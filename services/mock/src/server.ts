@@ -256,6 +256,39 @@ const routes: Route[] = [
     handler: (ctx) => ({ status: 201, body: withId(first(fx.checkOuts), ctx.body) }),
   },
 
+  // --- working hours and mileage --------------------------------------------
+  {
+    method: 'GET',
+    pattern: API_PATHS.shiftWindow,
+    handler: (ctx) => ({
+      body:
+        ctx.scenario === 'empty'
+          ? // No window configured anywhere. Capture is refused in this state, and
+            // the app must say so rather than retry — hence a 200 with a null, not
+            // a 404 that reads as a transient failure.
+            { window: null, resolvedFromTerritoryId: null }
+          : { window: fx.shiftWindow, resolvedFromTerritoryId: fx.IDS.orgTerritory },
+    }),
+  },
+  {
+    method: 'GET',
+    pattern: API_PATHS.mileage,
+    handler: (ctx) => {
+      const days =
+        ctx.scenario === 'empty'
+          ? []
+          : ctx.scenario === 'single'
+            ? fx.mileageDays.slice(0, 1)
+            : fx.mileageDays;
+      return {
+        body: {
+          days,
+          totalDistanceMetres: days.reduce((sum, day) => sum + day.distanceMetres, 0),
+        },
+      };
+    },
+  },
+
   // --- call reports and samples ---------------------------------------------
   {
     method: 'GET',

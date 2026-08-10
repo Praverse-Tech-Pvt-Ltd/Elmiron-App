@@ -13,12 +13,14 @@ import {
   ConsentTextVersionSchema,
   DoctorSchema,
   GetMeResponseSchema,
+  GetShiftWindowResponseSchema,
   ListAnalysesResponseSchema,
   ListBeatPlansResponseSchema,
   ListCallReportsResponseSchema,
   ListConsentRecordsResponseSchema,
   ListConsentTextVersionsResponseSchema,
   ListDoctorsResponseSchema,
+  ListMileageResponseSchema,
   ListSamplesAndInputsResponseSchema,
   ListTerritoriesResponseSchema,
   ListVisitsResponseSchema,
@@ -154,6 +156,14 @@ describe('every declared endpoint conforms to packages/core', () => {
       body: { id: IDS.sample },
       expectStatus: 201,
     });
+  });
+
+  it('shift window and mileage', async () => {
+    await expectConforms('/shift-window', GetShiftWindowResponseSchema);
+    await expectConforms(
+      '/mileage?fromDate=2026-08-01&toDate=2026-08-10',
+      ListMileageResponseSchema,
+    );
   });
 
   it('consent — text versions, active text, records, withdrawal', async () => {
@@ -292,6 +302,36 @@ describe('failure states', () => {
     const { status, body } = await call('/nope');
     expect(status).toBe(404);
     expect(ApiErrorResponseSchema.parse(body).error.code).toBe('not_found');
+  });
+});
+
+describe('working hours', () => {
+  it('reports a resolved window and the territory it came from', async () => {
+    const { body } = await call('/shift-window');
+    const parsed = GetShiftWindowResponseSchema.parse(body);
+    expect(parsed.window?.timezone).toBe('Asia/Kolkata');
+    expect(parsed.resolvedFromTerritoryId).not.toBeNull();
+  });
+
+  it('reports a null window rather than a 404 when none is configured', async () => {
+    // "Not configured" is a state the app must render, not a transient failure it
+    // should retry. A 404 here would read as the latter.
+    const { status, body } = await call('/shift-window', { scenario: 'empty' });
+    expect(status).toBe(200);
+    expect(GetShiftWindowResponseSchema.parse(body).window).toBeNull();
+  });
+
+  it('mileage totals match the sum of the days', async () => {
+    const { body } = await call('/mileage?fromDate=2026-08-01&toDate=2026-08-10');
+    const parsed = ListMileageResponseSchema.parse(body);
+    const summed = parsed.days.reduce((total, day) => total + day.distanceMetres, 0);
+    expect(parsed.totalDistanceMetres).toBeCloseTo(summed, 3);
+  });
+
+  it('includes a zero-distance day, because one check-in is a normal day', async () => {
+    const { body } = await call('/mileage?fromDate=2026-08-01&toDate=2026-08-10');
+    const parsed = ListMileageResponseSchema.parse(body);
+    expect(parsed.days.some((day) => day.distanceMetres === 0)).toBe(true);
   });
 });
 

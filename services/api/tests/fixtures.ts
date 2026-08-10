@@ -213,6 +213,16 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
       [world.beatPlans.pune, puneMr.id, territories.pune],
     );
 
+    // BE-W3. One window on the root, inherited by every territory beneath it, and
+    // one override on Nagpur so the inheritance walk has something to stop at.
+    await client.query(
+      `insert into public.territory_shift_windows
+         (territory_id, shift_start, shift_end, timezone, grace_minutes, active_weekdays) values
+         ($1, '09:00', '19:00', 'Asia/Kolkata', 15, '{1,2,3,4,5,6}'),
+         ($2, '06:00', '10:00', 'Asia/Kolkata', 0,  '{1,2,3,4,5}')`,
+      [territories.national, territories.nagpur],
+    );
+
     await client.query(
       `insert into public.visits (id, mr_id, doctor_id, clinic_address_id, status, started_at, completed_at) values
          ($1, $3, $5, $7, 'completed', now() - interval '2 hours', now() - interval '1 hour'),

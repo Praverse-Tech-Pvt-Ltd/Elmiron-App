@@ -5,6 +5,8 @@ import type {
   CallReport,
   CheckIn,
   CheckOut,
+  MileageDay,
+  TerritoryShiftWindow,
   ConsentRecord,
   ConsentTextVersion,
   Doctor,
@@ -212,6 +214,7 @@ export const visits: Visit[] = [
     scheduledFor: T(10),
     startedAt: T(10, 4),
     completedAt: T(10, 21),
+    receivedAt: T(10, 22),
     createdAt: T(8),
     updatedAt: T(10, 21),
   },
@@ -226,6 +229,7 @@ export const visits: Visit[] = [
     scheduledFor: T(11, 30),
     startedAt: T(11, 34),
     completedAt: T(11, 49),
+    receivedAt: T(11, 50),
     createdAt: T(8),
     updatedAt: T(11, 49),
   },
@@ -239,6 +243,8 @@ export const visits: Visit[] = [
     scheduledFor: null,
     startedAt: T(15, 2),
     completedAt: null,
+    // Synced six hours after it happened. This gap is the reason both fields exist.
+    receivedAt: T(21, 14),
     createdAt: T(15, 2),
     updatedAt: T(15, 2),
   },
@@ -259,6 +265,7 @@ export const checkIns: CheckIn[] = [
     distanceFromClinicMetres: 24,
     source: 'automatic',
     occurredAt: T(10, 4),
+    receivedAt: T(10, 4),
     createdAt: T(10, 4),
   },
 ];
@@ -278,6 +285,8 @@ export const checkOuts: CheckOut[] = [
     distanceFromClinicMetres: 180,
     source: 'automatic',
     occurredAt: T(10, 21),
+    receivedAt: T(10, 21),
+    durationSeconds: 1020,
     createdAt: T(10, 21),
   },
 ];
@@ -296,6 +305,7 @@ export const callReports: CallReport[] = [
     draftSource: 'voice_note',
     approvedByUserId: null,
     approvedAt: null,
+    receivedAt: T(10, 26),
     createdAt: T(10, 25),
     updatedAt: T(10, 26),
   },
@@ -312,6 +322,7 @@ export const samplesAndInputs: SampleAndInput[] = [
     quantity: 4,
     declaredValueInr: 0,
     occurredAt: T(10, 18),
+    receivedAt: T(10, 19),
     createdAt: T(10, 18),
   },
 ];
@@ -359,6 +370,7 @@ export const consentRecords: ConsentRecord[] = [
     supersedesConsentRecordId: null,
     isWithdrawal: false,
     capturedAt: T(10, 5),
+    receivedAt: T(10, 5),
     createdAt: T(10, 5),
   },
   {
@@ -373,6 +385,7 @@ export const consentRecords: ConsentRecord[] = [
     supersedesConsentRecordId: null,
     isWithdrawal: false,
     capturedAt: T(11, 35),
+    receivedAt: T(11, 35),
     createdAt: T(11, 35),
   },
   {
@@ -387,6 +400,7 @@ export const consentRecords: ConsentRecord[] = [
     supersedesConsentRecordId: null,
     isWithdrawal: false,
     capturedAt: T(15, 4),
+    receivedAt: T(15, 4),
     createdAt: T(15, 4),
   },
   {
@@ -401,6 +415,7 @@ export const consentRecords: ConsentRecord[] = [
     supersedesConsentRecordId: IDS.consentGranted,
     isWithdrawal: true,
     capturedAt: T(16, 40),
+    receivedAt: T(16, 40),
     createdAt: T(16, 40),
   },
 ];
@@ -607,4 +622,23 @@ export const syncQueue: SyncQueueItem[] = [
     clientCreatedAt: T(16, 10),
     syncedAt: null,
   },
+];
+
+export const shiftWindow: TerritoryShiftWindow = {
+  id: '17171717-1717-4717-8717-171717171701',
+  territoryId: IDS.orgTerritory,
+  shiftStart: '09:00:00',
+  shiftEnd: '19:00:00',
+  timezone: 'Asia/Kolkata',
+  graceMinutes: 15,
+  activeWeekdays: [1, 2, 3, 4, 5, 6],
+  createdAt: T(9),
+  updatedAt: T(9),
+};
+
+/** A working week. One zero-distance day, because a single check-in is normal. */
+export const mileageDays: MileageDay[] = [
+  { mrId: IDS.mr, travelDate: '2026-08-10', checkInCount: 6, distanceMetres: 41_280.4 },
+  { mrId: IDS.mr, travelDate: '2026-08-08', checkInCount: 7, distanceMetres: 52_610.9 },
+  { mrId: IDS.mr, travelDate: '2026-08-07', checkInCount: 1, distanceMetres: 0 },
 ];

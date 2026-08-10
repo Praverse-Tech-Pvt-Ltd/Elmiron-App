@@ -14,8 +14,10 @@ import {
   CheckInSchema,
   CheckOutSchema,
   DoctorSchema,
+  MileageDaySchema,
   SampleAndInputSchema,
   SampleOrInputKindSchema,
+  TerritoryShiftWindowSchema,
   VisitSchema,
 } from '../entities/field.js';
 import {
@@ -158,6 +160,38 @@ export type CreateSampleAndInputRequest = z.infer<typeof CreateSampleAndInputReq
 
 export const ListSamplesAndInputsResponseSchema = pageResponseSchema(SampleAndInputSchema);
 export type ListSamplesAndInputsResponse = z.infer<typeof ListSamplesAndInputsResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// Working hours and mileage — week 3
+// ---------------------------------------------------------------------------
+
+/** The window the caller's captures are validated against. */
+export const GetShiftWindowRequestSchema = z.object({
+  territoryId: UuidSchema.nullish(),
+});
+export type GetShiftWindowRequest = z.infer<typeof GetShiftWindowRequestSchema>;
+
+export const GetShiftWindowResponseSchema = z.object({
+  /** Null when no window is configured for the territory or any ancestor. Capture
+   *  is refused in that state, and the app should say so rather than retry. */
+  window: TerritoryShiftWindowSchema.nullable(),
+  /** The territory the window was actually resolved from, which may be an ancestor. */
+  resolvedFromTerritoryId: UuidSchema.nullable(),
+});
+export type GetShiftWindowResponse = z.infer<typeof GetShiftWindowResponseSchema>;
+
+export const ListMileageRequestSchema = z.object({
+  fromDate: IsoDateSchema,
+  toDate: IsoDateSchema,
+  mrId: UuidSchema.nullish(),
+});
+export type ListMileageRequest = z.infer<typeof ListMileageRequestSchema>;
+
+export const ListMileageResponseSchema = z.object({
+  days: z.array(MileageDaySchema),
+  totalDistanceMetres: z.number().nonnegative(),
+});
+export type ListMileageResponse = z.infer<typeof ListMileageResponseSchema>;
 
 // ---------------------------------------------------------------------------
 // Consent — week 6
@@ -350,6 +384,8 @@ export const API_PATHS = {
   visit: (id: string) => `/visits/${id}`,
   checkIns: '/check-ins',
   checkOuts: '/check-outs',
+  shiftWindow: '/shift-window',
+  mileage: '/mileage',
   callReports: '/call-reports',
   callReportApproval: (id: string) => `/call-reports/${id}/approval`,
   samplesAndInputs: '/samples-and-inputs',
@@ -388,4 +424,6 @@ export const EntityResponseSchemas = {
   beatPlan: BeatPlanSchema,
   territory: TerritorySchema,
   userProfile: UserProfileSchema,
+  territoryShiftWindow: TerritoryShiftWindowSchema,
+  mileageDay: MileageDaySchema,
 } as const;

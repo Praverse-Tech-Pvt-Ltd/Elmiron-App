@@ -13,7 +13,8 @@ the patient app is a separate project with a separate database.
 _This is the one section that describes now rather than history. The Phase log below
 is append-only._
 
-End of week 2 of 12. The security boundary exists and is adversarially tested.
+Week 3 of 12. The security boundary is proven (Gate 0 passed) and field capture is
+server-enforced.
 
 What exists and runs:
 
@@ -22,9 +23,12 @@ What exists and runs:
 - GitHub Actions CI, two jobs, both failing the build rather than warning. The
   database job applies every migration from empty, runs the Gate 0 suite, then
   **rolls every migration back and asserts the schema is empty**.
-- **Five migrations**: roles and territories, commercial schema, consent ledger,
-  audit log, and the whole RLS boundary in one auditable file.
-- **16 tables**, RLS enabled and forced on every one. **31 policies.**
+- **Six migrations**: roles and territories, commercial schema, consent ledger,
+  audit log, the whole RLS boundary in one auditable file, and field operations.
+- **17 tables**, RLS enabled and forced on every one. **31 policies.**
+- **Server-enforced capture**: work hours per territory in the territory's own
+  timezone, geofence computed from stored clinic coordinates, `received_at` stamped
+  by trigger, mileage summed from stored coordinates ordered by `occurred_at`.
 - The **consent ledger** and the **audit log**, both append-only against every role
   including `service_role` and the table owner — enforced by statement-level
   triggers, not by RLS, because BYPASSRLS roles never see a policy.
@@ -32,13 +36,14 @@ What exists and runs:
 - `services/mock` — contract **I2** — a running mock server covering every endpoint
   declared in `packages/core`, with populated / single / empty lists, real cursor
   pagination, every error code, and a full offline-sync queue.
-- **127 passing tests**: 12 contract guards in `packages/core`, 27 mock-conformance
-  tests in `services/mock`, 88 database tests in `services/api` of which 70 are the
-  Gate 0 adversarial suite.
+- **163 passing tests**: 12 contract guards in `packages/core`, 32 mock-conformance
+  tests in `services/mock`, 119 database tests in `services/api` — 18 foundations,
+  70 Gate 0 adversarial, 31 field operations.
 
-What does not exist yet: any application API. Every endpoint in `packages/core` is
-still declaration plus mock only. Audio storage, the pipeline, AE routing and the
-analysis engine are weeks 7–10.
+What does not exist yet: HTTP endpoints beyond what PostgREST generates from the
+schema. Audio storage, the pipeline, AE routing and the analysis engine are weeks
+7–10, and **contract I3 — the transcript schema they depend on — has not been
+published.**
 
 ---
 
@@ -636,6 +641,174 @@ in five weeks.
 **6. `docs/spend-approval.md` — the Apple Developer Program.** Response was requested
 by Friday 14 August. The blocker is the D-U-N-S number, not the $99. If it slips the
 week-5 App Store probe slips with it.
+
+---
+
+### BE-W3 — Field operations (12 August 2026)
+
+Gate 0 passed. One migration, `20260812000100_field_operations.sql`, and one new
+suite, `services/api/tests/field.spec.ts`.
+
+Everything in this phase exists because **the client cannot be trusted with any of
+it**: when a capture happened, where it happened, whether it was inside working
+hours, or how far the MR travelled. Each of those is either an expense claim or an
+attendance record, so each is computed or validated server-side.
+
+#### What was built
+
+**1. `received_at` on every client-originated table** — `visits`, `check_ins`,
+`check_outs`, `call_reports`, `samples_and_inputs`, `consent_records`.
+
+`occurred_at` is what the device says; `received_at` is when the server took
+delivery. A column default is not enforcement — anything that can INSERT can
+override it — so a `BEFORE INSERT` trigger stamps it and discards whatever was
+supplied, for every role including the table owner. There is a test that inserts
+`2001-01-01` as `postgres` and asserts the stored value is current.
+
+`clock_timestamp()`, not `now()`: `now()` is transaction start, which for a batched
+offline sync is the same instant for fifty rows that arrived over four seconds. The
+week-9 adverse-event SLA clock starts at ingest and will read this column.
+
+**2. Shift windows as configuration** — `territory_shift_windows`: start, end, IANA
+timezone, grace minutes, active ISO weekdays. One row per territory, **inherited
+down the territory tree** by `effective_shift_window()`. A territory with no window
+of its own resolves to the nearest ancestor.
+
+If no ancestor has one either, capture is **refused with an error naming the missing
+configuration** rather than falling back to a plausible default. A default here
+would silently accept captures at 3am for any territory someone forgot to configure.
+
+**3. Work-hours enforcement, server-side** — `is_within_shift()` converts
+`occurred_at` into the territory's own timezone before comparing. Comparing a UTC
+clock against a local window is a five-and-a-half hour error in this deployment, and
+it is the kind that produces plausible-looking data rather than an obvious failure.
+
+**4. Capture moved behind RPCs** — `record_check_in()` and `record_check_out()`.
+
+RLS decides which rows a caller may write; it cannot decide what the values must be.
+Work hours, the geofence computation and the check-out duration are none of them
+expressible as a policy, so **the direct INSERT policy and grant on `check_ins` and
+`check_outs` were withdrawn**. Leaving them would have left a path that skips every
+check above. There is a test asserting the direct path is now permission-denied.
+
+Both functions are **idempotent on the client-generated id**, and the idempotency
+check runs _before_ the work-hours check — a retry of something accepted at 10:00
+must not be refused because the phone finally got signal at 23:00. Replaying another
+user's id is rejected outright.
+
+**5. Geofence computed, never accepted** — `record_check_in` takes no geofence
+argument at all. Status and distance are derived from the stored clinic coordinates
+via `distance_metres()`, a plain haversine function. Deliberately not PostGIS or
+`earthdistance`: two call sites do not justify a spatial extension maintained
+forever.
+
+**6. Mileage** — `daily_mileage(from, to, mr_id)`. Sum of the distance between
+consecutive check-ins, per MR per day, **ordered by `occurred_at` and not by
+arrival**. A day that synced backwards would otherwise produce a different expense
+claim than the same day synced forwards. Bounded by `visible_user_ids()`, so an MR
+sees their own and a manager sees their team's.
+
+**7. Doctor search, indexed** — `pg_trgm` GIN indexes on `full_name` and
+`specialty`, a composite `(territory_id, is_active, full_name)` for the common
+filtered listing, and `search_doctors()`, which is **SECURITY INVOKER on purpose**
+so the doctors RLS policy remains the scope filter and the function cannot widen it.
+A test asserts the query plan uses the trigram index rather than timing a two-row
+fixture table and calling it fast.
+
+#### Contract change — Frontend and AI/ML need to know
+
+`packages/core` changed. Announced here rather than landing silently, per
+`mr-work-split.md` §4:
+
+| Change                                                                                                | Affects                             |
+| ----------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `receivedAt` added to `Visit`, `CheckIn`, `CheckOut`, `CallReport`, `SampleAndInput`, `ConsentRecord` | any code constructing these objects |
+| `durationSeconds` added to `CheckOut`                                                                 | nullable until a check-in arrives   |
+| `TerritoryShiftWindow` and `MileageDay` are new                                                       | new screens                         |
+| `GET /shift-window`, `GET /mileage` are new paths                                                     | new screens                         |
+
+All additive. Nothing was removed or renamed. The mock server serves both new
+endpoints, including the "no window configured" state as a `200` with a null window
+rather than a `404` — that state is something the app must render, not a transient
+failure it should retry.
+
+#### What each new test proves
+
+`services/api/tests/field.spec.ts`, 31 tests.
+
+| Block                 | What it proves                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **work hours** (7)    | Inside the window is accepted; before it opens and on a non-working day are refused. **A 05:00 UTC capture is accepted** — it is 10:30 IST, so accepting it is the proof the timezone conversion happens rather than a UTC comparison that would look correct in a test written in London. Inheritance resolves to the ancestor; an own window beats the ancestor; a territory with no window anywhere errors by name instead of defaulting. |
+| **geofence** (4)      | At the clinic → `inside` under 50 m. Three kilometres away → `outside`, distance between 2 and 5 km, regardless of what the app believes. No clinic address → `unavailable`. One degree of latitude measures 111.1–111.3 km.                                                                                                                                                                                                                 |
+| **received_at** (3)   | Stamped within a minute of now while `occurred_at` stays where the device put it. A supplied `2001-01-01` is discarded even from the owner. Every client-originated table has the column.                                                                                                                                                                                                                                                    |
+| **idempotency** (5)   | A retry returns the original row, does not overwrite it with the retry's coordinates, and leaves exactly one row. A retry outside working hours still succeeds, because the original was inside them. Replaying another user's id, and checking in against another MR's visit, both refused. The direct INSERT path is permission-denied.                                                                                                    |
+| **check-out** (2)     | Duration computed from the visit's earliest check-in. Null — not an error — when the check-out arrives before the check-in, which out-of-order sync makes normal.                                                                                                                                                                                                                                                                            |
+| **mileage** (6)       | Two ~1 km legs sum correctly. **The same day seeded in reverse produces the same total**, which is the whole reason for ordering by `occurred_at`. A single check-in reports zero rather than failing. Visible to the MR, visible to their manager, empty for a manager outside the team.                                                                                                                                                    |
+| **doctor search** (4) | Finds by partial name and by specialty; never returns a doctor outside the caller's territory; uses `doctors_full_name_trgm_idx` in the plan.                                                                                                                                                                                                                                                                                                |
+
+**Mutation-tested**, same discipline as BE-W2. Five deliberate regressions applied to
+the live schema — work-hours check stubbed to `true`, the `received_at` triggers
+dropped, the direct-insert path reopened, mileage ordered by `received_at` instead of
+`occurred_at`, and `search_doctors` switched to SECURITY DEFINER — produced **7
+failures across all five**, each caught by the test written for it. Restored: 119/119.
+
+#### Contract I3 — not published
+
+**AI/ML has not delivered the STT vendor decision or the transcript schema.** There
+is no such document in this repository: `docs/` contains no bake-off result, no
+vendor decision, and no transcript schema. I am not guessing at a shape.
+
+Per `mr-work-split.md` §4 this was due **end of week 2** and is described there as
+_"the highest-consequence contract in this project"_ — backend cannot design the
+pipeline without it. It is now one week late and the pipeline work starts in week 8.
+
+The provisional `Transcript` shape in `packages/core/src/entities/capture.ts` is a
+compile target for the mock server, clearly labelled as such, and must not be
+mistaken for the contract. **I need the real one, or a written statement that the
+bake-off failed and the AI layer is being cut** — which §0.1 of the work split says
+is a legitimate and good outcome if delivered early.
+
+#### Deliberately left out
+
+| Left out                                     | Why                                                                                                                             |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Admin correction rows for bad GPS captures   | The reviewer's forward note says build it when someone asks, as an append-only attributed row. Nobody has asked.                |
+| Expense amounts, rates, per-km reimbursement | Mileage is distance. Turning distance into money is a payroll decision nobody has made.                                         |
+| A generic idempotency-key table              | The client-generated primary key already is the idempotency key. A second mechanism would be a second thing to keep consistent. |
+| Beat-plan CRUD endpoints                     | Already covered by PostgREST plus the BE-W2 policies. Only the missing index was added.                                         |
+| Shift-window overrides per MR, or per date   | Configuration is per territory, which is what was asked. Per-person exceptions are a policy question, not a schema one.         |
+| PostGIS                                      | Two distance call sites.                                                                                                        |
+
+#### Open questions for the reviewer
+
+**1. Contract I3 is a week late and it blocks week 8.** See above. This is the item
+most likely to cost the date after the PV sign-off.
+
+**2. Mileage is straight-line distance, not road distance.** Sum of haversine legs
+between check-ins. Road distance would need a routing provider — cost, an external
+dependency, and data leaving India unless the provider has an Indian endpoint. My
+read is that straight-line is the right call for a reimbursement baseline and that
+the difference should be handled by the per-km rate, not by the geometry. **If
+Finance expects road distance, say so now** — it is a vendor decision with a
+residency question attached, not an implementation detail.
+
+**3. Withdrawing the direct INSERT on `check_ins`/`check_outs` is a contract change
+in behaviour, not shape.** Frontend must call `record_check_in` / `record_check_out`
+rather than POSTing to the table. The mock server's `POST /check-ins` still works and
+returns the same shape, so nothing breaks against the mock — but the real API will
+refuse a direct insert. Flagging because it is the kind of difference that surfaces
+in week 11 integration rather than now.
+
+**4. Shift windows have no data yet.** The table is empty outside test fixtures, so
+in a fresh environment **every capture will be refused** with "no shift window
+configured". That is the designed behaviour and it is loud, but somebody has to
+insert the real windows before a pilot. It needs the actual working hours per
+territory from the client — worth asking for now.
+
+**5. `search_doctors` has no pagination.** It caps at 200 rows. For a waiting-room
+lookup that is right; for the manager console listing a whole territory it is not.
+`GET /doctors` with cursor pagination stays the endpoint for listing. Flagging so the
+two do not get conflated.
 
 ---
 

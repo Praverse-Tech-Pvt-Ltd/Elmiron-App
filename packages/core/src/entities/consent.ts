@@ -51,6 +51,8 @@ export const ConsentRecordSchema = z.object({
   supersedesConsentRecordId: UuidSchema.nullable(),
   isWithdrawal: z.boolean(),
   capturedAt: IsoDateTimeSchema,
+  /** When the server took delivery. Server-stamped. */
+  receivedAt: IsoDateTimeSchema,
   createdAt: IsoDateTimeSchema,
 });
 export type ConsentRecord = z.infer<typeof ConsentRecordSchema>;

@@ -80,6 +80,8 @@ export const VisitSchema = z.object({
   scheduledFor: IsoDateTimeSchema.nullable(),
   startedAt: IsoDateTimeSchema.nullable(),
   completedAt: IsoDateTimeSchema.nullable(),
+  /** When the server took delivery. Server-stamped; a supplied value is discarded. */
+  receivedAt: IsoDateTimeSchema,
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,
 });
@@ -98,10 +100,15 @@ export const CheckInSchema = z.object({
   visitId: UuidSchema,
   mrId: UuidSchema,
   coordinates: CoordinatesSchema,
+  /** Computed server-side from the clinic coordinates. Never sent by the client. */
   geofenceStatus: GeofenceStatusSchema,
+  /** Computed server-side. A client-reported distance is an expense claim it wrote itself. */
   distanceFromClinicMetres: z.number().nonnegative().nullable(),
   source: CaptureSourceSchema,
+  /** What the device says. Its clock is not trusted. */
   occurredAt: IsoDateTimeSchema,
+  /** When the server took delivery. Use both to reconcile a late sync. */
+  receivedAt: IsoDateTimeSchema,
   createdAt: IsoDateTimeSchema,
 });
 export type CheckIn = z.infer<typeof CheckInSchema>;
@@ -115,6 +122,9 @@ export const CheckOutSchema = z.object({
   distanceFromClinicMetres: z.number().nonnegative().nullable(),
   source: CaptureSourceSchema,
   occurredAt: IsoDateTimeSchema,
+  receivedAt: IsoDateTimeSchema,
+  /** Seconds since the visit's earliest check-in. Null until one arrives. */
+  durationSeconds: z.number().int().nonnegative().nullable(),
   createdAt: IsoDateTimeSchema,
 });
 export type CheckOut = z.infer<typeof CheckOutSchema>;
@@ -139,6 +149,7 @@ export const CallReportSchema = z.object({
   draftSource: CallReportDraftSourceSchema,
   approvedByUserId: UuidSchema.nullable(),
   approvedAt: IsoDateTimeSchema.nullable(),
+  receivedAt: IsoDateTimeSchema,
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,
 });
@@ -158,6 +169,43 @@ export const SampleAndInputSchema = z.object({
   /** UCPMP caps are enforced server-side; this is the declared value in INR. */
   declaredValueInr: z.number().nonnegative(),
   occurredAt: IsoDateTimeSchema,
+  receivedAt: IsoDateTimeSchema,
   createdAt: IsoDateTimeSchema,
 });
 export type SampleAndInput = z.infer<typeof SampleAndInputSchema>;
+
+/**
+ * Working hours, per territory, inherited down the territory tree.
+ *
+ * The app shows the MR their own window so a refused capture has an explanation
+ * rather than an error code. A territory with no window of its own resolves to the
+ * nearest ancestor that has one; if none does, capture is refused outright.
+ */
+export const TerritoryShiftWindowSchema = z.object({
+  id: UuidSchema,
+  territoryId: UuidSchema,
+  /** Local wall-clock time, `HH:MM:SS`, in `timezone`. */
+  shiftStart: z.string(),
+  shiftEnd: z.string(),
+  /** IANA name, e.g. `Asia/Kolkata`. Windows are evaluated in this zone, not UTC. */
+  timezone: z.string().min(1),
+  graceMinutes: z.number().int().nonnegative(),
+  /** ISO weekdays, 1 = Monday .. 7 = Sunday. */
+  activeWeekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7),
+  createdAt: IsoDateTimeSchema,
+  updatedAt: IsoDateTimeSchema,
+});
+export type TerritoryShiftWindow = z.infer<typeof TerritoryShiftWindowSchema>;
+
+/**
+ * A day's travel, computed server-side from stored check-in coordinates ordered by
+ * `occurredAt`. This feeds the MR's expense claim, so it is never derived from a
+ * client-reported distance and it is visible to the MR.
+ */
+export const MileageDaySchema = z.object({
+  mrId: UuidSchema,
+  travelDate: IsoDateSchema,
+  checkInCount: z.number().int().nonnegative(),
+  distanceMetres: z.number().nonnegative(),
+});
+export type MileageDay = z.infer<typeof MileageDaySchema>;

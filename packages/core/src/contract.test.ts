@@ -37,6 +37,7 @@ describe('consent outcomes', () => {
       supersedesConsentRecordId: null,
       isWithdrawal: false,
       capturedAt: '2026-08-10T09:15:00+05:30',
+      receivedAt: '2026-08-10T09:15:02+05:30',
       createdAt: '2026-08-10T09:15:01+05:30',
     };
     expect(ConsentRecordSchema.safeParse(declined).success).toBe(true);
