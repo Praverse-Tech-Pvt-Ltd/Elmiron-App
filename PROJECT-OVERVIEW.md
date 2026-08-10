@@ -13,8 +13,8 @@ the patient app is a separate project with a separate database.
 _This is the one section that describes now rather than history. The Phase log below
 is append-only._
 
-Week 3 of 12. The security boundary is proven (Gate 0 passed) and field capture is
-server-enforced.
+Week 4 of 12. Boundary proven (Gate 0 passed), field capture server-enforced, and
+the offline queue is conflict-free by construction rather than by merge logic.
 
 What exists and runs:
 
@@ -23,9 +23,14 @@ What exists and runs:
 - GitHub Actions CI, two jobs, both failing the build rather than warning. The
   database job applies every migration from empty, runs the Gate 0 suite, then
   **rolls every migration back and asserts the schema is empty**.
-- **Six migrations**: roles and territories, commercial schema, consent ledger,
-  audit log, the whole RLS boundary in one auditable file, and field operations.
-- **17 tables**, RLS enabled and forced on every one. **31 policies.**
+- **Eight migrations**: roles and territories, commercial schema, consent ledger,
+  audit log, the RLS boundary in one auditable file, field operations, append-only
+  versioning, and offline sync.
+- **20 tables**, RLS enabled and forced on every one. **33 policies**, 3 views, all
+  `security_invoker`.
+- **Append-only wherever it can be**: consent ledger, audit log, call reports and
+  their approvals, beat plans, check-ins and check-outs. Conflicts are eliminated
+  rather than merged.
 - **Server-enforced capture**: work hours per territory in the territory's own
   timezone, geofence computed from stored clinic coordinates, `received_at` stamped
   by trigger, mileage summed from stored coordinates ordered by `occurred_at`.
@@ -36,9 +41,11 @@ What exists and runs:
 - `services/mock` — contract **I2** — a running mock server covering every endpoint
   declared in `packages/core`, with populated / single / empty lists, real cursor
   pagination, every error code, and a full offline-sync queue.
-- **163 passing tests**: 12 contract guards in `packages/core`, 32 mock-conformance
-  tests in `services/mock`, 119 database tests in `services/api` — 18 foundations,
-  70 Gate 0 adversarial, 31 field operations.
+- **203 passing tests**: 18 in `packages/core` (contract guards and config), 33
+  mock-conformance tests in `services/mock`, 152 database tests in `services/api` —
+  18 foundations, 70 Gate 0 adversarial, 31 field operations, 33 offline sync.
+- `packages/core` is namespaced into `@elmiron/core/shared` and `@elmiron/core/field`;
+  the root import still re-exports everything, so no consumer changes.
 
 What does not exist yet: HTTP endpoints beyond what PostgREST generates from the
 schema. Audio storage, the pipeline, AE routing and the analysis engine are weeks
@@ -165,6 +172,58 @@ subtly different.
 their own connections and cannot see uncommitted rows, so a suite that only seeds
 in-transaction can never exercise the faithful path. Teardown is impossible anyway —
 `consent_records` is append-only. Each run mints fresh UUIDs and emails instead.
+
+### Standing principle — what RLS is for, and what it is not
+
+**RLS decides WHICH ROWS a caller may write. It never decides WHAT THE VALUES MUST
+BE.**
+
+Any write with a validity rule beyond "is this row mine" — work hours, a geofence, a
+computed duration, the consent text version that was displayed, a legal state
+transition — cannot be enforced by a policy. That write goes behind an RPC, and the
+direct table path is **withdrawn, not merely unused**.
+
+Leaving the direct path in place while documenting that nobody should use it is not
+a control. It is a comment.
+
+Applied so far:
+
+| Write                | Rule a policy cannot express                                                                                                       | Enforced by                                   |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| check-in / check-out | inside the territory's shift window; geofence computed from stored clinic coordinates; duration derived from the earliest check-in | `record_check_in`, `record_check_out` — BE-W3 |
+| call report revision | a version must follow its parent, keep the same visit and author, and must not fork                                                | `revise_call_report` — BE-W4                  |
+| call report decision | the author may not decide their own report, and a superseded version cannot be decided                                             | `approve_call_report` — BE-W4                 |
+| every synced item    | partial success, per-item isolation, attempt counting, dead-lettering                                                              | `sync_push` — BE-W4                           |
+
+Where a rule **is** policy-expressible it stays a policy. `visits_insert_own` was
+tightened in BE-W4 to require the doctor be in the caller's territory rather than
+moved behind an RPC, because "is this doctor in my scope" is exactly the kind of
+thing `WITH CHECK` is for.
+
+This generalises to consent capture in week 6 and to the patient app's diary. Any
+time a write has a validity rule beyond ownership, the policy is not the control.
+
+### Closed by the reviewer, 12 August 2026 — three requirements dropped
+
+Recorded so they do not resurface as new proposals.
+
+**`backend-prompts-v2.md` §2, capability-predicate role model — DROPPED.**
+`patient`, `doctor` and `pv_officer` live in the **clinical database**, a separate
+Supabase project. The PV officer never signs into this one; the adverse-event
+endpoint pushes _out_ to them. A fourth role may never exist here at all, so
+refactoring `visible_user_ids()` for it would be the speculative abstraction the
+project rules forbid. Revisit only if a real fourth role appears — a regional or
+national manager tier is the plausible case.
+
+**`backend-prompts-v2.md` §8, API versioning — DROPPED.** One consumer, pre-release,
+nothing deployed. Versioning a contract no client has ever consumed is ceremony. Add
+it when an external consumer exists.
+
+**`backend-prompts-v2.md` §9.12, source-code search for application-layer scope
+filtering — DEFERRED to ~week 8**, when there is application code to search. The
+structural check built in BE-W2 — every base table carrying `mr_id` must have a
+SELECT policy referencing `visible_user_ids` — is retained and is the stronger
+guarantee while no application code exists.
 
 ### Settled by the reviewer, 11 August 2026
 
@@ -809,6 +868,196 @@ territory from the client — worth asking for now.
 lookup that is right; for the manager console listing a whole territory it is not.
 `GET /doctors` with cursor pagination stays the endpoint for listing. Flagging so the
 two do not get conflated.
+
+---
+
+### BE-W4 — Offline sync (13 August 2026)
+
+Two migrations. The first eliminates conflicts; the second handles what is left.
+
+#### Conflicts eliminated, not resolved
+
+Merge logic for a day that synced six hours late is hard to write and impossible to
+reason about a month later. Append-only data has no conflicts — only ordering, and
+ordering is already handled by `occurred_at` plus `received_at`. So the mutability
+was removed rather than merged.
+
+| Entity                                                             | Before                                                  | After                                                                                                          |
+| ------------------------------------------------------------------ | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `check_ins`, `check_outs`, `consent_records`, `samples_and_inputs` | already append-only                                     | unchanged                                                                                                      |
+| `call_reports`                                                     | mutable row per visit                                   | **append-only versions**: an edit is a new row with `version = parent + 1` and `supersedes_call_report_id` set |
+| call report approval                                               | an UPDATE writing `approved_by_user_id` onto the report | **`call_report_approvals`**, its own append-only table                                                         |
+| `beat_plans`                                                       | mutable row per MR per day                              | **append-only versions**, so an MR working yesterday's plan keeps a valid reference                            |
+| `visits`                                                           | mutable by the owning MR                                | still mutable — single-writer, see below                                                                       |
+
+**Approval had to move.** Once the report is immutable there is no UPDATE to set
+`approved` on, and putting the decision into a new _version_ of the report would make
+the manager an author of it — the one thing the brief says a manager must never be.
+So a decision is its own row, a reversal is a new row referencing the previous
+decision, and `call_report_current` derives `effective_status` from the two.
+
+**What genuinely remains, and how it is resolved:**
+
+- **Stale beat plan.** The manager revises the plan while the MR is offline working
+  the old one. Neither is discarded: the visit keeps its reference to the version
+  actually worked, the revision exists alongside it, and the sync result carries a
+  **`stale_beat_plan` warning on an accepted item**. Never a rejection — the MR did
+  the work.
+- **Visits.** Still mutable, deliberately: only the owning MR can write their own
+  visit, so there is no second writer to conflict with. What looks like a conflict is
+  ordering, and ordering is `occurred_at` for what happened and `received_at` for
+  what arrived. Documented rather than merged.
+- **Nothing resolves by "last write wins".** Arrival order is meaningless when a day
+  can land in any sequence, so no rule anywhere depends on it.
+
+#### The sync protocol
+
+`sync_push(batch_id, items)` — batched, resumable, idempotent on the device-generated
+item id.
+
+- **Partial success is the normal case.** Each item is applied inside its own
+  `BEGIN … EXCEPTION` block, which is its own savepoint, so a failure rolls back that
+  item and nothing else. A batch of eight with three refusals commits five.
+- **Per-item verdicts**, not a batch result: `accepted` / `duplicate` / `rejected` /
+  `dead_lettered`, each with a machine-readable `rejectionCode` and any `warnings`.
+- **A poison item cannot block the queue.** Nothing is sequential across items, and
+  after five attempts an item is dead-lettered and stops being retried, keeping the
+  reason it died of.
+
+#### Rejected items are visible, never silently lost
+
+This is the part that hurts real people if it is wrong. An MR captures eight visits,
+and at 6pm three are refused because the shift window was configured wrong. They did
+the work; they cannot re-do the day.
+
+- A rejection is a **durable row in `sync_items`** with its payload intact, so the
+  work can be resubmitted once the cause is fixed.
+- The code is machine-readable and the distinctions matter: `outside_shift_window` is
+  somebody else's misconfiguration, `outside_geofence` is about where the MR stood,
+  `not_your_record` is neither. Showing an MR the wrong one is how trust in the app
+  dies.
+- `list_sync_rejections()` returns them, scoped by `visible_user_ids()`.
+- **The override shape exists and the override does not.**
+  `sync_items.supersedes_sync_item_id` is present so a manager override can be added
+  later as code, not as a migration against a table with months of real data in it.
+  Same shape as a consent withdrawal.
+
+#### The rule the client needs to warn with
+
+`my_shift_window()` returns the caller's resolved window and the territory it came
+from, so Frontend can run the work-hours check client-side as **advisory** and warn at
+capture instead of ambushing the MR at 6pm. The database remains the enforcement
+point; the client copy is a courtesy.
+
+An unconfigured window returns `{ window: null }` and **not an error** — "your hours
+have not been set up, captures will be refused" is a state the app must render, not a
+transient failure worth retrying.
+
+#### Observability
+
+`sync_queue_status()` answers what support will ask during the pilot: accepted,
+rejected and dead-lettered counts, last successful sync, and the oldest unresolved
+item. Built now, because adding it later means querying months of real data with no
+index for the question.
+
+#### What each new test proves
+
+`services/api/tests/sync.spec.ts`, 33 tests.
+
+| Block                            | What it proves                                                                                                                                                                                                                                                                                                                     |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **partial success** (3)          | A good/bad/good batch returns `accepted, rejected, accepted` **and both good visits exist in the database** — the failure did not roll back the successes. One result per item, in order. A poison item does not block the item behind it.                                                                                         |
+| **idempotency** (2)              | A resubmitted item returns `duplicate` and applies nothing twice. A whole batch resent after a lost response returns `duplicate` for every item.                                                                                                                                                                                   |
+| **dead-lettering** (2)           | Five rejections, then `dead_lettered` on the sixth, still dead on the seventh. The original rejection code survives on the dead letter.                                                                                                                                                                                            |
+| **rejections are durable** (6)   | The row persists with its payload and a machine-readable code. `outside_shift_window` and `not_your_record` are distinguishable in the same batch. A malformed item is rejected _as malformed_ and the batch carries on. An unsupported entity is named as such. `list_sync_rejections` surfaces them. The override column exists. |
+| **call reports append-only** (5) | UPDATE refused at the trigger layer for the owner and at the grant layer for an MR. An edit is version 2 and version 1 is untouched. A fork is refused. `call_report_current` shows only the newest.                                                                                                                               |
+| **approval is separate** (5)     | A decision sets `effective_status` without touching the report. The author cannot decide their own. A superseded version cannot be decided. A reversal is a new row referencing the first. UPDATE on an approval is refused.                                                                                                       |
+| **stale beat plan** (3)          | Work filed against a superseded plan is **accepted with a `stale_beat_plan` warning** — the crucial one. No warning when the plan is current. `beat_plan_current` shows only the newest.                                                                                                                                           |
+| **observability** (5)            | Counts and last-successful-sync for the MR; visible to their manager; empty for a manager outside the team; an MR cannot read another MR's queue; the field cannot write `sync_items` directly.                                                                                                                                    |
+| **my_shift_window** (2)          | Returns the resolved window and its source territory. Reports an unconfigured window as null rather than raising.                                                                                                                                                                                                                  |
+
+**Mutation-tested.** Six regressions — call-report and approval triggers dropped,
+`beat_plan_is_stale` stubbed to false, dead-lettering removed, `sync_items` opened to
+every authenticated user, `my_shift_window` made to raise — produced **10 failures**,
+including the BE-W2 structural invariant catching the policy change. Restored:
+152/152.
+
+#### Two bugs the tests found in my own migration
+
+Both would have been invisible in a green suite:
+
+1. **`sync_items_rejection_has_code` was a biconditional on `rejected` alone**, so a
+   dead letter — which also carries a code — violated it. The dead-lettering test
+   caught it on first run.
+2. **A missing `id` on an item cast to NULL instead of raising**, so the malformed
+   branch never fired and the resulting NOT NULL violation escaped the per-item block
+   and took the whole batch down. Exactly the failure mode the per-item isolation
+   exists to prevent, in the code that implements it.
+
+#### Contract change — Frontend must be told
+
+| Change                                                                                                                                 | Effect                                                                                                                                     |
+| -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`POST /check-ins` and `POST /check-outs` are refused**                                                                               | The mock now returns `403 permission_denied` naming the RPC, matching the real API. Call `POST /rpc/record_check_in` / `record_check_out`. |
+| `CallReport` gains `version`, `supersedesCallReportId`; loses `approvedByUserId`, `approvedAt`                                         | Approval is `CallReportApproval`; render `CallReportCurrent.effectiveStatus`                                                               |
+| `CallReportApproval`, `CallReportCurrent`, `ServerSyncItem`, `SyncQueueStatus`, `SyncRejectionCode` are new                            | new surfaces                                                                                                                               |
+| `SyncPushRequest` gains `batchId`; `SyncPushResult` replaces `serverPayload`/`error` with `rejectionCode`/`rejectionDetail`/`warnings` | the queue UI reads these                                                                                                                   |
+| `BeatPlan` gains `version`, `supersedesBeatPlanId`                                                                                     |                                                                                                                                            |
+| `syncPush` path moves to `/rpc/sync_push`                                                                                              |                                                                                                                                            |
+| **`packages/core` is now namespaced**: `@elmiron/core/shared` and `@elmiron/core/field`                                                | The root import still re-exports everything, so **no consumer has to change**. Use the subpaths in new code.                               |
+
+#### Part 1c — integration readiness
+
+- **`packages/core` split into `core/shared` and `core/field`.** `shared` is identity,
+  primitives, errors, pagination and config — what a second app consumes unchanged.
+  `field` is the MR domain. Same package, subpath exports, root barrel intact.
+- **`packages/core/src/shared/config.ts`** loads the JWT audience, site URL,
+  additional redirect URLs and deep-link scheme from the environment and validates
+  them, failing loudly on a missing value rather than defaulting. Five tests,
+  including one asserting the failure.
+
+#### Deliberately left out
+
+| Left out                                       | Why                                                                                            |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| The manager override of a rejection            | The reviewer's instruction: leave room, do not build. The column exists; the logic does not.   |
+| `sync_pull`                                    | Part 3 is about push. The pull contract is declared and mocked; nothing consumes it yet.       |
+| Merge logic for visits                         | Single-writer. There is no second party to conflict with.                                      |
+| A generic retry/backoff scheduler              | The client owns retry timing. The server owns the attempt count and the dead-letter threshold. |
+| `env()` substitution in `supabase/config.toml` | Tried; it does not work. See open question 2.                                                  |
+
+#### Open questions for the reviewer
+
+**1. The dead-letter threshold is five attempts, chosen not derived.** An item that
+fails five times for a _fixable_ reason — a misconfigured shift window corrected on
+day three — is dead before the fix lands, and there is no un-dead path until the
+override exists. Options: raise the threshold, make it per rejection code, or make
+`dead_lettered` reversible when the code is one of the "somebody else's fault" set.
+**My recommendation is the third.** It is cheap, but it is a policy decision about
+whose fault counts.
+
+**2. `env()` in `supabase/config.toml` silently does not resolve.** I moved
+`site_url` and `additional_redirect_urls` to `env(APP_SITE_URL)` as the brief asked,
+started the stack, and checked the container: GoTrue received the literal string
+`env(APP_SITE_URL)`. The CLI resolves `.env` relative to `--workdir`, there is no
+`--env-file` flag, and an unresolved reference is passed through rather than failing.
+I reverted that half with the reasoning in the file. The app-level values — where the
+rule actually bites — are externalised properly in
+`packages/core/src/shared/config.ts`. Flagging because "we externalised the config"
+would have been a true sentence describing a broken system.
+
+**3. Contract I3 is now two weeks late.** Unchanged from BE-W3. Nothing in `docs/`.
+The pipeline work starts in week 8.
+
+**4. `sync_push` accepts up to 500 items in one transaction.** A full offline day is
+well under that; a device dark for a week is not. Per-item savepoints make the
+transaction long rather than large, but it is still one transaction. If pilot devices
+routinely queue more than a few hundred items this wants chunking on the client —
+worth a number from the pilot rather than a guess now.
+
+**5. Shift-window data is still missing** and now blocks more than capture: with no
+window configured, `sync_push` rejects every check-in in a batch with
+`outside_shift_window`. The escalation is drafted; it needs sending.
 
 ---
 

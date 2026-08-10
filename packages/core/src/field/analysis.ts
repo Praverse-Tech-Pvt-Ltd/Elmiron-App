@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { IsoDateTimeSchema, UuidSchema } from '../primitives.js';
+import { IsoDateTimeSchema, UuidSchema } from '../shared/primitives.js';
 
 /**
  * The performance analysis layer.

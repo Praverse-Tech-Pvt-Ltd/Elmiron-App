@@ -3,6 +3,8 @@ import type {
   AnalysisOverride,
   BeatPlan,
   CallReport,
+  CallReportApproval,
+  SyncQueueStatus,
   CheckIn,
   CheckOut,
   MileageDay,
@@ -182,6 +184,8 @@ export const beatPlans: BeatPlan[] = [
     status: 'approved',
     approvedByUserId: IDS.manager,
     approvedAt: T(8, 45),
+    version: 1,
+    supersedesBeatPlanId: null,
     entries: [
       {
         id: '55555555-5555-4555-8555-555555555511',
@@ -303,8 +307,8 @@ export const callReports: CallReport[] = [
     nextStep: 'Send the patient assistance leaflet by Wednesday.',
     status: 'submitted',
     draftSource: 'voice_note',
-    approvedByUserId: null,
-    approvedAt: null,
+    version: 1,
+    supersedesCallReportId: null,
     receivedAt: T(10, 26),
     createdAt: T(10, 25),
     updatedAt: T(10, 26),
@@ -641,4 +645,30 @@ export const mileageDays: MileageDay[] = [
   { mrId: IDS.mr, travelDate: '2026-08-10', checkInCount: 6, distanceMetres: 41_280.4 },
   { mrId: IDS.mr, travelDate: '2026-08-08', checkInCount: 7, distanceMetres: 52_610.9 },
   { mrId: IDS.mr, travelDate: '2026-08-07', checkInCount: 1, distanceMetres: 0 },
+];
+
+export const callReportApprovals: CallReportApproval[] = [
+  {
+    id: '18181818-1818-4818-8818-181818181801',
+    callReportId: IDS.callReport,
+    decidedByUserId: IDS.manager,
+    approved: true,
+    reason: 'Good recovery on the pricing question. Send the leaflet today.',
+    decidedAt: T(14, 20),
+    receivedAt: T(14, 20),
+    supersedesApprovalId: null,
+    createdAt: T(14, 20),
+  },
+];
+
+/** One MR mid-day: most of the queue through, one refused, one given up on. */
+export const syncQueueStatus: SyncQueueStatus[] = [
+  {
+    mrId: IDS.mr,
+    acceptedCount: 14,
+    rejectedCount: 2,
+    deadLetteredCount: 1,
+    lastSuccessfulSyncAt: T(17, 5),
+    oldestUnresolvedAt: T(11, 34),
+  },
 ];

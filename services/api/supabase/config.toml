@@ -156,11 +156,21 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
+# Localhost, deliberately literal. env() substitution was tried and does NOT work
+# here: the CLI resolves .env relative to --workdir (services/api), there is no
+# --env-file flag, and an unresolved reference is passed through as the literal
+# string "env(APP_SITE_URL)" rather than failing — a silent broken redirect.
+#
+# This file configures the LOCAL dev stack only. The deployed project's auth URLs
+# come from the Supabase dashboard, and the values the apps themselves use come
+# from APP_SITE_URL / APP_ADDITIONAL_REDIRECT_URLS via
+# packages/core/src/shared/config.ts, which is where the no-hardcoded-values rule
+# actually bites.
 site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+additional_redirect_urls = ["http://127.0.0.1:3000", "https://127.0.0.1:3000"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.

@@ -10,6 +10,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./shared": {
+      "types": "./dist/shared/index.d.ts",
+      "default": "./dist/shared/index.js"
+    },
+    "./field": {
+      "types": "./dist/field/index.d.ts",
+      "default": "./dist/field/index.js"
     }
   },
   "files": [

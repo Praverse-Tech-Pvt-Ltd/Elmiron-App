@@ -6,6 +6,7 @@ import {
   ApiErrorResponseSchema,
   ApiRequestError,
   BeatPlanSchema,
+  CallReportApprovalSchema,
   CallReportSchema,
   CheckInSchema,
   CheckOutSchema,
@@ -14,6 +15,7 @@ import {
   DoctorSchema,
   GetMeResponseSchema,
   GetShiftWindowResponseSchema,
+  SyncQueueStatusResponseSchema,
   ListAnalysesResponseSchema,
   ListBeatPlansResponseSchema,
   ListCallReportsResponseSchema,
@@ -124,19 +126,44 @@ describe('every declared endpoint conforms to packages/core', () => {
     await expectConforms(`/visits/${IDS.visitDone}`, VisitSchema, { method: 'PATCH', body: {} });
   });
 
-  it('check-ins and check-outs', async () => {
+  it('check-ins and check-outs are readable, and written through the RPC', async () => {
     await expectConforms('/check-ins', pageResponseSchema(CheckInSchema));
-    await expectConforms('/check-ins', CheckInSchema, {
-      method: 'POST',
-      body: { id: IDS.checkIn },
-      expectStatus: 201,
-    });
     await expectConforms('/check-outs', pageResponseSchema(CheckOutSchema));
-    await expectConforms('/check-outs', CheckOutSchema, {
+    await expectConforms('/rpc/record_check_in', CheckInSchema, {
       method: 'POST',
-      body: { id: IDS.checkOut },
+      body: {
+        p_id: IDS.checkIn,
+        p_visit_id: IDS.visitDone,
+        p_latitude: 18.5075,
+        p_longitude: 73.8079,
+        p_occurred_at: '2026-08-10T10:04:00+05:30',
+      },
       expectStatus: 201,
     });
+    await expectConforms('/rpc/record_check_out', CheckOutSchema, {
+      method: 'POST',
+      body: {
+        p_id: IDS.checkOut,
+        p_visit_id: IDS.visitDone,
+        p_latitude: 18.5076,
+        p_longitude: 73.808,
+        p_occurred_at: '2026-08-10T10:21:00+05:30',
+      },
+      expectStatus: 201,
+    });
+  });
+
+  it('refuses a direct write to a capture table, as the real API does', async () => {
+    // This is the assertion that stops the mock drifting back into a fiction. If
+    // someone re-adds a happy-path POST /check-ins, this fails in CI rather than at
+    // integration in week 11.
+    for (const path of ['/check-ins', '/check-outs']) {
+      const { status, body } = await call(path, { method: 'POST', body: { id: IDS.checkIn } });
+      expect(status, `${path} must refuse a direct write`).toBe(403);
+      const parsed = ApiErrorResponseSchema.parse(body);
+      expect(parsed.error.code).toBe('permission_denied');
+      expect(parsed.error.message).toMatch(/record_check_(in|out)/);
+    }
   });
 
   it('call reports, approval and samples', async () => {
@@ -146,9 +173,10 @@ describe('every declared endpoint conforms to packages/core', () => {
       body: { id: IDS.callReport },
       expectStatus: 201,
     });
-    await expectConforms(`/call-reports/${IDS.callReport}/approval`, CallReportSchema, {
+    await expectConforms(`/call-reports/${IDS.callReport}/approval`, CallReportApprovalSchema, {
       method: 'POST',
       body: { approved: true },
+      expectStatus: 201,
     });
     await expectConforms('/samples-and-inputs', ListSamplesAndInputsResponseSchema);
     await expectConforms('/samples-and-inputs', SampleAndInputSchema, {
@@ -160,6 +188,8 @@ describe('every declared endpoint conforms to packages/core', () => {
 
   it('shift window and mileage', async () => {
     await expectConforms('/shift-window', GetShiftWindowResponseSchema);
+    await expectConforms('/rpc/my_shift_window', GetShiftWindowResponseSchema);
+    await expectConforms('/rpc/sync_queue_status', SyncQueueStatusResponseSchema);
     await expectConforms(
       '/mileage?fromDate=2026-08-01&toDate=2026-08-10',
       ListMileageResponseSchema,
@@ -210,9 +240,10 @@ describe('every declared endpoint conforms to packages/core', () => {
   });
 
   it('offline sync — push, pull, queue inspection', async () => {
-    await expectConforms('/sync/push', SyncPushResponseSchema, {
+    await expectConforms('/rpc/sync_push', SyncPushResponseSchema, {
       method: 'POST',
       body: {
+        batchId: IDS.queuedVisit,
         items: [
           {
             id: IDS.queuedVisit,
@@ -346,11 +377,12 @@ describe('the offline-sync scenario', () => {
     expect(statuses).toContain('failed');
   });
 
-  it('push returns a mix of accepted, duplicate, conflict and rejected', async () => {
-    const { body } = await call('/sync/push', {
+  it('push returns a mix of accepted, duplicate, rejected and dead-lettered', async () => {
+    const { body } = await call('/rpc/sync_push', {
       method: 'POST',
       body: {
-        items: Array.from({ length: 4 }, (_unused, index) => ({
+        batchId: IDS.queuedVisit,
+        items: Array.from({ length: 5 }, (_unused, index) => ({
           id: `1515151${String(index)}-1515-4515-8515-151515151501`,
           entity: 'visit',
           operation: 'create',
@@ -364,9 +396,14 @@ describe('the offline-sync scenario', () => {
     expect(parsed.results.map((r) => r.status)).toEqual([
       'accepted',
       'duplicate',
-      'conflict',
       'rejected',
+      'accepted',
+      'dead_lettered',
     ]);
+    // A rejection always carries a machine-readable code; an acceptance may carry a
+    // warning. Frontend renders both differently, so both must be exercised.
+    expect(parsed.results[2]?.rejectionCode).toBe('outside_shift_window');
+    expect(parsed.results[3]?.warnings).toContain('stale_beat_plan');
   });
 });
 

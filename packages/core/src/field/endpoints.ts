@@ -5,8 +5,8 @@ import {
   IsoDateTimeSchema,
   LanguageTagSchema,
   UuidSchema,
-} from '../primitives.js';
-import { TerritorySchema, UserProfileSchema } from '../entities/identity.js';
+} from '../shared/primitives.js';
+import { TerritorySchema, UserProfileSchema } from '../shared/identity.js';
 import {
   BeatPlanSchema,
   CallReportSchema,
@@ -19,16 +19,19 @@ import {
   SampleOrInputKindSchema,
   TerritoryShiftWindowSchema,
   VisitSchema,
-} from '../entities/field.js';
+} from './entities.js';
+import { ConsentOutcomeSchema, ConsentRecordSchema, ConsentTextVersionSchema } from './consent.js';
+import { RecordingSchema, TranscriptSchema, VoiceNoteSchema } from './capture.js';
+import { AnalysisOverrideSchema, AnalysisSchema } from './analysis.js';
 import {
-  ConsentOutcomeSchema,
-  ConsentRecordSchema,
-  ConsentTextVersionSchema,
-} from '../entities/consent.js';
-import { RecordingSchema, TranscriptSchema, VoiceNoteSchema } from '../entities/capture.js';
-import { AnalysisOverrideSchema, AnalysisSchema } from '../entities/analysis.js';
-import { SyncEntitySchema, SyncOperationSchema, SyncQueueItemSchema } from '../entities/sync.js';
-import { PageRequestSchema, pageResponseSchema } from './pagination.js';
+  ServerSyncStatusSchema,
+  SyncEntitySchema,
+  SyncOperationSchema,
+  SyncQueueItemSchema,
+  SyncQueueStatusSchema,
+  SyncRejectionCodeSchema,
+} from './sync.js';
+import { PageRequestSchema, pageResponseSchema } from '../shared/pagination.js';
 
 /**
  * Request and response shapes for every endpoint the MR app will have, including
@@ -328,23 +331,38 @@ export const SyncPushItemSchema = z.object({
 export type SyncPushItem = z.infer<typeof SyncPushItemSchema>;
 
 export const SyncPushRequestSchema = z.object({
+  /** Device-generated. Re-submitting a whole batch is safe. */
+  batchId: UuidSchema,
   items: z.array(SyncPushItemSchema).min(1).max(500),
 });
 export type SyncPushRequest = z.infer<typeof SyncPushRequestSchema>;
 
+/**
+ * One verdict per item. Partial success is the normal case: some items in a batch
+ * succeed and some do not, and a failure never rolls back the successes.
+ */
 export const SyncPushResultSchema = z.object({
   id: UuidSchema,
-  status: z.enum(['accepted', 'duplicate', 'conflict', 'rejected']),
-  /** Present when the server's copy differs and the client must reconcile. */
-  serverPayload: z.record(z.string(), z.unknown()).nullable(),
-  error: z.string().nullable(),
+  status: ServerSyncStatusSchema,
+  /** Machine-readable. Null unless the status is `rejected` or `dead_lettered`. */
+  rejectionCode: SyncRejectionCodeSchema.nullable(),
+  /** Human-readable detail for support. Not for display to the MR unmodified. */
+  rejectionDetail: z.string().nullable(),
+  /** Accepted, but with something the MR should know — e.g. `stale_beat_plan`. */
+  warnings: z.array(z.string()),
 });
 export type SyncPushResult = z.infer<typeof SyncPushResultSchema>;
 
 export const SyncPushResponseSchema = z.object({
+  batchId: UuidSchema,
   results: z.array(SyncPushResultSchema),
   serverTime: IsoDateTimeSchema,
 });
+
+export const SyncQueueStatusResponseSchema = z.object({
+  queues: z.array(SyncQueueStatusSchema),
+});
+export type SyncQueueStatusResponse = z.infer<typeof SyncQueueStatusResponseSchema>;
 export type SyncPushResponse = z.infer<typeof SyncPushResponseSchema>;
 
 export const SyncPullRequestSchema = z.object({
@@ -382,8 +400,13 @@ export const API_PATHS = {
   beatPlan: (id: string) => `/beat-plans/${id}`,
   visits: '/visits',
   visit: (id: string) => `/visits/${id}`,
+  // Direct writes to these two are REFUSED by the API. Capture carries validity
+  // rules — work hours, geofence, duration — that a row-level policy cannot express,
+  // so it goes through the RPCs below and the table path was withdrawn in BE-W3.
   checkIns: '/check-ins',
   checkOuts: '/check-outs',
+  recordCheckIn: '/rpc/record_check_in',
+  recordCheckOut: '/rpc/record_check_out',
   shiftWindow: '/shift-window',
   mileage: '/mileage',
   callReports: '/call-reports',
@@ -402,8 +425,11 @@ export const API_PATHS = {
   analysis: (id: string) => `/analyses/${id}`,
   analysisResponse: (id: string) => `/analyses/${id}/response`,
   analysisOverrides: (id: string) => `/analyses/${id}/overrides`,
-  syncPush: '/sync/push',
+  syncPush: '/rpc/sync_push',
   syncPull: '/sync/pull',
+  syncQueueStatus: '/rpc/sync_queue_status',
+  syncRejections: '/rpc/list_sync_rejections',
+  myShiftWindow: '/rpc/my_shift_window',
 } as const;
 
 export const EntityResponseSchemas = {
@@ -427,3 +453,36 @@ export const EntityResponseSchemas = {
   territoryShiftWindow: TerritoryShiftWindowSchema,
   mileageDay: MileageDaySchema,
 } as const;
+
+// ---------------------------------------------------------------------------
+// RPC bodies — week 3 onward
+// ---------------------------------------------------------------------------
+
+/**
+ * PostgREST passes an RPC body straight through as named arguments, so these keys
+ * are the Postgres parameter names rather than the camelCase the rest of this file
+ * uses. The mapping is confined to this package on purpose: the leak stops here.
+ */
+export const RecordCheckInBodySchema = z.object({
+  p_id: UuidSchema,
+  p_visit_id: UuidSchema,
+  p_latitude: z.number().min(-90).max(90),
+  p_longitude: z.number().min(-180).max(180),
+  p_occurred_at: IsoDateTimeSchema,
+  p_accuracy_metres: z.number().nonnegative().nullish(),
+  p_source: CaptureSourceSchema.nullish(),
+});
+export type RecordCheckInBody = z.infer<typeof RecordCheckInBodySchema>;
+
+export const RecordCheckOutBodySchema = RecordCheckInBodySchema;
+export type RecordCheckOutBody = z.infer<typeof RecordCheckOutBodySchema>;
+
+export const toRecordCheckInBody = (input: CreateCheckInRequest): RecordCheckInBody => ({
+  p_id: input.id,
+  p_visit_id: input.visitId,
+  p_latitude: input.coordinates.latitude,
+  p_longitude: input.coordinates.longitude,
+  p_occurred_at: input.occurredAt,
+  p_accuracy_metres: input.coordinates.accuracyMetres,
+  p_source: input.source,
+});

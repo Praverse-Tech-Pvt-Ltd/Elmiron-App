@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { CoordinatesSchema, IsoDateSchema, IsoDateTimeSchema, UuidSchema } from '../primitives.js';
+import {
+  CoordinatesSchema,
+  IsoDateSchema,
+  IsoDateTimeSchema,
+  UuidSchema,
+} from '../shared/primitives.js';
 
 /**
  * Commercial field entities.
@@ -60,6 +65,8 @@ export const BeatPlanSchema = z.object({
   status: BeatPlanStatusSchema,
   approvedByUserId: UuidSchema.nullable(),
   approvedAt: IsoDateTimeSchema.nullable(),
+  version: z.number().int().positive(),
+  supersedesBeatPlanId: UuidSchema.nullable(),
   entries: z.array(BeatPlanEntrySchema),
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,
@@ -145,10 +152,12 @@ export const CallReportSchema = z.object({
   productIdsDiscussed: z.array(UuidSchema),
   objectionsRaised: z.string().nullable(),
   nextStep: z.string().nullable(),
+  /** Author-set only: `draft` or `submitted`. A decision is not a status here. */
   status: CallReportStatusSchema,
   draftSource: CallReportDraftSourceSchema,
-  approvedByUserId: UuidSchema.nullable(),
-  approvedAt: IsoDateTimeSchema.nullable(),
+  /** 1 for the first version; an edit is a new row, never a mutation. */
+  version: z.number().int().positive(),
+  supersedesCallReportId: UuidSchema.nullable(),
   receivedAt: IsoDateTimeSchema,
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,
@@ -209,3 +218,43 @@ export const MileageDaySchema = z.object({
   distanceMetres: z.number().nonnegative(),
 });
 export type MileageDay = z.infer<typeof MileageDaySchema>;
+
+/**
+ * A manager's decision on a call report.
+ *
+ * Separate from the report so a manager can decide without ever authoring the thing
+ * they are deciding on. Append-only: a reversal is a new row referencing the one it
+ * reverses.
+ */
+export const CallReportApprovalSchema = z.object({
+  id: UuidSchema,
+  callReportId: UuidSchema,
+  decidedByUserId: UuidSchema,
+  approved: z.boolean(),
+  reason: z.string().nullable(),
+  decidedAt: IsoDateTimeSchema,
+  receivedAt: IsoDateTimeSchema,
+  supersedesApprovalId: UuidSchema.nullable(),
+  createdAt: IsoDateTimeSchema,
+});
+export type CallReportApproval = z.infer<typeof CallReportApprovalSchema>;
+
+/** The latest version of a report plus its latest decision, which is what UI renders. */
+export const CallReportCurrentSchema = CallReportSchema.extend({
+  approvalDecision: z.boolean().nullable(),
+  decidedByUserId: UuidSchema.nullable(),
+  decidedAt: IsoDateTimeSchema.nullable(),
+  /** `draft` | `submitted` | `approved` | `rejected`, derived, never stored. */
+  effectiveStatus: z.string(),
+});
+export type CallReportCurrent = z.infer<typeof CallReportCurrentSchema>;
+
+/**
+ * A beat plan version. An MR who worked yesterday's plan keeps a valid reference to
+ * the version they actually worked; the manager's revision exists alongside it.
+ */
+export const BeatPlanVersionFieldsSchema = z.object({
+  version: z.number().int().positive(),
+  supersedesBeatPlanId: UuidSchema.nullable(),
+});
+export type BeatPlanVersionFields = z.infer<typeof BeatPlanVersionFieldsSchema>;

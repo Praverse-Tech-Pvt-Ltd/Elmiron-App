@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { IsoDateTimeSchema, UuidSchema } from '../primitives.js';
+import { IsoDateTimeSchema, UuidSchema } from './primitives.js';
 
 /**
  * The app has exactly three roles. There is no patient role and no doctor role —

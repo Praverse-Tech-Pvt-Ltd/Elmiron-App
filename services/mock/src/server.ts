@@ -152,6 +152,29 @@ const withId = <T extends { id: string }>(entity: T, body: unknown): T => {
   return typeof id === 'string' ? { ...entity, id } : entity;
 };
 
+/** The refusal the real API gives for a direct write to a capture table. */
+const captureViaRpcOnly = (ctx: Ctx, rpc: string): { status: number; body: unknown } => ({
+  status: 403,
+  body: {
+    error: {
+      code: 'permission_denied',
+      message: `Direct writes to ${ctx.path} are not permitted. Call ${rpc} instead — work-hours, geofence and duration are enforced there.`,
+      requestId: ctx.requestId,
+      fieldErrors: null,
+    } satisfies ApiError,
+  },
+});
+
+/**
+ * The RPC takes Postgres parameter names, so the body is p_-prefixed. The geofence
+ * fields are absent from the request on purpose: the server computes them.
+ */
+const recordCapture = (ctx: Ctx, template: { id: string }): { status: number; body: unknown } => {
+  const body = asRecord(ctx.body);
+  const id = body['p_id'];
+  return { status: 201, body: typeof id === 'string' ? { ...template, id } : template };
+};
+
 const first = <T>(items: T[]): T => {
   const item = items[0];
   if (item === undefined) throw new Error('fixture list is empty');
@@ -241,9 +264,19 @@ const routes: Route[] = [
     handler: (ctx) => ({ body: paginate(fx.checkIns, ctx) }),
   },
   {
+    // The real API withdrew this path in BE-W3: capture carries validity rules —
+    // work hours, geofence, duration — that a row policy cannot express, so it goes
+    // through the RPC. A mock that accepted what the API refuses would let the app
+    // be built against a fiction and break at integration, which is the exact
+    // failure a mock exists to prevent.
     method: 'POST',
     pattern: API_PATHS.checkIns,
-    handler: (ctx) => ({ status: 201, body: withId(first(fx.checkIns), ctx.body) }),
+    handler: (ctx) => captureViaRpcOnly(ctx, 'record_check_in'),
+  },
+  {
+    method: 'POST',
+    pattern: API_PATHS.recordCheckIn,
+    handler: (ctx) => recordCapture(ctx, first(fx.checkIns)),
   },
   {
     method: 'GET',
@@ -253,7 +286,12 @@ const routes: Route[] = [
   {
     method: 'POST',
     pattern: API_PATHS.checkOuts,
-    handler: (ctx) => ({ status: 201, body: withId(first(fx.checkOuts), ctx.body) }),
+    handler: (ctx) => captureViaRpcOnly(ctx, 'record_check_out'),
+  },
+  {
+    method: 'POST',
+    pattern: API_PATHS.recordCheckOut,
+    handler: (ctx) => recordCapture(ctx, first(fx.checkOuts)),
   },
 
   // --- working hours and mileage --------------------------------------------
@@ -301,15 +339,16 @@ const routes: Route[] = [
     handler: (ctx) => ({ status: 201, body: withId(first(fx.callReports), ctx.body) }),
   },
   {
+    // A decision is its own append-only record, not a status written onto the
+    // report. That is what lets a manager decide without ever authoring.
     method: 'POST',
     pattern: '/call-reports/:id/approval',
     handler: (ctx) => ({
+      status: 201,
       body: {
-        ...first(fx.callReports),
-        id: ctx.params['id'] ?? first(fx.callReports).id,
-        status: asRecord(ctx.body)['approved'] === false ? 'rejected' : 'approved',
-        approvedByUserId: fx.IDS.manager,
-        approvedAt: '2026-08-10T14:00:00+05:30',
+        ...first(fx.callReportApprovals),
+        callReportId: ctx.params['id'] ?? fx.IDS.callReport,
+        approved: asRecord(ctx.body)['approved'] !== false,
       },
     }),
   },
@@ -462,26 +501,52 @@ const routes: Route[] = [
 
   // --- offline sync ---------------------------------------------------------
   {
+    method: 'GET',
+    pattern: API_PATHS.syncQueueStatus,
+    handler: (ctx) => ({
+      body: { queues: ctx.scenario === 'empty' ? [] : fx.syncQueueStatus },
+    }),
+  },
+  {
+    method: 'GET',
+    pattern: API_PATHS.myShiftWindow,
+    handler: (ctx) => ({
+      body:
+        ctx.scenario === 'empty'
+          ? { window: null, resolvedFromTerritoryId: null }
+          : { window: fx.shiftWindow, resolvedFromTerritoryId: fx.IDS.orgTerritory },
+    }),
+  },
+  {
     method: 'POST',
     pattern: API_PATHS.syncPush,
     handler: (ctx) => {
-      const items = asRecord(ctx.body)['items'];
+      const body = asRecord(ctx.body);
+      const items = body['items'];
       const list = Array.isArray(items) ? items : [];
-      // Deterministic mix so the client's conflict and duplicate paths get exercised
-      // rather than only the happy one.
-      const statuses = ['accepted', 'duplicate', 'conflict', 'rejected'] as const;
+      // Deterministic mix, so the client's partial-success, duplicate, rejection and
+      // dead-letter paths all get exercised rather than only the happy one.
+      const verdicts = [
+        { status: 'accepted', rejectionCode: null, warnings: [] as string[] },
+        { status: 'duplicate', rejectionCode: null, warnings: [] as string[] },
+        { status: 'rejected', rejectionCode: 'outside_shift_window', warnings: [] as string[] },
+        { status: 'accepted', rejectionCode: null, warnings: ['stale_beat_plan'] },
+        { status: 'dead_lettered', rejectionCode: 'validation_failed', warnings: [] as string[] },
+      ] as const;
       return {
         body: {
+          batchId: asString(body['batchId'], fx.IDS.queuedVisit),
           results: list.map((item, index) => {
-            const status = statuses[index % statuses.length] ?? 'accepted';
+            const verdict = verdicts[index % verdicts.length] ?? verdicts[0];
             return {
               id: asString(asRecord(item)['id'], fx.IDS.queuedVisit),
-              status,
-              serverPayload: status === 'conflict' ? { status: 'completed' } : null,
-              error:
-                status === 'rejected'
-                  ? 'The visit this item refers to does not exist on the server.'
-                  : null,
+              status: verdict.status,
+              rejectionCode: verdict.rejectionCode,
+              rejectionDetail:
+                verdict.rejectionCode === null
+                  ? null
+                  : 'check-in at 03:12 is outside the configured shift window',
+              warnings: verdict.warnings,
             };
           }),
           serverTime: '2026-08-10T17:05:00+05:30',

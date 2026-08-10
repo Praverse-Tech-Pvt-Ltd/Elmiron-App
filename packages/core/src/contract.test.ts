@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { CONSENT_OUTCOMES, ConsentOutcomeSchema, ConsentRecordSchema } from './entities/consent.js';
-import { ROLES } from './entities/identity.js';
-import { AnalysisSchema, FindingSchema } from './entities/analysis.js';
-import { ApiErrorCodeSchema } from './api/errors.js';
+import { CONSENT_OUTCOMES, ConsentOutcomeSchema, ConsentRecordSchema } from './field/consent.js';
+import { ROLES } from './shared/identity.js';
+import { AnalysisSchema, FindingSchema } from './field/analysis.js';
+import { ApiErrorCodeSchema } from './shared/errors.js';
 
 /**
  * These are contract guards, not unit tests. Each one fails if someone later

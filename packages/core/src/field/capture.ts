@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { IsoDateTimeSchema, LanguageTagSchema, UuidSchema } from '../primitives.js';
+import { IsoDateTimeSchema, LanguageTagSchema, UuidSchema } from '../shared/primitives.js';
 
 /**
  * Audio capture and transcription.

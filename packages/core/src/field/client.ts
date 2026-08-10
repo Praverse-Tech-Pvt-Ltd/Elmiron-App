@@ -1,6 +1,6 @@
 import type { ZodType } from 'zod';
-import { ApiErrorResponseSchema, ApiRequestError } from './api/errors.js';
-import type { ApiError } from './api/errors.js';
+import { ApiErrorResponseSchema, ApiRequestError } from '../shared/errors.js';
+import type { ApiError } from '../shared/errors.js';
 import {
   API_PATHS,
   CreateCallReportRequestSchema,
@@ -20,7 +20,7 @@ import {
   SyncPushRequestSchema,
   SyncPushResponseSchema,
   WithdrawConsentRequestSchema,
-} from './api/endpoints.js';
+} from './endpoints.js';
 import type {
   CreateCallReportRequest,
   CreateCheckInRequest,
@@ -44,11 +44,11 @@ import type {
   SyncPushRequest,
   SyncPushResponse,
   WithdrawConsentRequest,
-} from './api/endpoints.js';
-import { CallReportSchema, CheckInSchema, CheckOutSchema, VisitSchema } from './entities/field.js';
-import type { CallReport, CheckIn, CheckOut, Visit } from './entities/field.js';
-import { ConsentRecordSchema } from './entities/consent.js';
-import type { ConsentRecord } from './entities/consent.js';
+} from './endpoints.js';
+import { CallReportSchema, CheckInSchema, CheckOutSchema, VisitSchema } from './entities.js';
+import type { CallReport, CheckIn, CheckOut, Visit } from './entities.js';
+import { ConsentRecordSchema } from './consent.js';
+import type { ConsentRecord } from './consent.js';
 
 export interface ApiClientOptions {
   /** Base URL of the API, e.g. `http://localhost:54321/functions/v1`. No trailing slash. */
