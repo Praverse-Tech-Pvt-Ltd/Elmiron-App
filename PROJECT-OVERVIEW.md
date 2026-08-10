@@ -161,6 +161,63 @@ their own connections and cannot see uncommitted rows, so a suite that only seed
 in-transaction can never exercise the faithful path. Teardown is impossible anyway —
 `consent_records` is append-only. Each run mints fresh UUIDs and emails instead.
 
+### Settled by the reviewer, 11 August 2026
+
+These two closed BE-W2 open questions 2 and 4. Recorded here in full so neither
+resurfaces as a new proposal in week 11.
+
+---
+
+**DECISION — `admin` has no write access to field activity.**
+
+The brief's "admin gets full access" was loose wording. It means **full visibility,
+subject to audit — never authorship.** `admin` cannot write `visits`, `check_ins`,
+`check_outs`, `call_reports`, `consent_records` or `analyses`. It retains full read
+across all of them (audited, through the logged RPCs where those apply) and full
+write on master data: `organisations`, `territories`, `user_profiles`, `doctors`,
+`clinic_addresses`.
+
+_Reasoning:_ the consent ledger's only value is evidentiary. If **any** role can
+author a consent record, then "could someone other than this MR have created this?"
+answers **yes**, and the ledger proves nothing — which removes the legal basis for
+the entire recording feature. The same logic applies to `check_ins`, which are the
+evidence base for mileage and attendance, and to `analyses`, which are employment
+records about a named person.
+
+_Rules out:_ a general admin write policy on any of those six tables, at any point,
+for any reason presented as convenience.
+
+**Forward note — do not build this now.** A legitimate correction need will appear:
+a check-in with wrong GPS coordinates from an OEM location glitch. The answer is an
+**append-only correction row attributed to the admin who made it**, exactly the shape
+of a consent withdrawal — never a general write policy, never an UPDATE. Build it
+when someone actually asks for it, and build it that way.
+
+---
+
+**DECISION — the audit row stays in the caller's transaction. No `dblink`.**
+
+A rolled-back transaction loses its audit row. That is accepted, not mitigated.
+
+_Reasoning:_ through PostgREST the whole request is one transaction. If it rolls
+back, PostgREST returns an error and the client receives nothing — **so there is no
+disclosure without a matching audit row on any path a real user can take.**
+
+Read-then-rollback requires a direct database session. The roles that have one,
+`postgres` and `service_role`, carry BYPASSRLS and bypass the RPC entirely, so the
+audit log was never the control for them in the first place. `dblink` would defend a
+threat already outside the model, at the cost of a real operational dependency.
+
+_Mitigation is operational, not technical:_ **do not grant direct production database
+sessions.** Add connection-level logging if one ever must be granted. Recorded as a
+known limitation rather than engineered around.
+
+**Condition on this decision:** if the patient app ever routes **clinical** reads
+through this same RPC pattern, this must be revisited. Different data, higher bar.
+This app holds no health data — consent records are the doctor's personal data under
+DPDP, analyses are the MR's employment data, and the applicable bar is DPDP Rule 6's
+reasonable security safeguards, which this clears.
+
 ---
 
 ## Phase log
@@ -772,7 +829,12 @@ $ pnpm db:reset && pnpm --filter @elmiron/api test
     runs never collide, but a long-lived local database fills up. `pnpm db:reset`
     clears it; CI resets before every run.
 11. **The audit row is not autonomous.** It shares the caller's transaction, so a
-    rollback loses it. Open question 4 above.
+    rollback loses it. **Accepted 11 Aug 2026, not a defect** — see the decision under
+    Architecture decisions. Through PostgREST a rollback returns an error and the
+    client receives nothing, so no real user path discloses without an audit row.
+    Read-then-rollback needs a direct session, and those roles bypass the RPC anyway.
+    Mitigation is operational: do not grant direct production sessions. **Revisit if
+    the patient app routes clinical reads through this pattern.**
 12. **Nothing has been pushed to a deployed Supabase project.** The remote is still
     unlinked, so every measurement in this document — including the BYPASSRLS
     behaviour the immutability design rests on — is from the local stack. Worth
