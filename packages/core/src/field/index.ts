@@ -9,6 +9,7 @@
 export * from './entities.js';
 export * from './consent.js';
 export * from './capture.js';
+export * from './transcript-v0.js';
 export * from './analysis.js';
 export * from './sync.js';
 export * from './manager.js';

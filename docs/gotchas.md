@@ -189,3 +189,76 @@ no database reported *152 passed*.
 **When reading a test run, check for "passed" rather than "skipped".** If the local
 Supabase stack is still coming up, the whole suite skips and the summary still looks
 broadly green.
+
+---
+
+## Supabase Storage
+
+### A row delete does not delete the object
+
+`delete from storage.objects` removes the row and leaves the file in the storage
+backend. Supabase now refuses the statement outright — *"this prevents accidental
+data loss from orphaned objects"* — which is the right call, but it means **any
+deletion path needs two systems and any deletion test needs two assertions**.
+
+Consequence for this project: the 90-day retention worker cannot live in Postgres.
+It claims a batch in SQL, deletes each object through the storage HTTP API, then
+confirms in SQL. See `services/api/scripts/purge-expired-audio.mjs`.
+
+Consequence for rollbacks: `20260815000300...down.sql` deliberately does **not**
+drop the bucket. Empty it through the API first.
+
+### Creating buckets and storage policies from SQL works, but `storage.objects` is not yours
+
+`storage.objects` is owned by `supabase_storage_admin`. `postgres` can still
+`create policy` on it and `insert into storage.buckets` — verified before designing
+against it, which is worth doing rather than assuming either way.
+
+---
+
+## More Postgres
+
+### `ALTER TYPE ... ADD VALUE` cannot be used in the same transaction that adds it
+
+PG12+ allows the statement inside a transaction, but the new label is not usable
+until that transaction commits. Each Supabase migration file is one transaction, so
+**adding an enum value and using it needs two migration files**. That is why
+`20260815000100` adds `org_default_shift_window` and `20260815000200` uses it.
+
+### `SET ROLE` to a role you created still needs membership
+
+`create role llm_gateway nologin` does not let `postgres` become it.
+`grant llm_gateway to postgres` does. Without that, a test that tries to prove a
+denial fails with *"permission denied to set role"* — which looks like the thing you
+are testing and is not.
+
+### `round(double precision, integer)` does not exist
+
+Only `round(numeric, integer)`. `percentile_cont` returns double precision even over
+a numeric input, so it needs an explicit `::numeric` before rounding.
+
+### `now()` is transaction start; `clock_timestamp()` is now
+
+Inside one transaction, a row stamped with `clock_timestamp()` is *later* than
+`now()`. A threshold expressed as `x < now() - interval` will therefore not fire for
+something written moments earlier in the same transaction. This produced a
+confusing test failure; the test was rewritten to use a ratio threshold instead of a
+clock one.
+
+---
+
+## Bash on this machine
+
+### Large heredocs in the Bash tool are unreliable
+
+Multi-hundred-line `cat > file <<'EOF'` blocks have twice failed with
+`unexpected EOF while looking for matching quote`, on content that contains no
+unbalanced quotes. Write files with the editor tool instead, or with a short Python
+block. Do not debug the heredoc; it is not the interesting problem.
+
+### Backticks inside a JS template literal end the literal
+
+Obvious in isolation, invisible in a 900-line test file: a SQL comment written inside
+a `` ` ``-quoted query that itself contains `` `auth.uid()` `` terminates the string
+and produces a parse error 40 lines away. Use plain words in SQL comments inside
+template literals.

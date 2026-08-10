@@ -554,9 +554,11 @@ describe.skipIf(!reachable)('consent_records is append-only', () => {
   });
 
   it('rejects TRUNCATE from the owner and from service_role', async () => {
+    // Since BE-W6 `recordings` references this table, so the foreign key refuses
+    // the truncate before the trigger is reached. Either refusal is the property.
     await expect(
       inRolledBackTransaction((client: Client) => client.query('truncate public.consent_records')),
-    ).rejects.toThrow(/append-only/);
+    ).rejects.toThrow(/append-only|cannot truncate a table referenced/);
     await expect(asRoleQuery('service_role', 'truncate public.consent_records')).rejects.toThrow();
   });
 
@@ -846,7 +848,10 @@ describe.skipIf(!reachable)('structural invariants', () => {
                where p.schemaname = 'public'
                  and p.tablename = c.table_name
                  and p.cmd in ('SELECT', 'ALL')
-                 and p.qual like '%visible_user_ids%'
+                 -- Either bound is scope-in-policy. The auth.uid() form is the
+                 -- stricter of the two: upload_grants is an ephemeral capability
+                 -- that not even a manager needs to see.
+                 and (p.qual like '%visible_user_ids%' or p.qual like '%auth.uid()%')
             )
             -- analyses is exempt: it has no SELECT grant at all, so direct access
             -- is a permission denied and every read goes through a logged RPC.

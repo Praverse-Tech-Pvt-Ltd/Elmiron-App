@@ -328,34 +328,57 @@ describe.skipIf(!reachable)('team exceptions', () => {
     });
   });
 
-  it('flags a consent-rate anomaly as data quality, in both directions', async () => {
+  /** puneMr declines everything, nagpurMr consents to everything. Both deviate. */
+  const seedDivergentConsents = async (client: Client): Promise<void> => {
+    const seed = async (
+      mrId: string,
+      visitId: string,
+      outcome: 'consented' | 'declined',
+    ): Promise<void> => {
+      for (let i = 0; i < 4; i += 1) {
+        await client.query(
+          `insert into public.consent_records
+             (id, visit_id, doctor_id, captured_by_mr_id, outcome, consent_text_version_id,
+              displayed_language, captured_at)
+           values (gen_random_uuid(), $1, $2, $3, $4, $5, 'en-IN', '2026-08-12T11:00:00+05:30')`,
+          [visitId, world.doctors.pune, mrId, outcome, world.consentTextVersionId],
+        );
+      }
+    };
+    await seed(world.users.puneMr.id, world.visits.pune, 'declined');
+
+    const nagpurVisit = randomUUID();
+    await client.query(
+      `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
+      [nagpurVisit, world.users.nagpurMr.id, world.doctors.pune],
+    );
+    await seed(world.users.nagpurMr.id, nagpurVisit, 'consented');
+  };
+
+  it('emits nothing at all below the team-size floor', async () => {
+    // The fixture manager oversees two MRs. A median over two people is one
+    // person's number, so the anomaly is suppressed entirely — not emitted with a
+    // low-confidence marker, which somebody would act on anyway.
     await inRolledBackTransaction(async (client) => {
-      // puneMr declines everything, nagpurMr consents to everything. Both deviate.
-      const seedConsents = async (
-        mr: FixtureUser,
-        visitId: string,
-        doctorId: string,
-        outcome: 'consented' | 'declined',
-      ): Promise<void> => {
-        for (let i = 0; i < 4; i += 1) {
-          await client.query(
-            `insert into public.consent_records
-               (id, visit_id, doctor_id, captured_by_mr_id, outcome, consent_text_version_id,
-                displayed_language, captured_at)
-             values (gen_random_uuid(), $1, $2, $3, $4, $5, 'en-IN', '2026-08-12T11:00:00+05:30')`,
-            [visitId, doctorId, mr.id, outcome, world.consentTextVersionId],
-          );
-        }
-      };
-      await seedConsents(world.users.puneMr, world.visits.pune, world.doctors.pune, 'declined');
-
-      const nagpurVisit = randomUUID();
-      await client.query(
-        `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
-        [nagpurVisit, world.users.nagpurMr.id, world.doctors.pune],
+      await seedDivergentConsents(client);
+      await asUser(client, world.users.westManager);
+      const rows = await client.query(
+        `select mr_id from public.team_exceptions('2026-08-12')
+          where exception_kind = 'consent_rate_anomaly'`,
       );
-      await seedConsents(world.users.nagpurMr, nagpurVisit, world.doctors.pune, 'consented');
+      expect(rows.rows).toEqual([]);
+    });
+  });
 
+  it('flags a consent-rate anomaly as data quality once the team is large enough', async () => {
+    await inRolledBackTransaction(async (client) => {
+      await seedDivergentConsents(client);
+      // Lower the floor through the config table rather than the code — which also
+      // proves the threshold is read at query time.
+      await client.query(
+        `insert into public.app_thresholds (key, value, unit, note)
+         values ('consent_min_team_size', '2'::jsonb, 'count', 'test override')`,
+      );
       await asUser(client, world.users.westManager);
       const rows = await client.query<{ mr_id: string; detail: Record<string, unknown> }>(
         `select mr_id, detail from public.team_exceptions('2026-08-12')
@@ -368,7 +391,43 @@ describe.skipIf(!reachable)('team exceptions', () => {
         expect(row.detail['signal']).toBe('data_quality');
         expect(row.detail).toHaveProperty('teamMedian');
         expect(row.detail).toHaveProperty('sampleSize');
+        expect(row.detail).toHaveProperty('teamSize');
       }
+    });
+  });
+
+  it('reads its thresholds from config rather than from the migration', async () => {
+    // Uses the rejection rate rather than the sync clock: received_at is stamped
+    // with clock_timestamp(), which is later than the transaction's now(), so a
+    // clock-based threshold behaves confusingly inside a single transaction. Noted
+    // in docs/gotchas.md.
+    await inRolledBackTransaction(async (client) => {
+      await asUser(client, world.users.puneMr);
+      await push(
+        client,
+        Array.from({ length: 6 }, () => poisonCheckIn(world.visits.pune)),
+      );
+
+      await client.query('reset role');
+      await asUser(client, world.users.westManager);
+      const before = await client.query<{ mr_id: string }>(
+        `select mr_id from public.team_exceptions('2026-08-12')
+          where exception_kind = 'high_rejection_rate'`,
+      );
+      expect(before.rows.map((r) => r.mr_id)).toContain(world.users.puneMr.id);
+
+      // Raise the bar above what is achievable. Nothing about the data changes.
+      await client.query('reset role');
+      await client.query(
+        `insert into public.app_thresholds (key, value, unit, note)
+         values ('rejection_rate_threshold', '1.5'::jsonb, 'ratio', 'test override')`,
+      );
+      await asUser(client, world.users.westManager);
+      const after = await client.query<{ mr_id: string }>(
+        `select mr_id from public.team_exceptions('2026-08-12')
+          where exception_kind = 'high_rejection_rate'`,
+      );
+      expect(after.rows).toEqual([]);
     });
   });
 
@@ -503,6 +562,46 @@ describe.skipIf(!reachable)('approval workflow', () => {
         [world.callReports.pune],
       );
       expect(decided.rows[0]?.effective_status).toBe('approved');
+    });
+  });
+
+  it('reports its own truncation rather than silently dropping the tail', async () => {
+    // Same failure as a silent cap in search_doctors, and it was fixed in one place
+    // and not the other. A caller who submits 250 must be told 50 were not decided.
+    await inRolledBackTransaction(async (client) => {
+      await asUser(client, world.users.westManager);
+      const ids = Array.from({ length: 250 }, () => randomUUID());
+      const result = await client.query<{
+        payload: {
+          results: unknown[];
+          decidedCount: number;
+          notDecidedCount: number;
+          submittedCount: number;
+          truncated: boolean;
+          limit: number;
+        };
+      }>('select public.approve_call_reports_bulk($1, true, $2) as payload', [ids, 'oversized']);
+
+      const payload = result.rows[0]?.payload;
+      expect(payload?.truncated).toBe(true);
+      expect(payload?.limit).toBe(200);
+      expect(payload?.submittedCount).toBe(250);
+      expect(payload?.results).toHaveLength(200);
+      expect((payload?.decidedCount ?? 0) + (payload?.notDecidedCount ?? 0)).toBe(200);
+    });
+  });
+
+  it('reports truncated=false for a batch inside the cap', async () => {
+    await inRolledBackTransaction(async (client) => {
+      await asUser(client, world.users.westManager);
+      const result = await client.query<{
+        payload: { truncated: boolean; submittedCount: number };
+      }>('select public.approve_call_reports_bulk($1, true, $2) as payload', [
+        [world.callReports.pune],
+        'small batch',
+      ]);
+      expect(result.rows[0]?.payload.truncated).toBe(false);
+      expect(result.rows[0]?.payload.submittedCount).toBe(1);
     });
   });
 

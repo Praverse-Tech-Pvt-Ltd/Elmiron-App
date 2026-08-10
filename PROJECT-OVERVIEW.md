@@ -13,9 +13,10 @@ the patient app is a separate project with a separate database.
 _This is the one section that describes now rather than history. The Phase log below
 is append-only._
 
-Week 5 of 12. Boundary proven (Gate 0 passed), field capture server-enforced, the
-offline queue conflict-free by construction, and the manager surface exception-first.
-**The Gate 1 server half is built and green**; the client half waits on the field app.
+Week 6 of 12. Boundary proven (Gate 0 passed), field capture server-enforced, the
+offline queue conflict-free by construction, the manager surface exception-first, and
+**audio that consent does not cover is now structurally impossible to hold**.
+The Gate 1 server half is built and green; the client half waits on the field app.
 
 What exists and runs:
 
@@ -24,11 +25,14 @@ What exists and runs:
 - GitHub Actions CI, two jobs, both failing the build rather than warning. The
   database job applies every migration from empty, runs the Gate 0 suite, then
   **rolls every migration back and asserts the schema is empty**.
-- **Nine migrations**: roles and territories, commercial schema, consent ledger,
-  audit log, the RLS boundary in one auditable file, field operations, append-only
-  versioning, offline sync, and the manager surface.
-- **21 tables**, RLS enabled and forced on every one. **34 policies**, 4 views, all
-  `security_invoker`.
+- **Twelve migrations**, ending with thresholds-as-config, the flagged organisation
+  default shift window, and consent/audio/retention.
+- **29 tables**, RLS enabled and forced on every one. **38 policies**, 5 views, all
+  `security_invoker`, plus two policies on `storage.objects`.
+- A private `audio` bucket whose write policy requires a live, single-use upload
+  grant — and no grant is issued for a visit without standing consent.
+- A 90-day retention worker that destroys the **object as well as the row**, with a
+  test that proves it over HTTP.
 - **Append-only wherever it can be**: consent ledger, audit log, call reports and
   their approvals, beat plans, check-ins and check-outs. Conflicts are eliminated
   rather than merged.
@@ -42,10 +46,10 @@ What exists and runs:
 - `services/mock` — contract **I2** — a running mock server covering every endpoint
   declared in `packages/core`, with populated / single / empty lists, real cursor
   pagination, every error code, and a full offline-sync queue.
-- **248 passing tests**: 18 in `packages/core` (contract guards and config), 40
-  mock-conformance tests in `services/mock`, 190 database tests in `services/api` —
-  18 foundations, 70 Gate 0 adversarial, 33 field operations, 33 offline sync,
-  28 manager surface, 8 Gate 1.
+- **287 passing tests**: 18 in `packages/core`, 40 mock-conformance tests in
+  `services/mock`, 229 database tests in `services/api` — foundations, Gate 0
+  adversarial, field operations, offline sync, manager surface, Gate 1, and
+  consent/audio/retention.
 - **`docs/gotchas.md`** carries the durable machine and tooling failures. There is no
   handoff document, on purpose.
 - `packages/core` is namespaced into `@elmiron/core/shared` and `@elmiron/core/field`;
@@ -1265,6 +1269,262 @@ schedule risk that engineering cannot resolve.
 capture: the harness seeds its own window, so a real environment without one refuses
 every check-in. The escalation is drafted in `claude/escalations-week3.md` and needs
 a named person at the client.
+
+---
+
+### BE-W6 — Consent, recording and retention (15 August 2026)
+
+Three migrations. The week's object was to make it structurally impossible to hold
+audio that consent does not cover.
+
+#### Housekeeping from the BE-W5 review
+
+**Thresholds are configuration.** `public.app_thresholds` — key, jsonb value, unit,
+scope, territory, effective date, who set it. `team_exceptions` reads them at query
+time. Seeded with the values that were hardcoded, so this changed where the numbers
+live and not what the system does.
+
+_Deviation, stated:_ the table is **append-only**, not updatable. The review said "a
+guess in a row costs an UPDATE"; an UPDATE would destroy the effective date and the
+record of who set the previous value, which are two of the five columns asked for.
+Changing a threshold is one INSERT — the same cost — and the history survives.
+
+**Team-size floor: 8.** Below eight MRs in the comparison group, the consent anomaly
+is not emitted **at all** — not a low-confidence signal, not a nulled field.
+
+_Why eight._ The brief says a field manager oversees 8–15 MRs, so eight is the
+bottom of a real team rather than a number I liked. Below it, the median is one or
+two people's behaviour: at n=3 the median _is_ the middle person, and a single
+outlier moves it by a third of the range. At n=8 the median sits between the fourth
+and fifth values and one anomalous MR cannot drag it. It is still a small-sample
+statistic and I would not defend it as more than "the point at which the comparison
+group is a group".
+
+**Bulk approve reports truncation.** `{ results, decidedCount, notDecidedCount,
+submittedCount, truncated, limit }`. Submitting 250 decides 200 and says so. Same
+failure as a silent cap in search — fixed in one place in BE-W5 and not the other.
+
+**The org default shift window, and its flag.** This reverses the BE-W3 rule that a
+missing window refuses every capture. The reversal is recorded in the migration
+header, not just here.
+
+- `org_default_shift_window` lives in the same config table and is **null by
+  default** — with nothing configured, behaviour is exactly as before: refuse.
+- A territory window always wins.
+- Every capture judged against the default carries `shift_window_source =
+'org_default'`, a **stored** column written server-side. Derived at read time it
+  would silently change meaning the moment someone configured a territory window
+  afterwards, and the point is a durable record of what the capture was judged
+  against.
+- Every such capture appears in `team_exceptions` under
+  `org_default_shift_window`, with a count and the earliest occurrence.
+
+`check_outs` carries the column too. The prompt named `check_ins`; a manager seeing
+flagged check-ins and unflagged check-outs is looking at half the picture, and that
+asymmetry gets exploited rather than noticed.
+
+**`TranscriptV0` published** to `packages/core/field/transcript-v0.ts`, marked in a
+header block as a placeholder owned by AI/ML, dated, with the reason it exists.
+Provider-agnostic: `vendor` is free-form text rather than an enum, because
+enumerating vendors is the decision this is waiting on, and per-word confidence is
+optional so a provider that omits it still validates. **It does not close I3.**
+
+#### The three properties
+
+**1. No audio without consent — absent, not disabled.**
+
+`issue_recording_upload_grant` raises for a visit with no standing consent, so there
+is no grant, no key, and nothing to call. Behind it, `recordings.consent_record_id`
+is NOT NULL and a trigger checks the outcome is `consented`, the visit matches, the
+row is not itself a withdrawal, and no withdrawal supersedes it.
+
+Two checks, deliberately: **the grant is a convenience and the storage policy is the
+control.** `storage.objects` accepts an INSERT into the `audio` bucket only where a
+live, unconsumed grant exists for exactly that key, held by that caller. There is a
+test that POSTs to storage over real HTTP with a valid MR token and no grant, and it
+is refused.
+
+Object paths are opaque and server-generated:
+`recordings/{uuid}/{uuid}.opus`, enforced by a check constraint. Nothing about a
+doctor, a clinic or a patient — object paths leak through logs, error messages and
+support tickets. Size and duration ceilings are enforced at issuance: 25 MB and two
+hours.
+
+**2. Withdrawal destroys.** See below.
+
+**3. Nothing survives 90 days.** `purge_after` is set by trigger from
+`received_at`, which is itself stamped `clock_timestamp()`. There is a test that
+inserts a recording claiming to be 200 days old with a matching `received_at`, and
+asserts the trigger overwrote both — a device cannot start or shorten a compliance
+clock by lying about when something happened.
+
+#### The withdrawal cascade — the decision and the reasoning
+
+When a withdrawal row lands for a visit with a recording, the trigger destroys the
+derived artifacts **in the same transaction as the withdrawal**: redacted
+transcript, then raw transcript, then analyses. The audio object is marked
+`purge_state = 'claimed'`, `destruction_reason = 'withdrawal'`, `purge_after = now`,
+and removed by the same worker that handles retention.
+
+**Why the object is not deleted inline.** A storage object is not a row. SQL cannot
+delete one, and a `delete from storage.objects` leaves the file behind in the
+backend — Supabase actively refuses it, and is right to. So the two paths share one
+claim/confirm machinery, which is also what makes them safe to interleave: whichever
+reaches the object first wins and the other is a no-op. There is a test that runs
+both.
+
+**Order within the cascade.** Derived artifacts first, audio last. A failure part-way
+therefore leaves the audio present and findable rather than the reverse — an
+orphaned analysis whose recording is gone is harder to notice and harder to explain.
+
+**The audit row is written in the same transaction as the destruction.** The
+alternative produces destructions with no record when the second write fails. A
+record with no destruction is the safer failure: it claims something was destroyed
+that is still present, which a reconciliation job can find and finish. The reverse is
+undetectable, and undetectable is the property that matters here.
+
+**What the log holds.** Object kind, object id, visit id, reason, timestamps, and
+counts of each derived row destroyed. The storage key is **SHA-256 hashed**, and
+there is no content column of any kind — a test asserts `segments`, `text`,
+`transcript`, `content` and `storage_key` are all absent from the table. The audit
+trail must not become the copy that survives the deletion.
+
+**The already-read summary.** This is the part that has no clean answer.
+
+A manager may have read the analysis days before the withdrawal arrived. That cannot
+be un-read, and pretending otherwise would be dishonest in a way that matters here.
+The model is: **the record shows the content existed and was withdrawn.** Not that
+it never existed, and not that it is still readable.
+
+So `visit_recording_status` returns `withdrawn` with the withdrawal date. It does not
+return the content, and it does not return `none`.
+
+_Why not silently vanish._ It is worse. A visit that quietly reverts to "no
+recording" hides the withdrawal from the only person who might otherwise notice a
+pattern of them — and a pattern of withdrawals in one territory, or against one MR,
+is exactly the signal somebody should see. Erasing the fact protects nobody and
+costs the one thing the record was for.
+
+**Withdrawal arriving late is the normal case**, not the edge case: offline, days
+later, after the analysis has run. There is a test that ages the analysis by three
+days, marks it as already viewed by the MR, and then withdraws.
+
+#### What the purge test asserts, and what it does not
+
+**Asserts.** It creates a real object in the `audio` bucket through the storage API,
+inserts a recording row pointing at it, backdates `received_at` to 91 days, runs the
+**actual worker** — the same `runPurge` the CLI runs, imported rather than
+reimplemented — and then asserts, over HTTP, that the object returns 404 **and** that
+the row is `destroyed` with a null key.
+
+A test that only checks the row proves the half that was never in doubt: a row delete
+does not touch an object. A test that only checks a scheduled job is registered
+proves nothing at all.
+
+It also asserts: running twice is safe and produces one destruction-log row; a crash
+between claim and confirm resumes on the next run; withdrawal and retention
+interleave safely; the raw transcript goes with the audio; and the health function
+reports a successful run.
+
+**Does not assert.** That the job is scheduled — there is no scheduler yet, and
+`audio_purge_health()` exists precisely so a stopped purge is visible rather than
+inferred. It does not assert behaviour at volume: the batch limit is 100 and nothing
+has been run against 10,000 expired objects. It does not assert anything about
+Supabase's own object-versioning or backup retention, which is a platform question I
+cannot answer from here and which could keep a copy of a "destroyed" object.
+
+#### The redaction gate
+
+`transcripts_raw` and `transcripts_redacted` are separate tables. The `llm_gateway`
+role exists now — three lines this week, an argument in week 8 — with `select` on
+the redacted table and **no grant of any kind** on the raw one, on `recordings`, on
+`voice_notes` or on `consent_records`.
+
+The test assumes the role and queries the raw table, asserting **permission denied**
+rather than an empty result. This is the case where the Gate 0 amendment's
+distinction genuinely bites: here the absence of a grant _is_ the control, so an
+empty result would mean the control is missing and something else happened to filter
+the rows.
+
+#### What each new test proves
+
+`consent-audio.spec.ts`, 32 tests.
+
+| Block                      | What it proves                                                                                                                                                                                                                                                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **consent capture** (6)    | All three outcomes are complete successful captures. The text version comes from the server catalogue — asserted structurally, by checking `capture_consent` has no version parameter at all. An unknown language is refused. Replay does not overwrite an outcome.                                                                         |
+| **the path is absent** (8) | No grant for `declined`, `not_asked`, or no record at all. A granted key is opaque and contains no doctor, clinic or patient string. Unbounded size and duration are refused. A `recordings` row is refused with a non-consented reference, with no reference, and with a non-opaque path.                                                  |
+| **storage policy** (3)     | A real HTTP POST with a valid token and no grant is refused; with a grant it succeeds; the bucket is private.                                                                                                                                                                                                                               |
+| **redaction gate** (4)     | `llm_gateway` gets permission denied on raw, can read redacted, holds no privilege on four sensitive tables, and the two tables are genuinely separate.                                                                                                                                                                                     |
+| **withdrawal** (7)         | Every derived artifact destroyed; the object marked immediately with `purge_after` now rather than in 90 days; the log records counts and a hashed key and has no content column; the manager sees `withdrawn` with a date; a late withdrawal after analysis works; and afterwards neither a new recording row nor a new grant is possible. |
+| **retention** (6)          | The object is gone from storage as well as the row; the clock is the server's; twice is safe; a crash resumes; withdrawal and retention interleave; health is reported.                                                                                                                                                                     |
+
+Plus 2 in `manager.spec.ts` for bulk truncation, and the reworked consent-anomaly
+tests around the floor.
+
+**Mutation-tested.** Nine regressions — consent trigger dropped, cascade emptied,
+raw table granted to the gateway, storage policy opened, retention counted from the
+client clock, grants issued without consent, the manager view hiding withdrawals, the
+destruction log storing the key in the clear, and bulk approve capping silently —
+produced **20 failures**. Restored: 229/229.
+
+**One gap the mutation run found in my own work:** I had built bulk-approve
+truncation with no test for it. Mutation 9 passed silently until I noticed nothing
+went red for it. Two tests added.
+
+#### Contract change — Frontend
+
+Additive. `TranscriptV0`, and `my_shift_window()` now returns `source` alongside
+`window`, so the app can say "these are the organisation's default hours, not your
+territory's". `search_doctors` and bulk approve shapes were covered in BE-W5 and
+BE-W6 respectively.
+
+Nothing removed.
+
+#### Anything I was asked to build that I think is wrong
+
+**Nothing in the brief is wrong.** Two things I would flag rather than object to:
+
+**The org-default flag is only as loud as whoever reads it.** I have made it a stored
+column and a first-class exception, which is what was asked. But an exception nobody
+opens is a log line with extra steps, and the console that displays these does not
+exist yet — it is Frontend's week 11. Between now and then, the flag is real and
+invisible. If the pilot starts before the console does, the strict rule is safer than
+the flag.
+
+**Publishing `TranscriptV0` reduces the pressure on AI/ML at exactly the wrong
+moment.** It unblocks me, which is why it was right, and it also removes the most
+visible symptom of a three-week-late contract. I have marked it a placeholder in the
+strongest terms I can put in a file, but a placeholder that works is a placeholder
+that stays. Worth a calendar reminder rather than trusting the comment.
+
+#### Open questions for the reviewer
+
+**1. Supabase may keep a copy of a "destroyed" object.** The purge deletes through
+the storage API and I have verified the object 404s afterwards. What I cannot verify
+from here is whether the platform retains it in backups, object versioning, or a
+soft-delete window. For a 90-day retention promise made on privacy grounds, that is
+the difference between the promise being true and being approximately true. **This
+needs an answer from Supabase before the pilot**, and it is not an engineering task.
+
+**2. `voice_notes` are purged at 90 days too, and nobody asked for that.** They are
+audio, they are covered by the same reasoning, and the alternative — keeping the MR's
+own voice indefinitely — seemed worse. But the voice note involves no third party and
+no consent, so a different retention could be defended. Flagging because I chose it.
+
+**3. The purge has no scheduler.** `audio_purge_health()` exists so that a stopped
+purge is visible, but nothing runs the worker. It needs a cron — Supabase's
+`pg_cron` calling an edge function, or an external scheduler — and that is a
+deployment decision I should not make unilaterally. **Until it is scheduled, the
+90-day promise is a script somebody has to remember to run.**
+
+**4. Contract I3 is four weeks late.** `TranscriptV0` unblocks week 8's design. The
+vendor decision and the measured Hinglish word error rate are still outstanding, and
+those are what decide whether the AI layer ships at all.
+
+**5. Shift-window data.** Now less urgent, because the org default exists — which is
+exactly the risk the reviewer named. The flag is the mitigation; somebody still has
+to collect the real hours.
 
 ---
 

@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint tests scripts",
     "test": "vitest run",
-    "verify:rollbacks": "node scripts/verify-rollbacks.mjs"
+    "verify:rollbacks": "node scripts/verify-rollbacks.mjs",
+    "purge:audio": "node scripts/purge-expired-audio.mjs"
   },
   "dependencies": {
     "@elmiron/core": "workspace:*"
