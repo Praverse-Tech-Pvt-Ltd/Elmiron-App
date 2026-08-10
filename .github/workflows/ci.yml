@@ -35,9 +35,11 @@ jobs:
       - run: pnpm run lint
       - run: pnpm run format:check
       - run: pnpm --filter @elmiron/core test
+      # Contract I2: proves every mock response still parses against packages/core.
+      - run: pnpm --filter @elmiron/mock test
 
   database:
-    name: migrations · database tests
+    name: migrations · Gate 0 RLS suite · rollbacks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -52,14 +54,27 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # Proves every migration applies to an empty database, in order.
+      # auth is required: the Gate 0 suite signs a fixture user in through GoTrue
+      # to prove the hand-built JWT claims match the ones the auth hook really mints.
       - name: Start Supabase and apply migrations
         run: pnpm exec supabase --workdir services/api start -x realtime,vector,imgproxy,studio
 
-      # From BE-W2 this job also runs the adversarial RLS suite that proves Gate 0.
-      - name: Database tests
+      # Includes services/api/tests/rls.spec.ts — the Gate 0 adversarial suite.
+      # SUPABASE_DB_URL being set does not make the tests run; db.ts hard-fails in CI
+      # if the database is unreachable, so a green run always means they executed.
+      - name: Database and Gate 0 tests
+        env:
+          CI: 'true'
+          SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_URL: http://127.0.0.1:54321
+        run: pnpm --filter @elmiron/api test
+
+      # Destructive, so it runs last. A rollback file that has never been executed
+      # is a claim, not a rollback.
+      - name: Verify every migration can be rolled back
         env:
           SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-        run: pnpm --filter @elmiron/api test
+        run: pnpm --filter @elmiron/api verify:rollbacks
 
       - name: Stop Supabase
         if: always()

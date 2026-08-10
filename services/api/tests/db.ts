@@ -66,6 +66,25 @@ export const requireDatabase = async (): Promise<boolean> => {
 };
 
 /**
+ * Runs `fn` on a plain connection with no transaction. Used for fixture setup,
+ * which has to COMMIT: the PostgREST and GoTrue paths run over HTTP on their own
+ * connections and cannot see uncommitted rows.
+ */
+export const withClient = async <T>(fn: (client: Client) => Promise<T>): Promise<T> => {
+  const client = new Client({ connectionString: DB_URL });
+  await client.connect();
+  try {
+    return await fn(client);
+  } finally {
+    try {
+      await client.end();
+    } catch {
+      // Nothing useful to add if teardown of the connection itself fails.
+    }
+  }
+};
+
+/**
  * Runs `fn` inside a transaction that is always rolled back.
  *
  * Cleanup failures are swallowed on purpose. If `fn` threw because the connection

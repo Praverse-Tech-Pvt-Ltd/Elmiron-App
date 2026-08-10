@@ -10,23 +10,35 @@ the patient app is a separate project with a separate database.
 
 ## Current state
 
-Week 1 of 12. Backend foundations only. There are no product features and no
-product APIs yet.
+_This is the one section that describes now rather than history. The Phase log below
+is append-only._
+
+End of week 2 of 12. The security boundary exists and is adversarially tested.
 
 What exists and runs:
 
-- A Turborepo + pnpm monorepo with five workspaces, strict TypeScript, ESLint and
-  Prettier.
-- GitHub Actions CI with two jobs, both failing the build rather than warning.
-- A local Supabase stack with one migration applied: role enum, territories,
-  user profiles, a JWT claims hook and two helper functions.
-- `packages/core` — contract **I1** — published with types, Zod schemas and a typed
-  API client covering every entity and endpoint the app will have.
-- 30 passing tests: 12 contract guards in `packages/core`, 18 database tests in
-  `services/api`.
+- A Turborepo + pnpm monorepo, **seven** workspaces, strict TypeScript, ESLint on
+  `strictTypeChecked`, Prettier.
+- GitHub Actions CI, two jobs, both failing the build rather than warning. The
+  database job applies every migration from empty, runs the Gate 0 suite, then
+  **rolls every migration back and asserts the schema is empty**.
+- **Five migrations**: roles and territories, commercial schema, consent ledger,
+  audit log, and the whole RLS boundary in one auditable file.
+- **16 tables**, RLS enabled and forced on every one. **31 policies.**
+- The **consent ledger** and the **audit log**, both append-only against every role
+  including `service_role` and the table owner — enforced by statement-level
+  triggers, not by RLS, because BYPASSRLS roles never see a policy.
+- `packages/core` — contract **I1** — types, Zod schemas and a typed API client.
+- `services/mock` — contract **I2** — a running mock server covering every endpoint
+  declared in `packages/core`, with populated / single / empty lists, real cursor
+  pagination, every error code, and a full offline-sync queue.
+- **127 passing tests**: 12 contract guards in `packages/core`, 27 mock-conformance
+  tests in `services/mock`, 88 database tests in `services/api` of which 70 are the
+  Gate 0 adversarial suite.
 
-What does not exist yet: the commercial schema, the full RLS policy set, the audit
-log, the consent ledger tables, the mock server, and every API endpoint. All BE-W2.
+What does not exist yet: any application API. Every endpoint in `packages/core` is
+still declaration plus mock only. Audio storage, the pipeline, AE routing and the
+analysis engine are weeks 7–10.
 
 ---
 
@@ -90,6 +102,64 @@ an uncited finding fails validation rather than rendering.
 **Rollback SQL lives in `services/api/rollbacks/`, not inside `supabase/migrations/`.**
 The CLI has no down-migration step; keeping the files next to the migrations risks
 the CLI applying them. They are applied by hand with psql.
+
+### Added in BE-W2
+
+**Immutability is a trigger, not a policy.** `postgres` and `service_role` both hold
+the **BYPASSRLS** attribute. Measured: with `FORCE ROW LEVEL SECURITY` on, both still
+read every row. RLS is never evaluated for them, so "no UPDATE policy" stops neither.
+Statement-level `BEFORE UPDATE OR DELETE OR TRUNCATE` triggers do, and they are what
+makes `consent_records` and `audit_log` append-only.
+_Rules out:_ an append-only guarantee that any holder of the service key can walk
+through.
+
+**Statement-level, not row-level.** A row-level trigger never fires for an UPDATE
+that matches no rows, so an out-of-scope UPDATE would report "0 rows affected" and
+read as success. Statement-level fires before the scan and errors every time. There
+is a test for exactly this.
+
+**`FORCE ROW LEVEL SECURITY` on every table anyway.** BE-W1 omitted it on the
+reasoning that it would break the SECURITY DEFINER helpers. That reasoning was
+wrong — BYPASSRLS wins over FORCE, so the helpers are unaffected. FORCE is now on
+everywhere. It buys nothing against `postgres` or `service_role`; it buys correctness
+if ownership ever moves to a role without BYPASSRLS. Nothing relies on it.
+
+**Authorization reads the role from `user_profiles`, never from the JWT claim.**
+`public.effective_role()` and `public.is_admin()` are what policies call.
+_Closes BE-W1 open question 3._ The claim refreshes at most hourly, so a demoted or
+deactivated user would otherwise keep their powers for up to an hour.
+`current_app_role()` survives as the BE-W1 deliverable and is fine for display.
+Tested: flipping `is_active` collapses scope immediately, with a still-valid token.
+
+**Reads of `analyses` and `consent_records` go through logged RPCs; there is no
+SELECT grant on either table.** Postgres has no SELECT trigger, and the brief
+requires every read of both to be audited — not only admin reads. So direct access is
+a genuine permission denied (amendment criterion 3), and `read_analysis`,
+`list_analyses`, `read_consent_record`, `list_consent_records` write the audit row
+first and return data second.
+_Rules out:_ "every read is logged" being true only for the paths someone remembered.
+_Cost:_ those two tables lose PostgREST's generated endpoints. The amendment rejected
+RPC-only reads across the board; this is the narrow case where the audit rule forces
+it anyway.
+
+**Every view is `security_invoker`.** A view runs as its owner by default, and every
+view here is owned by a BYPASSRLS role — `visit_summary` without it would hand every
+MR the company's entire visit history. A structural test asserts the property for
+every view in `public`, so the next one cannot omit it.
+
+**Approval is an RPC, because RLS cannot express column-level intent.** RLS says which
+rows, never which columns. `public.approve_call_report` is the only path to an
+approved status; field managers hold no UPDATE policy on `call_reports` at all, and
+the function rejects the author even when the author is a manager.
+
+**One primitive for scope: `public.visible_user_ids()`.** Every own-vs-team policy
+calls it. _Rules out:_ twenty hand-written subtree expressions, one of which is
+subtly different.
+
+**Fixtures are committed and never torn down.** PostgREST and GoTrue run over HTTP on
+their own connections and cannot see uncommitted rows, so a suite that only seeds
+in-transaction can never exercise the faithful path. Teardown is impossible anyway —
+`consent_records` is append-only. Each run mints fresh UUIDs and emails instead.
 
 ---
 
@@ -309,6 +379,209 @@ anyone's checkout looks odd after pulling, that rename is why.
 
 ---
 
+### BE-W2 — Boundary (11 August 2026)
+
+Built against `docs/amendment-gate0-criterion.md`, not the original
+"permission denied, not an empty result" wording in the brief.
+
+#### What was built
+
+**Four migrations**, on top of BE-W1's:
+
+| File                                   | Contents                                                                                      |
+| -------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `20260811000100_commercial_schema.sql` | FORCE RLS retrofit, both carried tasks, 8 enums, 11 tables, `visible_user_ids()`              |
+| `20260811000200_consent_ledger.sql`    | `consent_outcome`, `consent_text_versions`, `consent_records`, immutability triggers          |
+| `20260811000300_audit_log.sql`         | `audit_log`, write-audit triggers on 9 tables, 4 logged-read RPCs, approval and response RPCs |
+| `20260811000400_rls_policies.sql`      | The whole boundary: 31 policies, every grant and revocation, `visit_summary`                  |
+
+Every one has a matching file in `services/api/rollbacks/`, and **CI now executes all
+five rollbacks in reverse and asserts the public schema comes back empty** — closing
+BE-W1 known gap 5.
+
+**Both carried tasks from the amendment are done:**
+
+- **Territory cycles are now unrepresentable.** `reject_territory_cycle()` walks up
+  from the proposed parent on insert and on any `parent_id` update, and refuses the
+  edge that would close a loop. The BE-W1 `CYCLE` clause made the read safe; this
+  makes the write impossible.
+- **`reporting_manager_id` is constrained.** `validate_reporting_manager()` rejects a
+  manager who is an `mr`, rejects self-management, rejects a cycle in the chain, and
+  refuses a chain longer than 64 hops.
+
+#### Every RLS policy created
+
+RLS is **enabled and forced on all 16 tables**. `analyses` and `audit_log`
+deliberately have no policy and no grant for `authenticated` — direct access is a
+permission denied.
+
+| Table                   | Policy                                       | Cmd    | Effect                                                                       |
+| ----------------------- | -------------------------------------------- | ------ | ---------------------------------------------------------------------------- |
+| `organisations`         | `organisations_select_authenticated`         | SELECT | the employer's own name is readable                                          |
+| `organisations`         | `organisations_admin_all`                    | ALL    | admin writes                                                                 |
+| `territories`           | `territories_select_visible` _(BE-W1)_       | SELECT | own territory / own subtree / all                                            |
+| `territories`           | `territories_admin_all`                      | ALL    | admin writes                                                                 |
+| `user_profiles`         | `user_profiles_select_self` _(BE-W1)_        | SELECT | own row                                                                      |
+| `user_profiles`         | `user_profiles_select_team`                  | SELECT | a manager can name the people in their scope                                 |
+| `user_profiles`         | `user_profiles_select_auth_admin` _(BE-W1)_  | SELECT | GoTrue reads profiles to mint the role claim                                 |
+| `user_profiles`         | `user_profiles_admin_all`                    | ALL    | admin writes                                                                 |
+| `doctors`               | `doctors_select_in_territory`                | SELECT | bounded by `current_user_visible_territory_ids()`                            |
+| `doctors`               | `doctors_admin_all`                          | ALL    | admin writes                                                                 |
+| `clinic_addresses`      | `clinic_addresses_select_visible_doctor`     | SELECT | inherits the doctor's territory bound                                        |
+| `clinic_addresses`      | `clinic_addresses_admin_all`                 | ALL    | admin writes                                                                 |
+| `beat_plans`            | `beat_plans_select_own_or_team`              | SELECT | `visible_user_ids()`                                                         |
+| `beat_plans`            | `beat_plans_insert_own`                      | INSERT | own `mr_id` only                                                             |
+| `beat_plans`            | `beat_plans_update_own`                      | UPDATE | own `mr_id` only                                                             |
+| `beat_plan_entries`     | `beat_plan_entries_select_via_plan`          | SELECT | scope inherited from the plan                                                |
+| `beat_plan_entries`     | `beat_plan_entries_write_own_plan`           | ALL    | only entries on the caller's own plan                                        |
+| `visits`                | `visits_select_own_or_team`                  | SELECT | `visible_user_ids()`                                                         |
+| `visits`                | `visits_insert_own`                          | INSERT | own `mr_id` only                                                             |
+| `visits`                | `visits_update_own`                          | UPDATE | own `mr_id` only                                                             |
+| `check_ins`             | `check_ins_select_own_or_team`               | SELECT | `visible_user_ids()`                                                         |
+| `check_ins`             | `check_ins_insert_own`                       | INSERT | own `mr_id` **and** own visit                                                |
+| `check_outs`            | `check_outs_select_own_or_team`              | SELECT | `visible_user_ids()`                                                         |
+| `check_outs`            | `check_outs_insert_own`                      | INSERT | own `mr_id` **and** own visit                                                |
+| `call_reports`          | `call_reports_select_own_or_team`            | SELECT | `visible_user_ids()`                                                         |
+| `call_reports`          | `call_reports_insert_own`                    | INSERT | own visit, never `approved`                                                  |
+| `call_reports`          | `call_reports_update_own_not_approval`       | UPDATE | own row, and the WITH CHECK forbids `approved`                               |
+| `samples_and_inputs`    | `samples_and_inputs_select_own_or_team`      | SELECT | `visible_user_ids()`                                                         |
+| `samples_and_inputs`    | `samples_and_inputs_insert_own`              | INSERT | own `mr_id` and own visit                                                    |
+| `consent_text_versions` | `consent_text_versions_select_authenticated` | SELECT | the device must fetch the text it displays                                   |
+| `consent_records`       | `consent_records_insert_own`                 | INSERT | own capture, own visit. **No SELECT, UPDATE or DELETE policy for any role.** |
+| `analyses`              | —                                            | —      | **no policy, no grant.** Reads via logged RPC only                           |
+| `audit_log`             | —                                            | —      | **no policy, no grant.** Append-only by trigger                              |
+
+The `check_ins` / `check_outs` / `call_reports` / `samples_and_inputs` INSERT policies
+each carry a second clause requiring the visit to belong to the caller. Without it an
+MR could attach a record to someone else's visit while still passing the `mr_id` test.
+
+#### The Gate 0 suite — what each block proves
+
+`services/api/tests/rls.spec.ts`, 70 tests. Every scope test goes direct to Postgres
+or PostgREST with the user's own identity; no application code is in the path.
+
+| Block                                             | What it proves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **harness fidelity** (6)                          | The plain test connection **does** bypass RLS, so `asUser()` is not decoration. `SET ROLE authenticated` genuinely subjects the session to policy (asserted as an inequality against the same query run as `postgres`). A minted JWT is accepted by PostgREST. **Real GoTrue claims deep-equal the ones the fast path builds** — if the auth hook changes shape, this one test fails instead of the suite quietly testing a fiction. Positive controls throughout, so a zero-row result cannot pass because everything is broken. |
+| **mr → another mr: visits** (6)                   | All five required paths: REST, direct SQL, a join from a table the caller legitimately reads, a Postgres function, and the `visit_summary` view. Plus the view's positive control.                                                                                                                                                                                                                                                                                                                                                |
+| **mr → another mr: check-ins, call reports** (7)  | REST, SQL and join for each; the approval RPC refuses an unrelated MR and refuses a manager outside their team.                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **analyses** (7)                                  | Direct SELECT is **permission denied** for `mr`, `field_manager` **and** `admin` — criterion 3. REST exposes no table. `read_analysis` discloses nothing for another MR's analysis but does return the caller's own. `respond_to_analysis` refuses somebody else's.                                                                                                                                                                                                                                                               |
+| **field_manager → outside their team** (7)        | Positive control inside the subtree, then REST, SQL, join, view, `list_analyses` and `read_consent_record` all outside it.                                                                                                                                                                                                                                                                                                                                                                                                        |
+| **doctors bounded by territory** (5)              | An MR reads their own territory's doctor and not the neighbouring one, over both paths, including clinic addresses; a manager sees the whole subtree and no further.                                                                                                                                                                                                                                                                                                                                                              |
+| **consent_records append-only** (11)              | Two layers proved separately — `service_role` is stopped at the **grant**, and with the grant restored inside a rolled-back transaction the **trigger** still refuses it. Same for the table owner, which holds BYPASSRLS. A **zero-row UPDATE errors** rather than reporting success. Rewriting the consent text is refused. Withdrawal creates a new row and leaves the original `consented`. Withdrawing a never-granted consent is refused. No penalty, flag, score, rating, compliant or is_failure column exists.           |
+| **audit_log append-only** (7)                     | UPDATE and DELETE refused at the grant layer for `service_role` and at the trigger layer for the owner; zero-row UPDATE errors; `authenticated` can neither read nor write it; and an INSERT into `visits` provably adds exactly one audit row, so the trigger — not the caller — writes it.                                                                                                                                                                                                                                      |
+| **admin access is audited before disclosure** (4) | An admin read without a reason is refused. With one, the returned `readAt` is stamped after the audit insert and after the row is fetched, and `audit_log.occurred_at <= readAt` is **measured, not assumed**. An out-of-scope read still writes the row that shows someone went looking.                                                                                                                                                                                                                                         |
+| **structural invariants** (7)                     | Every table has RLS enabled **and** forced. Every view is `security_invoker`. **Every base table with an `mr_id` has a SELECT policy referencing `visible_user_ids`** — criterion 4 made mechanical. No write grant on any append-only table. `anon` holds nothing at all.                                                                                                                                                                                                                                                        |
+| **deactivation** (1)                              | Flipping `is_active` collapses scope immediately, with claims that still say active.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+
+**The suite was mutation-tested.** Four deliberate regressions were applied to the
+live schema — a permissive `visits` policy, the consent trigger dropped with its grant
+restored, `security_invoker` turned off on the view, and `analyses` granted to
+`authenticated` — and **20 of the 88 tests failed**. Restored, all 88 pass. Evidence
+below.
+
+#### Contract I2 — the mock server
+
+`services/mock`, zero runtime dependencies beyond `@elmiron/core`. `pnpm mock` starts
+it on `:4010`.
+
+- **Every endpoint declared in `packages/core`**, plus `GET /sync/queue` for driving
+  the offline-queue UI.
+- Fixtures are typed as the real entities, so **the mock cannot drift from the
+  contract without failing typecheck**.
+- Scenarios via `x-mock-scenario` or `?_scenario=`: `populated` (default), `single`,
+  `empty`, `denied`, `unauthenticated`, `validation`, `conflict`, `rate-limited`,
+  `error`.
+- Real cursor pagination — a test walks the whole list one item at a time and asserts
+  no repeats.
+- All three consent outcomes POST to the same route and all three return 201. There
+  is no error path for declining.
+- The offline-sync fixture covers `queued`, `in_flight`, `conflict` and `failed`, and
+  `POST /sync/push` returns a deterministic mix of accepted / duplicate / conflict /
+  rejected so the client's non-happy paths get exercised.
+- 27 tests parse every response against its `@elmiron/core` schema, and two of them
+  drive the published `createApiClient` against the mock — including asserting that
+  `permission_denied` arrives as a thrown `ApiRequestError`, never as empty data.
+
+#### Files created or changed
+
+```
+services/api/supabase/migrations/  20260811000100_commercial_schema.sql
+                                   20260811000200_consent_ledger.sql
+                                   20260811000300_audit_log.sql
+                                   20260811000400_rls_policies.sql
+services/api/rollbacks/            one .down.sql per migration above
+services/api/scripts/              verify-rollbacks.mjs
+services/api/tests/                auth.ts (new)  fixtures.ts (new)
+                                   rls.spec.ts (new)  db.ts (+withClient)
+                                   foundations.spec.ts (updated for the new schema)
+services/mock/                     package.json, tsconfig{,.build}.json,
+                                   vitest.config.ts,
+                                   src/fixtures.ts, src/server.ts, src/index.ts,
+                                   tests/contract.spec.ts
+.github/workflows/ci.yml           mock tests; Gate 0 suite; rollback verification
+eslint.config.mjs                  node globals for plain-JS scripts
+package.json                       `pnpm mock`
+.env.example                       test-harness keys, MOCK_PORT
+```
+
+#### Deliberately left out and why
+
+| Left out                                                       | Why                                                                                                                                                                        |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Any HTTP API implementation                                    | Not in the BE-W2 scope. Shapes are declared, the mock serves them, the database enforces the boundary beneath them.                                                        |
+| `findings` and `transcript_id` on `analyses`                   | Contract I5 is AI/ML's and is due end of week 8. `analyses` exists only because the RLS spec requires it.                                                                  |
+| Admin write access to visits, call reports and consent records | Admin has full access to master data. It has no path to author field activity on an MR's behalf, which would forge a record of work that never happened. Raising it below. |
+| Autonomous (out-of-transaction) audit writes                   | Needs `dblink` or `pg_background`. Recorded in the migration header rather than hidden. A rolled-back read disclosed nothing durable either.                               |
+| Reading `audit_log` from the app                               | Nothing needs it this week. The admin audit console is week 11 and gets its own logged RPC.                                                                                |
+| Cross-file dedup of the DB reachability check                  | Still deferred. Now that `rls.spec.ts` exists, `globalSetup` + `provide`/`inject` has real call sites — worth doing in BE-W3.                                              |
+
+#### Open questions for the reviewer
+
+**1. Two corrections to the amendments you sent, both measured.**
+
+- **`postgres` is not a superuser in Supabase, but it does hold `BYPASSRLS`** — so
+  vectors 1 and 2 in your note collapse into one. More importantly, **`FORCE ROW
+LEVEL SECURITY` does not subject `postgres` or `service_role` to policy**, because
+  BYPASSRLS wins over FORCE. Measured both ways: with FORCE on, `postgres` still
+  reads every row. FORCE is applied everywhere and is worth having, but it is not
+  what closes the owner-bypass vector for these roles — the **triggers** are. If the
+  ledger's immutability had been left to "no UPDATE policy plus FORCE", anyone
+  holding the service key could have rewritten it.
+- The corollary: **`SET ROLE authenticated` does work**, exactly as you said, and the
+  suite is built on it. Proven by an explicit inequality test rather than assumed.
+
+**2. Admin cannot author field activity, and I would like that confirmed.** The brief
+says `admin` — full access. I gave admin full read plus full write on master data
+(organisations, territories, user profiles, doctors, clinic addresses) but **no write
+policy on visits, check-ins, call reports, consent records or analyses**. An admin who
+can insert a consent record on an MR's behalf can manufacture a consent that no doctor
+ever gave, which is the exact artefact the ledger exists to make impossible. Say if
+you want literal full access; it is one policy per table and I would rather you chose
+it than inherit it.
+
+**3. `consent_text_versions.hash` is generated, not supplied.** The column is
+`generated always as (public.sha256_hex(full_text)) stored`. `sha256_hex` is marked
+IMMUTABLE on the basis that the database encoding is UTF8 and pinned; `convert_to` is
+only STABLE, which is why the wrapper exists. If the database encoding ever changes,
+that promise breaks and so do the stored hashes. Flagging rather than burying.
+
+**4. The audit row shares the caller's transaction.** A caller who rolls back loses
+the audit row with everything else. Making it autonomous needs `dblink` or
+`pg_background` — a real dependency and a real decision. My read is that it does not
+matter, because a rolled-back read disclosed nothing durable, but a PV or privacy
+reviewer may see it differently and it is cheaper to decide now than in week 11.
+
+**5. Still unanswered from BE-W1, and now overdue: the PV and privacy sign-off on the
+adverse-event position.** It blocks week 7 and needs two named people. Week 7 starts
+in five weeks.
+
+**6. `docs/spend-approval.md` — the Apple Developer Program.** Response was requested
+by Friday 14 August. The blocker is the D-U-N-S number, not the $99. If it slips the
+week-5 App Store probe slips with it.
+
+---
+
 ## How to run
 
 Prerequisites: Node 24, pnpm 11, Docker running. Setup steps are in
@@ -386,6 +659,73 @@ POST /territories   -> 403 {"code":"42501","message":"permission denied for tabl
 The hook fires, the claims land in the token, the MR reads only what they should,
 and a write attempt is denied rather than silently dropped.
 
+### Verification evidence — BE-W2, 11 August 2026
+
+```
+$ pnpm run build            Tasks: 3 successful, 3 total
+$ pnpm run typecheck        Tasks: 8 successful, 8 total
+$ pnpm run lint             Tasks: 6 successful, 6 total
+$ pnpm run format:check     All matched files use Prettier code style!
+
+$ pnpm --filter @elmiron/core test        Tests  12 passed (12)
+$ pnpm --filter @elmiron/mock test        Tests  27 passed (27)
+$ pnpm --filter @elmiron/api  test        Tests  88 passed (88)
+```
+
+**Migrations apply from empty**, not just against an already-migrated database:
+
+```
+$ pnpm db:reset
+Applying migration 20260810000100_roles_territories_profiles.sql...
+Applying migration 20260811000100_commercial_schema.sql...
+Applying migration 20260811000200_consent_ledger.sql...
+Applying migration 20260811000300_audit_log.sql...
+Applying migration 20260811000400_rls_policies.sql...
+Finished supabase db reset on branch main.
+```
+
+**Every rollback executes, in reverse, and leaves nothing behind** — this is the CI
+step, run locally first:
+
+```
+$ pnpm --filter @elmiron/api verify:rollbacks
+applying 20260811000400_rls_policies.down.sql ... ok
+applying 20260811000300_audit_log.down.sql ... ok
+applying 20260811000200_consent_ledger.down.sql ... ok
+applying 20260811000100_commercial_schema.down.sql ... ok
+applying 20260810000100_roles_territories_profiles.down.sql ... ok
+All rollbacks applied in reverse order; public schema is empty.
+```
+
+**The BYPASSRLS measurement**, which drove the immutability design:
+
+```
+              rolname       | rolsuper | rolbypassrls
+        --------------------+----------+--------------
+         anon               | f        | f
+         authenticated      | f        | f
+         postgres           | f        | t
+         service_role       | f        | t
+         supabase_auth_admin| f        | f
+
+  A: as postgres, no FORCE                        -> 2 of 2 territories
+  B: after SET LOCAL ROLE authenticated + claims   -> 1 of 2   <- RLS applies
+  D: FORCE RLS on, read as postgres again          -> 2 of 2   <- FORCE loses to BYPASSRLS
+  E: FORCE RLS on, as authenticated                -> 1 of 2
+```
+
+**The suite can fail.** Four regressions applied to the live schema — permissive
+`visits` policy, consent trigger dropped and its grant restored, `security_invoker`
+off on `visit_summary`, `analyses` granted to `authenticated`:
+
+```
+$ pnpm --filter @elmiron/api test     # with mutations applied
+  Tests  20 failed | 68 passed (88)
+
+$ pnpm db:reset && pnpm --filter @elmiron/api test
+  Tests  88 passed (88)
+```
+
 ---
 
 ## Known gaps
@@ -408,10 +748,14 @@ and a write attempt is denied rather than silently dropped.
    registers it; the linked remote project needs the hook enabled in
    Dashboard → Authentication → Hooks after the first `db push`. Not done — the
    remote project is not linked yet.
-4. **No `services/api/supabase/seed.sql`.** `db reset` warns about it. Seeding
-   arrives with the BE-W2 test fixtures.
-5. **Rollback SQL is not exercised by CI.** The down file exists and is checked in;
-   nothing proves it runs. Worth a CI step in BE-W2.
+4. **No `services/api/supabase/seed.sql`.** `db reset` still warns about it. The Gate 0
+   fixtures are created by the test run, not by a seed file, because they need real
+   GoTrue users. A seed file is only worth adding when someone wants a populated
+   database without running the suite.
+5. ~~**Rollback SQL is not exercised by CI.**~~ **Closed 11 Aug 2026.** All five
+   rollbacks now run in reverse in CI's database job and the schema is asserted empty
+   afterwards. `pnpm --filter @elmiron/api verify:rollbacks` runs it locally; it is
+   destructive, so follow it with `pnpm db:reset`.
 6. **No user provisioning path.** Users are created through `service_role` or Studio
    until the admin APIs land in week 11.
 7. **`apps/field` and `apps/console` are empty placeholders.** They typecheck; they
@@ -419,3 +763,26 @@ and a write attempt is denied rather than silently dropped.
 8. **`packages/ui-tokens` exports empty objects.** Frontend populates it.
 9. **The MCP Supabase server is unauthenticated in this session**, so nothing here
    was verified against the hosted project — only against the local stack.
+
+### Added in BE-W2
+
+10. **Fixture data accumulates.** The Gate 0 fixtures commit and are never torn down —
+    `consent_records` and `audit_log` are append-only, so a teardown would either fail
+    or have to disable the guard under test. Each run mints fresh UUIDs and emails, so
+    runs never collide, but a long-lived local database fills up. `pnpm db:reset`
+    clears it; CI resets before every run.
+11. **The audit row is not autonomous.** It shares the caller's transaction, so a
+    rollback loses it. Open question 4 above.
+12. **Nothing has been pushed to a deployed Supabase project.** The remote is still
+    unlinked, so every measurement in this document — including the BYPASSRLS
+    behaviour the immutability design rests on — is from the local stack. Worth
+    re-running once the project is linked; Supabase could in principle configure role
+    attributes differently in the cloud.
+13. **`db.ts` reachability is still checked once per spec file, not once per run.**
+    Measured in BE-W1 and unchanged. With two spec files and no database it costs one
+    extra 3-second connection attempt. `globalSetup` + `provide`/`inject` is the fix
+    and now has real call sites.
+14. **No load or performance testing of the policies.** `visible_user_ids()` and
+    `visible_territory_ids()` run a recursive CTE per policy evaluation. Both carry a
+    5s `statement_timeout` and neither has been measured against a realistic territory
+    tree. Worth a look before the field APIs land in week 3.

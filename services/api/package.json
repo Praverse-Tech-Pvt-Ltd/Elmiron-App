@@ -6,8 +6,9 @@
   "description": "Supabase migrations, edge functions and database tests.",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint tests",
-    "test": "vitest run"
+    "lint": "eslint tests scripts",
+    "test": "vitest run",
+    "verify:rollbacks": "node scripts/verify-rollbacks.mjs"
   },
   "dependencies": {
     "@elmiron/core": "workspace:*"

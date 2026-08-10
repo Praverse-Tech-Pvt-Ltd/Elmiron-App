@@ -27,15 +27,30 @@ const USER_PUNE_MR = '20000000-0000-4000-8000-000000000003';
 const USER_SOUTH_MR = '20000000-0000-4000-8000-000000000004';
 const USER_INACTIVE_MR = '20000000-0000-4000-8000-000000000005';
 
+const ORGANISATION = '10000000-0000-4000-8000-0000000000ff';
+
 const seed = async (client: Client): Promise<void> => {
+  // territories.organisation_id became NOT NULL in BE-W2.
   await client.query(
-    `insert into public.territories (id, name, code, parent_id) values
-       ($1, 'National',    'IN',           null),
-       ($2, 'West',        'IN-WEST',      $1),
-       ($3, 'Pune',        'IN-WEST-PUNE', $2),
-       ($4, 'Nagpur',      'IN-WEST-NAG',  $2),
-       ($5, 'South',       'IN-SOUTH',     $1)`,
-    [TERRITORY_NATIONAL, TERRITORY_WEST, TERRITORY_PUNE, TERRITORY_NAGPUR, TERRITORY_SOUTH],
+    `insert into public.organisations (id, name) values ($1, 'W1 Fixture Pharma')`,
+    [ORGANISATION],
+  );
+
+  await client.query(
+    `insert into public.territories (id, name, code, parent_id, organisation_id) values
+       ($1, 'National',    'IN',           null, $6),
+       ($2, 'West',        'IN-WEST',      $1,   $6),
+       ($3, 'Pune',        'IN-WEST-PUNE', $2,   $6),
+       ($4, 'Nagpur',      'IN-WEST-NAG',  $2,   $6),
+       ($5, 'South',       'IN-SOUTH',     $1,   $6)`,
+    [
+      TERRITORY_NATIONAL,
+      TERRITORY_WEST,
+      TERRITORY_PUNE,
+      TERRITORY_NAGPUR,
+      TERRITORY_SOUTH,
+      ORGANISATION,
+    ],
   );
 
   const users = [USER_ADMIN, USER_WEST_MANAGER, USER_PUNE_MR, USER_SOUTH_MR, USER_INACTIVE_MR];
@@ -113,14 +128,21 @@ describe.skipIf(!reachable)('schema', () => {
     });
   });
 
-  it('grants no write privilege on either table to authenticated', async () => {
+  it('grants TRUNCATE on nothing in public, to anyone but the owner', async () => {
+    // Supabase's default privileges hand `authenticated` and `anon` TRUNCATE on new
+    // public tables, and TRUNCATE ignores row-level security entirely. Every
+    // migration revokes it explicitly; this fails if one forgets.
+    //
+    // INSERT/UPDATE/DELETE are no longer part of this assertion: BE-W2 grants them
+    // to `authenticated` and constrains them with policy. Who may actually write is
+    // proved behaviourally in rls.spec.ts, not by reading the grant table.
     await inRolledBackTransaction(async (client) => {
-      const result = await client.query<{ table_name: string; privilege_type: string }>(
-        `select table_name, privilege_type
+      const result = await client.query<{ table_name: string; grantee: string }>(
+        `select table_name, grantee
            from information_schema.role_table_grants
-          where grantee = 'authenticated'
+          where grantee in ('authenticated', 'anon')
             and table_schema = 'public'
-            and privilege_type in ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE')`,
+            and privilege_type = 'TRUNCATE'`,
       );
       expect(result.rows).toEqual([]);
     });
@@ -172,7 +194,15 @@ describe.skipIf(!reachable)('visible_territory_ids', () => {
   it('gives an admin every territory', async () => {
     await inRolledBackTransaction(async (client) => {
       await seed(client);
-      expect(await visibleTerritories(client, USER_ADMIN)).toHaveLength(5);
+      // Compared against the live count, not a literal. rls.spec.ts commits its own
+      // fixture territories, and the two files run in parallel — a hardcoded 5 was
+      // a false failure waiting for the first day someone added a second spec.
+      const total = await client.query<{ count: string }>(
+        'select count(*) as count from public.territories',
+      );
+      const visible = await visibleTerritories(client, USER_ADMIN);
+      expect(visible).toHaveLength(Number(total.rows[0]?.count));
+      expect(visible.length).toBeGreaterThanOrEqual(5);
     });
   });
 
