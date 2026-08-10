@@ -499,6 +499,112 @@ const routes: Route[] = [
     }),
   },
 
+  // --- manager surface ------------------------------------------------------
+  {
+    method: 'GET',
+    pattern: API_PATHS.searchDoctors,
+    handler: (ctx) => {
+      const query = (ctx.query.get('p_query') ?? '').toLowerCase();
+      const limit = Number(ctx.query.get('p_limit') ?? 50);
+      const matched = fx.doctors.filter(
+        (d) =>
+          query === '' ||
+          d.fullName.toLowerCase().includes(query) ||
+          (d.specialty ?? '').toLowerCase().includes(query),
+      );
+      const effectiveLimit = Number.isFinite(limit) && limit > 0 ? limit : 50;
+      return {
+        body: {
+          items: matched.slice(0, effectiveLimit),
+          // Measured, not assumed — the same property the real function guarantees.
+          truncated: matched.length > effectiveLimit,
+          limit: effectiveLimit,
+        },
+      };
+    },
+  },
+  {
+    method: 'GET',
+    pattern: API_PATHS.teamActivity,
+    handler: (ctx) => ({ body: ctx.scenario === 'empty' ? [] : fx.teamActivity }),
+  },
+  {
+    method: 'GET',
+    pattern: API_PATHS.coverage,
+    handler: (ctx) => ({ body: ctx.scenario === 'empty' ? [] : fx.coverage }),
+  },
+  {
+    method: 'GET',
+    pattern: API_PATHS.teamExceptions,
+    // An empty exception list is the GOOD day, and the console has to render it as
+    // such rather than as a loading state that never resolves.
+    handler: (ctx) => ({ body: ctx.scenario === 'empty' ? [] : fx.teamExceptions }),
+  },
+  {
+    method: 'GET',
+    pattern: API_PATHS.approvableCallReports,
+    handler: (ctx) => ({
+      body:
+        ctx.scenario === 'empty'
+          ? []
+          : [
+              {
+                ...first(fx.callReports),
+                effectiveStatus: 'submitted',
+                approvalDecision: null,
+                decidedByUserId: null,
+                decidedAt: null,
+              },
+            ],
+    }),
+  },
+  {
+    method: 'POST',
+    pattern: API_PATHS.approveCallReportsBulk,
+    handler: (ctx) => {
+      const ids = asRecord(ctx.body)['p_call_report_ids'];
+      const list = Array.isArray(ids) ? ids : [];
+      return {
+        body: {
+          // One verdict per report. A manager clearing Monday morning needs to know
+          // which of the forty did not go through, not that "the batch failed".
+          results: list.map((id, index) => ({
+            id: asString(id, fx.IDS.callReport),
+            decided: index % 7 !== 6,
+            error: index % 7 === 6 ? 'call report is not in your scope' : null,
+          })),
+          serverTime: '2026-08-10T09:05:00+05:30',
+        },
+      };
+    },
+  },
+  {
+    method: 'GET',
+    pattern: API_PATHS.overdueCallReports,
+    handler: (ctx) => ({ body: ctx.scenario === 'empty' ? [] : fx.overdueCallReports }),
+  },
+  {
+    method: 'POST',
+    pattern: API_PATHS.reinstateSyncItem,
+    handler: (ctx) => {
+      const reason = asString(asRecord(ctx.body)['p_reason'], '');
+      if (reason.trim() === '') {
+        return {
+          status: 422,
+          body: {
+            error: {
+              code: 'validation_failed',
+              message: 'A reinstatement requires a reason.',
+              requestId: ctx.requestId,
+              fieldErrors: { p_reason: ['A reason is required.'] },
+            } satisfies ApiError,
+          },
+        };
+      }
+      return { body: { ...first(fx.syncQueue), status: 'queued' } };
+    },
+  },
+
   // --- offline sync ---------------------------------------------------------
   {
     method: 'GET',

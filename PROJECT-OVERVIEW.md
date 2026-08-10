@@ -13,8 +13,9 @@ the patient app is a separate project with a separate database.
 _This is the one section that describes now rather than history. The Phase log below
 is append-only._
 
-Week 4 of 12. Boundary proven (Gate 0 passed), field capture server-enforced, and
-the offline queue is conflict-free by construction rather than by merge logic.
+Week 5 of 12. Boundary proven (Gate 0 passed), field capture server-enforced, the
+offline queue conflict-free by construction, and the manager surface exception-first.
+**The Gate 1 server half is built and green**; the client half waits on the field app.
 
 What exists and runs:
 
@@ -23,10 +24,10 @@ What exists and runs:
 - GitHub Actions CI, two jobs, both failing the build rather than warning. The
   database job applies every migration from empty, runs the Gate 0 suite, then
   **rolls every migration back and asserts the schema is empty**.
-- **Eight migrations**: roles and territories, commercial schema, consent ledger,
+- **Nine migrations**: roles and territories, commercial schema, consent ledger,
   audit log, the RLS boundary in one auditable file, field operations, append-only
-  versioning, and offline sync.
-- **20 tables**, RLS enabled and forced on every one. **33 policies**, 3 views, all
+  versioning, offline sync, and the manager surface.
+- **21 tables**, RLS enabled and forced on every one. **34 policies**, 4 views, all
   `security_invoker`.
 - **Append-only wherever it can be**: consent ledger, audit log, call reports and
   their approvals, beat plans, check-ins and check-outs. Conflicts are eliminated
@@ -41,9 +42,12 @@ What exists and runs:
 - `services/mock` — contract **I2** — a running mock server covering every endpoint
   declared in `packages/core`, with populated / single / empty lists, real cursor
   pagination, every error code, and a full offline-sync queue.
-- **203 passing tests**: 18 in `packages/core` (contract guards and config), 33
-  mock-conformance tests in `services/mock`, 152 database tests in `services/api` —
-  18 foundations, 70 Gate 0 adversarial, 31 field operations, 33 offline sync.
+- **248 passing tests**: 18 in `packages/core` (contract guards and config), 40
+  mock-conformance tests in `services/mock`, 190 database tests in `services/api` —
+  18 foundations, 70 Gate 0 adversarial, 33 field operations, 33 offline sync,
+  28 manager surface, 8 Gate 1.
+- **`docs/gotchas.md`** carries the durable machine and tooling failures. There is no
+  handoff document, on purpose.
 - `packages/core` is namespaced into `@elmiron/core/shared` and `@elmiron/core/field`;
   the root import still re-exports everything, so no consumer changes.
 
@@ -1057,7 +1061,210 @@ worth a number from the pilot rather than a guess now.
 
 **5. Shift-window data is still missing** and now blocks more than capture: with no
 window configured, `sync_push` rejects every check-in in a batch with
-`outside_shift_window`. The escalation is drafted; it needs sending.
+`outside_shift_window`. The escalation is drafted at
+[docs/escalations-week3.md](docs/escalations-week3.md) §2 — **still unsent**. It needs
+a named person at the client to collect start/end times, working days and exceptions
+per territory; it is a data-gathering task, not an engineering one.
+
+---
+
+### BE-W5 — Manager surface, approval workflow, Gate 1 server half (14 August 2026)
+
+One migration, three new suites.
+
+#### Reviewer questions closed
+
+**Mileage is straight-line, and that is final.** Deterministic, auditable, free, and
+with no data-residency question — road distance means a routing provider and
+coordinates leaving India unless it has an Indian endpoint. The road-versus-straight
+difference is _systematic_, so it belongs in the per-km rate rather than in the
+measurement. If Finance wants road distance that is a vendor decision with a
+residency question attached, not an implementation detail.
+**One consequence for Frontend:** label it in the UI. An MR who believes it is road
+distance and finds out otherwise will feel short-changed and stop trusting the
+number.
+
+**`search_doctors` keeps its cap and now reports it.** `{ items, truncated, limit }`,
+with `truncated` measured by fetching one row beyond the limit rather than inferred.
+A silent cap is the same failure mode as a silently skipped test: the MR sees partial
+results and believes they are complete. Two tests, one for each value of the flag.
+
+**Frontend must call `record_check_in` / `record_check_out`** — announced in BE-W3,
+**acknowledged**. The mock refuses the direct POST as of BE-W4.
+
+**Dead-letter reversibility — built, with no fault taxonomy.** A dead letter is
+always reversible by a `field_manager` or `admin`, with a mandatory reason and an
+append-only attributed record. There is deliberately no "somebody else's fault" code
+set: at the point of rejection a wrong shift window and an MR error are
+indistinguishable — both produce `outside_shift_window` — and a taxonomy that looks
+clean at design time produces arguments in production about which bucket a case
+belongs in. **The control is attribution and visibility, not prevention.**
+
+Attempts are _forgiven_, never rewritten: `attempts_forgiven` records the baseline so
+a reinstated item gets a fresh budget while the record that it failed six times
+survives. Erasing that would make attributing the reversal pointless.
+
+#### The manager surface — exception-first
+
+| Function                            | Answers                                                                                                                    |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `team_activity(date)`               | who is where, who is off-plan, per MR, for a day                                                                           |
+| `coverage(from, to)`                | planned beat versus actual visits, per MR per day                                                                          |
+| `mr_activity_detail(mr, date)`      | one MR's day in full — the only non-exception view, because a manager shown an exception needs to look at the thing itself |
+| `team_exceptions(date, staleHours)` | missed visits, no recent sync, high rejection rate, consent-rate anomaly                                                   |
+
+**Location is drawn only from captures inside the configured shift window.** The
+manager view does not surface where an MR was outside their working hours, and that
+filter lives in `team_activity` rather than being left to the capture path — the
+fixtures seed check-ins directly, so the test proves the filter and not the RPC.
+
+**A missed visit is a planned doctor who was not seen**, not a count difference. An
+MR who did eight unplanned visits instead of eight planned ones has missed eight.
+
+**On consent rates.** An MR at 100% while the team sits at 40% is a **fraud signal,
+not a performance win**. The exception carries `signal: 'data_quality'`, the team
+median, and the sample size, and it fires on deviation in **either** direction — far
+below may mean a territory of doctors who decline, which is information about the
+territory. There is **no ranking of MRs against one another anywhere in this
+migration**: no score, no rank, no percentile, no ordering by performance. A test
+asserts the absence by name, in both the column list and the returned JSON.
+
+#### Approval workflow
+
+Built on the `call_report_approvals` table from BE-W4. An approval remains a decision
+**about** a report and never an edit **to** one.
+
+- `approvable_call_reports()` — submitted, current, in the caller's subtree, and
+  **never the caller's own**.
+- `approve_call_reports_bulk(ids[], approved, reason)` — up to 200 in one call, with
+  **a verdict per report**. Same per-item discipline as `sync_push`: one bad id does
+  not roll back the other thirty-nine. A manager clearing Monday morning needs to
+  know _which_ failed, not that "the batch failed".
+- `overdue_call_reports(threshold)` — submitted, current, undecided past a threshold.
+- `effective_status` stays derived in `call_report_current`. A test asserts it is not
+  a column on `call_reports`, and neither is `approved_by_user_id`.
+
+#### Sync observability, finished
+
+`sync_item_explained` puts the machine-readable code and the human sentence in the
+same row, plus `attempts_remaining` and `was_reinstated`.
+`sync_rejection_explanation()` is the mapping — `rejection_detail` is the raw
+Postgres message, which is precise and no use to an MR.
+
+Support can now answer, for any MR: what is queued, what failed, why in both
+registers, when they last synced successfully, what is dead-lettered, how many
+attempts remain, and whether anyone has already reinstated it.
+
+#### Gate 1 — the server half, decoupled
+
+Gate 1 needs the field app, which does not exist. Frontend lost three days to the
+credential problem, so the gate will slip; that is arithmetic, not failure.
+
+`services/api/tests/gate1.spec.ts` builds one MR's full day — a beat plan of four
+doctors, four visits, four check-ins, four call reports, a check-out — as the queue a
+device would hold at 6pm, and pushes it through `sync_push` in one batch. When
+Frontend arrives, Gate 1 becomes _run this, plus the client-side checks_.
+
+| Assertion                  | What it proves                                                                                                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| whole day in one batch     | 13 items accepted, and every id verified present in its own table — not merely reported accepted                                                                          |
+| same batch twice           | every item `duplicate`, row counts unchanged                                                                                                                              |
+| out-of-order arrival       | the day shuffled with two different deterministic seeds produces **the same mileage to six decimal places**. The number an MR is paid on cannot depend on delivery order. |
+| poison item mid-batch      | rejected with `outside_shift_window`; all 13 real items still commit                                                                                                      |
+| capture after shift end    | rejected **and no row written** — "refused" has to mean no row, not a row with a flag                                                                                     |
+| capture before shift start | same                                                                                                                                                                      |
+| scope                      | the day is visible to the MR's manager and invisible to another manager                                                                                                   |
+| observability              | `sync_queue_status` reports the day accurately                                                                                                                            |
+
+**What it does not prove**, stated in the file so nobody mistakes it for the whole
+gate: that the device queues correctly while offline, that the queue survives a
+process kill, and that location capture stops at shift end **on the device** rather
+than merely being refused on arrival.
+
+#### What each new test proves
+
+`manager.spec.ts` (28) and `gate1.spec.ts` (8), plus 2 added to `field.spec.ts`.
+
+| Block                              | What it proves                                                                                                                                                                                                                                                                                                      |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **dead-letter reinstatement** (7)  | Always reversible by a manager. Attempts forgiven, history intact (`attempt_count` still 6). A blank reason is refused. The reversal is an append-only attributed row, and UPDATE on it is refused. An MR cannot do it; a manager outside the team cannot either. Something not dead-lettered cannot be reinstated. |
+| **rejections explained** (2)       | Code and human sentence in the same row, with `attempts_remaining`. A reinstated item is flagged and its budget is back to 5.                                                                                                                                                                                       |
+| **team activity and coverage** (6) | A manager sees their subtree and nobody else; an MR sees only themselves. **A position captured outside the shift window is never surfaced.** Per-MR detail is refused outside scope.                                                                                                                               |
+| **team exceptions** (5)            | Stale sync, high rejection rate, and consent anomaly in both directions all fire. The anomaly is labelled `data_quality`. **No score, rank, percentile, grade or rating exists in any column or any returned detail object.**                                                                                       |
+| **approval workflow** (8)          | A manager is offered what they may decide and never their own report; an MR is offered nothing. Forty decided in one call. One bad id does not roll back the rest, and the good one really was decided. `effective_status` is not stored. Escalation fires and stops once decided.                                  |
+| **doctor search** (2 new)          | `truncated` is false when everything fits and true when it does not, with `limit` echoed.                                                                                                                                                                                                                           |
+
+**Mutation-tested.** Six regressions — reinstatement stripped of its reason check and
+its record, search capping silently, `team_activity` ignoring the shift window,
+`approvable_call_reports` offering a manager their own report, bulk approval aborting
+on first failure, and the consent anomaly turned into a `rank` — produced **14
+failures**. Restored: 190/190.
+
+#### Housekeeping
+
+- **`docs/gotchas.md` created** from the handoff's failed-attempts section: git
+  credential-helper precedence, `corepack` EPERM, long paths, the `env()`
+  substitution trap, analytics crash-loop, the BYPASSRLS measurements, zero-row
+  triggers, `convert_to` volatility, composite-return handling, TRUNCATE defaults,
+  and the skipped-versus-passed distinction. Cumulative and durable.
+- **`handoff.md` deleted, not committed.** A point-in-time snapshot in git is worse
+  than none, because the next person trusts it.
+- **`docs/spend-approval.md` revised.** The Apple Developer Program ask is
+  **withdrawn** — the app is Android-only permanently, so there is no iOS build, no
+  App Store probe, and **no D-U-N-S dependency**. Google Play at $25 is now the only
+  store account. The original §1 is struck through rather than deleted so anyone who
+  saw the first version can see it was cancelled. Nothing on the list needs a
+  decision this week.
+
+#### Contract change — Frontend
+
+All additive. `packages/core/field/manager.ts` is new:
+`SearchDoctorsResponse`, `TeamActivityRow`, `CoverageRow`, `TeamException`
+(+`TeamExceptionKind`), `BulkApprovalResponse`, `OverdueCallReport`,
+`ApprovableCallReport`. `SyncItemExplained` and `SyncItemReinstatement` are added to
+`field/sync.ts`. Eleven new RPC paths in `API_PATHS`.
+
+**`search_doctors` now returns `{ items, truncated, limit }` rather than an array.**
+That is the one shape change; the mock serves both states.
+
+The mock also serves an **empty exception list** under the `empty` scenario — a good
+day is a state the console must render, not a loading state that never resolves.
+
+#### Deliberately left out
+
+| Left out                                           | Why                                                                                               |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Any ranking, score or leaderboard                  | Explicitly forbidden, and it would invert the meaning of the consent signal.                      |
+| A fault taxonomy on rejections                     | Reviewer's decision, and the reasoning is recorded in the migration so it is not re-proposed.     |
+| Manager notification or digest delivery            | Week 11. `team_exceptions` and `overdue_call_reports` are the query half; nothing sends anything. |
+| Configurable exception thresholds                  | Function arguments with defaults, not configuration infrastructure. Used once each.               |
+| Coverage over arbitrary date ranges in the console | `coverage(from, to)` exists; how far back the console asks is a client decision.                  |
+
+#### Open questions for the reviewer
+
+**1. `team_exceptions` thresholds are chosen, not derived.** No sync in 12 hours,
+rejection rate above 20% over at least 5 items, consent rate 40 percentage points
+from the team median over at least 3 captures. All plausible; none measured, because
+there is no pilot data yet. **These will produce either noise or silence on real
+data, and there is no way to know which until week 12.** Worth revisiting with the
+first week of pilot numbers rather than tuning them now.
+
+**2. The consent-rate anomaly needs at least three captures per MR and a team median
+to fire.** In a small territory — one manager, three MRs — the median is noisy enough
+that the signal is close to meaningless. It works at pilot scale and probably not
+below it. Flagging rather than hiding.
+
+**3. Gate 1 will slip and that is arithmetic.** The server half is done and green.
+The client half needs the field app. Nothing here unblocks Frontend further.
+
+**4. Contract I3 is now three weeks late.** Nothing in `docs/`. Pipeline design
+starts week 8. This is unchanged from BE-W3 and BE-W4 and is now the single largest
+schedule risk that engineering cannot resolve.
+
+**5. Shift-window data is still missing.** Now blocking Gate 1's realism as well as
+capture: the harness seeds its own window, so a real environment without one refuses
+every check-in. The escalation is drafted in `claude/escalations-week3.md` and needs
+a named person at the client.
 
 ---
 

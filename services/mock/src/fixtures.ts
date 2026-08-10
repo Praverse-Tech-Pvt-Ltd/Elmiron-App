@@ -4,7 +4,11 @@ import type {
   BeatPlan,
   CallReport,
   CallReportApproval,
+  CoverageRow,
+  OverdueCallReport,
   SyncQueueStatus,
+  TeamActivityRow,
+  TeamException,
   CheckIn,
   CheckOut,
   MileageDay,
@@ -670,5 +674,91 @@ export const syncQueueStatus: SyncQueueStatus[] = [
     deadLetteredCount: 1,
     lastSuccessfulSyncAt: T(17, 5),
     oldestUnresolvedAt: T(11, 34),
+  },
+];
+
+export const teamActivity: TeamActivityRow[] = [
+  {
+    mrId: IDS.mr,
+    territoryId: IDS.puneTerritory,
+    plannedVisitCount: 8,
+    actualVisitCount: 6,
+    checkInCount: 6,
+    lastLatitude: 18.5075,
+    lastLongitude: 73.8079,
+    lastSeenAt: T(16, 12),
+    lastSuccessfulSyncAt: T(17, 5),
+  },
+  {
+    mrId: IDS.peerMr,
+    territoryId: IDS.puneTerritory,
+    plannedVisitCount: 7,
+    actualVisitCount: 7,
+    checkInCount: 7,
+    // Never synced today, and never seen. Both nulls are states the console renders.
+    lastLatitude: null,
+    lastLongitude: null,
+    lastSeenAt: null,
+    lastSuccessfulSyncAt: null,
+  },
+];
+
+export const coverage: CoverageRow[] = [
+  {
+    mrId: IDS.mr,
+    coverageDate: '2026-08-10',
+    plannedVisitCount: 8,
+    actualVisitCount: 6,
+    missedVisitCount: 2,
+  },
+  {
+    mrId: IDS.mr,
+    coverageDate: '2026-08-08',
+    plannedVisitCount: 7,
+    actualVisitCount: 7,
+    missedVisitCount: 0,
+  },
+];
+
+/**
+ * One of each kind. The consent anomaly is deliberately the MR with the HIGH rate:
+ * 100% against a team median of 40% is a fraud signal, and the console must render
+ * it as something to investigate rather than as a top position.
+ */
+export const teamExceptions: TeamException[] = [
+  {
+    mrId: IDS.mr,
+    exceptionKind: 'missed_visits',
+    detail: { missed: 2, planned: 8 },
+  },
+  {
+    mrId: IDS.peerMr,
+    exceptionKind: 'no_recent_sync',
+    detail: { lastSuccessfulSyncAt: null, thresholdHours: 12 },
+  },
+  {
+    mrId: IDS.peerMr,
+    exceptionKind: 'high_rejection_rate',
+    detail: { rejected: 4, submitted: 15 },
+  },
+  {
+    mrId: IDS.mr,
+    exceptionKind: 'consent_rate_anomaly',
+    detail: {
+      rate: 1,
+      teamMedian: 0.4,
+      sampleSize: 6,
+      signal: 'data_quality',
+      note: 'Investigate the territory and the capture flow. This is not a performance measure.',
+    },
+  },
+];
+
+export const overdueCallReports: OverdueCallReport[] = [
+  {
+    callReportId: IDS.callReport,
+    mrId: IDS.mr,
+    visitId: IDS.visitDone,
+    submittedAt: '2026-08-08T10:26:00+05:30',
   },
 ];

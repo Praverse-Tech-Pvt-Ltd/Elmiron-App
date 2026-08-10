@@ -429,6 +429,15 @@ export const API_PATHS = {
   syncPull: '/sync/pull',
   syncQueueStatus: '/rpc/sync_queue_status',
   syncRejections: '/rpc/list_sync_rejections',
+  reinstateSyncItem: '/rpc/reinstate_sync_item',
+  searchDoctors: '/rpc/search_doctors',
+  teamActivity: '/rpc/team_activity',
+  teamExceptions: '/rpc/team_exceptions',
+  coverage: '/rpc/coverage',
+  mrActivityDetail: '/rpc/mr_activity_detail',
+  approvableCallReports: '/rpc/approvable_call_reports',
+  approveCallReportsBulk: '/rpc/approve_call_reports_bulk',
+  overdueCallReports: '/rpc/overdue_call_reports',
   myShiftWindow: '/rpc/my_shift_window',
 } as const;
 

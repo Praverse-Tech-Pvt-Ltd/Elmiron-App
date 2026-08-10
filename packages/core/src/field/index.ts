@@ -11,5 +11,6 @@ export * from './consent.js';
 export * from './capture.js';
 export * from './analysis.js';
 export * from './sync.js';
+export * from './manager.js';
 export * from './endpoints.js';
 export * from './client.js';

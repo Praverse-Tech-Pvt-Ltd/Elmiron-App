@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import type { ZodType } from 'zod';
 import {
   AnalysisOverrideSchema,
@@ -6,7 +7,13 @@ import {
   ApiErrorResponseSchema,
   ApiRequestError,
   BeatPlanSchema,
+  BulkApprovalResponseSchema,
   CallReportApprovalSchema,
+  CoverageRowSchema,
+  OverdueCallReportSchema,
+  SearchDoctorsResponseSchema,
+  TeamActivityRowSchema,
+  TeamExceptionSchema,
   CallReportSchema,
   CheckInSchema,
   CheckOutSchema,
@@ -262,6 +269,71 @@ describe('every declared endpoint conforms to packages/core', () => {
 });
 
 // -----------------------------------------------------------------------------
+
+describe('the manager surface', () => {
+  it('every manager endpoint conforms to packages/core', async () => {
+    await expectConforms('/rpc/search_doctors?p_query=Dr', SearchDoctorsResponseSchema);
+    await expectConforms('/rpc/team_activity', z.array(TeamActivityRowSchema));
+    await expectConforms('/rpc/coverage', z.array(CoverageRowSchema));
+    await expectConforms('/rpc/team_exceptions', z.array(TeamExceptionSchema));
+    await expectConforms('/rpc/overdue_call_reports', z.array(OverdueCallReportSchema));
+    await expectConforms('/rpc/approve_call_reports_bulk', BulkApprovalResponseSchema, {
+      method: 'POST',
+      body: { p_call_report_ids: [IDS.callReport], p_approved: true },
+    });
+  });
+
+  it('reports search truncation rather than silently capping', async () => {
+    const { body } = await call('/rpc/search_doctors?p_query=Dr&p_limit=1');
+    const parsed = SearchDoctorsResponseSchema.parse(body);
+    expect(parsed.items).toHaveLength(1);
+    expect(parsed.truncated).toBe(true);
+  });
+
+  it('reports truncated=false when nothing was cut', async () => {
+    const { body } = await call('/rpc/search_doctors?p_query=Dr&p_limit=50');
+    expect(SearchDoctorsResponseSchema.parse(body).truncated).toBe(false);
+  });
+
+  it('serves an empty exception list — the good day is a state to render', async () => {
+    const { body } = await call('/rpc/team_exceptions', { scenario: 'empty' });
+    expect(z.array(TeamExceptionSchema).parse(body)).toEqual([]);
+  });
+
+  it('labels a consent-rate anomaly as data quality, never as a ranking', async () => {
+    const { body } = await call('/rpc/team_exceptions');
+    const parsed = z.array(TeamExceptionSchema).parse(body);
+    const anomaly = parsed.find((e) => e.exceptionKind === 'consent_rate_anomaly');
+    expect(anomaly?.detail['signal']).toBe('data_quality');
+    for (const exception of parsed) {
+      for (const forbidden of ['score', 'rank', 'percentile', 'grade', 'rating']) {
+        expect(Object.keys(exception.detail)).not.toContain(forbidden);
+      }
+    }
+  });
+
+  it('returns a verdict per report in a bulk decision', async () => {
+    const ids = Array.from({ length: 14 }, () => IDS.callReport);
+    const { body } = await call('/rpc/approve_call_reports_bulk', {
+      method: 'POST',
+      body: { p_call_report_ids: ids, p_approved: true },
+    });
+    const parsed = BulkApprovalResponseSchema.parse(body);
+    expect(parsed.results).toHaveLength(14);
+    // Not all-or-nothing: some decided, some not, each said so individually.
+    expect(parsed.results.some((r) => r.decided)).toBe(true);
+    expect(parsed.results.some((r) => !r.decided)).toBe(true);
+  });
+
+  it('refuses a reinstatement with no reason', async () => {
+    const { status, body } = await call('/rpc/reinstate_sync_item', {
+      method: 'POST',
+      body: { p_sync_item_id: IDS.queuedVisit, p_reason: '  ' },
+    });
+    expect(status).toBe(422);
+    expect(ApiErrorResponseSchema.parse(body).error.code).toBe('validation_failed');
+  });
+});
 
 describe('list states', () => {
   it('populated by default', async () => {

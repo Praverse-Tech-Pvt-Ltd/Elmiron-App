@@ -109,3 +109,36 @@ export const SyncQueueItemSchema = z.object({
   syncedAt: IsoDateTimeSchema.nullable(),
 });
 export type SyncQueueItem = z.infer<typeof SyncQueueItemSchema>;
+
+/**
+ * A queued item with its rejection explained.
+ *
+ * `rejectionCode` is for the app to branch on; `explanation` is the sentence a
+ * human reads. Both live in the same row so support never has to translate one
+ * into the other.
+ */
+export const SyncItemExplainedSchema = ServerSyncItemSchema.extend({
+  explanation: z.string().nullable(),
+  attemptsRemaining: z.number().int().nonnegative(),
+  wasReinstated: z.boolean(),
+});
+export type SyncItemExplained = z.infer<typeof SyncItemExplainedSchema>;
+
+/**
+ * A dead letter reversed by an authorised person.
+ *
+ * There is deliberately no fault code here. Blame cannot be enumerated in advance —
+ * at the point of rejection a wrong shift window and an MR error are
+ * indistinguishable — so the control is attribution and a mandatory reason, not a
+ * taxonomy.
+ */
+export const SyncItemReinstatementSchema = z.object({
+  id: UuidSchema,
+  syncItemId: UuidSchema,
+  reinstatedByUserId: UuidSchema,
+  reason: z.string().min(1),
+  attemptsAtReinstatement: z.number().int().nonnegative(),
+  createdAt: IsoDateTimeSchema,
+  receivedAt: IsoDateTimeSchema,
+});
+export type SyncItemReinstatement = z.infer<typeof SyncItemReinstatementSchema>;

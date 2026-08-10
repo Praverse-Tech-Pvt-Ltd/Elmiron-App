@@ -569,24 +569,38 @@ describe.skipIf(!reachable)('mileage', () => {
 // Doctor search
 // =============================================================================
 
+interface SearchResult {
+  items: Array<{ id: string }>;
+  truncated: boolean;
+  limit: number;
+}
+
+const searchDoctors = async (
+  client: Client,
+  query: string,
+  limit?: number,
+): Promise<SearchResult> => {
+  const result = await client.query<{ payload: SearchResult }>(
+    'select public.search_doctors($1, null, $2) as payload',
+    [query, limit ?? null],
+  );
+  const payload = result.rows[0]?.payload;
+  if (payload === undefined) throw new Error('search_doctors returned nothing');
+  return payload;
+};
+
 describe.skipIf(!reachable)('doctor search', () => {
   it('finds a doctor by partial name', async () => {
     await asUserTx(world.users.puneMr, async (client) => {
-      const result = await client.query<{ id: string }>(
-        'select id from public.search_doctors($1)',
-        ['Pune Fix'],
-      );
-      expect(result.rows.map((r) => r.id)).toContain(world.doctors.pune);
+      const result = await searchDoctors(client, 'Pune Fix');
+      expect(result.items.map((d) => d.id)).toContain(world.doctors.pune);
     });
   });
 
   it('finds a doctor by specialty', async () => {
     await asUserTx(world.users.puneMr, async (client) => {
-      const result = await client.query<{ id: string }>(
-        'select id from public.search_doctors($1)',
-        ['Urol'],
-      );
-      expect(result.rows.map((r) => r.id)).toContain(world.doctors.pune);
+      const result = await searchDoctors(client, 'Urol');
+      expect(result.items.map((d) => d.id)).toContain(world.doctors.pune);
     });
   });
 
@@ -594,13 +608,36 @@ describe.skipIf(!reachable)('doctor search', () => {
     // The function is SECURITY INVOKER, so the doctors policy is the scope filter.
     // A search that could widen scope would be a hole with a convenient name.
     await asUserTx(world.users.puneMr, async (client) => {
-      const result = await client.query<{ id: string }>(
-        'select id from public.search_doctors($1)',
-        ['Fixture'],
-      );
-      const ids = result.rows.map((r) => r.id);
+      const result = await searchDoctors(client, 'Fixture');
+      const ids = result.items.map((d) => d.id);
       expect(ids).toContain(world.doctors.pune);
       expect(ids).not.toContain(world.doctors.south);
+    });
+  });
+
+  it('reports truncated=false when everything fits', async () => {
+    await asUserTx(world.users.puneMr, async (client) => {
+      const result = await searchDoctors(client, 'Fixture');
+      expect(result.truncated).toBe(false);
+    });
+  });
+
+  it('reports truncated=true rather than silently capping', async () => {
+    // A silent cap is the same failure mode as a silently skipped test: the MR sees
+    // partial results and believes they are complete.
+    await inRolledBackTransaction(async (client) => {
+      for (let i = 0; i < 4; i += 1) {
+        await client.query(
+          `insert into public.doctors (organisation_id, full_name, territory_id)
+           values ($1, $2, $3)`,
+          [world.organisationId, `Dr Crowd Fixture ${String(i)}`, world.territories.pune],
+        );
+      }
+      await asUser(client, world.users.puneMr);
+      const result = await searchDoctors(client, 'Fixture', 2);
+      expect(result.items).toHaveLength(2);
+      expect(result.truncated).toBe(true);
+      expect(result.limit).toBe(2);
     });
   });
 
