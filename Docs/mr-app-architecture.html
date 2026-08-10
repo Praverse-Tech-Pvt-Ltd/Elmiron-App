@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MR App — Architecture</title>
+<style>
+:root{
+  --navy:#123a5e; --blue:#1e6fa8; --blue2:#2f8fc9; --teal:#0f7268; --teal2:#14a08f;
+  --purple:#6b4e8f; --amber:#9a6b1f; --red:#a6432f; --redbg:#fbefec;
+  --ink:#16222e; --muted:#5b6b7a; --line:#d3dde6; --bg:#f4f8fb; --card:#fff;
+}
+*{box-sizing:border-box}
+body{margin:0;padding:26px 18px 60px;background:var(--bg);color:var(--ink);
+ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1500px;margin:0 auto}
+header{text-align:center;margin-bottom:16px}
+h1{font-size:28px;font-weight:800;color:var(--navy);margin:0 0 5px;letter-spacing:-.3px}
+.sub{font-size:14px;color:var(--teal);font-style:italic;margin:0 0 3px}
+.meta{font-size:11.5px;color:var(--muted)}
+.layout{display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:start;margin-top:18px}
+
+.layer{display:grid;grid-template-columns:142px 1fr;border:1px solid var(--line);
+ border-radius:11px;overflow:hidden;background:var(--card);margin-bottom:11px}
+.lbl{padding:14px 12px;color:#fff;display:flex;flex-direction:column;justify-content:center;gap:2px}
+.lbl b{font-size:13.5px;font-weight:700;line-height:1.25}
+.lbl span{font-size:10.5px;opacity:.85}
+.l1 .lbl{background:var(--navy)} .l2 .lbl{background:var(--blue)}
+.l3 .lbl{background:var(--purple)} .l4 .lbl{background:var(--teal)} .l5 .lbl{background:var(--teal)}
+.body{padding:11px;display:flex;flex-wrap:wrap;gap:7px;align-content:flex-start}
+.box{background:#f8fbfd;border:1px solid var(--line);border-radius:7px;padding:8px 10px;
+ font-size:12px;font-weight:600;line-height:1.3;flex:1 1 auto;min-width:124px}
+.box small{display:block;font-weight:500;font-size:10px;color:var(--muted);margin-top:2px}
+.c-com{border-left:3px solid var(--blue2)} .c-ai{border-left:3px solid var(--purple)}
+.c-guard{border-left:3px solid var(--red);background:var(--redbg)}
+.c-guard small{color:#8a4a3b}
+.c-cli{border-left:3px solid var(--teal2)}
+.c-no{border-left:3px solid #b9c3cc;background:#f2f4f6;color:#8d99a4}
+.c-no small{color:#a3aeb8}
+.gh{width:100%;font-size:10px;font-weight:800;letter-spacing:.9px;text-transform:uppercase;
+ color:var(--muted);margin:3px 0 -1px;padding-left:2px}
+
+/* pipeline */
+.pipe{background:#fff;border:1px solid var(--line);border-radius:11px;padding:14px;margin-bottom:11px}
+.pipe h3{margin:0 0 3px;font-size:14px;color:var(--purple);font-weight:800}
+.pipe .ph{font-size:11.5px;color:var(--muted);margin:0 0 12px}
+.steps{display:flex;flex-wrap:wrap;gap:6px;align-items:stretch}
+.step{flex:1 1 118px;min-width:118px;border:1px solid var(--line);border-radius:7px;padding:8px 9px;background:#f8fbfd;position:relative}
+.step .n{font-size:9.5px;font-weight:800;color:var(--purple);letter-spacing:.5px}
+.step .t{font-size:11.5px;font-weight:700;margin:2px 0 3px;line-height:1.25}
+.step .g{font-size:9.5px;color:var(--muted);line-height:1.35}
+.step.gate{background:var(--redbg);border-color:#e8c4bb}
+.step.gate .n{color:var(--red)} .step.gate .g{color:#8a4a3b}
+.step.fork{background:#f3efF9;border-color:#d8cfe8}
+
+.wall{display:flex;align-items:center;gap:11px;margin:12px 0;padding:11px 14px;
+ background:#fff;border:2px dashed var(--navy);border-radius:11px}
+.wall .t{font-size:12px;font-weight:800;color:var(--navy);white-space:nowrap;line-height:1.3}
+.wall .d{font-size:11.5px;color:var(--muted);line-height:1.45}
+.wall .d b{color:var(--ink)}
+
+aside{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:14px;position:sticky;top:18px}
+aside h3{margin:0 0 3px;font-size:13px;color:var(--navy);font-weight:800}
+aside h3.sec{margin-top:15px;padding-top:12px;border-top:1px solid var(--line)}
+aside ul{margin:7px 0 0;padding-left:15px}
+aside li{font-size:11.5px;color:var(--muted);margin-bottom:6px;line-height:1.42}
+aside li b{color:var(--ink);font-weight:600}
+.alert{background:var(--redbg);border-left:3px solid var(--red);padding:9px 11px;border-radius:0 6px 6px 0;margin-bottom:8px}
+.alert p{margin:0;font-size:11px;line-height:1.45;color:#5a3b36}
+.alert p b{color:var(--red);display:block;margin-bottom:2px;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px}
+table{width:100%;border-collapse:collapse;font-size:11px;margin-top:7px}
+td{padding:4px 3px;border-bottom:1px solid var(--line);color:var(--muted)}
+td:first-child{color:var(--ink);font-weight:600;width:46%}
+.key{display:flex;flex-wrap:wrap;gap:13px;justify-content:center;margin-top:16px;
+ font-size:11px;color:var(--muted);padding-top:12px;border-top:1px solid var(--line)}
+.key i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+footer{text-align:center;margin-top:18px;font-size:10.5px;color:var(--muted);line-height:1.6}
+@media(max-width:1100px){.layout{grid-template-columns:1fr}.layer{grid-template-columns:1fr}
+ .lbl{flex-direction:row;align-items:baseline;gap:8px}aside{position:static}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>MR App — Architecture</h1>
+  <p class="sub">Field Execution · Consent-Gated Capture · Non-Diagnostic AI Coaching</p>
+  <p class="meta">v1.0 · 6 August 2026 · MR · Manager · Admin only · zero patient data</p>
+</header>
+
+<div class="layout">
+<div>
+
+  <!-- CHANNELS -->
+  <div class="layer l1">
+    <div class="lbl"><b>Channels</b><span>three roles, no more</span></div>
+    <div class="body">
+      <div class="box c-com">Medical Representative<small>field · mobile · offline-first</small></div>
+      <div class="box c-com">Field Manager<small>web console · exception-first</small></div>
+      <div class="box c-com">Admin<small>web · break-glass audited</small></div>
+      <div class="box c-no">Patient / Doctor / PV<small>separate app — no access here</small></div>
+    </div>
+  </div>
+
+  <!-- EXPERIENCE -->
+  <div class="layer l2">
+    <div class="lbl"><b>Experience</b><span>Expo + Next.js, one core</span></div>
+    <div class="body">
+      <div class="box c-com">MR Mobile App<small>Expo dev build · Android + iOS</small></div>
+      <div class="box c-com">Manager Console<small>Next.js</small></div>
+      <div class="box c-com">Admin Console<small>Next.js</small></div>
+      <div class="box c-guard">⚠ Tracking Transparency Screen<small>one tap from home · what, when, retention, who sees it</small></div>
+      <div class="box c-guard">⚠ Persistent Recording Indicator<small>Apple 2.5.14 · Android FGS notification</small></div>
+    </div>
+  </div>
+
+  <!-- CAPTURE -->
+  <div class="layer l3">
+    <div class="lbl"><b>Capture &amp; Consent</b><span>on device</span></div>
+    <div class="body">
+      <div class="gh">Existing tracking — unchanged</div>
+      <div class="box c-com">Beat Planning</div>
+      <div class="box c-com">Geofenced Check-in / out<small>primary mechanism · Apple mitigation</small></div>
+      <div class="box c-com">Work-hours Location<small>hard stop at shift end</small></div>
+      <div class="box c-com">Call Reporting<small>auto-drafted from voice note</small></div>
+      <div class="box c-com">Samples &amp; Inputs<small>UCPMP value caps</small></div>
+      <div class="gh">New — the AI capture layer</div>
+      <div class="box c-guard">1 · Doctor Consent Gate<small>tap-to-consent · logged · versioned · withdrawable</small></div>
+      <div class="box c-ai">2 · Visit Recording<small>only if consented · Opus mono · hard cap</small></div>
+      <div class="box c-ai">3 · MR Voice Note<small>ALWAYS — consent or not</small></div>
+      <div class="box c-ai">4 · Encrypted Queue<small>survives a full day offline · resumable upload</small></div>
+    </div>
+  </div>
+
+  <!-- PIPELINE -->
+  <div class="pipe">
+    <h3>AI Pipeline — server side</h3>
+    <p class="ph">Two gates in red. Neither is optional; each exists because of a specific legal finding.</p>
+    <div class="steps">
+      <div class="step"><div class="n">STAGE 5</div><div class="t">Transcribe</div>
+        <div class="g">Sarvam batch · diarized · codemix mode · brand-name hotwords</div></div>
+      <div class="step gate"><div class="n">STAGE 6 · GATE</div><div class="t">Redact</div>
+        <div class="g">Strip every patient identifier BEFORE storage and before the LLM. DPDP s.6(1) necessity cap.</div></div>
+      <div class="step fork"><div class="n">STAGE 7</div><div class="t">AE Detection</div>
+        <div class="g">Any suspected adverse reaction → human PV queue</div></div>
+      <div class="step gate"><div class="n">STAGE 7 · GATE</div><div class="t">Human PV Queue</div>
+        <div class="g">15-day clock from ingest. Never AI-triaged, never AI-dismissed. IPC §2.2.1.5</div></div>
+      <div class="step fork"><div class="n">STAGE 8</div><div class="t">Performance Analysis</div>
+        <div class="g">Scores the MR's own behaviour only · every finding cites a transcript span</div></div>
+      <div class="step"><div class="n">STAGE 9</div><div class="t">Coaching Feed</div>
+        <div class="g">MR sees it first and can respond · manager decides everything</div></div>
+    </div>
+  </div>
+
+  <!-- AI LAYER -->
+  <div class="layer l4">
+    <div class="lbl"><b>AI Layer</b><span>advisory only</span></div>
+    <div class="body">
+      <div class="gh">Assesses the MR</div>
+      <div class="box c-ai">Opening &amp; Purpose</div>
+      <div class="box c-ai">Message Accuracy<small>vs approved content — UCPMP control</small></div>
+      <div class="box c-ai">Objection Handling</div>
+      <div class="box c-ai">Talk vs Listen Ratio</div>
+      <div class="box c-ai">Call to Action</div>
+      <div class="box c-ai">Voice Note ↔ Call Report Match</div>
+      <div class="gh">Never — each converts this into a different regulated product</div>
+      <div class="box c-no">Score or profile the doctor<small>UCPMP Cl.8 · anti-kickback</small></div>
+      <div class="box c-no">Predict prescribing<small>prescriber targeting</small></div>
+      <div class="box c-no">Emotion / voice-stress analysis<small>⚠ likely prohibited, EU AI Act Art.5</small></div>
+      <div class="box c-no">Triage an adverse event<small>humans only</small></div>
+      <div class="box c-no">Trigger any HR consequence<small>DPDP s.8(3) · EU Annex III</small></div>
+    </div>
+  </div>
+
+  <!-- WALL -->
+  <div class="wall">
+    <div class="t">⛔ APP<br>BOUNDARY</div>
+    <div class="d"><b>The MR app has no read path into clinical data at all.</b>
+      Only two one-way bridges exist to the Patient app:
+      <b>anonymised aggregates in</b> (suppressed under 5 patients, no join key back to an individual) and
+      <b>adverse-event reports out</b> (to the same human PV queue the patient diary feeds).</div>
+  </div>
+
+  <!-- DATA -->
+  <div class="layer l5">
+    <div class="lbl"><b>Data</b><span>Mumbai region</span></div>
+    <div class="body">
+      <div class="box c-com">Commercial DB<small>Supabase ap-south-1 · row-level security</small></div>
+      <div class="box c-guard">Audio Store<small>encrypted · 90-day auto-purge</small></div>
+      <div class="box c-ai">Redacted Transcripts<small>the only text that persists</small></div>
+      <div class="box c-ai">Analyses + Override Log<small>manager disagreement = oversight evidence</small></div>
+      <div class="box c-guard">Consent Ledger<small>versioned · immutable · withdrawal is a new row</small></div>
+      <div class="box c-com">Audit Log<small>append-only · every access</small></div>
+      <div class="box c-cli">→ AE endpoint to Patient app<small>one-way out</small></div>
+      <div class="box c-cli">← Anonymised aggregates<small>one-way in</small></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- SIDEBAR -->
+<aside>
+  <h3>Findings that shaped this</h3>
+  <div class="alert"><p><b>Risk #1 — Apple 2.5.4</b>Apple has repeatedly rejected background-location apps for "tracking employees, which is not appropriate on the App Store" — including one where workers were contractors and the app had other features. Build MR-first, prefer geofencing, keep a foreground-only fallback.</p></div>
+  <div class="alert"><p><b>Consent</b>No B2B exemption under DPDP. The doctor is a Data Principal. Consent must be free, specific, informed, unambiguous — and withdrawable.</p></div>
+  <div class="alert"><p><b>Minimisation by design</b>A microphone in a consulting room necessarily captures patient talk. A broader consent clause cannot cure it — s.6(1) caps collection at necessity regardless. Hence the redaction gate.</p></div>
+  <div class="alert"><p><b>PV screening duty</b>IPC §2.2.1.5: MAHs must screen digital media under their management for adverse events. You cannot record and then not look. 15 calendar days from receipt.</p></div>
+  <div class="alert"><p><b>Unresolved contradiction</b>A valid case report needs an identifiable patient (§2.6). DPDP says do not retain one. PV and privacy must both sign a written position before this ships.</p></div>
+
+  <h3 class="sec">Speech stack</h3>
+  <table>
+    <tr><td>Sarvam Audio</td><td>5.0% Hindi WER — best of all</td></tr>
+    <tr><td>Gemini 3 Pro</td><td>6.0% — only global system at parity</td></tr>
+    <tr><td>OpenAI</td><td>~55%+ across Indian languages</td></tr>
+    <tr><td>AssemblyAI</td><td>Malayalam/Telugu &gt;100%</td></tr>
+    <tr><td>Azure</td><td>unsupported for 6 of 15</td></tr>
+    <tr><td>Whisper on Hinglish</td><td><b>52% mixed error rate</b></td></tr>
+  </table>
+  <ul><li><b>Sarvam</b> primary — India residency, codemix as a product feature, ₹45/hr diarized = <b>₹660 per MR per month</b>. <b>Deepgram</b> as challenger. Run a real bake-off first.</li></ul>
+
+  <h3 class="sec">Mobile</h3>
+  <ul>
+    <li><b>React Native + Expo</b> dev builds</li>
+    <li><b>Transistorsoft</b> for background location — not expo-location</li>
+    <li><b>expo-audio</b> background recording</li>
+    <li><b>PowerSync</b> offline-first</li>
+    <li>Indian OEM battery killers need per-OEM onboarding. No library solves this.</li>
+  </ul>
+
+  <h3 class="sec">Non-negotiables</h3>
+  <ul>
+    <li>Consent logged <b>before</b> capture starts</li>
+    <li>Redaction runs <b>before</b> the LLM sees anything</li>
+    <li>Declining to be recorded is <b>never</b> a negative MR signal</li>
+    <li>The voice note happens <b>every visit</b>, consent or not</li>
+    <li>MR sees their own analysis <b>first</b> and can respond</li>
+    <li>A human decides <b>every</b> consequence</li>
+  </ul>
+</aside>
+</div>
+
+<div class="key">
+  <span><i style="background:var(--blue2)"></i>Commercial</span>
+  <span><i style="background:var(--purple)"></i>AI layer</span>
+  <span><i style="background:var(--red)"></i>Compliance gate</span>
+  <span><i style="background:var(--teal2)"></i>Bridge to Patient app</span>
+  <span><i style="background:#b9c3cc"></i>Excluded</span>
+</div>
+
+<footer>
+  Planning artifact — not legal advice. Legal findings trace to research dated 6 August 2026 with sources and confidence levels.<br>
+  Speech benchmarks from Interspeech 2026 peer-reviewed papers. Prices are vendor list, retrieved 6 August 2026.
+</footer>
+
+</div>
+</body>
+</html>
