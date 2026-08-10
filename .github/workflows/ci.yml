@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Turbo prints enough without the interactive TUI in CI.
+  TURBO_UI: 'false'
+
+jobs:
+  static:
+    name: typecheck · lint · format · unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Every one of these fails the build. None of them warn.
+      - run: pnpm run build
+      - run: pnpm run typecheck
+      - run: pnpm run lint
+      - run: pnpm run format:check
+      - run: pnpm --filter @elmiron/core test
+
+  database:
+    name: migrations · database tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Proves every migration applies to an empty database, in order.
+      - name: Start Supabase and apply migrations
+        run: pnpm exec supabase --workdir services/api start -x realtime,vector,imgproxy,studio
+
+      # From BE-W2 this job also runs the adversarial RLS suite that proves Gate 0.
+      - name: Database tests
+        env:
+          SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: pnpm --filter @elmiron/api test
+
+      - name: Stop Supabase
+        if: always()
+        run: pnpm exec supabase --workdir services/api stop --no-backup

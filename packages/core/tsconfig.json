@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    // The client runs in React Native, in the browser and in Node. `fetch`,
+    // `URLSearchParams` and `Headers` come from the DOM lib in all three.
+    "lib": ["ES2023", "DOM"],
+    "types": ["vitest/globals"]
+  },
+  "include": ["src/**/*.ts"]
+}

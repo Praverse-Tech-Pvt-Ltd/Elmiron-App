@@ -1,0 +1,22 @@
+{
+  "name": "@elmiron/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Supabase migrations, edge functions and database tests.",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint tests",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@elmiron/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.2",
+    "@types/pg": "^8.15.6",
+    "pg": "^8.16.3",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

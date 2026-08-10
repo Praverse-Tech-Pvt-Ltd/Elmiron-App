@@ -1,0 +1,19 @@
+{
+  "name": "@elmiron/console",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Next.js manager and admin consoles. PLACEHOLDER — Frontend owns this.",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint src",
+    "test": "echo \"no tests in apps/console yet\""
+  },
+  "dependencies": {
+    "@elmiron/core": "workspace:*",
+    "@elmiron/ui-tokens": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

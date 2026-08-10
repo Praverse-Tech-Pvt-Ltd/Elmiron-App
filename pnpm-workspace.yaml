@@ -1,1 +1,10 @@
 storeDir: .pnpm-store
+
+packages:
+  - 'packages/*'
+  - 'apps/*'
+  - 'services/*'
+
+# esbuild is vitest's bundler; it needs its postinstall to fetch the platform binary.
+allowBuilds:
+  esbuild: true

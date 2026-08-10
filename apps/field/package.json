@@ -1,0 +1,19 @@
+{
+  "name": "@elmiron/field",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Expo app for medical representatives. PLACEHOLDER — Frontend owns this.",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint src",
+    "test": "echo \"no tests in apps/field yet\""
+  },
+  "dependencies": {
+    "@elmiron/core": "workspace:*",
+    "@elmiron/ui-tokens": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
