@@ -170,12 +170,17 @@ comment on function public.current_app_role() is
 -- of the caller's own policies. It takes an arbitrary user id, so EXECUTE is NOT
 -- granted to authenticated — an MR must not be able to enumerate a colleague's
 -- scope. Client code uses current_user_visible_territory_ids() below.
+--
+-- statement_timeout is set on the function itself, not left to the caller. A
+-- user-facing recursive query that can run unbounded is a denial-of-service
+-- surface in its own right, independent of the cycle guard below.
 create or replace function public.visible_territory_ids(p_user_id uuid)
 returns setof uuid
 language plpgsql
 stable
 security definer
 set search_path = ''
+set statement_timeout = '5s'
 as $$
 declare
   v_role      public.app_role;
@@ -207,13 +212,21 @@ begin
   end if;
 
   -- field_manager: own territory plus the whole subtree below it.
+  --
+  -- The CYCLE clause is not optional. territories_no_self_parent blocks A -> A but
+  -- nothing blocks A -> B -> A, and an unguarded recursive CTE over a cycle does not
+  -- error — it runs until the timeout above, which is a hang, not a failure.
+  --
+  -- This makes the read safe. It does not stop a cycle being written: only
+  -- service_role can write territories today, and the write-time trigger that makes
+  -- cycles unrepresentable is a BE-W2 task (see docs/amendment-gate0-criterion.md).
   return query
     with recursive subtree as (
       select t.id from public.territories t where t.id = v_territory
       union all
       select c.id from public.territories c join subtree s on c.parent_id = s.id
-    )
-    select subtree.id from subtree;
+    ) cycle id set is_cycle using path
+    select subtree.id from subtree where not subtree.is_cycle;
 end;
 $$;
 

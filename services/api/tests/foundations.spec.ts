@@ -1,23 +1,19 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
-import { databaseIsReachable, inRolledBackTransaction } from './db.js';
+import { inRolledBackTransaction, requireDatabase } from './db.js';
 
 /**
  * BE-W1 foundations.
  *
  * These prove the schema and the two helper functions behave as specified. They
- * are NOT the Gate 0 suite — the adversarial RLS tests (permission denied, not an
- * empty result, from five different attack paths) are BE-W2 and live in rls.spec.ts.
+ * are NOT the Gate 0 suite — the adversarial RLS tests are BE-W2 and live in
+ * rls.spec.ts. See docs/amendment-gate0-criterion.md for the corrected pass
+ * criterion: the property is non-disclosure and non-mutation, not the status code.
  */
 
-let reachable = false;
-
-beforeAll(async () => {
-  reachable = await databaseIsReachable();
-  if (!reachable) {
-    console.warn('No database at SUPABASE_DB_URL — skipping. Run `pnpm db:start` first.');
-  }
-});
+// Resolved at collection time, not in beforeAll, so `describe.skipIf` can mark the
+// tests as skipped in the summary rather than running them as no-op passes.
+const reachable = await requireDatabase();
 
 const TERRITORY_NATIONAL = '10000000-0000-4000-8000-000000000001';
 const TERRITORY_WEST = '10000000-0000-4000-8000-000000000002';
@@ -79,9 +75,8 @@ const visibleTerritories = async (client: Client, userId: string): Promise<strin
   return result.rows.map((row) => row.id).sort();
 };
 
-describe('schema', () => {
+describe.skipIf(!reachable)('schema', () => {
   it('has exactly three roles in app_role', async () => {
-    if (!reachable) return;
     await inRolledBackTransaction(async (client) => {
       const result = await client.query<{ label: string }>(
         `select e.enumlabel as label
@@ -95,7 +90,6 @@ describe('schema', () => {
   });
 
   it('has no clinical or patient tables', async () => {
-    if (!reachable) return;
     await inRolledBackTransaction(async (client) => {
       const result = await client.query<{ table_name: string }>(
         `select table_name from information_schema.tables
@@ -108,7 +102,6 @@ describe('schema', () => {
   });
 
   it('has row-level security enabled on every public table', async () => {
-    if (!reachable) return;
     await inRolledBackTransaction(async (client) => {
       const result = await client.query<{ relname: string }>(
         `select c.relname
@@ -121,7 +114,6 @@ describe('schema', () => {
   });
 
   it('grants no write privilege on either table to authenticated', async () => {
-    if (!reachable) return;
     await inRolledBackTransaction(async (client) => {
       const result = await client.query<{ table_name: string; privilege_type: string }>(
         `select table_name, privilege_type
@@ -135,7 +127,6 @@ describe('schema', () => {
   });
 
   it('rejects an mr or field_manager with no territory', async () => {
-    if (!reachable) return;
     await inRolledBackTransaction(async (client) => {
       await client.query(
         `insert into auth.users (id, email, aud, role)
@@ -152,9 +143,8 @@ describe('schema', () => {
   });
 });
 
-describe('visible_territory_ids', () => {
+describe.skipIf(!reachable)('visible_territory_ids', () => {
   it('gives an MR exactly their own territory', async () => {
-    if (!reachable) return;
     await inRolledBackTransaction(async (client) => {
       await seed(client);
       expect(await visibleTerritories(client, USER_PUNE_MR)).toEqual([TERRITORY_PUNE]);
@@ -162,7 +152,6 @@ describe('visible_territory_ids', () => {
   });
 
   it('gives a field manager their own territory plus the whole subtree', async () => {
-    if (!reachable) return;
     await inRolledBackTransaction(async (client) => {
       await seed(client);
       expect(await visibleTerritories(client, USER_WEST_MANAGER)).toEqual(
@@ -172,7 +161,6 @@ describe('visible_territory_ids', () => {
   });
 
   it('does not give a field manager a sibling subtree', async () => {
-    if (!reachable) return;
     await inRolledBackTransaction(async (client) => {
       await seed(client);
       const visible = await visibleTerritories(client, USER_WEST_MANAGER);
@@ -182,7 +170,6 @@ describe('visible_territory_ids', () => {
   });
 
   it('gives an admin every territory', async () => {
-    if (!reachable) return;
     await inRolledBackTransaction(async (client) => {
       await seed(client);
       expect(await visibleTerritories(client, USER_ADMIN)).toHaveLength(5);
@@ -190,7 +177,6 @@ describe('visible_territory_ids', () => {
   });
 
   it('gives a deactivated user nothing', async () => {
-    if (!reachable) return;
     await inRolledBackTransaction(async (client) => {
       await seed(client);
       expect(await visibleTerritories(client, USER_INACTIVE_MR)).toEqual([]);
@@ -198,7 +184,6 @@ describe('visible_territory_ids', () => {
   });
 
   it('gives an unknown user nothing', async () => {
-    if (!reachable) return;
     await inRolledBackTransaction(async (client) => {
       await seed(client);
       expect(await visibleTerritories(client, '40000000-0000-4000-8000-00000000ffff')).toEqual([]);
@@ -206,7 +191,6 @@ describe('visible_territory_ids', () => {
   });
 
   it('is not executable by the authenticated role', async () => {
-    if (!reachable) return;
     await inRolledBackTransaction(async (client) => {
       const result = await client.query<{ has: boolean }>(
         `select has_function_privilege(
@@ -219,7 +203,7 @@ describe('visible_territory_ids', () => {
   });
 });
 
-describe('current_app_role', () => {
+describe.skipIf(!reachable)('current_app_role', () => {
   const withClaims = async (claims: string | null): Promise<string | null> => {
     let role: string | null = null;
     await inRolledBackTransaction(async (client) => {
@@ -233,24 +217,20 @@ describe('current_app_role', () => {
   };
 
   it('returns the role carried in the app_role claim', async () => {
-    if (!reachable) return;
     expect(await withClaims(JSON.stringify({ app_role: 'field_manager' }))).toBe('field_manager');
   });
 
   it('returns null when there is no app_role claim', async () => {
-    if (!reachable) return;
     expect(await withClaims(JSON.stringify({ sub: USER_PUNE_MR }))).toBeNull();
   });
 
   it('returns null for an unauthenticated caller', async () => {
-    if (!reachable) return;
     expect(await withClaims(null)).toBeNull();
   });
 });
 
-describe('custom_access_token_hook', () => {
+describe.skipIf(!reachable)('custom_access_token_hook', () => {
   it('adds the role, territory and active flag to the claims', async () => {
-    if (!reachable) return;
     await inRolledBackTransaction(async (client) => {
       await seed(client);
       const result = await client.query<{ claims: Record<string, unknown> }>(
@@ -268,7 +248,6 @@ describe('custom_access_token_hook', () => {
   });
 
   it('adds no role claim for a user with no profile', async () => {
-    if (!reachable) return;
     await inRolledBackTransaction(async (client) => {
       const result = await client.query<{ claims: Record<string, unknown> }>(
         `select public.custom_access_token_hook(
@@ -281,7 +260,6 @@ describe('custom_access_token_hook', () => {
   });
 
   it('is not executable by anon or authenticated', async () => {
-    if (!reachable) return;
     await inRolledBackTransaction(async (client) => {
       const result = await client.query<{ grantee: string; has: boolean }>(
         `select g.grantee,

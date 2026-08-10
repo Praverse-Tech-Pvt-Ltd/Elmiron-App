@@ -332,9 +332,14 @@ pnpm --filter @elmiron/core test    # contract guards, no database needed
 pnpm --filter @elmiron/api test     # database tests, needs the stack running
 ```
 
-`services/api` tests skip rather than fail when no database is reachable, so
-`pnpm test` is useful without Docker. CI sets `SUPABASE_DB_URL` explicitly, so CI
-never skips.
+`services/api` tests report as **skipped** — not passed — when no database is
+reachable, so `pnpm test` stays useful without Docker while never manufacturing
+confidence. In CI an unreachable database is a hard failure.
+
+Note the earlier claim here, that CI "sets `SUPABASE_DB_URL` explicitly so CI never
+skips", was wrong: `DB_URL` has a default and reachability is a TCP connection, not
+an env var. The guard is now on `process.env.CI`, and all three paths are verified
+in the BE-W1 review evidence below.
 
 Studio: `http://127.0.0.1:54323`. Mail catcher: `http://127.0.0.1:54324`.
 
@@ -385,8 +390,16 @@ and a write attempt is denied rather than silently dropped.
 
 ## Known gaps
 
-1. **Reads outside scope return an empty list, not a denial.** Open question 1
-   above. This is the single most important thing to settle before BE-W2.
+1. ~~**Reads outside scope return an empty list, not a denial.**~~ **Settled
+   10 Aug 2026.** The reviewer accepted that the original criterion was not
+   satisfiable by RLS and amended it. `403`, `200 []` and `0 rows affected` are all
+   acceptable; the property is non-disclosure and non-mutation, tested
+   direct-to-database with no application code in the path. The RPC-only-reads
+   option was explicitly rejected as cosmetic. See
+   [docs/amendment-gate0-criterion.md](docs/amendment-gate0-criterion.md) — that
+   document is the criterion BE-W2 is built and reviewed against.
+   Two tasks are carried into BE-W2 from the same review: a write-time trigger
+   rejecting `territories` cycles, and `reporting_manager_id` role/cycle constraints.
 2. **The Supabase project region is unconfirmed** from this machine. Open question 2.
 3. **The custom access token hook is configured for local only.** `config.toml`
    registers it; the linked remote project needs the hook enabled in
