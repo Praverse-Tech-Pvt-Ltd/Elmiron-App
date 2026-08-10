@@ -17,8 +17,8 @@ Recorded 10 August 2026.
 | 4 | **VS Code — PostgreSQL** (`ms-ossdata.vscode-pgsql` v1.28.0) | VS Code extensions dir | `code --uninstall-extension ms-ossdata.vscode-pgsql` |
 | 5 | **VS Code — GitLens** (`eamodio.gitlens` v18.3.0) | VS Code extensions dir | `code --uninstall-extension eamodio.gitlens` |
 | 6 | **VS Code — Error Lens** (`usernamehw.errorlens` v3.28.0) | VS Code extensions dir | `code --uninstall-extension usernamehw.errorlens` |
-| 7 | **git `core.longpaths = true`** (global, user scope) | `C:\Users\maana\.gitconfig` | `git config --global --unset core.longpaths` |
-| 8 | **Windows `LongPathsEnabled`** *(pending — needs admin)* | `HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem` | Set the DWORD back to `0`. Machine-wide setting — check nothing else depends on it first. |
+| 7 | **git `core.longpaths = true`** — set at **both** global and system scope | `C:\Users\maana\.gitconfig` and `C:\Program Files\Git\etc\gitconfig` | `git config --global --unset core.longpaths` and, in an admin shell, `git config --system --unset core.longpaths` |
+| 8 | **Windows `LongPathsEnabled = 1`** | `HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem` | Set the DWORD back to `0`. Machine-wide setting — check nothing else depends on it first. Most systems are better off leaving it enabled. |
 
 ### Project-local, removed by deleting the repo folder
 
@@ -81,9 +81,9 @@ These were on the laptop before this project and are presumably used for other w
 
 | # | Item | Why it matters | Owner |
 |---|---|---|---|
-| 1 | Confirm the **Supabase cloud project exists in `ap-south-1` (Mumbai)**. Only the local stack has been verified. | Region cannot be changed later without a full migration. Confirm before anyone builds against it. | Maanav |
+| ~~1~~ | ~~Confirm the Supabase cloud project region.~~ **Resolved 10 Aug 2026** — project `pgfdbzoapmleqtoezhoa` is in `ap-south-1`, South Asia (Mumbai). | — | — |
 | 2 | Send the **Apple Developer Program** purchase request to whoever handles company payments. | Per `backend-setup.md` §10, the only item with a lead time that cannot be compressed — company account verification can take days to weeks. Needed for the week-5 App Store probe, so start it in week 3. | Maanav → payments |
-| 3 | Set Windows `LongPathsEnabled = 1` in the registry (needs admin + reboot). | `git config core.longpaths` is already set, but it only covers git's own file operations — not pnpm's or Node's. Without the registry flag, deep `node_modules` nesting will still fail. | Maanav |
+| ~~3~~ | ~~Set Windows `LongPathsEnabled = 1`.~~ **Resolved 10 Aug 2026** — registry set to `1` and rebooted; `git config --system core.longpaths true` also applied. Both halves are in place. | — | — |
 | ~~4~~ | ~~Decide how to handle the crash-looping `supabase_vector` container.~~ **Resolved 10 Aug 2026** — analytics disabled in `supabase/config.toml`. | — | — |
 
 ---

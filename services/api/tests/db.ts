@@ -27,11 +27,7 @@ export const databaseIsReachable = async (): Promise<boolean> => {
   }
 };
 
-/**
- * Resolves to whether the database is reachable. Throws in CI when it is not,
- * so a green CI run always means the assertions actually ran.
- */
-export const requireDatabase = async (): Promise<boolean> => {
+const check = async (): Promise<boolean> => {
   const reachable = await databaseIsReachable();
   if (!reachable) {
     if (process.env['CI'] !== undefined && process.env['CI'] !== '') {
@@ -46,7 +42,37 @@ export const requireDatabase = async (): Promise<boolean> => {
   return reachable;
 };
 
-/** Runs `fn` inside a transaction that is always rolled back. */
+/**
+ * Memoised so the connection attempt happens once per spec file rather than once
+ * per call site, and so the skip warning is not repeated within a file.
+ *
+ * Measured, not assumed: this does NOT dedupe across spec files. Vitest gives each
+ * file its own module registry, so `pending` is fresh per file — with two files and
+ * the database down, `check()` runs twice. Files run in parallel, so the cost is
+ * ceil(files / workers) x 3s rather than files x 3s.
+ *
+ * Deduping across files needs vitest `globalSetup` with provide/inject. Deferred
+ * until rls.spec.ts exists, so it is written against real call sites.
+ */
+let pending: Promise<boolean> | undefined;
+
+/**
+ * Resolves to whether the database is reachable. Throws in CI when it is not,
+ * so a green CI run always means the assertions actually ran.
+ */
+export const requireDatabase = async (): Promise<boolean> => {
+  pending ??= check();
+  return pending;
+};
+
+/**
+ * Runs `fn` inside a transaction that is always rolled back.
+ *
+ * Cleanup failures are swallowed on purpose. If `fn` threw because the connection
+ * died, the rollback throws too, and an unguarded `finally` would replace the real
+ * assertion failure with a connection error — which is a miserable thing to debug
+ * in an adversarial RLS suite. The original exception always wins.
+ */
 export const inRolledBackTransaction = async <T>(
   fn: (client: Client) => Promise<T>,
 ): Promise<T> => {
@@ -56,7 +82,15 @@ export const inRolledBackTransaction = async <T>(
     await client.query('begin');
     return await fn(client);
   } finally {
-    await client.query('rollback');
-    await client.end();
+    try {
+      await client.query('rollback');
+    } catch {
+      // Already failing, or the connection is gone. Nothing useful to add.
+    }
+    try {
+      await client.end();
+    } catch {
+      // Same.
+    }
   }
 };

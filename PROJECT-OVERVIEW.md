@@ -400,7 +400,10 @@ and a write attempt is denied rather than silently dropped.
    document is the criterion BE-W2 is built and reviewed against.
    Two tasks are carried into BE-W2 from the same review: a write-time trigger
    rejecting `territories` cycles, and `reporting_manager_id` role/cycle constraints.
-2. **The Supabase project region is unconfirmed** from this machine. Open question 2.
+2. ~~**The Supabase project region is unconfirmed.**~~ **Confirmed 10 Aug 2026:
+   `ap-south-1`, South Asia (Mumbai)**, for project ref `pgfdbzoapmleqtoezhoa`.
+   Verified in the dashboard, not from this machine — the MCP server is still
+   unauthenticated. Data residency requirement satisfied.
 3. **The custom access token hook is configured for local only.** `config.toml`
    registers it; the linked remote project needs the hook enabled in
    Dashboard → Authentication → Hooks after the first `db push`. Not done — the
