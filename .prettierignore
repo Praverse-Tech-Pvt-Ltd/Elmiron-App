@@ -9,3 +9,7 @@ services/api/supabase/.temp/
 # Planning documents are authored by the reviewer. Reformatting them creates
 # diff noise in files nobody edits in an editor.
 docs/
+
+# Agent-local settings. Git-ignored globally, so it never reaches CI — but Prettier
+# still saw it and failed `format:check` locally on a file nobody can commit.
+.claude/
