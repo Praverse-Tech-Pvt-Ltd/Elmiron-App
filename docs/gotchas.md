@@ -134,6 +134,22 @@ from that:
   it by default on this project. An edge-function-based job cannot be exercised by
   the test suite at all here, so it cannot be a compliance control.
 
+### The direct database connection does not work from GitHub Actions
+
+The dashboard offers `db.<ref>.supabase.co:5432` first, and it is the wrong one for
+CI. Supabase serves **direct connections over IPv6 only** — an IPv4 address is a paid
+add-on — and **GitHub-hosted runners are IPv4-only**. The failure is a connection
+timeout, which reads like a wrong password and sends you to check the secret.
+
+Use the **session pooler**: `aws-0-<region>.pooler.supabase.com:5432`, user
+`postgres.<ref>` rather than `postgres`.
+
+**Session (5432), not transaction (6543).** The transaction pooler recycles the
+connection between statements, which breaks prepared statements and anything
+session-scoped. The retention worker holds `SELECT ... FOR UPDATE SKIP LOCKED` across
+statements and the reconciliation worker holds a run id, so both need session mode.
+All three strings are written out in `.env.example`.
+
 ### Rollback files inside `supabase/migrations/`
 
 The CLI has no down-migration step, and anything matching `*.sql` in that directory
