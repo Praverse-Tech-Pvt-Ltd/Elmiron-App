@@ -2114,10 +2114,28 @@ $ pnpm db:reset && pnpm --filter @elmiron/api test
    `ap-south-1`, South Asia (Mumbai)**, for project ref `pgfdbzoapmleqtoezhoa`.
    Verified in the dashboard, not from this machine — the MCP server is still
    unauthenticated. Data residency requirement satisfied.
-3. **The custom access token hook is configured for local only.** `config.toml`
-   registers it; the linked remote project needs the hook enabled in
-   Dashboard → Authentication → Hooks after the first `db push`. Not done — the
-   remote project is not linked yet.
+3. ~~**The custom access token hook is configured for local only**, and the remote
+   project is not linked.~~ **Partially closed 17 Aug 2026.** All **17 migrations are
+   now deployed** to `pgfdbzoapmleqtoezhoa` via
+   `db push --db-url <direct>`; verified on the remote afterwards rather than
+   trusted: 34 tables with RLS enabled **and** forced on every one, 41 policies,
+   6 views all `security_invoker`, the `llm_gateway` role present with **no** grant
+   on `transcripts_raw` / `recordings` / `voice_notes` / `consent_records`, the
+   private `audio` bucket with its 3 `storage.objects` policies, 9 seeded
+   `app_thresholds` rows, `org_default_shift_window` null (so capture refuses), and
+   no `TRUNCATE` granted to `anon` or `authenticated`.
+
+   **Still outstanding:** the custom access token hook must be enabled by hand in
+   Dashboard → Authentication → Hooks — `config.toml` does not carry over. Note what
+   this does and does not affect: the hook mints the `app_role`, `app_territory_id`
+   and `app_is_active` claims that `current_app_role()` reads, which is display-only.
+   **Authorization is unaffected**, because every policy resolves the role through
+   `effective_role()` against `user_profiles` rather than through the token.
+
+   **New consequence:** the production database now has a schema, so the `.env`
+   hazard is live rather than theoretical. `SUPABASE_DB_URL` is deliberately pinned
+   to localhost for exactly this reason.
+
 4. **No `services/api/supabase/seed.sql`.** `db reset` still warns about it. The Gate 0
    fixtures are created by the test run, not by a seed file, because they need real
    GoTrue users. A seed file is only worth adding when someone wants a populated
