@@ -11,6 +11,14 @@ export interface PurgeResult {
   claimed: number;
   destroyed: number;
   failed: number;
+  /**
+   * Sessions closed as stale before the claim ran.
+   *
+   * Without this sweep an upload the MR simply never returned to stays `open`
+   * forever, and `claim_expired_audio` only collects partials that are `abandoned`
+   * or `revoked` — so its object would never be destroyed.
+   */
+  abandoned: number;
 }
 
 export interface PurgeOptions {

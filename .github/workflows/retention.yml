@@ -1,0 +1,104 @@
+name: Audio retention
+
+# The 90-day retention promise is made on privacy grounds. Until BE-W7 nothing ran
+# the worker, which meant the promise was not approximately true — it was false. A
+# control nobody runs is not a control.
+#
+# WHY A SCHEDULED WORKFLOW AND NOT pg_cron + pg_net.
+#
+# Both extensions are genuinely available (verified against the local stack:
+# pg_cron 1.6.4 is in shared_preload_libraries and creatable, pg_net 0.20.4 is
+# already installed), so this is a choice rather than a limitation.
+#
+#   1. pg_net is ASYNCHRONOUS. net.http_delete() returns a request id and the
+#      response lands in net._http_response later. The purge protocol is claim →
+#      delete the object → confirm, and confirming is only sound AFTER the delete is
+#      known to have succeeded. A pg_net worker would either confirm blindly — which
+#      destroys the one guarantee the design has — or need a second pass to read
+#      responses, which is a different worker with different bugs.
+#   2. The edge-function route avoids that, but it means a second implementation of
+#      a compliance-critical worker in a second language. The existing worker is
+#      already written, already driven by the test suite directly rather than
+#      reimplemented, and already mutation-tested.
+#   3. The local stack runs no edge runtime at all, so an edge-function purge could
+#      not be exercised by the suite. A compliance control the tests cannot reach is
+#      the thing this project has repeatedly refused to ship.
+#
+# THE COST, STATED. A workflow lives in the repository, not next to the data. If
+# Actions is disabled or the repository moves, this stops and the database does not
+# know. Two things cover that: the watchdog in retention-watchdog.yml runs as a
+# separate workflow so it does not die with this one, and — the part that cannot be
+# switched off — `begin_upload` refuses new audio once objects are past their purge
+# date, so a stopped purge becomes a refusal to take in more rather than a silent
+# breach.
+
+on:
+  schedule:
+    # 01:00 IST daily. Off-peak for the field, and before the watchdog checks.
+    - cron: '30 19 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: audio-retention
+  cancel-in-progress: false
+
+jobs:
+  purge:
+    name: destroy expired audio
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Fails rather than skips when the target is not configured.
+      #
+      # Until a deployed database exists this job is RED every day, and that is the
+      # accurate report: nothing is enforcing the retention promise. Skipping quietly
+      # instead would recreate exactly the BE-W6 gap this workflow closes. Configure
+      # the three secrets at deployment and it goes green.
+      - name: Check the retention target is configured
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        # Written as plain `if` blocks rather than `[ -z "$X" ] && missing=...`.
+        # GitHub runs these with `bash -e`, where an AND-list whose left side is
+        # false returns non-zero, and whether that exits depends on where the list
+        # sits in the script. A gate that decides whether a compliance control is
+        # enforced should not turn on that.
+        run: |
+          missing=""
+          if [ -z "$SUPABASE_DB_URL" ]; then missing="$missing SUPABASE_DB_URL"; fi
+          if [ -z "$SUPABASE_URL" ]; then missing="$missing SUPABASE_URL"; fi
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then missing="$missing SUPABASE_SERVICE_ROLE_KEY"; fi
+          if [ -n "$missing" ]; then
+            echo "::error::Audio retention is not scheduled against any database."
+            echo "::error::Missing repository secrets:$missing"
+            echo "::error::Until these are set, nothing enforces the 90-day retention promise."
+            exit 1
+          fi
+          echo "Retention target configured."
+
+      - name: Destroy expired audio
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: pnpm --filter @elmiron/api purge:audio
+
+      # The worker records failures rather than throwing, so that one unreachable
+      # object cannot stop the other ninety-nine being destroyed on time. That means
+      # a partial failure exits non-zero here without having abandoned the batch.
+      - name: Report health after the run
+        if: always()
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: pnpm --filter @elmiron/api check:purge-health

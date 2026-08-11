@@ -112,6 +112,28 @@ is unauthenticated and daemon access is root-equivalent on the host.
 **Consequence:** Studio's Logs pane is empty. Use
 `docker logs -f supabase_<service>_<project>` instead.
 
+### `pg_cron` and `pg_net` are both available; the edge runtime is not
+
+Measured on the local stack rather than assumed, because the scheduling decision
+turned on it:
+
+```
+ name    | default_version | installed_version
+ pg_cron | 1.6.4           |                     -- in shared_preload_libraries, CREATE EXTENSION works
+ pg_net  | 0.20.4          | 0.20.4              -- already installed
+```
+
+So a database-side schedule is genuinely possible. Two things that are not obvious
+from that:
+
+- **`pg_net` is asynchronous.** `net.http_delete()` returns a request id and the
+  response lands in `net._http_response` later. Any protocol that must confirm an
+  action only *after* verifying the HTTP call succeeded — the audio purge is exactly
+  this — needs two passes, and is therefore a second implementation of the worker.
+- **`supabase start` does not run the edge runtime** unless asked, and the CLI stops
+  it by default on this project. An edge-function-based job cannot be exercised by
+  the test suite at all here, so it cannot be a compliance control.
+
 ### Rollback files inside `supabase/migrations/`
 
 The CLI has no down-migration step, and anything matching `*.sql` in that directory
@@ -180,6 +202,29 @@ twice.
 Cost is bounded because files run in parallel — `ceil(files / workers) × 3s`, not
 `files × 3s`. A real cross-file fix needs `globalSetup` with `provide`/`inject`.
 
+### Spec files run in parallel against ONE database and ONE bucket
+
+Every `.spec.ts` gets its own worker thread, and they all commit into the same
+Supabase stack. Anything that reads global state is a cross-file race waiting for a
+third spec file to be added. BE-W7 took the suite from seven files to ten and turned
+two latent races into roughly one-in-ten CI failures:
+
+- **A global count.** `select count(*) from audit_log where table_name = 'visits'`
+  before and after an insert, expecting +1. Another file committing a visit between
+  the two reads makes it +2, which reads as a trigger bug. Scope the count to the
+  row's own id.
+- **A shared catalogue.** Every fixture run seeds its own `en-IN` consent text with
+  `effective_from now()`, so all runs compete to be the version
+  `active_consent_text()` returns. Reading it in one statement and using it in the
+  next, under READ COMMITTED, gets two different answers. Put both in one statement
+  so they share a snapshot.
+- **A shared worker.** `claim_expired_audio` uses `for update skip locked`, so a
+  purge started by another file can claim your object first. Asserting after exactly
+  one `runPurge` is asserting that no other worker exists. Worse, a claim by a worker
+  that then dies is invisible for the fifteen-minute stale window.
+
+The symptom is a different test failing each run, in files nobody touched.
+
 ### A skipped suite and a passing suite look similar in a terminal
 
 The database tests report **skipped** when no database is reachable, and CI throws
@@ -207,6 +252,66 @@ confirms in SQL. See `services/api/scripts/purge-expired-audio.mjs`.
 
 Consequence for rollbacks: `20260815000300...down.sql` deliberately does **not**
 drop the bucket. Empty it through the API first.
+
+### A chunked upload is an UPSERT, so a `using (false)` SELECT policy silently forbids it
+
+Supabase Storage does not issue an `UPDATE` when a client writes to an object that
+already exists. It issues:
+
+```sql
+INSERT INTO storage.objects (...) VALUES (...)
+ON CONFLICT (name, bucket_id) DO UPDATE SET ... RETURNING *
+```
+
+Postgres applies **SELECT policies to the conflicting row** of an upsert, and to any
+`UPDATE` whose `WHERE` clause references columns. BE-W6's `audio_no_public_read`
+(`for select ... using (false)`) therefore made every chunk after the first fail:
+
+```
+new row violates row-level security policy for table "objects"
+```
+
+**The message names the wrong thing.** It points at a `WITH CHECK` on the write; the
+policy actually refusing is the SELECT one. And a plain `UPDATE ... WHERE name = ...`
+under the same policy reports **"0 rows affected"**, which reads as success.
+
+Fix: scope the read rather than forbidding it. `audio_select_live_upload_only` allows
+reading only an object the caller holds a live, open, unconsumed grant for — so a
+completed recording stays unreadable and resumable upload works.
+
+Diagnose this class of failure by running the exact statement from the storage
+container's log as `set local role authenticated` with a `request.jwt.claims` GUC.
+The service's error body carries the real statement; the HTTP status does not.
+
+### `DELETE object` returns HTTP 400 when the object is missing, with the 404 in the body
+
+```
+HTTP 400
+{"statusCode":"404","error":"not_found","message":"Object not found","code":"NoSuchKey"}
+```
+
+So `if (response.ok || response.status === 404) return;` — the obvious idempotency
+check, and what BE-W6's retention worker had — **never fires**. Deleting an object
+something else already removed was being treated as a hard failure.
+
+It stayed invisible for a week because nothing reached it: `claim_expired_audio` does
+not re-claim a destroyed row, so the retention worker never asks twice. The
+post-restore reconciliation walks the bucket instead of a claim list and hit it on
+its first run. The check now parses the body — see `services/api/scripts/storage.mjs`,
+which both workers share.
+
+The same 400-wrapping applies to `GET` of a missing object.
+
+### A bucket walk is a smear across time, not a snapshot
+
+`storage.objects` is a table in the same database, so a PITR restore rewinds it with
+everything else. The only witness that did not travel back is the object store
+itself, over HTTP — and walking it takes long enough that rows change underneath.
+
+An upload that starts between the database read and the storage walk looks like an
+object with no row. Reversing the order just moves the error to the other direction.
+**Both snapshots have to be re-verified per finding immediately before acting**, or a
+reconciliation destroys live uploads. Found by another spec file racing this one.
 
 ### Creating buckets and storage policies from SQL works, but `storage.objects` is not yours
 
@@ -236,6 +341,41 @@ are testing and is not.
 
 Only `round(numeric, integer)`. `percentile_cont` returns double precision even over
 a numeric input, so it needs an explicit `::numeric` before rounding.
+
+### An append-only table cannot carry an `ON DELETE SET NULL` foreign key
+
+`SET NULL` is implemented as an **UPDATE against the referencing table**, so a
+statement-level append-only trigger refuses it — and the failure surfaces somewhere
+else entirely. `adverse_event_reports.redacted_transcript_id` written as
+`references public.transcripts_redacted (id) on delete set null` made every consent
+withdrawal fail:
+
+```
+adverse_event_reports is append-only: UPDATE is not permitted by any role
+```
+
+The withdrawal cascade deletes redacted transcripts, which fired the FK, which fired
+the guard. Seven BE-W6 withdrawal tests went red pointing at a table BE-W6 never
+heard of.
+
+`ON DELETE RESTRICT` is worse here: it lets an adverse-event report veto a doctor's
+withdrawal. The column is a plain `uuid` with no FK, and the pointer dangles once the
+transcript is destroyed — which is the honest state of affairs.
+
+### `ALTER TABLE ... ADD CONSTRAINT` validates existing rows, including ones you may not delete
+
+Narrowing a CHECK during a rollback fails if history violates it:
+
+```
+ERROR: check constraint "audio_destruction_log_object_kind_check" is violated by some row
+```
+
+On an ordinary table you would delete the offending rows. On an **append-only** one
+you cannot, by construction — that is the whole point of it. Use `NOT VALID`, which
+binds new rows and leaves the record intact.
+
+Caught by `verify:rollbacks`, which is the entire argument for executing rollback
+files rather than merely writing them.
 
 ### `now()` is transaction start; `clock_timestamp()` is now
 

@@ -251,7 +251,15 @@ describe.skipIf(!reachable)('rejected items are never silently lost', () => {
     });
   });
 
-  it('rejects an entity the pipeline does not accept yet, by name', async () => {
+  // Until BE-W7 this asserted `unsupported_entity`, because apply_sync_item refused
+  // `recording` and `voice_note` outright. The audio storage layer landed in BE-W7
+  // and both are now applied, so every value of sync_entity_kind is accepted and the
+  // `unsupported_entity` branch is unreachable. It stays in the vocabulary for the
+  // next entity that is declared before it is implemented.
+  //
+  // What this test still guards is the property the original one was for: a refusal
+  // carries the code that is TRUE of it, rather than a generic one.
+  it('rejects a recording with no upload grant by name, not generically', async () => {
     await asUserTx(world.users.puneMr, async (client) => {
       const response = await push(client, [
         {
@@ -263,7 +271,9 @@ describe.skipIf(!reachable)('rejected items are never silently lost', () => {
           payload: {},
         },
       ]);
-      expect(response.results[0]?.rejectionCode).toBe('unsupported_entity');
+      expect(response.results[0]?.status).toBe('rejected');
+      expect(response.results[0]?.rejectionCode).toBe('validation_failed');
+      expect(response.results[0]?.rejectionDetail).toMatch(/uploadGrantId/);
     });
   });
 

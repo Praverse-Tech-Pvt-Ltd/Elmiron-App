@@ -115,11 +115,27 @@ describe.skipIf(!reachable)('consent capture', () => {
     'records %s as a complete, successful capture',
     async (outcome) => {
       await asUserTx(world.users.puneMr, async (client) => {
-        const active = await client.query<{ id: string }>(
-          `select id from public.active_consent_text('en-IN')`,
-        );
-        const result = await client.query<{ outcome: string; consent_text_version_id: string }>(
-          'select outcome, consent_text_version_id from public.capture_consent($1, $2, $3, $4, $5)',
+        // Both halves in ONE statement, so they share one snapshot.
+        //
+        // Every fixture run seeds its own `en-IN` consent text with effective_from
+        // now(), so all runs compete to be the active version. Read across two
+        // statements under READ COMMITTED, another spec file committing its fixture
+        // between them changes the answer, and this fails claiming capture_consent
+        // stamped the wrong version. Flaky roughly one run in ten with the BE-W7
+        // suite at ten spec files; rarer, but present, before that.
+        //
+        // The property being tested is unchanged: the version comes from the
+        // server's catalogue rather than from the caller. The stronger guard is the
+        // structural test below — capture_consent has no version parameter at all.
+        const result = await client.query<{
+          outcome: string;
+          consent_text_version_id: string;
+          active_id: string;
+        }>(
+          `select c.outcome,
+                  c.consent_text_version_id,
+                  (select a.id from public.active_consent_text('en-IN') a) as active_id
+             from public.capture_consent($1, $2, $3, $4, $5) c`,
           [
             randomUUID(),
             world.visits.pune,
@@ -131,7 +147,7 @@ describe.skipIf(!reachable)('consent capture', () => {
         expect(result.rows[0]?.outcome).toBe(outcome);
         // Whatever the server's catalogue says is active — not a version the test
         // or the client chose.
-        expect(result.rows[0]?.consent_text_version_id).toBe(active.rows[0]?.id);
+        expect(result.rows[0]?.consent_text_version_id).toBe(result.rows[0]?.active_id);
       });
     },
   );

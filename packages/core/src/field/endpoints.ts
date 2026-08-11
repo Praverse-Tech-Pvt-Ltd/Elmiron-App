@@ -22,6 +22,7 @@ import {
 } from './entities.js';
 import { ConsentOutcomeSchema, ConsentRecordSchema, ConsentTextVersionSchema } from './consent.js';
 import { RecordingSchema, TranscriptSchema, VoiceNoteSchema } from './capture.js';
+import { UploadSessionStateSchema } from './upload.js';
 import { AnalysisOverrideSchema, AnalysisSchema } from './analysis.js';
 import {
   ServerSyncStatusSchema,
@@ -271,14 +272,30 @@ export type CreateRecordingRequest = z.infer<typeof CreateRecordingRequestSchema
 /**
  * A resumable upload session. The client uploads to `uploadUrl` and can query
  * `uploadedBytes` after a dropped connection to resume from the right offset.
+ *
+ * BE-W7 added the last two fields, additively. `uploadedBytes` was always the
+ * server's count rather than the device's, which is what makes resume work after the
+ * app was KILLED and not only after a socket dropped — but the original shape had no
+ * way to express either of the two things a client must show an MR:
+ *
+ *   * `state` — a session can be revoked underneath the device when the doctor
+ *     withdraws consent. Without this the client sees an upload that simply stops
+ *     working and has nothing true to say about why.
+ *   * `hardExpiresAt` — `expiresAt` slides forward on every chunk, so it is not a
+ *     deadline, it is a heartbeat timeout. The fixed ceiling is the one that means
+ *     "after this, the recording is gone", and it is the one worth showing.
  */
 export const UploadSessionSchema = z.object({
   uploadSessionId: UuidSchema,
   uploadUrl: z.url(),
   storageKey: z.string(),
+  /** Slides forward on each chunk. A heartbeat timeout, not a deadline. */
   expiresAt: IsoDateTimeSchema,
   uploadedBytes: z.number().int().nonnegative(),
   totalBytes: z.number().int().positive(),
+  state: UploadSessionStateSchema,
+  /** Fixed when the session opened. The sliding clock never passes it. */
+  hardExpiresAt: IsoDateTimeSchema,
 });
 export type UploadSession = z.infer<typeof UploadSessionSchema>;
 

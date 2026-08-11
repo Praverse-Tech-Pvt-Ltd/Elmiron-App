@@ -13,9 +13,11 @@ the patient app is a separate project with a separate database.
 _This is the one section that describes now rather than history. The Phase log below
 is append-only._
 
-Week 6 of 12. Boundary proven (Gate 0 passed), field capture server-enforced, the
-offline queue conflict-free by construction, the manager surface exception-first, and
-**audio that consent does not cover is now structurally impossible to hold**.
+Week 7 of 12. Boundary proven (Gate 0 passed), field capture server-enforced, the
+offline queue conflict-free by construction, the manager surface exception-first,
+**audio that consent does not cover is structurally impossible to hold**, and the
+90-day retention promise is now **enforced by something rather than promised by a
+script somebody has to remember to run**.
 The Gate 1 server half is built and green; the client half waits on the field app.
 
 What exists and runs:
@@ -24,15 +26,25 @@ What exists and runs:
   `strictTypeChecked`, Prettier.
 - GitHub Actions CI, two jobs, both failing the build rather than warning. The
   database job applies every migration from empty, runs the Gate 0 suite, then
-  **rolls every migration back and asserts the schema is empty**.
-- **Twelve migrations**, ending with thresholds-as-config, the flagged organisation
-  default shift window, and consent/audio/retention.
-- **29 tables**, RLS enabled and forced on every one. **38 policies**, 5 views, all
-  `security_invoker`, plus two policies on `storage.objects`.
-- A private `audio` bucket whose write policy requires a live, single-use upload
-  grant — and no grant is issued for a visit without standing consent.
+  **rolls every migration back and asserts the schema is empty**. Plus two scheduled
+  workflows: the retention worker, and a watchdog that fails loudly when it stops.
+- **Seventeen migrations**, ending with resumable upload, post-restore reconciliation
+  and adverse-event ingest.
+- **34 tables**, RLS enabled and forced on every one. **41 policies**, 6 views, all
+  `security_invoker`, plus three policies on `storage.objects`.
+- A private `audio` bucket whose write policy requires a live upload grant — and no
+  grant is issued for a visit without standing consent, for a visit quarantined by a
+  restore, or at all once the retention worker has demonstrably stopped.
+- **Resumable, chunked upload** that survives process death and network change, with
+  consent re-read on every chunk, and partial objects destroyed by the same worker
+  through the same machinery as everything else.
 - A 90-day retention worker that destroys the **object as well as the row**, with a
-  test that proves it over HTTP.
+  test that proves it over HTTP — scheduled daily, watched by a separate job, and
+  backstopped by a database-side refusal to accept new audio when it stalls.
+- **Post-restore reconciliation** in both directions, because a restore rewinds the
+  database and not the object store. See `docs/restore-runbook.md`.
+- **Adverse-event ingest**: append-only, a server-stamped fifteen-day statutory clock,
+  and no column a model could write a judgement into.
 - **Append-only wherever it can be**: consent ledger, audit log, call reports and
   their approvals, beat plans, check-ins and check-outs. Conflicts are eliminated
   rather than merged.
@@ -46,19 +58,23 @@ What exists and runs:
 - `services/mock` — contract **I2** — a running mock server covering every endpoint
   declared in `packages/core`, with populated / single / empty lists, real cursor
   pagination, every error code, and a full offline-sync queue.
-- **287 passing tests**: 18 in `packages/core`, 40 mock-conformance tests in
-  `services/mock`, 229 database tests in `services/api` — foundations, Gate 0
-  adversarial, field operations, offline sync, manager surface, Gate 1, and
-  consent/audio/retention.
+- **373 passing tests**: 21 in `packages/core`, 40 mock-conformance tests in
+  `services/mock`, 312 database tests in `services/api` — foundations, Gate 0
+  adversarial, field operations, offline sync, manager surface, Gate 1,
+  consent/audio/retention, resumable upload, retention operations and adverse events.
 - **`docs/gotchas.md`** carries the durable machine and tooling failures. There is no
   handoff document, on purpose.
 - `packages/core` is namespaced into `@elmiron/core/shared` and `@elmiron/core/field`;
   the root import still re-exports everything, so no consumer changes.
 
 What does not exist yet: HTTP endpoints beyond what PostgREST generates from the
-schema. Audio storage, the pipeline, AE routing and the analysis engine are weeks
-7–10, and **contract I3 — the transcript schema they depend on — has not been
-published.**
+schema. The transcription and redaction pipeline and the analysis engine are weeks
+8–10, and **contract I3 — the transcript schema they depend on — is five weeks late
+and now carries a CI deadline of 30 September 2026.**
+
+The adverse-event path is built **mechanically only**. Who receives one, through what
+channel, and what happens as the deadline approaches all wait on the PV and privacy
+sign-off outstanding since week 1 — see BE-W7 below for exactly what was left out.
 
 ---
 
@@ -1525,6 +1541,414 @@ those are what decide whether the AI layer ships at all.
 **5. Shift-window data.** Now less urgent, because the org default exists — which is
 exactly the risk the reviewer named. The flag is the mitigation; somebody still has
 to collect the real hours.
+
+---
+
+### BE-W7 — Upload path, purge scheduling, adverse-event ingest (16 August 2026)
+
+Five migrations. The week's object was to make the retention promise self-enforcing,
+make an upload survive an Indian mobile network, and build only the part of the
+adverse-event path that no sign-off can change.
+
+#### 1. The purge is scheduled — GitHub Actions, and why not `pg_cron`
+
+**The 90-day promise was false, not approximately true.** A worker nobody runs is not
+a control, and `audio_purge_health()` reporting a stopped purge to nobody was the
+same problem one level up. Both halves ship.
+
+**Chosen: two scheduled GitHub Actions workflows.** `retention.yml` runs the existing
+worker daily at 01:00 IST; `retention-watchdog.yml` checks health seven hours later,
+as a **separate workflow** — a watchdog sharing a job with the thing it watches dies
+with it and reports nothing.
+
+**`pg_cron` was the recommendation and I did not take it.** Both extensions are
+genuinely available — measured, not assumed: `pg_cron` 1.6.4 is in
+`shared_preload_libraries` and `CREATE EXTENSION` succeeds, `pg_net` 0.20.4 is
+already installed. Three reasons:
+
+1. **`pg_net` is asynchronous.** `net.http_delete()` returns a request id; the
+   response lands in `net._http_response` later. The purge protocol is claim →
+   delete the object → confirm, and confirming is only sound _after_ the delete is
+   known to have succeeded. A `pg_net` worker either confirms blindly — which
+   destroys the single guarantee the design has — or needs a second pass reading
+   responses, which is a different worker with different bugs.
+2. **The Edge Function route means a second implementation** of a compliance-critical
+   worker, in a second language. The existing one is already driven by the suite
+   directly rather than reimplemented, and already mutation-tested.
+3. **The local stack runs no edge runtime**, so an edge-function purge could not be
+   exercised by the tests at all. A compliance control the suite cannot reach is
+   precisely what this project has repeatedly refused to ship.
+
+**Where the health signal actually goes: a failed GitHub Actions run**, which mails
+whoever watches the repository. That is crude. It is also real and available now,
+where the console that should display it is Frontend's week 11.
+
+**The cost, stated.** A workflow lives in the repository, not next to the data. If
+Actions is disabled or the repository moves, both jobs stop and the database does not
+know. So there is a third layer that **cannot be switched off**:
+
+> **`begin_upload` refuses new audio once objects are past their purge date.**
+> If retention has stopped, intake stops.
+
+That is on the write path, in the database. A stopped purge degrades into a refusal
+to take in more audio rather than into a silent breach. It is deliberately expressed
+as "an object that should already be gone is still here" rather than "no successful
+run recently" — on a fresh database there has never been a run and nothing is
+overdue, and that is healthy.
+
+**Until the three deployment secrets exist, both workflows fail every day.** That is
+the accurate report, not a bug: nothing is enforcing the retention promise until they
+are set. Skipping quietly would recreate the exact gap this closes.
+
+#### 2. Resumable upload — the grant covers the whole object
+
+**The contradiction.** BE-W6 made the grant single-use and short-lived. A resumable
+upload is long-lived by definition. The prompt was right that these cannot both hold
+unless the design says which.
+
+**The decision: one grant per object, re-validated on every resume and every chunk.**
+
+Not a grant per chunk. A grant is permission to write **one object at one key**, and
+the key is unique — a per-chunk grant would re-issue the same key repeatedly, which
+makes "single-use" meaningless rather than stricter. What single-use has to mean here
+is that the grant is consumed at **finalisation**, not at first byte.
+
+So the lifetime is two clocks:
+
+|                   |                                                                         |
+| ----------------- | ----------------------------------------------------------------------- |
+| `expires_at`      | Slides forward on each chunk. A stalled upload dies in fifteen minutes. |
+| `hard_expires_at` | Fixed at issue, twenty-four hours. The sliding clock can never pass it. |
+
+Without the ceiling, a device that heartbeats forever holds a permission forever.
+Twenty-four hours covers the real case — record at 11am in a corridor, reach signal
+at the office at 7pm — and nothing longer is defensible for audio a doctor consented
+to minutes ago.
+
+**Consent is re-read at every resume and every chunk**, and the check runs **first**,
+before the session-state and clock checks. That ordering is not cosmetic: the
+withdrawal cascade sets the session to `revoked`, so a state-first ordering tells the
+MR "this grant is revoked" — true, useless, and it maps to `validation_failed`, whose
+sentence is _"the server refused the contents of this item"_. The MR would be told
+their recording was malformed when the doctor simply changed their mind. Found by a
+test asserting the rejection code rather than only the refusal.
+
+**Resume works after the app was killed, not only after a dropped socket.** The
+device that has lost everything calls `begin_upload` again and gets the same session,
+the same key and the server's byte count back. There is one open session per visit
+per kind, enforced by a partial unique index, so that question has exactly one
+answer. A resume token in local storage dies with the process; this does not.
+
+**A partial upload is an object, not scratch.** It occupies storage, it may contain
+audio, and if the visit was abandoned there is no recording row binding it to a
+consent record at all. It is destroyed by the **same worker through the same
+claim/confirm machinery**, and it counts toward the per-MR storage ceiling while it
+exists — reserved at its declared size, because a ceiling that only counts what
+already landed lets a device open two hundred sessions and walk straight through it.
+
+Bound on how long an abandoned object survives: the 24-hour hard ceiling plus one
+purge interval, so 48 hours worst case.
+
+**A gap I found by checking that everything built this week is actually called by
+something.** A session the MR never returns to stays `open` — nobody abandons it, the
+clocks just run out — and the purge only claims partials that are `abandoned` or
+`revoked`. `begin_upload` closes a stale session only if the same MR asks for the
+same visit again, which by definition they did not. So the object would have sat in
+the bucket indefinitely, past its retention date, with nothing claiming it. The
+retention worker now calls `close_stale_upload_sessions()` first on every run. This
+is the same class of mistake as BE-W6's unscheduled purge: a function that works, and
+that nothing invokes.
+
+#### 3. The queue — one mechanism, not two
+
+`recording` and `voice_note` were declared in the BE-W4 sync enum and refused by
+`apply_sync_item` until the storage layer existed. This is that layer, so **an upload
+is now an ordinary queue item** and inherits per-item isolation, attempt counting,
+dead-lettering and BE-W5's attributed reinstatement unchanged. Nothing was
+re-implemented.
+
+Two new rejection codes, both reachable in ordinary use: `consent_withdrawn` (the
+doctor withdrew while the device was offline) and `upload_expired` (the finalisation
+synced after the hard ceiling). Both would otherwise have landed as
+`validation_failed`, which is untrue and unactionable for both.
+
+**A third, `storage_ceiling_exceeded`, was drafted and then removed.** The ceiling is
+checked in `begin_upload`, which the client calls interactively because it needs the
+key before sending a byte, so that refusal reaches the caller directly and never
+travels through the queue. A rejection code no code path can produce is a vocabulary
+entry that looks like coverage and is not. There is now a test asserting every code
+in the enum has an explanation sentence.
+
+#### 4. Post-restore reconciliation — what it covers, and what it cannot
+
+A restore rewinds **the database** and not **the objects**. The prompt named one
+direction; there are two, and the second is worse.
+
+| Direction              | What it means                                                                                                                                         | What the reconciliation does                                                                                                        |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Row without object** | The database thinks it holds audio. Storage does not have it. A withdrawal may have been erased with everything else.                                 | Marks the row destroyed as `restore_reconciled`, removes derived transcripts and analyses, logs it — **and quarantines the visit**. |
+| **Object without row** | An upload that completed after the restore point; the object stayed, its row went back. **Audio held with no consent record and no retention clock.** | Destroys the object and records the finding.                                                                                        |
+
+The second is a live breach rather than a stale row, and nothing else in this system
+would ever have noticed it.
+
+**`storage.objects` cannot answer either question** — it is a table in the same
+database and was rewound too. The worker walks the object store over HTTP, which is
+the only witness that did not travel back.
+
+**It does not fabricate the withdrawal.** The consent row, the destruction-log row
+and `withdrawn_at` all lived in the database and all went back together; the only
+surviving trace is the object's absence, and absence cannot distinguish a withdrawal
+from an ordinary ninety-day purge. The ledger's entire value is that every row in it
+is a real thing a real doctor really did, and an inferred row would be
+indistinguishable from a genuine one forever afterwards. So the visit is
+**quarantined** — no upload grant is issued, and a named person clears it with a
+mandatory reason, recorded append-only. A blocked recording is recoverable; an
+un-withdrawn consent is not.
+
+**The quarantine is on the visit, not the doctor.** The doctor is the safer scope and
+is recorded on the finding for that reason, so widening it is one insert. But a
+missing object can also be an ordinary storage fault, and blocking every future
+recording for a doctor on that evidence turns a possible compliance question into a
+certain outage across their territory. That trade is stated rather than hidden.
+
+**What it cannot do**, in `docs/restore-runbook.md` and repeated here:
+
+- Recover a withdrawal, for the reason above.
+- Tell a restore artifact from an ordinary storage fault. Everything errs toward denial.
+- See an object the store has not yet made visible, if the listing is eventually
+  consistent. Run it twice, an hour apart, after a recent restore.
+- Say anything about **Supabase's own infrastructure** — S3 versioning, soft-delete
+  windows, sub-processor retention. Not in the public docs. **A DPA question, not an
+  engineering one.**
+
+`docs/restore-runbook.md` states plainly that a PITR restore on this project is a
+compliance event requiring this routine, and is dry-run by default: a tool that
+destroys audio the first time somebody runs it to see what it does is not a
+compliance tool.
+
+#### 5. The org default shift window now expires
+
+Mandatory `expiresAt` inside the config value, ceiling of 60 days from
+`effective_from`, enforced by a trigger at configuration time. After expiry the
+default stops applying and capture refuses again — the strict BE-W3 rule, back
+automatically, with nobody needing to remember.
+
+Measured against `effective_from` rather than `now()` deliberately: a rule expressed
+against `now()` has no legal way to write an already-expired row, and therefore no
+way to test the expired branch at all.
+
+A default carrying **no** expiry — one configured before this migration — is treated
+as expired rather than as permanent. The unsafe reading of missing data is the one
+that keeps capture flowing.
+
+`is_within_shift` now distinguishes "no window configured anywhere" from "the stopgap
+ran out", because those need different actions from different people and an MR told
+the wrong one raises the wrong ticket. `org_default_shift_window_status()` exposes the
+deadline before it bites.
+
+**Worth recording: the org-default path had no test at all before this week.** BE-W6
+built it and described it; nothing exercised it. Both sides of the boundary are now
+covered.
+
+#### 6. `TranscriptV0` has a hard expiry
+
+`packages/core/src/field/transcript-v0.expiry.test.ts` fails after **30 September
+2026** unless a `TranscriptV1Schema` is exported. The failure message names contract
+I3, names AI/ML as its owner, states what is still owed, and gives exactly two honest
+ways to make it pass — publish V1, or move the date deliberately in a one-line diff
+with somebody's name on the commit. A second test asserts `TranscriptV0Schema` still
+exists, so the guard cannot pass vacuously if the placeholder is renamed away.
+
+#### 7. `voice_notes` retention — the reasoning replaced
+
+Kept at 90 days; the symmetry argument is gone. The comment now says what is actually
+true: a voice note summarising a consultation **can name a patient the doctor
+discussed** — the same DPDP exposure as the recording — and unlike the recording
+**nobody consented to it at all**, because the doctor agreed to the conversation
+being recorded, not to the MR's commentary about it. It is also an employee's voice
+held by their employer. Anyone arguing for longer retention now has to beat a privacy
+position rather than a consistency preference.
+
+#### 8. Adverse-event ingest — the mechanical half
+
+Built: the record and its immutability, the statutory clock, and routing to a human.
+
+**Append-only against every role**, including `admin` and `service_role` — a
+statement-level trigger plus revoked privileges, the same two independent layers as
+`consent_records` and `audit_log`.
+
+**The clock starts at ingest.** `received_at` and `statutory_due_at` are both stamped
+by trigger; a test inserts a report claiming to be 200 days old with a matching
+receipt and asserts the trigger overwrote both. Fifteen calendar days, computed in a
+**pinned Asia/Kolkata**: calendar arithmetic on a `timestamptz` uses the session
+timezone, so the same insert could otherwise produce two different deadlines on two
+connections. India observes no DST, so today the pinned and session answers agree —
+pinning means they cannot stop agreeing because somebody changed a server setting.
+
+**Routing is to a human, and this is tested as an absence.** There is no severity,
+priority, triage state, confidence, score, category or causality column. A test
+asserts thirteen such names are absent, so the next person who wants one has to
+delete a test to get it. The `llm_gateway` role holds nothing here at all.
+
+**The clock is countable from day one.** `adverse_event_clock` and
+`adverse_event_clock_summary()` exist now rather than when somebody asks, because the
+thing that gets missed is a deadline nobody was counting.
+
+#### What I was told not to build, restated
+
+So the next reader knows the absence is deliberate:
+
+- **Who the PV officer is.** Not modelled. The role does not exist in this database
+  and the 12 August decision records that it may never.
+- **The notification channel.** Nothing pushes an adverse event anywhere. Plan §1's
+  one-way endpoint into the clinical PV queue is not built.
+- **What happens at day thirteen**, or any escalation ladder. There is no state
+  machine on an adverse event at all — no acknowledged, no assigned, no closed.
+- **Any assumption about org structure.** No routing rules, no on-call, no owner.
+
+All four wait on the PV and privacy sign-off outstanding since week 1. Guessing them
+produces a compliance artifact built on an invention, which is worse than an
+obviously incomplete one.
+
+Also not built, and also deliberate: `pg_cron` scheduling (§1), a second upload
+mechanism for the queue (§3), and any widening of the reconciliation quarantine to
+the doctor (§4).
+
+#### Anything I was asked to build that I believe is wrong
+
+**Nothing in the prompt is wrong.** Four things I would flag rather than object to,
+and one thing I got wrong myself.
+
+**1. The `reported_text` column decides a question the sign-off was meant to decide.**
+An MR who witnesses an adverse event must be able to describe it — a report with no
+description discharges no duty — but it is the one field here that can carry patient
+information, which is exactly the §2.6-versus-DPDP contradiction nobody has resolved.
+I included it and flagged it, because omitting it would have decided the question
+silently by making the feature useless. **This is the single most important thing for
+the sign-off to rule on**, and it is now shipped rather than pending.
+
+**2. Whether an adverse-event report survives a consent withdrawal is a legal
+question I answered by default.** It does survive: a pharmacovigilance duty is a
+separate legal basis from consent, and destroying a statutory record to satisfy a
+privacy request is not a trade a schema should make on its own. That is the safe
+default and it is still a default.
+
+**3. The retention watchdog's destination is a mailing list, effectively.** A failed
+Actions run reaches whoever has notifications on. That is a real human, and it is also
+the weakest link in the chain — it will be ignored within a month of the pilot unless
+the week-11 console picks it up. The database-side intake block exists because I do
+not trust this layer.
+
+**4. The 24-hour upload ceiling is a guess about Indian mobile networks.** It is
+generous enough for a full working day offline and short enough that an abandoned
+object is bounded. I have no field data behind it, and it is the number most likely
+to need changing after the pilot. It is a constant in one function, not a threshold
+row, because making it configurable before anyone has an opinion is the speculative
+abstraction the project rules forbid.
+
+**5. My own mistakes, recorded.**
+
+- I wrote the adverse-event transcript pointer as `references transcripts_redacted
+(id) on delete set null`, which made **every consent withdrawal fail** — `SET NULL`
+  is an UPDATE, and the table is append-only. Seven BE-W6 withdrawal tests went red
+  pointing at a table BE-W6 has never heard of. Caught by the existing suite on the
+  first run, not by review.
+- **A test of mine passed when it should have failed.** The hard-ceiling test
+  asserted that the sliding clock and the ceiling ended up _equal_, which a mutation
+  that raised both of them satisfied while destroying the property entirely. The
+  ceiling being **immovable** is what matters, and nothing asserted it. Mutation 3
+  found it; two assertions now do. This is the second time the harness has caught a
+  gap inside my own test rather than in the code under test, and it is the reason the
+  mutation pass is worth its cost.
+- **`close_stale_upload_sessions()` was written, tested, and called by nothing.** An
+  upload the MR never returned to would have kept its object forever. Found by
+  checking that every function built this week is actually invoked — which is the
+  same check that would have caught BE-W6's unscheduled purge a week earlier.
+
+#### What each new test proves
+
+`upload.spec.ts` 35, `retention-ops.spec.ts` 25, `adverse-events.spec.ts` 23.
+
+| Block                     | What it proves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **the session** (8)       | Two clocks, with the hard ceiling immovable by either a chunk or a resume; the same key comes back after an app kill; the server's byte count is authoritative; bounds are validated before a session is resumed; one open session per visit and kind.                                                                                                                                                                                                                                                 |
+| **consent in flight** (4) | A withdrawal stops a resume, stops a chunk, stops a finalisation, and revokes the session in the same transaction as the withdrawal itself.                                                                                                                                                                                                                                                                                                                                                            |
+| **writing chunks** (5)    | A second write to the same object succeeds while the session is open and is refused after finalisation; an MR can read their own in-flight upload, cannot read their own landed recording, and can never read anybody else's.                                                                                                                                                                                                                                                                          |
+| **finalising** (4)        | The recording is created and the grant consumed; a resend is idempotent; a size that does not fit the grant is refused; the retention clock is the server's.                                                                                                                                                                                                                                                                                                                                           |
+| **partials** (4)          | An abandoned partial's OBJECT is destroyed over HTTP, logged with a hashed key as `abandoned_upload`; a revoked one is logged as `withdrawal`; a stalled session is closed; **an upload the MR simply never came back to is collected too**.                                                                                                                                                                                                                                                           |
+| **ceilings** (3)          | An in-flight upload reserves against the ceiling; the ceiling refuses; **a stalled retention worker refuses new audio**.                                                                                                                                                                                                                                                                                                                                                                               |
+| **the queue** (7)         | A recording round-trips through `sync_push`; a withdrawal and an expiry each get their own code and their own sentence; the queue shows state, percentage and a reason; dead-lettering and manager reinstatement work unchanged; every code in the enum has an explanation.                                                                                                                                                                                                                            |
+| **scheduling** (8)        | Both workflows declare a five-field cron and run the right script; the watchdog is a separate file that does not run the purge; both fail rather than skip with no database; the verdict is quiet on a fresh system, fires on overdue objects, fires when the worker never ran, and fires _before_ anything goes overdue.                                                                                                                                                                              |
+| **shift expiry** (6)      | No expiry is refused; over 60 days is refused; an expiry before it starts is refused; null still switches it off; it applies and is flagged before expiry; after expiry resolution returns nothing and capture refuses with a message naming which problem it is.                                                                                                                                                                                                                                      |
+| **reconciliation** (9)    | A dry run changes nothing; a missing object re-applies the destruction as `restore_reconciled`; **no withdrawal is fabricated**; the visit is quarantined and blocks new audio; clearing needs a manager, a reason and leaves an append-only record; an orphan object is destroyed; an in-flight upload is left alone; a delete of an already-gone object is success; findings cannot be edited.                                                                                                       |
+| **adverse events** (23)   | Ingest is attributed and idempotent; the pipeline path is closed to the field; the clock is the server's, is exactly fifteen days, and survives a hostile session timezone; append-only against the owner, against a zero-row update, against truncate, and with no privilege for `service_role`; thirteen judgement column names are absent; the gateway is denied rather than filtered; an MR sees their own reports and not the pipeline's detections; the transcript pointer is not a foreign key. |
+
+**Mutation-tested.** Twelve regressions, applied one at a time to a freshly reset
+database, suite run, then reverted. **All twelve were killed — 32 failures in total.**
+
+| #   | Guard removed                                     | Tests that went red |
+| --- | ------------------------------------------------- | ------------------- |
+| 1   | Consent no longer re-read at resume or chunk      | 4                   |
+| 2   | Withdrawal no longer revokes a session in flight  | 3                   |
+| 3   | The hard ceiling can be pushed forward by a chunk | 1                   |
+| 4   | The purge no longer collects partial uploads      | 3                   |
+| 5   | Storage read opened to any authenticated caller   | 2                   |
+| 6   | An expired org default keeps applying             | 1                   |
+| 7   | The 60-day ceiling and mandatory expiry dropped   | 3                   |
+| 8   | The AE statutory clock takes the device's word    | 3                   |
+| 9   | `adverse_event_reports` made mutable              | 5                   |
+| 10  | The reconciliation stops quarantining             | 3                   |
+| 11  | A stalled purge no longer blocks intake           | 2                   |
+| 12  | Stale upload sessions never closed                | 2                   |
+
+**The first run of this battery was the point of running it.** Mutation 3 killed
+**nothing** — see "my own mistakes" above. The number in that row is what it kills
+now, after the test was fixed to assert the property that actually matters.
+
+#### Contract change — Frontend
+
+**Additive, with one correction.**
+
+- `UploadSession` gains **`state`** and **`hardExpiresAt`**. It already existed in
+  `endpoints.ts` — contract I1 declared the week-7 shape back in week 2 — and was
+  extended rather than duplicated. Both fields are things a client must show an MR:
+  `expiresAt` slides on every chunk, so it is a heartbeat timeout rather than a
+  deadline, and a session can be revoked underneath the device when the doctor
+  withdraws.
+- New: `UploadKind`, `UploadSessionState`, `UploadQueueItem`, `VisitAudioQuarantine`,
+  `AdverseEventSource`, `AdverseEventReport`, `AdverseEventClock`,
+  `AdverseEventClockSummary`.
+- **Correction in the mock, not the contract:** the `uploadSession` fixture's
+  `storageKey` was `recordings/2026/08/10/66666601.opus`. The real server enforces an
+  opaque server-generated path with a check constraint, and would refuse that key —
+  a path that encodes anything leaks through logs and support tickets. The fixture
+  now uses the real shape.
+
+Nothing removed.
+
+#### Open questions for the reviewer
+
+**1. The `reported_text` question above is the blocker for week 8 onward**, not just
+for this table. Every downstream stage — redaction, detection, routing — inherits
+whatever is decided about what an adverse-event record may contain.
+
+**2. Contract I3 is now five weeks late** and has a CI deadline of 30 September.
+`TranscriptV0` still does not close it; the vendor decision and the measured Hinglish
+word error rate are what decide whether the AI layer ships at all.
+
+**3. The DPA question is unchanged and still not an engineering task.** Whether
+Supabase retains a "destroyed" object in S3 versioning, a soft-delete window or a
+sub-processor's backup is not in the public documentation. The purge and the
+reconciliation both do what they claim at the API level; below that I cannot see.
+
+**4. Nothing tells anybody a visit is quarantined.** The MR sees it through their own
+queue and a manager can query it, but there is no alert. Same shape as the BE-W6
+org-default flag: real, and invisible until the console exists.
+
+**5. Volume is still untested.** The purge batch limit is 100 and the reconciliation
+walks the bucket one prefix at a time — O(objects) HTTP requests. Neither has been run
+against ten thousand objects, and the reconciliation is the one that would hurt.
 
 ---
 

@@ -1,5 +1,6 @@
 import { Client } from 'pg';
 import { randomUUID } from 'node:crypto';
+import { deleteStorageObject } from './storage.mjs';
 
 /**
  * The 90-day audio retention worker.
@@ -30,26 +31,14 @@ const DEFAULTS = {
   limit: 100,
 };
 
-const deleteObject = async (config, storageKey) => {
-  const response = await fetch(
-    `${config.apiUrl}/storage/v1/object/${config.bucket}/${storageKey}`,
-    {
-      method: 'DELETE',
-      headers: {
-        apikey: config.serviceKey,
-        authorization: `Bearer ${config.serviceKey}`,
-      },
-    },
-  );
-
-  // 404 means somebody already removed it — a previous run, or the withdrawal
-  // cascade racing this one. Both are success for our purposes: the object is gone.
-  if (response.ok || response.status === 404) return;
-
-  throw new Error(
-    `storage delete failed for ${storageKey}: ${String(response.status)} ${await response.text()}`,
-  );
-};
+/**
+ * BE-W7: this used to live here as `response.ok || response.status === 404`, and
+ * that check never fired. Supabase returns HTTP 400 for a missing object, with the
+ * 404 in the response BODY — so "somebody already removed it" was being treated as a
+ * hard failure. Nothing caught it because `claim_expired_audio` never re-claims a
+ * destroyed row, so this worker never asked twice. See scripts/storage.mjs.
+ */
+const deleteObject = deleteStorageObject;
 
 export const runPurge = async (overrides = {}) => {
   const config = { ...DEFAULTS, ...overrides };
@@ -61,8 +50,20 @@ export const runPurge = async (overrides = {}) => {
   let claimed = 0;
   let destroyed = 0;
   let failed = 0;
+  let abandoned = 0;
 
   try {
+    // BE-W7. An upload session whose clocks ran out is still `open`, and
+    // claim_expired_audio only collects partials that are `abandoned` or `revoked` —
+    // so without this sweep a device that stopped uploading and never came back
+    // leaves its partial object in the bucket FOREVER. Nothing else closes a session
+    // the MR never returns to.
+    //
+    // Runs before the claim so anything it closes is collected on this pass rather
+    // than the next one.
+    const closed = await client.query('select public.close_stale_upload_sessions() as closed');
+    abandoned = Number(closed.rows[0]?.closed ?? 0);
+
     const batch = await client.query('select * from public.claim_expired_audio($1, $2)', [
       runId,
       config.limit,
@@ -96,7 +97,7 @@ export const runPurge = async (overrides = {}) => {
     await client.end();
   }
 
-  return { runId, claimed, destroyed, failed };
+  return { runId, claimed, destroyed, failed, abandoned };
 };
 
 // CLI entry. Importing this module does not run anything.
@@ -106,7 +107,9 @@ if (
 ) {
   const result = await runPurge();
   console.log(
-    `purge ${result.runId}: claimed ${String(result.claimed)}, destroyed ${String(result.destroyed)}, failed ${String(result.failed)}`,
+    `purge ${result.runId}: closed ${String(result.abandoned)} stale session(s), ` +
+      `claimed ${String(result.claimed)}, destroyed ${String(result.destroyed)}, ` +
+      `failed ${String(result.failed)}`,
   );
   if (result.failed > 0) process.exit(1);
 }

@@ -1,0 +1,68 @@
+name: Audio retention watchdog
+
+# `audio_purge_health()` has existed since BE-W6 so that a stopped purge would be
+# visible rather than inferred. Nothing called it, which made it a row nobody reads.
+# This is the thing that calls it.
+#
+# It is a SEPARATE WORKFLOW from retention.yml on purpose. A watchdog that shares a
+# job with the process it watches dies with it and reports nothing — the failure it
+# is most needed for is exactly the one it would miss.
+#
+# The destination is a failed GitHub Actions run, which mails whoever is watching the
+# repository. That is crude. It is also real, and it is available now, whereas the
+# console that would display this is Frontend's week 11. When the console exists this
+# should point at it instead.
+#
+# This is the OUTER of three layers, and the only one that reaches a person:
+#
+#   1. begin_upload refuses new audio when objects are past their purge date. In the
+#      database, on the write path, cannot be switched off. Nobody is told.
+#   2. audio_purge_health() reports the state to anything that asks.
+#   3. This, which asks, and fails loudly when the answer is bad.
+
+on:
+  schedule:
+    # 08:30 IST daily — seven hours after the purge should have run, so a job that
+    # started and hung is caught rather than being read as still in progress.
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: audio-retention-watchdog
+  cancel-in-progress: false
+
+jobs:
+  watchdog:
+    name: is anything actually destroying expired audio
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Same reasoning as retention.yml: an unconfigured target is a real finding,
+      # not a reason to skip. The retention promise is not being kept by anything
+      # until this is pointed at a database.
+      - name: Check the retention target is configured
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::The retention watchdog is not pointed at any database."
+            echo "::error::Set the SUPABASE_DB_URL repository secret."
+            exit 1
+          fi
+          echo "Watchdog target configured."
+
+      - name: Check audio retention health
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PURGE_MAX_SILENCE_HOURS: '48'
+        run: pnpm --filter @elmiron/api check:purge-health

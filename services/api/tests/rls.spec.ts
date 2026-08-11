@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Client, QueryResult } from 'pg';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
@@ -707,18 +708,28 @@ describe.skipIf(!reachable)('audit_log is append-only', () => {
 
   it('is written by a trigger, not by the caller', async () => {
     await inRolledBackTransaction(async (client: Client) => {
-      const before = await client.query<{ count: string }>(
-        `select count(*) as count from public.audit_log where table_name = 'visits'`,
-      );
+      // Scoped to THIS row rather than counting every audited visit.
+      //
+      // A global count is a cross-file race: other spec files commit visits, and one
+      // landing between the two counts breaks this with an off-by-one that looks
+      // like a trigger bug. It was latent from BE-W2 and became roughly a one-in-ten
+      // failure when BE-W7 added three more spec files that commit visits.
+      const visitId = randomUUID();
+      const auditedRows = async (): Promise<number> => {
+        const result = await client.query<{ count: string }>(
+          `select count(*) as count from public.audit_log
+            where table_name = 'visits' and row_id = $1`,
+          [visitId],
+        );
+        return Number(result.rows[0]?.count);
+      };
+
+      expect(await auditedRows()).toBe(0);
       await client.query(
-        `insert into public.visits (id, mr_id, doctor_id, status)
-         values ('00000000-0000-4000-8000-00000000a001', $1, $2, 'planned')`,
-        [world.users.puneMr.id, world.doctors.pune],
+        `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'planned')`,
+        [visitId, world.users.puneMr.id, world.doctors.pune],
       );
-      const after = await client.query<{ count: string }>(
-        `select count(*) as count from public.audit_log where table_name = 'visits'`,
-      );
-      expect(Number(after.rows[0]?.count)).toBe(Number(before.rows[0]?.count) + 1);
+      expect(await auditedRows()).toBe(1);
     });
   });
 });

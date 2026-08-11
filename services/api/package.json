@@ -9,7 +9,9 @@
     "lint": "eslint tests scripts",
     "test": "vitest run",
     "verify:rollbacks": "node scripts/verify-rollbacks.mjs",
-    "purge:audio": "node scripts/purge-expired-audio.mjs"
+    "purge:audio": "node scripts/purge-expired-audio.mjs",
+    "check:purge-health": "node scripts/check-purge-health.mjs",
+    "reconcile:restore": "node scripts/reconcile-after-restore.mjs"
   },
   "dependencies": {
     "@elmiron/core": "workspace:*"

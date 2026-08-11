@@ -571,8 +571,17 @@ export const analysisOverrides: AnalysisOverride[] = [
 export const uploadSession: UploadSession = {
   uploadSessionId: IDS.uploadSession,
   uploadUrl: 'http://127.0.0.1:54331/mock-storage/upload/14141414',
-  storageKey: 'recordings/2026/08/10/66666601.opus',
+  // Opaque and server-generated. BE-W7 enforces this pattern with a check
+  // constraint; the earlier date-partitioned key would be refused by the real
+  // server, because a path that encodes anything leaks through logs and support
+  // tickets.
+  storageKey:
+    'recordings/66666601-6666-4666-8666-666666660001/66666601-6666-4666-8666-666666660002.opus',
+  state: 'open',
+  // Slides forward on each chunk — a heartbeat timeout rather than a deadline.
   expiresAt: '2026-08-10T18:00:00+05:30',
+  // Fixed at issue. This is the one that means "after this, the recording is gone".
+  hardExpiresAt: '2026-08-11T11:30:00+05:30',
   uploadedBytes: 1_048_576,
   totalBytes: 3_512_320,
 };
