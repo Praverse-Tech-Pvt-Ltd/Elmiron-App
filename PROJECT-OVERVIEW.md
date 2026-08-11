@@ -2125,12 +2125,25 @@ $ pnpm db:reset && pnpm --filter @elmiron/api test
    `app_thresholds` rows, `org_default_shift_window` null (so capture refuses), and
    no `TRUNCATE` granted to `anon` or `authenticated`.
 
-   **Still outstanding:** the custom access token hook must be enabled by hand in
-   Dashboard → Authentication → Hooks — `config.toml` does not carry over. Note what
-   this does and does not affect: the hook mints the `app_role`, `app_territory_id`
-   and `app_is_active` claims that `current_app_role()` reads, which is display-only.
-   **Authorization is unaffected**, because every policy resolves the role through
-   `effective_role()` against `user_profiles` rather than through the token.
+   **The custom access token hook is now enabled too**, set through the Management
+   API (`PATCH /v1/projects/<ref>/config/auth`) rather than the dashboard, so the
+   change is reproducible. `hook_custom_access_token_enabled: true`,
+   uri `pg-functions://postgres/public/custom_access_token_hook`.
+
+   Verified end to end, because the config endpoint reporting `true` says nothing
+   about whether GoTrue can actually execute the function — and a hook that raises
+   breaks **every** sign-in. Checked first that `supabase_auth_admin` holds EXECUTE on
+   the function and SELECT on `user_profiles` with a policy to match, and that
+   `authenticated` does **not** hold EXECUTE. Then called the function directly on the
+   remote, then created a throwaway user, signed in for real, confirmed a token was
+   issued, and deleted the user. Sign-in succeeded; `app_role` was correctly absent
+   for a user with no profile row.
+
+   Scope of what this affects, stated because it is easy to overestimate: the hook
+   mints the `app_role`, `app_territory_id` and `app_is_active` claims that
+   `current_app_role()` reads, which is **display-only**. Authorization was never
+   waiting on it — every policy resolves the role through `effective_role()` against
+   `user_profiles`.
 
    **New consequence:** the production database now has a schema, so the `.env`
    hazard is live rather than theoretical. `SUPABASE_DB_URL` is deliberately pinned
