@@ -418,3 +418,54 @@ Obvious in isolation, invisible in a 900-line test file: a SQL comment written i
 a `` ` ``-quoted query that itself contains `` `auth.uid()` `` terminates the string
 and produces a parse error 40 lines away. Use plain words in SQL comments inside
 template literals.
+
+---
+
+## Remote connection strings
+
+### A `?` in the database password breaks the URL, and the error tells you nothing
+
+Supabase generates passwords containing characters that are structural in a URL —
+`?` is the fatal one, because it begins the query string. A connection string with an
+unencoded `?` in the password is not a valid URL, so `pg` refuses it before any
+network call:
+
+```
+TypeError: Invalid URL
+  code: 'ERR_INVALID_URL',
+  input: '*****REDACTED*****',
+```
+
+**`pg` redacts the value in its own error**, which is correct behaviour and also
+means you cannot see which character is at fault. It reads like a malformed host or a
+library bug. It is neither.
+
+**Fix:** percent-encode the password segment only — `?` → `%3F`, `+` → `%2B`,
+`#` → `%23`, `@` → `%40`, `/` → `%2F`. `.env.example` says "percent-encode them in
+all three" for this reason; the instruction is easy to skip because the string looks
+fine.
+
+Verified 17 Aug 2026: both the session-pooler and direct strings for this project
+failed as stored and connected immediately once the password was encoded. Nothing
+about the host, user or port was wrong.
+
+### The direct string works from a laptop and will not work from Actions
+
+Confirmed from this machine: `db.<ref>.supabase.co:5432` connects fine, because the
+machine has IPv6. GitHub-hosted runners are IPv4-only, so the same string there fails
+as a **network timeout that reads like a bad password**. Use the session pooler
+(`aws-0-<region>.pooler.supabase.com:5432`) for anything running in CI — not the
+transaction pooler on 6543, which recycles the connection between statements and
+would silently drop a `for update skip locked` claim held across them.
+
+### Check whether the remote schema exists before blaming credentials
+
+```sql
+select count(*) from information_schema.tables where table_schema = 'public';
+select count(*) from information_schema.tables
+ where table_schema = 'supabase_migrations' and table_name = 'schema_migrations';
+```
+
+Zero and zero means `supabase db push` has never run — the credential is fine and the
+database is empty. A worker pointed at that fails on a missing function, which looks
+like a code defect rather than an unfinished deployment.
