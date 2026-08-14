@@ -22,7 +22,14 @@ import { deleteStorageObject } from './storage.mjs';
  * DRY RUN BY DEFAULT. Pass --apply to act. A tool that destroys audio the first time
  * somebody runs it to see what it does is not a compliance tool.
  *
- * Run: pnpm --filter @elmiron/api reconcile:restore -- --apply --note "PITR to 14 Aug"
+ * BE-W8 §1.2: --apply also requires --db-url on the command line. A restore is a
+ * rare, deliberate event — the operator is present and already typing a command —
+ * so there is no cost to naming the target explicitly, and inheriting it from
+ * SUPABASE_DB_URL means a stale or wrong value in the environment reconciles the
+ * wrong project's storage objects against the wrong project's database. Dry runs
+ * still fall back to the environment; nothing is destroyed by a dry run.
+ *
+ * Run: pnpm --filter @elmiron/api reconcile:restore -- --apply --db-url "<pooler url>" --note "PITR to 14 Aug"
  */
 
 const DEFAULTS = {
@@ -182,15 +189,55 @@ export const reconcileAfterRestore = async (overrides = {}) => {
   }
 };
 
+/**
+ * Pure, so the refusal is testable without arranging a real restore.
+ *
+ * `--apply` reconciles storage against the database for real — deleting objects and
+ * writing `audit_log` rows — so it must not silently inherit its target from
+ * `SUPABASE_DB_URL`. A dry run is harmless and keeps the environment fallback.
+ *
+ * @param {string[]} argv arguments after the script path (`process.argv.slice(2)`)
+ * @returns {{ apply: boolean, dbUrl: string | undefined, note: string | null }}
+ * @throws {Error} if --apply is passed without --db-url
+ */
+export const parseCliArgs = (argv) => {
+  const apply = argv.includes('--apply');
+
+  const dbUrlIndex = argv.indexOf('--db-url');
+  const dbUrl = dbUrlIndex === -1 ? undefined : argv[dbUrlIndex + 1];
+
+  const noteIndex = argv.indexOf('--note');
+  const note = noteIndex === -1 ? null : (argv[noteIndex + 1] ?? null);
+
+  if (apply && (dbUrl === undefined || dbUrl === '')) {
+    throw new Error(
+      'reconcile:restore --apply refuses to run without --db-url on the command line. ' +
+        'This deletes storage objects and writes permanent audit_log rows; inheriting the ' +
+        'target from SUPABASE_DB_URL risks reconciling the wrong project against a stale or ' +
+        'wrong environment value. Pass --db-url "<pooler url>" explicitly.',
+    );
+  }
+
+  return { apply, dbUrl, note };
+};
+
 // CLI entry. Importing this module does not run anything.
 if (
   process.argv[1] !== undefined &&
   import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))
 ) {
-  const noteIndex = process.argv.indexOf('--note');
+  let args;
+  try {
+    args = parseCliArgs(process.argv.slice(2));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+
   const result = await reconcileAfterRestore({
-    apply: process.argv.includes('--apply'),
-    note: noteIndex === -1 ? null : (process.argv[noteIndex + 1] ?? null),
+    apply: args.apply,
+    note: args.note,
+    ...(args.dbUrl !== undefined ? { dbUrl: args.dbUrl } : {}),
   });
 
   console.log(JSON.stringify(result, null, 2));

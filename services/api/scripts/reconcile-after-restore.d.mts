@@ -36,3 +36,11 @@ export interface ReconcileOptions {
 export declare const reconcileAfterRestore: (
   overrides?: ReconcileOptions,
 ) => Promise<ReconcileResult>;
+
+export interface ReconcileCliArgs {
+  apply: boolean;
+  dbUrl: string | undefined;
+  note: string | null;
+}
+
+export declare const parseCliArgs: (argv: string[]) => ReconcileCliArgs;
