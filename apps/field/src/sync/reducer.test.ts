@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { SyncItemReinstatement, SyncQueueItem } from '@elmiron/core';
 import type { ServerVerdict } from './events';
@@ -323,9 +325,96 @@ describe('purity', () => {
   });
 
   it('is decidable without knowing where anything is stored', () => {
-    // The whole reason this can be written before PowerSync exists. If this file
-    // ever needs to import the store to decide a transition, the boundary is gone.
+    // Secondary to the import-list assertion below. A substring scan catches a
+    // storage-shaped local helper that an import list would not; it is the weaker
+    // of the two and is kept only because it is free.
     const source = syncQueueReducer.toString();
     expect(source).not.toMatch(/store|persist|database|sqlite|powersync/iu);
+  });
+});
+
+describe('the storage boundary', () => {
+  // `.href` rather than the URL object: this app's lib includes DOM, so `URL` here
+  // is the DOM one while `fileURLToPath` expects node's. They are not the same type.
+  const reducerSource = readFileSync(
+    fileURLToPath(new URL('./reducer.ts', import.meta.url).href),
+    'utf8',
+  );
+
+  const FROM_IMPORT = /^import\s+(type\s+)?[^;]*?from\s+'([^']+)';/gmu;
+  const BARE_IMPORT = /^import\s+'([^']+)';/gmu;
+
+  /**
+   * An import list is enumerable and cannot be aliased around. A substring scan can
+   * be defeated by importing the store under another name, by a callback that does
+   * IO, or by a helper module that persists on the reducer's behalf — none of which
+   * can happen if the file imports nothing but types.
+   */
+  it('imports only types, and only from the contract and its own events', () => {
+    const imports = [...reducerSource.matchAll(FROM_IMPORT)].map((match) => ({
+      typeOnly: match[1] !== undefined,
+      source: match[2] ?? '',
+    }));
+
+    expect(imports.length).toBeGreaterThan(0);
+    for (const entry of imports) {
+      expect(entry.typeOnly, `${entry.source} is a value import`).toBe(true);
+    }
+    expect(new Set(imports.map((entry) => entry.source))).toEqual(
+      new Set(['@elmiron/core', './events']),
+    );
+  });
+
+  it('has no side-effect imports', () => {
+    // `import './something'` has no bindings to inspect and can do anything.
+    expect([...reducerSource.matchAll(BARE_IMPORT)]).toHaveLength(0);
+  });
+});
+
+describe('who owns dead-lettering', () => {
+  // The server holds the attempt budget and the forgiveness baseline. If the client
+  // could decide an item was dead on its own, the two could disagree about whether
+  // an MR's work is recoverable — and the MR is looking at the client's answer.
+  // The client renders what it is told. Nothing here may become a local retry limit.
+  it('never dead-letters locally, however many attempts fail', () => {
+    const events: Parameters<typeof syncQueueReducer>[1][] = [
+      { type: 'enqueued', item: item('a', '2026-08-14T09:00:00.000Z') },
+    ];
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      events.push(
+        { type: 'batch_started', ids: ['a'] },
+        { type: 'attempt_failed', ids: ['a'], error: 'offline' },
+      );
+    }
+    const state = reduceAll(events);
+
+    expect(find(state, 'a')?.attemptCount).toBe(50);
+    expect(find(state, 'a')?.status).toBe('queued');
+    expect(summarise(state).deadLettered).toBe(0);
+    expect(summarise(state).failed).toBe(0);
+    expect(state.rejections['a']).toBeUndefined();
+  });
+
+  it('sets deadLettered only from a server verdict that says so', () => {
+    const other = (['accepted', 'duplicate', 'rejected'] as const).map((status) =>
+      reduceAll([
+        { type: 'enqueued', item: item('a', '2026-08-14T09:00:00.000Z') },
+        {
+          type: 'verdict_received',
+          verdict: verdict({
+            id: 'a',
+            status,
+            rejectionCode: status === 'rejected' ? 'validation_failed' : null,
+            attemptsRemaining: 0,
+          }),
+        },
+      ]),
+    );
+
+    // attemptsRemaining is 0 in every one of these and still nothing is dead —
+    // the status is what decides it, not a number the client could reinterpret.
+    for (const state of other) {
+      expect(summarise(state).deadLettered).toBe(0);
+    }
   });
 });

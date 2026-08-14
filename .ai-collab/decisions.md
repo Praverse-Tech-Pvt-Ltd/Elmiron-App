@@ -364,6 +364,26 @@ test belongs with it, and it should assert that the `declined` path:
 Recorded now so the control is built with the screen rather than remembered after.
 
 ---
+## Standing rule while the project is blocked — 14 August 2026
+
+Fourteen items need a human; engineering is otherwise stopped. The rule for what may
+still be built:
+
+> **Pure logic with tests can be built ahead. Anything that renders waits for a
+> device.**
+
+The FE-W2 reducer qualified because it is the hardest logic in the frontend, fully
+decidable from the contract in `packages/core`, and verifiable by its own test suite
+today. FE-W3 has no equivalent — doctor search filtering, mileage formatting and
+refusal-state selection are a few small pure functions, and everything else in that
+sprint renders.
+
+**A screen that cannot be run is the "code nothing has executed" trap**, which this
+project has already paid for twice. Manufacturing work to keep the queue from looking
+short would be the wrong instinct, and is explicitly not to be done.
+
+---
+
 ## Where the earlier ones live
 
 | Decision | Where |

@@ -2826,3 +2826,43 @@ its only caller is its test suite. That is the shape the project has twice been
 burned by, so it is recorded here rather than discovered later. The distinction from
 those two cases: this code _is_ executed, on every test run, and its behaviour is
 asserted — what is missing is a production caller, not verification.
+
+#### Dead-lettering is the server''s. The client only ever learns of it.
+
+Asked directly during review, and worth stating because it is the kind of thing
+someone improves later by adding a local retry limit.
+
+**The client never dead-letters an item on its own.** `deadLettered` is set from one
+place only — a server verdict whose status is `dead_lettered`. The reducer counts
+attempts but compares that count to nothing; there is no local ceiling and no
+threshold to tune.
+
+The reason is that the server holds the attempt budget and the forgiveness baseline.
+If the client could decide an item was dead locally, the two systems could disagree
+about whether an MR''s work is recoverable — and the MR is looking at the client''s
+answer. The client renders what it is told.
+
+Two tests pin it: fifty consecutive failed attempts leave the item `queued` with
+nothing dead-lettered and nothing rejected; and a verdict carrying
+`attemptsRemaining: 0` still produces no dead letter unless the status itself says
+`dead_lettered`, so the client cannot reinterpret a number into a verdict.
+
+Mutation-tested — a local ceiling that dead-letters after three attempts fails 2 of 40.
+
+#### The storage boundary is asserted on the import list, not on a substring
+
+The first version scanned the reducer''s source for `store`, `persist`, `sqlite` and
+`powersync`. That catches the obvious violation and misses an aliased import, a
+callback that does IO, or a helper module persisting on the reducer''s behalf — a
+substring scan standing in for an architectural property.
+
+The assertion is now on the **import list**, which is enumerable and cannot be
+aliased around: every import in `reducer.ts` must be `import type`, and the set of
+sources must be exactly `@elmiron/core` and `./events`. Side-effect imports are
+asserted absent separately, since `import ''./x''` has no bindings to inspect. A file
+that imports nothing but types cannot do IO at all.
+
+The substring scan is kept as a secondary check — it catches a storage-shaped local
+helper that an import list would not — and is labelled as the weaker of the two.
+
+Mutation-tested: a value import added under an alias fails 1 of 40.
