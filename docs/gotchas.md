@@ -518,3 +518,65 @@ arrival-rate-at-pilot-scale explicitly; "the database handles this batch fast" s
 nothing about whether the schedule around it can keep up. Found by doing the
 arithmetic against the plan's own numbers (100 MRs × 8 visits/day), not by load
 testing — the deficit (~16x) was visible before running anything.
+
+## `create or replace function` means reading one definition tells you nothing
+
+### Auditing a function's behaviour from a migration file finds the WRONG definition if a later migration redefines it
+
+A migration chain full of `create or replace function public.foo()` is a chain of
+overwrites, not a chain of additions. `public.audio_purge_health()` was defined once
+in `20260815000300_audio_consent_retention.sql` (missing two fields the JS consumer
+reads) and redefined completely in `20260816000300_resumable_upload.sql` (fields
+present, correctly wired). Reading only the first definition and concluding "this
+function has been broken since it shipped" produced a wrong, confidently-stated claim
+that made it into a migration's own comments before being caught.
+
+**The fix is procedural, not just "be more careful":** to know what a function
+*actually does today*, either `grep` every migration file for every
+`create or replace function public.<name>` and read the LAST one in migration order,
+or — far more reliably — query the live database directly:
+
+```sql
+select prosrc from pg_proc where proname = 'audio_purge_health';
+```
+
+or, simpler still, call the function and inspect its real return shape. A local
+`db reset` with the migration under suspicion held out of the migrations directory,
+then re-applied after confirming the claim, is what caught this one — the claim
+didn't survive contact with the actual database.
+
+## A `BEFORE INSERT` trigger that stamps a compliance column defeats a fixture that sets it directly
+
+### Third time this recurred: `stamp_audio_retention` silently overwrites whatever `purge_after` a test fixture supplies on `INSERT`
+
+`stamp_audio_retention()` is a `BEFORE INSERT` trigger on `recordings` and
+`voice_notes` that unconditionally sets `purge_after := received_at + interval '90
+days'`, regardless of what the `INSERT` statement supplied. Any fixture that does
+
+```sql
+insert into public.recordings (..., purge_after) values (..., now() - interval '10 days')
+```
+
+silently gets a row 90 days in the *future*, not 10 days in the past — the insert
+succeeds, nothing errors, and the test that depends on the row being overdue either
+fails confusingly or (worse) passes for the wrong reason, because whatever it's
+actually testing happened to be true anyway. Hit three separate times on this
+project: the Part 3.1 volume measurement, the Part 3.2 cross-file race fixtures, and
+the BE-W8 addendum's backlog-stall tests.
+
+**The pattern that works:** insert first (with any placeholder value, or omit the
+column and let the trigger run), then a separate `UPDATE` afterward to backdate the
+column for real — the trigger only fires `BEFORE INSERT`, not `BEFORE UPDATE`, so the
+second write sticks:
+
+```sql
+insert into public.recordings (..., purge_after) values (..., now());
+update public.recordings set purge_after = now() - interval '10 days' where id = $1;
+```
+
+**The general rule, for any table in this schema:** before writing a fixture that
+sets a column a trigger also writes to, check for a `before insert` trigger on that
+table (`\d public.<table>` in psql, or grep the migrations for
+`before insert ... execute function`). If one exists and touches the column, the
+fixture needs the insert-then-update shape above — a single `INSERT` with the
+"right" value is not evidence the value survived.

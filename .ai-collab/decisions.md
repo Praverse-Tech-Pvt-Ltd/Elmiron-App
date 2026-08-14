@@ -196,9 +196,10 @@ one-line form for scanning.
   worth of overdue objects; **secondary**: a single object's age > 12h (was 3h).
   `purge_batch_limit` moved from a hardcoded 100 to a threshold, default 250.
   See `PROJECT-OVERVIEW.md` → BE-W8 §7 for the full writeup.
-- **Not applied to production.** Committed and pushed to `main` only, per explicit
-  instruction to run nothing further until told. Both retention workflows are
-  disabled (`gh workflow disable`) for the same reason.
+- **Correction, later the same day: this IS now applied to production.** Written
+  originally when held back per explicit instruction to run nothing further until
+  told. See the entry below — deployed, verified on the remote directly, and both
+  workflows re-enabled.
 - **Self-correction, recorded rather than hidden:** an earlier draft of this fix
   wrongly claimed `audio_purge_health()` had never returned `stalled`/
   `liveObjectCount` since BE-W6. It does — `20260816000300_resumable_upload.sql`
@@ -212,7 +213,35 @@ one-line form for scanning.
   split (durable six stay tracked as-is; strip point-in-time claims from
   `handover.md`/`handoff.md` into pointers) and the production-migration-audit-trail
   gap (two hand-run `db push` calls, no runbook step yet) are both accepted asks,
-  not yet done.
+  deferred deliberately — real, cheap, and not worth another backend week ahead of
+  FE-W1.
+
+### Retention workflows: disabled, then deployed and re-enabled — the full timeline
+
+- **Disabled:** both `retention.yml` and `retention-watchdog.yml` disabled via
+  `gh workflow disable`, in-session, on the reviewer's explicit instruction ("I need
+  the runs to stop for now ill tell when u are supposed to run"), shortly before
+  07:00 UTC on 14 August. **Who:** the agent, on direct user instruction — not a
+  unilateral call. **Why:** the stall-detection fix above was mid-review and not yet
+  verified; nothing should fire against production while a change to the
+  fleet-availability backstop was still being checked.
+- **The reminder mechanism this removed, named rather than left implicit:** the
+  17 August entry above records that a daily red run *is* the reminder against a
+  forgotten deployment step. A disabled workflow is silent — it produces no red, no
+  alert, nothing. For the ~35 minutes both were off, that protection did not exist.
+  Not dangerous in that window specifically (no audio, no seed data, no field app),
+  but the gap is the same shape the original decision existed to prevent, and it is
+  now on record rather than invisible.
+- **Deployed:** `20260817000200_purge_backlog_stall_detection.sql` pushed to
+  production at 07:27:56 UTC, 14 August. Verified directly against the remote
+  (not the CLI's success line): all three `purge_max_silence_hours` history rows
+  present (48 → 3 → 12), `threshold_number()` resolves `purge_batch_limit=250`,
+  `purge_backlog_multiplier=3`, `purge_max_silence_hours=12`, and
+  `audio_purge_health()` returns the correct shape with `stalled: false`.
+- **Re-enabled:** both workflows re-enabled via `gh workflow enable` immediately
+  after the deploy was verified, 07:28 UTC, 14 August. First real scheduled cycle
+  (not a manual dispatch) observed at — *fill in from the next hourly/watchdog run;
+  see `PROJECT-OVERVIEW.md` → BE-W8 §7 for the timestamp once it lands.*
 
 ---
 
