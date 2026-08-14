@@ -1,23 +1,36 @@
 /**
- * Design tokens — PLACEHOLDER.
+ * Design tokens and the WCAG contrast validator that guards them.
  *
- * Owned by Frontend (week 1: "wire the token pipeline from the designer's
- * `design-tokens.json`"). Backend created this package so the workspace, CI and
- * import paths exist; Backend does not populate it.
- *
- * Nothing here is a real token value. Replace the whole file.
+ * The values in `palette.ts` are a **placeholder**, not the brand's — the brand
+ * guideline has not been committed. `tokens.status` says so at runtime. See
+ * `brand-specification.ts` for what the guideline specifies and why it cannot be
+ * used as given.
  */
 
-export interface DesignTokens {
-  readonly color: Readonly<Record<string, string>>;
-  readonly space: Readonly<Record<string, number>>;
-  readonly radius: Readonly<Record<string, number>>;
-  readonly typography: Readonly<Record<string, string>>;
-}
+export {
+  CONTRAST_MINIMUM,
+  contrastRatio,
+  evaluateContrast,
+  formatRatio,
+  meetsContrast,
+  parseHexColor,
+  relativeLuminance,
+} from './contrast.js';
+export type { ContrastResult, ContrastUsage, Rgb, WcagLevel } from './contrast.js';
 
-export const tokens: DesignTokens = {
-  color: {},
-  space: {},
-  radius: {},
-  typography: {},
-};
+export { placeholderPalette } from './palette.js';
+export type { PaletteColor } from './palette.js';
+
+export { requiredContrastPairs, tokens } from './tokens.js';
+export type {
+  ColorTokens,
+  ContrastPair,
+  DesignTokens,
+  RadiusTokens,
+  SpaceTokens,
+  TypeStyle,
+  TypographyTokens,
+} from './tokens.js';
+
+export { brandContrastSpecifications } from './brand-specification.js';
+export type { BrandContrastSpecification } from './brand-specification.js';
