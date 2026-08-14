@@ -34,8 +34,12 @@ name: Audio retention
 
 on:
   schedule:
-    # 01:00 IST daily. Off-peak for the field, and before the watchdog checks.
-    - cron: '30 19 * * *'
+    # Hourly, on the hour. BE-W8 Part 3.1: a daily cron at this batch size (100)
+    # drains 100/day against a pilot-scale arrival rate of ~1,600 audio objects/day
+    # -- under-provisioned by ~16x, by arithmetic, once the pilot is at its stated
+    # size. Hourly at the same batch is 2,400/day, 1.5x headroom, and a failed run
+    # costs an hour of drain instead of a day.
+    - cron: '0 * * * *'
   workflow_dispatch:
 
 concurrency:

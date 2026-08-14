@@ -663,10 +663,16 @@ describe.skipIf(!reachable)('the 90-day purge', () => {
         [recordingId, visitId, world.users.puneMr.id, consentId, storageKey],
       );
       // Backdate the SERVER receipt, which is what the clock is counted from.
+      // purge_after only needs to be in the past to be claim-eligible. BE-W8
+      // tightened audio_purge_is_stalled()'s window from 48h to 3h (Part 3.1); a
+      // 1-day-overdue committed row sat safely under the old bar but trips the new
+      // one for the whole shared test database while this row exists uncommitted-
+      // to-destroyed, which is a genuine cross-file hazard on a suite that shares
+      // one database across parallel workers. 5 minutes overdue is still overdue.
       await client.query(
         `update public.recordings
             set received_at = now() - interval '91 days',
-                purge_after = now() - interval '1 day'
+                purge_after = now() - interval '5 minutes'
           where id = $1`,
         [recordingId],
       );
@@ -850,9 +856,10 @@ describe.skipIf(!reachable)('the 90-day purge', () => {
          values ($1, $2, 'en-IN', 'fixture', 'v0', $3)`,
         [visitId, id, JSON.stringify(SYNTHETIC_TRANSCRIPT)],
       );
+      // See the comment on the same pattern in expiredRecording() above.
       await client.query(
         `update public.recordings set received_at = now() - interval '91 days',
-                                      purge_after = now() - interval '1 day'
+                                      purge_after = now() - interval '5 minutes'
           where id = $1`,
         [id],
       );

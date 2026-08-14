@@ -10,6 +10,12 @@ services/api/supabase/.temp/
 # diff noise in files nobody edits in an editor.
 docs/
 
+# Same reasoning, now tracked (BE-W8): AI-collaboration working notes, updated
+# directly by whoever is at the machine, not run through an editor's formatter.
+.ai-collab/
+handoff.md
+CLAUDE.md
+
 # Agent-local settings. Git-ignored globally, so it never reaches CI — but Prettier
 # still saw it and failed `format:check` locally on a file nobody can commit.
 .claude/

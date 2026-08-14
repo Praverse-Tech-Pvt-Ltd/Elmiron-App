@@ -19,11 +19,13 @@ import { Client } from 'pg';
 const DEFAULTS = {
   dbUrl: process.env.SUPABASE_DB_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres',
   /**
-   * Two missed daily runs. Matches the `purge_max_silence_hours` threshold the
-   * database uses to decide it is stalled, so the watchdog and the intake block do
-   * not disagree about what "stopped" means.
+   * BE-W8: two missed HOURLY runs plus buffer for scheduling jitter, since
+   * retention.yml moved from daily to hourly (Part 3.1). Matches the
+   * `purge_max_silence_hours` threshold the database uses to decide it is stalled
+   * (20260817000100_retention_schedule_resize.sql), so the watchdog and the intake
+   * block do not disagree about what "stopped" means.
    */
-  maxSilenceHours: Number(process.env.PURGE_MAX_SILENCE_HOURS ?? 48),
+  maxSilenceHours: Number(process.env.PURGE_MAX_SILENCE_HOURS ?? 3),
 };
 
 /**
