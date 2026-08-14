@@ -19,24 +19,27 @@ import { Client } from 'pg';
 const DEFAULTS = {
   dbUrl: process.env.SUPABASE_DB_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres',
   /**
-   * BE-W8: two missed HOURLY runs plus buffer for scheduling jitter, since
-   * retention.yml moved from daily to hourly (Part 3.1). Matches the
-   * `purge_max_silence_hours` threshold the database uses to decide it is stalled
-   * (20260817000100_retention_schedule_resize.sql), so the watchdog and the intake
-   * block do not disagree about what "stopped" means.
+   * BE-W8 addendum: this is a SEPARATE, deliberately loose signal from the
+   * database's own `stalled` verdict (public.audio_purge_is_stalled(), backlog-
+   * size-based since this addendum). It exists only to catch a worker that has
+   * gone completely silent even when the fleet is too small for the backlog
+   * count to trip the primary check. 12h, not the 3h this project shipped
+   * earlier the same day and then reverted: a per-object age check that tight
+   * trips on ordinary GitHub Actions scheduling jitter against an hourly cron
+   * (already observed: a 1h46m nominal-to-actual gap on a real run).
    */
-  maxSilenceHours: Number(process.env.PURGE_MAX_SILENCE_HOURS ?? 3),
+  runSilenceHours: Number(process.env.PURGE_RUN_SILENCE_HOURS ?? 12),
 };
 
 /**
  * Pure, so the failure path is testable without arranging a genuinely broken purge.
  *
  * @param {Record<string, unknown>} health the jsonb from public.audio_purge_health()
- * @param {{ maxSilenceHours?: number, now?: Date }} [options]
+ * @param {{ runSilenceHours?: number, now?: Date }} [options]
  * @returns {{ healthy: boolean, reasons: string[] }}
  */
 export const evaluatePurgeHealth = (health, options = {}) => {
-  const maxSilenceHours = options.maxSilenceHours ?? DEFAULTS.maxSilenceHours;
+  const runSilenceHours = options.runSilenceHours ?? DEFAULTS.runSilenceHours;
   const now = options.now ?? new Date();
   const reasons = [];
 
@@ -46,19 +49,26 @@ export const evaluatePurgeHealth = (health, options = {}) => {
       ? null
       : new Date(String(health.lastSuccessfulRunAt));
 
-  // The database's own verdict: something is past its purge date by more than the
-  // silence window. This is the condition that also stops new uploads being accepted,
-  // so by the time it is true, MRs are already being refused.
+  // The database's own verdict (public.audio_purge_is_stalled(), backlog-size-
+  // based since the BE-W8 addendum): the worker cannot keep up with what it is
+  // claiming, or a single object has gone unclaimed past the hard ceiling. This
+  // is the condition that also stops new uploads being accepted, so by the time
+  // it is true, MRs are already being refused. No specific hour number belongs
+  // in this message: the DB composes two thresholds (a backlog multiplier and a
+  // ceiling) into one boolean, and restating one of them here would drift the
+  // moment either changes -- exactly the bug this addendum fixed.
   if (health.stalled === true) {
     reasons.push(
-      `${String(health.overdueObjectCount ?? 0)} object(s) are past their purge date by more than ` +
-        `${String(maxSilenceHours)}h. New uploads are being refused.`,
+      `${String(health.overdueObjectCount ?? 0)} object(s) are past their purge date and the ` +
+        'retention worker is stalled. New uploads are being refused.',
     );
   }
 
-  // Watching the worker rather than only its effect, so the alert arrives before
-  // anything actually goes overdue. Silent when the system holds no audio at all:
-  // a fresh deployment has nothing to purge and is not broken.
+  // A SEPARATE, deliberately loose signal: the worker has not succeeded in a
+  // long time, independent of whether a backlog has built up yet. Watching the
+  // worker rather than only its effect, so the alert arrives before anything
+  // actually goes overdue. Silent when the system holds no audio at all: a
+  // fresh deployment has nothing to purge and is not broken.
   if (liveObjectCount > 0) {
     if (lastSuccessfulRunAt === null) {
       reasons.push(
@@ -67,10 +77,10 @@ export const evaluatePurgeHealth = (health, options = {}) => {
       );
     } else {
       const hoursSince = (now.getTime() - lastSuccessfulRunAt.getTime()) / 3_600_000;
-      if (hoursSince > maxSilenceHours) {
+      if (hoursSince > runSilenceHours) {
         reasons.push(
           `the retention worker last succeeded ${hoursSince.toFixed(1)}h ago, over the ` +
-            `${String(maxSilenceHours)}h limit.`,
+            `${String(runSilenceHours)}h limit.`,
         );
       }
     }
@@ -87,7 +97,7 @@ export const checkPurgeHealth = async (overrides = {}) => {
   try {
     const result = await client.query('select public.audio_purge_health() as health');
     const health = result.rows[0]?.health ?? {};
-    return { health, ...evaluatePurgeHealth(health, { maxSilenceHours: config.maxSilenceHours }) };
+    return { health, ...evaluatePurgeHealth(health, { runSilenceHours: config.runSilenceHours }) };
   } finally {
     await client.end();
   }

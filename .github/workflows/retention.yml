@@ -34,11 +34,15 @@ name: Audio retention
 
 on:
   schedule:
-    # Hourly, on the hour. BE-W8 Part 3.1: a daily cron at this batch size (100)
-    # drains 100/day against a pilot-scale arrival rate of ~1,600 audio objects/day
-    # -- under-provisioned by ~16x, by arithmetic, once the pilot is at its stated
-    # size. Hourly at the same batch is 2,400/day, 1.5x headroom, and a failed run
-    # costs an hour of drain instead of a day.
+    # Hourly, on the hour. BE-W8 Part 3.1: a daily cron at batch 100 drained
+    # 100/day against a pilot-scale arrival rate of ~1,600 audio objects/day --
+    # under-provisioned by ~16x, by arithmetic, once the pilot is at its stated
+    # size. A failed run now costs an hour of drain instead of a day.
+    #
+    # Addendum, same day: the batch size (purge_batch_limit in app_thresholds,
+    # not a constant here) moved 100 -> 250, so this is 6,000/day, 3.75x
+    # headroom -- survives the pilot doubling to ~150 MRs without anyone
+    # noticing they needed to change anything.
     - cron: '0 * * * *'
   workflow_dispatch:
 

@@ -28,6 +28,11 @@ const DEFAULTS = {
     process.env.SUPABASE_SERVICE_ROLE_KEY ??
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU',
   bucket: 'audio',
+  // Fallback only, used when the DB is unreachable for the threshold read or the
+  // caller passes no override. BE-W8 addendum: the real value is
+  // purge_batch_limit in app_thresholds, not this constant -- it was a hardcoded
+  // JS number until growing the fleet past the pilot size would have needed a
+  // code change and a deploy instead of a threshold row.
   limit: 100,
 };
 
@@ -64,9 +69,23 @@ export const runPurge = async (overrides = {}) => {
     const closed = await client.query('select public.close_stale_upload_sessions() as closed');
     abandoned = Number(closed.rows[0]?.closed ?? 0);
 
+    // overrides.limit (set explicitly, including by tests) wins outright. Absent
+    // that, read the configured batch size rather than the DEFAULTS fallback --
+    // this is the one place that fallback is actually reached in practice: the
+    // threshold read failing is a reason to keep going with a known-safe number,
+    // not to abort the run.
+    let limit = overrides.limit;
+    if (limit === undefined) {
+      const threshold = await client.query(
+        "select public.threshold_number('purge_batch_limit', null, $1) as v",
+        [DEFAULTS.limit],
+      );
+      limit = Number(threshold.rows[0]?.v ?? DEFAULTS.limit);
+    }
+
     const batch = await client.query('select * from public.claim_expired_audio($1, $2)', [
       runId,
-      config.limit,
+      limit,
     ]);
     claimed = batch.rows.length;
 

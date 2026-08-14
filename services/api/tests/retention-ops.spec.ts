@@ -217,6 +217,126 @@ describe.skipIf(!reachable)('the watchdog against the real database', () => {
       expect(verdict.reasons.join(' ')).toMatch(/past their purge date/);
     });
   });
+
+  // BE-W8 addendum. The whole point of moving audio_purge_is_stalled() to a
+  // backlog-size check: a large pile of RECENTLY overdue objects is the worker
+  // falling behind, and a single object briefly overdue is not. Proven against
+  // the real function, not a hand-built fixture -- the earlier draft of this
+  // migration wrongly believed audio_purge_health() itself needed fixing, from
+  // reading only the first `create or replace` of that function and missing a
+  // later one; this suite now pins the real SQL return shape directly.
+  describe('backlog-based stall detection, against the real function', () => {
+    it('trips on backlog size even though nothing is individually old', async () => {
+      await asUserTx(world.users.puneMr, async (client) => {
+        await client.query('reset role');
+
+        const limits = await client.query<{ batch: string; multiplier: string }>(
+          `select public.threshold_number('purge_batch_limit') as batch,
+                  public.threshold_number('purge_backlog_multiplier') as multiplier`,
+        );
+        const overThreshold =
+          Math.ceil(Number(limits.rows[0]?.batch) * Number(limits.rows[0]?.multiplier)) + 1;
+
+        const recordingIds: string[] = [];
+        for (let i = 0; i < overThreshold; i += 1) {
+          const visitId = randomUUID();
+          const consentId = randomUUID();
+          const recordingId = randomUUID();
+          await client.query(
+            `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
+            [visitId, world.users.puneMr.id, world.doctors.pune],
+          );
+          await client.query(
+            `insert into public.consent_records
+               (id, visit_id, doctor_id, captured_by_mr_id, outcome, consent_text_version_id,
+                displayed_language, captured_at)
+             values ($1, $2, $3, $4, 'consented', $5, 'en-IN', now())`,
+            [
+              consentId,
+              visitId,
+              world.doctors.pune,
+              world.users.puneMr.id,
+              world.consentTextVersionId,
+            ],
+          );
+          await client.query(
+            `insert into public.recordings
+               (id, visit_id, mr_id, consent_record_id, storage_key, bitrate_kbps,
+                duration_seconds, size_bytes, recorded_at, purge_after)
+             values ($1, $2, $3, $4, $5, 28, 240, 32, now(), now())`,
+            [recordingId, visitId, world.users.puneMr.id, consentId, opaqueKey()],
+          );
+          recordingIds.push(recordingId);
+        }
+
+        // stamp_audio_retention is a BEFORE INSERT trigger that unconditionally
+        // overwrites purge_after to now() + 90 days, ignoring the value just
+        // inserted -- it only fires on INSERT, so an UPDATE afterward backdates
+        // it for real. Same trap as the Part 3.1 volume measurement.
+        await client.query(
+          `update public.recordings set purge_after = now() - interval '1 minute'
+            where id = any($1::uuid[])`,
+          [recordingIds],
+        );
+
+        const stalled = await client.query<{ audio_purge_is_stalled: boolean }>(
+          'select public.audio_purge_is_stalled()',
+        );
+        // Every object here is one minute overdue -- nowhere near the 12h secondary
+        // ceiling. Only the backlog count can be why this trips.
+        expect(stalled.rows[0]?.audio_purge_is_stalled).toBe(true);
+      });
+    }, 30_000);
+
+    it('does not trip on a single object briefly overdue -- the false-positive case', async () => {
+      await asUserTx(world.users.puneMr, async (client) => {
+        await client.query('reset role');
+        const visitId = randomUUID();
+        const consentId = randomUUID();
+        await client.query(
+          `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
+          [visitId, world.users.puneMr.id, world.doctors.pune],
+        );
+        await client.query(
+          `insert into public.consent_records
+             (id, visit_id, doctor_id, captured_by_mr_id, outcome, consent_text_version_id,
+              displayed_language, captured_at)
+           values ($1, $2, $3, $4, 'consented', $5, 'en-IN', now())`,
+          [
+            consentId,
+            visitId,
+            world.doctors.pune,
+            world.users.puneMr.id,
+            world.consentTextVersionId,
+          ],
+        );
+        const recordingId = randomUUID();
+        await client.query(
+          `insert into public.recordings
+             (id, visit_id, mr_id, consent_record_id, storage_key, bitrate_kbps,
+              duration_seconds, size_bytes, recorded_at, purge_after)
+           values ($1, $2, $3, $4, $5, 28, 240, 32, now(), now())`,
+          [recordingId, visitId, world.users.puneMr.id, consentId, opaqueKey()],
+        );
+        // stamp_audio_retention only fires on INSERT (see the comment in the test
+        // above); backdate for real with an UPDATE. Four hours overdue -- past the
+        // OLD 3h threshold this project shipped and reverted the same day, well
+        // under the new 12h secondary ceiling, and nowhere near a backlog of
+        // purge_batch_limit x purge_backlog_multiplier. Ordinary GitHub Actions
+        // scheduling jitter (already observed: 1h46m on a real run) produces
+        // exactly this shape, and it must not refuse the fleet.
+        await client.query(
+          `update public.recordings set purge_after = now() - interval '4 hours' where id = $1`,
+          [recordingId],
+        );
+
+        const stalled = await client.query<{ audio_purge_is_stalled: boolean }>(
+          'select public.audio_purge_is_stalled()',
+        );
+        expect(stalled.rows[0]?.audio_purge_is_stalled).toBe(false);
+      });
+    });
+  });
 });
 
 // =============================================================================

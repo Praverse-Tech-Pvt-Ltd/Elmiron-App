@@ -24,9 +24,7 @@ on:
   schedule:
     # BE-W8: retention.yml moved from daily to hourly (Part 3.1 -- see that file).
     # The watchdog moves with it, on a 15-minute offset so it checks after the
-    # purge for that hour should already have completed, and stays fast enough to
-    # catch a stall within the new 3-hour silence threshold rather than up to a day
-    # late.
+    # purge for that hour should already have completed.
     - cron: '15 * * * *'
   workflow_dispatch:
 
@@ -67,8 +65,9 @@ jobs:
       - name: Check audio retention health
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          # Matches the purge_max_silence_hours threshold set by
-          # 20260817000100_retention_schedule_resize.sql: two missed hourly runs
-          # plus buffer for scheduling jitter.
-          PURGE_MAX_SILENCE_HOURS: '3'
+          # BE-W8 addendum: deliberately loose and DECOUPLED from the database's
+          # own stall check (public.audio_purge_is_stalled(), backlog-size-based).
+          # This is a secondary "has the worker gone completely silent" signal --
+          # see check-purge-health.mjs and 20260817000200_purge_backlog_stall_detection.sql.
+          PURGE_RUN_SILENCE_HOURS: '12'
         run: pnpm --filter @elmiron/api check:purge-health

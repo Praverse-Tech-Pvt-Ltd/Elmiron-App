@@ -24,10 +24,10 @@ export interface PurgeHealthVerdict {
 
 export declare const evaluatePurgeHealth: (
   health: Partial<PurgeHealth> & Record<string, unknown>,
-  options?: { maxSilenceHours?: number; now?: Date },
+  options?: { runSilenceHours?: number; now?: Date },
 ) => PurgeHealthVerdict;
 
 export declare const checkPurgeHealth: (overrides?: {
   dbUrl?: string;
-  maxSilenceHours?: number;
+  runSilenceHours?: number;
 }) => Promise<PurgeHealthVerdict & { health: PurgeHealth }>;
