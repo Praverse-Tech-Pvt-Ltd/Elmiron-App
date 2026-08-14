@@ -20,15 +20,23 @@ services/api/supabase/.branches/
 # core.symlinks=false on Windows, so committing these duplicates every skill file.
 .claude/skills/
 
-# Local AI-collaboration working notes. Deliberately NOT tracked.
+# .ai-collab/ and handoff.md are tracked as of BE-W8. BE-W6 originally kept them
+# untracked on staleness grounds; that decision is reversed by explicit request —
+# they are now committed and expected to be updated regularly, not treated as a
+# point-in-time snapshot. PROJECT-OVERVIEW.md and docs/gotchas.md remain the
+# durable, cumulative record; these are the working notes alongside them.
+
+
+# graphify knowledge-graph output. Regenerate with:
+#   graphify extract . --backend claude-cli
 #
-# BE-W6 decided this project has no handoff document in git, on the reasoning that a
-# point-in-time snapshot goes stale within hours and the next person trusts it anyway
-# — which had already happened once. The durable, tracked equivalents are
-# PROJECT-OVERVIEW.md (state and decisions) and docs/gotchas.md (cumulative, append
-# only). Everything in here is a local working aid for whoever is at this machine.
+# graphify's own docs recommend committing this so the team shares one map. We do
+# not, for two reasons: it is ~4 MB of mostly graph.html and cache/, and it is a
+# derived artefact that goes stale the moment a migration lands — the same
+# staleness argument that keeps handoff.md out of git above.
 #
-# The rule is listed here rather than hidden in .git/info/exclude so the arrangement
-# is visible to the next person instead of being invisible local state.
-.ai-collab/
-handoff.md
+# Requires `pip install "graphifyy[sql]"` first. The base package bundles 36
+# tree-sitter grammars, SQL is not one of them, and without it every .sql file
+# contributes nothing — which on this repo silently omits the entire RLS
+# enforcement layer while still producing a confident-looking graph.
+graphify-out/
