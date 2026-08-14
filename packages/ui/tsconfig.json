@@ -1,0 +1,20 @@
+{
+  // Extends the repo base for strictness, then overrides the module settings it
+  // sets for Node. React Native is bundled by Metro, not resolved by Node, so
+  // `NodeNext` is wrong here — it would demand `.js` extensions on imports Metro
+  // resolves without them. Every strictness flag from the base is inherited.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM"],
+    // This package is consumed as TypeScript source — see package.json `main`.
+    // Metro and Next.js both transpile it; nothing here is compiled to dist.
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "types": []
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}
