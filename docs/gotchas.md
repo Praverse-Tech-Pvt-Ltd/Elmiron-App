@@ -580,3 +580,150 @@ table (`\d public.<table>` in psql, or grep the migrations for
 `before insert ... execute function`). If one exists and touches the column, the
 fixture needs the insert-then-update shape above — a single `INSERT` with the
 "right" value is not evidence the value survived.
+
+---
+
+## Expo, Metro and pnpm — FE-W1
+
+### `disableHierarchicalLookup` in `metro.config` breaks resolution under pnpm
+
+Expo's monorepo guide gives a Metro config with
+`config.resolver.disableHierarchicalLookup = true`. **That guide assumes npm or
+yarn.** Under those, every package is flat at the workspace root and the upward
+walk finds only duplicates, so switching it off is a speed-up. Under pnpm a
+package's own dependencies live nested inside the virtual store, and the upward
+walk is the only way to reach them.
+
+With it on, the bundle fails one package at a time:
+
+```
+Unable to resolve module @expo/metro-runtime from .../expo-router/entry-classic.js
+Unable to resolve module whatwg-fetch      from .../@expo/metro-runtime/src/...
+Unable to resolve module invariant         from .../expo-router/build/renderRootComponent.js
+```
+
+Each name belongs to a package **you did not install and cannot fix by
+installing**, because the import is inside somebody else's file. It reads as a
+broken dependency tree. It is a resolver setting.
+
+**Fix: do not set it.** Set `watchFolders` and `nodeModulesPaths` and stop there.
+With hierarchical lookup left on, the app bundles under pnpm's default isolated
+linker with no hoisting at all.
+
+**What this cost, and what it nearly cost.** The first two failures were read as
+"pnpm cannot do React Native", and the fix reached for was `nodeLinker: hoisted`
+across the workspace. That would have worked, and it would have silently deleted
+the install-time guarantee that a package cannot import what it has not declared —
+for `core`, `mock` and `api` as well, to accommodate one app. If you find yourself
+hoisting to fix a resolution error, check `disableHierarchicalLookup` first.
+
+### When a fix needs a repo-wide control weakened for one workspace, the diagnosis is wrong
+
+Stated separately because it generalises past Metro.
+
+The two resolution failures above were read as "pnpm cannot do React Native", and
+the fix reached for was `nodeLinker: hoisted` across the workspace. That would have
+worked. It would also have deleted, for `core`, `mock` and `api` as well, the
+install-time guarantee that a package cannot import what it has not declared — to
+accommodate one app. The actual cause was one line of our own Metro config.
+
+**The install-time guard was correctly reporting a real problem, and we were about
+to remove it for being right.**
+
+So: *a fix that requires weakening a repo-wide control to accommodate one workspace
+is evidence that the diagnosis is wrong, not that the control is too strict.* Bound
+the attempt, find the local cause, and only then decide whether the control is
+actually the obstacle. The same shape appears earlier in this file — the RLS test
+that "proved" nothing because it connected as `postgres`, and the idempotency check
+that never fired because the 404 arrived inside an HTTP 400.
+### `node-linker` in `.npmrc` is silently ignored by pnpm 11
+
+pnpm 11 reads its settings from `pnpm-workspace.yaml`, not `.npmrc`. A
+`node-linker=hoisted` line in `.npmrc` produces no warning, no error, and no
+effect — `pnpm install` reports "Already up to date" and the layout is unchanged.
+The equivalent key is `nodeLinker` in `pnpm-workspace.yaml`, alongside `storeDir`
+and `allowBuilds`.
+
+Related: changing the linker does not relink an existing tree. Every
+`node_modules` has to be removed first, or the install is a no-op.
+
+### Metro does not substitute `.js` for `.tsx`
+
+TypeScript's NodeNext resolution maps `./Thing.js` onto `./Thing.tsx`, which is why
+the rest of this repo writes `.js` extensions on relative imports. Metro does not.
+A bundler-resolved package — `packages/ui` — must use **extensionless** relative
+imports, or every import fails at bundle time while `tsc` reports nothing wrong.
+
+### Expo reads `.env` from the app directory, not the workspace root
+
+`EXPO_PUBLIC_*` values in the repo-root `.env` are invisible to `apps/field`. The
+app needs its own `.env`. Both are gitignored by the root `.gitignore` (`.env`
+matches at any depth), and `apps/field/.env` must hold **only** `EXPO_PUBLIC_*`
+values, every one of which is inlined into the shipped bundle and readable from
+the APK.
+
+### `expo install` rewrites `package.json` and adds config plugins
+
+It reformats the file and appends a `plugins` array to `app.json` — including
+entries for packages you did not ask it to configure. Re-read both files after
+running it rather than assuming only dependencies moved.
+
+## pnpm on Windows — FE-W1
+
+### `corepack enable --install-directory "$env:APPDATA\npm"` fails with ENOENT
+
+The fix recorded above under "Node and pnpm on Windows" assumes
+`%APPDATA%\npm` exists. On a machine where npm has never installed a global
+package it does not, and corepack reports:
+
+```
+Internal Error: ENOENT: no such file or directory, lstat 'C:\Users\<user>\AppData\Roaming\npm'
+```
+
+The directory is already on `PATH`, which is what makes this confusing — `PATH`
+lists it, so it looks present. Create it first:
+
+```powershell
+New-Item -ItemType Directory -Path "$env:APPDATA\npm" -Force
+corepack enable --install-directory "$env:APPDATA\npm"
+```
+
+### Moving the repo invalidates `node_modules`, and pnpm will not purge it without a TTY
+
+After moving the checkout to a new path, `pnpm install` aborts:
+
+```
+[ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY] Aborted removal of modules directory due to no TTY
+```
+
+`CI=true` allows the purge — **and then blocks the next install that changes the
+lockfile**, because `CI` also implies `--frozen-lockfile`. Set it for the purge,
+unset it before adding a dependency. The two failures look unrelated and are the
+same variable.
+
+
+## Credentials and `.env` — FE-W1
+
+### Classify by value shape, not by key name
+
+Moving production credentials out of the repo, a first pass filtered on key names —
+`*_SECRET_KEY`, `*_ACCESS_TOKEN`, `*_DB_URL`, `*_POOLER_*`. It moved six values and
+left three behind: `SUPABASE_URL`, `SUPABASE_JWKS_URL` and
+`EXPO_PUBLIC_SUPABASE_URL`, all pointing at the deployed project.
+
+None of those names sounds like a secret, and strictly none is one. **A URL is a
+pointer, and a pointer decides which database you talk to.** The Expo one is the
+worse of the three: it would have sent the mobile app at production, where there is
+no seed reference data and no shift window, so every capture refuses — a confusing
+failure rather than a dangerous one, and still the opposite of the instruction that
+sign-in runs against the local stack.
+
+Scan the values, not the names:
+
+```bash
+grep -nE '=(https?://[a-z0-9]+\.supabase\.co|postgres(ql)?://)' .env
+```
+
+Anything matching `<ref>.supabase.co` or a `postgres://` authority is remote no
+matter what the key is called. A name-based filter cannot find it, because the name
+was chosen before anyone knew which environment the value would hold.

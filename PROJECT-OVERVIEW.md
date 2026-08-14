@@ -2463,3 +2463,265 @@ $ pnpm db:reset && pnpm --filter @elmiron/api test
     `visible_territory_ids()` run a recursive CTE per policy evaluation. Both carry a
     5s `statement_timeout` and neither has been measured against a realistic territory
     tree. Worth a look before the field APIs land in week 3.
+
+---
+
+### FE-W1 — Foundations (14 August 2026)
+
+First frontend sprint. `apps/field` and `packages/ui-tokens` were placeholders from
+BE-W1 until this one; `packages/ui` did not exist.
+
+#### FE-G1 — UNMET, and not dressed up
+
+**No physical Android device was available.** The gate is "a signed-in APK on a
+physical Android device" and it has not been met. No emulator run is offered in its
+place.
+
+What was proven instead, and it is less: the app **bundles**. `expo export
+--platform android` produces a 3.8 MB Hermes bundle, which exercises Metro,
+workspace resolution, the three `@elmiron/*` imports and the `EXPO_PUBLIC_*`
+inlining. It does not exercise signing, installation, the Android runtime, or
+sign-in on a device.
+
+Also outstanding for the APK: `eas login`, which needs credentials only the
+developer can enter.
+
+#### The build path changed mid-sprint
+
+The plan chose local Gradle. The machine has no JDK, no Android SDK and no `adb`,
+so installing that toolchain _was_ the risk local Gradle was chosen to avoid. The
+reviewer reversed it: **EAS Build for FE-W1**, local Gradle from around FE-W3 when
+native config changes get frequent.
+
+Free tier, verified at expo.dev/pricing on 14 August 2026: **15 Android builds a
+month, low-priority queue with 90+ minute waits at peak, 1 concurrency.** Enough for
+this sprint, and a reason not to stay on it once rebuilds get frequent.
+
+#### `packages/ui-tokens` — a validator and a control, not a palette
+
+**No brand palette was produced, deliberately.** `docs/design-plan.md` and the brand
+guideline were written outside the repo and never committed, so the only brand facts
+available are two contrast ratios. Inventing colours to fit them and documenting the
+assumption would produce something that looks authoritative and is wrong in a way
+nobody catches until the client sees it. The reviewer's instruction was explicit.
+
+What exists instead:
+
+| Piece                    | What it is                                                                                                                                                           |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contrast.ts`            | WCAG 2.2 validator — real relative luminance, the 0.03928 linearisation cut-off the criterion is written against, ratios compared unrounded                          |
+| `palette.ts`             | Neutral placeholder values, marked placeholder in the constant name, in `tokens.status`, and in the file header. **The one file to replace when the brand arrives.** |
+| `tokens.ts`              | Token structure. Every colour is a reference into the palette, so a brand swap touches one file                                                                      |
+| `brand-specification.ts` | What the guideline specifies, with colour values left `null`                                                                                                         |
+
+**The brand finding is a control, not a note.** `brand-specification.test.ts` runs
+the recorded ratios through the validator and asserts they fail:
+
+| Pair                         | Recorded   | AA needs | Verdict                                                                                       |
+| ---------------------------- | ---------- | -------- | --------------------------------------------------------------------------------------------- |
+| Primary button label on fill | **2.54:1** | 4.5:1    | Fails AA and AAA, at every text size — 2.54 is below even the 3:1 non-text floor              |
+| Badge label on fill          | **4.33:1** | 4.5:1    | Fails AA for normal text. Clears the 3:1 large-text floor, which is how it gets waved through |
+
+The colour fields being `null` is load-bearing: the test that compares a computed
+ratio against the recorded one is vacuous today and activates the moment somebody
+fills them in. Either the finding is confirmed against real colours, or the recorded
+number was wrong and the build says so.
+
+**Placeholder pairs, measured** — every pair with a WCAG obligation is asserted on
+every test run, so a brand swap that introduces an inaccessible pair fails here
+rather than reaching a screen:
+
+```
+text      17.40:1  min 4.5  PASS   primary text on background
+text      15.96:1  min 4.5  PASS   primary text on surface
+text       8.86:1  min 4.5  PASS   secondary text on background
+text       8.12:1  min 4.5  PASS   secondary text on surface
+text       6.42:1  min 4.5  PASS   primary button label on primary button fill
+non-text   6.42:1  min 3    PASS   primary button fill against the page
+text       6.53:1  min 4.5  PASS   critical text on background
+```
+
+38 tests. **Mutation-tested**, per the convention: linearisation removed → 8 failed;
+AA threshold lowered 4.5 → 2.5 → 8 failed; a colour literal pasted into `tokens.ts`
+instead of a palette reference → 3 failed. Restored: 38/38.
+
+#### The extraction rule — strengthened past what was asked, on purpose
+
+The ask was a lint rule that fails the build when `apps/field` **defines** a
+component. What is enforced instead: **`apps/field` cannot import React Native's
+visual primitives at all.** `View`, `Text`, `Pressable`, `StyleSheet`, `TextInput`,
+`FlatList` and the rest are restricted imports there. Non-visual APIs — `Platform`,
+`AppState`, `Linking` — stay available, and route files still work because composing
+`@elmiron/ui` needs none of the restricted names.
+
+This is the same move as _"there is no upload endpoint without consent, not a
+disabled button"_: remove the capability rather than detect the symptom. A naming or
+file-location rule detects a component after someone writes it; this one means the
+materials are not in the building.
+
+**Recorded here as a deliberate strengthening so it does not get "simplified" back
+into a convention later.**
+
+Proof it fails the build:
+
+```
+apps/field/src/ExtractionRuleProbe.tsx
+  1:10  error  'StyleSheet' import from 'react-native' is restricted...
+  1:22  error  'Text' import from 'react-native' is restricted...
+  1:28  error  'View' import from 'react-native' is restricted...
+✖ 3 problems (3 errors, 0 warnings)
+```
+
+Probe removed, `pnpm --filter @elmiron/field lint` exits 0.
+
+#### A guard removed is a guard replaced — `import/no-extraneous-dependencies`
+
+React Native's package graph is not pnpm-clean: `expo-router` imports
+`@expo/metro-runtime` without declaring it, which imports `whatwg-fetch` without
+declaring it, and so on. The first instinct was `nodeLinker: hoisted` across the
+workspace, which works — and silently deletes the install-time guarantee that a
+package cannot import what it has not declared, for `core`, `mock` and `api` too, to
+accommodate one app.
+
+**That turned out to be unnecessary.** The real cause was
+`disableHierarchicalLookup` in this repo's own `metro.config.cjs`, copied from
+Expo's monorepo guide, which assumes npm or yarn. Under pnpm it makes nested
+dependencies unreachable. Removed, the app bundles under pnpm's **default isolated
+linker with no hoisting configured at all** — `pnpm-workspace.yaml` is unchanged
+from `origin/main`.
+
+`eslint-plugin-import`'s `no-extraneous-dependencies` was added regardless. The
+install-time property now also holds at lint time, in CI, for every workspace — so
+it survives the next time somebody is tempted to hoist their way out of a resolution
+error. Proven: an undeclared `import prettier` in `packages/core` fails lint; removed,
+exit 0.
+
+#### The four `APP_*` values
+
+`loadAppConfig()` has existed since BE-W1 with no caller. This app is the first, and
+it throws on absence rather than defaulting.
+
+| Value                          | Set to                      | Why                                                                                                                                                                                                                   |
+| ------------------------------ | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `APP_JWT_AUDIENCE`             | `authenticated`             | What Supabase puts in `aud`. Matches `config.test.ts` and the local stack                                                                                                                                             |
+| `APP_SITE_URL`                 | `http://127.0.0.1:3000`     | The console's dev origin. Mobile does not use it; it is required and must be a real URL                                                                                                                               |
+| `APP_ADDITIONAL_REDIRECT_URLS` | `elmironmr://auth-callback` | The only redirect an Android app needs. The schema permits an empty list for mobile-only; a real deep link is better than an empty one because it is the value that has to be right when auth callbacks land in FE-W4 |
+| `APP_DEEP_LINK_SCHEME`         | `elmironmr`                 | Matches `scheme` in `app.json` and the example in `config.test.ts`. These two must agree or the callback silently fails                                                                                               |
+
+All four are also mirrored as `EXPO_PUBLIC_APP_*`, because Expo only inlines that
+prefix. Every one is public by nature — an audience, a redirect target and a URL
+scheme are readable in any APK regardless. **The publishable key is the only Supabase
+key that may carry the prefix.**
+
+#### Production credentials left the repository
+
+`.env` held a service-role key, three remote connection strings and a Supabase
+access token, and `SUPABASE_URL`, `SUPABASE_JWKS_URL` and `EXPO_PUBLIC_SUPABASE_URL`
+all pointed at the deployed project — including the one the mobile app reads, while
+the sprint brief says sign-in runs against the **local** stack.
+
+Nine values moved to `~/.elmiron-prod.env`, outside the tree. The repo `.env` now
+holds localhost and public constants only; a check confirms no remaining value is
+anything else. Loading production is now a deliberate act, documented in the file
+header and in `docs/gotchas.md`.
+
+This replaces a denylist with the removal of a class. `.easignore` was added too —
+EAS uploads the project directory, and the reasoning that made that acceptable
+("`apps/field` carries no secrets") depended on a gitignore rule holding.
+
+#### What was built in `apps/field`
+
+Expo SDK 57, React 19.2.3, React Native 0.86.2, expo-router, Android only — no iOS
+key in `app.json`, no `react-dom`, no `react-native-web`. The default template was
+not used: it ships `@expo/ui`, `expo-glass-effect`, `expo-symbols` and a
+`src/components` directory, three of which are iOS-flavoured and the last of which
+violates the extraction rule on the first commit.
+
+Routes: `_layout` (session provider), `index` (session-restoring redirect),
+`sign-in`, `home` (role-aware), `doctors`. `src/` holds config, the Supabase client,
+the API client and claim reading — no components.
+
+**The role is read, not inferred.** `src/claims.ts` decodes `app_role`,
+`app_territory_id` and `app_is_active` from the token the auth hook mints, and throws
+if they are absent rather than falling back to a least-privileged view — a token
+without them means the app is pointed at a project where the hook is not enabled,
+which should be loud. It does not verify the signature, and says so: the server does
+that, and these claims decide which rows render, not what anyone may do.
+
+**The non-happy path is wired first.** `app/doctors.tsx` runs against the mock's
+`denied` scenario, and renders a denial with its own state — never an empty list.
+An empty list is what a client-side filter looks like, and the client never decides
+what an MR may see.
+
+#### Verification
+
+All against the local stack, Docker up:
+
+```
+pnpm run build          Tasks: 3 successful
+pnpm run typecheck      Tasks: 9 successful
+pnpm run lint           Tasks: 7 successful
+pnpm run format:check   All matched files use Prettier code style!
+
+@elmiron/ui-tokens   38 passed (38)
+@elmiron/core        21 passed (21)
+@elmiron/mock        40 passed (40)
+@elmiron/api        333 passed (333), 13 files    <- passed, not skipped
+verify:rollbacks     all 19 reversed, public schema empty; restored with db:reset
+```
+
+The `api` number matters here specifically: this sprint changed how packages
+resolve, and `api` is the workspace with the most to lose. It was run with the stack
+up so the result reads _passed_ rather than _skipped_ — the distinction
+`docs/gotchas.md` warns about.
+
+#### A note for anyone bisecting this sprint
+
+FE-W1 landed as five commits so a revert can be surgical. **`pnpm-lock.yaml` is
+entirely in the first of them**, because one lockfile cannot be split across commits
+that each add dependencies.
+
+The consequence: checking out an intermediate commit and running
+`pnpm install --frozen-lockfile` fails, because the lockfile there describes
+dependencies the `package.json` files at that commit do not yet declare. **That is
+not a broken tree.** Only the final state of the series is installable. Reverting any
+single commit works normally, which is what the split was for.
+
+#### Deliberately not built
+
+| Left out                                                        | Why                                                                  |
+| --------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Any feature screen — check-in, consent, recording, call reports | FE-W2 onward                                                         |
+| Anything showing a transcript, analysis or AI output            | Blocked, and may be cancelled outright                               |
+| Any ranking, score, rank, percentile or grade                   | Regulatory line, not a preference                                    |
+| Anything in `apps/console`                                      | FE-W6                                                                |
+| Any iOS configuration                                           | Android only, permanently                                            |
+| A brand palette                                                 | No committed source. See above                                       |
+| `graphify-out/`                                                 | Optional derived artifact; the code and migrations are the authority |
+
+#### What I think is wrong, or worth arguing with
+
+**1. `apps/field/tsconfig.json` cannot extend the repo base, and that is a real
+divergence.** The base sets `module: NodeNext`, which requires `.js` extensions on
+relative imports; Metro does not resolve them. The app extends `expo/tsconfig.base`
+and repeats every strictness flag explicitly. One flag is genuinely dropped:
+`noPropertyAccessFromIndexSignature`, because Expo inlines env values by rewriting
+`process.env.EXPO_PUBLIC_X` and only matches dot access — the bracket access that
+rule demands yields `undefined` in a release bundle while working in development.
+Dropping a strictness flag to satisfy a bundler is worth someone else's eyes.
+
+**2. The extraction rule has one hole I could not close cheaply.** `import * as RN
+from 'react-native'` is not reliably caught by `no-restricted-imports` with
+`importNames`. Anyone deliberately routing around the rule can. It stops the
+accident, not the intent — which is the honest description of most lint rules, but
+worth stating rather than implying the boundary is airtight.
+
+**3. `com.praversetech.elmironmr` is a guess.** The Android application id is
+permanent once published to Play and I derived it from the GitHub organisation
+without being told. Change it before the first upload if it is wrong; afterwards it
+cannot be changed at all.
+
+**4. The `declined`-is-not-an-error rule has no test yet.** `Banner` documents that
+`critical` is never for a declined consent, and `ColorTokens` repeats it — both are
+comments. The consent screen is FE-W4 and the real control belongs with it, but a
+comment is not a control and should not be mistaken for one in the meantime.

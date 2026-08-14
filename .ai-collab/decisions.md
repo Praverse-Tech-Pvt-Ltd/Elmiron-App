@@ -245,6 +245,125 @@ one-line form for scanning.
 
 ---
 
+## FE-W1 — 14 August 2026 · Model: Claude Opus 5
+
+Written up in full in `PROJECT-OVERVIEW.md` -> FE-W1. One-line form for scanning.
+
+### Extraction rule removes the capability, not the symptom
+
+- **Decision:** `apps/field` cannot import React Native visual primitives at all.
+- **Alternatives:** a lint rule failing when a component is *defined* there (what was
+  specified); a naming or directory convention.
+- **Why this won:** same shape as "there is no upload endpoint without consent, not a
+  disabled button". Detection finds a component after someone writes it; removing the
+  materials means it cannot be written.
+- **Cost accepted:** `import * as RN from 'react-native'` routes around it. Stops the
+  accident, not the intent.
+
+### No hoisting; the isolated-linker guard is intact
+
+- **Decision:** `pnpm-workspace.yaml` unchanged. The Expo resolution failures were
+  caused by `disableHierarchicalLookup` in our own Metro config, not by pnpm.
+- **Alternatives:** repo-wide `nodeLinker: hoisted`; `publicHoistPattern` globs.
+- **Why this won:** neither is needed once the Metro setting is removed. Hoisting
+  would have deleted the install-time "cannot import what you have not declared"
+  guarantee for `core`, `mock` and `api` to accommodate one app.
+- **Compensating control added anyway:** `import/no-extraneous-dependencies`, so the
+  property also holds at lint time if anyone hoists later.
+
+### Production credentials moved out of the repo tree
+
+- **Decision:** nine values to `~/.elmiron-prod.env`. Repo `.env` keeps localhost and
+  public constants only.
+- **Why this won:** three denylists had accumulated around one hazard, and the
+  directory is uploaded to a third party at build time. Removing the class beats a
+  fourth denylist.
+
+---
+
+## FE-W8 open item — the Android signing key
+
+**Decide before the first Play Store upload. Unrecoverable afterwards.**
+
+EAS Build generates the Android keystore and holds it on Expo's servers. Google
+requires every update to an installed app to carry the same signing key, and there is
+no recovery path if access to that key is lost — a lost Expo account means an app
+that can never be updated, only republished under a new listing.
+
+Two mitigations. Pick one:
+
+1. **Download and back up the keystore** (`eas credentials`) somewhere durable and
+   outside the Expo account.
+2. **Enrol in Play App Signing**, so Google holds the app signing key and Expo holds
+   only an upload key — an upload key can be reset if lost.
+
+*Confidence: medium-high on the Play App Signing model. Verify against current Play
+Console documentation before relying on it — this was not verified against Google's
+docs during FE-W1.*
+
+Cheap now, impossible later. Same pattern as the region choice and the D-U-N-S lead
+time.
+
+---
+## FE-W8 BLOCKING — the Android package ID and the Play Console account
+
+**Two decisions, neither of them the developer''s, both permanent after the first
+Play Store upload.** `com.praversetech.elmironmr` is currently in `app.json` as a
+**placeholder I chose from the GitHub organisation name.** It has not been approved
+by anyone.
+
+### 1. Whose Play Console account ships this?
+
+It decides the package ID, who owns the store listing, who holds the keystore, and
+what happens to all three if the client relationship ends. Pairs directly with the
+EAS keystore item below — the same question asked from the other side.
+
+- **Praverse ships it:** we control releases and the signing key; the client depends
+  on us to publish, and transferring a listing later is a manual Google process.
+- **The client ships it:** they own the listing and the identity permanently; we need
+  access to build and release, and the package ID should be theirs from the start.
+
+### 2. Should a pharmaceutical brand name be in a permanent public identifier?
+
+If "Elmiron" is the client''s mark rather than ours, `com.praversetech.elmironmr`
+bakes their trademark into a string that **can never be changed** — a different
+package ID is a different app listing, with no upgrade path for anyone who installed
+the first one. Something neutral, `com.praversetech.fieldforce`, costs nothing today
+and avoids a conversation that has no good outcome later.
+
+**Owner:** reviewer. **Needed by:** before the first Play upload, FE-W8.
+**Until then:** the placeholder stays and is not to be treated as decided.
+
+---
+
+## FE-W1 — accepted deviations
+
+### `apps/field/tsconfig.json` does not extend the repo base
+
+- **Decision:** it extends `expo/tsconfig.base` and repeats every strictness flag
+  explicitly, dropping exactly one: `noPropertyAccessFromIndexSignature`.
+- **Why:** the repo base sets `module: NodeNext`, which requires `.js` extensions on
+  relative imports; Metro does not resolve them. And Expo inlines environment values
+  by rewriting `process.env.EXPO_PUBLIC_X` at build time, matching **dot access
+  only** — the bracket access that rule demands is not rewritten and yields
+  `undefined` in a release bundle while working fine in development.
+- **Do not "fix" this back.** Re-adding the flag and switching to bracket access
+  breaks env inlining in release builds only, which is the worst place to find it.
+
+### "Declined is not an error" has no control yet — FE-W4
+
+Today `Banner` and `ColorTokens` carry comments saying `critical` is never for a
+declined consent. **A comment is not a control.** The consent screen is FE-W4; the
+test belongs with it, and it should assert that the `declined` path:
+
+- carries no error styling and no `critical` token,
+- has no confirmation or "are you sure?" step,
+- has a tap target no smaller than `consented`, and
+- sits at equal visual weight — neither outcome is the secondary action.
+
+Recorded now so the control is built with the screen rather than remembered after.
+
+---
 ## Where the earlier ones live
 
 | Decision | Where |
