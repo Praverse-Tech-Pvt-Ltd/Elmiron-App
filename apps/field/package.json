@@ -11,7 +11,7 @@
     "export": "expo export --platform android",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint app src",
-    "test": "echo \"no tests in apps/field yet\""
+    "test": "vitest run"
   },
   "dependencies": {
     "@elmiron/core": "workspace:*",
@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "vitest": "^3.2.4",
     "typescript": "^5.9.3"
   }
 }
