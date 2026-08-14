@@ -184,6 +184,36 @@ one-line form for scanning.
   the reasoning holds regardless of what PITR costs — but anyone revisiting this
   should re-check the number before treating it as current.
 
+### Addendum, same day — the 3h stall threshold was itself dangerous
+
+- **Finding:** the threshold change above fixed the cadence but shipped a check
+  that trips on a **single** overdue object. With an hourly cron and a 3h bar, two
+  ordinary GitHub Actions scheduling delays (already observed: 1h46m on a real run)
+  are enough to refuse the whole fleet. Flagged by the reviewer before this reached
+  production for real.
+- **Decision:** `audio_purge_is_stalled()` redefined into two signals —
+  **primary**: backlog > `purge_backlog_multiplier` (3) × `purge_batch_limit` runs'
+  worth of overdue objects; **secondary**: a single object's age > 12h (was 3h).
+  `purge_batch_limit` moved from a hardcoded 100 to a threshold, default 250.
+  See `PROJECT-OVERVIEW.md` → BE-W8 §7 for the full writeup.
+- **Not applied to production.** Committed and pushed to `main` only, per explicit
+  instruction to run nothing further until told. Both retention workflows are
+  disabled (`gh workflow disable`) for the same reason.
+- **Self-correction, recorded rather than hidden:** an earlier draft of this fix
+  wrongly claimed `audio_purge_health()` had never returned `stalled`/
+  `liveObjectCount` since BE-W6. It does — `20260816000300_resumable_upload.sql`
+  redefines the function correctly; the wrong claim came from reading only the
+  first `create or replace` in `20260815000300` and missing the later one. Caught
+  by re-verifying against a real DB reset before committing, not after. Nothing
+  incorrect was pushed.
+- **Also true and unresolved, named so it isn't lost:** the reviewer's "13 hours
+  out" catch was right — that line was written after the cron had already moved to
+  hourly, reasoning from a schedule that no longer existed. The `.ai-collab/`
+  split (durable six stay tracked as-is; strip point-in-time claims from
+  `handover.md`/`handoff.md` into pointers) and the production-migration-audit-trail
+  gap (two hand-run `db push` calls, no runbook step yet) are both accepted asks,
+  not yet done.
+
 ---
 
 ## Where the earlier ones live

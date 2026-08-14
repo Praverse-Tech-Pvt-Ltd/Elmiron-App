@@ -2010,12 +2010,16 @@ resolve, the pooler is reachable, `claim_expired_audio` exists on the remote. It
 proves nothing about destruction, because the database held no recordings and nothing
 was past its purge date. That is not yet true end-to-end.
 
-**Outstanding, genuinely: tonight's `19:30` UTC scheduled retention run and
-tomorrow's watchdog run have not fired as of this section being written** — the
-schedule was resized to hourly partway through the day (§4 below), so the next
-observation that matters is whether the **hourly** cadence goes green on its own
-schedule, not the old daily slot. Check `gh run list --workflow="Audio retention"
---json event,createdAt,conclusion` and update this line.
+**Corrected, same day.** The sentence originally here said "tonight's `19:30` UTC
+run is ~13 hours out" — stale reasoning written _after_ the cron had already moved to
+hourly earlier in the same session, still thinking in terms of the schedule that no
+longer existed. Checked directly (`gh run list --workflow=retention.yml
+--json event,createdAt,conclusion`): the hourly cron never actually fired before the
+workflow was disabled (see §7 below) — the last real run was still the manual
+dispatch. The correct statement was "the next run is within the hour," not thirteen
+hours, and not "already fired several times" either. Both retention workflows are
+**currently disabled** (`gh workflow disable`) at the reviewer's request, pending the
+addendum in §7. Re-enable and observe before treating the hourly cadence as proven.
 
 #### 3. Seeding — infrastructure only, not data
 
@@ -2137,9 +2141,8 @@ previously carried is retired going forward — see the correction note in
 
 #### Open questions for the reviewer
 
-**1. Tonight's `19:30` UTC retention run and the following hourly runs need to be
-observed**, not predicted — see §2 above. This is the one item in this section that
-is a prediction rather than a measurement.
+**1. Both retention workflows are disabled and need to be re-enabled and observed
+before the hourly cadence is proven.** See §7.
 
 **2. `sync_push` at real concurrency (100 MRs at 6pm against a session pooler) is
 unmeasured.** The single-transaction timing measured this week (179ms at 500 items)
@@ -2149,6 +2152,74 @@ actual risk at pilot scale.
 **3. PV/privacy sign-off, contract I3, the DPA question and the org-default shift
 window deadline are all unchanged from BE-W7** — none of this week's work touched
 them, and none of them got closer to resolved.
+
+---
+
+#### 7. Addendum, same day — the stall check measured the wrong property
+
+The reviewer's follow-up on §4 found four things. Three held up; correcting the
+fourth openly rather than letting it stand.
+
+**The 3-hour stall threshold was genuinely dangerous, and is fixed.**
+`audio_purge_is_stalled()` tripped on a **single object** overdue by more than the
+threshold — that conflates "the worker is dead" with "the worker is alive but
+briefly behind on a busy hour." With an hourly cron and a 3-hour bar, two consecutive
+GitHub Actions scheduling delays of the size already observed (1h46m on a real run)
+were enough to trip it, refusing new audio for **the entire fleet**. Redefined into
+two separated signals:
+
+|                                           | Meaning                                                                                     | Value        |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------- | ------------ |
+| **Primary** (`purge_backlog_multiplier`)  | Backlog exceeds N runs' worth of claim capacity — the worker cannot keep up                 | 3            |
+| **Secondary** (`purge_max_silence_hours`) | A single object's age exceeds a hard ceiling — the worker is dead even with a small backlog | 12h (was 3h) |
+
+Proven against the real function, not a fixture: a pile of objects each overdue by
+one minute trips the primary signal purely on count; a single object four hours
+overdue — the exact shape ordinary scheduling jitter produces — trips neither.
+
+**The batch limit was hardcoded — moved to config.** `purge_batch_limit` is now an
+`app_thresholds` row, default 250 (was a JS constant, 100). Growing the fleet past
+the pilot size is now a threshold row, not a code change and a deploy. At 250/hour
+this is 6,000/day, 3.75x the pilot's stated arrival rate — survives the pilot
+doubling to ~150 MRs without anyone needing to notice.
+
+**The "13 hours out" claim was stale within the same session, self-inflicted.** Said
+after the cron had already moved to hourly, still reasoning from the schedule that no
+longer existed. Checked directly rather than re-asserted: the hourly cron never
+actually fired before both workflows were disabled at the reviewer's request. Neither
+guess was right — not 13 hours, and not "already fired several times."
+
+**Corrected before it shipped, not after: `audio_purge_health()` was never
+broken.** An earlier draft of the addendum migration claimed the function didn't
+return `stalled`/`liveObjectCount` and had silently failed to report anything useful
+since BE-W6. That was wrong. `20260815000300_audio_consent_retention.sql` defines the
+function once without those fields — reading only that definition is where the wrong
+claim came from — but `20260816000300_resumable_upload.sql` (BE-W7) **redefines it**
+with both fields wired up correctly via `create or replace function`. Missed the
+second definition on the first pass. Caught before committing by deliberately
+resetting the local database with the new migration held out and querying the real
+function output directly, rather than trusting the first read. The migration and its
+rollback were rewritten to remove the incorrect section entirely before anything was
+pushed.
+
+**Not deployed to production.** Committed and pushed to `main`; CI is green. Both
+`retention.yml` and `retention-watchdog.yml` remain disabled per the reviewer's
+instruction not to run anything further until told. The migration
+(`20260817000200_purge_backlog_stall_detection.sql`) has **not** been applied to
+production — unlike the earlier same-day threshold migration, this one is held for
+explicit instruction before touching the remote database again.
+
+**`.ai-collab/` split — not done this addendum.** The reviewer's proposal (track the
+durable six files as-is; strip point-in-time claims out of `handover.md` and
+`handoff.md` specifically, leaving them as pointers into `PROJECT-OVERVIEW.md`) is
+recorded here as the plan but not executed — it touches files this addendum was not
+asked to change and deserves its own pass rather than being folded in.
+
+**Production migration audit trail — flagged, not built.** Two hand-run
+`supabase db push` calls against production this week, both outside CI. No incident
+resulted, but a third one is where this becomes a real risk. Needs either a
+documented runbook step with a verification query, or a workflow, before the pilot —
+not scoped into this addendum, named so it doesn't get lost.
 
 ---
 
