@@ -135,6 +135,57 @@ one-line form for scanning.
 
 ---
 
+## 14 August 2026 (real date) · BE-W8 · Model: Claude Sonnet 5
+
+### The retention schedule was under-provisioned ~16x — resized, not just documented
+
+- **Finding:** Part 3.1's local measurement showed the DB side draining 5,000 objects
+  in ~30s (50 runs × ~591ms at batch 100). The bottleneck was never throughput — it
+  was that the cron only ran once a day. Against the stated pilot size (100 MRs × 8
+  visits/day, each visit producing a doctor recording and an MR voice note ≈ 1,600
+  audio objects/day), a daily cron at batch 100 drains 100/day against ~1,600/day
+  arrival: short by roughly 16x, on day 91, by arithmetic rather than by accident.
+- **Decision:** `retention.yml` moved from daily (`30 19 * * *`) to hourly
+  (`0 * * * *`), same batch of 100 → 2,400/day, 1.5x headroom. The watchdog
+  (`retention-watchdog.yml`) moved with it (15-min offset), and
+  `purge_max_silence_hours` moved 48 → 3 (migration
+  `20260817000100_retention_schedule_resize.sql`, applied to production).
+- **Why hourly rather than a bigger daily batch:** a failed run costs an hour of
+  drain instead of a day, and the blast radius per run stays small — more forgiving
+  of the kind of environmental failure this project has already hit twice (the
+  secrets gap, the IPv6 direct-connection trap).
+- **What the backstop means here:** `begin_upload` refusing new audio when the purge
+  stalls is *correct* — an availability failure beats a compliance failure. The
+  finding is that it would have fired by arithmetic, not by accident, three months
+  into the pilot, taking every MR in the fleet down to record at once. Now it has
+  1.5x headroom instead of a 16x deficit.
+- **Surfaced a real test hazard, not a coincidence:** tightening the threshold from
+  48h to 3h turned two already-committed test fixtures (`consent-audio.spec.ts`,
+  backdated 1 day) into a cross-file race — any test running concurrently against
+  the shared local database would see the global stall flag trip. Fixed with a named
+  constant (`OVERDUE_NOT_STALLED_MINUTES` in `tests/db.ts`) rather than a smaller
+  raw interval, so the next author reaches for it instead of re-discovering the trap.
+
+### PITR — decided, not bought
+
+- **Decision:** do not buy Point-in-Time Recovery. Daily backups (included in the
+  Pro plan) plus `docs/restore-runbook.md` is the right posture.
+- **Why:** a restore on this project is a documented compliance event that can
+  un-withdraw a consent — that is the entire reason the runbook and the post-restore
+  reconciliation worker (`reconcile-after-restore.mjs`) exist. Paying for
+  finer-grained restore points buys more of the exact thing the design already
+  defends against, not less risk.
+- **Cost, stated plainly:** if a real incident needs a restore point finer than the
+  last daily backup, that gap is accepted. Revisit if a real incident makes that
+  gap the actual problem, not preemptively.
+- **Unverified, flagged rather than silently trusted:** the ~$100/month PITR figure
+  in `docs/backend-prompt-w8.md` is dated 11 August and explicitly marked
+  "re-verify before spending." This decision doesn't depend on the exact price —
+  the reasoning holds regardless of what PITR costs — but anyone revisiting this
+  should re-check the number before treating it as current.
+
+---
+
 ## Where the earlier ones live
 
 | Decision | Where |
