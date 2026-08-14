@@ -2889,3 +2889,36 @@ sprints, and 472 passing tests do not change that.
 FE-W8-blocking items and the standing rule for the current blocked period. **This
 file is the durable record; if the two disagree, this one is right.** The pointer is
 here so the two do not quietly become parallel sources of truth.
+
+#### Known residual — a function can ride in on `payload`
+
+Written up rather than guarded, deliberately. Raised in review of FE-W2 and recorded
+here before the next sprint so it is a known limit rather than a surprise.
+
+**What the hole is.** `SyncQueueItem.payload` is
+`z.record(z.string(), z.unknown())`. The import-list assertion proves `reducer.ts`
+imports nothing but types, and every type in its surface — `SyncQueueItem`,
+`ServerVerdict`, `SyncEvent`, `SyncItemReinstatement`, `SyncQueueState` — declares no
+function members anywhere. But an import list constrains what a file _pulls in_, not
+what is _handed to it_. At the type level `unknown` is not a function, so a
+JSON-shape assertion over these types passes while a function could still arrive
+inside `payload` at runtime. Purity would then live at the call site rather than in
+the file, and the guard cannot tell the difference.
+
+**Why no guard was added.** A type-level assertion would pass today and would still
+pass with a function in `payload`, because `unknown` satisfies it — so it would read
+as closing the hole while closing nothing. A runtime check walking every payload for
+function values would cost work on every transition to defend against a shape the
+reducer never dereferences. Both are worse than an accurate note.
+
+**What actually closes it.** Narrowing the contract: `payload` typed as a recursive
+JSON value in `packages/core` rather than `unknown`. That is Backend's file and a
+contract change, so it is a request rather than something Frontend does — worth
+raising if a payload ever needs to be inspected rather than carried.
+
+**The specific change that makes this dangerous.** Today the reducer only ever
+_carries_ `payload` — it is copied between states and never read into, never
+destructured, never called. **The moment any code path begins invoking or
+dereferencing something out of `payload`, this stops being a residual and becomes a
+live arbitrary-execution path**, and the import-list guard will still be green while
+it happens. If that change is ever proposed, narrow the contract first.
