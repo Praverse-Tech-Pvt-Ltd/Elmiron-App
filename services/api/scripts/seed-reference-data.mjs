@@ -51,7 +51,7 @@ const deterministicId = (table, key) => {
     hash.slice(0, 8),
     hash.slice(8, 12),
     `4${hash.slice(13, 16)}`,
-    `${(['8', '9', 'a', 'b'][parseInt(hash[16], 16) % 4])}${hash.slice(17, 20)}`,
+    `${['8', '9', 'a', 'b'][parseInt(hash[16], 16) % 4]}${hash.slice(17, 20)}`,
     hash.slice(20, 32),
   ].join('-');
 };
@@ -197,7 +197,9 @@ if (
 
   const data = await readReferenceData(args.dataPath);
   const dbUrl =
-    args.dbUrl ?? process.env.SUPABASE_DB_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
+    args.dbUrl ??
+    process.env.SUPABASE_DB_URL ??
+    'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
   const result = await seedReferenceData(data, { apply: args.apply, dbUrl });
 
   console.log(
@@ -210,6 +212,8 @@ if (
   );
 
   if (!result.applied) {
-    console.log('\nNothing was changed. Re-run with --apply --db-url "<pooler url>" to seed for real.');
+    console.log(
+      '\nNothing was changed. Re-run with --apply --db-url "<pooler url>" to seed for real.',
+    );
   }
 }
