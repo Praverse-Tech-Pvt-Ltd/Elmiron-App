@@ -384,6 +384,41 @@ short would be the wrong instinct, and is explicitly not to be done.
 
 ---
 
+## FE-W2 open item — what the queue screen shows during a long retry
+
+Raised in review and not yet built, because no queue screen exists.
+
+An item honestly sitting `queued` after fifty failed attempts is **correct** — the
+client never dead-letters and the server holds the budget. It is also a trust
+problem: indefinite silent retry reads to an MR as "nothing is happening", and
+`my_upload_queue()` is described in the plan as their only proof the day's work is
+safe.
+
+This is a screen-state decision, not a dead-letter decision, and it belongs in FE-W2
+rather than FE-W7 polish. The queue must visibly distinguish **retrying normally**
+from **retrying for six hours** — the second is not an error state and must not be
+styled as one, but it cannot look identical to the first either.
+
+Build it with the screen. The reducer already carries what it needs
+(`attemptCount`, `oldestUnsyncedClientCreatedAt`); nothing in the state machine has
+to change.
+
+## What "the blocked period" means, precisely
+
+Named because "blocked" without an object is how a status becomes unfalsifiable.
+
+**Blocked on:** a physical Android device, an Expo account (`eas login`), push
+credentials for the repository, an elevated shell for `LongPathsEnabled`, the brand
+guideline, and the Play account / package ID decision.
+
+**Not blocked on:** the AI layer. Contract I3 is late and is the highest-consequence
+open item, but the sprint order was deliberately arranged so FE-W2 through FE-W5 do
+not depend on it. It is not what is stopping work today.
+
+The distinction matters because the first list is procurement and credentials — an
+afternoon and a purchase — while the second is a measurement nobody has taken.
+---
+
 ## Where the earlier ones live
 
 | Decision | Where |

@@ -2866,3 +2866,26 @@ The substring scan is kept as a secondary check — it catches a storage-shaped 
 helper that an import list would not — and is labelled as the weaker of the two.
 
 Mutation-tested: a value import added under an alias fails 1 of 40.
+
+#### Terminology: checks are not gates
+
+Two different things were being called the same word, three lines apart, and that is
+how a reader walks away with the wrong picture.
+
+- **Checks** (or guards) are the script-level ones: `build`, `typecheck`, `lint`,
+  `format:check`, `test`. "9/9 checks" means the turbo tasks passed.
+- **Gates** are **FE-G1 … FE-G5** and their backend equivalents. They are
+  demonstrations on real hardware or against real data, and no number of passing
+  checks substitutes for one.
+
+**As of FE-W2, every check passes and no frontend gate has passed.** FE-G1 (a
+signed-in APK on a physical Android device) and FE-G2 (a full simulated day in
+airplane mode, syncing clean) are both open. FE-W1 and FE-W2 are therefore both open
+sprints, and 472 passing tests do not change that.
+
+#### Where the working notes live
+
+`.ai-collab/decisions.md` holds decisions not yet written up here, plus the
+FE-W8-blocking items and the standing rule for the current blocked period. **This
+file is the durable record; if the two disagree, this one is right.** The pointer is
+here so the two do not quietly become parallel sources of truth.
