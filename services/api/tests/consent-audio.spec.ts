@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
-import { DB_URL, inRolledBackTransaction, requireDatabase, withClient } from './db.js';
+import {
+  DB_URL,
+  OVERDUE_NOT_STALLED_MINUTES,
+  inRolledBackTransaction,
+  requireDatabase,
+  withClient,
+} from './db.js';
 import { API_URL, SERVICE_ROLE_KEY, asUser, mintAccessToken } from './auth.js';
 import { seedFixtures } from './fixtures.js';
 import type { FixtureUser, FixtureWorld } from './fixtures.js';
@@ -662,19 +668,15 @@ describe.skipIf(!reachable)('the 90-day purge', () => {
          values ($1, $2, $3, $4, $5, 28, 600, 32, now(), 'uploaded')`,
         [recordingId, visitId, world.users.puneMr.id, consentId, storageKey],
       );
-      // Backdate the SERVER receipt, which is what the clock is counted from.
-      // purge_after only needs to be in the past to be claim-eligible. BE-W8
-      // tightened audio_purge_is_stalled()'s window from 48h to 3h (Part 3.1); a
-      // 1-day-overdue committed row sat safely under the old bar but trips the new
-      // one for the whole shared test database while this row exists uncommitted-
-      // to-destroyed, which is a genuine cross-file hazard on a suite that shares
-      // one database across parallel workers. 5 minutes overdue is still overdue.
+      // Backdate the SERVER receipt, which is what the clock is counted from. See
+      // OVERDUE_NOT_STALLED_MINUTES in db.ts for why purge_after uses that constant
+      // rather than a large, more "realistic"-looking interval.
       await client.query(
         `update public.recordings
             set received_at = now() - interval '91 days',
-                purge_after = now() - interval '5 minutes'
+                purge_after = now() - make_interval(mins => $2)
           where id = $1`,
-        [recordingId],
+        [recordingId, OVERDUE_NOT_STALLED_MINUTES],
       );
       return { recordingId, storageKey };
     });
@@ -856,12 +858,12 @@ describe.skipIf(!reachable)('the 90-day purge', () => {
          values ($1, $2, 'en-IN', 'fixture', 'v0', $3)`,
         [visitId, id, JSON.stringify(SYNTHETIC_TRANSCRIPT)],
       );
-      // See the comment on the same pattern in expiredRecording() above.
+      // See OVERDUE_NOT_STALLED_MINUTES in db.ts.
       await client.query(
         `update public.recordings set received_at = now() - interval '91 days',
-                                      purge_after = now() - interval '5 minutes'
+                                      purge_after = now() - make_interval(mins => $2)
           where id = $1`,
-        [id],
+        [id, OVERDUE_NOT_STALLED_MINUTES],
       );
       return id;
     });

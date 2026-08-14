@@ -16,6 +16,26 @@ import { Client } from 'pg';
 export const DB_URL =
   process.env['SUPABASE_DB_URL'] ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
 
+/**
+ * Minutes past due that guarantees a COMMITTED `recordings`/`voice_notes` row is
+ * claim-eligible (`purge_after` in the past) WITHOUT crossing
+ * `audio_purge_is_stalled()`'s window and tripping the *global* stall check for
+ * every other test running concurrently on this shared database.
+ *
+ * BE-W8 Part 3.2, promoted from an incident rather than a guess: a committed
+ * fixture backdated by 1 day sat safely under the old 48h stall threshold and
+ * silently became a cross-file hazard the moment Part 3.1 tightened it to 3h.
+ * Reach for this constant whenever a COMMITTED fixture needs to be "overdue but
+ * not stalled" — it will always be small next to any reasonable
+ * purge_max_silence_hours value, current or future.
+ *
+ * NOT for a test that deliberately SIMULATES a stalled worker (those want to
+ * cross the threshold on purpose) — but those run inside
+ * `inRolledBackTransaction`/`asUserTx`, which never commits, so they cannot leak
+ * into another file's global check regardless of how large the backdate is.
+ */
+export const OVERDUE_NOT_STALLED_MINUTES = 5;
+
 export const databaseIsReachable = async (): Promise<boolean> => {
   const client = new Client({ connectionString: DB_URL, connectionTimeoutMillis: 3000 });
   try {

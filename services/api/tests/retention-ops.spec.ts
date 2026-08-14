@@ -200,7 +200,9 @@ describe.skipIf(!reachable)('the watchdog against the real database', () => {
          values ($1, $2, $3, $4, $5, 28, 240, 32, now(), now())`,
         [recordingId, visitId, world.users.puneMr.id, consentId, opaqueKey()],
       );
-      // Ten days past its purge date. Nothing destroyed it, so nothing is running.
+      // Ten days past its purge date. Nothing destroyed it, so nothing is running --
+      // DELIBERATELY simulating a stalled worker, safe only because asUserTx never
+      // commits. See OVERDUE_NOT_STALLED_MINUTES in db.ts for the COMMITTED case.
       await client.query(
         `update public.recordings set purge_after = now() - interval '10 days' where id = $1`,
         [recordingId],

@@ -873,7 +873,11 @@ describe.skipIf(!reachable)('bounded by more than its own size', () => {
             `recordings/${randomUUID()}/${randomUUID()}.opus`,
           ],
         );
-        // Ten days past its purge date, well beyond the 48-hour silence window.
+        // Ten days past its purge date, well beyond the silence window -- this
+        // DELIBERATELY simulates a stalled worker, so it must exceed the threshold.
+        // Safe only because this whole block runs inside asUserTx
+        // (inRolledBackTransaction) and never commits; see OVERDUE_NOT_STALLED_MINUTES
+        // in db.ts for the constant a COMMITTED fixture must use instead.
         await client.query(
           `update public.recordings set purge_after = now() - interval '10 days' where id = $1`,
           [orphan],
