@@ -469,3 +469,52 @@ select count(*) from information_schema.tables
 Zero and zero means `supabase db push` has never run — the credential is fine and the
 database is empty. A worker pointed at that fails on a missing function, which looks
 like a code defect rather than an unfinished deployment.
+
+## Node's `URL` and IPv6 hosts
+
+### `new URL(...).hostname` keeps the brackets on an IPv6 literal
+
+`new URL('postgresql://x@[::1]:5432/db').hostname` returns `"[::1]"`, not `"::1"`.
+A guard comparing against the bare address (`::1`, `127.0.0.1`, `localhost`) has to
+strip `^\[|\]$` first, or it refuses a genuinely-local IPv6 URL as if it were remote.
+Caught by a test asserting the guard *allows* `[::1]`, not just that it refuses a
+remote host — the refusal path would have passed either way.
+
+## Cron cadence and a threshold that is itself data
+
+### A negative claim ("has never fired") rots the moment it becomes false
+
+`handover.md` asserted the retention and watchdog crons had never fired, twice, in
+two separate sessions. Both were already false when re-checked with
+`gh run list --workflow="<name>" --json event,createdAt,conclusion` — the schedules
+had been firing daily and failing (missing secrets) for two days by the time anyone
+looked. Any claim of the shape "X has never happened" or "Y is absent" needs the
+command that re-checks it written next to the claim, not just the claim, or the next
+reader inherits a timestamp as if it were a fact.
+
+### A test threshold that "just happens" to sit under a stall check is a landmine
+
+`app_thresholds` values (like `purge_max_silence_hours`) are read by both production
+code and by test fixtures that deliberately backdate a `purge_after` column to
+simulate "overdue." A **committed** fixture backdated by an amount that's safely
+under today's threshold (e.g. 1 day, under a 48-hour stall window) is silently a
+future cross-file hazard: tighten the threshold later (BE-W8 moved it to 3 hours)
+and that same fixture now trips a *global* stall check for every test running
+concurrently on the shared local database — a flake that reads as unrelated failures
+in other files, with no obvious connection to the commit that actually caused it.
+Rolled-back fixtures (`inRolledBackTransaction`/`asUserTx`) are immune, because
+nothing they write is ever visible to another connection. A **committed** fixture
+that needs "overdue" should use a small, named constant
+(`OVERDUE_NOT_STALLED_MINUTES` in `services/api/tests/db.ts`) rather than a
+raw interval that happens to clear whatever the threshold is today.
+
+## Arithmetic beats intuition for a scheduled worker's batch size
+
+A worker that drains its backlog quickly in isolation (5,000 objects in 50 runs of
+~591ms, well within a single CI job) can still be under-provisioned by an order of
+magnitude at the *stated* target scale, because the constraint was never throughput
+— it was cadence. Batch-size-per-run × runs-per-day has to be checked against
+arrival-rate-at-pilot-scale explicitly; "the database handles this batch fast" says
+nothing about whether the schedule around it can keep up. Found by doing the
+arithmetic against the plan's own numbers (100 MRs × 8 visits/day), not by load
+testing — the deficit (~16x) was visible before running anything.
