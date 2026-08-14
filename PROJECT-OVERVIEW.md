@@ -2725,3 +2725,104 @@ cannot be changed at all.
 `critical` is never for a declined consent, and `ColorTokens` repeats it — both are
 comments. The consent screen is FE-W4 and the real control belongs with it, but a
 comment is not a control and should not be mistaken for one in the meantime.
+
+---
+
+### FE-W2 (part) — the offline queue state machine (14 August 2026)
+
+**Advanced, not closed. FE-G2 is UNMET** — the gate is a full simulated day in
+airplane mode on a real device, syncing clean afterwards, and there is no device and
+no development build. Nothing below is offered as meeting it.
+
+This exists because FE-W2 is the one sprint that could proceed while fourteen items
+wait on a human. It is also, by the sprint order's own design, work that survives
+either answer to contract I3 — the AI-dependent screens are FE-W9 onward precisely so
+that a cut AI layer deletes nothing built before it.
+
+#### What was built, and the boundary that made it safe to build early
+
+Writing a queue before the persistence layer exists risks encoding assumptions that
+PowerSync then contradicts — discovered in FE-W3 with the state machine wired into
+four screens. So the split is:
+
+| Built now                                                                | Deliberately not built          |
+| ------------------------------------------------------------------------ | ------------------------------- |
+| `sync/reducer.ts` — pure `(state, event) => state`                       | The PowerSync local store       |
+| `sync/events.ts` — every transition as data                              | Anything that renders the queue |
+| `sync/explanation.ts` — rejection code → what the MR is shown and can do | Any native-module code          |
+| `sync/store.ts` — the **interface** PowerSync will implement             | Its implementation              |
+
+The reducer decides every transition from the contract in
+`packages/core/src/field/sync.ts` alone. A test asserts it — the reducer's source is
+checked for any mention of storage, so if a transition ever needs to know where rows
+live, that test fails rather than the boundary quietly eroding.
+
+`store.ts` is an interface with no implementor, stated as such in the file. Writing
+the adapter now would mean shipping code that has never been executed, which this
+project has already caught twice — `close_stale_upload_sessions()` and a purge worker
+nothing ran. Catching the third before it happens rather than after.
+
+#### The three rules that are easy to get backwards
+
+1. **`duplicate` is success.** The item id is the server's idempotency key, so
+   retrying something already accepted returns `duplicate`. Rendering that as failure
+   puts a red row in front of an MR whose work landed perfectly. Accepted and
+   duplicate are deliberately not distinguished on screen.
+2. **A failed attempt decides nothing.** No verdict means the server never saw it.
+   The item returns to `queued` — never to `failed`, never dropped. A test drives
+   twenty consecutive failed pushes across a simulated offline day and asserts all
+   three items are still queued and countable.
+3. **A rejection is not a toast.** It persists in the state until resolved or
+   reinstated. A rejection the MR did not happen to be looking at is a lost day.
+
+Two further properties worth naming: the reducer refuses a rejection that arrives
+with no `rejectionCode`, rather than showing an unexplained failure; and `syncedAt`
+is stamped from the server's `receivedAt`, never the device clock. The one derived
+field that _is_ a device timestamp is named `oldestUnsyncedClientCreatedAt` so its
+provenance cannot be mistaken at the call site.
+
+#### The MR-readable sentence is Backend's, verbatim
+
+`explanation.ts` passes the server's sentence through unchanged and **never
+fabricates prose for a refusal**. When the server sends none, the fallback says the
+app does not have the reason — which is true — rather than guessing at one. A test
+asserts the fallback names no cause: not shift, geofence, territory, hours or
+location. `outside_shift_window` is somebody else's misconfiguration and
+`outside_geofence` is about where the MR stood; showing the wrong one to someone who
+genuinely did the work is how trust in the app dies.
+
+The one judgement that does belong to the client is what the MR can do next — retry
+or escalate — and a test iterates every code in `SyncRejectionCodeSchema`, so a new
+code added by Backend fails here rather than rendering an undefined action.
+
+#### Dead letters
+
+Reinstatement returns an item to the queue and records who did it and why. The
+reducer **throws on an empty or whitespace reason**: attribution plus a mandatory
+reason is the entire control, since there is deliberately no fault taxonomy behind it
+— at the point of rejection a wrong shift window and an MR error are
+indistinguishable. The original rejection is kept after reversal; erasing it would
+erase why somebody had to intervene.
+
+#### Verification
+
+36 tests, `pnpm --filter @elmiron/field test`. **Mutation-tested**, per the
+convention:
+
+| Mutation                                 | Result   |
+| ---------------------------------------- | -------- |
+| A failed attempt marks the item `failed` | 2 failed |
+| Enqueue de-duplication removed           | 1 failed |
+| `syncedAt` taken from the device clock   | 1 failed |
+| Reinstatement reason no longer required  | 2 failed |
+| The fallback invents a cause             | 1 failed |
+
+Restored: 36/36.
+
+#### Known gap, flagged rather than left
+
+**Nothing calls the reducer yet.** It is wired to a screen in FE-W3, and until then
+its only caller is its test suite. That is the shape the project has twice been
+burned by, so it is recorded here rather than discovered later. The distinction from
+those two cases: this code _is_ executed, on every test run, and its behaviour is
+asserted — what is missing is a production caller, not verification.

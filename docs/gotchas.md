@@ -727,3 +727,35 @@ grep -nE '=(https?://[a-z0-9]+\.supabase\.co|postgres(ql)?://)' .env
 Anything matching `<ref>.supabase.co` or a `postgres://` authority is remote no
 matter what the key is called. A name-based filter cannot find it, because the name
 was chosen before anyone knew which environment the value would hold.
+
+### Filenames arrive stripped of hyphens from the claude.ai download
+
+Three files landed as `frontendplanv2.md`, `frontendpromptw1.md` and
+`blockedonyou.md`, each of which should have been hyphenated. The cause is the
+download step, not git, OneDrive or Windows.
+
+The alternate data stream on the file shows it:
+
+```powershell
+Get-Content docs\blocked-on-you.md -Stream Zone.Identifier
+```
+```
+[ZoneTransfer]
+ZoneId=3
+ReferrerUrl=https://claude.ai/cowork/...
+HostUrl=https://claude.ai/api/organizations/<org>/files/<uuid>/contents
+```
+
+The download URL carries a UUID and **no filename**, so the name is generated
+client-side from the document title — and the generator strips every non-alphanumeric
+character rather than replacing it with a hyphen. "Blocked on you" becomes
+`blockedonyou`. The `.md` extension survives because only the basename is sanitised.
+
+**Consequence:** every document arriving this way needs renaming before it is
+committed, and the repo convention (`backend-prompt-w6.md`) makes the un-hyphenated
+form obvious — which is the only reason all three were caught. Rename on arrival; do
+not assume the name you gave the document is the name on disk.
+
+The same stream is worth checking whenever a file's name or encoding looks wrong: it
+records where the file actually came from, which no amount of looking at the contents
+will tell you.
