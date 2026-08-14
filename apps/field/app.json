@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Elmiron MR",
+    "slug": "elmiron-field",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "elmironmr",
+    "platforms": ["android"],
+    "android": {
+      "package": "com.praversetech.elmironmr",
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": ["expo-router", "expo-status-bar"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
