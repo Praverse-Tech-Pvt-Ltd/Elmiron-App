@@ -1952,6 +1952,206 @@ against ten thousand objects, and the reconciliation is the one that would hurt.
 
 ---
 
+### BE-W8 — Operational readiness (14 August 2026)
+
+Not pipeline orchestration — nothing exists yet to orchestrate (no speech vendor, no
+redaction engine, `TranscriptV0` is a placeholder). This week is everything that has
+to be true before anyone records anything: the deployment made real, the assumptions
+measured instead of trusted, and the dates in this file made to mean one thing.
+
+#### 1. The control that was a habit, made a guard
+
+**`verify:rollbacks` drops the entire public schema and took its target from
+`SUPABASE_DB_URL` with no check.** `.ai-collab/handover.md` documented the hazard
+three times, in escalating language, and every mitigation offered was a rule for a
+human to follow — "never export the remote URL in a shell where this runs." A rule a
+person has to remember is not a guard.
+
+`assertLocalhostOnly()` now refuses to open a connection unless the host resolves to
+`127.0.0.1`, `::1` or `localhost` — no `--force`, no environment escape hatch. Caught
+one bug building it: `new URL(...).hostname` keeps the brackets on an IPv6 literal
+(`[::1]`), so the naive comparison would have refused a genuinely-local IPv6 URL as
+if it were remote. A test asserts the guard **allows** `[::1]`, not only that it
+refuses a remote host — the allow-path is what would have shipped broken.
+
+**`reconcile-after-restore.mjs --apply`** got the same treatment: it now refuses to
+run without `--db-url` given explicitly on the command line, rather than inheriting a
+possibly-stale `SUPABASE_DB_URL` from the environment. Dry runs are unaffected — they
+destroy nothing, so the environment fallback is harmless there.
+
+Both proven with a test asserting the refusal fires against a fake remote-looking
+URL, and separately by running the real `verify:rollbacks` against the local stack —
+all 17 (now 18) migrations reversed to an empty public schema, then the database was
+reset back.
+
+#### 2. The deployment made real
+
+**The three GitHub secrets are set** (`SUPABASE_DB_URL` from
+`SUPABASE_POOLER_SESSION_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` from
+`SUPABASE_SECRET_KEY`), piped directly from `.env` into `gh secret set` via stdin —
+never written to a shell argument, history, or a session transcript.
+
+**The schedule was checked, not predicted — and the check itself found a stale
+claim.** `handover.md` asserted twice, in two separate sessions, that no scheduled
+run had ever fired. Both assertions were already false by the time this was checked:
+`gh run list --workflow="Audio retention" --json event,createdAt,conclusion` showed
+the cron had been firing daily and failing (missing secrets) for two days. This is
+now the standing rule for `.ai-collab/`: **any claim of the form "X has never
+happened" carries the command that re-checks it, next to the claim** — see
+`docs/gotchas.md`.
+
+`Audio retention` was then dispatched by hand and went **green** — the first
+successful run since the secrets landed. The subsequent scheduled watchdog run
+(nominally `03:00` UTC, actually fired `04:46` UTC — GitHub Actions cron jitter, not
+a bug) also went green, now that a successful purge run existed for it to find.
+
+**Read this run correctly: it proves the wiring, not the retention path.** Credentials
+resolve, the pooler is reachable, `claim_expired_audio` exists on the remote. It
+proves nothing about destruction, because the database held no recordings and nothing
+was past its purge date. That is not yet true end-to-end.
+
+**Outstanding, genuinely: tonight's `19:30` UTC scheduled retention run and
+tomorrow's watchdog run have not fired as of this section being written** — the
+schedule was resized to hourly partway through the day (§4 below), so the next
+observation that matters is whether the **hourly** cadence goes green on its own
+schedule, not the old daily slot. Check `gh run list --workflow="Audio retention"
+--json event,createdAt,conclusion` and update this line.
+
+#### 3. Seeding — infrastructure only, not data
+
+**No organisation name, territory, doctor, or consent-text copy was fabricated into
+this repo**, and none was seeded onto production. `handover.md` is explicit: creating
+org/territory/doctor rows on production just to test pollutes an append-only audit
+log permanently. `services/api/scripts/seed-reference-data.mjs` is the tool —
+idempotent by construction (deterministic per-row ids from a stable key in a
+separately-supplied data file, `ON CONFLICT (id) DO NOTHING`), dry-run by default,
+`--apply` requires `--db-url` explicitly — and it was tested only against the local
+stack with an obviously-synthetic fixture (`OBSOLETE_TEST_FIXTURE`), never against
+production, because there is no real data yet to run it with.
+
+**Territory shift windows are untouched by the tool on purpose.** Capture must keep
+refusing until the client's real per-territory hours arrive.
+
+**The `audit_log` decision, stated plainly:** `territories`, `doctors` and
+`consent_text_versions` each carry an unconditional `AFTER INSERT` trigger that fires
+for every writer including `service_role` — `BYPASSRLS` skips RLS policies, not
+triggers. Seeding through this script therefore writes real, permanent `audit_log`
+rows, with `actor_id`/`actor_role` both null (no JWT behind a direct connection).
+This is not suppressed, and cannot be without disabling the trigger — exactly the
+kind of guard-that-can-be-switched-off `constraints.md` rules out. Read plainly: the
+audit trail will correctly show that a system process inserted these rows.
+`organisations` carries no audit trigger, so organisation inserts write nothing.
+
+#### 4. Volume — measured, and the retention schedule was wrong
+
+**Answers BE-W7's open question 5.** Two numbers were measured locally, not assumed:
+
+- **Purge, 5,000-object backlog:** drained in 50 runs of ~591ms each at the existing
+  batch of 100 (storage_key null, isolating DB-side claim/confirm from the network
+  call). **The database was never the constraint.**
+- **Storage DELETE round-trip:** avg 8ms/object (existing), 5ms/object (already-gone)
+  — a local-loopback floor, not a production number, but it confirmed the same thing
+  from the other side: the per-object cost is small.
+- **`sync_push`:** 29ms for a realistic 48-item batch (8 visits/day × ~6 items),
+  179ms for 500 items. Neither holds the transaction long enough to be a concern at
+  these volumes; the real question — 100 MRs syncing concurrently against a session
+  pooler — is a connection-count question, not a transaction-duration one, and is not
+  this week's work.
+
+**The finding that mattered: the daily cron was under-provisioned by roughly 16x, on
+day 91, by arithmetic rather than by accident.** Against the plan's own stated pilot
+size — 100 MRs × 8 visits/day, each visit producing a doctor recording and an MR
+voice note — audio arrives at ~1,600 objects/day. At day 90 those start expiring at
+the rate they were created. A daily cron at batch 100 drains 100/day. The database
+proved it could do 5,000 rows in 30 seconds; the schedule only let it try once every
+24 hours.
+
+**`begin_upload` refusing new audio when the purge stalls is the right design** — an
+availability failure beats a compliance failure — but the failure mode this exposes
+is every MR in the fleet losing the ability to record, simultaneously, three months
+into the pilot, discovered in production rather than provisioned for.
+
+**Resized, not just documented:**
+
+|                               | Before               | After                                             |
+| ----------------------------- | -------------------- | ------------------------------------------------- |
+| `retention.yml` cron          | daily, `30 19 * * *` | hourly, `0 * * * *`                               |
+| Effective drain rate          | 100/day              | 2,400/day (1.5x headroom over ~1,600/day arrival) |
+| `retention-watchdog.yml` cron | daily, `0 3 * * *`   | hourly, `15 * * * *`                              |
+| `purge_max_silence_hours`     | 48                   | 3                                                 |
+
+The threshold change is migration `20260817000100_retention_schedule_resize.sql` — a
+new `app_thresholds` row, not an edit; the table is append-only. Its rollback cannot
+`DELETE` the row (`reject_mutation` blocks that for every role); the row is cleaned
+up only when the earlier thresholds migration's rollback drops the table entirely,
+which is documented in the rollback file rather than silently assumed. **Applied to
+production** and verified: `select public.threshold('purge_max_silence_hours')`
+resolves `3`.
+
+**Hourly rather than a bigger daily batch, deliberately:** a failed run costs an hour
+of drain instead of a day, and the blast radius per run stays small — more forgiving
+of the kind of environmental failure this project has already hit twice (the secrets
+gap, the IPv6 direct-connection trap).
+
+**Made the pattern this exposed structural, not remembered.** Tightening the
+threshold turned two already-committed test fixtures
+(`consent-audio.spec.ts`, backdated 1 day, safe under the old 48h bar) into a
+cross-file race: any test running concurrently on the shared local database would
+observe the tightened global stall check trip. Fixed with a named constant,
+`OVERDUE_NOT_STALLED_MINUTES` in `services/api/tests/db.ts`, with pointers left at
+the two legitimate large-backdate sites (which simulate a stalled worker
+deliberately, safe only because they run inside a rolled-back transaction) so the
+convention is discoverable from either direction. A gotchas entry is not a fix for
+something that recurs by construction; this is.
+
+#### 5. Backups — decided
+
+**Do not buy PITR.** Daily backups (Pro plan default) plus `docs/restore-runbook.md`
+is the right posture. A restore on this project is a documented compliance event
+that can un-withdraw a consent — that is the entire reason the runbook and
+`reconcile-after-restore.mjs` exist. Paying for finer-grained restore points buys
+more of the exact thing the design already defends against. Recorded in
+`.ai-collab/decisions.md` with the reasoning; the ~$100/month figure that prompted
+the question is dated 11 August and explicitly flagged there as unverified — the
+decision does not depend on the exact number.
+
+#### 6. The calendar
+
+Every date in this document, and in `.ai-collab/`, is now the real date. Sprint
+labels (`BE-W8`) stay as labels. The project-calendar offset that `.ai-collab/`
+previously carried is retired going forward — see the correction note in
+`.ai-collab/handover.md` rather than silently rewriting the earlier entries.
+
+#### Calls this prompt got wrong, or that I'd push back on
+
+- **§1.2 as originally scoped** ("decide whether `--apply` should also require the
+  target on the command line") was under-specified into "explicit, not localhost-only"
+  by the reviewer mid-week; the distinction mattered because
+  `reconcile-after-restore.mjs` is meant to run against production, so a localhost
+  guard would have broken its actual job.
+- **The retention-watchdog cadence and threshold were not asked for explicitly** —
+  only `retention.yml`'s cron and "the watchdog thresholds if they assume a daily
+  cadence" were named. Moved both anyway: a watchdog checking daily against an hourly
+  worker would miss a stall for up to 23 hours even after the 3-hour threshold fires,
+  which defeats the point of tightening the threshold at all.
+
+#### Open questions for the reviewer
+
+**1. Tonight's `19:30` UTC retention run and the following hourly runs need to be
+observed**, not predicted — see §2 above. This is the one item in this section that
+is a prediction rather than a measurement.
+
+**2. `sync_push` at real concurrency (100 MRs at 6pm against a session pooler) is
+unmeasured.** The single-transaction timing measured this week (179ms at 500 items)
+says nothing about connection-pool exhaustion under concurrent load, which is the
+actual risk at pilot scale.
+
+**3. PV/privacy sign-off, contract I3, the DPA question and the org-default shift
+window deadline are all unchanged from BE-W7** — none of this week's work touched
+them, and none of them got closer to resolved.
+
+---
+
 ## How to run
 
 Prerequisites: Node 24, pnpm 11, Docker running. Setup steps are in
