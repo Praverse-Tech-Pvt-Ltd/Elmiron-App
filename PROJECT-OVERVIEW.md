@@ -2015,11 +2015,19 @@ run is ~13 hours out" — stale reasoning written _after_ the cron had already m
 hourly earlier in the same session, still thinking in terms of the schedule that no
 longer existed. Checked directly (`gh run list --workflow=retention.yml
 --json event,createdAt,conclusion`): the hourly cron never actually fired before the
-workflow was disabled (see §7 below) — the last real run was still the manual
-dispatch. The correct statement was "the next run is within the hour," not thirteen
-hours, and not "already fired several times" either. Both retention workflows are
-**currently disabled** (`gh workflow disable`) at the reviewer's request, pending the
-addendum in §7. Re-enable and observe before treating the hourly cadence as proven.
+workflow was disabled (see §7). The correct statement was "the next run is within the
+hour," not thirteen hours, and not "already fired several times" either.
+
+**Proven, not predicted, after §7's fix shipped and both workflows were re-enabled:**
+`Audio retention` fired on its own hourly cron — `event: schedule`, not
+`workflow_dispatch` — at **08:55:45 UTC, 14 August**
+([run 31785943559](https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App/actions/runs/31785943559)).
+Green in 22s: claimed 0, destroyed 0, failed 0 (empty database — expected).
+`check-purge-health` ran in the same job immediately after and reported
+`"stalled": false` from the **new backlog-based function**, so this is the whole
+chain proven end to end, not just the migration verified in isolation. The watchdog's
+first post-re-enable fire is the one piece still outstanding as this line was
+written.
 
 #### 3. Seeding — infrastructure only, not data
 
@@ -2141,17 +2149,19 @@ previously carried is retired going forward — see the correction note in
 
 #### Open questions for the reviewer
 
-**1. Both retention workflows are disabled and need to be re-enabled and observed
-before the hourly cadence is proven.** See §7.
-
-**2. `sync_push` at real concurrency (100 MRs at 6pm against a session pooler) is
+**1. `sync_push` at real concurrency (100 MRs at 6pm against a session pooler) is
 unmeasured.** The single-transaction timing measured this week (179ms at 500 items)
 says nothing about connection-pool exhaustion under concurrent load, which is the
 actual risk at pilot scale.
 
-**3. PV/privacy sign-off, contract I3, the DPA question and the org-default shift
+**2. PV/privacy sign-off, contract I3, the DPA question and the org-default shift
 window deadline are all unchanged from BE-W7** — none of this week's work touched
 them, and none of them got closer to resolved.
+
+**3. Two items accepted and deliberately deferred, not forgotten** — the
+`.ai-collab/` handover/handoff split, and a runbook step or workflow for production
+migrations (two hand-run `db push` calls this week, no audit trail yet). Both are
+cheap and real; neither is worth another backend week ahead of FE-W1. See §7.
 
 ---
 
@@ -2202,12 +2212,14 @@ function output directly, rather than trusting the first read. The migration and
 rollback were rewritten to remove the incorrect section entirely before anything was
 pushed.
 
-**Not deployed to production.** Committed and pushed to `main`; CI is green. Both
-`retention.yml` and `retention-watchdog.yml` remain disabled per the reviewer's
-instruction not to run anything further until told. The migration
-(`20260817000200_purge_backlog_stall_detection.sql`) has **not** been applied to
-production — unlike the earlier same-day threshold migration, this one is held for
-explicit instruction before touching the remote database again.
+**Now deployed and live, in three explicit steps rather than by default.** Held back
+initially per instruction not to run anything until told; once the reviewer confirmed
+the fix, `20260817000200_purge_backlog_stall_detection.sql` was pushed to production
+and verified directly against the remote — not the CLI's success line — before
+either workflow was re-enabled. Full timeline, including the ~35-minute window both
+workflows were disabled and the reminder mechanism that was silent during it, is in
+`.ai-collab/decisions.md` → "Retention workflows: disabled, then deployed and
+re-enabled."
 
 **`.ai-collab/` split — not done this addendum.** The reviewer's proposal (track the
 durable six files as-is; strip point-in-time claims out of `handover.md` and

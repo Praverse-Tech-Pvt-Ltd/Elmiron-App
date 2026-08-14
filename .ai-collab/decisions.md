@@ -239,9 +239,16 @@ one-line form for scanning.
   `purge_backlog_multiplier=3`, `purge_max_silence_hours=12`, and
   `audio_purge_health()` returns the correct shape with `stalled: false`.
 - **Re-enabled:** both workflows re-enabled via `gh workflow enable` immediately
-  after the deploy was verified, 07:28 UTC, 14 August. First real scheduled cycle
-  (not a manual dispatch) observed at — *fill in from the next hourly/watchdog run;
-  see `PROJECT-OVERVIEW.md` → BE-W8 §7 for the timestamp once it lands.*
+  after the deploy was verified, 07:28 UTC, 14 August.
+- **First real scheduled cycle, proven, not dispatched:** `Audio retention` fired on
+  its own cron at **08:55:45 UTC**, `event: schedule` (not `workflow_dispatch`),
+  run [31785943559](https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App/actions/runs/31785943559).
+  Completed green in 22s: claimed 0, destroyed 0, failed 0 (empty database, as
+  expected). `check-purge-health` ran immediately after in the same job and reported
+  `"stalled": false` from the NEW backlog-based function — the whole chain proven
+  end to end, not just the migration in isolation. `Audio retention watchdog`'s
+  first post-re-enable fire is the remaining piece; see
+  `PROJECT-OVERVIEW.md` → BE-W8 §7 for its result once it lands.
 
 ---
 
