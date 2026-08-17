@@ -3142,7 +3142,10 @@ deleted afterwards; it is gitignored and no native project is committed.
 of the rename, and with `android/` deleted it would not work. `git checkout` on that
 file, verified.
 
-#### Files FE-R1 missed
+#### Files FE-R1a's four-file edit missed
+
+_(Header corrected before this section settled: FE-R1 wrote these files correctly to the
+then-current scheme. It was FE-R1a's narrower edit that did not reach them.)_
 
 `packages/core/src/shared/config.test.ts` and `config.ts` carried the scheme as a
 test fixture and a doc example. FE-R1's sweep had rewritten them from `elmironmr` to

@@ -851,3 +851,63 @@ whether the app calls one or not.
 
 Exclude build output when asking "does our code use X". The answer from a bundle is
 always yes.
+
+### Anything that lands in AndroidManifest.xml is verified at prebuild, never at config
+
+**The general rule. The deep-link scheme in FE-R1a was only the first instance.**
+
+`expo config --type public` and `expo config --type introspect` both resolve the
+*config*. They do not generate the *manifest*. A value can resolve perfectly at
+config level and never reach `AndroidManifest.xml`, and both commands will report
+success while it happens.
+
+Measured in FE-R1a: with a dotted URI scheme set, `--type introspect` returned
+`scheme: com.praversetech.fieldforce` and `intentFilters: []` — empty. Only
+`npx expo prebuild --platform android` produced the actual
+`<data android:scheme="com.praversetech.fieldforce"/>` that proves it lands.
+
+**This sits directly in front of FE-W3 and FE-W4.** The same blind spot applies to
+every value a config plugin writes into the native manifest:
+
+| Sprint | Value | Written by |
+| --- | --- | --- |
+| FE-W3 | `ACCESS_BACKGROUND_LOCATION`, `FOREGROUND_SERVICE_LOCATION` | Transistorsoft background geolocation |
+| FE-W4 | background audio mode, `FOREGROUND_SERVICE_MICROPHONE` | `expo-audio` |
+
+If any of those resolve at config level and do not reach the manifest, the result is
+a **runtime failure on a real device that presents as a native-module bug** — you
+will spend the day reading Transistorsoft issues. The check is one command:
+
+```bash
+npx expo prebuild --platform android --no-install
+```
+
+then grep the generated `android/app/src/main/AndroidManifest.xml` for the permission
+or intent filter you expect. Delete `android/` afterwards if you do not keep native
+directories — **and check `git status`**, because prebuild also rewrites
+`package.json` scripts (see the entry above).
+
+### Repo search convention — exclude build artifacts
+
+Grepping this repo for "does our code use X" gives wrong answers unless build output
+is excluded. `apps/field/dist/*.hbc` is a compiled Hermes bundle containing
+`supabase-js`'s entire SDK, so a search for `signInWithOtp` matches there whether or
+not the app has ever called it. That false positive cost time once in FE-R1a.
+
+`apps/field/dist/` is **gitignored, not tracked** (`.gitignore:6` — `dist/`), so
+`git ls-files` based searches are already clean. Filesystem searches are not.
+
+Exclude, when asking what the source does:
+
+```
+dist/  build/  .expo/  android/  ios/  node_modules/  *.hbc  *.map  coverage/
+```
+
+The reliable form is to search tracked files only:
+
+```bash
+git ls-files | grep -vE '^docs/|\.(md|html)$' | xargs grep -n 'thingYouAreLookingFor'
+```
+
+Documentation is excluded separately there for a different reason — see the
+identifier-versus-prose entry above.
