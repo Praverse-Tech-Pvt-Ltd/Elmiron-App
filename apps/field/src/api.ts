@@ -1,5 +1,5 @@
-import { createApiClient } from '@elmiron/core';
-import type { ApiClient } from '@elmiron/core';
+import { createApiClient } from '@fieldforce/core';
+import type { ApiClient } from '@fieldforce/core';
 import { apiBaseUrl } from './config';
 import { supabase } from './supabase';
 

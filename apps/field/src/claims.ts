@@ -1,5 +1,5 @@
-import { RoleSchema } from '@elmiron/core';
-import type { Role } from '@elmiron/core';
+import { RoleSchema } from '@fieldforce/core';
+import type { Role } from '@fieldforce/core';
 
 /**
  * The role is **read** from the token, never inferred.
@@ -19,7 +19,7 @@ import type { Role } from '@elmiron/core';
  *   collapses to an empty scope rather than to access.
  *
  * Validation is hand-rolled rather than done with Zod: `zod` is a dependency of
- * `@elmiron/core`, not of this app, and adding it here to check three fields would
+ * `@fieldforce/core`, not of this app, and adding it here to check three fields would
  * be a dependency added for convenience.
  */
 export interface AppClaims {

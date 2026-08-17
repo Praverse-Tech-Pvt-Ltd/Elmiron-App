@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, Text as RnText } from 'react-native';
-import { tokens } from '@elmiron/ui-tokens';
+import { tokens } from '@fieldforce/ui-tokens';
 
 export interface TextProps {
   readonly children: ReactNode;

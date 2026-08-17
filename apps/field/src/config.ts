@@ -1,5 +1,5 @@
-import { loadAppConfig } from '@elmiron/core';
-import type { AppConfig } from '@elmiron/core';
+import { loadAppConfig } from '@fieldforce/core';
+import type { AppConfig } from '@fieldforce/core';
 
 /**
  * The first caller of `loadAppConfig` in this repository.

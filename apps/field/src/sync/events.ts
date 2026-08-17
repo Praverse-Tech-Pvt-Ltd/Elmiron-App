@@ -4,7 +4,7 @@ import type {
   SyncQueueItem,
   SyncRejectionCode,
   SyncWarning,
-} from '@elmiron/core';
+} from '@fieldforce/core';
 
 /**
  * Everything that can happen to the offline queue, as data.

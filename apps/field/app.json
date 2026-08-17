@@ -1,14 +1,14 @@
 {
   "expo": {
-    "name": "Elmiron MR",
-    "slug": "elmiron-field",
+    "name": "Field Force",
+    "slug": "field-force",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "scheme": "elmironmr",
+    "scheme": "praversefieldforce",
     "platforms": ["android"],
     "android": {
-      "package": "com.praversetech.elmironmr",
+      "package": "com.praversetech.fieldforce",
       "edgeToEdgeEnabled": true
     },
     "plugins": ["expo-router", "expo-status-bar"],

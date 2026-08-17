@@ -29,7 +29,7 @@ import { deleteStorageObject } from './storage.mjs';
  * wrong project's storage objects against the wrong project's database. Dry runs
  * still fall back to the environment; nothing is destroyed by a dry run.
  *
- * Run: pnpm --filter @elmiron/api reconcile:restore -- --apply --db-url "<pooler url>" --note "PITR to 14 Aug"
+ * Run: pnpm --filter @fieldforce/api reconcile:restore -- --apply --db-url "<pooler url>" --note "PITR to 14 Aug"
  */
 
 const DEFAULTS = {

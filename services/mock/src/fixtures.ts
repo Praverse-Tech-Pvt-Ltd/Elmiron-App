@@ -25,12 +25,12 @@ import type {
   UserProfile,
   Visit,
   VoiceNote,
-} from '@elmiron/core';
+} from '@fieldforce/core';
 
 /**
  * Fixture data for the mock server.
  *
- * Everything here is typed as the real entity from `@elmiron/core`, so the mock
+ * Everything here is typed as the real entity from `@fieldforce/core`, so the mock
  * cannot drift from the contract without failing typecheck. That is the point: a
  * mock that hand-rolls its own shapes is a second contract nobody maintains.
  *

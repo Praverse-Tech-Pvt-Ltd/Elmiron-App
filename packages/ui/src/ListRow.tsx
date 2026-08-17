@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { tokens } from '@elmiron/ui-tokens';
+import { tokens } from '@fieldforce/ui-tokens';
 import { BodyText, Label } from './Text';
 
 export interface ListRowProps {

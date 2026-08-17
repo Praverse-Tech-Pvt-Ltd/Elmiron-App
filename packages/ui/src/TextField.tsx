@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
-import { tokens } from '@elmiron/ui-tokens';
+import { tokens } from '@fieldforce/ui-tokens';
 import { Label } from './Text';
 
 export interface TextFieldProps {

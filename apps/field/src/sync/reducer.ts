@@ -1,4 +1,4 @@
-import type { SyncQueueItem, SyncRejectionCode, SyncWarning } from '@elmiron/core';
+import type { SyncQueueItem, SyncRejectionCode, SyncWarning } from '@fieldforce/core';
 import type { ServerVerdict, SyncEvent } from './events';
 
 /**

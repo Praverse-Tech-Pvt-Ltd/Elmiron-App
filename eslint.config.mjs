@@ -78,7 +78,7 @@ export default tseslint.config(
     //
     // Enforced by removing the materials rather than by policing the output: with no
     // access to react-native's visual primitives, a component cannot be built here.
-    // Route files still work, because composing `@elmiron/ui` needs none of these.
+    // Route files still work, because composing `@fieldforce/ui` needs none of these.
     // Non-visual APIs — Platform, AppState, Linking, Alert — stay available.
     //
     // Two rules, because one is not enough. `no-restricted-imports` matches named
@@ -92,7 +92,7 @@ export default tseslint.config(
         {
           selector: 'ImportDeclaration[source.value="react-native"] > ImportNamespaceSpecifier',
           message:
-            'Namespace-importing react-native reaches the visual primitives that are restricted here. Components live in @elmiron/ui. Import the specific non-visual API you need by name.',
+            'Namespace-importing react-native reaches the visual primitives that are restricted here. Components live in @fieldforce/ui. Import the specific non-visual API you need by name.',
         },
       ],
       'no-restricted-imports': [
@@ -124,7 +124,7 @@ export default tseslint.config(
                 'KeyboardAvoidingView',
               ],
               message:
-                'Components live in @elmiron/ui, never in apps/field. Import the component you need from @elmiron/ui, or add it there if it does not exist yet.',
+                'Components live in @fieldforce/ui, never in apps/field. Import the component you need from @fieldforce/ui, or add it there if it does not exist yet.',
             },
           ],
         },

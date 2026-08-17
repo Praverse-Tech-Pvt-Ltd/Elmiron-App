@@ -1,5 +1,5 @@
 {
-  "name": "@elmiron/ui",
+  "name": "@fieldforce/ui",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -18,7 +18,7 @@
     "test": "echo \"no tests in ui yet\""
   },
   "dependencies": {
-    "@elmiron/ui-tokens": "workspace:*"
+    "@fieldforce/ui-tokens": "workspace:*"
   },
   "peerDependencies": {
     "react": ">=19",

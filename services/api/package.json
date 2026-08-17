@@ -1,5 +1,5 @@
 {
-  "name": "@elmiron/api",
+  "name": "@fieldforce/api",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -15,7 +15,7 @@
     "seed:reference": "node scripts/seed-reference-data.mjs"
   },
   "dependencies": {
-    "@elmiron/core": "workspace:*"
+    "@fieldforce/core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.9.2",

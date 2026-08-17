@@ -34,7 +34,7 @@ const OWNER = [
   'the AI layer ships at all.',
   '',
   'This test fails because the deadline for replacing the placeholder has passed and',
-  'no `TranscriptV1Schema` is exported from @elmiron/core/field.',
+  'no `TranscriptV1Schema` is exported from @fieldforce/core/field.',
   '',
   'There are exactly two honest ways to make it pass:',
   '  1. Publish TranscriptV1 alongside V0, so consumers migrate deliberately.',

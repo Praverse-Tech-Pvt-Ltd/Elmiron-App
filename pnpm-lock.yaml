@@ -41,10 +41,10 @@ importers:
 
   apps/console:
     dependencies:
-      '@elmiron/core':
+      '@fieldforce/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@elmiron/ui-tokens':
+      '@fieldforce/ui-tokens':
         specifier: workspace:*
         version: link:../../packages/ui-tokens
     devDependencies:
@@ -54,18 +54,18 @@ importers:
 
   apps/field:
     dependencies:
-      '@elmiron/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@elmiron/ui':
-        specifier: workspace:*
-        version: link:../../packages/ui
-      '@elmiron/ui-tokens':
-        specifier: workspace:*
-        version: link:../../packages/ui-tokens
       '@expo/metro-runtime':
         specifier: ~57.0.9
         version: 57.0.9(@expo/log-box@57.0.2)(expo@57.0.12)(react-native@0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.87.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)
+      '@fieldforce/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@fieldforce/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      '@fieldforce/ui-tokens':
+        specifier: workspace:*
+        version: link:../../packages/ui-tokens
       '@react-native-async-storage/async-storage':
         specifier: 2.2.0
         version: 2.2.0(react-native@0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.87.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.3)(supports-color@8.1.1))
@@ -128,7 +128,7 @@ importers:
 
   packages/ui:
     dependencies:
-      '@elmiron/ui-tokens':
+      '@fieldforce/ui-tokens':
         specifier: workspace:*
         version: link:../ui-tokens
     devDependencies:
@@ -156,7 +156,7 @@ importers:
 
   services/api:
     dependencies:
-      '@elmiron/core':
+      '@fieldforce/core':
         specifier: workspace:*
         version: link:../../packages/core
     devDependencies:
@@ -178,7 +178,7 @@ importers:
 
   services/mock:
     dependencies:
-      '@elmiron/core':
+      '@fieldforce/core':
         specifier: workspace:*
         version: link:../../packages/core
     devDependencies:

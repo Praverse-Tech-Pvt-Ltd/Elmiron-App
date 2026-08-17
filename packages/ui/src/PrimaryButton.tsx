@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
-import { tokens } from '@elmiron/ui-tokens';
+import { tokens } from '@fieldforce/ui-tokens';
 
 export interface PrimaryButtonProps {
   readonly label: string;

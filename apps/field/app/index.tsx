@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Redirect } from 'expo-router';
-import { Screen, Spinner } from '@elmiron/ui';
+import { Screen, Spinner } from '@fieldforce/ui';
 import { useSession } from '../src/session';
 
 /**

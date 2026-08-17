@@ -18,7 +18,7 @@ import { deleteStorageObject } from './storage.mjs';
  *   * Safe to interleave with a consent withdrawal, which marks the same rows
  *     through the same machinery rather than deleting them itself.
  *
- * Run: pnpm --filter @elmiron/api purge:audio
+ * Run: pnpm --filter @fieldforce/api purge:audio
  */
 
 const DEFAULTS = {

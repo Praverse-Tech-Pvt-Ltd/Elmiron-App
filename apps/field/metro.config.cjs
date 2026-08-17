@@ -1,8 +1,8 @@
 // Metro in a pnpm workspace.
 //
 // Two things this file exists for, both of which fail confusingly without it:
-//   1. `watchFolders` — the app imports @elmiron/core, @elmiron/ui and
-//      @elmiron/ui-tokens from outside its own directory. Metro does not watch
+//   1. `watchFolders` — the app imports @fieldforce/core, @fieldforce/ui and
+//      @fieldforce/ui-tokens from outside its own directory. Metro does not watch
 //      outside the project root by default, so edits there would not reload.
 //   2. `nodeModulesPaths` — the workspace root is a second place to look, because
 //      hoisted packages land there rather than in the app.

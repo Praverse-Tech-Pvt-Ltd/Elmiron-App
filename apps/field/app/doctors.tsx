@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ApiRequestError } from '@elmiron/core';
-import type { Doctor } from '@elmiron/core';
-import { Banner, BodyText, Heading, ListRow, Screen, Spinner } from '@elmiron/ui';
+import { ApiRequestError } from '@fieldforce/core';
+import type { Doctor } from '@fieldforce/core';
+import { Banner, BodyText, Heading, ListRow, Screen, Spinner } from '@fieldforce/ui';
 import { createClientForScenario } from '../src/api';
 
 /**

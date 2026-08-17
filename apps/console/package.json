@@ -1,5 +1,5 @@
 {
-  "name": "@elmiron/console",
+  "name": "@fieldforce/console",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,8 +10,8 @@
     "test": "echo \"no tests in apps/console yet\""
   },
   "dependencies": {
-    "@elmiron/core": "workspace:*",
-    "@elmiron/ui-tokens": "workspace:*"
+    "@fieldforce/core": "workspace:*",
+    "@fieldforce/ui-tokens": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.9.3"

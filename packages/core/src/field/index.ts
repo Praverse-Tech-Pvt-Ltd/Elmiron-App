@@ -1,5 +1,5 @@
 /**
- * `@elmiron/core/field` — the MR app's own domain.
+ * `@fieldforce/core/field` — the MR app's own domain.
  *
  * Doctors, beat plans, visits, capture, consent, analysis, sync, and the typed
  * client for them. The patient app has a different domain and would not import

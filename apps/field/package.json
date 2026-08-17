@@ -1,5 +1,5 @@
 {
-  "name": "@elmiron/field",
+  "name": "@fieldforce/field",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,9 +14,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@elmiron/core": "workspace:*",
-    "@elmiron/ui": "workspace:*",
-    "@elmiron/ui-tokens": "workspace:*",
+    "@fieldforce/core": "workspace:*",
+    "@fieldforce/ui": "workspace:*",
+    "@fieldforce/ui-tokens": "workspace:*",
     "@expo/metro-runtime": "~57.0.9",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@supabase/supabase-js": "^2.112.3",

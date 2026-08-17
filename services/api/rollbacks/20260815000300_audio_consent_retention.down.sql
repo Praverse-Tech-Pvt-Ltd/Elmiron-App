@@ -48,7 +48,7 @@ drop policy if exists audio_insert_requires_live_grant  on storage.objects;
 -- Empty the bucket through the storage API first, which is what
 -- scripts/purge-expired-audio.mjs does, then drop it by hand:
 --
---   pnpm --filter @elmiron/api purge:audio
+--   pnpm --filter @fieldforce/api purge:audio
 --   -- then, once it reports nothing left:
 --   delete from storage.buckets where id = 'audio';
 

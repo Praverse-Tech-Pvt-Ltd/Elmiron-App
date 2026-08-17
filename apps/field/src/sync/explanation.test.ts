@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SyncRejectionCodeSchema } from '@elmiron/core';
+import { SyncRejectionCodeSchema } from '@fieldforce/core';
 import { presentRejection } from './explanation';
 import type { RejectionRecord } from './reducer';
 

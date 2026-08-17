@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import type { SyncItemReinstatement, SyncQueueItem } from '@elmiron/core';
+import type { SyncItemReinstatement, SyncQueueItem } from '@fieldforce/core';
 import type { ServerVerdict } from './events';
 import { emptyQueue, summarise, syncQueueReducer } from './reducer';
 import type { SyncQueueState } from './reducer';
@@ -361,7 +361,7 @@ describe('the storage boundary', () => {
       expect(entry.typeOnly, `${entry.source} is a value import`).toBe(true);
     }
     expect(new Set(imports.map((entry) => entry.source))).toEqual(
-      new Set(['@elmiron/core', './events']),
+      new Set(['@fieldforce/core', './events']),
     );
   });
 

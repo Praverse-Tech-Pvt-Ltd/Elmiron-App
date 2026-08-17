@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { tokens } from '@elmiron/ui-tokens';
+import { tokens } from '@fieldforce/ui-tokens';
 import { BodyText } from './Text';
 
 /**

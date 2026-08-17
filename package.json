@@ -10,7 +10,7 @@
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "mock": "pnpm --filter @elmiron/mock build && pnpm --filter @elmiron/mock start",
+    "mock": "pnpm --filter @fieldforce/mock build && pnpm --filter @fieldforce/mock start",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:start": "supabase --workdir services/api start",

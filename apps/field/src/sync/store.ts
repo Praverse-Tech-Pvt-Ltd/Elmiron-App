@@ -1,4 +1,4 @@
-import type { SyncQueueItem } from '@elmiron/core';
+import type { SyncQueueItem } from '@fieldforce/core';
 import type { SyncQueueState } from './reducer';
 
 /**

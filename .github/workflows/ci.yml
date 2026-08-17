@@ -34,9 +34,9 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm run lint
       - run: pnpm run format:check
-      - run: pnpm --filter @elmiron/core test
+      - run: pnpm --filter @fieldforce/core test
       # Contract I2: proves every mock response still parses against packages/core.
-      - run: pnpm --filter @elmiron/mock test
+      - run: pnpm --filter @fieldforce/mock test
 
   database:
     name: migrations · Gate 0 RLS suite · rollbacks
@@ -67,14 +67,14 @@ jobs:
           CI: 'true'
           SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           SUPABASE_URL: http://127.0.0.1:54321
-        run: pnpm --filter @elmiron/api test
+        run: pnpm --filter @fieldforce/api test
 
       # Destructive, so it runs last. A rollback file that has never been executed
       # is a claim, not a rollback.
       - name: Verify every migration can be rolled back
         env:
           SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-        run: pnpm --filter @elmiron/api verify:rollbacks
+        run: pnpm --filter @fieldforce/api verify:rollbacks
 
       - name: Stop Supabase
         if: always()

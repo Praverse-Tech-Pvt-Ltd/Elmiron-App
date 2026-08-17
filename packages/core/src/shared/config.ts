@@ -6,7 +6,7 @@ import { z } from 'zod';
  * Nothing single-app is hardcoded anywhere in this package. The JWT audience, the
  * site URL, the permitted redirect URLs and the deep-link scheme all come from the
  * environment, because a second app — the patient app — will consume
- * `@elmiron/core` with different values for every one of them.
+ * `@fieldforce/core` with different values for every one of them.
  *
  * `loadAppConfig` fails loudly on a missing or malformed value rather than falling
  * back to a default. A silently-wrong redirect URL is an auth loop nobody can
@@ -26,7 +26,7 @@ export const AppConfigSchema = z.object({
   /** Exact URLs auth providers may redirect to. Empty is valid for a mobile-only app. */
   additionalRedirectUrls: z.array(z.url()),
 
-  /** Mobile deep-link scheme, without `://` — e.g. `elmironmr`. */
+  /** Mobile deep-link scheme, without `://` — e.g. `praversefieldforce`. */
   deepLinkScheme: z
     .string()
     .min(1)

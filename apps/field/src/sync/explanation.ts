@@ -1,4 +1,4 @@
-import type { SyncRejectionCode } from '@elmiron/core';
+import type { SyncRejectionCode } from '@fieldforce/core';
 import type { RejectionRecord } from './reducer';
 
 /**
