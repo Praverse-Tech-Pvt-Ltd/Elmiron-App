@@ -759,3 +759,31 @@ not assume the name you gave the document is the name on disk.
 The same stream is worth checking whenever a file's name or encoding looks wrong: it
 records where the file actually came from, which no amount of looking at the contents
 will tell you.
+
+### The development machine's clock drifted, and tests must not read it
+
+Observed during FE-W2: git stamped most of a session''s commits `2026-08-14` while
+the tooling reported the date as `2026-08-17`, and a later commit in the same session
+stamped `2026-08-17`. Roughly three days, inside one working session.
+
+`docs/frontend-plan-v2.md` §3.4 already says the **client''s** clock is not trusted
+and that every record carries a server `received_at` alongside the device''s
+`occurred_at`. That is a product rule about an MR''s phone. This is a different
+problem with the same shape: **the development machine''s clock is not trustworthy
+either.**
+
+The consequence is specific. Any fixture, seed or assertion that reaches for local
+time — `new Date()`, `Date.now()`, `now()` in a seed, a relative window like "within
+the last hour" — is a flaky test, and it fails *differently* in CI than locally
+because the two clocks disagree. With CI having never run on the frontend, the first
+green-locally-red-in-CI run is where that gets discovered, and it reads as a logic
+bug rather than a clock one.
+
+**Rule: anything time-sensitive in a test takes an injected or fixed value.** Pass the
+instant in, freeze it, or use a constant. Never read the machine. The backend suites
+already do the equivalent — `received_at` is stamped by trigger from
+`clock_timestamp()` and asserted against the row, not against the test runner''s idea
+of now.
+
+If a date in a report and a date in a commit disagree, neither is automatically
+wrong. See `.ai-collab/decisions.md` — "How dates in the record are read".

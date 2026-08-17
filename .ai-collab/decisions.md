@@ -450,6 +450,28 @@ If a push still 403s **after** authenticating, that is the org-permission branch
 rather than discovering it on a third attempt.
 ---
 
+## How dates in the record are read — 17 August 2026
+
+Recorded because two documents disagreed and the wrong one was almost "corrected".
+
+> **A `###` section header carries the date of the work it describes, taken from the
+> commit timestamp. It is never edited afterwards. Summary and handoff documents
+> carry their own snapshot date. Where the two differ, that is provenance, not
+> drift.**
+
+The case that produced it: `PROJECT-OVERVIEW.md` carries FE-W1, FE-W2 and BE-W8 as
+14 August 2026, matching the commits that hold them. `handoff.md` and a frontend
+status summary say 17 August. The temptation was to edit the FE sections to agree
+with the summary — which would have inverted which document is authoritative, and
+would have created a fresh inconsistency by leaving BE-W8 at the old date.
+
+The append-only log yields to nothing. The summary is the document that gets updated.
+
+Consequence worth stating: a section header is **not** a reliable "when did this get
+written" for anything that spans days, and should not be used to order work across
+roles. Use the commit history for that.
+---
+
 ## Where the earlier ones live
 
 | Decision | Where |
