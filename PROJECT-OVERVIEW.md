@@ -3101,3 +3101,151 @@ was checked on Windows; CI runs on Linux. Local checks cannot catch a case-sensi
 failure. The risk is genuinely low — this rename changed file _contents_ and no file
 _paths_, so there is no new casing to get wrong — but "verification replaces CI"
 should not be read as "verification equals CI." It does not.
+
+---
+
+### FE-R1a — Reverse-DNS scheme, and the OTP gap it exposed (17 August 2026)
+
+Follows FE-R1. Two things: take the strictly-better scheme while it is still free,
+and answer a question FE-R1 filed too quietly.
+
+#### The scheme is now reverse-DNS
+
+|                  | From (FE-R1)                         | To (FE-R1a)                                   |
+| ---------------- | ------------------------------------ | --------------------------------------------- |
+| Deep link scheme | `praversefieldforce`                 | `com.praversetech.fieldforce`                 |
+| Redirect URL     | `praversefieldforce://auth-callback` | `com.praversetech.fieldforce://auth-callback` |
+
+Guaranteed-unique rather than probably-unique, and identical to the package id, so
+there is one string to remember instead of two. A scheme is irreversible in the same
+way a package id is — once any link exists in the wild it cannot change — and FE-R1's
+whole premise was fixing the irreversible things while they are free. Doing that 95%
+and leaving a known-better option on the table contradicts the sprint's own logic.
+
+**It was conditional on the toolchain, not on the RFC.** Dots are legal in a URI
+scheme under RFC 3986, but "legal" and "the toolchain is happy" are different claims.
+Verified at three levels:
+
+| Level                                  | Result                                                                                                                                       |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `expo config --type public`            | resolves, `scheme: com.praversetech.fieldforce`                                                                                              |
+| `expo config --type introspect`        | resolves; note `intentFilters` is empty at config level — the scheme is applied during prebuild, not here                                    |
+| **`expo prebuild --platform android`** | `<data android:scheme="com.praversetech.fieldforce"/>` in the generated `AndroidManifest.xml`, with matching `applicationId` and `namespace` |
+| `loadAppConfig()`                      | does not throw; `new URL(...)` parses the redirect, protocol `com.praversetech.fieldforce:`                                                  |
+
+The prebuild check is the one that mattered — the config-level checks would have
+passed even if the manifest generation choked. The generated `android/` directory was
+deleted afterwards; it is gitignored and no native project is committed.
+
+**One prebuild side effect, reverted.** `expo prebuild` rewrote `apps/field`'s
+`android` script from `expo start --android` to `expo run:android`. That is not part
+of the rename, and with `android/` deleted it would not work. `git checkout` on that
+file, verified.
+
+#### Files FE-R1 missed
+
+`packages/core/src/shared/config.test.ts` and `config.ts` carried the scheme as a
+test fixture and a doc example. FE-R1's sweep had rewritten them from `elmironmr` to
+`praversefieldforce`; FE-R1a's four-file edit did not reach them, leaving an
+intermediate value in the tree. Both now carry the final scheme.
+
+**Worth naming: the fixture change incidentally strengthens the test.**
+`config.test.ts` now round-trips a dotted scheme through the `^[a-z][a-z0-9+.-]*$`
+validation, so the regex's acceptance of dots is asserted rather than assumed. That
+was a by-product of completing the rename, not a change made for its own sake.
+
+#### The file counts, reconciled
+
+Three different numbers appeared in the FE-R1 report because each counted a different
+set. Stated explicitly so the record is citable:
+
+| Figure | What it counts                                                                                                                                                    |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **49** | Tracked code/config files containing `@elmiron` _before_ the sweep — the initial inventory                                                                        |
+| **51** | Tracked files the sweep actually rewrote — 49 plus the two carrying `elmironmr` but not `@elmiron/` (`apps/field/app.json`, `packages/core/src/shared/config.ts`) |
+| **91** | Token occurrences replaced across those 51 files                                                                                                                  |
+| **53** | Files in commit `f34ceef` — the 51, plus `app.config.ts` (new) and `pnpm-lock.yaml` (regenerated)                                                                 |
+| **4**  | Files changed by FE-R1a                                                                                                                                           |
+
+#### The OTP question — answered: it was never built
+
+FE-R1 reported the empty Supabase redirect allow-list as a wrinkle. It is not a
+wrinkle, and the question it raised has a definite answer.
+
+**Client-side, only four auth calls exist**, all in `apps/field/src/session.tsx` and
+`api.ts`: `getSession`, `onAuthStateChange`, `signInWithPassword`, `signOut`. There
+is no `signInWithOtp`, no `verifyOtp`, no `signInWithOAuth`, no `emailRedirectTo`
+anywhere in `apps/field` or `packages`.
+
+_A grep does report one match in `apps/field/dist/` — that is the built Hermes
+bundle, which contains `supabase-js`'s own implementation of those methods whether or
+not the app calls them. It is a false positive and worth knowing about, because it
+will recur for anyone searching the tree for API usage._
+
+**So of the two possibilities: not built.** Nothing is passing a test that asserts
+something weaker than it appears to — there is no OTP test at all, in
+`services/api/tests` or anywhere else.
+
+**Where the gap actually sits.** BE-W1 enabled email + password **and** email OTP on
+the platform (`otp_length = 6`, `otp_expiry = 3600`, `enable_confirmations = false`
+in `config.toml`). The FE-W1 prompt asked only for "sign-in against the local
+Supabase stack", which the password grant satisfies literally. So this is a gap
+between **platform capability and client implementation**, not a misreported FE-W1
+deliverable — but it is a gap, and it was not previously written down.
+
+Consequences, recorded so they are not rediscovered in FE-W7:
+
+- **OTP sign-in could not work today even if it were built**, because no deep-link
+  scheme has ever been in `additional_redirect_urls`.
+- Password sign-in is unaffected — it involves no redirect. Nothing is broken now.
+- The failure, when it comes, will present as "auth is broken on real devices" and
+  will look like a client bug. It is a server allow-list entry.
+
+#### Backend request — updated value
+
+Supersedes the value in FE-R1. `services/api` is read-only to Frontend, so this is a
+request.
+
+`services/api/supabase/config.toml` currently:
+
+```toml
+additional_redirect_urls = ["http://127.0.0.1:3000", "https://127.0.0.1:3000"]
+```
+
+**Add:** `com.praversetech.fieldforce://auth-callback`
+
+Same addition needed on any hosted project. **The FE-R1 value
+(`praversefieldforce://auth-callback`) is superseded and should not be added** — it
+was never deployed anywhere, so nothing needs removing.
+
+#### Verification — the full §5 gate, re-run
+
+| Check                               | Result                                                                            |
+| ----------------------------------- | --------------------------------------------------------------------------------- |
+| `pnpm run build`                    | 3/3                                                                               |
+| `pnpm run typecheck`                | 9/9                                                                               |
+| `pnpm run lint`                     | 7/7                                                                               |
+| `pnpm format:check`                 | clean                                                                             |
+| Tests                               | ui-tokens 38 · core 21 · field 40 · mock 40 · api **333 passed** — 472, unchanged |
+| Stale tokens in code + config       | `praversefieldforce` 0 · `elmironmr` 0 · `@elmiron/` 0                            |
+| Untracked `.env`, `apps/field/.env` | 0 stale hits each                                                                 |
+
+#### Left alone, deliberately
+
+- **`@fieldforce/core`** stays, wart and all. The packages are `private` and never
+  published, so the scope is reversible at any time — irreversible things get fixed
+  now, reversible ones get fixed when they bite.
+- **A duplicate `APP_ADDITIONAL_REDIRECT_URLS` key in `.env.example`**, one from
+  BE-W1 (`http://127.0.0.1:3000`) and one from FE-W1's appended block. The later
+  entry wins in every dotenv implementation, so behaviour is defined, but it is
+  confusing to read. **Noticed while sweeping and not fixed** — the no-opportunistic-
+  fixes rule cuts both ways. Flagged for whoever owns `.env.example` next.
+
+#### Reversal path
+
+`git revert` the FE-R1a commit restores the four tracked files. Beyond it:
+
+- root `.env` and `apps/field/.env` are untracked and carry the scheme in four and
+  two places respectively — restore by hand.
+- No `pnpm install` needed; FE-R1a changed no dependency or lockfile.
+- Nothing external: no Expo project, no published app, no link in the wild.

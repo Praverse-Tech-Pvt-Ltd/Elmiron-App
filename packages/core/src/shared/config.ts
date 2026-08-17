@@ -26,7 +26,7 @@ export const AppConfigSchema = z.object({
   /** Exact URLs auth providers may redirect to. Empty is valid for a mobile-only app. */
   additionalRedirectUrls: z.array(z.url()),
 
-  /** Mobile deep-link scheme, without `://` — e.g. `praversefieldforce`. */
+  /** Mobile deep-link scheme, without `://` — e.g. `com.praversetech.fieldforce`. */
   deepLinkScheme: z
     .string()
     .min(1)

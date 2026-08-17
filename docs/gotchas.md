@@ -824,3 +824,30 @@ replaced **before** `elmironmr`, or the result is
 
 The verification then has to report the deliberately-unchanged count *separately*, or
 a reviewer reading "17 files still match" cannot tell a design decision from a miss.
+
+### `expo prebuild` rewrites your package.json scripts
+
+Running `npx expo prebuild --platform android` to inspect the generated manifest also
+rewrote `apps/field`'s `android` script from `expo start --android` to
+`expo run:android`. That is correct for a project that keeps its native directories
+and wrong for one that does not — and it lands silently in a file you were not
+editing.
+
+If you prebuild only to inspect the output, check `git status` afterwards and revert
+what you did not mean to change. Deleting the generated `android/` directory does not
+undo the script edit.
+
+**Worth doing anyway.** `expo config --type public` and `--type introspect` both
+resolved a dotted URI scheme happily while `intentFilters` stayed empty, because the
+scheme is applied to the manifest during prebuild rather than at config time. Only
+the prebuild proved `<data android:scheme="com.praversetech.fieldforce"/>` actually
+lands. Config-level checks would have passed either way.
+
+### Searching a built bundle finds APIs the app never calls
+
+Grepping the tree for `signInWithOtp` matched `apps/field/dist/*.hbc` — the compiled
+Hermes bundle, which contains `supabase-js`'s own implementation of every auth method
+whether the app calls one or not.
+
+Exclude build output when asking "does our code use X". The answer from a bundle is
+always yes.
