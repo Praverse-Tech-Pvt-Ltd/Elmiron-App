@@ -472,6 +472,34 @@ written" for anything that spans days, and should not be used to order work acro
 roles. Use the commit history for that.
 ---
 
+## O2 — the name in permanent identifiers: brief written, decision still open
+
+`docs/brand-identifier-decision.md`, 17 August 2026.
+
+Escalated from a naming question to a legal one on one finding: **ELMIRON® is a
+registered trademark of a third party** (IVAX Research, LLC, per the FDA prescribing
+information), so `com.praversetech.elmironmr` would put another company''s
+pharmaceutical mark into a permanent public Play Store identifier published under
+Praverse''s account. Whether that is a problem needs counsel, not engineering.
+
+The brief''s substance, so it is not lost if the file moves:
+
+- Only **two** identifiers actually matter — the Android package ID and the URL
+  scheme. The other 187 occurrences are free to change.
+- The cost curve has a specific cliff: after a pilot with 100 MRs, renaming the
+  package forces an uninstall, **and queued offline work does not survive an
+  uninstall unless it has already synced.** That turns a branding decision into a
+  data-loss one.
+- Recommended option: neutral identifier (`com.praversetech.fieldforce`), keeping the
+  **display name** as a separate freely-changeable string. That decouples branding
+  from the irreversible choice and unblocks FE-W8 without waiting for the trademark
+  answer.
+
+Needs: a trademark position for software in India (counsel), the Play Console account
+owner (client), and sign-off to rename if option B. Pairs with the existing
+FE-W8-blocking entries — the package ID and the account owner are one conversation.
+---
+
 ## Where the earlier ones live
 
 | Decision | Where |
