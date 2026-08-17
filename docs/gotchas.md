@@ -787,3 +787,40 @@ of now.
 
 If a date in a report and a date in a commit disagree, neither is automatically
 wrong. See `.ai-collab/decisions.md` — "How dates in the record are read".
+
+### `pnpm db:start` fails with a named-pipe error when Docker Desktop is not running
+
+```
+{"_tag":"Error","error":{"code":"LegacyDockerLifecycleInspectError",
+ "message":"failed to inspect container health: failed to connect to the docker API at
+ npipe:////./pipe/dockerDesktopLinuxEngine..."}}
+```
+
+Reads as a Supabase CLI fault and is not one. Docker Desktop does not start with
+Windows by default, so after any reboot the daemon pipe is simply absent. Start
+Docker Desktop, wait for the daemon, then re-run. The tell is `npipe://` in the
+message — a Supabase problem never mentions a Windows named pipe.
+
+Worth pairing with the existing note that a database suite reports **skipped**, not
+failed, when nothing is reachable. Reboot, forget Docker, run the suite, read
+"green": that is the whole trap in one sequence.
+
+### Renaming an identifier that is also a word in the prose
+
+FE-R1 had to remove a trademark from package identifiers while leaving the same word
+alone in documentation that legitimately describes the drug. A naive
+case-insensitive sweep of the brand name would have rewritten 189 occurrences across
+70 files, most of them prose, and produced an unreviewable diff.
+
+**The technique: pick tokens that are only ever identifiers.** Here
+`@elmiron/` (with the trailing slash) is always the npm scope, `elmironmr` is always
+the package id or scheme, and bare `Elmiron` is always the drug. Three exact,
+case-sensitive substitutions touched 51 files and 91 occurrences, every one of them
+an identifier, and left the prose untouched by construction rather than by review.
+
+Order matters when one token contains another: `com.praversetech.elmironmr` has to be
+replaced **before** `elmironmr`, or the result is
+`com.praversetech.praversefieldforce`.
+
+The verification then has to report the deliberately-unchanged count *separately*, or
+a reviewer reading "17 files still match" cannot tell a design decision from a miss.

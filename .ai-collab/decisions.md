@@ -488,7 +488,18 @@ written" for anything that spans days, and should not be used to order work acro
 roles. Use the commit history for that.
 ---
 
-## O2 — the name in permanent identifiers: brief written, decision still open
+## O2 — the name in permanent identifiers: EXECUTED, commit `f34ceef` (17 Aug 2026)
+
+**Status: RULED 17 Aug -> EXECUTED 17 Aug.** The ruling below is kept in full; it is
+not superseded, it is done. Package id `com.praversetech.fieldforce`, scheme
+`praversefieldforce`, scope `@fieldforce/*`, display name moved to configuration.
+472 tests unchanged, all three old tokens at zero in code and config. Full write-up:
+`PROJECT-OVERVIEW.md` -> FE-R1. **Outstanding from it: Backend must add**
+`praversefieldforce://auth-callback` **to `additional_redirect_urls` — no deep-link
+scheme was ever in that allow-list, so this is a pre-existing gap the rename
+surfaced.**
+
+### The original ruling
 
 `docs/brand-identifier-decision.md`, 17 August 2026.
 

@@ -2922,3 +2922,182 @@ destructured, never called. **The moment any code path begins invoking or
 dereferencing something out of `payload`, this stops being a residual and becomes a
 live arbitrary-execution path**, and the import-list guard will still be green while
 it happens. If that change is ever proposed, narrow the contract first.
+
+---
+
+### FE-R1 — Package identifier rename (17 August 2026)
+
+Executes the ruling in `docs/brand-identifier-decision.md`. Commit **`f34ceef`**,
+53 files. Push #2 of four, run before the harness so harness tests are not written
+against a namespace that changes a week later.
+
+**Why now:** ELMIRON is a third party's registered pharmaceutical trademark, and the
+package id and URL scheme become permanent and public the moment anything is
+published. Nothing is published, no deep link exists in the wild, no user has the app
+installed — this is the cheapest it will ever be.
+
+#### The mapping
+
+| Item                    | From                         | To                                                        |
+| ----------------------- | ---------------------------- | --------------------------------------------------------- |
+| Android `applicationId` | `com.praversetech.elmironmr` | `com.praversetech.fieldforce`                             |
+| Deep link scheme        | `elmironmr`                  | `praversefieldforce`                                      |
+| npm workspace scope     | `@elmiron/*` (7 packages)    | `@fieldforce/*`                                           |
+| Display name            | `"Elmiron MR"`, hardcoded    | configuration, default `"Field Force"`                    |
+| Expo slug               | `elmiron-field`              | `field-force` — **beyond the three specified, see below** |
+
+#### The two choices I was asked to propose
+
+**Deep link scheme — `praversefieldforce`.** Neutral, carries no drug or brand name,
+and vendor-prefixed: custom schemes are first-come-first-served on a device, so a bare
+`fieldforce` is a plausible collision with any other field-force app the MR installs.
+It matches option B of the approved brief, so it introduces no new decision, and it
+satisfies the scheme regex in `loadAppConfig` (`^[a-z][a-z0-9+.-]*$`).
+
+_Considered and not chosen:_ reverse-DNS (`com.praversetech.fieldforce` as the scheme
+itself), which is the lowest-collision form and current best practice. Rejected only
+because it diverges from the approved brief and is more verbose in every redirect
+URL. **If the reviewer prefers it, it is a one-token change and still free.**
+
+**npm scope — `@fieldforce`.** Consistent with the package id, names the product
+rather than the brand. Registry availability is irrelevant: all seven packages are
+`"private": true` and are never published.
+
+_Flagged:_ if `packages/core` is ever shared with the patient app, `@fieldforce/core`
+will be slightly wrong for it — a patient app is not a field force. Not solved here,
+and not worth a third name today.
+
+#### What changed, and what deliberately did not
+
+The sweep keyed on **three tokens, each of which is always an identifier and never
+prose about the drug**: `@elmiron/` (with the slash) is always the npm scope;
+`com.praversetech.elmironmr` is the package id; `elmironmr` is the scheme. Bare
+"Elmiron" is the drug name and was not touched.
+
+| Area                 | Files  | Replacements |
+| -------------------- | ------ | ------------ |
+| `apps/`              | 18     | 34           |
+| `packages/`          | 16     | 21           |
+| `services/`          | 11     | 17           |
+| `.github/` workflows | 3      | 7            |
+| `.env.example`       | 1      | 6            |
+| `eslint.config.mjs`  | 1      | 4            |
+| root `package.json`  | 1      | 2            |
+| **Total**            | **51** | **91**       |
+
+Plus `app.json`, the new `app.config.ts` and the regenerated lockfile — 53 in the
+commit.
+
+**17 documentation files still mention Elmiron, deliberately.** Naming a drug in
+documentation that describes the drug is accurate use; putting a third party's mark
+in a package id is not. Those change only when O2 itself resolves — which brand,
+which molecule, which legal entity — and that decision has not been made.
+
+#### Verification — this replaced CI, which has still never run
+
+| Check                       | Result                                               |
+| --------------------------- | ---------------------------------------------------- |
+| `pnpm run build`            | 3/3                                                  |
+| `pnpm run typecheck`        | 9/9                                                  |
+| `pnpm run lint`             | 7/7                                                  |
+| `pnpm format:check`         | clean                                                |
+| `expo config --type public` | resolves; `name` comes from `app.config.ts`          |
+| `loadAppConfig()`           | does not throw; `deepLinkScheme: praversefieldforce` |
+
+**Test counts, before → after — identical, and `api` _passed_ rather than skipped:**
+
+| Suite       | Before  | After   |
+| ----------- | ------- | ------- |
+| `ui-tokens` | 38      | 38      |
+| `core`      | 21      | 21      |
+| `field`     | 40      | 40      |
+| `mock`      | 40      | 40      |
+| `api`       | 333     | 333     |
+| **Total**   | **472** | **472** |
+
+**Zero-reference searches.** Tracked files, documentation excluded (`docs/`,
+`.ai-collab/`, `*.md`, `*.html`):
+
+```
+--- token: com\.praversetech\.elmironmr     matches: 0
+--- token: elmironmr                        matches: 0
+--- token: @elmiron/                         matches: 0
+
+untracked env files:  .env  0 hits    apps/field/.env  0 hits
+
+package id : "package": "com.praversetech.fieldforce"
+scheme     : "scheme": "praversefieldforce"
+scopes     : @fieldforce/{api,console,core,field,mock,ui,ui-tokens}
+```
+
+The 17 remaining documentation matches are **excluded by design, not missed** — the
+search reports them separately for exactly that reason.
+
+#### Backend request — the Supabase redirect allow-list
+
+**Requested, not changed.** `services/api` is read-only to Frontend.
+
+`services/api/supabase/config.toml` currently has:
+
+```toml
+additional_redirect_urls = ["http://127.0.0.1:3000", "https://127.0.0.1:3000"]
+```
+
+**Exact value to add:** `praversefieldforce://auth-callback`
+
+An important detail: **no deep-link scheme was ever in that list**, old or new. So the
+rename did not break this — it surfaced a pre-existing gap. Nothing is broken today
+because FE-W1 sign-in uses the password grant, which involves no redirect. It bites at
+the first magic-link, OTP or OAuth flow, and the failure will look like an auth
+problem rather than a configuration one. Any hosted project needs the same addition.
+
+#### Reversal path
+
+`git revert f34ceef` restores all 53 tracked files. **Three things it does not do:**
+
+1. **`pnpm install` must be re-run.** The lockfile is in the commit and reverts with
+   it, but `node_modules` still holds the new scope symlinks until an install relinks
+   them.
+2. **Two untracked `.env` files were changed and are not in the diff.** Restore by
+   hand:
+   - root `.env` — `APP_DEEP_LINK_SCHEME`, `APP_ADDITIONAL_REDIRECT_URLS`,
+     `EXPO_PUBLIC_APP_DEEP_LINK_SCHEME`, `EXPO_PUBLIC_APP_ADDITIONAL_REDIRECT_URLS`
+     back to `elmironmr` / `elmironmr://auth-callback`
+   - `apps/field/.env` — the same two `EXPO_PUBLIC_*` values
+3. `app.config.ts` is a new file; the revert deletes it, which returns the display
+   name to a hardcoded string in `app.json`. That is the intended consequence of a
+   revert, not a leftover.
+
+Nothing external needs undoing: no Expo project exists under either slug, nothing has
+been published, and no store listing has ever claimed either package id.
+
+#### Ambiguous cases
+
+**One, and I decided it rather than leaving it.** Doc comments inside code that
+reference the package by name — `@elmiron/core — interface contract I1` in
+`packages/core/src/index.ts`, and six similar. These are prose, but the string they
+contain is a package identifier, and leaving them would have made the comments
+factually wrong about a package that no longer exists under that name. The
+three-token rule covers them: `@elmiron/` is always the scope. Recorded here because
+it is the closest thing to a §2 edge case in the whole sweep.
+
+#### What I think is worth arguing with
+
+**1. The Expo slug was not in the prompt's three, and I changed it anyway.**
+`elmiron-field` is a public identifier appearing in EAS project URLs and carrying the
+mark. Leaving it while renaming everything else would have defeated the purpose, and
+no Expo project exists yet to be renamed later. But it _is_ a decision beyond the
+brief, it is one line in `app.json`, and it is the reviewer's to veto.
+
+**2. The scope rename structurally cannot be done without editing read-only
+workspaces.** `services/api` and `packages/core` are read-only to Frontend, and their
+`package.json` names are part of `@elmiron/*`. The instruction to do the scope in this
+pass authorises it, but "the scope is mechanical and free" is true of the edit and not
+of the ownership boundary. Worth Backend knowing their workspace was touched, even
+though every changed line there is the substitution.
+
+**3. Local verification replacing CI has one specific blind spot.** Everything here
+was checked on Windows; CI runs on Linux. Local checks cannot catch a case-sensitivity
+failure. The risk is genuinely low — this rename changed file _contents_ and no file
+_paths_, so there is no new casing to get wrong — but "verification replaces CI"
+should not be read as "verification equals CI." It does not.
