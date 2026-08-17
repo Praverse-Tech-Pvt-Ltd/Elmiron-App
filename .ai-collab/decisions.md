@@ -419,6 +419,37 @@ The distinction matters because the first list is procurement and credentials �
 afternoon and a purchase — while the second is a measurement nobody has taken.
 ---
 
+## Push sequencing while CI has never run — 14 August 2026
+
+Three pushes, each green before the next. Not a preference; a diagnosis rule.
+
+1. **The ten existing commits alone.** First CI run has one candidate cause:
+   existing code against existing config.
+2. **The render harness alone** — `jest-expo` wired into turbo and CI, plus the
+   deliberately-failing test. A red CI here is the runner configuration and nothing
+   else.
+3. **Everything else** — route tests, the queue screen, the rest of FE-W2b.
+
+Folding 2 into 3 gives a red CI two candidate causes. Folding 2 into 1 gives it
+three. The stop condition that kept FE-W2b from starting exists to stop exactly this,
+and it has the same failure mode one layer down.
+
+**Not yet reflected in `docs/frontend-prompt-w2b.md`**, deliberately: it only binds at
+execution time, and by then there will be CI results to fold into the same amendment.
+One amendment beats two.
+
+### Related, and not self-service
+
+Push currently 403s with `gh` unauthenticated. Checking the PAT scope is a human
+action in GitHub's web UI, not something reachable from the repository — and the push
+does not have to come from this session at all. The commits exist; any authenticated
+client moves them.
+
+If a push still 403s **after** authenticating, that is the org-permission branch on
+`Praverse-Tech-Pvt-Ltd` and it needs someone with admin. Worth raising the same day
+rather than discovering it on a third attempt.
+---
+
 ## Where the earlier ones live
 
 | Decision | Where |
