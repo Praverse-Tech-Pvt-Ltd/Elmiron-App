@@ -438,6 +438,22 @@ and it has the same failure mode one layer down.
 execution time, and by then there will be CI results to fold into the same amendment.
 One amendment beats two.
 
+### Revised 17 August 2026 — four pushes, not three
+
+The O2 rename is a code change touching ~70 files. It slots in **before** the
+harness, because a harness written against the old namespace gets rewritten a week
+later.
+
+1. **The thirteen existing commits alone** — one candidate cause: existing code
+   against existing config.
+2. **The O2 rename alone** — `com.praversetech.fieldforce`, the `elmironmr` URL
+   scheme, and the `@elmiron/*` workspace scope, in one pass. Approved 17 August;
+   **not to be executed until push 1 has had a CI run.**
+3. **The render harness alone** — `jest-expo` wired into turbo and CI.
+4. **Route tests, queue screen, the rest of FE-W2b.**
+
+No exception was made for the rename despite it being a change the reviewer wanted.
+A red CI with two candidate causes costs more than a day of waiting.
 ### Related, and not self-service
 
 Push currently 403s with `gh` unauthenticated. Checking the PAT scope is a human

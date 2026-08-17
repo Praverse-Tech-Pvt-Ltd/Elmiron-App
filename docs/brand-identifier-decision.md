@@ -7,6 +7,24 @@ question. Not an engineering decision.
 ID and the workspace namespace, before the first Play Store upload. Everything else
 in this brief exists to put a cost on that ruling.
 
+> ## STATUS — RULED, 17 August 2026
+>
+> **Option B approved: `com.praversetech.fieldforce`, display name kept as a separate
+> freely-changeable string. The `@elmiron/*` workspace scope is renamed in the same
+> pass.**
+>
+> **Not yet executed.** A rename touching 70 files is a code change, and landing it on
+> thirteen commits CI has never seen would give a red CI two candidate causes. It is
+> **push #2**, after the existing commits have had their own CI run. See
+> `.ai-collab/decisions.md` → push sequencing.
+>
+> **The headline, which §4 buried:** the neutral identifier is correct under *every*
+> possible trademark answer. Clean, and we have a duller package ID and lost nothing.
+> Dirty, and we avoided an uninstall-and-lose-the-queue migration across a live field
+> force. **So the rename does not block on counsel, and O2 stops blocking FE-W8 the
+> moment it lands** — a legal question with an unknown timeline is taken off the
+> critical path rather than answered.
+
 ---
 
 ## 1. Why this is not a naming preference
@@ -145,3 +163,67 @@ nobody has approved**, and it is recorded as FE-W8-blocking in
   is still open at its cheapest price.**
 
 That is the entire reason this brief is worth reading now rather than in FE-W8.
+
+---
+
+## 7. Amendments after review, 17 August 2026
+
+### The trademark evidence is thinner than §1 implies — and that helps
+
+The FDA prescribing information is from **2008**. It establishes who held the mark
+then, not now. IVAX was absorbed into Teva, and marks move with corporate
+transactions routinely, so "IVAX Research, LLC" is probably stale as a statement of
+current ownership even if it was correct at the time.
+
+This does not weaken the conclusion, it sharpens it. Two things are established:
+**ELMIRON is somebody else''s registered mark**, and **we do not know whose it is
+now.** Both point the same way — do not put it in an irreversible identifier.
+
+### Do the free check before paying for the expensive one
+
+The **Indian Trade Marks Registry is publicly searchable at
+`ipindiaonline.gov.in`**, free. Ten minutes establishes whether ELMIRON is registered
+in India, in which classes, and to whom.
+
+That is **not clearance and does not replace counsel** — but it tells you whether
+this is a ten-minute problem or a ten-thousand-rupee one before spending the money.
+Do it first.
+
+### Neither Medindia nor Wikipedia is authoritative here
+
+Both are cited in §1 and both are **drug-information sources being asked a legal
+question**. They are adequate for "what brands is this molecule sold under in India"
+and inadequate for anything about registration or ownership. Read them as the reason
+to check the registry, not as the check.
+
+Consequence for the project record: the claim that "Elmiron does not exist in India
+under that name" is stated with high confidence in the Claude-side project docs and
+**needs a confidence downgrade** — Indian trade listings for an Elmiron-branded
+tablet exist, the sources conflict, and none of them settles it. To be amended during
+the wider doc reconciliation rather than in a one-line edit.
+
+### A second reason for the neutral ID, not in the original brief
+
+**A package ID is visible in the app list on the MR''s own phone, in the Play Store
+URL, and to anyone who inspects the APK.** `com.praversetech.elmironmr` therefore
+discloses *which product an MR details* to anyone who picks up their handset.
+
+In a UCPMP-sensitive market, where pharma–doctor interaction is already constrained
+and scrutinised, that is a small but real disclosure obtained for nothing. The
+neutral identifier removes it as a side effect rather than as a goal.
+
+### Scope of the rename, settled
+
+`@elmiron/*` is included in the same pass. It is mechanical and free while the sweep
+is already happening; a second sweep later is not free. It only matters at all if
+those packages are ever published to public npm — unlikely — but the cost of
+including it now is a wider find-replace, and the cost of excluding it is an entire
+second pass if that ever changes.
+
+### What still needs a human
+
+| # | Needed | From | Changed? |
+| --- | --- | --- | --- |
+| 1 | Trademark position for software in India — registry search first, then counsel | Client legal | Unchanged |
+| 2 | Whose Play Console account publishes | Client sponsor | Unchanged |
+| 3 | Sign-off to rename | Reviewer | **Given, 17 August 2026** |
