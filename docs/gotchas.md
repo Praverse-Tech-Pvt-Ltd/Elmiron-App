@@ -1031,3 +1031,30 @@ which keeps the boundary test running and makes it fail on its own assertion.
 This applies to everything mutation-tested on this project, including the FE-W2
 reducer guards and the FE-W1 contrast controls — all of which were verified by
 failure count rather than by colour, but none of which stated the rule.
+
+### Adding a workspace does not add it to CI — check, do not presume
+
+CI names each suite explicitly rather than running `turbo run test`, so a new
+workspace's tests are invisible in CI until somebody adds a line. Nothing warns.
+`ui-tokens` carried the WCAG contrast guard — a build-failing accessibility control —
+and it had **never executed in CI**, because the step was simply absent. The local
+runs were green the whole time.
+
+Every workspace with a real test script must appear in a workflow. Audit with:
+
+```bash
+git ls-files '*package.json' | while read -r f; do
+  n=$(python -c "import json,sys;print(json.load(open(sys.argv[1],encoding='utf-8')).get('name',''))" "$f")
+  t=$(python -c "import json,sys;print(json.load(open(sys.argv[1],encoding='utf-8')).get('scripts',{}).get('test',''))" "$f")
+  case "$t" in ""|echo*) continue;; esac
+  grep -q -- "--filter $n test" .github/workflows/*.yml || echo "NOT IN CI: $n"
+done
+```
+
+As of FE-H1 all five run: `core`, `ui-tokens`, `mock` and `field` in the static job,
+`api` in the database job. **`packages/ui` is the next one to catch** — its `test`
+script is still a placeholder `echo`, so the audit skips it, and it will need a CI
+line the day it gains a real suite.
+
+The general shape: a control that is only invoked by a list somebody maintains by
+hand is a control that will eventually be left off the list.
