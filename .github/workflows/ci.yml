@@ -35,6 +35,10 @@ jobs:
       - run: pnpm run lint
       - run: pnpm run format:check
       - run: pnpm --filter @fieldforce/core test
+      # The WCAG contrast guard. It fails the build when a design token drops below
+      # its required ratio, and it had never run here — the step simply did not
+      # exist, so the control was decorative in CI from the day it was written.
+      - run: pnpm --filter @fieldforce/ui-tokens test
       # Contract I2: proves every mock response still parses against packages/core.
       - run: pnpm --filter @fieldforce/mock test
       # Two runners in one workspace, both invoked by this script: vitest for logic
