@@ -911,3 +911,123 @@ git ls-files | grep -vE '^docs/|\.(md|html)$' | xargs grep -n 'thingYouAreLookin
 
 Documentation is excluded separately there for a different reason — see the
 identifier-versus-prose entry above.
+
+## The render harness — FE-H1
+
+### Jest cannot resolve a bare preset name under pnpm
+
+```
+● Validation Error:
+  Preset jest-expo not found.
+```
+
+`jest-expo` is installed and linked at `apps/field/node_modules/jest-expo`, and
+node's own resolver finds it from that directory without complaint. Jest uses its
+**own** resolver, running from inside `.pnpm/jest@29.../node_modules`, which does not
+search the workspace. The error says the package is missing when it is present.
+
+Resolve the path in the config instead, from the config file's own location:
+
+```js
+// jest.config.cjs
+preset: require('node:path').dirname(require.resolve('jest-expo/jest-preset')),
+```
+
+**`dirname` matters.** Passing the resolved *file* gives a different and equally
+confusing error: `Module .../jest-preset.js should have "jest-preset.js" or
+"jest-preset.json" file at the root`. Jest wants the directory containing the preset.
+
+### The working `transformIgnorePatterns`
+
+`jest-expo`'s preset transforms React Native and Expo packages inside `node_modules`
+and skips everything else. That is right until a workspace package is consumed as
+**TypeScript source** rather than built JavaScript — which is how `@fieldforce/ui` is
+set up, so Metro and Next.js can each transpile it. Without the scope added, jest
+hands raw TSX to node and dies on the first `<`.
+
+Verbatim, from `apps/field/jest.config.cjs`:
+
+```js
+transformIgnorePatterns: [
+  'node_modules/(?!(?:.pnpm/)?((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|@fieldforce/.*))',
+],
+```
+
+The `(?:.pnpm/)?` and the trailing `@fieldforce/.*` are the two additions to the
+stock pattern.
+
+### `@testing-library/react-native` v14: `render` is async
+
+**The most misleading error in this sprint.** In RTL v14 `render` returns a Promise.
+Called without `await`, it yields a thenable whose prototype is
+`constructor, then, catch, finally` — no query methods — and `screen` throws:
+
+```
+`render` function has not been called
+```
+
+which reads as though render was never invoked, rather than as an un-awaited promise
+one line above. Symptoms: `view.getByText is not a function`, and `screen` throwing
+immediately after an apparently successful render.
+
+```tsx
+await render(<Thing />);          // not: const view = render(<Thing />)
+expect(screen.getByText('x')).toBeTruthy();
+```
+
+Queries come from the module-level `screen`, not from a return value. Every render
+test needs this.
+
+### Never `Set-Content -Encoding utf8` on Windows PowerShell 5.1 — it writes a BOM
+
+`jest-haste-map` refuses the file outright:
+
+```
+Error: Cannot parse .../package.json as JSON: Unexpected token '', "{
+  "name"... is not valid JSON
+```
+
+PowerShell 5.1's `utf8` means **UTF-8 with BOM**. A BOM had sat in a tracked
+`apps/field/package.json` across several commits, because nothing else parsed it
+strictly enough to notice — `git`, `pnpm`, `tsc`, `eslint` and `prettier` all
+tolerate it.
+
+Use one of these when writing a file other tools will parse:
+
+```powershell
+[System.IO.File]::WriteAllText($path, $text)          # no BOM, any PS version
+Set-Content $path $text -Encoding utf8NoBOM           # PowerShell 6+ only
+```
+
+To find existing ones:
+
+```bash
+git ls-files | while read -r f; do head -c 3 "$f" | od -An -tx1 | grep -q 'ef bb bf' && echo "$f"; done
+```
+
+## Mutation testing — a rule, not a technique
+
+### A mutation that removes the check is not a proof of the check
+
+Found while mutation-testing the vitest/jest boundary. The first mutation *replaced*
+vitest's include glob with `.test.tsx`, intending to create an overlap. Instead it
+stopped vitest matching `runner-boundary.test.ts` at all: the check never ran, and
+the result read as green.
+
+**A mutation must leave the assertion running and make it fail.** If the test count
+drops, the mutation deleted the test rather than breaking it, and the proof is void.
+
+Check the count, not just the colour:
+
+```
+before mutation   44 passed
+bad mutation      40 passed          <- check vanished, proves nothing
+good mutation     2 failed | 42 passed
+```
+
+The correct version *widened* the include to `['src/**/*.test.ts', 'src/**/*.test.tsx']`,
+which keeps the boundary test running and makes it fail on its own assertion.
+
+This applies to everything mutation-tested on this project, including the FE-W2
+reducer guards and the FE-W1 contrast controls — all of which were verified by
+failure count rather than by colour, but none of which stated the rule.

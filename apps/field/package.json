@@ -11,13 +11,15 @@
     "export": "expo export --platform android",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint app src",
-    "test": "vitest run"
+    "test": "vitest run && jest",
+    "test:logic": "vitest run",
+    "test:render": "jest"
   },
   "dependencies": {
+    "@expo/metro-runtime": "~57.0.9",
     "@fieldforce/core": "workspace:*",
     "@fieldforce/ui": "workspace:*",
     "@fieldforce/ui-tokens": "workspace:*",
-    "@expo/metro-runtime": "~57.0.9",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@supabase/supabase-js": "^2.112.3",
     "expo": "~57.0.12",
@@ -31,9 +33,15 @@
     "react-native-screens": "~4.26.2"
   },
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "@react-native/jest-preset": "^0.86.2",
+    "@testing-library/react-native": "^14.0.1",
     "@types/node": "^24.9.2",
     "@types/react": "~19.2.2",
-    "vitest": "^3.2.4",
-    "typescript": "^5.9.3"
+    "jest": "^29.7.0",
+    "jest-expo": "~57.0.4",
+    "test-renderer": "^1.2.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
   }
 }

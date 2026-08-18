@@ -3252,3 +3252,156 @@ was never deployed anywhere, so nothing needs removing.
   two places respectively — restore by hand.
 - No `pnpm install` needed; FE-R1a changed no dependency or lockfile.
 - Nothing external: no Expo project, no published app, no link in the wild.
+
+---
+
+### FE-H1 — Render test harness (17 August 2026)
+
+Push #3 of four. Harness only — route tests and the queue screen are push #4, so that
+when CI eventually runs, a red result has one candidate cause.
+
+**This push does not close FE-G1 or FE-G2.** Both need hardware. Every check below is
+local; CI has still never run on any frontend code.
+
+#### Packages — six, not two, and why
+
+The prompt authorised `jest-expo` and `@testing-library/react-native`. The registry
+confirmed the deprecation exactly as stated:
+
+> `@testing-library/jest-native`: **DEPRECATED** — "This package is no longer
+> maintained. Please use the built-in Jest matchers available in
+> @testing-library/react-native v12.4+."
+
+`@testing-library/react-native` **14.0.1** installed, `jest-expo` **57.0.4**. No third
+matcher package.
+
+But the authorised two do not run. `peerDependenciesMeta` marks only `expo` and
+`react-server-dom-webpack` optional for jest-expo, and only `jest` optional for RTL:
+
+| Package                          | Why it is required                                                                      |
+| -------------------------------- | --------------------------------------------------------------------------------------- |
+| `jest` 29.7                      | jest-expo is a **preset**, not a runner. Not declared anywhere in this repo before now. |
+| `@react-native/jest-preset` 0.86 | jest-expo peer, not optional                                                            |
+| `test-renderer` 1.2              | RTL v14 peer, not optional. Distinct from `react-test-renderer`.                        |
+| `@jest/globals` 29.7             | typings for `describe`/`it`/`expect` — see below                                        |
+
+**`test-renderer` was verified before installing**, because a generically-named v1.x
+package arriving as a transitive peer is the shape of a typosquat. It is published by
+`mdjastrzebski`, who is **one of the 17 maintainers of
+`@testing-library/react-native`** — a direct publisher overlap, checkable from the
+registry alone. RTL 14.0.1's own `peerDependencies` names it. 607k downloads/week,
+~20% of RTL's 3.04M, consistent with v14-only adoption.
+
+**`@jest/globals` rather than `@types/jest`, and the reason is structural.**
+`@types/jest` declares `describe`/`it`/`expect` **globally**, so they would
+type-resolve inside the `.test.ts` files vitest runs — the runner boundary would be
+invisible at the type level. Explicit imports from `'@jest/globals'` and `'vitest'`
+make which runner owns a file legible in its first three lines. The split enforces
+itself rather than relying on a convention.
+
+#### Two runners in one workspace
+
+Chosen over migrating the 40 existing vitest tests: they are the most carefully
+constructed in the codebase and porting them between runners risks silently weakening
+an assertion in a way no count would show.
+
+```
+*.test.ts   -> vitest   logic, node, no renderer
+*.test.tsx  -> jest     rendering, jest-expo preset
+```
+
+`apps/field/jest.config.cjs` and `apps/field/vitest.config.ts`. Scripts:
+`test` runs both, `test:logic` and `test:render` run one each. Wired into CI as
+`pnpm --filter @fieldforce/field test`, which invokes both.
+
+**The boundary is enforced, not conventional.** `src/runner-boundary.test.ts`, 4
+tests, asserts every vitest include ends `.test.ts`, every jest testMatch ends
+`.test.tsx`, that vitest keeps an explicit `.test.tsx` exclusion even though the
+include already implies it, and that no string can satisfy both.
+
+#### The negative control
+
+`src/harness.test.tsx`, committed in the passing orientation. Inverted:
+
+```
+● render harness › does not find text that was never rendered — the negative control
+  Unable to find an element with text: text that is not rendered
+Tests:  1 failed, 1 passed, 2 total
+```
+
+Restored: 2 passed.
+
+**The boundary check was mutation-tested too, and the first attempt was a dud worth
+recording.** Replacing vitest's include with `.test.tsx` stopped vitest matching
+`runner-boundary.test.ts` at all — nothing ran, and the result read as green.
+_Widening_ the include to `['src/**/*.test.ts', 'src/**/*.test.tsx']` is the correct
+mutation, and fails 2 of 44:
+
+```
+vitest include "src/**/*.test.tsx" must end in .test.ts
+```
+
+#### Test counts, before → after
+
+| Suite       | Runner | Before | After  | Delta             |
+| ----------- | ------ | ------ | ------ | ----------------- |
+| `field`     | vitest | 40     | **44** | +4 boundary tests |
+| `field`     | jest   | —      | **2**  | +2 harness tests  |
+| `ui-tokens` | vitest | 38     | 38     | —                 |
+| `core`      | vitest | 21     | 21     | —                 |
+| `mock`      | vitest | 40     | 40     | —                 |
+| `api`       | vitest | 333    | 333    | —                 |
+
+**Totals are no longer meaningful as a single number.** From here on, report per
+runner: **476 vitest + 2 jest**.
+
+The six added tests, each pinning a fact:
+
+1. _sends only .test.ts to vitest_ — every vitest include ends `.test.ts`
+2. _sends only .test.tsx to jest_ — every jest testMatch ends `.test.tsx`
+3. _keeps vitest excluding .test.tsx_ — the redundant exclusion survives a widened include
+4. _cannot match the same file in both runners_ — no string satisfies both
+5. _renders a component from @fieldforce/ui_ — the whole chain: TSX transformed, workspace package transformed as source, RN tree mounted, queries read it back
+6. _the negative control_ — the harness fails when an assertion is wrong
+
+#### Verification
+
+| Check                                                      | Result                                         |
+| ---------------------------------------------------------- | ---------------------------------------------- |
+| `pnpm run build`                                           | 3/3                                            |
+| `pnpm run typecheck`                                       | 9/9                                            |
+| `pnpm run lint`                                            | 7/7                                            |
+| `pnpm format:check`                                        | clean                                          |
+| `api` with the stack up                                    | **333 passed**, 13 files — passed, not skipped |
+| Harness needs a device, emulator, prebuild or native build | **No.** Node only.                             |
+
+`apps/field/dist/` is **gitignored, not tracked** (`.gitignore:6` — `dist/`), and is
+excluded from jest discovery along with `.expo/`, `android/` and `ios/`.
+
+#### What it cost — four traps, all now in gotchas.md
+
+1. **Jest cannot resolve a bare preset name under pnpm.** `Preset jest-expo not
+found` while node's `require.resolve('jest-expo/jest-preset')` succeeds from the
+   same directory. Fixed with `path.dirname(require.resolve(...))`.
+2. **A UTF-8 BOM in `apps/field/package.json`** — written by an earlier
+   `Set-Content -Encoding utf8`, which on PowerShell 5.1 means _with_ BOM. It had sat
+   in a tracked file across several commits.
+3. **RTL v14's `render` is async.** Un-awaited, it yields a thenable with no query
+   methods, and `screen` throws _"`render` function has not been called"_.
+4. **`transformIgnorePatterns` needed `@fieldforce` added** — `packages/ui` is
+   consumed as TypeScript source.
+
+#### What I think is worth arguing with
+
+**1. CI has never run `ui-tokens`.** Found while wiring, not fixed here — the
+no-opportunistic-fixes rule holds. It is addressed in the commit immediately
+following this one, because `check-contrast` is a build-failing accessibility guard
+that has been decorative in CI since it was written.
+
+**2. Six packages is three more than a harness ought to need**, and the count is
+driven by RTL v14's peer graph rather than by anything this project chose. Worth
+re-examining if RTL's peers consolidate.
+
+**3. The `screen` API works, but only after `await`.** Push #4 will write dozens of
+render tests, and every one needs `await render(...)`. That is stated in the push #4
+prompt rather than left to be rediscovered per test.
