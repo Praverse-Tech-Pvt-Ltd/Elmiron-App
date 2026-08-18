@@ -39,6 +39,11 @@ jobs:
       # its required ratio, and it had never run here — the step simply did not
       # exist, so the control was decorative in CI from the day it was written.
       - run: pnpm --filter @fieldforce/ui-tokens test
+      # Added with this package's first real tests, in the same commit, because a
+      # workspace that gains a suite and not a CI line is how ui-tokens stayed
+      # decorative. Runs both runners: vitest for the boundary check, jest for
+      # component rendering.
+      - run: pnpm --filter @fieldforce/ui test
       # Contract I2: proves every mock response still parses against packages/core.
       - run: pnpm --filter @fieldforce/mock test
       # Two runners in one workspace, both invoked by this script: vitest for logic
