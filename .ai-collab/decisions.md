@@ -252,6 +252,29 @@ one-line form for scanning.
 
 ---
 
+## 23 August 2026 · Model: Claude Sonnet 5
+
+### Retention workflows disabled again
+
+- **Decision:** `retention.yml` and `retention-watchdog.yml` disabled via
+  `gh workflow disable`, at 08:44 UTC, 23 August.
+- **Who:** the agent, on direct user instruction ("disable the scheduled workflows
+  again") — not a unilateral call.
+- **Why:** not stated by the user; not inferred or invented here. Both workflows had
+  been running green on their real hourly/15-min cadence since the 14 August
+  re-enable (last observed runs: retention at 08:15:58 UTC, watchdog at 07:47:31 UTC,
+  23 August, both `schedule`-triggered and successful) — this was not a response to
+  a failure.
+- **The reminder-mechanism gap applies again, same as 14 August:** a disabled
+  workflow produces no red, no alert. If this stays off for any length of time,
+  nothing will surface a forgotten re-enable. No expiry or follow-up was requested;
+  none is assumed here.
+- **State as of this entry:** both `disabled_manually`. Migration
+  `20260817000200_purge_backlog_stall_detection.sql` remains applied to production
+  from 14 August — only the schedules are off, not the fix.
+
+---
+
 ## Where the earlier ones live
 
 | Decision | Where |
