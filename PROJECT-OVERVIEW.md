@@ -3405,3 +3405,225 @@ re-examining if RTL's peers consolidate.
 **3. The `screen` API works, but only after `await`.** Push #4 will write dozens of
 render tests, and every one needs `await render(...)`. That is stated in the push #4
 prompt rather than left to be rediscovered per test.
+
+---
+
+### FE-W2b - Route tests and queue screen (17 August 2026)
+
+Push #4, the last of the sequence, and the first MR-facing surface in this project.
+
+**FE-G1 and FE-G2 remain OPEN.** Both need a physical Android device and there is
+none. Nothing below is offered as meeting either. Every number here is local; CI has
+still never run on any frontend code.
+
+#### Three commits, kept separate for diagnosability
+
+| Commit    | Contents                                                           |
+| --------- | ------------------------------------------------------------------ |
+| `cca4ac5` | `packages/ui` gains the harness and its CI line in the same commit |
+| `62d480f` | Route tests for the five FE-W1 files                               |
+| `1e580a3` | The queue screen, its binding, and both mutation proofs            |
+
+#### The five route files
+
+Seventeen `it()` blocks, nineteen executed cases - `app/home.tsx` uses `it.each` over
+three roles. **Both figures are stated because quoting one while the runner prints the
+other is how a count stops being auditable.**
+
+| Route             | Blocks / cases | What the tests pin                                                                                                                                                                                                                                                                                 |
+| ----------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/index.tsx`   | 3 / 3          | A cold start shows a _named_ restoring state rather than guessing a destination; a restored session goes to `/home`, an absent one to `/sign-in`                                                                                                                                                   |
+| `app/sign-in.tsx` | 3 / 3          | Submit disabled until both fields are filled; both inputs carry accessible labels; no failure banner before anything has been attempted                                                                                                                                                            |
+| `app/home.tsx`    | 6 / 8          | Each role sees its own destination and not another's; the role is the one **read from the token**, displayed rather than inferred; all three roles keep the shared destination, because hiding a row is navigation and not permission; a signed-out session redirects instead of rendering a shell |
+| `app/doctors.tsx` | 5 / 5          | A denial renders **as a denial and never as an empty list**; the server's sentence verbatim; an empty territory and a refused one are distinguishable; the loading state names what it loads; a transport failure is not reported as a permission problem                                          |
+| `app/_layout.tsx` | **0**          | **Not tested - see below**                                                                                                                                                                                                                                                                         |
+
+**`app/_layout.tsx` could not be meaningfully tested today.** It composes
+`SafeAreaProvider`, `SessionProvider` and `StatusBar` around expo-router's `<Stack/>`,
+which resolves routes from the filesystem at runtime. Rendering it in isolation
+exercises the providers and not the composition, so the only honest assertion
+available is that it did not throw - the kind this prompt forbids. It is covered
+indirectly: every other route test mounts a component that reads the session context
+the layout provides.
+
+**No client-side permission logic was added or implied.** These tests pin how the
+client _presents_ a server decision.
+
+#### The queue screen
+
+Component in `packages/ui/src/QueueScreen.tsx`; `apps/field/app/queue.tsx` is a
+binding that reads state, passes it down and renders. Nothing else.
+
+**It decides nothing.** There is no branch in the file that could promote, demote,
+reorder or retire an item.
+
+`packages/ui` cannot import the reducer - a package must not depend on an app - so
+`QueueScreenProps` is declared structurally and a real `SyncQueueState` satisfies it
+by shape. **The binding passing state straight through is the compile-time check that
+the two agree**; if the reducer's state diverges, that line stops compiling.
+
+| State                        | Glyph    | Label                                                                         | Backed by                                                                                                 |
+| ---------------------------- | -------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| empty                        | `U+2713` | **Everything is sent** + "Nothing is waiting to leave this phone."            | `items: []`, and a fully-synced queue                                                                     |
+| queued, retrying normally    | `U+21BB` | **Waiting to send**                                                           | `SyncQueueItemSchema.parse`, `attemptCount: 0`                                                            |
+| queued, retrying a long time | `U+25F7` | **Still trying**                                                              | same, `attemptCount >= 3`; also produced by driving five real `attempt_failed` events through the reducer |
+| rejected                     | `U+2715` | **Refused** + the server's sentence                                           | reducer fed a real `rejected` verdict                                                                     |
+| dead-lettered                | `U+2298` | **Needs someone to look** + "This can be sent again once someone reviews it." | `deadLettered: true`                                                                                      |
+
+**Inputs are parsed through `@fieldforce/core`'s Zod schemas, not taken from
+`services/mock` fixtures.** Section 2 named the wrong mechanism for the right goal:
+mock fixtures are server-response shapes while the screen consumes reducer state, so
+they would need translating through the reducer anyway - and a drifted fixture passes
+while a drifted parse throws. The `apps/field` test runs the chain end to end:
+contract-parsed input, the real reducer, the screen. Nothing between them is a
+fixture.
+
+_Recorded separately, not fixed here:_ `services/mock`'s fixtures are unreachable -
+`main: ./dist/index.js`, no `exports` map, and an entrypoint with a top-level
+`await startMockServer()` that starts a listener on import. A real defect for whoever
+needs them next.
+
+#### The long-retry threshold
+
+**`LONG_RETRY_AFTER_ATTEMPTS = 3`. Display only.**
+
+Three tests assert it changes presentation and nothing else: the item is
+byte-identical either side of the threshold (same status, same id); a row that crosses
+it **does not move**, because position is read as priority and priority is a verdict
+the server owns; and no number of attempts - 500 in the test - ever becomes a refusal.
+
+**No duration is computed anywhere on this screen.** The only timestamp rendered is
+**`RejectionRecord.receivedAt`**, the server's own clock, and only for items the
+server has actually answered. A queued item has no server timestamp, so the screen
+shows **no time at all** for it rather than passing off `clientCreatedAt` - the
+device's clock - as though the server knew about the work. A test asserts that
+absence. This also sidesteps the drifted-dev-clock trap recorded in `gotchas.md`.
+
+#### Both mutation proofs - the count held at 15 in each
+
+```
+MUTATION 1 - the threshold issues a verdict instead of choosing words
+  return item.attemptCount >= longRetryAfterAttempts ? 'refused' : 'waiting';
+  -> Tests: 4 failed, 11 passed, 15 total
+     renders the label "Still trying"
+     changes the words and nothing about the item
+     does not move a row that crosses it
+     never turns a long wait into a refusal
+
+MUTATION 2 - the client wraps its own wording around the server's sentence
+  <BodyText>{`The server said: ${rejection.explanation}`}</BodyText>
+  -> Tests: 1 failed, 14 passed, 15 total
+     renders verbatim, with nothing wrapped around it
+
+restored -> Tests: 15 passed, 15 total
+```
+
+Neither mutation dropped the case count, so in both the assertion ran and failed
+rather than vanishing.
+
+#### Per-runner counts
+
+**A single total would now span two runners and five workspaces and hide which one
+moved.** Reported per runner from here on.
+
+| Workspace   | Runner | Before | After                                  |
+| ----------- | ------ | ------ | -------------------------------------- |
+| `field`     | vitest | 44     | 44                                     |
+| `field`     | jest   | 2      | **24**                                 |
+| `ui`        | vitest | -      | **4**                                  |
+| `ui`        | jest   | -      | **17**                                 |
+| `ui-tokens` | vitest | 38     | 38                                     |
+| `core`      | vitest | 21     | 21                                     |
+| `mock`      | vitest | 40     | 40                                     |
+| `api`       | vitest | 333    | **333 passed** - stack up, not skipped |
+
+Added, each pinning a fact: 4 boundary + 2 harness in `ui`; 19 route cases and 3 chain
+cases in `field`; and in `ui`'s screen suite - 2 empty-state, 3 state labels, 1
+dead-letter reversibility, 2 verbatim-sentence, 2 timestamp, 3 threshold, 2 glyph.
+
+#### Accessibility - asserted versus deferred
+
+**Asserted in the renderer:**
+
+- Every one of the five states renders a **text label**, so meaning is never carried
+  by colour or glyph alone.
+- The glyph is **invisible to the accessibility tree** - proved by the query engine
+  itself, since RTL skips hidden elements and the glyph cannot be found without
+  `includeHiddenElements: true`, while its label can. Without this TalkBack would
+  announce "clockwise open circle arrow, Waiting to send".
+- Glyphs are **Basic Unicode, below U+2800 and outside the emoji blocks**, asserted by
+  codepoint.
+- Both sign-in inputs carry accessible labels; the loading state names what it loads.
+
+**Deferred to device verification - not checked, and not implied to be:**
+
+- **44px touch targets.** `minHeight: 44` is set on rows and buttons; a renderer does
+  not lay out, so nothing here measures a real target.
+- **16px body, weight 400 minimum.** The tokens say so and `ui-tokens` asserts the
+  contrast ratios, but rendered type size is not measured here.
+- **Outdoor legibility at partial brightness** - the FE-W7 sunlight audit.
+- **Glyph rendering on real OEM font stacks.** Non-emoji codepoints reduce the tofu
+  risk; they do not eliminate it on Xiaomi/Oppo/Vivo ROMs.
+- **Whether TalkBack honours `importantForAccessibility`** in the built app, as
+  opposed to the test renderer's accessibility tree.
+
+#### The lint-rule extension - proposal only, not implemented
+
+The current rule bans React Native visual primitives in `apps/field`, so a full
+reusable screen assembled from `@fieldforce/ui` components can sit there undetected.
+
+**Proposed:** in `apps/field/app/**`, fail when a file declares **any JSX-returning
+function other than its default export**. That encodes _routes bind, screens render_
+about as directly as a lint rule can - a binding has exactly one component and it is
+the route.
+
+**What it would wrongly reject:**
+
+1. **Inline component mocks in tests.** The two route test files mock `Redirect` as a
+   function returning a node. Exempting `*.test.tsx` reopens the hole in exactly the
+   files that grew it last time; not exempting them means mocks move to a shared
+   helper.
+2. **A genuinely route-specific render helper** - a three-line branch a route extracts
+   for readability - would be forced into `packages/ui` even when nothing else will
+   ever consume it.
+
+**Noise on current code: low.** All five routes have exactly one JSX-returning default
+export and would pass unchanged. It fires only on the two test files.
+
+**My read:** worth having, with mocks moved to a shared test helper rather than
+exempting test files. But it is a real cost on a real pattern, and if the answer is
+that no rule expresses this cleanly, enforcing it in review and recording that is
+better than a rule with a carve-out big enough to hide the thing it was written to
+catch.
+
+#### CI membership
+
+Re-audited. **Every workspace with a real test script is invoked by CI:** `core`,
+`ui-tokens`, `ui`, `mock` and `field` in the static job, `api` in the database job.
+`packages/ui` was the next predicted victim of the hand-maintained list and was caught
+on schedule - its CI line landed in the same commit as its first tests.
+
+#### What I think is worth arguing with
+
+**1. `docs/design-plan.md` is still not in the repo, and I could not put it there.**
+The prompt's "Read first" lists it, and it lives on the Claude side where this session
+cannot reach it. I built to the numbers in the prompt itself - 16px, weight 400, 44px,
+press states, icon plus label. That was sufficient here, but this is the ninth
+instance of a document existing only where the reader is not, and it is the one
+instruction in this prompt I could not follow.
+
+**2. Nothing links to the queue screen.** `app/queue.tsx` is reachable by URL and by
+nothing else - no navigation row points at it, because adding one was not asked for
+and would be an unrequested feature. Under this project's own convention that anything
+built should be called by something, that is worth a decision rather than a silent
+gap.
+
+**3. The binding renders `emptyQueue` and never changes.** That is honest - nothing
+enqueues until FE-W3 and there is no store - but it means the screen a human can reach
+today always shows the empty state. The five states are exercised by tests, not by the
+app.
+
+**4. `@fieldforce/core` was added as a devDependency of `packages/ui`** so its tests
+could parse through the contract schemas. A workspace package rather than a new
+external one, but a dependency addition nonetheless, and it is the mechanical
+consequence of ruling B.

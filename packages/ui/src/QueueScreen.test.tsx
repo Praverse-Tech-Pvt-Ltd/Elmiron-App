@@ -166,3 +166,30 @@ describe('the long-retry threshold is display only', () => {
     expect(screen.queryByText('Needs someone to look')).toBeNull();
   });
 });
+
+describe('the glyph is decorative', () => {
+  it('is invisible to the accessibility tree, so the label is what gets announced', async () => {
+    // The strongest available proof, and it is the query engine's own: RTL skips
+    // accessibility-hidden elements by default, so a glyph that IS hidden simply
+    // cannot be found without opting in. Without this, TalkBack would read
+    // "clockwise open circle arrow, Waiting to send" — icon+label satisfying a
+    // checklist while being worse for the person it exists for.
+    const queued = item();
+    await render(<QueueScreen items={[queued]} rejections={{}} />);
+
+    expect(screen.queryByText('↻')).toBeNull();
+    expect(screen.getByText('↻', { includeHiddenElements: true })).toBeTruthy();
+
+    // The label beside it is not hidden.
+    expect(screen.getByText('Waiting to send')).toBeTruthy();
+  });
+
+  it('uses Basic Unicode rather than emoji, which can render as tofu on OEM ROMs', async () => {
+    // Emoji presentation varies across Android OEM font stacks — the Xiaomi/Oppo/Vivo
+    // ROMs this product targets are exactly where that bites.
+    await render(<QueueScreen items={[]} rejections={{}} />);
+    const glyph = screen.getByText('✓', { includeHiddenElements: true });
+    const codepoint = (glyph.props['children'] as string).codePointAt(0) ?? 0;
+    expect(codepoint).toBeLessThan(0x2800);
+  });
+});
