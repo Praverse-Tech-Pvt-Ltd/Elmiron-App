@@ -25,6 +25,13 @@ export type { TextProps } from './Text';
 export { ListRow } from './ListRow';
 export type { ListRowProps } from './ListRow';
 export { PrimaryButton } from './PrimaryButton';
+export { LONG_RETRY_AFTER_ATTEMPTS, QueueScreen, rowStateFor } from './QueueScreen';
+export type {
+  QueueRowState,
+  QueueScreenItem,
+  QueueScreenProps,
+  QueueScreenRejection,
+} from './QueueScreen';
 export type { PrimaryButtonProps } from './PrimaryButton';
 export { Screen } from './Screen';
 export type { ScreenProps } from './Screen';

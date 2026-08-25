@@ -1058,3 +1058,50 @@ line the day it gains a real suite.
 
 The general shape: a control that is only invoked by a list somebody maintains by
 hand is a control that will eventually be left off the list.
+
+### Report test BLOCKS and CASES separately wherever `it.each` exists
+
+`app/home.tsx`'s route tests are 6 `it()` blocks that execute as 8 cases, because one
+block is an `it.each` over three roles. A report quoting 6 while the runner prints 8
+is a count nobody can reconcile — the same failure as a single total hiding a
+per-runner split.
+
+State both, always:
+
+```
+app/home.tsx   6 blocks / 8 cases
+```
+
+Sits alongside the mutation rule above: both are about counts that look sound and are
+not.
+
+### `it.each` with `as const` tuples produces a signature a destructured callback fails
+
+```
+error TS2345: Argument of type '(_state: "waiting" | ..., label: ..., over: ...) => Promise<void>'
+is not assignable to parameter of type '(...args: readonly ["waiting", ...] | readonly [...]) => ...'
+```
+
+The `as const` makes each row a distinct readonly tuple type, and the callback must
+satisfy every one of them at once. Use an array of **objects** instead — jest's `$var`
+interpolation works on object keys, so the case names stay readable:
+
+```tsx
+it.each([
+  { label: 'Waiting to send', attemptCount: 0 },
+  { label: 'Still trying', attemptCount: 3 },
+])('renders the label "$label"', async ({ label, attemptCount }) => { /* ... */ });
+```
+
+### `Array.prototype.reduce` infers the accumulator from the array, not from the seed
+
+Driving the reducer over a literal array of events fails to typecheck: TypeScript
+widens the array to a union of its element shapes and then insists the accumulator is
+that union, so `state.items` "does not exist".
+
+Annotate the array, not the reduce:
+
+```ts
+const events: SyncEvent[] = [ /* ... */ ];
+const state = events.reduce(syncQueueReducer, emptyQueue);
+```
