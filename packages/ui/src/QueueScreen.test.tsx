@@ -177,19 +177,28 @@ describe('the glyph is decorative', () => {
     const queued = item();
     await render(<QueueScreen items={[queued]} rejections={{}} />);
 
-    expect(screen.queryByText('↻')).toBeNull();
-    expect(screen.getByText('↻', { includeHiddenElements: true })).toBeTruthy();
+    // Verify 'Waiting to send' state glyph (↻)
+    expect(screen.queryByText('\u21BB')).toBeNull();
+    expect(screen.getByText('\u21BB', { includeHiddenElements: true })).toBeTruthy();
 
     // The label beside it is not hidden.
     expect(screen.getByText('Waiting to send')).toBeTruthy();
   });
 
-  it('uses Basic Unicode rather than emoji, which can render as tofu on OEM ROMs', async () => {
-    // Emoji presentation varies across Android OEM font stacks — the Xiaomi/Oppo/Vivo
-    // ROMs this product targets are exactly where that bites.
+  it('uses only documented Basic Unicode glyphs, not emoji', async () => {
+    // Pinned to the exact set of five codepoints. Below U+2800 is not enough to
+    // exclude emoji (Misc Symbols/Dingbats blocks overlap); an allowlist is
+    // simpler and strictly stronger.
+    const ALLOWED_GLYPHS = new Set(['\u2713', '\u21BB', '\u25F7', '\u2715', '\u2298']);
+
     await render(<QueueScreen items={[]} rejections={{}} />);
-    const glyph = screen.getByText('✓', { includeHiddenElements: true });
-    const codepoint = (glyph.props['children'] as string).codePointAt(0) ?? 0;
-    expect(codepoint).toBeLessThan(0x2800);
+
+    // Find the glyph in the empty state (it is a sibling of 'Everything is sent')
+    const label = screen.getByText('Everything is sent');
+    const statusLine = label.parent;
+    const glyph = statusLine?.children[0];
+    const char = (glyph as any).props['children'] as string;
+
+    expect(ALLOWED_GLYPHS.has(char)).toBe(true);
   });
 });
