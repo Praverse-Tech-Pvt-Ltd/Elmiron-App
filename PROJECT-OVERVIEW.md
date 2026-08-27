@@ -3627,3 +3627,34 @@ app.
 could parse through the contract schemas. A workspace package rather than a new
 external one, but a dependency addition nonetheless, and it is the mechanical
 consequence of ruling B.
+
+---
+
+### Record correction (27 August 2026)
+
+On 27 August, it was identified that the generated ndroid/ directory was untracked despite FE-R1a claiming it was gitignored. The root .gitignore has been updated and the directory is now correctly excluded. This note is appended as a durable record of the discovery.
+
+### FE-Build-1  Native build and hoisting (27 August 2026)
+
+The first successful native build of the Field app on Android. This phase resolved the toolchain blockers and established the path-length-compatible project layout.
+
+#### Toolchain blockers and fixes
+
+| Blocker | Fix |
+| --- | --- |
+| **JDK 25 failure** | JDK 17 installed and configured for both Gradle and Terminal JAVA_HOME. JEP 472 restricted-method errors on native modules (Screens/Worklets) resolved. |
+| **Path length limits** | Switched pnpm to `hoisted` linker. `CMAKE_OBJECT_PATH_MAX` (250 chars) was being exceeded by deep `node_modules/.pnpm` nesting. |
+| **Location Exception** | Ensured only `ANDROID_USER_HOME` is defined; IDE-injected `ANDROID_PREFS_ROOT` process-level variable identified and cleared. |
+| **Missing SDK Platform** | API 36 platform installed to match `compileSdkVersion`. |
+
+#### Hoisting decision
+
+The project root path (`C:\\dev\\Elmiron-App`) combined with pnpm\u0027s default symlink-heavy layout produced object file paths of ~195 characters before reaching the module source. The CMake build for `react-native-worklets` failed because generated object paths exceeded Windows\u0027s 250-character ceiling. Hoisting flattened the tree, reducing nesting by ~4 levels and ~60 characters.
+
+**Version mismatch resolved.** The first hoisted install drifted `react-native-worklets` from 0.11.4 to 0.12.1 due to open peer-dependency ranges. This broke the build with `error: no member named \u0027executeSync\u0027 in \u0027worklets::WorkletRuntime\u0027`. Resolved by restoring the lockfile and re-running install, pinning the hoisted layout to the documented versions.
+
+#### Verification
+
+- **FE-G1 State:** **emulator-passed / device-pending**. The app runs on the Pixel 10 API 37.1 emulator; sign-in and field capture await a physical device.
+- **Test Fidelity:** 521 tests pass across 2 runners. Hoisting verified as safe for both Frontend (Jest/Metro) and Backend (Vitest/Node) resolution.
+- **api suite:** **333 PASSED** against the local Supabase stack.

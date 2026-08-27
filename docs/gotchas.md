@@ -576,7 +576,7 @@ update public.recordings set purge_after = now() - interval '10 days' where id =
 
 **The general rule, for any table in this schema:** before writing a fixture that
 sets a column a trigger also writes to, check for a `before insert` trigger on that
-table (`\d public.<table>` in psql, or grep the migrations for
+table (`\d public.<table` in psql, or grep the migrations for
 `before insert ... execute function`). If one exists and touches the column, the
 fixture needs the insert-then-update shape above — a single `INSERT` with the
 "right" value is not evidence the value survived.
@@ -1105,3 +1105,27 @@ Annotate the array, not the reduce:
 const events: SyncEvent[] = [ /* ... */ ];
 const state = events.reduce(syncQueueReducer, emptyQueue);
 ```
+
+---
+
+## Android Toolchain and Build
+
+### AndroidLocationsException: "Several environment variables ... contain different paths"
+
+AGP reports this error while printing two IDENTICAL paths. The real rule is that only ONE mechanism may be defined. If both `ANDROID_PREFS_ROOT` and `ANDROID_USER_HOME` are set, the build fails even when they point to the same location.
+
+### ANDROID_PREFS_ROOT injected by IDE
+
+This variable was set at PROCESS scope only, injected by the IDE (Android Studio). A registry check shows nothing, and unsetting it in one shell session does not persist. To ensure a clean environment, build from an external terminal where the variable is not present.
+
+### Emulator API version vs compileSdkVersion
+
+The emulator's system image API (e.g., API 37) and the `compileSdkVersion` (e.g., API 36) are separate SDK components. Having an API 37 emulator does not provide the API 36 platform required for compilation. Both must be installed via the SDK Manager.
+
+### JDK 25 failure (JEP 472) on native modules
+
+JDK 25 fails during CMake configuration with a restricted-method error (JEP 472) when building `react-native-screens` and `react-native-worklets`. JDK 17 is the documented project requirement. Note that Android Studio's Gradle JDK and the terminal's `JAVA_HOME` are separate settings; both must be pointed at JDK 17 to ensure consistency between IDE and CLI builds.
+
+### General Rule: Pinned Toolchain
+
+The toolchain for this project is deliberately pinned to documented versions. Newer versions of the JDK or SDK platforms are not necessarily better and may introduce breaking changes or incompatibilities. Always match the versions specified in the project documentation.

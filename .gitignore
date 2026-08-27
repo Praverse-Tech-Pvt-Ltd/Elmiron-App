@@ -21,7 +21,7 @@ services/api/supabase/.branches/
 .claude/skills/
 
 # .ai-collab/ and handoff.md are tracked as of BE-W8. BE-W6 originally kept them
-# untracked on staleness grounds; that decision is reversed by explicit request —
+# untracked on staleness grounds; that decision is reversed by explicit request â€”
 # they are now committed and expected to be updated regularly, not treated as a
 # point-in-time snapshot. PROJECT-OVERVIEW.md and docs/gotchas.md remain the
 # durable, cumulative record; these are the working notes alongside them.
@@ -32,11 +32,15 @@ services/api/supabase/.branches/
 #
 # graphify's own docs recommend committing this so the team shares one map. We do
 # not, for two reasons: it is ~4 MB of mostly graph.html and cache/, and it is a
-# derived artefact that goes stale the moment a migration lands — the same
+# derived artefact that goes stale the moment a migration lands â€” the same
 # staleness argument that keeps handoff.md out of git above.
 #
 # Requires `pip install "graphifyy[sql]"` first. The base package bundles 36
 # tree-sitter grammars, SQL is not one of them, and without it every .sql file
-# contributes nothing — which on this repo silently omits the entire RLS
+# contributes nothing â€” which on this repo silently omits the entire RLS
 # enforcement layer while still producing a confident-looking graph.
 graphify-out/
+
+# Expo generated native directories
+apps/field/android/
+apps/field/ios/

@@ -538,5 +538,14 @@ FE-W8-blocking entries — the package ID and the account owner are one conversa
 | RLS decides which rows, never what values | → "Standing principle" |
 | Three requirements dropped (roles, versioning, source search) | → "Closed by the reviewer, 12 Aug" |
 | `app_thresholds` is append-only, not updatable | → BE-W6 |
-| Team-size floor of 8 for the consent anomaly | → BE-W6 |
 | Withdrawal cascade order, and why the object is not deleted inline | → BE-W6 |
+
+---
+
+## 27 August 2026 · Model: Gemini 3.1 Pro
+
+### Section freezing rule
+
+- **Decision:** A `###` section in `PROJECT-OVERVIEW.md` is editable while its sprint is open. **Once the sprint closes, the section freezes.** Any later correction goes in the current section, dated, saying what it replaced and where.
+- **Why:** To prevent erasing the discovery of errors and maintain a durable, auditable record of the project's actual history.
+
