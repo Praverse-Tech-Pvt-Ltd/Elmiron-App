@@ -4132,3 +4132,54 @@ does not require either the GitHub token or a device. **No feature work proceeds
 CI has run green once** — FE-W3 does not start on the strength of 523 tests that have
 only ever run on the machine that wrote them.
 
+---
+
+### FE-Build-2g — offline backup and corrected push diagnosis (31 August 2026)
+
+**Correction: the 403 was never a token scope problem, and the error text said so all
+along.**
+
+_Original claim,_ recorded in FE-Push-1, FE-Build-2c, 2d, 2e and 2f and carried into
+`docs/push-readiness.md`: the push is blocked on a personal access token lacking
+`repo` scope, with `workflow` scope needed as well.
+
+_Correction:_ the failure is
+`remote: Permission to Praverse-Tech-Pvt-Ltd/Elmiron-App.git denied to Devpt1904`,
+HTTP 403 — an **authorisation failure at the account level.** `Devpt1904` has no write
+access to the repository. A token carries the permissions of the account that issued
+it and cannot exceed them, so no scope change reaches this. GitHub names the account
+and says *denied*; it does not say that for a missing scope, which presents
+differently.
+
+The fix needs another person, and is one of: an org owner grants `Devpt1904` write
+access, directly or through a team; or the push is made from an account that already
+holds it — `Rabbitshah` authored **and committed** `b5d03a5` on 23 August, so that
+account can write here; or, as a fallback only, a SAML SSO authorisation, which would
+present as its own distinct error and does not match this one. The `workflow` scope
+requirement is real but **secondary** — it applies only once a push is authorised at
+all, because `.github/workflows/ci.yml` is among the modified files.
+
+_Source of error:_ the reviewer, and Claude Code for repeating it without reading the
+message closely. What caught it was writing `docs/push-readiness.md`: stating the
+blocker for a stranger meant pasting the error verbatim, and the verbatim text names
+an account rather than a scope. **A diagnosis nobody has to write out is a diagnosis
+nobody checks.**
+
+**Which makes the single-machine exposure the live risk, not the push.** A permissions
+grant depends on another person and may take days; thirty-six commits since 14 August,
+including the FE-R1 trademark rename that exists nowhere else, sit on one laptop.
+`backup/pre-merge-31aug` protects against a bad merge and against nothing else.
+
+**`C:/dev/elmiron-app-31aug2026.bundle`** — 1,043,791 bytes, one file, complete
+history and all five refs, no remote and no permissions required. `git bundle verify`:
+*"is okay"*, *"records a complete history"*, sha1. Test-restored by cloning it to a
+scratch directory: tip `142e6bc` matching the source, 71 commits matching the source,
+`f34ceef` an ancestor of HEAD (exit 0), `backup/pre-merge-31aug` carried across as a
+remote-tracking ref at `f658ab2`, and `apps/field/package.json` reading
+`@fieldforce/field`. The scratch clone was then deleted. `*.bundle` is gitignored — a
+bundle committed into the repository it backs up is circular.
+
+**The bundle is not yet a backup.** It is on the same disk as the repository. It
+becomes one when a copy exists off this machine, and not before. That copy is a human
+action and nothing here can perform it.
+
