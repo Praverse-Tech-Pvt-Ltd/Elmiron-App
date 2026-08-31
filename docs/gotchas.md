@@ -1129,3 +1129,34 @@ JDK 25 fails during CMake configuration with a restricted-method error (JEP 472)
 ### General Rule: Pinned Toolchain
 
 The toolchain for this project is deliberately pinned to documented versions. Newer versions of the JDK or SDK platforms are not necessarily better and may introduce breaking changes or incompatibilities. Always match the versions specified in the project documentation.
+
+---
+
+## Known flakes
+
+Tests that have failed without a known cause. An entry here is a debt, not a
+dismissal: it records the one observation precisely enough that the second one can
+be recognised as a pattern rather than re-explained away.
+
+### `apps/field` — `doctors.tsx` › "renders a denial as a denial, never as an empty list"
+
+**The one failure, 31 August 2026.** It failed on the first run of
+`pnpm --filter @fieldforce/field test` immediately after `apps/field/jest.setup.cjs`
+was added and `setupFiles` was wired into `apps/field/jest.config.cjs` — the run in
+which jest first loaded a setup file that had not existed on the previous run. Result
+that run: `Test Suites: 1 failed, 5 passed, 6 total`, `Tests: 1 failed, 23 passed, 24
+total`, this test the only failure.
+
+**The four outcomes since.** `test:render` alone: passed, 24/24. Then three
+consecutive full `test` runs (vitest + jest): passed, 44 + 24 each time. No change to
+the test or to the component between the failure and the four passes.
+
+**Hypothesis, and it is only that:** jest's transform cache was stale for that one
+run — the setup file changed what the module registry looks like, and the failing run
+was the one that straddled the change. Nothing was measured. The failure output was
+not captured before the re-run, which is itself the mistake: a flake with no captured
+output is a flake that cannot be diagnosed later.
+
+> If this test fails once more under any conditions, it is investigated as a real
+> race and not re-run. A test asserting a denial is enforced, that passes
+> intermittently, is worse than no test.

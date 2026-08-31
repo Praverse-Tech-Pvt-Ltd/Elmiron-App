@@ -3987,3 +3987,95 @@ pre-existing by stashing every change from this session and re-running. And
 `1aafc5c`; it is conforming now only because this session's edit to that file ran it
 through the formatter.
 
+---
+
+### FE-Build-2e — reconciliation with origin (31 August 2026)
+
+**Merge, not rebase — and the reasoning matters more than the ruling.** Both backend
+commits touch `PROJECT-OVERVIEW.md` and `.ai-collab/decisions.md`, which the frontend
+line also touches. Replaying 32 commits through a conflicting file means resolving
+substantially the same conflict up to 32 times, and every pass is a fresh chance to
+drop a line from a file whose whole point is that nothing gets dropped. One merge is
+one conflict, one resolution, one reviewable diff.
+
+**In the event there were no conflicts at all.** `git merge origin/main` auto-merged
+both files with the `ort` strategy: `.ai-collab/decisions.md` (+36 −3),
+`PROJECT-OVERVIEW.md` (+44 −19). The two sides had edited different regions — backend
+its own retention sections, frontend appending at the end — so nothing needed
+adjudicating and no resolution rule had to be applied.
+
+What the two commits contained: `b5d03a5` (Maanav Shah, 23 Aug) recorded the retention
+workflows being disabled again; `1ad5aa0` (Maanav Shah, 14 Aug) corrected the claim
+about the scheduled retention run and rewrote the surrounding paragraphs, which is
+where the 19 deletions come from. Backend's own edit to backend's own section,
+predating the append-only rule.
+
+**Nothing frontend was lost.** `git diff backup/pre-merge-31aug HEAD --stat` shows
+exactly two files changed — `.ai-collab/decisions.md` and `PROJECT-OVERVIEW.md` — and
+no other path. The R1 rename `f34ceef` ("FE-R1: remove a third party's trademark from
+the permanent identifiers") is still an ancestor of HEAD, and `apps/field/package.json`
+still reads `@fieldforce/field`. All ten `### FE-` sections are present. Test counts
+are identical either side of the merge: core 21, mock 40, ui-tokens 38, ui 4 + 19,
+field 44 + 24, api 333 — **523 across six packages**, before and after.
+`backup/pre-merge-31aug` is kept.
+
+**Correction — the append-only guard was never at risk, and the error was mine.**
+
+_Original claim (FE-Build-2d, and repeated):_ `1ad5aa0`'s 19 deletions "will land in
+the range the new append-only guard inspects, and the guard will fail on it", so the
+reconciliation needed a decision about the guard's base.
+
+_Correction:_ **wrong, and demonstrated wrong.** `git diff A...B` is
+`git diff $(git merge-base A B) B`; it excludes everything on A's side of the base.
+After the merge, `origin/main` **is** the merge base — `git merge-base origin/main
+HEAD` returns `b5d03a5`, which is `origin/main` itself — so the range contains only
+commits absent from origin, and `1ad5aa0` is not among them. Run against the merged
+HEAD, the guard's exact command gives:
+
+```
+$ git diff --numstat origin/main...HEAD -- PROJECT-OVERVIEW.md
+1512	0	PROJECT-OVERVIEW.md
+Deleted lines: 0
+PASS: append-only respected.
+```
+
+1512 insertions, **zero deletions**, exit 0. Three-dot semantics already handle this
+and no redesign is needed. `git log --oneline origin/main...HEAD` lists 33 commits and
+`1ad5aa0` is not one of them.
+
+_Source of error:_ Claude Code, reasoning about the range instead of running it — on
+a guard whose entire justification was that a rule nobody has executed is not a
+control.
+
+**The lint failure blocking `static` is fixed.** `packages/ui/src/QueueScreen.test.tsx`
+reached into the rendered tree with `(glyph as any).props['children']` to read the
+status glyph. The `any` was avoidable, so it was typed rather than silenced:
+`children` is `ReactTestInstance | string`, and the test now narrows, throwing a
+legible error if the tree ever changes shape, instead of reading `.props` off a string
+and asserting on `undefined`. It also now asserts the value is a string before
+checking it against the allowlist — strictly stronger than before. Repo-wide `lint`:
+**7 tasks, 7 successful.** Render suite unchanged at 19.
+
+**`format:check` has never run in CI, and the one failure we found was found by
+accident.** `apps/field/jest.config.cjs` was non-conforming as committed in `1aafc5c`
+and conforms now only because an unrelated edit in FE-Build-2d ran it through
+prettier — nobody looked for it. Confirmed after the fact by checking that file's
+content at `90ede3c` with the repo's own prettier: non-conforming. Repo-wide
+`format:check` now reports exactly one file, `services/api/scripts/seed-one-mr.mjs`,
+which is **untracked** and therefore invisible to CI; it has been left alone. No
+tracked file is non-conforming.
+
+A method note, because it nearly produced a wrong answer: checking formatting in a
+`git worktree` of an old commit reported only `PROJECT-OVERVIEW.md` and missed
+`jest.config.cjs`. The worktree has no `node_modules`, so `npx` fetched a different
+prettier. **Check historical formatting by extracting the file into the working repo,
+not by running the tool in a dependency-less worktree.**
+
+**The flake is logged, not closed.** `docs/gotchas.md` gains a "Known flakes" heading
+and an entry for `apps/field` › `doctors.tsx` › "renders a denial as a denial" — one
+failure, on the first run after `jest.setup.cjs` was added, four passes since, with a
+stale-transform-cache hypothesis recorded as a hypothesis. The entry carries the rule
+that a second occurrence is investigated as a real race and not re-run. It also
+records the mistake made at the time: the failure output was not captured before the
+re-run, so there is nothing to diagnose from.
+

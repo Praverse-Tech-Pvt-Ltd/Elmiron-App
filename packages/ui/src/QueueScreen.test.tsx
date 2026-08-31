@@ -197,8 +197,15 @@ describe('the glyph is decorative', () => {
     const label = screen.getByText('Everything is sent');
     const statusLine = label.parent;
     const glyph = statusLine?.children[0];
-    const char = (glyph as any).props['children'] as string;
+    // `children` is `ReactTestInstance | string`. Narrowing rather than casting to
+    // `any` keeps the failure legible: if the tree ever changes shape, this throws
+    // saying so, instead of reading `.props` off a string and asserting undefined.
+    if (glyph === undefined || typeof glyph === 'string') {
+      throw new Error('expected the glyph to be an element, not a bare text node');
+    }
+    const char = (glyph.props as { children?: unknown }).children;
 
-    expect(ALLOWED_GLYPHS.has(char)).toBe(true);
+    expect(typeof char).toBe('string');
+    expect(ALLOWED_GLYPHS.has(char as string)).toBe(true);
   });
 });

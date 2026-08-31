@@ -36,11 +36,11 @@ module.exports = {
   // root'. dirname of the resolved file is that directory.
   preset: require('node:path').dirname(require.resolve('jest-expo/jest-preset')),
 
-  // The other half of the boundary. Narrower than jest's default on purpose.
   // Screens render `@fieldforce/ui`'s `Screen`, which reads the safe-area inset and
   // throws when no provider is mounted. Same setup file as packages/ui.
   setupFiles: ['<rootDir>/jest.setup.cjs'],
 
+  // The other half of the boundary. Narrower than jest's default on purpose.
   testMatch: ['<rootDir>/**/*.test.tsx'],
 
   // Build artifacts are not source. apps/field/dist holds a compiled Hermes bundle
