@@ -4079,3 +4079,56 @@ that a second occurrence is investigated as a real race and not re-run. It also
 records the mistake made at the time: the failure output was not captured before the
 re-run, so there is nothing to diagnose from.
 
+---
+
+### FE-Build-2f — untracked files closed, push-readiness recorded (31 August 2026)
+
+**The canonical status document was not in the repository.** `docs/frontend-status.md`
+opens by declaring itself canonical, and a pointer file exists specifically to redirect
+readers to it — a duplicate having been reduced on the grounds that two documents
+claiming the same truth diverge. It was untracked for the entire project to date, so
+the one document everyone was told to read was the one document not in the repo, while
+a rule requiring referenced documents to be present was in force. It is committed now.
+
+_Original claim:_ the frontend status lives at `docs/frontend-status.md` and the
+duplicate defers to it. _Correction:_ true of the content, false of the repository —
+the file existed only in the working tree of one machine, and a fresh clone had the
+pointer without the target. _Source of error:_ the reviewer.
+
+**It was stale in three of the four respects checked**, and was corrected rather than
+rewritten: the merge with origin was absent, the safe-area fix was absent, and the
+test figure read 521 with `ui` jest at 17 (now 523 and 19). It was already accurate
+that CI has never run. Four further corrections while in there: the commit count
+("23+" → 34, previously flagged as unverified), JDK 25 and the path-length blocker
+moved from LIVE to resolved, "the app has never been built" replaced with
+`emulator-passed / device-pending`, and the emulator corrected from "Pixel 10 Pro XL /
+API 37.1" to **Pixel_10, API 36 / Android 16** — the tool version having been read as
+an API level. A new "Since FE-W2b" section records FE-Build-1 through 2f.
+
+**`apps/field/.gitignore` is redundant, and is ignored rather than committed.** Its
+only entry is `expo-env.d.ts`; with the file moved aside, `git check-ignore -v`
+reports `.gitignore:75` — the root already covers it. Committing it would invite the
+churn `expo-env.d.ts` itself caused, since Expo rewrites it on prebuild and the tree
+goes dirty with nobody having edited anything.
+
+**The `npx`-in-a-worktree trap is recorded in `docs/gotchas.md`.** A worktree has no
+`node_modules`, so `npx` fetches different tooling and silently answers a different
+question: it reported one non-conforming file at `90ede3c` where the correct method —
+extract the historical file into the working repo and run the repo's own binary —
+found two. Generalised there to anything depending on `node_modules`: prettier,
+eslint, tsc, jest.
+
+**`docs/push-readiness.md` is new**, and is deliberately a statement of exposure
+rather than a status or a plan: 34 commits waiting, the oldest `dd9c1a4` from
+**14 August**; every quality figure self-reported because CI has never executed;
+`origin/main` still serving the pre-rename `@elmiron/*` identifiers, so a clone today
+carries a third party's trademark in the package names; one blocking action owned by a
+human — `repo` scope on the token, plus `workflow` scope now that
+`.github/workflows/ci.yml` has changed; and two deferred verifications that need the
+emulator, the safe-area screenshot and the glyph rendering check.
+
+**This is the final local commit before the token is resolved.** Nothing remains that
+does not require either the GitHub token or a device. **No feature work proceeds until
+CI has run green once** — FE-W3 does not start on the strength of 523 tests that have
+only ever run on the machine that wrote them.
+
