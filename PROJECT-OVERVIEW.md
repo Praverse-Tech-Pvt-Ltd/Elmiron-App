@@ -4183,3 +4183,49 @@ bundle committed into the repository it backs up is circular.
 becomes one when a copy exists off this machine, and not before. That copy is a human
 action and nothing here can perform it.
 
+---
+
+### FE-W3-SPEC — field capture specified, decisions raised (31 August 2026)
+
+`docs/fe-w3-spec.md` exists. **No FE-W3 code was written, no dependency added, and
+nothing under `apps/`, `packages/` or `services/` was touched except to read it.**
+
+**The finding that matters: the backend is not greenfield here, and it is narrower than
+"tracking".** `check_ins` and `check_outs` store one fix each;
+`public.daily_mileage()` sums straight-line hops between consecutive check-ins and
+reads no other source of position; there is no location-fix, trace or breadcrumb table
+among the thirty-four; and `SyncEntitySchema` has no entity for one. `packages/core`,
+`services/api` and `services/mock` agree field for field — **no contradictions found**.
+Choosing continuous tracking is therefore new schema, a new sync entity, a new
+retention rule and a necessity argument, not a client-side feature.
+
+**The second finding: location has no retention at all.** Audio carries `purge_after`,
+a retention worker, a destruction log and an intake-stops-if-retention-stalls check.
+Check-in coordinates have no purge column and no deletion path. Today the honest answer
+to "how long is location kept" is **forever, and nothing deletes it** — while the
+retention machinery that would have to enforce any answer is itself currently disabled.
+
+**Six decisions are raised and none is answered:** collection frequency and precision;
+retention; what the MR is told and when; behaviour on denial or coarse-only grant;
+whether location makes a visit valid or is advisory metadata; and whether shift-end
+enforcement is client-side or server-side. They are policy with legal consequences
+under the DPDP Act and employment law, they need a human decision and in places
+qualified legal advice, and the specification says so at the head of that section
+rather than choosing.
+
+Android behaviour is sourced inline to Android developer documentation and Play policy.
+**Four claims are marked unverified rather than stated:** the exact expiry conditions of
+"only this time"; permission auto-reset for unused apps; the presentation of the
+foreground-service notification on Android 13+; and the OEM specifics for Oppo, Vivo and
+Samsung, since only the Xiaomi page was read. OEM behaviour is recorded as empirical and
+crowd-sourced, because the vendors do not document it.
+
+One consequence worth surfacing early: `ACCESS_BACKGROUND_LOCATION` triggers a Google
+Play permissions declaration with a video and a prominent in-app disclosure, and the
+policy's listed acceptable uses are all user-benefiting features. An employee-monitoring
+framing is not among them. That is the same shape as the Apple probe in
+`docs/mr-work-split.md`, and the same answer applies: find out early.
+
+**No FE-W3 code is to be written until those decisions are answered and CI has run
+green once.** Both conditions, not either.
+
