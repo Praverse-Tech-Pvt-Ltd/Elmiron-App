@@ -74,3 +74,10 @@ screen*.png
 # it is untracked rather than fought with.
 apps/field/expo-env.d.ts
 
+# Expo regenerates this on prebuild. Its only entry is `expo-env.d.ts`, which the root
+# already ignores above — verified by removing the file and re-running check-ignore,
+# which still reported this .gitignore's rule as redundant. Committing it would invite
+# the same churn expo-env.d.ts caused: Expo rewrites it, the tree goes dirty, nobody
+# edited anything.
+apps/field/.gitignore
+

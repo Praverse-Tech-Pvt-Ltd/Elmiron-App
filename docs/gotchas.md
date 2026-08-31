@@ -1132,6 +1132,36 @@ The toolchain for this project is deliberately pinned to documented versions. Ne
 
 ---
 
+## Checking a historical file with `npx` inside a bare `git worktree`
+
+**The trap:** to find out whether a file was already failing `format:check` at an older
+commit, the obvious move is a throwaway worktree at that commit and `npx prettier
+--check .` inside it. A worktree has no `node_modules`, so `npx` does not find the
+repo's pinned prettier — it downloads a different one and answers a different
+question, silently, with no error and no version printed.
+
+On 31 August this reported **one** non-conforming file at `90ede3c`. The correct
+method found **two**: `apps/field/jest.config.cjs` was also non-conforming and the
+worktree run missed it entirely. A wrong "it was already fine" is worse than no answer,
+because it closes the question.
+
+**The method that works** — extract the historical content into the working repo,
+where the installed tooling is, and run the repo's own binary against it:
+
+```sh
+mkdir -p /tmp/check && git show 90ede3c:apps/field/jest.config.cjs > /tmp/check/jest.config.cjs
+npx prettier --check /tmp/check/jest.config.cjs     # run FROM the repo, not the worktree
+```
+
+Keep the original filename: prettier infers its parser from the extension, and a
+`.cjs` renamed to `.txt` is silently skipped.
+
+**The general rule:** any command whose behaviour depends on `node_modules` —
+prettier, eslint, tsc, jest — answers a different question inside a worktree that has
+none. Either install into the worktree or bring the file to the tooling.
+
+---
+
 ## Known flakes
 
 Tests that have failed without a known cause. An entry here is a debt, not a
