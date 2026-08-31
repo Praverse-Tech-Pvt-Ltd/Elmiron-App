@@ -3860,3 +3860,118 @@ contrast guard in `packages/ui-tokens/src/contrast.test.ts` has still never exec
 and the append-only guard added above has never executed either — it is verified only
 by the local negative control recorded here.
 
+---
+
+### FE-Build-2d — safe-area inset and origin divergence (31 August 2026)
+
+**The two commits on origin are Backend's, and the push is not a fast-forward.**
+
+| | |
+| --- | --- |
+| `b5d03a5` | Maanav Shah <126866160+Rabbitshah@users.noreply.github.com>, Sun 23 Aug 2026 14:14 +0530 — "Record: retention workflows disabled again, 23 August". Touches `.ai-collab/decisions.md` (+23). |
+| `1ad5aa0` | Maanav Shah <126866160+Rabbitshah@users.noreply.github.com>, Fri 14 Aug 2026 14:28 +0530 — "BE-W8: record the real scheduled retention run, not a manual dispatch". Touches `.ai-collab/decisions.md` (+13 −3) and `PROJECT-OVERVIEW.md` (+44 −19). |
+
+Both are Backend record-keeping. Neither touches frontend code, `packages/`, `apps/`
+or the lockfile.
+
+`git merge-base --is-ancestor origin/main HEAD` exits **1**. The histories have
+genuinely diverged: 31 local commits over a base that no longer includes origin's two.
+**A merge or rebase is required**, and that is the reviewer's decision — nothing was
+merged, rebased, pulled or reset here.
+
+One thing to know before choosing: `1ad5aa0` **deletes 19 lines** from
+`PROJECT-OVERVIEW.md`. Whichever way the two lines of history are reconciled, that
+deletion will appear in the range the new append-only guard inspects, and the guard
+will fail the build on it. The guard is right and the commit predates it; the
+reconciliation needs a decision about which base the guard compares against.
+
+**The safe-area defect is every screen, not the sign-in screen.**
+
+`react-native-safe-area-context` is a dependency and `SafeAreaProvider` **is** mounted
+in `apps/field/app/_layout.tsx`. Nothing consumed it. The `Stack` runs with
+`headerShown: false`, so no navigation header reserved the status bar either.
+
+| Route | Renders inside `Screen` | Consumed an inset before this change |
+| --- | --- | --- |
+| `app/index.tsx` | yes | no |
+| `app/sign-in.tsx` | yes | no |
+| `app/home.tsx` | yes | no |
+| `app/doctors.tsx` | yes | no |
+| `app/queue.tsx` | via `QueueScreen`, which renders `Screen` | no |
+
+A repo-wide grep for `SafeAreaView`, `useSafeAreaInsets` or `edges=` returned three
+hits, all of them the provider in `_layout.tsx`.
+
+**The fix is one component: `packages/ui/src/Screen.tsx`.** Every route renders inside
+it, so the inset is applied there once, added to the token padding rather than
+replacing it — `space.md` is the design's margin, the inset is the device's hardware,
+and neither substitutes for the other. There is no pixel literal; the numbers come
+from `useSafeAreaInsets()`. A per-screen `SafeAreaView` was rejected: it leaves the
+next new screen broken by default, which is exactly how this defect arrived.
+
+The hook throws when no provider is mounted, and that is kept — a missing provider
+should fail loudly rather than silently render zero insets. It does mean both jest
+projects need the library's own mock, which is now installed in
+`packages/ui/jest.setup.cjs` and `apps/field/jest.setup.cjs`.
+
+**The test, and the negative control.** `packages/ui/src/Screen.test.tsx` asserts
+arithmetic, not the presence of a wrapper: `padding === space.md + inset`, with a
+distinct non-zero value on each edge, so an implementation that wired `insets.top`
+into all four sides fails. Note that the shipped mock's insets are **all zero** unless
+a context supplies otherwise — a test resting on its defaults would assert
+`md + 0 === md` and pass with the fix removed — so the test supplies its own metrics
+through `SafeAreaProvider`.
+
+With the inset removed from `Screen`:
+
+```
+● Screen safe-area inset › adds the device inset to the token padding when the screen does not scroll
+  Expected: 63
+  Received: 16
+● Screen safe-area inset › adds it to the content container when the screen scrolls
+  Expected: 63
+  Received: 16
+Tests: 2 failed, 17 passed, 19 total
+```
+
+Restored: `Tests: 19 passed, 19 total`. `packages/ui` render tests went 17 → 19; the
+vitest side is unchanged at 4; `apps/field` is unchanged at 44 + 24. No count dropped.
+
+**What the test does not prove.** Mock insets are not device insets. It proves the
+arithmetic and that the value reaches the content container; it does not prove the
+number is right on a punch-hole display, in landscape, with a three-button navigation
+bar, or with the gesture bar. **Deferred verification: a fresh screenshot of the
+sign-in screen on the Pixel 10 emulator showing the heading clear of the status bar.**
+Until that exists the defect is fixed-and-tested, not closed.
+
+**`apps/field/expo-env.d.ts` was a generated file, and is now untracked.** Expo
+rewrites it on `expo start` — it had already replaced the committed comment with its
+own "This file should not be edited and should be in your git ignore". It was
+committed on the theory that `pnpm typecheck` needs it on a fresh clone; that was
+tested on 31 August by moving the file aside, and the field typecheck passes without
+it. `git rm --cached` plus a root `.gitignore` entry. This is part of why the working
+tree has never been clean.
+
+**Two corrections to the record, both the reviewer's.**
+
+1. _Original claim:_ repeated references, across several prompts, to
+   `check-contrast.ts`. _Correction:_ **no file of that name exists.** The contrast
+   guard is `packages/ui-tokens/src/contrast.test.ts`. _Source of error:_ the
+   reviewer, after having written the rule that forbids referencing artefacts not
+   present in the repo.
+2. _Original claim:_ the contrast guard was "present in the repo but never invoked —
+   decorative". _Correction:_ the mechanism was wrong. A `.test.ts` runs with its
+   workspace's suite; it was never uninvoked locally. The accurate statement is that
+   **CI has never executed, so no test in this repo has ever run anywhere except the
+   authoring machine.** Same risk, different cause — and a different fix, since
+   nothing needed wiring up, only a pipeline that runs.
+   _Source of error:_ the reviewer.
+
+**Two failures CI will hit, both pre-existing and neither fixed here.**
+`packages/ui/src/QueueScreen.test.tsx:200` fails `lint` with
+`@typescript-eslint/no-explicit-any` and `no-unsafe-member-access` — verified
+pre-existing by stashing every change from this session and re-running. And
+`apps/field/jest.config.cjs` was non-conforming for `format:check` as committed in
+`1aafc5c`; it is conforming now only because this session's edit to that file ran it
+through the formatter.
+

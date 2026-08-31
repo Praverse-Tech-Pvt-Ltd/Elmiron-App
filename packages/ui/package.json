@@ -24,7 +24,8 @@
   },
   "peerDependencies": {
     "react": ">=19",
-    "react-native": ">=0.86"
+    "react-native": ">=0.86",
+    "react-native-safe-area-context": ">=5"
   },
   "devDependencies": {
     "@fieldforce/core": "workspace:*",
@@ -36,6 +37,7 @@
     "jest-expo": "~57.0.4",
     "react": "19.2.3",
     "react-native": "0.86.2",
+    "react-native-safe-area-context": "~5.7.0",
     "test-renderer": "^1.2.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"

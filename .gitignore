@@ -66,3 +66,11 @@ metro-*.txt
 
 # Screenshots captured while driving the emulator by hand.
 screen*.png
+
+# Expo rewrites this on `expo start`, replacing whatever is in it with its own
+# "should not be edited" note — which is why the working tree was never clean. It was
+# committed on the theory that `pnpm typecheck` needs it on a fresh clone; that is no
+# longer true (verified 31 Aug: the field typecheck passes with the file absent), so
+# it is untracked rather than fought with.
+apps/field/expo-env.d.ts
+

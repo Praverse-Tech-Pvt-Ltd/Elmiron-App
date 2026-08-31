@@ -38,6 +38,10 @@ module.exports = {
   // root'. dirname of the resolved file is that directory.
   preset: require('node:path').dirname(require.resolve('jest-expo/jest-preset')),
 
+  // See the file: it installs the library's own safe-area mock so components that
+  // render `Screen` do not each have to mount a provider.
+  setupFiles: ['<rootDir>/jest.setup.cjs'],
+
   // The other half of the boundary. Narrower than jest's default on purpose.
   testMatch: ['<rootDir>/**/*.test.tsx'],
 
