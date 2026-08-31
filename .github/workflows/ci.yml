@@ -19,6 +19,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          # The append-only guard below diffs against the base, so it needs history.
+          fetch-depth: 0
+
+      # PROJECT-OVERVIEW.md is append-only and some of its sections are frozen. That
+      # rule lived only as prose inside the file it protects, and a `prettier --write`
+      # walked through it and reformatted a frozen table. A human caught it, which is
+      # not a control. This is the control: any deletion from the file fails the build.
+      - name: PROJECT-OVERVIEW.md is append-only
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="origin/${{ github.base_ref }}"
+          else
+            # Push events: compare against what the branch was before this push.
+            # `origin/main...HEAD` is empty once the push has landed and would pass
+            # vacuously, which is the failure mode this guard exists to avoid.
+            BASE="${{ github.event.before }}"
+          fi
+          echo "Comparing $BASE...HEAD"
+          DELETED=$(git diff --numstat "$BASE...HEAD" -- PROJECT-OVERVIEW.md | awk '{print $2}')
+          DELETED=${DELETED:-0}
+          echo "Deleted lines: $DELETED"
+          if [ "$DELETED" -gt 0 ]; then
+            echo "::error file=PROJECT-OVERVIEW.md::$DELETED line(s) removed. This file is append-only; frozen sections are never edited. Add a correction section instead."
+            git diff "$BASE...HEAD" -- PROJECT-OVERVIEW.md | grep '^-[^-]' | head -40
+            exit 1
+          fi
 
       - uses: pnpm/action-setup@v4
 

@@ -19,3 +19,9 @@ CLAUDE.md
 # Agent-local settings. Git-ignored globally, so it never reaches CI — but Prettier
 # still saw it and failed `format:check` locally on a file nobody can commit.
 .claude/
+
+# Append-only, with frozen sections. `prettier --write` reformatted a frozen table
+# once already. The CI guard in .github/workflows/ci.yml catches a deletion; this
+# stops the formatter from making one in the first place.
+PROJECT-OVERVIEW.md
+

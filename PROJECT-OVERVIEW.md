@@ -3773,3 +3773,90 @@ rewrite the frozen FE-Build-1 section) or the file is added to `.prettierignore`
 alongside the other reviewer-authored documents. That is a decision, not a cleanup,
 so it is recorded here rather than taken.
 
+---
+
+### FE-Build-2c — repo hygiene and first push (31 August 2026)
+
+**The second directory was a stale clone, not a fork.** `C:/Users/devp0/StudioProjects/Elmiron-App`
+shares this repo's `origin`. Its HEAD is `b5d03a5`, which is **exactly `origin/main`** —
+outcome **(b)**: the clone is at the true tip, and it also carries substantial
+uncommitted work (a second, independent `apps/field` and `apps/console` built there
+in a separate session, plus token and lint changes). Not divergence in history; no
+commits exist there that are absent here.
+
+The `@elmiron/*` package names in that directory are not a different project. They
+are what `origin/main` still says, because the R1 rename to `@fieldforce/*` is among
+the commits that have never been pushed. `git show origin/main:apps/field/package.json`
+returns `"name": "@elmiron/field"`; the local file says `"@fieldforce/field"`.
+
+**A correction to the FE-Build-2b report,** which called those two directories
+"divergent frontend lines" and asked which was canonical: that was wrong. This repo
+is canonical; the other is a clone of the unrenamed published state. Nothing there
+needs reconciling and nothing was deleted, moved or modified.
+
+**This checkout's `origin/main` ref was stale.** Before `git fetch` it pointed at
+`d3b841f`; the real tip is `b5d03a5`. The branch is **30 ahead, 2 behind** — the two
+missing commits are `1ad5aa0` and `b5d03a5`, both Backend retention records. A push
+will be rejected as non-fast-forward until they are integrated. That is a rebase-or-merge
+decision and was not taken here.
+
+**The root-level `android/`.** `.gitignore` had `apps/field/android/`, which is a path
+from the repo root and does not match a directory named `android/` at the root. The
+stray tree was produced by an Expo prebuild/run invoked from the **repo root** instead
+of `apps/field`: `android/`, its `gradlew`, `settings.gradle` and a root `app.json`
+all carry the same 27 August 15:24 timestamp, and that `app.json` contains Expo's
+default `"package": "com.anonymous.elmironapp"` — the name Expo generates when it
+finds no app config, which is exactly what the root of this monorepo looks like to it.
+`root_build.txt` records the resulting Gradle run. The directory has **not** been
+deleted; it is evidence of how it was produced.
+
+Now ignored, root-anchored with a leading slash: `/android/`, `/ios/`, `/app.json`,
+plus `build_*.txt`, `current_build*.txt`, `root_build*.txt`, `metro-*.txt`,
+`.gradle_home/` and `screen*.png`. Named patterns rather than `*.txt`, which would
+swallow real files later. **The general rule:** a `.gitignore` entry containing a
+slash is anchored to the repo root, so `apps/field/android/` never protects any other
+directory of the same name.
+
+**The append-only rule is now mechanical.** It previously existed only as prose inside
+the file it protects, and a `prettier --write` reformatted a frozen table — caught by a
+human, which is not a control. Two changes:
+
+- `PROJECT-OVERVIEW.md` added to `.prettierignore`, so the formatter cannot make the
+  edit.
+- A step in the `static` job of `.github/workflows/ci.yml` fails the build when a
+  change to this file deletes any line: `git diff --numstat <base>...HEAD` field 2,
+  non-zero is a failure. It compares against `github.event.before` on a push and
+  `origin/<base_ref>` on a pull request — `origin/main...HEAD` is empty once a push has
+  landed and would pass vacuously, which is the failure mode the guard exists to avoid.
+  The job's checkout now uses `fetch-depth: 0`.
+
+**Negative control, because a guard that has never failed is indistinguishable from a
+guard that cannot fail.** On a scratch branch, one line was deleted from the frozen
+FE-Build-1 table and the same logic run:
+
+```
+Comparing main...HEAD
+Deleted lines: 1
+ERROR: 1 line(s) removed. PROJECT-OVERVIEW.md is append-only.
+-| **Missing SDK Platform** | API 36 platform installed to match `compileSdkVersion`. |
+exit=1
+```
+
+The positive control passes on the genuine append-only commit `6dc4a6d` (`Deleted
+lines: 0`). The scratch branch was deleted and the frozen line verified present.
+
+**The push failed again, on authorisation, not on content.**
+
+```
+remote: Permission to Praverse-Tech-Pvt-Ltd/Elmiron-App.git denied to Devpt1904.
+fatal: unable to access 'https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App.git/':
+The requested URL returned error: 403
+```
+
+Two blockers now stand between this work and CI: the credential helper offers
+`Devpt1904`, which has no write access to the org repository, and the branch is two
+commits behind `origin/main`. **CI has still never run on any frontend code**, the
+contrast guard in `packages/ui-tokens/src/contrast.test.ts` has still never executed,
+and the append-only guard added above has never executed either — it is verified only
+by the local negative control recorded here.
+

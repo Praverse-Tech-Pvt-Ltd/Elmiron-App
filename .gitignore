@@ -44,3 +44,25 @@ graphify-out/
 # Expo generated native directories
 apps/field/android/
 apps/field/ios/
+
+# Root-anchored native directories. `apps/field/android/` above is a path from the
+# repo root and does NOT match a directory called `android/` at the root — an
+# `expo prebuild` / `run:android` invoked from the wrong working directory produced
+# exactly that on 27 August and it sat untracked and visible to `git add -A`.
+/android/
+/ios/
+
+# The Expo config that same misdirected prebuild generated at the root, with the
+# default `com.anonymous.*` package. The real app config is apps/field/app.json.
+/app.json
+
+# Build and bundler logs written next to whatever directory the command ran in.
+# Named patterns rather than `*.txt`, which would swallow real files later.
+build_*.txt
+current_build*.txt
+root_build*.txt
+metro-*.txt
+.gradle_home/
+
+# Screenshots captured while driving the emulator by hand.
+screen*.png
