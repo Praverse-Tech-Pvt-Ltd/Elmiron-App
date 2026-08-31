@@ -239,9 +239,39 @@ one-line form for scanning.
   `purge_backlog_multiplier=3`, `purge_max_silence_hours=12`, and
   `audio_purge_health()` returns the correct shape with `stalled: false`.
 - **Re-enabled:** both workflows re-enabled via `gh workflow enable` immediately
-  after the deploy was verified, 07:28 UTC, 14 August. First real scheduled cycle
-  (not a manual dispatch) observed at — *fill in from the next hourly/watchdog run;
-  see `PROJECT-OVERVIEW.md` → BE-W8 §7 for the timestamp once it lands.*
+  after the deploy was verified, 07:28 UTC, 14 August.
+- **First real scheduled cycle, proven, not dispatched:** `Audio retention` fired on
+  its own cron at **08:55:45 UTC**, `event: schedule` (not `workflow_dispatch`),
+  run [31785943559](https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App/actions/runs/31785943559).
+  Completed green in 22s: claimed 0, destroyed 0, failed 0 (empty database, as
+  expected). `check-purge-health` ran immediately after in the same job and reported
+  `"stalled": false` from the NEW backlog-based function — the whole chain proven
+  end to end, not just the migration in isolation. `Audio retention watchdog`'s
+  first post-re-enable fire is the remaining piece; see
+  `PROJECT-OVERVIEW.md` → BE-W8 §7 for its result once it lands.
+
+---
+
+## 23 August 2026 · Model: Claude Sonnet 5
+
+### Retention workflows disabled again
+
+- **Decision:** `retention.yml` and `retention-watchdog.yml` disabled via
+  `gh workflow disable`, at 08:44 UTC, 23 August.
+- **Who:** the agent, on direct user instruction ("disable the scheduled workflows
+  again") — not a unilateral call.
+- **Why:** not stated by the user; not inferred or invented here. Both workflows had
+  been running green on their real hourly/15-min cadence since the 14 August
+  re-enable (last observed runs: retention at 08:15:58 UTC, watchdog at 07:47:31 UTC,
+  23 August, both `schedule`-triggered and successful) — this was not a response to
+  a failure.
+- **The reminder-mechanism gap applies again, same as 14 August:** a disabled
+  workflow produces no red, no alert. If this stays off for any length of time,
+  nothing will surface a forgotten re-enable. No expiry or follow-up was requested;
+  none is assumed here.
+- **State as of this entry:** both `disabled_manually`. Migration
+  `20260817000200_purge_backlog_stall_detection.sql` remains applied to production
+  from 14 August — only the schedules are off, not the fix.
 
 ---
 
