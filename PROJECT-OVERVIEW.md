@@ -3658,3 +3658,118 @@ The project root path (`C:\\dev\\Elmiron-App`) combined with pnpm\u0027s default
 - **FE-G1 State:** **emulator-passed / device-pending**. The app runs on the Pixel 10 API 37.1 emulator; sign-in and field capture await a physical device.
 - **Test Fidelity:** 521 tests pass across 2 runners. Hoisting verified as safe for both Frontend (Jest/Metro) and Backend (Vitest/Node) resolution.
 - **api suite:** **333 PASSED** against the local Supabase stack.
+
+---
+
+### Corrections to FE-Build-1 (31 August 2026)
+
+The FE-Build-1 section above is frozen and stays as written. Four of its claims are
+wrong or unverified. Each is corrected here, with the source of the error named.
+
+**1. The Android API level.**
+
+_Original claim:_ two different numbers for the same setting — "API 36 platform
+installed to match `compileSdkVersion`" in the blocker table, and "Pixel 10 API 37.1
+emulator" under Verification.
+
+_Correction:_ **36 is right; 37.1 is wrong.** On disk:
+
+- `apps/field/android/app/build.gradle:88,93,94` — `compileSdk`, `minSdkVersion` and
+  `targetSdkVersion` are all `rootProject.ext.*`, so no literal lives in the project.
+- `node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle:65` supplies
+  the default the ext resolves to: `safeExtGet("compileSdkVersion", 36)`.
+- The build's own merged manifest is the proof of what was actually compiled —
+  `apps/field/android/app/build/intermediates/merged_manifest/debug/processDebugMainManifest/AndroidManifest.xml:8-9`:
+  `minSdkVersion="24"`, `targetSdkVersion="36"`.
+- The running emulator reports `ro.build.version.sdk=36`, release 16 — API 36,
+  Android 16.
+
+There is no API 37 anywhere. 37.1 is most likely the Android Emulator _tool_ version
+read as an API level; the two are unrelated numbers.
+
+_Note on the directory:_ `apps/field/android/` does exist on disk, ignored by
+`.gitignore:45`. It was not regenerated for this check — the values above come from
+build outputs already present.
+
+_Source of error:_ the FE-Build-1 report.
+
+**2. "Traced to `CMAKE_OBJECT_PATH_MAX`" — it was not traced.**
+
+_Original claim:_ the path-length failure was "traced to" `CMAKE_OBJECT_PATH_MAX`
+(250 chars) being exceeded by `node_modules/.pnpm` nesting.
+
+_Correction:_ it was **hypothesised**, not traced. Nothing measured the actual object
+path length before or after. The hoisting fix worked, and a fix that works is
+consistent with the hypothesis without proving it — the same fix would have resolved
+several other path-related failures equally well. Relabel as: hypothesis, supported
+by the fix succeeding.
+
+_Source of error:_ the reviewer.
+
+**3. The saving from shortening the repo root was ~160 characters, not ~60.**
+
+_Original claim:_ hoisting reduced nesting by "~4 levels and ~60 characters".
+
+_Correction:_ the figure is **~160**. The `.pnpm` path segment appears **twice**, at
+roughly 80 characters each. The conclusion is unchanged — shortening the root alone
+was insufficient and hoisting was required — but the number supporting it was wrong.
+
+_Source of error:_ the reviewer.
+
+**4. "Pinned to the documented versions" understates what the hoisted install moved.**
+
+_Original claim:_ the `react-native-worklets` 0.11.4 → 0.12.1 drift was "resolved by
+restoring the lockfile and re-running install, pinning the hoisted layout to the
+documented versions".
+
+_Correction:_ the worklets pin held — `node_modules/react-native-worklets` is 0.11.4
+on disk and the package does not appear in the lockfile drift at all. But the hoisted
+install added **40 package versions** to `pnpm-lock.yaml` and removed **none**
+(1145 → 1185 keys; `git diff 7bee3f4^ HEAD -- pnpm-lock.yaml`). No _direct_
+dependency's own resolved version changed — `apps/field` still resolves `expo@57.0.12`
+and `expo-constants@57.0.10`, which is what is installed — but a second, newer copy of
+the Expo and Metro toolchains entered the tree through `jest-expo`'s peer resolution:
+`expo@57.0.16`, `@expo/cli@57.0.18`, `metro@0.84.5` and 37 others. The test runner is
+no longer necessarily running against the toolchain the app builds with. Nothing has
+been changed in response; a version pin is a decision, not a cleanup.
+
+_Source of error:_ the FE-Build-1 report.
+
+---
+
+### FE-Push-1 — first push and first CI run (31 August 2026)
+
+**Commits ready to push: 29.** Everything from `dd9c1a4` (FE-W1 §1) to `90ede3c`
+(glyph codepoint allowlist) — the entire frontend line of work, none of it ever built
+or tested by any machine other than the one that wrote it.
+
+**The push failed. CI did not run.**
+
+```
+remote: Permission to Praverse-Tech-Pvt-Ltd/Elmiron-App.git denied to Devpt1904.
+fatal: unable to access 'https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App.git/':
+The requested URL returned error: 403
+```
+
+The credential helper offers the account `Devpt1904`, which has no write access to
+`Praverse-Tech-Pvt-Ltd/Elmiron-App`. Commits are authored as
+`Dev Patel <softwares@praversetech.com>`, so the identity writing the commits and the
+identity authenticating the push are different accounts. `gh auth status` reports no
+logged-in host. Resolving this is a human action and was not attempted.
+
+**Consequence: every claim about CI remains unverified.** In particular the WCAG
+contrast guard — added to `.github/workflows/ci.yml:41` as
+`pnpm --filter @fieldforce/ui-tokens test` in commit `791c3c6`, precisely because it
+had never executed — **still has not executed.** It is in the workflow file, and the
+workflow file has never run on this branch. There is no file named `check-contrast.ts`
+in the repository; the guard is `packages/ui-tokens/src/contrast.test.ts`, reached
+through that workspace's `test` script.
+
+**One failure is predictable without running CI.** `format:check` runs
+`prettier --check .`, `.prettierignore` does not exclude `PROJECT-OVERVIEW.md`, and
+that file is already non-conforming at `90ede3c` — before this section was added. The
+`static` job will fail at that step until either the file is formatted (which would
+rewrite the frozen FE-Build-1 section) or the file is added to `.prettierignore`
+alongside the other reviewer-authored documents. That is a decision, not a cleanup,
+so it is recorded here rather than taken.
+
