@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#E9E7E0;-webkit-font-smoothing:antialiased}
+a{color:#35593A;text-decoration:none;border-bottom:1px solid rgba(53,89,58,.3)}
+a:hover{color:#2F5233;border-bottom-color:#2F5233}
+@keyframes syncspin{to{transform:rotate(360deg)}}
+</style>
+</helmet>
+
+<div style="background:#E9E7E0;color:#1F211C;font-family:'DM Sans',system-ui,sans-serif;font-size:15px;line-height:1.5;padding:0 0 140px">
+
+<div style="padding:80px 56px 0;max-width:1340px">
+  <div style="display:flex;align-items:center;gap:11px;margin-bottom:26px">
+    <span style="width:26px;height:26px;border-radius:8px;background:#35593A;display:block"></span>
+    <span style="font-size:14px;font-weight:600;letter-spacing:-.01em">Elmiron Field</span>
+    <span style="width:3px;height:3px;border-radius:50%;background:#B4B7AC"></span>
+    <span style="font-size:14px;color:#585B52">Phase 2 · First run &amp; the day</span>
+  </div>
+  <h1 style="font-size:56px;font-weight:600;line-height:1;letter-spacing:-.04em;margin:0 0 24px;max-width:16ch">Twenty-eight screens, one thumb.</h1>
+  <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:44px;max-width:1120px;align-items:start">
+    <p style="font-size:19px;line-height:1.55;color:#585B52;margin:0;text-wrap:pretty">First run, the daily loop, self-service, and the four states that get skipped. Frames are 390 × 844 at 1:1 on the Phase 1 tokens. Every primary action sits in the bottom third, every screen works offline, and tracking is never the headline.</p>
+    <div style="background:#FFFFFF;border-radius:20px;padding:24px 26px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 16px 40px -22px rgba(20,21,15,.35)">
+      <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:10px">Reading the board</div>
+      <p style="margin:0;font-size:15px;line-height:1.6">Four flows, then states. Offline is <strong style="font-weight:600">not</strong> one of the states — it is B2, a complete working home screen. The only critical colour in the entire flow is S3.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══ FLOW A ══ -->
+<div style="padding:68px 56px 0">
+  <div style="margin-bottom:30px;max-width:1340px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:600;background:#1F211C;color:#FFFFFF;padding:5px 12px;border-radius:999px">Flow A</span>
+      <span style="font-size:26px;font-weight:600;letter-spacing:-.03em">First run</span>
+      <span style="font-size:15px;color:#585B52">the highest-abandonment surface in the product</span>
+    </div>
+    <p style="font-size:16.5px;line-height:1.6;color:#585B52;margin:0;max-width:78ch">A plain-language rationale before every OS dialog, written in the MR's interest — not one of these screens says "manager", "compliance" or "monitor". The asks are split across two days: location and notifications at sign-in, microphone deferred to the first real visit, because asking for a mic before the MR has seen any value is how you lose them.</p>
+  </div>
+
+  <div style="display:flex;gap:38px;flex-wrap:wrap;align-items:flex-start">
+
+    <!-- A1 -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">A1</span><span style="font-size:14.5px;font-weight:500">Sign in</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">9:41</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="flex:1;padding:0 30px;display:flex;flex-direction:column;justify-content:center;overflow:hidden">
+          <div style="width:52px;height:52px;border-radius:16px;background:#35593A;margin-bottom:30px;display:flex;align-items:center;justify-content:center"><span style="width:18px;height:18px;border-radius:50%;border:2.5px solid #FFFFFF;display:block"></span></div>
+          <div style="font-family:'Cormorant Garamond',Georgia,serif;font-weight:500;font-size:44px;line-height:1.05;letter-spacing:-.015em">Relief at the root.</div>
+          <div style="font-size:16px;color:#585B52;margin-top:12px">Field team sign-in</div>
+        </div>
+        <div style="padding:16px 30px 40px;display:flex;flex-direction:column;gap:12px;flex:none">
+          <div style="font-size:14px;font-weight:500;color:#585B52">Your work mobile number</div>
+          <div style="height:60px;background:#FFFFFF;border-radius:16px;font-size:20px;padding:0 18px;display:flex;align-items:center;gap:10px;font-variant-numeric:tabular-nums;box-shadow:0 1px 2px rgba(20,21,15,.05)"><span style="color:#585B52">+91</span>98204 41236</div>
+          <button type="button" style="height:60px;background:#35593A;border:none;border-radius:16px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer;margin-top:4px" style-active="background:#2F5233">Send me a code</button>
+          <div style="font-size:14px;color:#585B52;text-align:center;margin-top:4px">Help desk · 1800 200 4411</div>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">The one Cormorant moment in the app. Number pre-filled from the SIM where the OS allows it.</p>
+    </div>
+
+    <!-- A2 LOCATION -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#1F211C;color:#FFFFFF;padding:4px 9px;border-radius:999px">A2</span><span style="font-size:14.5px;font-weight:500">Location — rationale</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">9:43</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="padding:0 30px 16px;display:flex;gap:6px;flex:none"><span style="height:4px;flex:1;background:#35593A;border-radius:2px"></span><span style="height:4px;flex:1;background:#E3E1D9;border-radius:2px"></span><span style="height:4px;flex:1;background:#E3E1D9;border-radius:2px"></span></div>
+        <div style="flex:1;padding:0 30px;overflow:hidden">
+          <div style="font-size:14px;font-weight:500;color:#585B52;margin-bottom:10px">Step 1 of 3</div>
+          <h2 style="font-size:30px;font-weight:600;line-height:1.1;letter-spacing:-.033em;margin:0 0 12px">Stop filling in where you were.</h2>
+          <p style="font-size:16.5px;line-height:1.5;color:#585B52;margin:0 0 18px">Turn location on and three things stop being your job.</p>
+          <div style="background:#FFFFFF;border-radius:20px;padding:6px 20px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.4)">
+            <div style="padding:13px 0;border-bottom:1px solid #F2F0E9;display:flex;gap:13px;align-items:flex-start"><span style="width:28px;height:28px;border-radius:10px;background:#E9F0E9;flex:none;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#35593A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><div style="font-size:16.5px;font-weight:600;letter-spacing:-.01em">Checked in automatically</div><div style="font-size:14.5px;color:#585B52;line-height:1.45;margin-top:2px">Walk in, it logs itself. No form in the waiting room.</div></div></div>
+            <div style="padding:13px 0;border-bottom:1px solid #F2F0E9;display:flex;gap:13px;align-items:flex-start"><span style="width:28px;height:28px;border-radius:10px;background:#E9F0E9;flex:none;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#35593A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><div style="font-size:16.5px;font-weight:600;letter-spacing:-.01em">Mileage adds itself up</div><div style="font-size:14.5px;color:#585B52;line-height:1.45;margin-top:2px">Every kilometre onto your claim. No odometer photos.</div></div></div>
+            <div style="padding:13px 0;display:flex;gap:13px;align-items:flex-start"><span style="width:28px;height:28px;border-radius:10px;background:#E9F0E9;flex:none;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#35593A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><div style="font-size:16.5px;font-weight:600;letter-spacing:-.01em">The nearest doctor you've missed</div><div style="font-size:14.5px;color:#585B52;line-height:1.45;margin-top:2px">When a visit falls through, you know who's close.</div></div></div>
+          </div>
+          <div style="background:#E9F0E9;border-radius:16px;padding:13px 17px;margin-top:12px">
+            <div style="font-size:15.5px;font-weight:600;letter-spacing:-.01em">Only during your shift</div>
+            <div style="font-size:14.5px;line-height:1.45;color:#3F5F43;margin-top:2px">It stops when you end your day. <span style="border-bottom:1px solid rgba(53,89,58,.4)">See exactly what's recorded</span></div>
+          </div>
+        </div>
+        <div style="padding:14px 30px 32px;display:flex;flex-direction:column;gap:10px;flex:none">
+          <button type="button" style="height:60px;background:#35593A;border:none;border-radius:16px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer" style-active="background:#2F5233">Turn on location</button>
+          <button type="button" style="height:52px;background:#F1EFE8;border:none;border-radius:16px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-active="background:#E5E2D9">Not now</button>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">Three concrete benefits, all the MR's. "Not now" is a real 52px option, not a grey link — an MR who feels cornered here uninstalls.</p>
+    </div>
+
+    <!-- A3 NOTIFICATIONS -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">A3</span><span style="font-size:14.5px;font-weight:500">Notifications — rationale</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">9:45</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="padding:0 30px 16px;display:flex;gap:6px;flex:none"><span style="height:4px;flex:1;background:#35593A;border-radius:2px"></span><span style="height:4px;flex:1;background:#35593A;border-radius:2px"></span><span style="height:4px;flex:1;background:#E3E1D9;border-radius:2px"></span></div>
+        <div style="flex:1;padding:0 30px;overflow:hidden">
+          <div style="font-size:14px;font-weight:500;color:#585B52;margin-bottom:10px">Step 2 of 3</div>
+          <h2 style="font-size:30px;font-weight:600;line-height:1.1;letter-spacing:-.033em;margin:0 0 9px">Four a day. That's the deal.</h2>
+          <p style="font-size:16.5px;line-height:1.5;color:#585B52;margin:0 0 14px">You get these and nothing else. No marketing, no team announcements, nothing after 8pm.</p>
+          <div style="background:#FFFFFF;border-radius:20px;padding:4px 20px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.4)">
+            <div style="padding:10px 0;border-bottom:1px solid #F2F0E9"><div style="font-size:16.5px;font-weight:600;letter-spacing:-.01em">"You're near Dr. Iyer"</div><div style="font-size:14.5px;color:#585B52;line-height:1.45;margin-top:2px">Only for doctors on today's plan.</div></div>
+            <div style="padding:10px 0;border-bottom:1px solid #F2F0E9"><div style="font-size:16.5px;font-weight:600;letter-spacing:-.01em">"Your plan changed"</div><div style="font-size:14.5px;color:#585B52;line-height:1.45;margin-top:2px">When someone is added or moved.</div></div>
+            <div style="padding:10px 0;border-bottom:1px solid #F2F0E9"><div style="font-size:16.5px;font-weight:600;letter-spacing:-.01em">"Xiaomi stopped the app"</div><div style="font-size:14.5px;color:#585B52;line-height:1.45;margin-top:2px">So your visits don't quietly stop being logged.</div></div>
+            <div style="padding:10px 0"><div style="font-size:16.5px;font-weight:600;letter-spacing:-.01em">"Your coaching is ready"</div><div style="font-size:14.5px;color:#585B52;line-height:1.45;margin-top:2px">You always see it before your manager does.</div></div>
+          </div>
+          <div style="background:#F1EFE8;border-radius:16px;padding:11px 17px;margin-top:10px"><div style="font-size:14.5px;line-height:1.5;color:#585B52">Turn any of them off later. The app works without them — you'd just be checking in by hand more often.</div></div>
+        </div>
+        <div style="padding:14px 30px 32px;display:flex;flex-direction:column;gap:10px;flex:none">
+          <button type="button" style="height:60px;background:#35593A;border:none;border-radius:16px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer" style-active="background:#2F5233">Allow notifications</button>
+          <button type="button" style="height:52px;background:#F1EFE8;border:none;border-radius:16px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-active="background:#E5E2D9">Not now</button>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">Naming all four and capping the number is the whole argument. "Stay updated" earns a decline from a field force already spammed by every other work app.</p>
+    </div>
+
+    <!-- A4 MIC -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">A4</span><span style="font-size:14.5px;font-weight:500">Microphone — deferred to day one's first visit</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">10:02</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="flex:1;padding:8px 30px 0;overflow:hidden">
+          <div style="font-size:14px;font-weight:500;color:#585B52;margin-bottom:10px">Before your first visit</div>
+          <h2 style="font-size:32px;font-weight:600;line-height:1.08;letter-spacing:-.035em;margin:0 0 12px">Talk instead of typing.</h2>
+          <p style="font-size:16.5px;line-height:1.5;color:#585B52;margin:0 0 18px">Speak for thirty seconds after each visit. The app writes your call report and you fix what it got wrong.</p>
+          <div style="background:#1F211C;border-radius:20px;padding:22px;margin-bottom:14px;display:flex;gap:28px;box-shadow:0 16px 36px -22px rgba(20,21,15,.7)">
+            <div><div style="font-size:40px;font-weight:600;color:#FFFFFF;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-.045em">9</div><div style="font-size:14px;color:rgba(255,255,255,.72);margin-top:8px">visits a day</div></div>
+            <div style="width:1px;background:rgba(255,255,255,.16)"></div>
+            <div><div style="font-size:40px;font-weight:600;color:#FFFFFF;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-.045em">14<span style="font-size:21px;letter-spacing:-.02em"> min</span></div><div style="font-size:14px;color:rgba(255,255,255,.72);margin-top:8px">of forms you skip</div></div>
+          </div>
+          <div style="background:#FFFFFF;border-radius:20px;padding:4px 20px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.4)">
+            <div style="padding:14px 0;border-bottom:1px solid #F2F0E9;font-size:15.5px;line-height:1.5;color:#585B52"><strong style="color:#1F211C;font-weight:600">Your note is yours.</strong> It records only while you hold the button.</div>
+            <div style="padding:14px 0;font-size:15.5px;line-height:1.5;color:#585B52"><strong style="color:#1F211C;font-weight:600">Recording a consultation is separate.</strong> That needs the doctor to agree, every time.</div>
+          </div>
+        </div>
+        <div style="padding:14px 30px 32px;display:flex;flex-direction:column;gap:10px;flex:none">
+          <button type="button" style="height:60px;background:#35593A;border:none;border-radius:16px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer" style-active="background:#2F5233">Turn on the microphone</button>
+          <button type="button" style="height:52px;background:#F1EFE8;border:none;border-radius:16px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-active="background:#E5E2D9">I'll type my reports</button>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">Deliberately separates <em>your voice note</em> from <em>recording the doctor</em>. Conflating them at the prompt is how the app earns its surveillance reputation on day one.</p>
+    </div>
+
+    <!-- A5 XIAOMI -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#1F211C;color:#FFFFFF;padding:4px 9px;border-radius:999px">A5</span><span style="font-size:14.5px;font-weight:500">Battery — Xiaomi / MIUI</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">8:47</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="flex:1;padding:6px 30px 0;overflow:hidden">
+          <div style="display:inline-flex;align-items:center;gap:8px;background:#FFFFFF;border-radius:999px;padding:7px 14px;margin-bottom:14px;box-shadow:0 1px 2px rgba(20,21,15,.06)"><span style="width:7px;height:7px;border-radius:50%;background:#35593A;flex:none"></span><span style="font-size:13.5px;font-weight:500">Redmi Note 13 · MIUI 14</span></div>
+          <h2 style="font-size:29px;font-weight:600;line-height:1.1;letter-spacing:-.032em;margin:0 0 10px">Xiaomi will shut this app off. Two taps stops it.</h2>
+          <p style="font-size:16px;line-height:1.5;color:#585B52;margin:0 0 16px">If MIUI closes the app, your check-ins and mileage stop and you'll be entering them by hand.</p>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="background:#E9F0E9;border-radius:16px;padding:13px 18px;display:flex;gap:13px;align-items:center"><span style="width:28px;height:28px;border-radius:50%;background:#35593A;display:flex;align-items:center;justify-content:center;flex:none"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><div style="font-size:16px;font-weight:600">Autostart</div><div style="font-size:14px;color:#3F5F43">Done</div></div></div>
+            <div style="background:#FFFFFF;border-radius:18px;padding:15px 18px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.45)">
+              <div style="display:flex;gap:13px;align-items:center;margin-bottom:12px"><span style="width:28px;height:28px;border-radius:50%;background:#1F211C;color:#FFFFFF;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none">2</span><div style="font-size:16px;font-weight:600;letter-spacing:-.01em">Battery saver → No restrictions</div></div>
+              <div style="background:#F7F5F0;border-radius:14px;padding:11px">
+                <div style="font-size:13px;font-weight:500;color:#585B52;margin-bottom:8px">What you'll see</div>
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <div style="background:#FFFFFF;border-radius:10px;padding:10px 13px;font-size:14.5px;color:#585B52;display:flex;justify-content:space-between;align-items:center"><span>Battery saver</span><span style="width:16px;height:16px;border-radius:50%;border:1.5px solid #C4C7BD"></span></div>
+                  <div style="background:#E9F0E9;border-radius:10px;padding:10px 13px;font-size:14.5px;font-weight:600;display:flex;justify-content:space-between;align-items:center"><span>No restrictions</span><span style="width:16px;height:16px;border-radius:50%;background:#35593A;display:flex;align-items:center;justify-content:center"><svg width="9" height="9" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+                </div>
+                <div style="font-size:13.5px;color:#585B52;margin-top:8px">Tap the last one, then press back.</div>
+              </div>
+            </div>
+            <div style="background:#FFFFFF;border-radius:16px;padding:13px 18px;display:flex;gap:13px;align-items:center;opacity:.5"><span style="width:28px;height:28px;border-radius:50%;background:#F1EFE8;color:#585B52;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none">3</span><div style="font-size:16px;font-weight:600">Lock the app in Recents</div></div>
+          </div>
+        </div>
+        <div style="padding:14px 30px 32px;display:flex;flex-direction:column;gap:10px;flex:none">
+          <button type="button" style="height:60px;background:#35593A;border:none;border-radius:16px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer" style-active="background:#2F5233">Open that settings screen</button>
+          <button type="button" style="height:52px;background:#F1EFE8;border:none;border-radius:16px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-active="background:#E5E2D9">Show me a 20-second video</button>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">The OEM is detected from the build, so the MR never picks their own phone from a list. Each step shows a picture of the actual settings screen they're about to land on.</p>
+    </div>
+
+    <!-- A6 OPPO -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">A6</span><span style="font-size:14.5px;font-weight:500">Battery — Oppo / ColorOS</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">8:47</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="flex:1;padding:6px 30px 0;overflow:hidden">
+          <div style="display:inline-flex;align-items:center;gap:8px;background:#FFFFFF;border-radius:999px;padding:7px 14px;margin-bottom:14px;box-shadow:0 1px 2px rgba(20,21,15,.06)"><span style="width:7px;height:7px;border-radius:50%;background:#35593A;flex:none"></span><span style="font-size:13.5px;font-weight:500">Oppo A78 · ColorOS 14</span></div>
+          <h2 style="font-size:29px;font-weight:600;line-height:1.1;letter-spacing:-.032em;margin:0 0 10px">ColorOS is the strictest of the four.</h2>
+          <p style="font-size:16px;line-height:1.5;color:#585B52;margin:0 0 16px">Three settings in three different places. Worth doing once — otherwise the app dies in your pocket within the hour.</p>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="background:#E9F0E9;border-radius:16px;padding:13px 18px;display:flex;gap:13px;align-items:center"><span style="width:28px;height:28px;border-radius:50%;background:#35593A;display:flex;align-items:center;justify-content:center;flex:none"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><div style="font-size:16px;font-weight:600">Auto-launch</div><div style="font-size:14px;color:#3F5F43">Done</div></div></div>
+            <div style="background:#FFFFFF;border-radius:18px;padding:15px 18px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.45)">
+              <div style="display:flex;gap:13px;align-items:center;margin-bottom:12px"><span style="width:28px;height:28px;border-radius:50%;background:#1F211C;color:#FFFFFF;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none">2</span><div style="font-size:16px;font-weight:600;letter-spacing:-.01em">Power saving → Allow background</div></div>
+              <div style="background:#F7F5F0;border-radius:14px;padding:11px">
+                <div style="font-size:13px;font-weight:500;color:#585B52;margin-bottom:8px">What you'll see</div>
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <div style="background:#FFFFFF;border-radius:10px;padding:10px 13px;font-size:14.5px;color:#585B52;display:flex;justify-content:space-between;align-items:center"><span>Smart power saving</span><span style="width:16px;height:16px;border-radius:50%;border:1.5px solid #C4C7BD"></span></div>
+                  <div style="background:#E9F0E9;border-radius:10px;padding:10px 13px;font-size:14.5px;font-weight:600;display:flex;justify-content:space-between;align-items:center"><span>Allow background activity</span><span style="width:16px;height:16px;border-radius:50%;background:#35593A;display:flex;align-items:center;justify-content:center"><svg width="9" height="9" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+                </div>
+              </div>
+            </div>
+            <div style="background:#FFFFFF;border-radius:16px;padding:13px 18px;display:flex;gap:13px;align-items:center;opacity:.5"><span style="width:28px;height:28px;border-radius:50%;background:#F1EFE8;color:#585B52;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none">3</span><div style="font-size:16px;font-weight:600">Sleep standby optimisation → off</div></div>
+          </div>
+        </div>
+        <div style="padding:14px 30px 32px;display:flex;flex-direction:column;gap:10px;flex:none">
+          <button type="button" style="height:60px;background:#35593A;border:none;border-radius:16px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer" style-active="background:#2F5233">Open that settings screen</button>
+          <button type="button" style="height:52px;background:#F1EFE8;border:none;border-radius:16px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-active="background:#E5E2D9">Show me a 20-second video</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- A7 VIVO -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">A7</span><span style="font-size:14.5px;font-weight:500">Battery — Vivo / Funtouch</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">8:47</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="flex:1;padding:6px 30px 0;overflow:hidden">
+          <div style="display:inline-flex;align-items:center;gap:8px;background:#FFFFFF;border-radius:999px;padding:7px 14px;margin-bottom:14px;box-shadow:0 1px 2px rgba(20,21,15,.06)"><span style="width:7px;height:7px;border-radius:50%;background:#35593A;flex:none"></span><span style="font-size:13.5px;font-weight:500">Vivo Y28 · Funtouch OS 14</span></div>
+          <h2 style="font-size:29px;font-weight:600;line-height:1.1;letter-spacing:-.032em;margin:0 0 10px">Vivo hides this under "High background power".</h2>
+          <p style="font-size:16px;line-height:1.5;color:#585B52;margin:0 0 16px">The setting sounds like a warning. It isn't — it's permission to keep running while you walk between clinics.</p>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="background:#E9F0E9;border-radius:16px;padding:13px 18px;display:flex;gap:13px;align-items:center"><span style="width:28px;height:28px;border-radius:50%;background:#35593A;display:flex;align-items:center;justify-content:center;flex:none"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><div style="font-size:16px;font-weight:600">Auto-start</div><div style="font-size:14px;color:#3F5F43">Done</div></div></div>
+            <div style="background:#FFFFFF;border-radius:18px;padding:15px 18px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.45)">
+              <div style="display:flex;gap:13px;align-items:center;margin-bottom:12px"><span style="width:28px;height:28px;border-radius:50%;background:#1F211C;color:#FFFFFF;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none">2</span><div style="font-size:16px;font-weight:600;letter-spacing:-.01em">Allow high background power</div></div>
+              <div style="background:#F7F5F0;border-radius:14px;padding:11px">
+                <div style="font-size:13px;font-weight:500;color:#585B52;margin-bottom:8px">What you'll see</div>
+                <div style="background:#FFFFFF;border-radius:10px;padding:11px 13px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:14.5px">High background power use</span><span style="width:42px;height:24px;border-radius:12px;background:#35593A;display:flex;align-items:center;justify-content:flex-end;padding:2px;box-sizing:border-box"><span style="width:20px;height:20px;border-radius:50%;background:#FFFFFF"></span></span></div>
+                <div style="font-size:13.5px;color:#585B52;margin-top:8px">Switch it on, then press back twice.</div>
+              </div>
+            </div>
+            <div style="background:#FFFFFF;border-radius:16px;padding:13px 18px;display:flex;gap:13px;align-items:center;opacity:.5"><span style="width:28px;height:28px;border-radius:50%;background:#F1EFE8;color:#585B52;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none">3</span><div style="font-size:16px;font-weight:600">Lock the app in Recents</div></div>
+          </div>
+        </div>
+        <div style="padding:14px 30px 32px;display:flex;flex-direction:column;gap:10px;flex:none">
+          <button type="button" style="height:60px;background:#35593A;border:none;border-radius:16px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer" style-active="background:#2F5233">Open that settings screen</button>
+          <button type="button" style="height:52px;background:#F1EFE8;border:none;border-radius:16px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-active="background:#E5E2D9">Show me a 20-second video</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- A8 REALME -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">A8</span><span style="font-size:14.5px;font-weight:500">Battery — Realme UI</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">8:47</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="flex:1;padding:6px 30px 0;overflow:hidden">
+          <div style="display:inline-flex;align-items:center;gap:8px;background:#FFFFFF;border-radius:999px;padding:7px 14px;margin-bottom:14px;box-shadow:0 1px 2px rgba(20,21,15,.06)"><span style="width:7px;height:7px;border-radius:50%;background:#35593A;flex:none"></span><span style="font-size:13.5px;font-weight:500">Realme Narzo 70 · Realme UI 5</span></div>
+          <h2 style="font-size:29px;font-weight:600;line-height:1.1;letter-spacing:-.032em;margin:0 0 10px">Two settings, same screen. Quickest of the four.</h2>
+          <p style="font-size:16px;line-height:1.5;color:#585B52;margin:0 0 16px">Realme puts both in one place. Tap through and you're done in about fifteen seconds.</p>
+          <div style="background:#FFFFFF;border-radius:18px;padding:15px 18px;margin-bottom:12px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.45)">
+            <div style="display:flex;gap:13px;align-items:center;margin-bottom:12px"><span style="width:28px;height:28px;border-radius:50%;background:#1F211C;color:#FFFFFF;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none">1</span><div style="font-size:16px;font-weight:600;letter-spacing:-.01em">App battery usage</div></div>
+            <div style="background:#F7F5F0;border-radius:14px;padding:11px">
+              <div style="font-size:13px;font-weight:500;color:#585B52;margin-bottom:8px">What you'll see</div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="background:#FFFFFF;border-radius:10px;padding:11px 13px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:14.5px">Allow background activity</span><span style="width:42px;height:24px;border-radius:12px;background:#35593A;display:flex;align-items:center;justify-content:flex-end;padding:2px;box-sizing:border-box"><span style="width:20px;height:20px;border-radius:50%;background:#FFFFFF"></span></span></div>
+                <div style="background:#FFFFFF;border-radius:10px;padding:11px 13px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:14.5px">Allow auto launch</span><span style="width:42px;height:24px;border-radius:12px;background:#35593A;display:flex;align-items:center;justify-content:flex-end;padding:2px;box-sizing:border-box"><span style="width:20px;height:20px;border-radius:50%;background:#FFFFFF"></span></span></div>
+              </div>
+              <div style="font-size:13.5px;color:#585B52;margin-top:8px">Both on, then press back.</div>
+            </div>
+          </div>
+          <div style="background:#F1EFE8;border-radius:16px;padding:13px 18px"><div style="font-size:15px;font-weight:600;margin-bottom:2px">After a system update</div><div style="font-size:14.5px;line-height:1.45;color:#585B52">Realme resets these silently. If the app warns you it was stopped, come back here — fifteen seconds again.</div></div>
+        </div>
+        <div style="padding:14px 30px 32px;display:flex;flex-direction:column;gap:10px;flex:none">
+          <button type="button" style="height:60px;background:#35593A;border:none;border-radius:16px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer" style-active="background:#2F5233">Open that settings screen</button>
+          <button type="button" style="height:52px;background:#F1EFE8;border:none;border-radius:16px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-active="background:#E5E2D9">Show me a 20-second video</button>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">The silent-reset warning is honest and load-bearing. This will be a recurring support cost on all four platforms — budget for it rather than designing it away.</p>
+    </div>
+
+    <!-- A9 TRANSPARENCY INTRO -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">A9</span><span style="font-size:14.5px;font-weight:500">What we record — intro</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">8:52</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="flex:1;padding:8px 30px 0;overflow:hidden">
+          <h2 style="font-size:32px;font-weight:600;line-height:1.08;letter-spacing:-.035em;margin:0 0 12px">Everything, before you ask.</h2>
+          <p style="font-size:16px;line-height:1.5;color:#585B52;margin:0 0 16px">Open this any time from home. It never changes without telling you.</p>
+          <div style="background:#FFFFFF;border-radius:20px;padding:4px 20px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.4)">
+            <div style="padding:12px 0;border-bottom:1px solid #F2F0E9"><div style="font-size:16px;font-weight:600;letter-spacing:-.01em">Where you are, during your shift</div><div style="font-size:14.5px;color:#585B52;line-height:1.45;margin-top:2px">Start day to End day. Never outside those hours.</div></div>
+            <div style="padding:12px 0;border-bottom:1px solid #F2F0E9"><div style="font-size:16px;font-weight:600;letter-spacing:-.01em">Which doctors you saw, and when</div><div style="font-size:14.5px;color:#585B52;line-height:1.45;margin-top:2px">Check-in and check-out times.</div></div>
+            <div style="padding:12px 0;border-bottom:1px solid #F2F0E9"><div style="font-size:16px;font-weight:600;letter-spacing:-.01em">Your voice notes and reports</div><div style="font-size:14.5px;color:#585B52;line-height:1.45;margin-top:2px">Kept 90 days, then deleted.</div></div>
+            <div style="padding:12px 0"><div style="font-size:16px;font-weight:600;letter-spacing:-.01em">Recordings — only if a doctor agrees</div><div style="font-size:14.5px;color:#585B52;line-height:1.45;margin-top:2px">If they say no, nothing happens to you.</div></div>
+          </div>
+          <div style="background:#E9F0E9;border-radius:16px;padding:14px 18px;margin-top:12px"><div style="font-size:16px;font-weight:600;letter-spacing:-.01em;margin-bottom:4px">What we never record</div><div style="font-size:14.5px;line-height:1.5;color:#3F5F43">Your personal calls, messages, other apps, your camera, or anything at all once your shift ends.</div></div>
+        </div>
+        <div style="padding:14px 30px 32px;flex:none">
+          <button type="button" style="height:60px;width:100%;background:#35593A;border:none;border-radius:16px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer" style-active="background:#2F5233">Start my first day</button>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">The "never" block matters more than the list above it. Field-force fear is about the phone in their pocket after 7pm, and that is the sentence that answers it.</p>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ══ FLOW B ══ -->
+<div style="padding:68px 56px 0">
+  <div style="margin-bottom:30px;max-width:1340px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:600;background:#1F211C;color:#FFFFFF;padding:5px 12px;border-radius:999px">Flow B</span>
+      <span style="font-size:26px;font-weight:600;letter-spacing:-.03em">The day</span>
+      <span style="font-size:15px;color:#585B52">shift start → arrival → check-in → check-out → shift end</span>
+    </div>
+    <p style="font-size:16.5px;line-height:1.6;color:#585B52;margin:0;max-width:78ch">Home leads in the mandated order: next visit and travel time, today's progress, <strong style="color:#1F211C;font-weight:600">mileage earned today</strong>, sync. Tracking appears once, at the bottom, as a link the MR opens by choice. No map of where you've been, no coverage score, nothing phrased in a manager's voice.</p>
+  </div>
+
+  <div style="display:flex;gap:38px;flex-wrap:wrap;align-items:flex-start">
+
+    <!-- B1 HOME -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#1F211C;color:#FFFFFF;padding:4px 9px;border-radius:999px">B1</span><span style="font-size:14.5px;font-weight:500">Home / Today</span><span style="font-size:13.5px;color:#585B52">the screen everything is judged on</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">11:42</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="padding:0 22px 14px;display:flex;align-items:center;justify-content:space-between;flex:none">
+          <div><div style="font-size:27px;font-weight:600;letter-spacing:-.035em;line-height:1.1">Thursday</div><div style="font-size:14.5px;color:#585B52;margin-top:2px">Started 8:55 · South Mumbai</div></div>
+          <div style="height:36px;padding:0 13px;background:#E9F0E9;border-radius:999px;display:flex;align-items:center;gap:7px"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#35593A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="font-size:13.5px;font-weight:600;color:#35593A">Sent</span></div>
+        </div>
+        <div style="flex:1;overflow:hidden;padding:0 22px">
+          <div style="background:#1F211C;border-radius:22px;padding:20px 24px;margin-bottom:11px;box-shadow:0 18px 40px -24px rgba(20,21,15,.8)">
+            <div style="font-size:13.5px;font-weight:500;color:rgba(255,255,255,.6);margin-bottom:9px">Next visit</div>
+            <div style="font-size:29px;font-weight:600;color:#FFFFFF;letter-spacing:-.035em;line-height:1.05;margin-bottom:3px">Dr. S. Iyer</div>
+            <div style="font-size:15.5px;color:rgba(255,255,255,.75);margin-bottom:17px">Sunrise Clinic, Prabhadevi</div>
+            <div style="display:flex;align-items:flex-end;gap:24px">
+              <div><div style="font-size:27px;font-weight:600;color:#B8CDB8;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-.035em">11<span style="font-size:16px;letter-spacing:-.01em"> min</span></div><div style="font-size:13.5px;color:rgba(255,255,255,.6);margin-top:5px">by bike, traffic now</div></div>
+              <div style="width:1px;height:32px;background:rgba(255,255,255,.16)"></div>
+              <div><div style="font-size:27px;font-weight:600;color:#FFFFFF;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-.035em">2.4<span style="font-size:16px;letter-spacing:-.01em"> km</span></div><div style="font-size:13.5px;color:rgba(255,255,255,.6);margin-top:5px">from here</div></div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:11px">
+            <div style="background:#FFFFFF;border-radius:20px;padding:16px 18px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.4)">
+              <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:9px">Today</div>
+              <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:38px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-.045em">6</span><span style="font-size:17px;color:#585B52">of 9</span></div>
+              <div style="display:flex;gap:3px;margin-top:12px"><span style="height:6px;flex:1;background:#35593A;border-radius:3px"></span><span style="height:6px;flex:1;background:#35593A;border-radius:3px"></span><span style="height:6px;flex:1;background:#35593A;border-radius:3px"></span><span style="height:6px;flex:1;background:#35593A;border-radius:3px"></span><span style="height:6px;flex:1;background:#35593A;border-radius:3px"></span><span style="height:6px;flex:1;background:#35593A;border-radius:3px"></span><span style="height:6px;flex:1;background:#E9E7DF;border-radius:3px"></span><span style="height:6px;flex:1;background:#E9E7DF;border-radius:3px"></span><span style="height:6px;flex:1;background:#E9E7DF;border-radius:3px"></span></div>
+            </div>
+            <div style="background:#FFFFFF;border-radius:20px;padding:16px 18px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.4)">
+              <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:9px">You've earned</div>
+              <div style="font-size:38px;font-weight:600;color:#35593A;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-.045em">₹412</div>
+              <div style="font-size:13.5px;color:#585B52;margin-top:12px">31.7 km · on this month's claim</div>
+            </div>
+          </div>
+          <div style="background:#FFFFFF;border-radius:18px;padding:0 20px;height:56px;display:flex;align-items:center;gap:12px;margin-bottom:11px;box-shadow:0 1px 2px rgba(20,21,15,.04)">
+            <span style="width:22px;height:22px;border-radius:50%;background:#E9F0E9;display:flex;align-items:center;justify-content:center;flex:none"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#35593A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span style="font-size:16px;flex:1">Everything sent</span>
+            <span style="font-size:14px;color:#585B52;font-variant-numeric:tabular-nums">11:42</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px">
+            <svg width="17" height="17" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7.6" stroke="#585B52" stroke-width="1.5"/><path d="M10 9.2v4.2" stroke="#585B52" stroke-width="1.7" stroke-linecap="round"/><circle cx="10" cy="6.6" r="1" fill="#585B52"/></svg>
+            <span style="font-size:14.5px;color:#585B52;border-bottom:1px solid #DEDCD4">What this app records about me</span>
+          </div>
+        </div>
+        <div style="padding:12px 22px 12px;flex:none">
+          <button type="button" style="height:60px;width:100%;background:#35593A;border:none;border-radius:18px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer" style-active="background:#2F5233">Start the trip to Dr. Iyer</button>
+        </div>
+        <div style="height:80px;background:#FFFFFF;display:flex;flex:none;padding:8px 12px 16px;gap:4px">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px"><span style="width:44px;height:26px;border-radius:999px;background:#E9F0E9;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="2.9" y="3.6" width="14.2" height="13" rx="3.4" stroke="#35593A" stroke-width="1.7"/><path d="M2.9 7.7h14.2M7 2.4v2.6M13 2.4v2.6" stroke="#35593A" stroke-width="1.7" stroke-linecap="round"/></svg></span><span style="font-size:11.5px;font-weight:600;color:#35593A">Today</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px"><span style="height:26px;display:flex;align-items:center"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="7.1" r="3.3" stroke="#585B52" stroke-width="1.7"/><path d="M4.2 16.6c0-3.1 2.6-5.3 5.8-5.3s5.8 2.2 5.8 5.3" stroke="#585B52" stroke-width="1.7" stroke-linecap="round"/></svg></span><span style="font-size:11.5px;color:#585B52">Doctors</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;position:relative"><span style="height:26px;display:flex;align-items:center"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="2.6" y="3.4" width="14.8" height="11" rx="3.2" stroke="#585B52" stroke-width="1.7"/><path d="M6.6 17.4l2.6-2.9" stroke="#585B52" stroke-width="1.7" stroke-linecap="round"/></svg></span><span style="font-size:11.5px;color:#585B52">Coaching</span><span style="position:absolute;top:2px;right:26px;width:8px;height:8px;border-radius:50%;background:#35593A;border:2px solid #FFFFFF"></span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px"><span style="height:26px;display:flex;align-items:center"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M3.4 5.6h13.2M3.4 10h13.2M3.4 14.4h8.4" stroke="#585B52" stroke-width="1.7" stroke-linecap="round"/></svg></span><span style="font-size:11.5px;color:#585B52">Me</span></div>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">Money is the second-largest figure and the only other accent-green thing on the screen. It is also the honest answer to Apple 2.5.4 — background location produces <em>this</em>, and a reviewer can see it in ten seconds.</p>
+    </div>
+
+    <!-- B2 OFFLINE -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">B2</span><span style="font-size:14.5px;font-weight:500">Home — offline</span><span style="font-size:13.5px;color:#585B52">a normal Thursday</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">13:18</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;border:1.5px dashed #585B52;box-sizing:border-box"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="padding:0 22px 12px;display:flex;align-items:center;justify-content:space-between;flex:none">
+          <div><div style="font-size:27px;font-weight:600;letter-spacing:-.035em;line-height:1.1">Thursday</div><div style="font-size:14.5px;color:#585B52;margin-top:2px">Started 8:55 · South Mumbai</div></div>
+          <div style="height:36px;padding:0 13px;background:#F1EFE8;border:1px dashed #B4B7AC;border-radius:999px;display:flex;align-items:center;gap:7px;box-sizing:border-box"><span style="font-size:13.5px;font-weight:600;color:#585B52">4 waiting</span></div>
+        </div>
+        <div style="flex:1;overflow:hidden;padding:0 22px">
+          <div style="background:#F1EFE8;border-radius:16px;padding:12px 18px;margin-bottom:9px"><div style="font-size:15.5px;font-weight:600;letter-spacing:-.01em">No signal — carry on</div><div style="font-size:14.5px;color:#585B52;margin-top:2px;line-height:1.4">Everything saves here and sends itself later.</div></div>
+          <div style="background:#1F211C;border-radius:22px;padding:17px 24px;margin-bottom:9px;box-shadow:0 18px 40px -24px rgba(20,21,15,.8)">
+            <div style="font-size:13.5px;font-weight:500;color:rgba(255,255,255,.6);margin-bottom:8px">Next visit</div>
+            <div style="font-size:29px;font-weight:600;color:#FFFFFF;letter-spacing:-.035em;line-height:1.05;margin-bottom:3px">Dr. K. Shah</div>
+            <div style="font-size:15.5px;color:rgba(255,255,255,.75);margin-bottom:15px">Matunga · saved route</div>
+            <div style="display:flex;align-items:flex-end;gap:24px">
+              <div><div style="font-size:27px;font-weight:600;color:#B8CDB8;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-.035em">~18<span style="font-size:16px;letter-spacing:-.01em"> min</span></div><div style="font-size:13.5px;color:rgba(255,255,255,.6);margin-top:5px">last known traffic</div></div>
+              <div style="width:1px;height:32px;background:rgba(255,255,255,.16)"></div>
+              <div><div style="font-size:27px;font-weight:600;color:#FFFFFF;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-.035em">5.1<span style="font-size:16px;letter-spacing:-.01em"> km</span></div><div style="font-size:13.5px;color:rgba(255,255,255,.6);margin-top:5px">from here</div></div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:9px">
+            <div style="background:#FFFFFF;border-radius:20px;padding:14px 18px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.4)"><div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:8px">Today</div><div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:36px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-.045em">7</span><span style="font-size:17px;color:#585B52">of 9</span></div><div style="display:flex;gap:3px;margin-top:10px"><span style="height:6px;flex:1;background:#35593A;border-radius:3px"></span><span style="height:6px;flex:1;background:#35593A;border-radius:3px"></span><span style="height:6px;flex:1;background:#35593A;border-radius:3px"></span><span style="height:6px;flex:1;background:#35593A;border-radius:3px"></span><span style="height:6px;flex:1;background:#B4B7AC;border-radius:3px"></span><span style="height:6px;flex:1;background:#B4B7AC;border-radius:3px"></span><span style="height:6px;flex:1;background:#B4B7AC;border-radius:3px"></span><span style="height:6px;flex:1;background:#E9E7DF;border-radius:3px"></span><span style="height:6px;flex:1;background:#E9E7DF;border-radius:3px"></span></div></div>
+            <div style="background:#FFFFFF;border-radius:20px;padding:14px 18px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.4)"><div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:8px">You've earned</div><div style="font-size:36px;font-weight:600;color:#35593A;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-.045em">₹508</div><div style="font-size:13.5px;color:#585B52;margin-top:10px">39.1 km · counted here</div></div>
+          </div>
+          <div style="background:#F1EFE8;border:1px dashed #B4B7AC;border-radius:18px;padding:0 20px;height:52px;display:flex;align-items:center;gap:11px;margin-bottom:9px;box-sizing:border-box"><span style="width:11px;height:11px;border-radius:50%;border:1.8px dashed #585B52;flex:none"></span><span style="font-size:16px;flex:1">4 waiting · 2.1 MB</span><span style="font-size:14.5px;font-weight:600;color:#35593A">See list</span></div>
+          <div style="display:flex;align-items:center;gap:9px">
+            <svg width="17" height="17" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7.6" stroke="#585B52" stroke-width="1.5"/><path d="M10 9.2v4.2" stroke="#585B52" stroke-width="1.7" stroke-linecap="round"/><circle cx="10" cy="6.6" r="1" fill="#585B52"/></svg>
+            <span style="font-size:14.5px;color:#585B52;border-bottom:1px solid #DEDCD4">What this app records about me</span>
+          </div>
+        </div>
+        <div style="padding:12px 22px 12px;flex:none">
+          <button type="button" style="height:60px;width:100%;background:#35593A;border:none;border-radius:18px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;line-height:1.15" style-active="background:#2F5233"><span>Start the trip to Dr. Shah</span><span style="font-size:12px;font-weight:500;opacity:.78">works without signal</span></button>
+        </div>
+        <div style="height:80px;background:#FFFFFF;display:flex;flex:none;padding:8px 12px 16px;gap:4px">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px"><span style="width:44px;height:26px;border-radius:999px;background:#E9F0E9;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="2.9" y="3.6" width="14.2" height="13" rx="3.4" stroke="#35593A" stroke-width="1.7"/><path d="M2.9 7.7h14.2M7 2.4v2.6M13 2.4v2.6" stroke="#35593A" stroke-width="1.7" stroke-linecap="round"/></svg></span><span style="font-size:11.5px;font-weight:600;color:#35593A">Today</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px"><span style="height:26px;display:flex;align-items:center"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="7.1" r="3.3" stroke="#585B52" stroke-width="1.7"/><path d="M4.2 16.6c0-3.1 2.6-5.3 5.8-5.3s5.8 2.2 5.8 5.3" stroke="#585B52" stroke-width="1.7" stroke-linecap="round"/></svg></span><span style="font-size:11.5px;color:#585B52">Doctors</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px"><span style="height:26px;display:flex;align-items:center"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="2.6" y="3.4" width="14.8" height="11" rx="3.2" stroke="#585B52" stroke-width="1.7"/><path d="M6.6 17.4l2.6-2.9" stroke="#585B52" stroke-width="1.7" stroke-linecap="round"/></svg></span><span style="font-size:11.5px;color:#585B52">Coaching</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px"><span style="height:26px;display:flex;align-items:center"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M3.4 5.6h13.2M3.4 10h13.2M3.4 14.4h8.4" stroke="#585B52" stroke-width="1.7" stroke-linecap="round"/></svg></span><span style="font-size:11.5px;color:#585B52">Me</span></div>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">Identical structure, neutral tone, dashed edges. Nothing is red, nothing is hidden, and the progress bar shows locally-counted visits in the offline tone rather than dropping them.</p>
+    </div>
+
+    <!-- B3 BEAT PLAN -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">B3</span><span style="font-size:14.5px;font-weight:500">Beat plan &amp; route</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">11:43</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="padding:0 22px 16px;flex:none"><div style="font-size:27px;font-weight:600;letter-spacing:-.035em;line-height:1.1">Today's route</div><div style="font-size:14.5px;color:#585B52;margin-top:2px">9 planned · 6 done · 31.7 km</div></div>
+        <div style="flex:1;overflow:hidden;padding:0 22px">
+          <div style="display:flex;gap:15px"><div style="width:22px;display:flex;flex-direction:column;align-items:center;flex:none"><span style="width:22px;height:22px;border-radius:50%;background:#35593A;display:flex;align-items:center;justify-content:center"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span style="width:2px;flex:1;background:#E9E7DF;min-height:16px"></span></div><div style="padding-bottom:13px;flex:1"><div style="font-size:16.5px;font-weight:500;color:#585B52">Dr. A. Menon</div><div style="font-size:14px;color:#585B52">09:20 · consented · 8 min</div></div></div>
+          <div style="display:flex;gap:15px"><div style="width:22px;display:flex;flex-direction:column;align-items:center;flex:none"><span style="width:22px;height:22px;border-radius:50%;background:#35593A;display:flex;align-items:center;justify-content:center"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span style="width:2px;flex:1;background:#E9E7DF;min-height:16px"></span></div><div style="padding-bottom:13px;flex:1"><div style="font-size:16.5px;font-weight:500;color:#585B52">Dr. R. Banerjee</div><div style="font-size:14px;color:#585B52">10:05 · declined recording · 11 min</div></div></div>
+          <div style="display:flex;gap:15px"><div style="width:22px;display:flex;flex-direction:column;align-items:center;flex:none"><span style="width:22px;height:22px;border-radius:50%;background:#35593A;display:flex;align-items:center;justify-content:center"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span style="width:2px;flex:1;background:#E9E7DF;min-height:16px"></span></div><div style="padding-bottom:13px;flex:1"><div style="font-size:16.5px;font-weight:500;color:#585B52">Dr. P. Nair</div><div style="font-size:14px;color:#585B52">10:48 · consented · 6 min</div></div></div>
+          <div style="display:flex;gap:15px"><div style="width:22px;display:flex;flex-direction:column;align-items:center;flex:none"><span style="width:22px;height:22px;border-radius:50%;background:#FBFAF7;border:3.5px solid #35593A;box-sizing:border-box"></span><span style="width:2px;flex:1;background:#E9E7DF;min-height:16px"></span></div><div style="padding-bottom:13px;flex:1"><div style="background:#FFFFFF;border-radius:18px;padding:16px 18px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.45)"><div style="font-size:21px;font-weight:600;letter-spacing:-.025em">Dr. S. Iyer</div><div style="font-size:15px;color:#585B52;margin-top:2px">Sunrise Clinic · 11 min · 2.4 km</div><div style="display:inline-block;font-size:13.5px;font-weight:600;color:#35593A;background:#E9F0E9;border-radius:999px;padding:5px 12px;margin-top:11px">Best window 12:00–13:00</div></div></div></div>
+          <div style="display:flex;gap:15px"><div style="width:22px;display:flex;flex-direction:column;align-items:center;flex:none"><span style="width:22px;height:22px;border-radius:50%;border:1.6px solid #C4C7BD;box-sizing:border-box"></span><span style="width:2px;flex:1;background:#E9E7DF;min-height:16px"></span></div><div style="padding-bottom:13px;flex:1"><div style="font-size:16.5px;font-weight:600">Dr. K. Shah</div><div style="font-size:14px;color:#585B52">Matunga · 5.1 km on from Iyer</div></div></div>
+          <div style="display:flex;gap:15px"><div style="width:22px;display:flex;flex-direction:column;align-items:center;flex:none"><span style="width:22px;height:22px;border-radius:50%;border:1.6px dashed #7A5510;box-sizing:border-box"></span><span style="width:2px;flex:1;background:#E9E7DF;min-height:14px"></span></div><div style="padding-bottom:13px;flex:1"><div style="font-size:16.5px;font-weight:600">Dr. M. Rao</div><div style="font-size:14px;color:#7A5510">Closes at 14:00 — go before Shah?</div></div></div>
+          <div style="display:flex;gap:15px"><div style="width:22px;display:flex;justify-content:center;flex:none"><span style="width:22px;height:22px;border-radius:50%;border:1.6px solid #C4C7BD;box-sizing:border-box"></span></div><div style="flex:1"><div style="font-size:16.5px;font-weight:500;color:#585B52">+ 3 more</div></div></div>
+        </div>
+        <div style="padding:12px 22px 12px;flex:none;display:flex;gap:10px">
+          <button type="button" style="height:60px;flex:1;background:#35593A;border:none;border-radius:18px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer" style-active="background:#2F5233">Open in Maps</button>
+          <button type="button" style="height:60px;background:#F1EFE8;border:none;border-radius:18px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;padding:0 22px;cursor:pointer" style-active="background:#E5E2D9">Reorder</button>
+        </div>
+        <div style="height:80px;background:#FFFFFF;display:flex;flex:none;padding:8px 12px 16px;gap:4px">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px"><span style="width:44px;height:26px;border-radius:999px;background:#E9F0E9;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="2.9" y="3.6" width="14.2" height="13" rx="3.4" stroke="#35593A" stroke-width="1.7"/><path d="M2.9 7.7h14.2M7 2.4v2.6M13 2.4v2.6" stroke="#35593A" stroke-width="1.7" stroke-linecap="round"/></svg></span><span style="font-size:11.5px;font-weight:600;color:#35593A">Today</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px"><span style="height:26px;display:flex;align-items:center"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="7.1" r="3.3" stroke="#585B52" stroke-width="1.7"/><path d="M4.2 16.6c0-3.1 2.6-5.3 5.8-5.3s5.8 2.2 5.8 5.3" stroke="#585B52" stroke-width="1.7" stroke-linecap="round"/></svg></span><span style="font-size:11.5px;color:#585B52">Doctors</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px"><span style="height:26px;display:flex;align-items:center"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="2.6" y="3.4" width="14.8" height="11" rx="3.2" stroke="#585B52" stroke-width="1.7"/><path d="M6.6 17.4l2.6-2.9" stroke="#585B52" stroke-width="1.7" stroke-linecap="round"/></svg></span><span style="font-size:11.5px;color:#585B52">Coaching</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px"><span style="height:26px;display:flex;align-items:center"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M3.4 5.6h13.2M3.4 10h13.2M3.4 14.4h8.4" stroke="#585B52" stroke-width="1.7" stroke-linecap="round"/></svg></span><span style="font-size:11.5px;color:#585B52">Me</span></div>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">A timeline, not a map. Maps are slow on a mid-range phone, costly on data, and a breadcrumb trail of where you've been is the surveillance read. Only the current stop is a card.</p>
+    </div>
+
+    <!-- B4 ARRIVAL -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">B4</span><span style="font-size:14.5px;font-weight:500">Arrival prompt</span><span style="font-size:13.5px;color:#585B52">geofence fired</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;position:relative;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">11:56</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="flex:1;position:relative;overflow:hidden">
+          <div style="position:absolute;inset:0;padding:0 22px;opacity:.35"><div style="font-size:27px;font-weight:600;letter-spacing:-.035em">Thursday</div><div style="background:#1F211C;border-radius:22px;height:160px;margin-top:22px"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px"><div style="background:#FFFFFF;border-radius:20px;height:110px"></div><div style="background:#FFFFFF;border-radius:20px;height:110px"></div></div></div>
+          <div style="position:absolute;inset:0;background:rgba(20,21,15,.44)"></div>
+        </div>
+        <div style="position:absolute;left:0;right:0;bottom:0;background:#FBFAF7;border-radius:30px 30px 42px 42px;box-shadow:0 -10px 44px -14px rgba(20,21,15,.35)">
+          <div style="padding:12px 0 4px;display:flex;justify-content:center"><span style="width:38px;height:4px;background:#D8D6CE;border-radius:2px"></span></div>
+          <div style="padding:18px 28px 0">
+            <div style="display:inline-flex;align-items:center;gap:8px;background:#E9F0E9;border-radius:999px;padding:7px 13px;margin-bottom:18px"><span style="width:7px;height:7px;border-radius:50%;background:#35593A"></span><span style="font-size:13.5px;font-weight:600;color:#35593A">You're at Sunrise Clinic</span></div>
+            <div style="font-size:32px;font-weight:600;letter-spacing:-.04em;line-height:1.05;margin-bottom:6px">Dr. S. Iyer</div>
+            <div style="font-size:15.5px;color:#585B52;margin-bottom:20px">Arrived 11:56 · last seen 3 weeks ago</div>
+            <div style="background:#FFFFFF;border-radius:18px;padding:17px 19px;margin-bottom:22px;box-shadow:0 1px 2px rgba(20,21,15,.05)"><div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:7px">From last time</div><div style="font-size:15.5px;line-height:1.5">Asked for the paediatric dosing sheet. Said cost is the first thing his patients raise.</div></div>
+          </div>
+          <div style="padding:0 28px 40px">
+            <button type="button" style="height:66px;width:100%;background:#35593A;border:none;border-radius:18px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:19px;font-weight:600;cursor:pointer;margin-bottom:10px" style-active="background:#2F5233">Check in</button>
+            <div style="display:flex;gap:10px">
+              <button type="button" style="height:52px;flex:1;background:#F1EFE8;border:none;border-radius:16px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-active="background:#E5E2D9">Just passing</button>
+              <button type="button" style="height:52px;flex:1;background:#F1EFE8;border:none;border-radius:16px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-active="background:#E5E2D9">He's not in</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">Fires while the MR is walking, so check-in is a 66px one-tap. "Just passing" means the geofence never forces a visit that didn't happen.</p>
+    </div>
+
+    <!-- B5 IN VISIT -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">B5</span><span style="font-size:14.5px;font-weight:500">Checked in — the visit</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">11:58</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="padding:0 22px 16px;flex:none">
+          <div style="background:#E9F0E9;border-radius:999px;height:52px;padding:0 8px 0 16px;display:flex;align-items:center;gap:11px">
+            <span style="width:22px;height:22px;border-radius:50%;background:#35593A;display:flex;align-items:center;justify-content:center;flex:none"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span style="font-size:15.5px;font-weight:600;letter-spacing:-.01em;flex:1">Checked in · Dr. S. Iyer</span>
+            <span style="background:#FFFFFF;border-radius:999px;padding:6px 13px;font-size:14.5px;color:#35593A;font-variant-numeric:tabular-nums;font-weight:600">02:14</span>
+          </div>
+        </div>
+        <div style="flex:1;padding:0 22px;overflow:hidden">
+          <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:11px">While you're in there</div>
+          <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;margin-bottom:16px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.4)">
+            <div style="min-height:74px;padding:15px 20px;display:flex;align-items:center;gap:14px;cursor:pointer;border-bottom:1px solid #F2F0E9" style-active="background:#FAF9F5"><div style="flex:1"><div style="font-size:16.5px;font-weight:600;letter-spacing:-.01em">Show approved content</div><div style="font-size:14.5px;color:#585B52;margin-top:1px">Paediatric dosing sheet — he asked last time</div></div><svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M6 3.4L10.6 8L6 12.6" stroke="#9B9E94" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div style="min-height:74px;padding:15px 20px;display:flex;align-items:center;gap:14px;cursor:pointer;border-bottom:1px solid #F2F0E9" style-active="background:#FAF9F5"><div style="flex:1"><div style="font-size:16.5px;font-weight:600;letter-spacing:-.01em">Leave samples</div><div style="font-size:14.5px;color:#585B52;margin-top:1px">4 of 12 left this month · UCPMP cap</div></div><svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M6 3.4L10.6 8L6 12.6" stroke="#9B9E94" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div style="min-height:74px;padding:15px 20px;display:flex;align-items:center;gap:14px;cursor:pointer" style-active="background:#FAF9F5"><div style="flex:1"><div style="font-size:16.5px;font-weight:600;letter-spacing:-.01em">Ask to record this visit</div><div style="font-size:14.5px;color:#585B52;margin-top:1px">Hand the phone over — the doctor decides</div></div><svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M6 3.4L10.6 8L6 12.6" stroke="#9B9E94" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <div style="background:#E9F0E9;border-radius:16px;padding:15px 18px"><div style="font-size:15.5px;font-weight:600;letter-spacing:-.01em;margin-bottom:3px">Asking is your job. Agreeing is theirs.</div><div style="font-size:14.5px;line-height:1.5;color:#3F5F43">If Dr. Iyer says no, tap "He declined" and carry on. Nothing about that counts against you.</div></div>
+        </div>
+        <div style="padding:14px 22px 40px;flex:none">
+          <button type="button" style="height:66px;width:100%;background:#35593A;border:none;border-radius:18px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:19px;font-weight:600;cursor:pointer" style-active="background:#2F5233">Check out</button>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">The reassurance sits on the screen read <em>before</em> asking, not after a decline — that is when it changes what the MR actually does.</p>
+    </div>
+
+    <!-- B6 CHECK-OUT -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">B6</span><span style="font-size:14.5px;font-weight:500">Check-out → voice note</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">12:09</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="flex:1;padding:6px 22px 0;overflow:hidden">
+          <div style="font-size:30px;font-weight:600;letter-spacing:-.038em;line-height:1.08;margin-bottom:4px">That's Dr. Iyer done</div>
+          <div style="font-size:15.5px;color:#585B52;margin-bottom:18px">11:56 – 12:09 · 13 minutes</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:14px">
+            <div style="background:#FFFFFF;border-radius:20px;padding:16px 19px;box-shadow:0 1px 2px rgba(20,21,15,.04)"><div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:7px">Added today</div><div style="font-size:29px;font-weight:600;color:#35593A;font-variant-numeric:tabular-nums;letter-spacing:-.04em;line-height:1">₹31</div><div style="font-size:13.5px;color:#585B52;margin-top:5px">2.4 km</div></div>
+            <div style="background:#FFFFFF;border-radius:20px;padding:16px 19px;box-shadow:0 1px 2px rgba(20,21,15,.04)"><div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:7px">Recorded</div><div style="font-size:18px;font-weight:600;letter-spacing:-.015em;margin-top:3px">He declined</div><div style="font-size:13.5px;color:#585B52;margin-top:5px">logged, nothing further</div></div>
+          </div>
+          <div style="background:#1F211C;border-radius:22px;padding:26px 24px;text-align:center;box-shadow:0 18px 44px -24px rgba(20,21,15,.85)">
+            <div style="font-size:13.5px;font-weight:500;color:rgba(255,255,255,.6);margin-bottom:11px">Last thing</div>
+            <div style="font-size:23px;font-weight:600;color:#FFFFFF;letter-spacing:-.028em;margin-bottom:8px">Tell me how it went</div>
+            <div style="font-size:15.5px;line-height:1.5;color:rgba(255,255,255,.72);margin-bottom:22px">Thirty seconds. I'll write the call report and you just fix what I get wrong.</div>
+            <div style="display:flex;align-items:center;justify-content:center;gap:4px;height:42px"><span style="width:3px;height:14px;background:rgba(255,255,255,.28);border-radius:2px"></span><span style="width:3px;height:24px;background:rgba(255,255,255,.28);border-radius:2px"></span><span style="width:3px;height:34px;background:rgba(255,255,255,.28);border-radius:2px"></span><span style="width:3px;height:20px;background:rgba(255,255,255,.28);border-radius:2px"></span><span style="width:3px;height:40px;background:rgba(255,255,255,.28);border-radius:2px"></span><span style="width:3px;height:26px;background:rgba(255,255,255,.28);border-radius:2px"></span><span style="width:3px;height:16px;background:rgba(255,255,255,.28);border-radius:2px"></span><span style="width:3px;height:30px;background:rgba(255,255,255,.28);border-radius:2px"></span><span style="width:3px;height:22px;background:rgba(255,255,255,.28);border-radius:2px"></span><span style="width:3px;height:36px;background:rgba(255,255,255,.28);border-radius:2px"></span><span style="width:3px;height:18px;background:rgba(255,255,255,.28);border-radius:2px"></span><span style="width:3px;height:28px;background:rgba(255,255,255,.28);border-radius:2px"></span></div>
+          </div>
+        </div>
+        <div style="padding:14px 22px 40px;flex:none">
+          <button type="button" style="height:66px;width:100%;background:#35593A;border:none;border-radius:18px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:19px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:10px" style-active="background:#2F5233"><span style="width:13px;height:13px;border-radius:50%;background:#FFFFFF"></span>Hold to talk</button>
+          <button type="button" style="height:52px;width:100%;background:#F1EFE8;border:none;border-radius:16px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-active="background:#E5E2D9">Type it instead</button>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">"He declined" sits next to the money in plain body colour, no icon, no tone. That placement is the point — a decline is as unremarkable as the kilometres.</p>
+    </div>
+
+    <!-- B7 DAY ENDED -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">B7</span><span style="font-size:14.5px;font-weight:500">Day ended</span><span style="font-size:13.5px;color:#585B52">C11 — capture stopped</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">18:22</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="flex:1;padding:6px 22px 0;overflow:hidden">
+          <div style="background:#FFFFFF;border-radius:22px;padding:28px 24px;margin-bottom:14px;text-align:center;box-shadow:0 1px 2px rgba(20,21,15,.04),0 16px 40px -24px rgba(20,21,15,.5)">
+            <div style="width:56px;height:56px;border-radius:50%;background:#F1EFE8;margin:0 auto 16px;display:flex;align-items:center;justify-content:center"><span style="width:16px;height:16px;border-radius:4px;background:#585B52"></span></div>
+            <div style="font-size:27px;font-weight:600;letter-spacing:-.035em;line-height:1.12;margin-bottom:8px">Location is off.</div>
+            <div style="font-size:16px;line-height:1.5;color:#585B52">Nothing more is recorded until you tap Start day tomorrow.</div>
+            <div style="font-size:13.5px;color:#585B52;margin-top:16px;border-top:1px solid #F2F0E9;padding-top:14px">Stopped 18:22 · ran 9h 27m</div>
+          </div>
+          <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:10px">Your Thursday</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:10px">
+            <div style="background:#FFFFFF;border-radius:20px;padding:16px 19px;box-shadow:0 1px 2px rgba(20,21,15,.04)"><div style="font-size:36px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-.045em">9</div><div style="font-size:14px;color:#585B52;margin-top:8px">visits, all 9 planned</div></div>
+            <div style="background:#FFFFFF;border-radius:20px;padding:16px 19px;box-shadow:0 1px 2px rgba(20,21,15,.04)"><div style="font-size:36px;font-weight:600;color:#35593A;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-.045em">₹627</div><div style="font-size:14px;color:#585B52;margin-top:8px">48.2 km on your claim</div></div>
+          </div>
+          <div style="background:#FFFFFF;border-radius:18px;padding:0 20px;height:56px;display:flex;align-items:center;gap:12px;margin-bottom:10px;box-shadow:0 1px 2px rgba(20,21,15,.04)"><span style="width:22px;height:22px;border-radius:50%;background:#E9F0E9;display:flex;align-items:center;justify-content:center;flex:none"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#35593A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span style="font-size:16px;flex:1">All 9 reports sent</span></div>
+          <div style="background:#FFFFFF;border-radius:18px;padding:0 20px;height:56px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 2px rgba(20,21,15,.04)"><span style="font-size:16px;flex:1">Data used today</span><span style="font-size:15px;color:#585B52;font-variant-numeric:tabular-nums">6.2 MB</span></div>
+        </div>
+        <div style="padding:14px 22px 40px;flex:none">
+          <button type="button" style="height:60px;width:100%;background:#F1EFE8;border:none;border-radius:18px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:500;cursor:pointer" style-active="background:#E5E2D9">See everything recorded today</button>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">Constraint C11. The stop confirmation outranks the day's numbers — an MR unsure whether tracking stopped kills the app from Recents, and then it's off tomorrow too.</p>
+    </div>
+
+    <!-- B8 DOCTOR LIST -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">B8</span><span style="font-size:14.5px;font-weight:500">Doctor list &amp; search</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">14:02</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="padding:0 22px 12px;flex:none">
+          <div style="font-size:27px;font-weight:600;letter-spacing:-.035em;line-height:1.1;margin-bottom:12px">Doctors</div>
+          <div style="height:52px;background:#FFFFFF;border-radius:16px;padding:0 16px;display:flex;align-items:center;gap:11px;box-shadow:0 1px 2px rgba(20,21,15,.05)"><svg width="17" height="17" viewBox="0 0 20 20" fill="none"><circle cx="8.8" cy="8.8" r="5.6" stroke="#585B52" stroke-width="1.7"/><path d="M13 13l3.6 3.6" stroke="#585B52" stroke-width="1.7" stroke-linecap="round"/></svg><span style="font-size:16.5px;color:#585B52;flex:1">Name, clinic or area</span></div>
+          <div style="display:flex;gap:8px;margin-top:9px"><span style="background:#1F211C;color:#FFFFFF;border-radius:999px;padding:7px 14px;font-size:13.5px;font-weight:600">Near me</span><span style="background:#FFFFFF;border-radius:999px;padding:7px 14px;font-size:13.5px;font-weight:500;color:#585B52;box-shadow:0 1px 2px rgba(20,21,15,.05)">Not seen 30d</span><span style="background:#FFFFFF;border-radius:999px;padding:7px 14px;font-size:13.5px;font-weight:500;color:#585B52;box-shadow:0 1px 2px rgba(20,21,15,.05)">On plan</span></div>
+        </div>
+        <div style="flex:1;padding:0 22px;overflow:hidden">
+          <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.4)">
+            <div style="min-height:70px;padding:10px 20px;display:flex;align-items:center;gap:14px;border-bottom:1px solid #F2F0E9;cursor:pointer" style-active="background:#FAF9F5"><div style="flex:1"><div style="font-size:17px;font-weight:600;letter-spacing:-.015em">Dr. V. Kulkarni</div><div style="font-size:14.5px;color:#585B52">Dadar West · 0.4 km · 6 weeks ago</div></div><span style="background:#F7EFDD;border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:600;color:#7A5510">Overdue</span></div>
+            <div style="min-height:70px;padding:10px 20px;display:flex;align-items:center;gap:14px;border-bottom:1px solid #F2F0E9;cursor:pointer" style-active="background:#FAF9F5"><div style="flex:1"><div style="font-size:17px;font-weight:600;letter-spacing:-.015em">Dr. S. Iyer</div><div style="font-size:14.5px;color:#585B52">Prabhadevi · 1.1 km · today</div></div><span style="background:#E9F0E9;border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:600;color:#35593A">Seen</span></div>
+            <div style="min-height:70px;padding:10px 20px;display:flex;align-items:center;gap:14px;border-bottom:1px solid #F2F0E9;cursor:pointer" style-active="background:#FAF9F5"><div style="flex:1"><div style="font-size:17px;font-weight:600;letter-spacing:-.015em">Dr. M. Rao</div><div style="font-size:14.5px;color:#585B52">Worli · 1.8 km · 2 weeks ago</div></div><span style="font-size:13.5px;color:#585B52;white-space:nowrap;flex:none">On plan</span></div>
+            <div style="min-height:70px;padding:10px 20px;display:flex;align-items:center;gap:14px;border-bottom:1px solid #F2F0E9;cursor:pointer" style-active="background:#FAF9F5"><div style="flex:1"><div style="font-size:17px;font-weight:600;letter-spacing:-.015em">Dr. K. Shah</div><div style="font-size:14.5px;color:#585B52">Matunga · 3.2 km · 9 days ago</div></div></div>
+            <div style="min-height:70px;padding:10px 20px;display:flex;align-items:center;gap:14px;cursor:pointer" style-active="background:#FAF9F5"><div style="flex:1"><div style="font-size:17px;font-weight:600;letter-spacing:-.015em">Dr. A. Menon</div><div style="font-size:14.5px;color:#585B52">Sion · 4.6 km · Tuesday</div></div></div>
+          </div>
+          <div style="font-size:14px;color:#585B52;margin-top:9px">All 214 doctors in your territory are on this phone. Search works with no signal.</div>
+        </div>
+        <div style="height:80px;background:#FFFFFF;display:flex;flex:none;padding:8px 12px 16px;gap:4px">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px"><span style="height:26px;display:flex;align-items:center"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="2.9" y="3.6" width="14.2" height="13" rx="3.4" stroke="#585B52" stroke-width="1.7"/><path d="M2.9 7.7h14.2" stroke="#585B52" stroke-width="1.7" stroke-linecap="round"/></svg></span><span style="font-size:11.5px;color:#585B52">Today</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px"><span style="width:44px;height:26px;border-radius:999px;background:#E9F0E9;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="7.1" r="3.3" stroke="#35593A" stroke-width="1.7"/><path d="M4.2 16.6c0-3.1 2.6-5.3 5.8-5.3s5.8 2.2 5.8 5.3" stroke="#35593A" stroke-width="1.7" stroke-linecap="round"/></svg></span><span style="font-size:11.5px;font-weight:600;color:#35593A">Doctors</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px"><span style="height:26px;display:flex;align-items:center"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="2.6" y="3.4" width="14.8" height="11" rx="3.2" stroke="#585B52" stroke-width="1.7"/><path d="M6.6 17.4l2.6-2.9" stroke="#585B52" stroke-width="1.7" stroke-linecap="round"/></svg></span><span style="font-size:11.5px;color:#585B52">Coaching</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px"><span style="height:26px;display:flex;align-items:center"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M3.4 5.6h13.2M3.4 10h13.2M3.4 14.4h8.4" stroke="#585B52" stroke-width="1.7" stroke-linecap="round"/></svg></span><span style="font-size:11.5px;color:#585B52">Me</span></div>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">Distance, not alphabet, is the default sort — the MR is standing somewhere. "Overdue" is the only coloured badge, because it is the only one that changes what they do next.</p>
+    </div>
+
+    <!-- B9 DOCTOR PROFILE -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">B9</span><span style="font-size:14.5px;font-weight:500">Doctor profile</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">14:04</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="flex:1;padding:0 22px;overflow:hidden">
+          <div style="background:#1F211C;border-radius:22px;padding:20px 24px;margin-bottom:11px;box-shadow:0 18px 40px -24px rgba(20,21,15,.8)">
+            <div style="font-size:29px;font-weight:600;color:#FFFFFF;letter-spacing:-.035em;line-height:1.05;margin-bottom:3px">Dr. V. Kulkarni</div>
+            <div style="font-size:15.5px;color:rgba(255,255,255,.75);margin-bottom:16px">Urologist · Kulkarni Clinic, Dadar West</div>
+            <div style="display:flex;align-items:flex-end;gap:24px">
+              <div><div style="font-size:26px;font-weight:600;color:#B8CDB8;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-.035em">6<span style="font-size:15px;letter-spacing:-.01em"> weeks</span></div><div style="font-size:13.5px;color:rgba(255,255,255,.6);margin-top:5px">since your last visit</div></div>
+              <div style="width:1px;height:30px;background:rgba(255,255,255,.16)"></div>
+              <div><div style="font-size:26px;font-weight:600;color:#FFFFFF;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-.035em">0.4<span style="font-size:15px;letter-spacing:-.01em"> km</span></div><div style="font-size:13.5px;color:rgba(255,255,255,.6);margin-top:5px">from here</div></div>
+            </div>
+          </div>
+          <div style="background:#FFFFFF;border-radius:18px;padding:15px 20px;margin-bottom:10px;box-shadow:0 1px 2px rgba(20,21,15,.04)"><div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:6px">Best time to catch him</div><div style="font-size:17px;font-weight:600;letter-spacing:-.015em">Tuesdays and Thursdays, 11:30–13:00</div><div style="font-size:14px;color:#585B52;margin-top:3px">From your last five visits. Fridays he operates.</div></div>
+          <div style="background:#FFFFFF;border-radius:18px;padding:15px 20px;margin-bottom:10px;box-shadow:0 1px 2px rgba(20,21,15,.04)">
+            <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:8px">Last three visits</div>
+            <div style="padding:8px 0;border-bottom:1px solid #F2F0E9"><div style="font-size:15.5px;font-weight:500">3 Jul · 9 min · declined recording</div><div style="font-size:14px;color:#585B52;line-height:1.45;margin-top:2px">Wanted the paediatric data. Said cost is his first question from patients.</div></div>
+            <div style="padding:8px 0;border-bottom:1px solid #F2F0E9"><div style="font-size:15.5px;font-weight:500">2 Jun · 6 min · agreed</div><div style="font-size:14px;color:#585B52;line-height:1.45;margin-top:2px">Took 4 sample packs. Asked about the assistance scheme.</div></div>
+            <div style="padding:8px 0"><div style="font-size:15.5px;font-weight:500">28 Apr · 4 min · not asked</div></div>
+          </div>
+          <div style="background:#F1EFE8;border-radius:16px;padding:12px 18px"><div style="font-size:14.5px;line-height:1.5;color:#585B52">Nothing here about what he prescribes, and nothing about his patients. Neither is recorded anywhere in this app.</div></div>
+        </div>
+        <div style="padding:14px 22px 40px;flex:none;display:flex;gap:10px">
+          <button type="button" style="height:60px;flex:1;background:#35593A;border:none;border-radius:18px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer" style-active="background:#2F5233">Add to today</button>
+          <button type="button" style="height:60px;background:#F1EFE8;border:none;border-radius:18px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;padding:0 22px;cursor:pointer" style-active="background:#E5E2D9">Directions</button>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">The closing line is constraint C14 made visible. A profile screen is exactly where prescriber profiling would creep in, so the absence is stated rather than assumed.</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ FLOW C ══ -->
+<div style="padding:68px 56px 0">
+  <div style="margin-bottom:30px;max-width:1340px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:600;background:#1F211C;color:#FFFFFF;padding:5px 12px;border-radius:999px">Flow C</span>
+      <span style="font-size:26px;font-weight:600;letter-spacing:-.03em">Self-service &amp; the paperwork</span>
+    </div>
+    <p style="font-size:16.5px;line-height:1.6;color:#585B52;margin:0;max-width:78ch">Sync, mileage, transparency, settings, samples and the auto-drafted report. Data used this month is a first-class number — on a personal SIM, audio upload is the MR's money.</p>
+  </div>
+
+  <div style="display:flex;gap:38px;flex-wrap:wrap;align-items:flex-start">
+
+    <!-- C1 SYNC -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">C1</span><span style="font-size:14.5px;font-weight:500">Sync queue</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">13:20</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;border:1.5px dashed #585B52;box-sizing:border-box"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="padding:0 22px 16px;flex:none"><div style="font-size:27px;font-weight:600;letter-spacing:-.035em;line-height:1.1">Waiting to send</div><div style="font-size:14.5px;color:#585B52;margin-top:2px">4 things · 2.1 MB · nothing is lost</div></div>
+        <div style="flex:1;padding:0 22px;overflow:hidden">
+          <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;margin-bottom:14px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.4)">
+            <div style="min-height:72px;padding:14px 20px;display:flex;align-items:center;gap:14px;border-bottom:1px solid #F2F0E9"><span style="width:11px;height:11px;border:1.8px dashed #9B9E94;border-radius:50%;flex:none"></span><div style="flex:1"><div style="font-size:16px;font-weight:600;letter-spacing:-.01em">Call report · Dr. P. Nair</div><div style="font-size:14px;color:#585B52">10:48 · 4 KB</div></div></div>
+            <div style="min-height:72px;padding:14px 20px;display:flex;align-items:center;gap:14px;border-bottom:1px solid #F2F0E9"><span style="width:11px;height:11px;border:1.8px dashed #9B9E94;border-radius:50%;flex:none"></span><div style="flex:1"><div style="font-size:16px;font-weight:600;letter-spacing:-.01em">Voice note · Dr. P. Nair</div><div style="font-size:14px;color:#585B52">10:52 · 0:38 · 380 KB</div></div></div>
+            <div style="min-height:72px;padding:14px 20px;display:flex;align-items:center;gap:14px;border-bottom:1px solid #F2F0E9;background:#FAF9F5"><span style="width:11px;height:11px;border-radius:2px;background:#585B52;flex:none"></span><div style="flex:1"><div style="font-size:16px;font-weight:600;letter-spacing:-.01em">Visit recording · Dr. S. Iyer</div><div style="font-size:14px;color:#585B52">Waiting for WiFi · 4:11 · 1.6 MB</div></div><span style="background:#E9F0E9;border-radius:999px;padding:7px 14px;font-size:14px;font-weight:600;color:#35593A">Send</span></div>
+            <div style="min-height:72px;padding:14px 20px;display:flex;align-items:center;gap:14px"><span style="width:11px;height:11px;border:1.8px dashed #9B9E94;border-radius:50%;flex:none"></span><div style="flex:1"><div style="font-size:16px;font-weight:600;letter-spacing:-.01em">Check-in · Dr. K. Shah</div><div style="font-size:14px;color:#585B52">13:04 · 1 KB</div></div></div>
+          </div>
+          <div style="background:#F1EFE8;border-radius:16px;padding:15px 18px"><div style="font-size:15.5px;font-weight:600;letter-spacing:-.01em;margin-bottom:3px">These are safe on your phone</div><div style="font-size:14.5px;line-height:1.5;color:#585B52">They stay until they've been received. Closing the app, running out of battery and switching off are all fine.</div></div>
+        </div>
+        <div style="padding:14px 22px 40px;flex:none">
+          <button type="button" style="height:60px;width:100%;background:#F1EFE8;border:none;border-radius:18px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:500;cursor:pointer" style-active="background:#E5E2D9">Send all now — uses 2.1 MB</button>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">Every item names its size and the button states the cost in its own label. The MR never spends their data without being told first.</p>
+    </div>
+
+    <!-- C2 MILEAGE -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">C2</span><span style="font-size:14.5px;font-weight:500">Mileage &amp; expenses</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">18:30</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="padding:0 22px 16px;flex:none"><div style="font-size:27px;font-weight:600;letter-spacing:-.035em;line-height:1.1">This month</div><div style="font-size:14.5px;color:#585B52;margin-top:2px">1–14 August · 11 working days</div></div>
+        <div style="flex:1;padding:0 22px;overflow:hidden">
+          <div style="background:#35593A;border-radius:22px;padding:20px 22px;margin-bottom:12px;box-shadow:0 18px 40px -24px rgba(53,89,58,.9)">
+            <div style="font-size:13.5px;font-weight:500;color:rgba(255,255,255,.72);margin-bottom:10px">Ready to claim</div>
+            <div style="font-size:48px;font-weight:600;color:#FFFFFF;font-variant-numeric:tabular-nums;line-height:.95;letter-spacing:-.05em">₹6,840</div>
+            <div style="font-size:15px;color:rgba(255,255,255,.82);margin-top:12px;line-height:1.45">526 km, worked out from your route. No odometer photos, no forms.</div>
+          </div>
+          <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;margin-bottom:12px;box-shadow:0 1px 2px rgba(20,21,15,.04)">
+            <div style="min-height:56px;padding:10px 20px;display:flex;align-items:center;border-bottom:1px solid #F2F0E9"><div style="flex:1"><div style="font-size:16px;font-weight:500">Thursday 14 Aug</div><div style="font-size:14px;color:#585B52">48.2 km · 9 visits</div></div><span style="font-size:18px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em">₹627</span></div>
+            <div style="min-height:56px;padding:10px 20px;display:flex;align-items:center;border-bottom:1px solid #F2F0E9"><div style="flex:1"><div style="font-size:16px;font-weight:500">Wednesday 13 Aug</div><div style="font-size:14px;color:#585B52">51.9 km · 8 visits</div></div><span style="font-size:18px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em">₹675</span></div>
+            <div style="min-height:56px;padding:10px 20px;display:flex;align-items:center"><div style="flex:1"><div style="font-size:16px;font-weight:500">Tuesday 12 Aug</div><div style="font-size:14px;color:#7A5510">Route incomplete — phone off 2h</div></div><span style="font-size:18px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em">₹310</span></div>
+          </div>
+          <div style="background:#F7EFDD;border-radius:16px;padding:14px 18px">
+            <div style="font-size:15.5px;font-weight:600;letter-spacing:-.01em">Tuesday looks short</div>
+            <div style="font-size:14.5px;color:#6B4C0E;margin-top:2px;line-height:1.45">Add the kilometres yourself and say what happened — it goes to your manager as written.</div>
+            <button type="button" style="margin-top:12px;height:46px;background:#FFFFFF;border:none;border-radius:12px;color:#7A5510;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;padding:0 18px;cursor:pointer" style-active="background:#F2E6CC">Add it by hand</button>
+          </div>
+        </div>
+        <div style="padding:14px 22px 40px;flex:none">
+          <button type="button" style="height:60px;width:100%;background:#35593A;border:none;border-radius:18px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer" style-active="background:#2F5233">Submit the claim</button>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">The one filled-accent card in the app. Missing data is attention, never critical, and the fix is the MR's own words rather than a dispute — OEM kills make gaps a constraint, not an exception.</p>
+    </div>
+
+    <!-- C3 TRANSPARENCY -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">C3</span><span style="font-size:14.5px;font-weight:500">Tracking transparency</span><span style="font-size:13.5px;color:#585B52">C10 — one tap from home</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">18:31</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="padding:0 22px 14px;flex:none"><div style="font-size:27px;font-weight:600;letter-spacing:-.035em;line-height:1.1">What this app records</div><div style="font-size:14.5px;color:#585B52;margin-top:2px">Thursday 14 August</div></div>
+        <div style="flex:1;padding:0 22px;overflow:hidden">
+          <div style="background:#FFFFFF;border-radius:18px;padding:12px 20px;margin-bottom:11px;display:flex;align-items:center;gap:14px;box-shadow:0 1px 2px rgba(20,21,15,.04)"><span style="width:36px;height:36px;border-radius:50%;background:#F1EFE8;display:flex;align-items:center;justify-content:center;flex:none"><span style="width:13px;height:13px;border-radius:3px;background:#585B52"></span></span><div><div style="font-size:17px;font-weight:600;letter-spacing:-.015em">Off right now</div><div style="font-size:14.5px;color:#585B52">Stopped at 18:22 when you ended your day</div></div></div>
+          <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:8px">Today, in full</div>
+          <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;margin-bottom:11px;box-shadow:0 1px 2px rgba(20,21,15,.04)">
+            <div style="padding:9px 20px;display:flex;align-items:center;border-bottom:1px solid #F2F0E9"><div style="flex:1"><div style="font-size:16px">Location points</div><div style="font-size:14px;color:#585B52">08:55 – 18:22 only</div></div><span style="font-size:17px;font-weight:600;font-variant-numeric:tabular-nums">148</span></div>
+            <div style="padding:9px 20px;display:flex;align-items:center;border-bottom:1px solid #F2F0E9"><div style="flex:1"><div style="font-size:16px">Check-ins</div><div style="font-size:14px;color:#585B52">time and clinic, nothing else</div></div><span style="font-size:17px;font-weight:600;font-variant-numeric:tabular-nums">9</span></div>
+            <div style="padding:9px 20px;display:flex;align-items:center;border-bottom:1px solid #F2F0E9"><div style="flex:1"><div style="font-size:16px">Your voice notes</div><div style="font-size:14px;color:#585B52">deleted after 90 days</div></div><span style="font-size:17px;font-weight:600;font-variant-numeric:tabular-nums">9</span></div>
+            <div style="padding:9px 20px;display:flex;align-items:center"><div style="flex:1"><div style="font-size:16px">Visit recordings</div><div style="font-size:14px;color:#585B52">6 agreed · 3 said no</div></div><span style="font-size:17px;font-weight:600;font-variant-numeric:tabular-nums">6</span></div>
+          </div>
+          <div style="background:#E9F0E9;border-radius:16px;padding:12px 18px;margin-bottom:11px"><div style="font-size:15.5px;font-weight:600;letter-spacing:-.01em;margin-bottom:2px">Never recorded, at any time</div><div style="font-size:14.5px;line-height:1.45;color:#3F5F43">Calls · messages · other apps · camera · anything outside 08:55–18:22.</div></div>
+          <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:8px">Who has looked</div>
+          <div style="background:#FFFFFF;border-radius:18px;padding:12px 20px;box-shadow:0 1px 2px rgba(20,21,15,.04)"><div style="font-size:16px;font-weight:500">R. Deshpande, your manager</div><div style="font-size:14px;color:#585B52">Opened your route review · 16:40</div></div>
+        </div>
+        <div style="padding:14px 22px 40px;flex:none">
+          <button type="button" style="height:60px;width:100%;background:#F1EFE8;border:none;border-radius:18px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:500;cursor:pointer" style-active="background:#E5E2D9">Email me all of this</button>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">"Who has looked" does the real work. Showing the MR when their manager opened their data is unusual, uncomfortable, and the strongest evidence this is not a covert system. <strong style="color:#1F211C;font-weight:600">Not in the brief — it needs your call.</strong></p>
+    </div>
+
+    <!-- C4 SETTINGS -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">C4</span><span style="font-size:14.5px;font-weight:500">Settings · data &amp; language</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">18:33</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="padding:0 22px 16px;flex:none"><div style="font-size:27px;font-weight:600;letter-spacing:-.035em;line-height:1.1">Settings</div></div>
+        <div style="flex:1;padding:0 22px;overflow:hidden">
+          <div style="background:#FFFFFF;border-radius:20px;padding:16px 20px;margin-bottom:11px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.4)">
+            <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:9px">Your data, this month</div>
+            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:13px"><span style="font-size:36px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-.045em">84 MB</span><span style="font-size:15px;color:#585B52">of your plan</span></div>
+            <div style="height:10px;background:#F1EFE8;border-radius:5px;display:flex;overflow:hidden;margin-bottom:10px;gap:2px"><span style="width:62%;background:#35593A;border-radius:5px"></span><span style="width:24%;background:#A9BFA9;border-radius:5px"></span></div>
+            <div style="display:flex;gap:18px;font-size:13.5px;color:#585B52"><span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:3px;background:#35593A"></span>Audio 52 MB</span><span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:3px;background:#A9BFA9"></span>Everything else 20 MB</span></div>
+          </div>
+          <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;margin-bottom:11px;box-shadow:0 1px 2px rgba(20,21,15,.04)">
+            <div style="min-height:70px;padding:12px 20px;display:flex;align-items:center;gap:14px;border-bottom:1px solid #F2F0E9"><div style="flex:1"><div style="font-size:16.5px;font-weight:600;letter-spacing:-.01em">Send audio on WiFi only</div><div style="font-size:14.5px;color:#585B52;line-height:1.4">Recordings wait for WiFi. Everything else still sends.</div></div><span style="width:50px;height:30px;border-radius:15px;background:#35593A;flex:none;display:flex;align-items:center;justify-content:flex-end;padding:3px;box-sizing:border-box"><span style="width:24px;height:24px;border-radius:50%;background:#FFFFFF"></span></span></div>
+            <div style="min-height:70px;padding:12px 20px;display:flex;align-items:center;gap:14px"><div style="flex:1"><div style="font-size:16.5px;font-weight:600;letter-spacing:-.01em">Warn me over 100 MB</div><div style="font-size:14.5px;color:#585B52">A note on home, nothing stops working.</div></div><span style="width:50px;height:30px;border-radius:15px;background:#E3E1D9;flex:none;display:flex;align-items:center;padding:3px;box-sizing:border-box"><span style="width:24px;height:24px;border-radius:50%;background:#FFFFFF"></span></span></div>
+          </div>
+          <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;margin-bottom:11px;box-shadow:0 1px 2px rgba(20,21,15,.04)">
+            <div style="min-height:62px;padding:11px 20px;display:flex;align-items:center;border-bottom:1px solid #F2F0E9"><div style="flex:1;font-size:16.5px;font-weight:600;letter-spacing:-.01em">App language</div><span style="font-size:16px;color:#585B52">English</span><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-left:8px"><path d="M6 3.4L10.6 8L6 12.6" stroke="#9B9E94" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div style="min-height:62px;padding:11px 20px;display:flex;align-items:center"><div style="flex:1"><div style="font-size:16.5px;font-weight:600;letter-spacing:-.01em">Consent screen language</div><div style="font-size:14px;color:#585B52">What the doctor reads</div></div><span style="font-size:16px;color:#585B52">Marathi</span><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-left:8px"><path d="M6 3.4L10.6 8L6 12.6" stroke="#9B9E94" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.04)">
+            <div style="min-height:62px;padding:11px 20px;display:flex;align-items:center;border-bottom:1px solid #F2F0E9"><div style="flex:1"><div style="font-size:16.5px;font-weight:600;letter-spacing:-.01em">Battery &amp; autostart</div><div style="font-size:14px;color:#35593A">All 3 set correctly</div></div><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3.4L10.6 8L6 12.6" stroke="#9B9E94" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div style="min-height:62px;padding:11px 20px;display:flex;align-items:center"><div style="flex:1;font-size:16.5px;font-weight:600;letter-spacing:-.01em">What this app records</div><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3.4L10.6 8L6 12.6" stroke="#9B9E94" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">WiFi-only ships <strong style="color:#1F211C;font-weight:600">on</strong>. Audio is 62% of the bill and the MR didn't choose to generate it. Consent language is set separately from UI language — a product decision as much as a design one.</p>
+    </div>
+
+    <!-- C5 SAMPLES -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">C5</span><span style="font-size:14.5px;font-weight:500">Samples &amp; inputs</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">12:04</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="padding:0 22px 16px;flex:none"><div style="font-size:27px;font-weight:600;letter-spacing:-.035em;line-height:1.1">Leave samples</div><div style="font-size:14.5px;color:#585B52;margin-top:2px">Dr. S. Iyer · 14 August</div></div>
+        <div style="flex:1;padding:0 22px;overflow:hidden">
+          <div style="background:#FFFFFF;border-radius:20px;padding:18px 20px;margin-bottom:11px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.4)">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px"><div style="font-size:17px;font-weight:600;letter-spacing:-.015em">Elmiron 100 mg · 30s</div><div style="font-size:14px;color:#585B52">8 in your bag</div></div>
+            <div style="display:flex;align-items:center;gap:16px">
+              <button type="button" style="width:54px;height:54px;border-radius:16px;background:#F1EFE8;border:none;font-size:24px;color:#1F211C;cursor:pointer;font-family:'DM Sans',sans-serif" style-active="background:#E5E2D9">−</button>
+              <div style="flex:1;text-align:center;font-size:40px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.045em">2</div>
+              <button type="button" style="width:54px;height:54px;border-radius:16px;background:#F1EFE8;border:none;font-size:24px;color:#1F211C;cursor:pointer;font-family:'DM Sans',sans-serif" style-active="background:#E5E2D9">+</button>
+            </div>
+          </div>
+          <div style="background:#FFFFFF;border-radius:18px;padding:15px 20px;margin-bottom:11px;box-shadow:0 1px 2px rgba(20,21,15,.04)">
+            <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:9px">His month, against the UCPMP cap</div>
+            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:9px"><span style="font-size:29px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.04em">6</span><span style="font-size:16px;color:#585B52">of 12 packs</span></div>
+            <div style="height:9px;background:#F1EFE8;border-radius:5px;display:flex;overflow:hidden;gap:2px"><span style="width:50%;background:#35593A;border-radius:5px"></span><span style="width:17%;background:#A9BFA9;border-radius:5px"></span></div>
+            <div style="font-size:14px;color:#585B52;margin-top:8px">Leaving 2 today takes him to 8. The cap is a hard stop — the app won't let you go past it.</div>
+          </div>
+          <div style="background:#FFFFFF;border-radius:18px;padding:15px 20px;box-shadow:0 1px 2px rgba(20,21,15,.04)">
+            <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:10px">Also leaving</div>
+            <div style="display:flex;gap:9px;flex-wrap:wrap"><span style="background:#E9F0E9;border-radius:999px;padding:9px 15px;font-size:14.5px;font-weight:600;color:#35593A">Paediatric dosing sheet</span><span style="background:#F1EFE8;border-radius:999px;padding:9px 15px;font-size:14.5px;color:#585B52">Patient booklet</span><span style="background:#F1EFE8;border-radius:999px;padding:9px 15px;font-size:14.5px;color:#585B52">Assistance form</span></div>
+          </div>
+        </div>
+        <div style="padding:14px 22px 40px;flex:none;display:flex;flex-direction:column;gap:9px">
+          <button type="button" style="height:60px;background:#35593A;border:none;border-radius:18px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer" style-active="background:#2F5233">Record what I left</button>
+          <div style="font-size:13.5px;color:#585B52;text-align:center">Signed for on delivery. Saves offline.</div>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">Big stepper because it is used one-handed in a doorway. The UCPMP cap is enforced in the control rather than warned about after the fact.</p>
+    </div>
+
+    <!-- C6 CALL REPORT -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#1F211C;color:#FFFFFF;padding:4px 9px;border-radius:999px">C6</span><span style="font-size:14.5px;font-weight:500">Call report — auto-drafted</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">12:11</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="padding:0 22px 14px;flex:none"><div style="font-size:27px;font-weight:600;letter-spacing:-.035em;line-height:1.1">Your report</div><div style="font-size:14.5px;color:#585B52;margin-top:2px">Written from your voice note. Change anything.</div></div>
+        <div style="flex:1;padding:0 22px;overflow:hidden">
+          <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;margin-bottom:11px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.4)">
+            <div style="padding:10px 20px;border-bottom:1px solid #F2F0E9;display:flex;align-items:center"><div style="flex:1"><div style="font-size:13.5px;color:#585B52">Outcome</div><div style="font-size:16.5px;font-weight:600;letter-spacing:-.01em;margin-top:1px">Detailed, samples left</div></div><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3.4L10.6 8L6 12.6" stroke="#9B9E94" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div style="padding:10px 20px;border-bottom:1px solid #F2F0E9;display:flex;align-items:center"><div style="flex:1"><div style="font-size:13.5px;color:#585B52">Products discussed</div><div style="font-size:16.5px;font-weight:600;letter-spacing:-.01em;margin-top:1px">Elmiron 100 mg</div></div><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3.4L10.6 8L6 12.6" stroke="#9B9E94" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div style="padding:10px 20px;display:flex;align-items:center"><div style="flex:1"><div style="font-size:13.5px;color:#585B52">Next step</div><div style="font-size:16.5px;font-weight:600;letter-spacing:-.01em;margin-top:1px">Bring the assistance form · 21 Aug</div></div><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3.4L10.6 8L6 12.6" stroke="#9B9E94" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <div style="background:#FFFFFF;border-radius:20px;padding:13px 20px;margin-bottom:9px;box-shadow:0 1px 2px rgba(20,21,15,.04)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div style="font-size:13.5px;font-weight:500;color:#585B52">Notes</div><span style="background:#E9F0E9;border-radius:999px;padding:4px 10px;font-size:12.5px;font-weight:600;color:#35593A">From your voice note</span></div>
+            <div style="font-size:16px;line-height:1.55">Went through the new dosing data. He pushed back on cost straight away — said his patients ask about it first. Talked about the assistance scheme on the way out and he asked me to bring the form next week. Left two sample packs and the paediatric sheet.</div>
+          </div>
+          <div style="background:#F1EFE8;border-radius:16px;padding:12px 18px"><div style="font-size:14.5px;line-height:1.5;color:#585B52">Nothing is filed until you tap Send. If the draft is wrong, fix it — the version your manager sees is yours, not the machine's.</div></div>
+        </div>
+        <div style="padding:14px 22px 40px;flex:none;display:flex;flex-direction:column;gap:10px">
+          <button type="button" style="height:60px;background:#35593A;border:none;border-radius:18px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer" style-active="background:#2F5233">Send the report</button>
+          <button type="button" style="height:52px;background:#F1EFE8;border:none;border-radius:16px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-active="background:#E5E2D9">Record the note again</button>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">This screen earns the voice note. If the draft is good the MR records willingly; if it isn't they stop recording and the whole coaching layer starves.</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ STATES ══ -->
+<div style="padding:68px 56px 0">
+  <div style="margin-bottom:30px;max-width:1340px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:600;background:#7A5510;color:#FFFFFF;padding:5px 12px;border-radius:999px">States</span>
+      <span style="font-size:26px;font-weight:600;letter-spacing:-.03em">The four that get skipped</span>
+    </div>
+    <p style="font-size:16.5px;line-height:1.6;color:#585B52;margin:0;max-width:78ch">Drawn on Home, because that is where they will actually be seen. <strong style="color:#1F211C;font-weight:600">None of the four is offline</strong> — offline is B2, a complete working screen.</p>
+  </div>
+
+  <div style="display:flex;gap:38px;flex-wrap:wrap;align-items:flex-start">
+
+    <!-- S1 -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">S1</span><span style="font-size:14.5px;font-weight:500">Loading</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">8:55</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="padding:0 22px 16px;flex:none"><div style="font-size:27px;font-weight:600;letter-spacing:-.035em;line-height:1.1">Thursday</div><div style="font-size:14.5px;color:#585B52;margin-top:2px">Getting your day</div></div>
+        <div style="flex:1;padding:0 22px;overflow:hidden">
+          <div style="background:#F1EFE8;border-radius:22px;padding:22px 24px;margin-bottom:12px"><div style="height:12px;width:60px;background:#E3E1D9;border-radius:6px;margin-bottom:18px"></div><div style="height:28px;width:62%;background:#E3E1D9;border-radius:8px;margin-bottom:12px"></div><div style="height:16px;width:80%;background:#E3E1D9;border-radius:6px;margin-bottom:22px"></div><div style="height:26px;width:45%;background:#E3E1D9;border-radius:8px"></div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px"><div style="background:#FFFFFF;border-radius:20px;padding:18px 20px;box-shadow:0 1px 2px rgba(20,21,15,.04)"><div style="height:12px;width:40px;background:#F1EFE8;border-radius:6px;margin-bottom:16px"></div><div style="height:34px;width:60%;background:#F1EFE8;border-radius:8px"></div></div><div style="background:#FFFFFF;border-radius:20px;padding:18px 20px;box-shadow:0 1px 2px rgba(20,21,15,.04)"><div style="height:12px;width:56px;background:#F1EFE8;border-radius:6px;margin-bottom:16px"></div><div style="height:34px;width:70%;background:#F1EFE8;border-radius:8px"></div></div></div>
+          <div style="background:#FFFFFF;border-radius:18px;height:56px;display:flex;align-items:center;gap:12px;padding:0 20px;box-shadow:0 1px 2px rgba(20,21,15,.04)"><span style="width:16px;height:16px;border:2px solid #E9E7DF;border-top-color:#35593A;border-radius:50%;animation:syncspin .9s linear infinite"></span><span style="font-size:15.5px;color:#585B52">Getting today's plan</span></div>
+          <div style="font-size:14.5px;color:#585B52;margin-top:18px;line-height:1.5">Yesterday's plan is showing until this finishes — you can start moving.</div>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">Skeletons match the real layout so nothing shifts. Stale data stays visible and is labelled — a blocking spinner in a waiting room is a lost visit.</p>
+    </div>
+
+    <!-- S2 -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">S2</span><span style="font-size:14.5px;font-weight:500">Empty — no plan today</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">9:04</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="padding:0 22px 16px;flex:none"><div style="font-size:27px;font-weight:600;letter-spacing:-.035em;line-height:1.1">Saturday</div><div style="font-size:14.5px;color:#585B52;margin-top:2px">Not started</div></div>
+        <div style="flex:1;padding:40px 30px 0;display:flex;flex-direction:column;align-items:center;text-align:center;overflow:hidden">
+          <div style="width:66px;height:66px;border-radius:22px;background:#F1EFE8;margin-bottom:22px;display:flex;align-items:center;justify-content:center"><svg width="26" height="26" viewBox="0 0 20 20" fill="none"><rect x="2.9" y="3.6" width="14.2" height="13" rx="3.4" stroke="#9B9E94" stroke-width="1.7"/><path d="M2.9 7.7h14.2" stroke="#9B9E94" stroke-width="1.7" stroke-linecap="round"/></svg></div>
+          <div style="font-size:24px;font-weight:600;letter-spacing:-.03em;margin-bottom:8px">Nothing planned for today</div>
+          <p style="font-size:16px;line-height:1.5;color:#585B52;margin:0 0 26px;max-width:31ch">No beat plan came through. You can still visit anyone in your territory and it'll all be logged.</p>
+          <div style="width:100%;background:#FFFFFF;border-radius:20px;padding:18px 20px;text-align:left;box-shadow:0 1px 2px rgba(20,21,15,.04),0 14px 34px -22px rgba(20,21,15,.4)"><div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:8px">Nearest not covered</div><div style="font-size:18px;font-weight:600;letter-spacing:-.02em">Dr. V. Kulkarni</div><div style="font-size:14.5px;color:#585B52;margin-top:3px">Dadar West · 1.8 km · last seen 6 weeks ago</div></div>
+        </div>
+        <div style="padding:14px 22px 40px;flex:none">
+          <button type="button" style="height:60px;width:100%;background:#35593A;border:none;border-radius:18px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer;margin-bottom:10px" style-active="background:#2F5233">Start my day anyway</button>
+          <button type="button" style="height:52px;width:100%;background:#F1EFE8;border:none;border-radius:16px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-active="background:#E5E2D9">Find a doctor</button>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">Offers the next useful thing. It never says "ask your manager for a beat plan" — that hands the MR's day to someone else.</p>
+    </div>
+
+    <!-- S3 -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">S3</span><span style="font-size:14.5px;font-weight:500">Error — upload keeps failing</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">19:10</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="padding:0 22px 16px;flex:none"><div style="font-size:27px;font-weight:600;letter-spacing:-.035em;line-height:1.1">Waiting to send</div><div style="font-size:14.5px;color:#585B52;margin-top:2px">1 thing won't go</div></div>
+        <div style="flex:1;padding:0 22px;overflow:hidden">
+          <div style="background:#F8EAE6;border-radius:20px;padding:18px 22px;margin-bottom:12px"><div style="font-size:19px;font-weight:600;letter-spacing:-.022em;margin-bottom:5px">One recording won't send</div><div style="font-size:15px;line-height:1.5;color:#7E3520">Dr. Iyer, 4:11 long. Tried five times since 12:14. The file is still safe on your phone.</div></div>
+          <div style="background:#FFFFFF;border-radius:20px;padding:18px 22px;margin-bottom:12px;box-shadow:0 1px 2px rgba(20,21,15,.04)">
+            <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:12px">Things to try</div>
+            <div style="display:flex;gap:13px;align-items:flex-start;margin-bottom:12px"><span style="width:24px;height:24px;border-radius:50%;background:#E9F0E9;color:#35593A;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none">1</span><div style="font-size:15.5px;line-height:1.5;color:#585B52">Get on WiFi and tap Send. A 1.6 MB file over patchy mobile data often gives up.</div></div>
+            <div style="display:flex;gap:13px;align-items:flex-start"><span style="width:24px;height:24px;border-radius:50%;background:#E9F0E9;color:#35593A;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none">2</span><div style="font-size:15.5px;line-height:1.5;color:#585B52">Leave it. It retries overnight and most of these clear on their own.</div></div>
+          </div>
+          <div style="background:#E9F0E9;border-radius:16px;padding:15px 18px"><div style="font-size:15.5px;font-weight:600;letter-spacing:-.01em;margin-bottom:3px">This isn't counted against you</div><div style="font-size:14.5px;line-height:1.5;color:#3F5F43">Your visit, report and mileage all went through at 12:14. Only the audio is stuck.</div></div>
+        </div>
+        <div style="padding:14px 22px 40px;flex:none">
+          <button type="button" style="height:60px;width:100%;background:#35593A;border:none;border-radius:18px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer;margin-bottom:10px" style-active="background:#2F5233">Try again now</button>
+          <button type="button" style="height:52px;width:100%;background:#F1EFE8;border:none;border-radius:16px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-active="background:#E5E2D9">Tell the help desk</button>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">A genuine error — the only critical colour in the whole flow. It scopes the damage precisely and says out loud that the failure is the system's, not the MR's.</p>
+    </div>
+
+    <!-- S4 -->
+    <div style="width:390px;flex:none">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:12px;font-weight:600;background:#FFFFFF;color:#585B52;padding:4px 9px;border-radius:999px">S4</span><span style="font-size:14.5px;font-weight:500">Permission denied</span></div>
+      <div style="width:390px;height:844px;background:#FBFAF7;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(20,21,15,.06),0 28px 60px -30px rgba(20,21,15,.5)">
+        <div style="height:52px;padding:0 26px;display:flex;align-items:center;justify-content:space-between;flex:none"><span style="font-size:14px;font-weight:600">9:02</span><span style="display:flex;gap:5px;align-items:center"><span style="width:16px;height:9px;border-radius:2px;background:#1F211C"></span><span style="width:22px;height:11px;border-radius:3px;border:1.5px solid #1F211C"></span></span></div>
+        <div style="padding:0 22px 14px;display:flex;align-items:center;justify-content:space-between;flex:none"><div><div style="font-size:27px;font-weight:600;letter-spacing:-.035em;line-height:1.1">Thursday</div><div style="font-size:14.5px;color:#585B52;margin-top:2px">Manual mode</div></div><div style="height:36px;padding:0 13px;background:#E9F0E9;border-radius:999px;display:flex;align-items:center;gap:7px"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#35593A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="font-size:13.5px;font-weight:600;color:#35593A">Sent</span></div></div>
+        <div style="flex:1;padding:0 22px;overflow:hidden">
+          <div style="background:#F7EFDD;border-radius:20px;padding:18px 22px;margin-bottom:12px"><div style="font-size:19px;font-weight:600;letter-spacing:-.022em;margin-bottom:5px">Location is off, so you're doing this by hand</div><div style="font-size:15px;line-height:1.5;color:#6B4C0E">Check-ins need a tap each and mileage won't add itself up. That's about 14 minutes a day and roughly ₹600 a month you'd claim manually.</div></div>
+          <div style="background:#1F211C;border-radius:22px;padding:20px 24px;margin-bottom:11px;box-shadow:0 18px 40px -24px rgba(20,21,15,.8)">
+            <div style="font-size:13.5px;font-weight:500;color:rgba(255,255,255,.6);margin-bottom:9px">Next visit</div>
+            <div style="font-size:29px;font-weight:600;color:#FFFFFF;letter-spacing:-.035em;line-height:1.05;margin-bottom:3px">Dr. S. Iyer</div>
+            <div style="font-size:15.5px;color:rgba(255,255,255,.75)">Sunrise Clinic, Prabhadevi</div>
+            <button type="button" style="margin-top:16px;height:52px;width:100%;background:rgba(255,255,255,.14);border:none;border-radius:14px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;cursor:pointer" style-active="background:rgba(255,255,255,.24)">Check in by hand</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px">
+            <div style="background:#FFFFFF;border-radius:20px;padding:16px 18px;box-shadow:0 1px 2px rgba(20,21,15,.04)"><div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:9px">Today</div><div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:38px;font-weight:600;line-height:1;letter-spacing:-.045em">0</span><span style="font-size:17px;color:#585B52">of 9</span></div></div>
+            <div style="background:#F1EFE8;border:1px dashed #B4B7AC;border-radius:20px;padding:16px 18px;box-sizing:border-box"><div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:9px">You've earned</div><div style="font-size:21px;font-weight:600;color:#585B52;line-height:1.2;letter-spacing:-.02em">Add it<br>yourself</div></div>
+          </div>
+        </div>
+        <div style="padding:14px 22px 40px;flex:none">
+          <button type="button" style="height:60px;width:100%;background:#35593A;border:none;border-radius:18px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer;margin-bottom:10px" style-active="background:#2F5233">Turn location back on</button>
+          <button type="button" style="height:52px;width:100%;background:#F1EFE8;border:none;border-radius:16px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;cursor:pointer" style-active="background:#E5E2D9">Carry on by hand</button>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6;color:#585B52;margin:14px 0 0;max-width:390px">The app <strong style="color:#1F211C;font-weight:600">fully works</strong> with location denied — that is what makes the re-ask honest rather than coercive. The cost is quantified in the MR's own money and minutes, and there is no nag loop.</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- NOTES -->
+<div style="padding:68px 56px 0;max-width:1340px">
+  <div style="background:#FFFFFF;border-radius:22px;padding:32px 34px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 18px 44px -26px rgba(20,21,15,.45)">
+    <div style="font-size:20px;font-weight:600;letter-spacing:-.025em;margin-bottom:20px">Decisions worth arguing about</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(272px,1fr));gap:26px">
+      <div><div style="font-size:16px;font-weight:600;margin-bottom:6px">Permissions split across two days</div><p style="margin:0;font-size:14.5px;line-height:1.6;color:#585B52">Location and notifications at sign-in; microphone deferred to the first real visit. Asking for a mic before the MR has seen a single benefit is the abandonment moment. Costs one extra prompt on day one.</p></div>
+      <div><div style="font-size:16px;font-weight:600;margin-bottom:6px">No map anywhere</div><p style="margin:0;font-size:14.5px;line-height:1.6;color:#585B52">Slow on a mid-range phone, costly on data, and a breadcrumb trail is the most surveillance-coded thing we could show. The route is a timeline; navigation hands off to the MR's own Maps app.</p></div>
+      <div><div style="font-size:16px;font-weight:600;margin-bottom:6px">WiFi-only audio defaults on</div><p style="margin:0;font-size:14.5px;line-height:1.6;color:#585B52">Audio is 62% of the data bill and the MR didn't choose to generate it. Slower ingest is the price. Say if the pipeline can't take the delay.</p></div>
+      <div><div style="font-size:16px;font-weight:600;margin-bottom:6px">"Who has looked" — your call</div><p style="margin:0;font-size:14.5px;line-height:1.6;color:#585B52">Not in the brief. If the audit log already records manager access, surfacing it to the MR costs nothing and is the strongest anti-surveillance signal in the product. It will make some managers uncomfortable.</p></div>
+    </div>
+    <div style="border-top:1px solid #F2F0E9;margin-top:26px;padding-top:22px">
+      <div style="font-size:16px;font-weight:600;margin-bottom:8px">Your two checkpoint questions</div>
+      <p style="margin:0 0 10px;font-size:15px;line-height:1.6;color:#585B52;max-width:92ch"><strong style="color:#1F211C;font-weight:600">Does home lead with MR benefit or with tracking?</strong> Benefit. The first four blocks are next visit, progress, money and sync, in that order. Tracking appears once, at the bottom, as a link opened by choice. No map, no coverage score, no manager language anywhere in the flow.</p>
+      <p style="margin:0;font-size:15px;line-height:1.6;color:#585B52;max-width:92ch"><strong style="color:#1F211C;font-weight:600">Is offline designed as normal or as an error?</strong> Normal — B2 is a complete working home screen with the same structure as B1 in the neutral offline tone, and offline is deliberately absent from the four failure states. The only critical colour in the whole flow is S3, a real upload failure after five attempts.</p>
+    </div>
+  </div>
+</div>
+
+</div>
+</x-dc>
+</body>
+</html>

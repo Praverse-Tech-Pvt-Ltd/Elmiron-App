@@ -25,3 +25,9 @@ CLAUDE.md
 # stops the formatter from making one in the first place.
 PROJECT-OVERVIEW.md
 
+
+# The committed design documents. These are the specification of record, exported
+# from Claude Design — reformatting them rewrites the thing screens are built
+# against. `support.js` is deliberately absent (see the commit that added them);
+# the markup is the spec, the inert press states are not.
+docs/design/

@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#E9E7E0;-webkit-font-smoothing:antialiased}
+a{color:#35593A;text-decoration:none;border-bottom:1px solid rgba(53,89,58,.3)}
+a:hover{color:#2F5233;border-bottom-color:#2F5233}
+@keyframes recpulse{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes syncspin{to{transform:rotate(360deg)}}
+</style>
+</helmet>
+
+<div style="background:#E9E7E0;color:#1F211C;font-family:'DM Sans',system-ui,sans-serif;font-size:15px;line-height:1.5;padding:0 0 140px">
+
+<!-- MASTHEAD -->
+<div style="padding:80px 56px 0;max-width:1340px">
+  <div style="display:flex;align-items:center;gap:11px;margin-bottom:26px">
+    <span style="width:26px;height:26px;border-radius:8px;background:#35593A;display:block"></span>
+    <span style="font-size:14px;font-weight:600;letter-spacing:-.01em">Elmiron Field</span>
+    <span style="width:3px;height:3px;border-radius:50%;background:#B4B7AC"></span>
+    <span style="font-size:14px;color:#585B52">Phase 1 · Tokens &amp; components</span>
+  </div>
+  <h1 style="font-size:56px;font-weight:600;line-height:1;letter-spacing:-.04em;margin:0 0 24px;max-width:15ch">The system, measured.</h1>
+  <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:44px;max-width:1120px;align-items:start">
+    <p style="font-size:19px;line-height:1.55;color:#585B52;margin:0;text-wrap:pretty">A light product theme extending the Tier 2 tokens: warm paper, white cards, one accent, two text tones. Six semantic states the reference left undefined, a reach-zone rule, and fourteen components with their full press-first state matrix. Every ratio here is computed to the WCAG 2.x relative-luminance formula and reproducible from the hex pairs shown.</p>
+    <div style="background:#FFFFFF;border-radius:20px;padding:24px 26px;box-shadow:0 1px 2px rgba(20,21,15,.04),0 16px 40px -22px rgba(20,21,15,.35)">
+      <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:10px">One thing on the record</div>
+      <p style="margin:0;font-size:15px;line-height:1.6">Light is the theme you asked for and it is right for review, demo and the console. It is <strong style="font-weight:600">not</strong> automatically right for a phone at 50% brightness in Indian sun. §07 sets out what an outdoor variant would need and what it would cost.</p>
+    </div>
+  </div>
+</div>
+
+<!-- 01 GROUND -->
+<div style="padding:64px 56px 0;max-width:1340px">
+  <div style="border-top:1px solid #D6D4CB;padding-top:34px">
+    <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:8px">01 — Ground, ink, accent</div>
+    <h2 style="font-size:30px;font-weight:600;letter-spacing:-.032em;margin:0 0 10px">Three surfaces, two text tones, one accent.</h2>
+    <p style="font-size:16.5px;line-height:1.6;color:#585B52;margin:0 0 26px;max-width:70ch">Separation comes from the paper-to-card step and a soft shadow, not from an outline on everything. There is no tertiary grey — hierarchy is carried by size and weight.</p>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:14px;margin-bottom:20px">
+      <div><div style="height:70px;background:#FBFAF7;border:1px solid #E6E4DC;border-radius:14px"></div><div style="font-size:14.5px;font-weight:600;margin-top:10px">paper</div><div style="font-family:'DM Mono',monospace;font-size:12.5px;color:#585B52">#FBFAF7</div><div style="font-size:13px;color:#585B52;margin-top:3px">Screen base</div></div>
+      <div><div style="height:70px;background:#FFFFFF;border:1px solid #E6E4DC;border-radius:14px"></div><div style="font-size:14.5px;font-weight:600;margin-top:10px">card</div><div style="font-family:'DM Mono',monospace;font-size:12.5px;color:#585B52">#FFFFFF</div><div style="font-size:13px;color:#585B52;margin-top:3px">Everything raised</div></div>
+      <div><div style="height:70px;background:#F1EFE8;border:1px solid #E6E4DC;border-radius:14px"></div><div style="font-size:14.5px;font-weight:600;margin-top:10px">wash</div><div style="font-family:'DM Mono',monospace;font-size:12.5px;color:#585B52">#F1EFE8</div><div style="font-size:13px;color:#585B52;margin-top:3px">Secondary buttons, quiet blocks</div></div>
+      <div><div style="height:70px;background:#1F211C;border-radius:14px"></div><div style="font-size:14.5px;font-weight:600;margin-top:10px">ink</div><div style="font-family:'DM Mono',monospace;font-size:12.5px;color:#585B52">#1F211C</div><div style="font-size:13px;color:#585B52;margin-top:3px">Text, and the hero card fill</div></div>
+      <div><div style="height:70px;background:#585B52;border-radius:14px"></div><div style="font-size:14.5px;font-weight:600;margin-top:10px">muted</div><div style="font-family:'DM Mono',monospace;font-size:12.5px;color:#585B52">#585B52</div><div style="font-size:13px;color:#585B52;margin-top:3px">Everything not primary</div></div>
+      <div><div style="height:70px;background:#35593A;border-radius:14px"></div><div style="font-size:14.5px;font-weight:600;margin-top:10px">accent</div><div style="font-family:'DM Mono',monospace;font-size:12.5px;color:#585B52">#35593A</div><div style="font-size:13px;color:#585B52;margin-top:3px">Tier 2, unchanged</div></div>
+      <div><div style="height:70px;background:#8B8E84;border-radius:14px"></div><div style="font-size:14.5px;font-weight:600;margin-top:10px">border</div><div style="font-family:'DM Mono',monospace;font-size:12.5px;color:#585B52">#8B8E84</div><div style="font-size:13px;color:#585B52;margin-top:3px">Control edges only</div></div>
+      <div><div style="height:70px;background:#F2F0E9;border:1px solid #E6E4DC;border-radius:14px"></div><div style="font-size:14.5px;font-weight:600;margin-top:10px">hairline</div><div style="font-family:'DM Mono',monospace;font-size:12.5px;color:#585B52">#F2F0E9</div><div style="font-size:13px;color:#585B52;margin-top:3px">Dividers inside a card</div></div>
+    </div>
+
+    <div style="background:#FFFFFF;border-radius:18px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+      <div style="display:grid;grid-template-columns:1.2fr .9fr .8fr .8fr 1.9fr;background:#F7F5F0;border-bottom:1px solid #EFEDE6">
+        <div style="padding:11px 20px;font-size:12.5px;font-weight:600;color:#585B52">Token</div>
+        <div style="padding:11px 14px;font-size:12.5px;font-weight:600;color:#585B52">Value</div>
+        <div style="padding:11px 14px;font-size:12.5px;font-weight:600;color:#585B52;text-align:right">On paper</div>
+        <div style="padding:11px 14px;font-size:12.5px;font-weight:600;color:#585B52;text-align:right">On card</div>
+        <div style="padding:11px 20px;font-size:12.5px;font-weight:600;color:#585B52">Use</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1.2fr .9fr .8fr .8fr 1.9fr;border-bottom:1px solid #EFEDE6;align-items:center"><div style="padding:12px 20px;font-size:15px;font-weight:500">ink</div><div style="padding:12px 14px;font-family:'DM Mono',monospace;font-size:13px;color:#585B52">#1F211C</div><div style="padding:12px 14px;font-size:14.5px;font-weight:600;color:#35593A;text-align:right;font-variant-numeric:tabular-nums">15.57</div><div style="padding:12px 14px;font-size:14.5px;font-weight:600;color:#35593A;text-align:right;font-variant-numeric:tabular-nums">16.25</div><div style="padding:12px 20px;font-size:14px;color:#585B52">Everything the MR must read</div></div>
+      <div style="display:grid;grid-template-columns:1.2fr .9fr .8fr .8fr 1.9fr;border-bottom:1px solid #EFEDE6;align-items:center"><div style="padding:12px 20px;font-size:15px;font-weight:500">muted</div><div style="padding:12px 14px;font-family:'DM Mono',monospace;font-size:13px;color:#585B52">#585B52</div><div style="padding:12px 14px;font-size:14.5px;font-weight:600;color:#35593A;text-align:right;font-variant-numeric:tabular-nums">6.63</div><div style="padding:12px 14px;font-size:14.5px;font-weight:600;color:#35593A;text-align:right;font-variant-numeric:tabular-nums">6.92</div><div style="padding:12px 20px;font-size:14px;color:#585B52">Labels, metadata, supporting copy</div></div>
+      <div style="display:grid;grid-template-columns:1.2fr .9fr .8fr .8fr 1.9fr;border-bottom:1px solid #EFEDE6;align-items:center"><div style="padding:12px 20px;font-size:15px;font-weight:500">accent</div><div style="padding:12px 14px;font-family:'DM Mono',monospace;font-size:13px;color:#585B52">#35593A</div><div style="padding:12px 14px;font-size:14.5px;font-weight:600;color:#35593A;text-align:right;font-variant-numeric:tabular-nums">7.62</div><div style="padding:12px 14px;font-size:14.5px;font-weight:600;color:#35593A;text-align:right;font-variant-numeric:tabular-nums">7.95</div><div style="padding:12px 20px;font-size:14px;color:#585B52">Primary fill, money, current step, focus ring</div></div>
+      <div style="display:grid;grid-template-columns:1.2fr .9fr .8fr .8fr 1.9fr;border-bottom:1px solid #EFEDE6;align-items:center"><div style="padding:12px 20px;font-size:15px;font-weight:500">accent-press</div><div style="padding:12px 14px;font-family:'DM Mono',monospace;font-size:13px;color:#585B52">#2F5233</div><div style="padding:12px 14px;font-size:14.5px;font-weight:600;color:#35593A;text-align:right;font-variant-numeric:tabular-nums">8.47</div><div style="padding:12px 14px;font-size:14.5px;font-weight:600;color:#35593A;text-align:right;font-variant-numeric:tabular-nums">8.84</div><div style="padding:12px 20px;font-size:14px;color:#585B52">Pressed fill. Darkens, never lightens</div></div>
+      <div style="display:grid;grid-template-columns:1.2fr .9fr .8fr .8fr 1.9fr;border-bottom:1px solid #EFEDE6;align-items:center"><div style="padding:12px 20px;font-size:15px;font-weight:500">border</div><div style="padding:12px 14px;font-family:'DM Mono',monospace;font-size:13px;color:#585B52">#8B8E84</div><div style="padding:12px 14px;font-size:14.5px;font-weight:600;color:#35593A;text-align:right;font-variant-numeric:tabular-nums">3.19</div><div style="padding:12px 14px;font-size:14.5px;font-weight:600;color:#35593A;text-align:right;font-variant-numeric:tabular-nums">3.33</div><div style="padding:12px 20px;font-size:14px;color:#585B52">Control edge. Clears WCAG 1.4.11 at 3:1</div></div>
+      <div style="display:grid;grid-template-columns:1.2fr .9fr .8fr .8fr 1.9fr;align-items:center"><div style="padding:12px 20px;font-size:15px;font-weight:500">hairline</div><div style="padding:12px 14px;font-family:'DM Mono',monospace;font-size:13px;color:#585B52">#F2F0E9</div><div style="padding:12px 14px;font-size:14.5px;color:#585B52;text-align:right;font-variant-numeric:tabular-nums">1.09</div><div style="padding:12px 14px;font-size:14.5px;color:#585B52;text-align:right;font-variant-numeric:tabular-nums">1.14</div><div style="padding:12px 20px;font-size:14px;color:#585B52">Decorative divider. Never a control edge</div></div>
+    </div>
+    <div style="background:#FFFFFF;border-radius:14px;padding:16px 20px;margin-top:14px;box-shadow:0 1px 2px rgba(20,21,15,.04);font-size:14.5px;line-height:1.6;color:#585B52">Fills, all with white text: accent <span style="font-family:'DM Mono',monospace;font-size:13px;color:#1F211C">#35593A</span> <strong style="color:#35593A;font-weight:600">7.95</strong> · pressed <span style="font-family:'DM Mono',monospace;font-size:13px;color:#1F211C">#2F5233</span> <strong style="color:#35593A;font-weight:600">8.84</strong> · ink hero <span style="font-family:'DM Mono',monospace;font-size:13px;color:#1F211C">#1F211C</span> <strong style="color:#35593A;font-weight:600">16.25</strong>. Ink on the wash fill: <strong style="color:#35593A;font-weight:600">14.12</strong>.</div>
+  </div>
+</div>
+
+<!-- 02 SEMANTIC -->
+<div style="padding:64px 56px 0;max-width:1340px">
+  <div style="border-top:1px solid #D6D4CB;padding-top:34px">
+    <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:8px">02 — Semantic states</div>
+    <h2 style="font-size:30px;font-weight:600;letter-spacing:-.032em;margin:0 0 10px">Six states the Tier 2 reference left open.</h2>
+    <p style="font-size:16.5px;line-height:1.6;color:#585B52;margin:0 0 8px;max-width:72ch">Each ships with a mandatory glyph or word — colour never carries meaning alone. Two of them decide whether this app is trusted.</p>
+    <p style="font-size:16.5px;line-height:1.6;color:#585B52;margin:0 0 26px;max-width:72ch"><strong style="color:#1F211C;font-weight:600">Offline reuses the muted tone with a dashed edge, never critical</strong> — it is the expected condition for most of an MR's day. <strong style="color:#1F211C;font-weight:600">Recording is terracotta, not signal red</strong>: unmissable to the MR, but a doctor glancing across a desk reads "on", not "alarm".</p>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+      <div style="background:#FFFFFF;border-radius:18px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="padding:16px 20px;border-bottom:1px solid #F2F0E9;display:flex;align-items:center;gap:10px"><span style="width:24px;height:24px;border-radius:50%;background:#35593A;display:flex;align-items:center;justify-content:center;flex:none"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span style="font-size:16px;font-weight:600">success</span><span style="font-family:'DM Mono',monospace;font-size:12.5px;color:#585B52;margin-left:auto">#35593A</span></div>
+        <div style="padding:16px 20px"><div style="background:#E9F0E9;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:9px"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#35593A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="font-size:15px;font-weight:500">Visit synced</span></div><div style="font-size:13.5px;color:#585B52;margin-top:11px;line-height:1.6">paper <strong style="color:#35593A;font-weight:600">7.62</strong> · card <strong style="color:#35593A;font-weight:600">7.95</strong> · on well <span style="font-family:'DM Mono',monospace;font-size:12.5px">#E9F0E9</span> <strong style="color:#35593A;font-weight:600">6.85</strong></div></div>
+      </div>
+      <div style="background:#FFFFFF;border-radius:18px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="padding:16px 20px;border-bottom:1px solid #F2F0E9;display:flex;align-items:center;gap:10px"><span style="width:24px;height:24px;border-radius:50%;background:#7A5510;color:#FFFFFF;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">!</span><span style="font-size:16px;font-weight:600">attention</span><span style="font-family:'DM Mono',monospace;font-size:12.5px;color:#585B52;margin-left:auto">#7A5510</span></div>
+        <div style="padding:16px 20px"><div style="background:#F7EFDD;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:9px"><span style="color:#7A5510;font-size:14px;font-weight:700">!</span><span style="font-size:15px;font-weight:500">Battery saver is on</span></div><div style="font-size:13.5px;color:#585B52;margin-top:11px;line-height:1.6">paper <strong style="color:#35593A;font-weight:600">6.42</strong> · card <strong style="color:#35593A;font-weight:600">6.70</strong> · on well <span style="font-family:'DM Mono',monospace;font-size:12.5px">#F7EFDD</span> <strong style="color:#35593A;font-weight:600">5.85</strong></div></div>
+      </div>
+      <div style="background:#FFFFFF;border-radius:18px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="padding:16px 20px;border-bottom:1px solid #F2F0E9;display:flex;align-items:center;gap:10px"><span style="width:24px;height:24px;border-radius:50%;background:#9C3B26;display:flex;align-items:center;justify-content:center;flex:none"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"/></svg></span><span style="font-size:16px;font-weight:600">critical</span><span style="font-family:'DM Mono',monospace;font-size:12.5px;color:#585B52;margin-left:auto">#9C3B26</span></div>
+        <div style="padding:16px 20px"><div style="background:#F8EAE6;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:9px"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#9C3B26" stroke-width="2.4" stroke-linecap="round"/></svg><span style="font-size:15px;font-weight:500">Upload failed 5 times</span></div><div style="font-size:13.5px;color:#585B52;margin-top:11px;line-height:1.6">paper <strong style="color:#35593A;font-weight:600">6.56</strong> · card <strong style="color:#35593A;font-weight:600">6.85</strong> · on well <span style="font-family:'DM Mono',monospace;font-size:12.5px">#F8EAE6</span> <strong style="color:#35593A;font-weight:600">5.84</strong></div></div>
+      </div>
+      <div style="background:#FFFFFF;border-radius:18px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="padding:16px 20px;border-bottom:1px solid #F2F0E9;display:flex;align-items:center;gap:10px"><span style="width:24px;height:24px;border-radius:50%;background:#2A5570;color:#FFFFFF;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">i</span><span style="font-size:16px;font-weight:600">info</span><span style="font-family:'DM Mono',monospace;font-size:12.5px;color:#585B52;margin-left:auto">#2A5570</span></div>
+        <div style="padding:16px 20px"><div style="background:#E7EFF4;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:9px"><span style="color:#2A5570;font-size:14px;font-weight:700">i</span><span style="font-size:15px;font-weight:500">Route updated at 09:12</span></div><div style="font-size:13.5px;color:#585B52;margin-top:11px;line-height:1.6">paper <strong style="color:#35593A;font-weight:600">7.64</strong> · card <strong style="color:#35593A;font-weight:600">7.98</strong> · on well <span style="font-family:'DM Mono',monospace;font-size:12.5px">#E7EFF4</span> <strong style="color:#35593A;font-weight:600">6.86</strong></div></div>
+      </div>
+      <div style="background:#FFFFFF;border-radius:18px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="padding:16px 20px;border-bottom:1px solid #F2F0E9;display:flex;align-items:center;gap:10px"><span style="width:24px;height:24px;border-radius:50%;border:2px dashed #585B52;flex:none"></span><span style="font-size:16px;font-weight:600">offline</span><span style="font-family:'DM Mono',monospace;font-size:12.5px;color:#585B52;margin-left:auto">#585B52</span></div>
+        <div style="padding:16px 20px"><div style="background:#F1EFE8;border:1px dashed #B4B7AC;border-radius:12px;padding:11px 14px;display:flex;align-items:center;gap:9px"><span style="width:11px;height:11px;border-radius:50%;border:1.8px dashed #585B52;flex:none"></span><span style="font-size:15px;font-weight:500">Saved on this phone</span></div><div style="font-size:13.5px;color:#585B52;margin-top:11px;line-height:1.6">paper <strong style="color:#35593A;font-weight:600">6.63</strong> · card <strong style="color:#35593A;font-weight:600">6.92</strong> · on well <span style="font-family:'DM Mono',monospace;font-size:12.5px">#F1EFE8</span> <strong style="color:#35593A;font-weight:600">6.02</strong></div><div style="font-size:13.5px;line-height:1.5;color:#585B52;margin-top:10px;border-top:1px solid #F2F0E9;padding-top:10px">Same hue as muted. The dashed edge is the signal, not the colour.</div></div>
+      </div>
+      <div style="background:#FFFFFF;border-radius:18px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="padding:16px 20px;border-bottom:1px solid #F2F0E9;display:flex;align-items:center;gap:10px"><span style="width:16px;height:16px;border-radius:50%;background:#8A4A32;flex:none;animation:recpulse 2s ease-in-out infinite"></span><span style="font-size:16px;font-weight:600">recording</span><span style="font-family:'DM Mono',monospace;font-size:12.5px;color:#585B52;margin-left:auto">#8A4A32</span></div>
+        <div style="padding:16px 20px"><div style="background:#F6EDE9;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:9px"><span style="width:11px;height:11px;border-radius:50%;background:#8A4A32;flex:none;animation:recpulse 2s ease-in-out infinite"></span><span style="font-size:15px;font-weight:500">Recording · 02:41</span></div><div style="font-size:13.5px;color:#585B52;margin-top:11px;line-height:1.6">paper <strong style="color:#35593A;font-weight:600">6.48</strong> · card <strong style="color:#35593A;font-weight:600">6.76</strong> · on well <span style="font-family:'DM Mono',monospace;font-size:12.5px">#F6EDE9</span> <strong style="color:#35593A;font-weight:600">5.86</strong></div><div style="font-size:13.5px;line-height:1.5;color:#585B52;margin-top:10px;border-top:1px solid #F2F0E9;padding-top:10px">Distinct from critical by hue and by shape — recording is always a dot, critical always a cross. They never share a screen.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 03 TYPE -->
+<div style="padding:64px 56px 0;max-width:1340px">
+  <div style="border-top:1px solid #D6D4CB;padding-top:34px">
+    <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:8px">03 — Type</div>
+    <h2 style="font-size:30px;font-weight:600;letter-spacing:-.032em;margin:0 0 10px">DM Sans, 400 minimum, no exceptions.</h2>
+    <p style="font-size:16.5px;line-height:1.6;color:#585B52;margin:0 0 26px;max-width:70ch">Body floor is 16px against the Tier 2 standard-density 15. Figures run large and tight — a number an MR reads while walking has to survive a glance.</p>
+    <div style="display:grid;grid-template-columns:1fr 350px;gap:20px;align-items:start">
+      <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="padding:20px 26px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:20px"><span style="font-family:'DM Mono',monospace;font-size:12px;color:#585B52;width:118px;flex:none">figure · 40/600/−.045</span><span style="font-size:40px;font-weight:600;letter-spacing:-.045em;font-variant-numeric:tabular-nums;color:#35593A">₹412</span></div>
+        <div style="padding:20px 26px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:20px"><span style="font-family:'DM Mono',monospace;font-size:12px;color:#585B52;width:118px;flex:none">display · 30/600/−.035</span><span style="font-size:30px;font-weight:600;letter-spacing:-.035em">That's Dr. Iyer done</span></div>
+        <div style="padding:20px 26px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:20px"><span style="font-family:'DM Mono',monospace;font-size:12px;color:#585B52;width:118px;flex:none">title · 27/600/−.035</span><span style="font-size:27px;font-weight:600;letter-spacing:-.035em">Thursday</span></div>
+        <div style="padding:20px 26px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:20px"><span style="font-family:'DM Mono',monospace;font-size:12px;color:#585B52;width:118px;flex:none">heading · 16.5/600</span><span style="font-size:16.5px;font-weight:600;letter-spacing:-.01em">Show approved content</span></div>
+        <div style="padding:20px 26px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:20px"><span style="font-family:'DM Mono',monospace;font-size:12px;color:#585B52;width:118px;flex:none">body · 16/400</span><span style="font-size:16px;max-width:44ch;line-height:1.5">Six of nine visits done. Next is Sunrise Clinic, eleven minutes away by the route you took last Tuesday.</span></div>
+        <div style="padding:20px 26px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:20px"><span style="font-family:'DM Mono',monospace;font-size:12px;color:#585B52;width:118px;flex:none">secondary · 14.5/400</span><span style="font-size:14.5px;color:#585B52">31.7 km · on this month's claim</span></div>
+        <div style="padding:20px 26px;display:flex;align-items:baseline;gap:20px"><span style="font-family:'DM Mono',monospace;font-size:12px;color:#585B52;width:118px;flex:none">label · 13.5/500</span><span style="font-size:13.5px;font-weight:500;color:#585B52">You've earned</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div style="background:#FFFFFF;border-radius:20px;padding:22px 24px;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+          <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:12px">The one Cormorant moment</div>
+          <div style="font-family:'Cormorant Garamond',Georgia,serif;font-weight:500;font-size:36px;line-height:1.08;letter-spacing:-.015em">Relief at the root.</div>
+          <p style="font-size:14px;line-height:1.55;color:#585B52;margin:12px 0 0">Login splash only, weight 500 at 36px. Not a screen title, not a section header, not an empty state. Italiana has zero product use.</p>
+        </div>
+        <div style="background:#FFFFFF;border-radius:20px;padding:22px 24px;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+          <div style="font-size:13.5px;font-weight:500;color:#9C3B26;margin-bottom:12px">Banned</div>
+          <ul style="margin:0;padding-left:18px;font-size:14px;line-height:1.75;color:#585B52">
+            <li>DM Sans below 400, anywhere</li>
+            <li>Body below 16px</li>
+            <li>Any tappable label below 14px</li>
+            <li>Cormorant below 24px or below 500</li>
+            <li>All-caps mono eyebrows on every block</li>
+            <li>A third grey</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 04 REACH -->
+<div style="padding:64px 56px 0;max-width:1340px">
+  <div style="border-top:1px solid #D6D4CB;padding-top:34px">
+    <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:8px">04 — Reach &amp; targets</div>
+    <h2 style="font-size:30px;font-weight:600;letter-spacing:-.032em;margin:0 0 10px">The other hand is holding a detail bag.</h2>
+    <p style="font-size:16.5px;line-height:1.6;color:#585B52;margin:0 0 26px;max-width:70ch">Every screen in this app is a one-thumb screen.</p>
+    <div style="display:grid;grid-template-columns:290px 1fr;gap:28px;align-items:start">
+      <div style="width:290px;height:600px;background:#FBFAF7;border-radius:32px;position:relative;overflow:hidden;box-shadow:0 2px 6px rgba(20,21,15,.06),0 22px 48px -28px rgba(20,21,15,.45)">
+        <div style="position:absolute;top:0;left:0;right:0;height:200px;background:#F1EFE8;border-bottom:1px dashed #B4B7AC;display:flex;align-items:center;justify-content:center"><span style="font-size:13px;color:#585B52;text-align:center;line-height:1.6">Read only<br><span style="font-size:12.5px">status, headings, figures</span></span></div>
+        <div style="position:absolute;top:200px;left:0;right:0;height:200px;border-bottom:1px dashed #B4B7AC;display:flex;align-items:center;justify-content:center"><span style="font-size:13px;color:#585B52;text-align:center;line-height:1.6">Scroll &amp; secondary<br><span style="font-size:12.5px">list rows, cards, links</span></span></div>
+        <div style="position:absolute;top:400px;left:0;right:0;bottom:0;background:#E9F0E9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:0 22px">
+          <span style="font-size:13px;font-weight:600;color:#35593A">Reach zone · bottom third</span>
+          <div style="width:100%;height:60px;background:#35593A;border-radius:16px;color:#FFFFFF;font-size:17px;font-weight:600;display:flex;align-items:center;justify-content:center">Check in</div>
+          <span style="font-size:13px;color:#3F5F43;text-align:center;line-height:1.5">Every primary action lands here.<br>No exceptions, including sheets.</span>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div style="background:#FFFFFF;border-radius:20px;padding:22px 24px;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+          <div style="font-size:17px;font-weight:600;letter-spacing:-.02em;margin-bottom:10px">The rule</div>
+          <p style="margin:0 0 10px;font-size:15.5px;line-height:1.6;color:#585B52">On an 844pt canvas the reach zone is the bottom <strong style="color:#1F211C;font-weight:600">281pt</strong>. A screen's single primary action originates inside it, pinned — never scrolled to. Two primary actions on one screen means the screen is wrong; split it.</p>
+          <p style="margin:0;font-size:15.5px;line-height:1.6;color:#585B52">Destructive and irreversible actions are the deliberate exception. They sit <em>outside</em> the zone so a resting thumb cannot fire them.</p>
+        </div>
+        <div style="background:#FFFFFF;border-radius:20px;padding:22px 24px;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+          <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:16px">Target sizes</div>
+          <div style="display:flex;align-items:flex-end;gap:22px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:9px"><div style="width:44px;height:44px;border:1px dashed #B4B7AC;border-radius:12px;display:flex;align-items:center;justify-content:center"><div style="width:20px;height:20px;border-radius:6px;background:#B4B7AC"></div></div><span style="font-size:12.5px;color:#585B52">44 · floor</span></div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:9px"><div style="width:52px;height:52px;background:#F1EFE8;border-radius:16px;display:flex;align-items:center;justify-content:center"><div style="width:22px;height:22px;border-radius:7px;background:#585B52"></div></div><span style="font-size:12.5px;color:#585B52">52 · secondary</span></div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:9px"><div style="width:130px;height:60px;background:#35593A;border-radius:16px;color:#FFFFFF;font-size:16px;font-weight:600;display:flex;align-items:center;justify-content:center">Primary</div><span style="font-size:12.5px;color:#585B52">60 · primary</span></div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:9px"><div style="width:130px;height:66px;background:#8A4A32;border-radius:18px;color:#FFFFFF;font-size:17px;font-weight:600;display:flex;align-items:center;justify-content:center">Stop</div><span style="font-size:12.5px;color:#585B52">66 · in-visit</span></div>
+          </div>
+          <div style="font-size:14.5px;line-height:1.6;color:#585B52;margin-top:18px">Minimum 8px between adjacent targets. In-visit controls go to 66px — pressed while walking, in a corridor, without looking.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 05 COMPONENTS -->
+<div style="padding:64px 56px 0;max-width:1340px">
+  <div style="border-top:1px solid #D6D4CB;padding-top:34px">
+    <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:8px">05 — Components</div>
+    <h2 style="font-size:30px;font-weight:600;letter-spacing:-.032em;margin:0 0 10px">Fourteen components. No hover, anywhere.</h2>
+    <p style="font-size:16.5px;line-height:1.6;color:#585B52;margin:0 0 8px;max-width:72ch">Press is the only feedback. Every live control below responds to a real press — the swatches labelled <em>press</em> are the rendered state, not a description of one.</p>
+    <p style="font-size:16.5px;line-height:1.6;color:#585B52;margin:0 0 28px;max-width:72ch">Press is a fill darkening, never a scale transform. Scale animation on a mid-range Android drops frames and reads as lag.</p>
+
+    <!-- Button -->
+    <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;margin-bottom:16px;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+      <div style="padding:16px 24px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:12px"><span style="font-size:17px;font-weight:600;letter-spacing:-.02em">Button</span><span style="font-size:14.5px;color:#585B52">60px primary · 52px secondary · 16px radius · label 17/600, never uppercase</span></div>
+      <div style="padding:24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:22px">
+        <div style="display:flex;flex-direction:column;gap:9px"><span style="font-size:13px;color:#585B52">Primary · default → press</span><button type="button" style="height:60px;background:#35593A;border:none;border-radius:16px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer;width:100%" style-active="background:#2F5233">Check in</button><span style="font-size:12.5px;color:#35593A;font-weight:600">7.95 : 1</span></div>
+        <div style="display:flex;flex-direction:column;gap:9px"><span style="font-size:13px;color:#585B52">Primary · pressed</span><div style="height:60px;background:#2F5233;border-radius:16px;color:#FFFFFF;font-size:17px;font-weight:600;display:flex;align-items:center;justify-content:center">Check in</div><span style="font-size:12.5px;color:#35593A;font-weight:600">8.84 : 1</span></div>
+        <div style="display:flex;flex-direction:column;gap:9px"><span style="font-size:13px;color:#585B52">Primary · focus</span><div style="height:60px;background:#35593A;border-radius:16px;color:#FFFFFF;font-size:17px;font-weight:600;display:flex;align-items:center;justify-content:center;outline:3px solid #35593A;outline-offset:3px">Check in</div><span style="font-size:12.5px;color:#585B52">ring 3px · offset 3</span></div>
+        <div style="display:flex;flex-direction:column;gap:9px"><span style="font-size:13px;color:#585B52">Primary · loading</span><div style="height:60px;background:#35593A;border-radius:16px;color:#FFFFFF;font-size:17px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:11px"><span style="width:15px;height:15px;border:2px solid rgba(255,255,255,.35);border-top-color:#FFFFFF;border-radius:50%;animation:syncspin .9s linear infinite"></span>Checking in</div><span style="font-size:12.5px;color:#585B52">label changes, width holds</span></div>
+        <div style="display:flex;flex-direction:column;gap:9px"><span style="font-size:13px;color:#585B52">Primary · disabled</span><div style="height:60px;background:#F1EFE8;border-radius:16px;color:#9B9E94;font-size:17px;font-weight:600;display:flex;align-items:center;justify-content:center">Check in</div><span style="font-size:12.5px;color:#585B52">2.37 — exempt, always paired with a reason line</span></div>
+        <div style="display:flex;flex-direction:column;gap:9px"><span style="font-size:13px;color:#585B52">Primary · works offline</span><button type="button" style="height:60px;background:#35593A;border:none;border-radius:16px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;line-height:1.15" style-active="background:#2F5233"><span>Check in</span><span style="font-size:12px;font-weight:500;opacity:.78">will sync later</span></button><span style="font-size:12.5px;color:#585B52">not an error state</span></div>
+        <div style="display:flex;flex-direction:column;gap:9px"><span style="font-size:13px;color:#585B52">Secondary · filled, no outline</span><button type="button" style="height:52px;background:#F1EFE8;border:none;border-radius:16px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;cursor:pointer;width:100%" style-active="background:#E5E2D9">Not now</button><span style="font-size:12.5px;color:#35593A;font-weight:600">14.12 : 1</span></div>
+        <div style="display:flex;flex-direction:column;gap:9px"><span style="font-size:13px;color:#585B52">Quiet · text only</span><button type="button" style="height:52px;background:transparent;border:none;border-radius:16px;color:#35593A;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;cursor:pointer;width:100%" style-active="background:#F1EFE8">See my route</button><span style="font-size:12.5px;color:#35593A;font-weight:600">7.95 : 1</span></div>
+        <div style="display:flex;flex-direction:column;gap:9px"><span style="font-size:13px;color:#585B52">Destructive</span><button type="button" style="height:52px;background:#FFFFFF;border:1.5px solid #9C3B26;border-radius:16px;color:#9C3B26;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;cursor:pointer;width:100%" style-active="background:#F8EAE6">Discard recording</button><span style="font-size:12.5px;color:#35593A;font-weight:600">6.85 : 1 · outside the reach zone</span></div>
+      </div>
+    </div>
+
+    <!-- IconButton + TextInput -->
+    <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:16px;margin-bottom:16px">
+      <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="padding:16px 24px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:12px"><span style="font-size:17px;font-weight:600;letter-spacing:-.02em">IconButton</span><span style="font-size:14.5px;color:#585B52">52px · always has a text label somewhere on screen</span></div>
+        <div style="padding:24px;display:flex;gap:20px;flex-wrap:wrap">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:9px"><button type="button" style="width:52px;height:52px;background:#F1EFE8;border:none;border-radius:16px;cursor:pointer;display:flex;align-items:center;justify-content:center" style-active="background:#E5E2D9"><svg width="19" height="19" viewBox="0 0 20 20" fill="none"><path d="M16.5 10a6.5 6.5 0 11-2.2-4.9" stroke="#1F211C" stroke-width="1.8" stroke-linecap="round"/><path d="M16.6 2.6v3.4h-3.4" stroke="#1F211C" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button><span style="font-size:12.5px;color:#585B52">default</span></div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:9px"><div style="width:52px;height:52px;background:#E5E2D9;border-radius:16px;display:flex;align-items:center;justify-content:center"><svg width="19" height="19" viewBox="0 0 20 20" fill="none"><path d="M16.5 10a6.5 6.5 0 11-2.2-4.9" stroke="#1F211C" stroke-width="1.8" stroke-linecap="round"/><path d="M16.6 2.6v3.4h-3.4" stroke="#1F211C" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span style="font-size:12.5px;color:#585B52">press</span></div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:9px"><div style="width:52px;height:52px;background:#35593A;border-radius:16px;display:flex;align-items:center;justify-content:center"><svg width="19" height="19" viewBox="0 0 20 20" fill="none"><path d="M16.5 10a6.5 6.5 0 11-2.2-4.9" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/><path d="M16.6 2.6v3.4h-3.4" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span style="font-size:12.5px;color:#585B52">active</span></div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:9px"><div style="width:52px;height:52px;background:#F7F5F0;border-radius:16px;display:flex;align-items:center;justify-content:center"><svg width="19" height="19" viewBox="0 0 20 20" fill="none"><path d="M16.5 10a6.5 6.5 0 11-2.2-4.9" stroke="#C4C7BD" stroke-width="1.8" stroke-linecap="round"/><path d="M16.6 2.6v3.4h-3.4" stroke="#C4C7BD" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span style="font-size:12.5px;color:#585B52">disabled</span></div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:9px"><div style="width:52px;height:52px;background:#F1EFE8;border-radius:16px;display:flex;align-items:center;justify-content:center"><span style="width:17px;height:17px;border:2px solid #DEDCD4;border-top-color:#35593A;border-radius:50%;animation:syncspin .9s linear infinite"></span></div><span style="font-size:12.5px;color:#585B52">loading</span></div>
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="padding:16px 24px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:12px"><span style="font-size:17px;font-weight:600;letter-spacing:-.02em">TextInput</span><span style="font-size:14.5px;color:#585B52">60px · 19px value · label always visible, never placeholder-only</span></div>
+        <div style="padding:24px;display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:14px;font-weight:500;color:#585B52">Doctor name</label><input type="text" placeholder="Search" style="height:60px;background:#FBFAF7;border:1px solid #8B8E84;border-radius:16px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:19px;padding:0 16px;width:100%;outline:none;box-sizing:border-box" style-focus="border-color:#35593A;box-shadow:0 0 0 3px rgba(53,89,58,.22)"><span style="font-size:12.5px;color:#585B52">default → focus · tap it</span></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:14px;font-weight:500;color:#585B52">Doctor name</label><div style="height:60px;background:#FBFAF7;border:1px solid #8B8E84;border-radius:16px;font-size:19px;padding:0 16px;display:flex;align-items:center;box-sizing:border-box">Dr. A. Menon</div><span style="font-size:12.5px;color:#35593A;font-weight:600">filled · 15.57 : 1</span></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:14px;font-weight:500;color:#585B52">Odometer reading</label><div style="height:60px;background:#F8EAE6;border:1.5px solid #9C3B26;border-radius:16px;font-size:19px;padding:0 16px;display:flex;align-items:center;box-sizing:border-box">41,2</div><span style="font-size:13.5px;color:#9C3B26;display:flex;gap:6px;line-height:1.4"><span style="font-weight:700">×</span>Needs 5 digits — yesterday you ended at 41,208</span></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:14px;font-weight:500;color:#9B9E94">Territory</label><div style="height:60px;background:#F7F5F0;border:1px dashed #C4C7BD;border-radius:16px;color:#9B9E94;font-size:19px;padding:0 16px;display:flex;align-items:center;box-sizing:border-box">South Mumbai</div><span style="font-size:12.5px;color:#585B52">disabled · set by your manager</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Select + Card -->
+    <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:16px;margin-bottom:16px">
+      <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="padding:16px 24px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:12px"><span style="font-size:17px;font-weight:600;letter-spacing:-.02em">Select</span><span style="font-size:14.5px;color:#585B52">opens a bottom sheet, never a dropdown</span></div>
+        <div style="padding:24px;display:flex;flex-direction:column;gap:20px">
+          <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:14px;font-weight:500;color:#585B52">Visit outcome</label><button type="button" onClick="{{ openSheet }}" style="height:60px;background:#FBFAF7;border:1px solid #8B8E84;border-radius:16px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:19px;padding:0 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;width:100%;text-align:left;box-sizing:border-box" style-active="background:#F1EFE8;border-color:#35593A"><span>Detailed, samples left</span><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3.4 6L8 10.6L12.6 6" stroke="#585B52" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button><span style="font-size:12.5px;color:#585B52">tap to open the live sheet</span></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:14px;font-weight:500;color:#585B52">Visit outcome</label><div style="height:60px;background:#FBFAF7;border:1.5px solid #35593A;border-radius:16px;color:#585B52;font-size:19px;padding:0 16px;display:flex;align-items:center;justify-content:space-between;box-sizing:border-box"><span>Choose one</span><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3.4 10L8 5.4L12.6 10" stroke="#35593A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span style="font-size:12.5px;color:#585B52">open · nothing chosen</span></div>
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="padding:16px 24px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:12px"><span style="font-size:17px;font-weight:600;letter-spacing:-.02em">Card</span><span style="font-size:14.5px;color:#585B52">20px radius · shadow, not outline · one dark hero per screen</span></div>
+        <div style="padding:24px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div style="background:#1F211C;border-radius:20px;padding:18px 20px;cursor:pointer;box-shadow:0 14px 30px -20px rgba(20,21,15,.8)" style-active="background:#101208">
+            <div style="font-size:13px;font-weight:500;color:rgba(255,255,255,.6);margin-bottom:9px">Next visit</div>
+            <div style="font-size:22px;font-weight:600;color:#FFFFFF;letter-spacing:-.03em;margin-bottom:3px">Dr. S. Iyer</div>
+            <div style="font-size:14.5px;color:rgba(255,255,255,.75)">Sunrise Clinic · 11 min</div>
+            <div style="font-size:12.5px;color:rgba(255,255,255,.55);margin-top:14px;border-top:1px solid rgba(255,255,255,.14);padding-top:10px">hero · default / press · white 16.25</div>
+          </div>
+          <div style="background:#F1EFE8;border:1px dashed #B4B7AC;border-radius:20px;padding:18px 20px">
+            <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px"><span style="width:10px;height:10px;border-radius:50%;border:1.8px dashed #585B52;flex:none"></span><span style="font-size:13px;font-weight:500;color:#585B52">On this phone</span></div>
+            <div style="font-size:22px;font-weight:600;letter-spacing:-.03em;margin-bottom:3px">Dr. R. Banerjee</div>
+            <div style="font-size:14.5px;color:#585B52">Report saved · sends when you have signal</div>
+            <div style="font-size:12.5px;color:#585B52;margin-top:14px;border-top:1px solid #DEDCD4;padding-top:10px">offline · neutral, not an error</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ListItem -->
+    <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;margin-bottom:16px;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+      <div style="padding:16px 24px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:12px"><span style="font-size:17px;font-weight:600;letter-spacing:-.02em">ListItem</span><span style="font-size:14.5px;color:#585B52">70px minimum · status glyph mandatory, colour never alone</span></div>
+      <div style="padding:24px">
+        <div style="background:#FBFAF7;border-radius:16px;overflow:hidden">
+          <div style="min-height:70px;padding:13px 20px;display:flex;align-items:center;gap:14px;border-bottom:1px solid #F2F0E9;cursor:pointer" style-active="background:#F1EFE8"><span style="width:26px;height:26px;border-radius:50%;background:#35593A;display:flex;align-items:center;justify-content:center;flex:none"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div style="flex:1"><div style="font-size:17px;font-weight:600;letter-spacing:-.015em">Dr. A. Menon</div><div style="font-size:14.5px;color:#585B52">09:20 · consented · synced</div></div><span style="font-size:14.5px;color:#585B52;font-variant-numeric:tabular-nums">09:20</span></div>
+          <div style="min-height:70px;padding:13px 20px;display:flex;align-items:center;gap:14px;border-bottom:1px solid #F2F0E9;background:#F1EFE8;box-shadow:inset 3px 0 0 #35593A"><span style="width:26px;height:26px;border-radius:50%;background:#35593A;display:flex;align-items:center;justify-content:center;flex:none"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div style="flex:1"><div style="font-size:17px;font-weight:600;letter-spacing:-.015em">Dr. S. Iyer</div><div style="font-size:14.5px;color:#585B52">10:05 · declined recording · voice note filed</div></div><span style="font-size:12.5px;font-weight:600;color:#35593A">PRESS</span></div>
+          <div style="min-height:70px;padding:13px 20px;display:flex;align-items:center;gap:14px;border-bottom:1px solid #F2F0E9"><span style="width:26px;height:26px;border-radius:50%;border:2px dashed #585B52;flex:none"></span><div style="flex:1"><div style="font-size:17px;font-weight:600;letter-spacing:-.015em">Dr. R. Banerjee</div><div style="font-size:14.5px;color:#585B52">Saved on this phone · 2 items waiting</div></div><span style="font-size:14.5px;color:#585B52;font-variant-numeric:tabular-nums">11:40</span></div>
+          <div style="min-height:70px;padding:13px 20px;display:flex;align-items:center;gap:14px"><span style="width:26px;height:26px;border-radius:50%;border:1px solid #E0DED6;flex:none"></span><div style="flex:1"><div style="font-size:17px;font-weight:600;color:#9B9E94;letter-spacing:-.015em">Dr. P. Nair</div><div style="font-size:14.5px;color:#9B9E94">Not in today's beat plan</div></div></div>
+        </div>
+        <div style="font-size:13px;color:#585B52;margin-top:11px">default · press + selected · offline · disabled</div>
+      </div>
+    </div>
+
+    <!-- Toast + Banner -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+      <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="padding:16px 24px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:12px"><span style="font-size:17px;font-weight:600;letter-spacing:-.02em">Toast</span><span style="font-size:14.5px;color:#585B52">above the reach zone · 5s · never blocks</span></div>
+        <div style="padding:24px;display:flex;flex-direction:column;gap:12px">
+          <div style="background:#1F211C;border-radius:16px;padding:15px 18px;display:flex;align-items:center;gap:12px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#B8CDB8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="font-size:15.5px;color:#FFFFFF;flex:1">Checked in at Sunrise Clinic</span><span style="font-size:14.5px;font-weight:600;color:#B8CDB8">Undo</span></div>
+          <div style="background:#F1EFE8;border:1px dashed #B4B7AC;border-radius:16px;padding:15px 18px;display:flex;align-items:center;gap:12px"><span style="width:12px;height:12px;border-radius:50%;border:1.8px dashed #585B52;flex:none"></span><span style="font-size:15.5px;flex:1">Saved here — 3 items waiting to send</span></div>
+          <div style="background:#F8EAE6;border-radius:16px;padding:15px 18px;display:flex;align-items:center;gap:12px"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#9C3B26" stroke-width="2.4" stroke-linecap="round"/></svg><span style="font-size:15.5px;flex:1">Couldn't reach GPS. Check in by hand?</span><span style="font-size:14.5px;font-weight:600;color:#9C3B26">Do it</span></div>
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="padding:16px 24px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:12px"><span style="font-size:17px;font-weight:600;letter-spacing:-.02em">Banner</span><span style="font-size:14.5px;color:#585B52">in flow, persists until resolved</span></div>
+        <div style="padding:24px;display:flex;flex-direction:column;gap:12px">
+          <div style="background:#E7EFF4;border-radius:16px;padding:15px 18px"><div style="font-size:15.5px;font-weight:600">Your beat plan changed</div><div style="font-size:14.5px;color:#2A5570;margin-top:2px">Two doctors added for this afternoon.</div></div>
+          <div style="background:#F7EFDD;border-radius:16px;padding:15px 18px"><div style="font-size:15.5px;font-weight:600">MIUI stopped this app in the background</div><div style="font-size:14.5px;color:#6B4C0E;margin-top:2px">Your 10:05 visit wasn't logged automatically.</div><button type="button" style="margin-top:12px;height:46px;background:#FFFFFF;border:none;border-radius:12px;color:#7A5510;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;padding:0 18px;cursor:pointer" style-active="background:#F2E6CC">Fix it in Settings</button></div>
+          <div style="background:#F1EFE8;border:1px dashed #B4B7AC;border-radius:16px;padding:15px 18px"><div style="font-size:15.5px;font-weight:600">No signal — everything still works</div><div style="font-size:14.5px;color:#585B52;margin-top:2px">Check-ins, reports and voice notes save on the phone.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sync + Recording -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+      <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="padding:16px 24px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:12px"><span style="font-size:17px;font-weight:600;letter-spacing:-.02em">SyncQueueIndicator</span><span style="font-size:14.5px;color:#585B52">on every screen · countable · tappable</span></div>
+        <div style="padding:24px;display:flex;flex-direction:column;gap:11px">
+          <div style="height:52px;background:#FBFAF7;border-radius:14px;padding:0 16px;display:flex;align-items:center;gap:11px"><span style="width:22px;height:22px;border-radius:50%;background:#E9F0E9;display:flex;align-items:center;justify-content:center;flex:none"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#35593A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span style="font-size:15.5px;flex:1">Everything sent</span><span style="font-size:14px;color:#585B52;font-variant-numeric:tabular-nums">11:42</span></div>
+          <div style="height:52px;background:#FBFAF7;border-radius:14px;padding:0 16px;display:flex;align-items:center;gap:11px;position:relative;overflow:hidden"><span style="width:15px;height:15px;border:2px solid #DEDCD4;border-top-color:#35593A;border-radius:50%;animation:syncspin .9s linear infinite;flex:none"></span><span style="font-size:15.5px;flex:1">Sending 2 of 5</span><span style="font-size:14px;color:#585B52">1.4 MB</span><span style="position:absolute;bottom:0;left:0;height:3px;width:33%;background:#35593A"></span></div>
+          <div style="height:52px;background:#F1EFE8;border:1px dashed #B4B7AC;border-radius:14px;padding:0 16px;display:flex;align-items:center;gap:11px;box-sizing:border-box"><span style="width:11px;height:11px;border-radius:50%;border:1.8px dashed #585B52;flex:none"></span><span style="font-size:15.5px;flex:1">5 waiting · no signal</span><span style="font-size:14.5px;font-weight:600;color:#35593A">See list</span></div>
+          <div style="height:52px;background:#F1EFE8;border:1px dashed #B4B7AC;border-radius:14px;padding:0 16px;display:flex;align-items:center;gap:11px;box-sizing:border-box"><span style="width:11px;height:11px;border-radius:2px;background:#585B52;flex:none"></span><span style="font-size:15.5px;flex:1">3 waiting for WiFi</span><span style="font-size:14.5px;font-weight:600;color:#35593A">Send now</span></div>
+          <div style="height:52px;background:#F8EAE6;border-radius:14px;padding:0 16px;display:flex;align-items:center;gap:11px"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#9C3B26" stroke-width="2.4" stroke-linecap="round"/></svg><span style="font-size:15.5px;flex:1">1 couldn't send · tried 5 times</span><span style="font-size:14.5px;font-weight:600;color:#9C3B26">Retry</span></div>
+          <div style="font-size:14px;line-height:1.6;color:#585B52;border-top:1px solid #F2F0E9;padding-top:12px;margin-top:3px">Only the last row is critical. <strong style="color:#1F211C;font-weight:600">"Waiting" is never red</strong> — an MR offline all morning has done nothing wrong.</div>
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="padding:16px 24px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:12px"><span style="font-size:17px;font-weight:600;letter-spacing:-.02em">RecordingIndicator</span><span style="font-size:14.5px;color:#585B52">Apple 2.5.14 · persistent, reaches into the status bar</span></div>
+        <div style="padding:24px;display:flex;flex-direction:column;gap:11px">
+          <div style="height:56px;background:#F6EDE9;border-radius:14px;padding:0 18px;display:flex;align-items:center;gap:12px"><span style="width:13px;height:13px;border-radius:50%;border:2px solid #8A4A32;flex:none"></span><span style="font-size:15.5px;font-weight:500;flex:1">Ready to record</span><span style="font-size:14px;color:#585B52">armed</span></div>
+          <div style="height:56px;background:#8A4A32;border-radius:14px;padding:0 18px;display:flex;align-items:center;gap:12px"><span style="width:13px;height:13px;border-radius:50%;background:#FFFFFF;flex:none;animation:recpulse 2s ease-in-out infinite"></span><span style="font-size:16px;font-weight:600;color:#FFFFFF;flex:1">Recording this visit</span><span style="font-size:16px;color:#FFFFFF;font-variant-numeric:tabular-nums;font-weight:600">02:41</span></div>
+          <div style="height:56px;background:#F6EDE9;border:1px dashed #C89A85;border-radius:14px;padding:0 18px;display:flex;align-items:center;gap:12px;box-sizing:border-box"><span style="width:11px;height:11px;border-radius:2px;background:#8A4A32;flex:none"></span><span style="font-size:15.5px;font-weight:500;flex:1">Paused — a call came in</span><span style="font-size:15px;color:#585B52;font-variant-numeric:tabular-nums">02:41</span></div>
+          <div style="height:56px;background:#FBFAF7;border-radius:14px;padding:0 18px;display:flex;align-items:center;gap:12px"><span style="width:15px;height:15px;border:2px solid #DEDCD4;border-top-color:#35593A;border-radius:50%;animation:syncspin .9s linear infinite;flex:none"></span><span style="font-size:15.5px;font-weight:500;flex:1">Saving 4:12 to this phone</span></div>
+          <div style="font-size:14px;line-height:1.6;color:#585B52;border-top:1px solid #F2F0E9;padding-top:12px;margin-top:3px">White on <span style="font-family:'DM Mono',monospace;font-size:13px;color:#1F211C">#8A4A32</span> is <strong style="color:#35593A;font-weight:600">6.76</strong>. The word "Recording" is always present — the dot alone would fail the colour-alone rule and fail anyone glancing from a distance.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Citation -->
+    <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;margin-bottom:16px;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+      <div style="padding:16px 24px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:12px"><span style="font-size:17px;font-weight:600;letter-spacing:-.02em">CitationSpan</span><span style="font-size:14.5px;color:#585B52">the atom of contestability · every finding has one</span></div>
+      <div style="padding:24px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <button type="button" onClick="{{ toggleCite }}" style="background:#FBFAF7;border:none;border-radius:14px;padding:14px 16px;text-align:left;cursor:pointer;font-family:'DM Sans',sans-serif;width:100%;display:flex;gap:13px;align-items:flex-start" style-active="background:#F1EFE8">
+            <span style="width:30px;height:30px;border-radius:50%;background:#35593A;display:flex;align-items:center;justify-content:center;flex:none"><svg width="11" height="12" viewBox="0 0 10 11" fill="none"><path d="M1 1.2v8.6L9 5.5z" fill="#FFFFFF"/></svg></span>
+            <div><div style="font-size:13.5px;font-weight:600;color:#35593A;font-variant-numeric:tabular-nums;margin-bottom:4px">02:14 · audio kept 61 more days</div><div style="font-size:15px;line-height:1.5;color:#1F211C">"…it's a lot more than what we're using now, and my patients ask about cost first."</div></div>
+          </button>
+          <sc-if value="{{ citeOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#FBFAF7;border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:13px">
+              <span style="width:34px;height:34px;border-radius:50%;background:#35593A;display:flex;align-items:center;justify-content:center;flex:none"><span style="display:flex;gap:3px"><span style="width:3px;height:12px;background:#FFFFFF"></span><span style="width:3px;height:12px;background:#FFFFFF"></span></span></span>
+              <div style="flex:1;height:5px;background:#EFEDE6;border-radius:3px;position:relative"><span style="position:absolute;left:0;top:0;bottom:0;width:38%;background:#35593A;border-radius:3px"></span></div>
+              <span style="font-size:13.5px;color:#585B52;font-variant-numeric:tabular-nums">00:09 / 00:24</span>
+            </div>
+          </sc-if>
+          <span style="font-size:12.5px;color:#585B52">default → press → playing · tap it</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="background:#FBFAF7;border:1px dashed #C4C7BD;border-radius:14px;padding:14px 16px">
+            <div style="font-size:13.5px;font-weight:600;color:#585B52;font-variant-numeric:tabular-nums;margin-bottom:4px">02:14 · audio deleted at 90 days · transcript kept</div>
+            <div style="font-size:15px;line-height:1.5;color:#585B52">"…it's a lot more than what we're using now, and my patients ask about cost first."</div>
+          </div>
+          <div style="background:#F1EFE8;border-radius:14px;padding:13px 16px;font-size:14px;line-height:1.6;color:#585B52">Redaction runs before anything reaches this component. If a span ever contained a patient detail the pipeline failed, not the UI — but it renders <span style="background:#DEDCD4;padding:1px 7px;border-radius:5px;font-family:'DM Mono',monospace;font-size:12.5px;color:#1F211C">[removed]</span> rather than dropping the sentence, so the MR can see something was cut.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Finding + Override -->
+    <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:16px">
+      <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="padding:16px 24px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:12px"><span style="font-size:17px;font-weight:600;letter-spacing:-.02em">FindingCard</span><span style="font-size:14.5px;color:#585B52">what happened · the evidence · your reply</span></div>
+        <div style="padding:24px;display:flex;flex-direction:column;gap:14px">
+          <div style="background:#FBFAF7;border-radius:16px;padding:18px 20px">
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px"><span style="width:22px;height:22px;border-radius:50%;background:#E9F0E9;display:flex;align-items:center;justify-content:center;flex:none"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#35593A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span style="font-size:13.5px;font-weight:600;color:#35593A">Worked well</span></div>
+            <div style="font-size:17px;font-weight:500;line-height:1.4;margin-bottom:12px">You opened with the purpose of the call in eighteen seconds.</div>
+            <div style="background:#FFFFFF;border-radius:12px;padding:12px 14px;margin-bottom:14px"><div style="font-size:13px;font-weight:600;color:#35593A;font-variant-numeric:tabular-nums;margin-bottom:3px">00:04</div><div style="font-size:14.5px;line-height:1.45;color:#585B52">"Doctor, two minutes — the new dosing data, and I'll leave you a sample pack."</div></div>
+            <button type="button" style="height:46px;width:100%;background:#F1EFE8;border:none;border-radius:12px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer" style-active="background:#E5E2D9">Add your reply</button>
+          </div>
+          <div style="background:#FBFAF7;border-radius:16px;padding:18px 20px">
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px"><span style="width:22px;height:22px;border-radius:50%;background:#F7EFDD;display:flex;align-items:center;justify-content:center;flex:none"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3.5 8h9M8.6 4.2L12.5 8l-3.9 3.8" stroke="#7A5510" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span style="font-size:13.5px;font-weight:600;color:#7A5510">One thing to try</span></div>
+            <div style="font-size:17px;font-weight:500;line-height:1.4;margin-bottom:12px">The cost objection at 02:14 wasn't answered — the conversation moved to dosing.</div>
+            <div style="background:#FFFFFF;border-radius:12px;padding:12px 14px;margin-bottom:14px"><div style="font-size:13px;font-weight:600;color:#35593A;font-variant-numeric:tabular-nums;margin-bottom:3px">02:14</div><div style="font-size:14.5px;line-height:1.45;color:#585B52">"…my patients ask about cost first."</div></div>
+            <sc-if value="{{ replyOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <label style="font-size:14px;font-weight:500;color:#585B52">Your reply — your manager sees this next to the finding</label>
+                <textarea rows="3" placeholder="What actually happened?" style="background:#FFFFFF;border:1px solid #8B8E84;border-radius:12px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;padding:12px 14px;width:100%;outline:none;resize:vertical;box-sizing:border-box" style-focus="border-color:#35593A;box-shadow:0 0 0 3px rgba(53,89,58,.22)"></textarea>
+                <div style="display:flex;gap:10px"><button type="button" onClick="{{ closeReply }}" style="height:48px;flex:1;background:#35593A;border:none;border-radius:12px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;cursor:pointer" style-active="background:#2F5233">Send reply</button><button type="button" onClick="{{ closeReply }}" style="height:48px;background:#F1EFE8;border:none;border-radius:12px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:500;padding:0 20px;cursor:pointer" style-active="background:#E5E2D9">Cancel</button></div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ replyClosed }}" hint-placeholder-val="{{ true }}">
+              <button type="button" onClick="{{ openReply }}" style="height:46px;width:100%;background:#F1EFE8;border:none;border-radius:12px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer" style-active="background:#E5E2D9">Add your reply</button>
+            </sc-if>
+          </div>
+          <div style="background:#E9F0E9;border-radius:14px;padding:14px 17px;font-size:14.5px;line-height:1.55;color:#1F211C"><strong style="font-weight:600">You are seeing this before your manager acts on it.</strong> Your reply goes with it. Nothing here is a score, and none of it is compared to anyone else.</div>
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="padding:16px 24px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:12px"><span style="font-size:17px;font-weight:600;letter-spacing:-.02em">OverrideControl</span><span style="font-size:14.5px;color:#585B52">manager · compact</span></div>
+        <div style="padding:24px;display:flex;flex-direction:column;gap:14px">
+          <div style="background:#FBFAF7;border-radius:16px;padding:18px 20px">
+            <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:9px">AI finding · advisory · you decide</div>
+            <div style="font-size:16.5px;line-height:1.4;margin-bottom:16px">Cost objection at 02:14 not addressed.</div>
+            <sc-if value="{{ overrideIdle }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;gap:10px">
+                <button type="button" onClick="{{ doAgree }}" style="height:48px;flex:1;background:#FFFFFF;border:2px solid #1F211C;border-radius:12px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;cursor:pointer" style-active="background:#F1EFE8">Agree</button>
+                <button type="button" onClick="{{ doOverride }}" style="height:48px;flex:1;background:#FFFFFF;border:2px solid #1F211C;border-radius:12px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;cursor:pointer" style-active="background:#F1EFE8">Disagree</button>
+              </div>
+            </sc-if>
+            <sc-if value="{{ overrideReason }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <label style="font-size:14px;font-weight:500;color:#585B52">Why — one line, logged</label>
+                <input type="text" placeholder="e.g. answered off-mic in the corridor" style="height:48px;background:#FFFFFF;border:1px solid #8B8E84;border-radius:12px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;padding:0 14px;width:100%;outline:none;box-sizing:border-box" style-focus="border-color:#35593A;box-shadow:0 0 0 3px rgba(53,89,58,.22)">
+                <button type="button" onClick="{{ doLog }}" style="height:48px;background:#35593A;border:none;border-radius:12px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;cursor:pointer" style-active="background:#2F5233">Log the override</button>
+              </div>
+            </sc-if>
+            <sc-if value="{{ overrideDone }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="background:#E9F0E9;border-radius:12px;padding:13px 15px;font-size:14.5px;line-height:1.5;color:#1F211C">Logged at 14:02. Rahul is told you overrode it, and your reason. The rubric owner sees it weekly.</div>
+                <button type="button" onClick="{{ doReset }}" style="height:46px;background:#F1EFE8;border:none;border-radius:12px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:500;cursor:pointer" style-active="background:#E5E2D9">Reset demo</button>
+              </div>
+            </sc-if>
+          </div>
+          <div style="font-size:14px;line-height:1.6;color:#585B52">Agree and Disagree are identical controls in one row, one tap each, no confirm on either. Disagreeing is not an error state and carries no warning colour — it is the evidence of human oversight, so the UI treats it as the ordinary half of an ordinary decision.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BottomSheet -->
+    <div style="background:#FFFFFF;border-radius:20px;overflow:hidden;margin-top:16px;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+      <div style="padding:16px 24px;border-bottom:1px solid #F2F0E9;display:flex;align-items:baseline;gap:12px"><span style="font-size:17px;font-weight:600;letter-spacing:-.02em">BottomSheet</span><span style="font-size:14.5px;color:#585B52">every option list · rows start inside the reach zone · scrim is press-to-dismiss</span></div>
+      <div style="padding:24px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <button type="button" onClick="{{ openSheet }}" style="height:52px;background:#F1EFE8;border:none;border-radius:16px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;padding:0 22px;cursor:pointer" style-active="background:#E5E2D9">Open the live sheet</button>
+        <span style="font-size:14.5px;color:#585B52">Handle, 70px rows, sticky footer. Max height 70vh; content scrolls, the footer does not.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 06 LEGIBILITY -->
+<div style="padding:64px 56px 0;max-width:1340px">
+  <div style="border-top:1px solid #D6D4CB;padding-top:34px">
+    <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:8px">06 — What this theme costs</div>
+    <h2 style="font-size:30px;font-weight:600;letter-spacing:-.032em;margin:0 0 10px">Honest about the light theme outdoors.</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:22px">
+      <div style="background:#FFFFFF;border-radius:20px;padding:22px 24px;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="font-size:15px;font-weight:600;color:#9C3B26;margin-bottom:14px">Where it will struggle in sun</div>
+        <div style="display:flex;flex-direction:column;gap:13px">
+          <div><div style="font-size:15.5px;font-weight:600">Paper at 98% luminance is a mirror.</div><div style="font-size:14.5px;line-height:1.55;color:#585B52;margin-top:2px">Contrast ratios stay true on a monitor and collapse under a specular reflection. No hex value fixes that — only a darker ground does.</div></div>
+          <div><div style="font-size:15.5px;font-weight:600">Hairline <span style="font-family:'DM Mono',monospace;font-size:13.5px">#F2F0E9</span> disappears first.</div><div style="font-size:14.5px;line-height:1.55;color:#585B52;margin-top:2px">Card separation must survive on the paper-to-card step alone, which is why no control depends on a hairline for its boundary.</div></div>
+          <div><div style="font-size:15.5px;font-weight:600">Battery on OLED.</div><div style="font-size:14.5px;line-height:1.55;color:#585B52;margin-top:2px">A near-white ground draws measurably more than a charcoal one on the exact mid-range devices where battery anxiety is a live adoption risk.</div></div>
+        </div>
+      </div>
+      <div style="background:#FFFFFF;border-radius:20px;padding:22px 24px;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="font-size:15px;font-weight:600;color:#35593A;margin-bottom:14px">What holds regardless</div>
+        <div style="display:flex;flex-direction:column;gap:13px">
+          <div><div style="font-size:15.5px;font-weight:600">Every pair clears AA, most clear AAA.</div><div style="font-size:14.5px;line-height:1.55;color:#585B52;margin-top:2px">Lowest text pair in the system is the attention foreground on its own well at 5.85. Everything else is above 6.</div></div>
+          <div><div style="font-size:15.5px;font-weight:600">Meaning never rides on colour.</div><div style="font-size:14.5px;line-height:1.55;color:#585B52;margin-top:2px">Solid tick, dashed ring, pulsing dot, cross — each state is distinguishable in greyscale and at arm's length.</div></div>
+          <div><div style="font-size:15.5px;font-weight:600">The reach zone is theme-independent.</div><div style="font-size:14.5px;line-height:1.55;color:#585B52;margin-top:2px">Nothing about one-handed use changes if the ground inverts, so an outdoor variant is a recolour of this system, not a redesign.</div></div>
+        </div>
+      </div>
+    </div>
+    <div style="background:#F7EFDD;border-radius:16px;padding:20px 24px;margin-top:16px">
+      <div style="font-size:15.5px;font-weight:600;margin-bottom:6px">The recommendation, so it is on the record</div>
+      <p style="margin:0;font-size:15px;line-height:1.6;color:#6B4C0E;max-width:92ch">Ship light as the default. Add a charcoal outdoor variant as a user-facing toggle in Settings before the pilot, and let the week-6 midday test on a real mid-range Android decide whether it becomes the default in the field. That is roughly a week of design — one recolour pass over these fourteen components and a second contrast audit — and it is cheap insurance against a field force that cannot read the screen.</p>
+    </div>
+  </div>
+</div>
+
+<!-- 07 OPEN -->
+<div style="padding:64px 56px 0;max-width:1340px">
+  <div style="border-top:1px solid #D6D4CB;padding-top:34px">
+    <div style="font-size:13.5px;font-weight:500;color:#585B52;margin-bottom:8px">07 — Open before Phase 2</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px">
+      <div style="background:#FFFFFF;border-radius:18px;padding:20px 22px;box-shadow:0 1px 2px rgba(20,21,15,.05)"><div style="font-size:16px;font-weight:600;margin-bottom:6px">Which languages ship at pilot</div><p style="margin:0;font-size:14.5px;line-height:1.6;color:#585B52">DM Sans has no Devanagari. If Hindi or Marathi UI is in the pilot I need a second face chosen now — Noto Sans Devanagari is the safe answer — and re-measured, because the same hex at a different stroke weight is a different legibility problem. This blocks the consent screen entirely.</p></div>
+      <div style="background:#FFFFFF;border-radius:18px;padding:20px 22px;box-shadow:0 1px 2px rgba(20,21,15,.05)"><div style="font-size:16px;font-weight:600;margin-bottom:6px">Recording colour needs a doctor's eyes</div><p style="margin:0;font-size:14.5px;line-height:1.6;color:#585B52">Terracotta over signal red is a judgement, not a measurement. It should go into the week-4 doctor test as its own question: does the bar read as "on" or as "alarm" to someone who did not ask to see it?</p></div>
+      <div style="background:#FFFFFF;border-radius:18px;padding:20px 22px;box-shadow:0 1px 2px rgba(20,21,15,.05)"><div style="font-size:16px;font-weight:600;margin-bottom:6px">Outdoor variant — yes or no</div><p style="margin:0;font-size:14.5px;line-height:1.6;color:#585B52">Section 06 recommends building it. It is a second state matrix and a second audit. Say the word and it lands before the pilot; say no and I will note it as an accepted risk against the field conditions in the brief.</p></div>
+      <div style="background:#FFFFFF;border-radius:18px;padding:20px 22px;box-shadow:0 1px 2px rgba(20,21,15,.05)"><div style="font-size:16px;font-weight:600;margin-bottom:6px">Console density</div><p style="margin:0;font-size:14.5px;line-height:1.6;color:#585B52">Manager and admin run these same tokens at compact density — 13–15px base, tighter rhythm — rather than a separate system. Phase 4 is drawn that way.</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- SHEET -->
+<sc-if value="{{ sheetOpen }}" hint-placeholder-val="{{ false }}">
+<div style="position:fixed;inset:0;z-index:950;display:flex;align-items:flex-end;justify-content:center">
+  <div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:rgba(20,21,15,.5)"></div>
+  <div style="position:relative;width:min(420px,100%);background:#FBFAF7;border-radius:26px 26px 0 0;max-height:70vh;display:flex;flex-direction:column">
+    <div style="padding:12px 0 4px;display:flex;justify-content:center"><span style="width:40px;height:4px;background:#D8D6CE;border-radius:2px"></span></div>
+    <div style="padding:12px 24px 16px"><div style="font-size:21px;font-weight:600;letter-spacing:-.025em">Visit outcome</div><div style="font-size:14.5px;color:#585B52;margin-top:2px">Saved on this phone either way</div></div>
+    <div style="overflow:auto;flex:1;padding:0 24px">
+      <div style="background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(20,21,15,.05)">
+        <div style="min-height:70px;padding:0 18px;display:flex;align-items:center;gap:13px;border-bottom:1px solid #F2F0E9;cursor:pointer;background:#E9F0E9" style-active="background:#DDE7DC"><span style="width:22px;height:22px;border-radius:50%;background:#35593A;display:flex;align-items:center;justify-content:center;flex:none"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 8.4L6.2 11.6L13 4.8" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span style="font-size:17px;font-weight:500">Detailed, samples left</span></div>
+        <div style="min-height:70px;padding:0 18px;display:flex;align-items:center;gap:13px;border-bottom:1px solid #F2F0E9;cursor:pointer" style-active="background:#F7F5F0"><span style="width:22px;height:22px;border-radius:50%;border:1.5px solid #C4C7BD;flex:none"></span><span style="font-size:17px">Detailed, no samples</span></div>
+        <div style="min-height:70px;padding:0 18px;display:flex;align-items:center;gap:13px;border-bottom:1px solid #F2F0E9;cursor:pointer" style-active="background:#F7F5F0"><span style="width:22px;height:22px;border-radius:50%;border:1.5px solid #C4C7BD;flex:none"></span><span style="font-size:17px">Doctor unavailable</span></div>
+        <div style="min-height:70px;padding:0 18px;display:flex;align-items:center;gap:13px;cursor:pointer" style-active="background:#F7F5F0"><span style="width:22px;height:22px;border-radius:50%;border:1.5px solid #C4C7BD;flex:none"></span><span style="font-size:17px">Rescheduled</span></div>
+      </div>
+    </div>
+    <div style="padding:16px 24px 28px;display:flex;gap:10px">
+      <button type="button" onClick="{{ closeSheet }}" style="height:60px;flex:1;background:#35593A;border:none;border-radius:16px;color:#FFFFFF;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:600;cursor:pointer" style-active="background:#2F5233">Save</button>
+      <button type="button" onClick="{{ closeSheet }}" style="height:60px;background:#F1EFE8;border:none;border-radius:16px;color:#1F211C;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:500;padding:0 22px;cursor:pointer" style-active="background:#E5E2D9">Cancel</button>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { sheet:false, cite:false, reply:false, override:'idle' };
+  renderVals() {
+    const ov = this.state.override;
+    return {
+      sheetOpen: this.state.sheet,
+      citeOpen: this.state.cite,
+      replyOpen: this.state.reply,
+      replyClosed: !this.state.reply,
+      overrideIdle: ov === 'idle',
+      overrideReason: ov === 'reason',
+      overrideDone: ov === 'done',
+      openSheet: () => this.setState({ sheet:true }),
+      closeSheet: () => this.setState({ sheet:false }),
+      toggleCite: () => this.setState(s => ({ cite: !s.cite })),
+      openReply: () => this.setState({ reply:true }),
+      closeReply: () => this.setState({ reply:false }),
+      doAgree: () => this.setState({ override:'done' }),
+      doOverride: () => this.setState({ override:'reason' }),
+      doLog: () => this.setState({ override:'done' }),
+      doReset: () => this.setState({ override:'idle' })
+    };
+  }
+}
+</script>
+</body>
+</html>
