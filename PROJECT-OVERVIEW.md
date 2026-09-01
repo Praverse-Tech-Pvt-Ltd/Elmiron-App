@@ -4229,3 +4229,229 @@ framing is not among them. That is the same shape as the Apple probe in
 **No FE-W3 code is to be written until those decisions are answered and CI has run
 green once.** Both conditions, not either.
 
+
+---
+
+### FE-W3 — onboarding, permissions and OEM battery setup (1 September 2026)
+
+**Plan W3 was skipped and is now closed.** `docs/mr-work-split.md` §2 gives Week 3
+Frontend as "Onboarding: permission rationale + per-OEM battery setup". Weeks 4 and part
+of 5 were built instead. This closes it.
+
+**The numbering correction, recorded because two things now carry the same name.**
+Earlier prompts and the two commits below used "FE-W3" for field capture and background
+geolocation:
+
+- `db2ab2e` docs: specify FE-W3 field capture before building it
+- `3b64ea1` docs: record FE-W3-SPEC — six decisions open, no code until they are answered
+
+That was wrong. **Field capture, geofence, check-in and shift start/end are plan W5.**
+Plan W3 is this sprint. `docs/fe-w3-spec.md` and the `FE-W3-SPEC` entry above are
+therefore *W5* specifications under a W3 filename, and neither has been renamed here —
+renaming a committed spec mid-flight is worse than a recorded correction. **The gate in
+that entry — "no FE-W3 code until those decisions are answered and CI has run green
+once" — belongs to the W5 work and is untouched.** Nothing in this sprint requests a
+position, reads a fix, or crosses into it.
+
+#### Detection, and the Realme/Oppo trap
+
+`apps/field/src/onboarding/oem.ts` maps `{ manufacturer, brand, model }` to one of five
+families. The input is a plain object, not a native module: `Platform.constants` is read
+once in `device.ts` and passed in, so the mapping — the part with the bugs in it — is
+testable under vitest with no device.
+
+**Brand is matched before manufacturer, and that ordering is the whole point.** Realme
+was spun out of Oppo and Realme handsets have historically reported `manufacturer=OPPO`
+while reporting `brand=realme`. Reading manufacturer first is a passing-looking
+implementation that walks a Realme user through ColorOS's three-settings-in-three-places
+flow when Realme UI puts two settings on one screen — nothing on their phone matches
+what the app tells them to tap. **Negative control run:** deleting the `realme` brand row
+so the lookup falls through to `manufacturer=OPPO` fails with
+`expected 'oppo' to be 'realme'`, and the row was restored.
+
+Two smaller decisions, both asserted: matching is on **exact tokens, never substrings**,
+because a false positive ("vivobook") is strictly worse than `unknown`; and the lookups
+are `Map`s rather than object literals, because the key comes off the device and
+`brand: "constructor"` resolves through `Object.prototype` to a function that is not
+`undefined`. `unknown` is a first-class outcome with its own screen — it is the majority
+of the world, every Pixel and every emulator.
+
+#### The unresolvable-intent rule
+
+`startActivity` with a component that does not resolve throws
+`ActivityNotFoundException`. Not a rejected promise — a crash, on the settings screen of
+the onboarding flow, on first run, on exactly the device population the feature exists
+for. `apps/field/src/onboarding/intents.ts` holds **one table, one place**, and
+`launch.ts` enforces four rules: probe before offering; render usefully with zero working
+intents; wrap the launch regardless; never throw. `launchSettings` has no throwing path
+and returns `'opened' | 'unresolvable' | 'failed'` — there is deliberately no `'error'`
+member, because a settings screen that will not open is the ordinary condition here.
+
+**Read from `IntentModule.kt` in the installed React Native rather than from the docs**,
+because the three APIs are not interchangeable:
+
+- `sendIntent(action)` builds `Intent(action)`, calls `resolveActivity` first and
+  **rejects** rather than throwing.
+- `openSettings()` builds `ACTION_APPLICATION_DETAILS_SETTINGS` **with the `package:`
+  data URI** and catches into a rejection. `sendIntent` can set extras but not data, so
+  that action sent as a bare action would resolve, launch and land nowhere — a
+  working-looking button that does nothing, which is worse than no button.
+- `openURL`/`canOpenURL` build `Intent(ACTION_VIEW, Uri.parse(url))` and never parse a
+  component out of an `intent://` URL.
+
+**So React Native cannot target a vendor component at all**, and `expo-intent-launcher` —
+a native module, therefore a dev-client rebuild — is not a dependency. The four
+component-targeted vendor intents are declared in the table, marked inexpressible, and
+their buttons never render. **The designed fallback is not hypothetical: it is the
+shipping default on every device.** Widening `SUPPORTED_TARGET_KINDS` is the only change
+needed when the module lands; no screen changes with it.
+
+One narrowing is recorded rather than hidden: React Native exposes no `resolveActivity`
+for a bare action, so `probe` returns true for the two expressible kinds and the real
+check is the one `sendIntent` performs natively immediately before launching. The check
+still precedes any activity start; what is lost is only hiding the button in advance, and
+rule 2 is what makes that acceptable.
+
+#### The screens
+
+A5-A8 are one component (`packages/ui/src/OemBatteryScreen.tsx`) with four sets of copy
+in `oem-content.ts`, plus a generic screen for `unknown`. Steps carry a Done state, which
+is **not persisted**: these are settings on the phone, the app cannot read back whether
+the MR changed them, and a tick surviving a restart would be the app asserting something
+it does not know.
+
+**The 20-second videos do not exist.** The control renders **disabled, labelled
+"20-second video — not recorded yet"**, rather than being omitted — omitting it would
+leave no trace that a designed element is missing. No third-party link: putting these
+steps on YouTube would send an MR's device identity to Google on first run of an app
+whose premise is careful handling of what it collects.
+
+A3 names all four notification types and states a numeric cap. A4 defers the microphone
+to the first real visit and **keeps the MR's own voice note separate from recording the
+doctor** — asserted as two distinct rendered nodes, so a rewrite that merges them into
+one friendly sentence about "recording" fails. S4 gives two actions as two
+`PrimaryButton`s, equal in the markup and not only in the copy.
+
+**Background location is not requested, declared or prepared for.** Android will not
+grant it in the same prompt as foreground location, and `FE-W3-SPEC` raises the Play
+declaration as an open decision. `REQUESTS_BACKGROUND_LOCATION = false` is asserted.
+
+**S4's ₹600 and 14 minutes are the design's estimates and the screen says so on screen.**
+Nothing here measured them: no MR has been timed and the mock service is fixtures.
+
+#### Denial blocks nothing, asserted as a property
+
+`permissions.ts` states the three S4 rules as functions rather than prose, and
+`permissions.test.ts` checks them across **all 27 permission combinations**:
+`reachableRoutes(denied)` equals `reachableRoutes(granted)`; `persistentBannerFor` is
+always `null`; `shouldPromptForLocation` is false for `app-launch`, `screen-focus` and
+`elapsed-time` across 500 simulated launches and true only for
+`explicit-user-request`. There is no attempt counter and no backoff — those are designs
+for asking repeatedly. Manual check-in is returned in every state.
+
+These read as tautologies. They are tautologies a future `if (location === 'denied')`
+would break, which is the point.
+
+#### Boundary
+
+No geofence, check-in/out or shift start/end (plan W5). No consent handoff (plan W6, and
+it needs the doctor test first). No recording UI (plan W7). No dependency added.
+
+#### Tests
+
+| Package | Before | After |
+| --- | --- | --- |
+| `@fieldforce/field` vitest | 44 | 115 |
+| `@fieldforce/field` jest | 24 | 48 |
+| `@fieldforce/ui` vitest / jest | 4 / 19 | 4 / 19 |
+| `@fieldforce/core` vitest | 21 | 21 |
+| **Total** | **112** | **207** |
+
+`pnpm typecheck`, `pnpm lint` and the format check pass. `prettier --check` still reports
+`services/api/scripts/seed-one-mr.mjs`, which is untracked and predates this work.
+
+`expo export --platform android` was also run, and the Hermes bundle contains the copy
+from all four new screens. That is more than the tests prove: it shows the new routes
+resolve under **Metro**, whose resolution differs from both TypeScript's and jest's — the
+onboarding modules were first written with NodeNext `.js` import specifiers, which
+typechecked and would have failed to bundle. One environment note: the `expo` shim in
+`apps/field/node_modules/.bin` points at a path that does not exist under this repo's
+`nodeLinker: hoisted`, so `pnpm run export` fails with `Cannot find module`. Invoking
+`node node_modules/expo/bin/cli` from the repo root works. Pre-existing, not from this
+sprint.
+
+#### Run on the emulator
+
+The debug build was run against Metro on a Pixel emulator (`com.praversetech.fieldforce`,
+Android 16) and the flow was exercised by hand.
+
+**Intent resolution, queried directly from the package manager rather than inferred:**
+
+| Intent | Resolves |
+| --- | --- |
+| `IGNORE_BATTERY_OPTIMIZATION_SETTINGS` | yes — `Settings$AppBatteryUsageActivity` |
+| `APPLICATION_DETAILS_SETTINGS` + `package:` data | yes — `applications.InstalledAppDetails` |
+| `com.miui.securitycenter/...AutoStartManagementActivity` | no activity found |
+| `com.coloros.safecenter/...StartupAppListActivity` | no activity found |
+| `com.vivo.permissionmanager/...BgStartUpManagerActivity` | no activity found |
+
+**Two of two expressible intents resolve; three of three vendor components do not** —
+which is the expected shape on a Pixel and is exactly what the design predicts.
+
+The emulator detects as `unknown` and got the generic screen, with both steps, both
+"What you'll see" lines, both Done toggles and both shortcuts. Pressing them:
+
+- step 1 opened **App battery usage**;
+- step 2 opened **this app's own App info page**, with its battery entry on it.
+
+**That second result is the justification for the `app-settings` kind existing.** Sent as
+a bare action through `sendIntent`, `APPLICATION_DETAILS_SETTINGS` has no `package:` data
+and does not reach that page — the button would have looked like it worked and gone
+nowhere. It was written as its own kind on the strength of reading `IntentModule.kt`, and
+the device confirms the reading.
+
+The app returned intact from both launches, the Done toggle flipped to "Done", and
+**logcat shows no `ReactNativeJS` warning or error at all.** The LogBox toast visible in
+the screenshots is Metro failing to serve `LogBoxImages` — a `react-native@0.86.3` /
+`0.86.2` skew under pnpm, present before this work and unrelated to it.
+
+S4 was rendered on the device too: two buttons of identical weight, and the estimate
+disclaimer under the ₹600 line.
+
+#### Not verified without a physical device
+
+The emulator is AOSP. It has none of the four vendor ROMs on it, so it cannot answer the
+questions this feature exists to answer. The following are **unverified**, and the first
+three are the feature's whole subject:
+
+1. **That any vendor component intent resolves on any real handset.** Every one is
+   crowd-sourced; none has been opened on a Xiaomi, Oppo, Vivo or Realme.
+2. **That `Platform.constants.Brand`/`Manufacturer` carry the values assumed** — in
+   particular that a current Realme still reports `manufacturer=OPPO`. The mapping is
+   tested; the fingerprints it is tested against are not observed from hardware.
+3. **That the numbered steps match what the current MIUI, ColorOS, Funtouch and Realme UI
+   actually show**, including the "What you'll see" wording, which is the line whose
+   entire job is matching the vendor's screen.
+4. **That `Linking.openSettings()` and the battery-optimisation action reach a useful
+   page on each of the four skins.** Both work on the AOSP emulator (above); the skins
+   reorganise these pages and that is not evidence about them.
+5. **That the app survives the OEM killers at all** — the premise of the sprint, testable
+   only by leaving a build in a pocket for an hour on each of the four.
+6. Android 11+ package-visibility behaviour without a `<queries>` declaration.
+
+#### Copy that is not sourced
+
+`docs/design/` **is not in this repository** — the four Phase documents were never
+committed — so this was built from the written extract in the prompt, and the gaps are
+flagged in code rather than filled in:
+
+- **A8's numbered steps are not in the extract.** Its two step titles are derived from
+  the extract's own words ("two settings, same screen", and Realme UI's ColorOS lineage
+  whose settings A6 names), and A8 carries **no "What you'll see" line** because that text
+  would be fabricated. `A8_STEP_DETAIL_IS_UNSOURCED` and a test hold the gap open.
+- **A3's four notification names are derived from features in this codebase**, not
+  transcribed from Phase 2, and **the cap number is not sourced at all** —
+  `NAMES_ARE_DERIVED`, `DAILY_CAP_IS_UNSOURCED`. Both must be checked against Phase 2
+  before this screen ships.
+- A1, A2 and S1-S3 were **not built**. The extract does not describe them and inventing
+  screens is worse than leaving the sprint visibly partial.

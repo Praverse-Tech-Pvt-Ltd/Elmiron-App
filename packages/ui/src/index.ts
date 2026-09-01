@@ -24,6 +24,8 @@ export { BodyText, Heading, Label } from './Text';
 export type { TextProps } from './Text';
 export { ListRow } from './ListRow';
 export type { ListRowProps } from './ListRow';
+export { OemBatteryScreen } from './OemBatteryScreen';
+export type { OemBatteryScreenProps } from './OemBatteryScreen';
 export { PrimaryButton } from './PrimaryButton';
 export { LONG_RETRY_AFTER_ATTEMPTS, QueueScreen, rowStateFor } from './QueueScreen';
 export type {
@@ -34,6 +36,8 @@ export type {
 } from './QueueScreen';
 export type { PrimaryButtonProps } from './PrimaryButton';
 export { Screen } from './Screen';
+export { SetupStepList } from './SetupStepList';
+export type { SetupStepListProps, SetupStepView } from './SetupStepList';
 export type { ScreenProps } from './Screen';
 export { Spinner } from './Spinner';
 export type { SpinnerProps } from './Spinner';
