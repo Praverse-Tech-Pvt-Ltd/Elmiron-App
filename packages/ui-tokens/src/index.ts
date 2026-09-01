@@ -18,7 +18,7 @@ export {
 } from './contrast.js';
 export type { ContrastResult, ContrastUsage, Rgb, WcagLevel } from './contrast.js';
 
-export { placeholderPalette } from './palette.js';
+export { brandPalette } from './palette.js';
 export type { PaletteColor } from './palette.js';
 
 export { requiredContrastPairs, tokens } from './tokens.js';
