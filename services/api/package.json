@@ -12,7 +12,8 @@
     "purge:audio": "node scripts/purge-expired-audio.mjs",
     "check:purge-health": "node scripts/check-purge-health.mjs",
     "reconcile:restore": "node scripts/reconcile-after-restore.mjs",
-    "seed:reference": "node scripts/seed-reference-data.mjs"
+    "seed:reference": "node scripts/seed-reference-data.mjs",
+    "seed:mr": "node scripts/seed-one-mr.mjs"
   },
   "dependencies": {
     "@fieldforce/core": "workspace:*"
