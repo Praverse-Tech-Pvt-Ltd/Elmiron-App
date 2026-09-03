@@ -18,6 +18,10 @@
  * TypeScript's NodeNext resolution does.
  */
 
+export { AnalysisReplyScreen } from './AnalysisReplyScreen';
+export type { AnalysisReplyScreenProps } from './AnalysisReplyScreen';
+export { AnalysisScreen } from './AnalysisScreen';
+export type { AnalysisFinding, AnalysisScreenProps } from './AnalysisScreen';
 export { Banner } from './Banner';
 export type { BannerAction, BannerProps, BannerTone } from './Banner';
 export { BeatPlanScreen } from './BeatPlanScreen';
@@ -31,6 +35,13 @@ export type { CallReportScreenProps } from './CallReportScreen';
 export { Card } from './Card';
 export type { CardProps, CardTone } from './Card';
 export { CitationSpan } from './CitationSpan';
+export { CoachingFeedScreen } from './CoachingFeedScreen';
+export type {
+  CoachingFeedRow,
+  CoachingFeedScreenProps,
+  CoachingFinding,
+  CoachingTrendPoint,
+} from './CoachingFeedScreen';
 export { ConsentScreen } from './ConsentScreen';
 export type {
   ConsentAnswer,

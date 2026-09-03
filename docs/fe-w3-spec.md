@@ -554,6 +554,83 @@ was shown a time five and a half hours from the one on their own clock.
 `indicatorStateFor` now formats through `clockFrom`, which slices the characters
 and keeps the offset the server sent.
 
+### Phase 4 — §3.6 partially reversed, 3 September 2026
+
+> **THIS IS A REVERSAL OF A REGULATORY DECISION AND IT IS RECORDED HERE ON
+> PURPOSE.** `frontend-plan-v2.md` §3.6 lists "any screen that displays a
+> transcript, analysis or AI summary" under *never build*, and §4a above records
+> that line being put to a human on 2 September 2026 and **upheld**. On 3 September
+> it was put again, with Phase 4 attached, and was **reopened for the MR's own
+> screens only**. A regulatory line that moves silently is worse than one that
+> never moved, so the scope of the reversal is written out below rather than being
+> inferred from what happens to exist in the repository.
+
+**Reopened.** D1, D2 and D3 — the MR's coaching feed, their own analysis with its
+citations, and their reply. The MR reading an analysis *of themselves*, before
+anyone acts on it, is the half of the design that exists to make the system
+contestable.
+
+**Still closed.** E1 and E2 — the manager's coaching queue and the analysis
+review with its override. Both put an AI analysis of a named employee in front of
+their manager, which is the surveillance half of the same product, and the
+reversal did not extend to it. `FindingCard` and `OverrideControl` remain built,
+tested and unrendered, as they were before.
+
+**Never reopened, and not part of this at all: the scoring ban.** §3.6's first
+bullet — no ranking, score, rank, percentile or grade, "not for MRs, not in the
+console, not 'just a sort order'" — was not in question and has not moved.
+`src/coaching/feed.ts` carries the ban at the top of the file, `trendFor` has no
+parameter another person's number could enter through, and both the logic and the
+render suites assert the absence.
+
+**What the MR's screens show, and what they refuse to.**
+
+- **The sampling ratio is on the feed.** "3 visits reviewed of 42" is the design's
+  own addition against the brief, and its argument holds: an MR who believes every
+  visit is analysed behaves like someone under total observation. The reviewed
+  count is never rendered without the total beside it.
+- **Every finding carries its citation, and a finding without one is not shown.**
+  `FindingCitationSchema`'s array is `.min(1)`, but Zod's minimum does not reach
+  the TypeScript type — so a server that broke the rule would arrive as a claim
+  about the MR with nothing behind it. Dropping it is the lesser harm; rendering an
+  assertion the MR cannot check is the thing the citation exists to prevent.
+- **Nothing is truncated.** "Two worked, one to try — never a list of six
+  failures" is an obligation on the rubric, not on the screen. A UI that hid the
+  sixth would be hiding a finding the MR has a right to contest.
+- **No quote can be played and no reply can be spoken.** Both need the audio
+  pipeline in FE-W4. `CitationSpan.onPlay` is omitted and D3's "hold to say it
+  instead" is absent, each with a sentence saying why — a dead play control would
+  tell an MR a recording of them exists.
+- **A refusal is shown as a refusal.** `AnalysisStatus` has `refused` as a
+  first-class value and the contract calls it correct behaviour when the model
+  cannot cite without speculating. It renders as the system declining to guess,
+  never as an error.
+
+### Phase 4 — the console, stood up
+
+`apps/console` was a placeholder holding one file. It is now a Next.js app: the
+compact-density scale Phase 4 asks for (`compactTypography` in `ui-tokens`, every
+step chosen rather than multiplied off the phone scale), a small set of web
+elements built from the shared colour, space and radius tokens, and **E3**.
+
+**`@fieldforce/ui` is deliberately not used there.** It is React Native; rendering
+it in a browser means `react-native-web` and a second rendering target to maintain
+for the life of the product, for components whose brief is a phone in one hand.
+Phase 4 asks for the same *tokens* at compact density, not the same components.
+The tokens are the contract; the components are not.
+
+**E3 is the only Phase 4 console screen that may exist**, and it was never blocked:
+consent versions, audit and retention show no transcript, no analysis and no AI
+output. One of its three panels has data behind it and two do not — there is no
+audit-log path and no retention path in `API_PATHS`, so those panels name what is
+missing instead of printing the design's illustrative "41 recordings purged" and
+"90 days" as though a server had said them.
+
+**DM Sans is not loaded in the console.** The field app registers four faces
+through `expo-font`; the web equivalent is `next/font` and a decision about
+self-hosting, and a half-applied typeface would be worse than the honest system
+stack it falls back to.
+
 ---
 
 ## 5. What this specification does not cover

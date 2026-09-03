@@ -265,6 +265,37 @@ export const tokens: DesignTokens = {
  */
 export const fontFamilyFor = (weight: TypeStyle['weight']): string => tokens.font[weight];
 
+/**
+ * The console's scale — Phase 4: "the same Phase 1 tokens at compact density".
+ *
+ * **A desk product on a laptop, not a phone in the sun.** Phase 1's floors — body
+ * at 16, no tappable label below 14 — are justified by a specific situation:
+ * outdoors, mid-range Android, partial brightness, one thumb. A manager at a desk
+ * with a mouse is none of those, and holding a phone's floors on a 1320px console
+ * costs rows on screen for no legibility anyone gains. Phase 4 sets the base at
+ * 13–15px and this is that.
+ *
+ * **Every step is chosen, not multiplied.** A blind 0.875 factor would produce
+ * values like 11.8 that no one decided on, and would quietly drag the figure role
+ * under the point where tabular digits still read across a table. The ratios of
+ * the committed scale are preserved; the numbers are picked.
+ *
+ * The colour tokens are shared unchanged, which is the point of "same tokens":
+ * `requiredContrastPairs` already covers every pair the console uses, so nothing
+ * here can introduce an inaccessible combination.
+ */
+export const compactTypography: TypographyTokens = {
+  figure: { size: 29, lineHeight: 33, weight: '600', letterSpacing: -1.15 },
+  display: { size: 26, lineHeight: 30, weight: '600', letterSpacing: -0.85 },
+  title: { size: 22, lineHeight: 26, weight: '600', letterSpacing: -0.7 },
+  heading: { size: 15, lineHeight: 20, weight: '600' },
+  body: { size: 14.5, lineHeight: 21, weight: '400' },
+  secondary: { size: 13.5, lineHeight: 19, weight: '400' },
+  label: { size: 12.5, lineHeight: 17, weight: '600' },
+  control: { size: 14, lineHeight: 19, weight: '600' },
+  value: { size: 15, lineHeight: 20, weight: '400' },
+};
+
 export interface ContrastPair {
   readonly name: string;
   readonly foreground: string;

@@ -11,6 +11,7 @@ import {
   CreateVisitRequestSchema,
   GetMeResponseSchema,
   ListAnalysesResponseSchema,
+  RespondToAnalysisRequestSchema,
   ListCallReportsResponseSchema,
   ListConsentRecordsResponseSchema,
   ListConsentTextVersionsResponseSchema,
@@ -37,6 +38,7 @@ import type {
   GetMeResponse,
   ListAnalysesRequest,
   ListAnalysesResponse,
+  RespondToAnalysisRequest,
   ListCallReportsRequest,
   ListCallReportsResponse,
   GetActiveConsentTextRequest,
@@ -67,6 +69,8 @@ import {
   VisitSchema,
 } from './entities.js';
 import type { CallReport, CheckIn, CheckOut, SampleAndInput, Visit } from './entities.js';
+import { AnalysisSchema } from './analysis.js';
+import type { Analysis } from './analysis.js';
 import { ConsentRecordSchema, ConsentTextVersionSchema } from './consent.js';
 import type { ConsentRecord, ConsentTextVersion } from './consent.js';
 
@@ -349,6 +353,34 @@ export const createApiClient = (options: ApiClientOptions) => {
         'GET',
         `${API_PATHS.analyses}${toQueryString(params as Record<string, QueryValue>)}`,
         ListAnalysesResponseSchema,
+      ),
+
+    /**
+     * One analysis, by id — Phase 4 D2.
+     *
+     * Fetched rather than picked out of a list already in hand, because reading it
+     * is an event: `mrViewedAt` is stamped by the server on this call, and it is
+     * what makes "you saw this before your manager acted on it" a fact the audit
+     * log can support rather than a claim the UI makes about itself.
+     */
+    getAnalysis: (id: string): Promise<Analysis> =>
+      request('GET', API_PATHS.analysis(id), AnalysisSchema),
+
+    /**
+     * The MR's reply to their own analysis — D3.
+     *
+     * **Attached, never overwriting.** The contract names it that way and the
+     * schema keeps `mrResponse` beside the findings rather than inside them: a
+     * reply that edited the finding would destroy the thing being contested. The
+     * response comes back on the analysis, so the caller re-renders from the
+     * server's copy rather than its own optimistic one.
+     */
+    respondToAnalysis: (id: string, input: RespondToAnalysisRequest): Promise<Analysis> =>
+      request(
+        'POST',
+        API_PATHS.analysisResponse(id),
+        AnalysisSchema,
+        RespondToAnalysisRequestSchema.parse(input),
       ),
 
     syncPush: (input: SyncPushRequest): Promise<SyncPushResponse> =>
