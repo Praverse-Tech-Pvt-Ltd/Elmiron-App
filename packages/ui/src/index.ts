@@ -23,6 +23,8 @@ export type { AnalysisReplyScreenProps } from './AnalysisReplyScreen';
 export { AnalysisScreen } from './AnalysisScreen';
 export type { AnalysisFinding, AnalysisScreenProps } from './AnalysisScreen';
 export { Banner } from './Banner';
+export { BrandLine } from './BrandLine';
+export type { BrandLineProps } from './BrandLine';
 export type { BannerAction, BannerProps, BannerTone } from './Banner';
 export { BeatPlanScreen } from './BeatPlanScreen';
 export type { BeatPlanScreenProps, BeatPlanStop } from './BeatPlanScreen';

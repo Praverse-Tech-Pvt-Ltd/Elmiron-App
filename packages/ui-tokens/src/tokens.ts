@@ -117,6 +117,16 @@ export interface FontTokens {
   readonly '500': string;
   readonly '600': string;
   readonly '700': string;
+  /**
+   * Cormorant Garamond, and it has exactly one use.
+   *
+   * §03: "The one Cormorant moment — login splash only, weight 500 at 36px. Not a
+   * screen title, not a section header, not an empty state." It is deliberately
+   * outside the weight map above so it cannot be reached through
+   * `fontFamilyFor` — the only way to render it is `BrandLine`, and
+   * `packages/ui`'s own test asserts that no other component imports it.
+   */
+  readonly brand: string;
 }
 
 export interface TypeStyle {
@@ -154,6 +164,13 @@ export interface TypographyTokens {
   readonly control: TypeStyle;
   /** 19/400 — the value inside an input, larger than body on purpose. §05. */
   readonly value: TypeStyle;
+  /**
+   * 36/500 — the brand line, and nothing else. §03's single Cormorant exception.
+   *
+   * Its own step because it is not part of the working scale: no screen composes
+   * with it, nothing steps down from it, and it appears once in the product.
+   */
+  readonly brand: TypeStyle;
 }
 
 /**
@@ -230,6 +247,7 @@ export const tokens: DesignTokens = {
     '500': 'DMSans_500Medium',
     '600': 'DMSans_600SemiBold',
     '700': 'DMSans_700Bold',
+    brand: 'CormorantGaramond_500Medium',
   },
   space: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 },
   radius: { sm: 4, md: 8, well: 12, control: 16, card: 20, pill: 999 },
@@ -243,6 +261,7 @@ export const tokens: DesignTokens = {
     label: { size: 13.5, lineHeight: 18, weight: '500' },
     control: { size: 17, lineHeight: 22, weight: '600' },
     value: { size: 19, lineHeight: 24, weight: '400' },
+    brand: { size: 36, lineHeight: 42, weight: '500' },
   },
   target: {
     floor: 44,
@@ -294,6 +313,9 @@ export const compactTypography: TypographyTokens = {
   label: { size: 12.5, lineHeight: 17, weight: '600' },
   control: { size: 14, lineHeight: 19, weight: '600' },
   value: { size: 15, lineHeight: 20, weight: '400' },
+  // The console has no login splash and no brand moment. The step exists to
+  // satisfy the shared type; nothing in `apps/console` renders it.
+  brand: { size: 30, lineHeight: 36, weight: '500' },
 };
 
 export interface ContrastPair {

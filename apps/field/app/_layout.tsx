@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { CormorantGaramond_500Medium } from '@expo-google-fonts/cormorant-garamond';
 import {
   DMSans_400Regular,
   DMSans_500Medium,
@@ -30,6 +31,10 @@ const FACES = {
   DMSans_500Medium,
   DMSans_600SemiBold,
   DMSans_700Bold,
+  // §03's single Cormorant moment. One face, one weight, one screen — loaded here
+  // because `useFonts` registers everything in one call, not because the brand
+  // line is part of the working scale.
+  CormorantGaramond_500Medium,
 };
 
 export default function RootLayout(): ReactNode {

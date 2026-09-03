@@ -3,7 +3,7 @@
 > [!IMPORTANT]
 > This is the canonical frontend status; the Claude-side mirror at `claude/frontend-status.md` is a convenience copy and defers to this file.
 
-**Snapshot at FE-Build-2f close, 31 August 2026.** Describes what exists, not what was planned.
+**Snapshot at Phase 4 close, 3 September 2026.** Describes what exists, not what was planned.
 
 If this file and a chat window disagree, this file is wrong — update it. If this file and the repo disagree, **the repo wins**: `PROJECT-OVERVIEW.md`, `.ai-collab/decisions.md`, `.ai-collab/constraints.md`, `docs/gotchas.md` and `docs/brand-identifier-decision.md` are tracked. This is a summary for people on the Claude side who cannot see the repo.
 
@@ -11,9 +11,11 @@ If this file and a chat window disagree, this file is wrong — update it. If th
 
 ## One-line status
 
-**Every test green locally. Nothing pushed, CI has never run, and FE-G1/FE-G2 remain open.** The app *has* now been built and run on the emulator — `emulator-passed / device-pending`, never a passed gate.
+**Every test green locally. Nothing pushed, CI has never run, and FE-G1/FE-G2 remain open.** The app has been signed into and driven end to end on the emulator — `emulator-passed / device-pending`, never a passed gate.
 
-**34 commits ahead of `origin/main`, 0 behind**, checked 31 August after merging origin. The push is blocked on a personal access token that lacks `repo` scope — and now also needs `workflow` scope, since `.github/workflows/ci.yml` has been modified. See `docs/push-readiness.md`.
+**47 commits ahead of `origin/main`, 0 behind**, checked 3 September. The push is **not** a token-scope problem: `Devpt1904` does not have write access to the repository, which is an account-level authorisation failure no scope change fixes. `workflow` scope is a second gate behind it. See `docs/push-readiness.md`, which is where that misdiagnosis was caught.
+
+**All four design phases are built except three frames, each blocked on a decision rather than on engineering** — see *Design phases* below.
 
 ---
 
@@ -26,25 +28,41 @@ If this file and a chat window disagree, this file is wrong — update it. If th
 | FE-R1 / R1a | Package identifier rename. Unplanned, necessary. | — | Done |
 | FE-H1 | Render harness — jest for `.tsx`, vitest for `.ts`, boundary enforced by tests | — | Done |
 | **FE-W2b** | **`packages/ui` harness + CI · 19 route cases · the queue screen · 3 mutation proofs** | — | **Done** |
+| **FE-W3** | **The field surface — tabs, Today, doctors, beat plan, visit, mileage, transparency, settings, the outbox** | — | **Done** |
+| **Phase 2** | **28/28 frames. C5 samples and B7 day-end closed it on 3 September.** | — | **Done** |
+| **Phase 3** | **The consent handoff — 3 variants, the legal layer, the declined state (D1–D5)** | — | **D6/D7 blocked on audio** |
+| **Phase 4** | **The MR's coaching (D1–D3) and the admin console (E3)** | — | **E1/E2 held by §3.6** |
+| **Phase 1** | **14/14 components, tokens, DM Sans, the Cormorant brand line** | — | **Done** |
+
+### Design phases — what is left, and who owns it
+
+| Frame | Blocked on | Owner |
+|---|---|---|
+| Phase 3 D6 · recording bar | Audio capture. No `expo-audio`/`expo-av`; adding a native module takes the app out of Expo Go. FE-W4. | Engineering, once the dev-build path is chosen |
+| Phase 3 D7 · voice note | Same. | Same |
+| Phase 4 E1 · coaching queue | §3.6 — puts an AI analysis of a named employee in front of their manager. The 3 September reversal covered the MR's own screens only. | A human decision |
+| Phase 4 E2 · analysis review | Same. | Same |
+
+A bar reading "Recording · he agreed at 11:58" over an app that captures nothing is not an unfinished feature, it is a false statement to a doctor who has just been asked to trust it. That is why D6/D7 stay unbuilt rather than being stubbed.
 
 **Checks** all pass. **Gates** — none have passed. Both terms were used interchangeably early on; fixed in the repo record.
 
 ### Test counts — per workspace, per runner
 
-| Workspace | Runner | Count |
-|---|---|---|
-| `field` | vitest | 44 |
-| `field` | jest | 24 |
-| `ui` | vitest | 4 |
-| `ui` | jest | 19 |
-| `ui-tokens` | vitest | 38 |
-| `core` | vitest | 21 |
-| `mock` | vitest | 40 |
-| `api` | vitest | 333 (stack up, passed not skipped) |
+| Workspace | Runner | Count | Was, 31 Aug |
+|---|---|---|---|
+| `field` | vitest | 302 | 44 |
+| `field` | jest | 72 | 24 |
+| `ui` | vitest | 4 | 4 |
+| `ui` | jest | 212 | 19 |
+| `ui-tokens` | vitest | 54 | 38 |
+| `core` | vitest | 21 | 21 |
+| `mock` | vitest | 40 | 40 |
+| `api` | vitest | 344 (stack up, passed not skipped) | 333 |
 
-**523 total. A single figure now spans two runners and six workspaces and hides which one moved — always report the split.**
+**1,049 total. A single figure spans two runners and seven workspaces and hides which one moved — always report the split.**
 
-The two added since FE-W2b are `packages/ui/src/Screen.test.tsx` — the safe-area inset, asserted as arithmetic. Counts were re-measured either side of the origin merge and did not move.
+**A count is not coverage, and three defects this week were found by running the app rather than the suite:** the consent copy misgendered the rep, the "no notice" gate fired while still loading, and the sync indicator printed a raw UTC timestamp on the home screen. Each now has a regression test naming the emulator run that caught it. The suite is worth what it asserts, not what it totals.
 
 ---
 

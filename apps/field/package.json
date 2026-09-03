@@ -16,6 +16,7 @@
     "test:render": "jest"
   },
   "dependencies": {
+    "@expo-google-fonts/cormorant-garamond": "^0.4.1",
     "@expo-google-fonts/dm-sans": "^0.4.2",
     "@expo/metro-runtime": "~57.0.9",
     "@fieldforce/core": "workspace:*",

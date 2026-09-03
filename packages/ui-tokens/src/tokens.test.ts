@@ -81,8 +81,27 @@ describe('the typeface', () => {
     expect(fontFamilyFor('700')).toBe('DMSans_700Bold');
   });
 
-  it('carries no face below 400, which §03 bans anywhere', () => {
-    const weights = Object.keys(tokens.font);
+  it('carries no DM Sans face below 400, which §03 bans anywhere', () => {
+    const weights = Object.keys(tokens.font).filter((key) => /^\d+$/u.test(key));
     expect(weights).toEqual(['400', '500', '600', '700']);
+  });
+
+  it('keeps Cormorant out of the weight map, so nothing can reach it by weight', () => {
+    // §03: "the one Cormorant moment — login splash only". It is not a weight, so
+    // `fontFamilyFor` cannot return it and a screen cannot ask for it by accident.
+    // `BrandLine` is the only way in, and packages/ui asserts that separately.
+    expect(tokens.font.brand).toBe('CormorantGaramond_500Medium');
+    const byWeight = (['400', '500', '600', '700'] as const).map((w) => fontFamilyFor(w));
+    expect(byWeight).not.toContain(tokens.font.brand);
+  });
+
+  it('gives the brand line the size and weight §03 names, and no other role that size', () => {
+    expect(tokens.typography.brand.size).toBe(36);
+    expect(tokens.typography.brand.weight).toBe('500');
+    // Keyed rather than `Object.entries`, which widens the value to `any`.
+    const others = (Object.keys(tokens.typography) as (keyof typeof tokens.typography)[])
+      .filter((role) => role !== 'brand')
+      .map((role) => tokens.typography[role].size);
+    expect(others).not.toContain(36);
   });
 });

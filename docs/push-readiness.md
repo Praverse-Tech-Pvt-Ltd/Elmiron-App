@@ -10,7 +10,8 @@ no memory of this one — can tell what is true from what is merely claimed.
 
 ## What is waiting
 
-**34 commits**, ahead of `origin/main` and 0 behind it after the 31 August merge. The
+**47 commits** as of 3 September, ahead of `origin/main` and 0 behind it after the
+31 August merge. (**34** when this page was written.) The
 oldest is `dd9c1a4`, **14 August 2026** — "FE-W1 §1: workspace config, and a lint-time
 replacement for the linker guard". Seventeen days of work exists on one laptop.
 
@@ -106,3 +107,18 @@ Two things are fixed and tested but not confirmed by looking at them:
 
 Neither is closed by a passing test, and neither should be described as closed until
 the screenshot exists.
+
+**Both closed by observation, 3 September 2026.** The app was signed into on the
+Pixel 10 emulator and driven through onboarding, Today, a visit, the consent
+handoff and the declined state.
+
+1. **The safe-area inset — closed.** Every screenshot from that run shows the
+   heading clear of the status bar and the punch-hole.
+2. **The glyph rendering — closed.** The queue and sync glyphs render as glyphs,
+   not tofu. This is also why `StatusGlyph` was deliberately left off DM Sans when
+   the typeface landed the same day: a webfont missing a codepoint would reintroduce
+   exactly the tofu this item was watching for, and the system font is the one thing
+   guaranteed to carry U+2713 and U+2715 on every OEM build in scope.
+
+What is still **not** closed by that run: FE-G1 and FE-G2 are device gates, and an
+emulator is not a device.

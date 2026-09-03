@@ -1,7 +1,26 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { Banner, BodyText, Heading, PrimaryButton, Screen, TextField } from '@fieldforce/ui';
+import {
+  Banner,
+  BodyText,
+  BrandLine,
+  Heading,
+  PrimaryButton,
+  Screen,
+  TextField,
+} from '@fieldforce/ui';
 import { useSession } from '../src/session';
+
+/**
+ * The brand line, §03's one Cormorant moment.
+ *
+ * Kept as a constant here rather than in `packages/ui` because it is brand copy:
+ * `docs/brand-identifier-decision.md` keeps branding changeable without an
+ * engineer, and O2 — closed for India in `docs/frontend-status.md` — puts the
+ * display half of the identity deliberately on the free side of that line. The
+ * words carry no trademark; the mark itself appears nowhere in this app.
+ */
+const BRAND_LINE = 'Relief at the root.';
 
 export default function SignIn(): ReactNode {
   const { signIn } = useSession();
@@ -29,6 +48,13 @@ export default function SignIn(): ReactNode {
 
   return (
     <Screen scrollable>
+      {/*
+        §03's login splash, and the only place Cormorant appears in the product.
+        Above the heading rather than instead of it: the brand line is not a screen
+        title, and "Sign in" still has to be the first thing that tells the MR what
+        this screen is for.
+      */}
+      <BrandLine>{BRAND_LINE}</BrandLine>
       <Heading>Sign in</Heading>
       <BodyText muted>Use the account your manager set up for you.</BodyText>
 
