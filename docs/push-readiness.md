@@ -10,8 +10,11 @@ no memory of this one — can tell what is true from what is merely claimed.
 
 ## What is waiting
 
-**47 commits** as of 3 September, ahead of `origin/main` and 0 behind it after the
-31 August merge. (**34** when this page was written.) The
+**51 commits** as of 3 September, ahead of `origin/main` and 0 behind it after the
+31 August merge. (**34** when this page was written.)
+
+The 403 below was **re-confirmed on 3 September**, unchanged, with the same error
+text. Nothing about the diagnosis has moved: it is still an account, not a scope. The
 oldest is `dd9c1a4`, **14 August 2026** — "FE-W1 §1: workspace config, and a lint-time
 replacement for the linker guard". Seventeen days of work exists on one laptop.
 
@@ -19,7 +22,18 @@ replacement for the linker guard". Seventeen days of work exists on one laptop.
 only on this machine, so it is not a backup of anything against the loss of the
 machine.
 
-**Offline backup, 31 August:** `C:/dev/elmiron-app-31aug2026.bundle` — 1,043,791 bytes,
+**Offline backup, 3 September:** `C:/dev/elmiron-app-03sep2026.bundle` — 1,473,636
+bytes, all six refs including `fe/phase2-c5-b7-and-phase3-consent` at `2d4ccca`.
+`git bundle verify` reports *"records a complete history"*, and it was test-restored
+by cloning the branch to a scratch directory: 86 commits, the console's coaching
+screens and `apps/field/src/capture/recording.ts` both present. The scratch clone
+was deleted. **The 31 August bundle below is superseded and 17 commits stale.**
+
+**The same caveat applies and has not been discharged.** It is on the same disk as
+the repository, so it protects against a bad merge and nothing else. It becomes a
+backup at the moment a copy exists somewhere off this machine, and not before.
+
+**Offline backup, 31 August (superseded):** `C:/dev/elmiron-app-31aug2026.bundle` — 1,043,791 bytes,
 a single file holding the complete history and all five refs, requiring no remote and
 no permissions. `git bundle verify` reports *"okay"* and *"records a complete
 history"*. Test-restored by cloning it to a scratch directory: tip `142e6bc`, 71
