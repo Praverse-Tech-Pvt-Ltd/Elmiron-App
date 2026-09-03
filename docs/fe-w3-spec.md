@@ -570,11 +570,43 @@ citations, and their reply. The MR reading an analysis *of themselves*, before
 anyone acts on it, is the half of the design that exists to make the system
 contestable.
 
-**Still closed.** E1 and E2 — the manager's coaching queue and the analysis
-review with its override. Both put an AI analysis of a named employee in front of
-their manager, which is the surveillance half of the same product, and the
-reversal did not extend to it. `FindingCard` and `OverrideControl` remain built,
-tested and unrendered, as they were before.
+**Still closed at that point.** E1 and E2 — the manager's coaching queue and the
+analysis review with its override — were left closed by the first reversal.
+
+> **SECOND REVERSAL, THE SAME DAY.** E1 and E2 were put again, separately, and
+> **reopened**. Both are now built, in `apps/console`. The two reversals are
+> recorded as two because they were two decisions: the first covered the MR
+> reading an analysis of themselves, the second covers a manager reading one about
+> somebody else, and those are not the same question. Anyone auditing this should
+> be able to see that the second was asked and answered on its own.
+
+What the manager's screens are built to refuse:
+
+- **The advisory notice is the first thing on the queue and cannot be dismissed.**
+  A manager arriving there is about to read a machine's judgement of a named
+  person.
+- **The MR's reply status is a table column, not a detail on the next screen**, so
+  a manager cannot open a finding without already knowing the MR answered it — and
+  on E2 the reply itself sits between the citation and the controls, in reading
+  order, never behind a disclosure.
+- **Agree and Disagree are identical controls and agreeing writes nothing.** There
+  is no `agree` endpoint and there should not be: agreement is the absence of an
+  override, and manufacturing a row for it would turn every unreviewed finding into
+  an implied endorsement the moment somebody wanted a metric out of it.
+- **A reason is required to disagree.** `CreateAnalysisOverrideRequestSchema.reason`
+  is `.min(1)`; an override with no reason proves a click happened, not that
+  anybody thought — and this row is the evidence of human oversight.
+- **The queue is a filter, not a league table.** Rows appear because a category
+  recurred, sorted by MR id, which is meaningless on purpose. "Most findings first"
+  would be a ranking wearing a sort order as a disguise. There is no per-MR consent
+  percentage anywhere: `manager.ts` calls a consent anomaly a `data_quality`
+  signal, and an MR at 100% is surfaced as a possible fraud signal rather than as
+  the top of a list.
+
+`FindingCard` and `OverrideControl` in `packages/ui` **remain unrendered** — the
+console is React Native-free, so E2's override is a web form built from the shared
+tokens. Those two components are still waiting for a React Native surface that
+wants them.
 
 **Never reopened, and not part of this at all: the scoring ban.** §3.6's first
 bullet — no ranking, score, rank, percentile or grade, "not for MRs, not in the

@@ -9,14 +9,14 @@ import { compactTypography, tokens } from '@fieldforce/ui-tokens';
  * all of the manager side are unbuilt, so they render as plain text rather than as
  * links that go nowhere. A dead nav item teaches an admin the product is broken.
  *
- * The manager console — the coaching queue and the analysis review — is absent
- * entirely rather than greyed out, because it is not merely unbuilt: `§3.6` still
- * forbids a screen that displays an analysis to a manager, and the 3 September
- * decision reopened only the MR's own screens.
+ * The coaching queue arrived with the second §3.6 reversal on 3 September 2026 and
+ * is the landing surface, as Phase 4 asks: "exception-first — not a team
+ * scoreboard, because there isn't one."
  */
 const ITEMS: readonly { readonly label: string; readonly href?: string }[] = [
-  { label: 'Users & roles' },
+  { label: 'Coaching queue', href: '/coaching' },
   { label: 'Consent versions', href: '/admin' },
+  { label: 'Users & roles' },
   { label: 'Audit log' },
   { label: 'Territories' },
   { label: 'Retention & purge' },

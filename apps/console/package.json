@@ -10,7 +10,7 @@
     "start": "next start -p 3100",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint src",
-    "test": "echo \"no tests in apps/console yet\""
+    "test": "vitest run"
   },
   "dependencies": {
     "@fieldforce/core": "workspace:*",
@@ -23,6 +23,7 @@
     "@types/node": "^24.13.3",
     "@types/react": "~19.2.18",
     "@types/react-dom": "^19.2.5",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
   }
 }

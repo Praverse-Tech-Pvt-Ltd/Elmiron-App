@@ -11,6 +11,7 @@ import {
   CreateVisitRequestSchema,
   GetMeResponseSchema,
   ListAnalysesResponseSchema,
+  CreateAnalysisOverrideRequestSchema,
   RespondToAnalysisRequestSchema,
   ListCallReportsResponseSchema,
   ListConsentRecordsResponseSchema,
@@ -38,6 +39,7 @@ import type {
   GetMeResponse,
   ListAnalysesRequest,
   ListAnalysesResponse,
+  CreateAnalysisOverrideRequest,
   RespondToAnalysisRequest,
   ListCallReportsRequest,
   ListCallReportsResponse,
@@ -69,8 +71,8 @@ import {
   VisitSchema,
 } from './entities.js';
 import type { CallReport, CheckIn, CheckOut, SampleAndInput, Visit } from './entities.js';
-import { AnalysisSchema } from './analysis.js';
-import type { Analysis } from './analysis.js';
+import { AnalysisOverrideSchema, AnalysisSchema } from './analysis.js';
+import type { Analysis, AnalysisOverride } from './analysis.js';
 import { ConsentRecordSchema, ConsentTextVersionSchema } from './consent.js';
 import type { ConsentRecord, ConsentTextVersion } from './consent.js';
 
@@ -381,6 +383,30 @@ export const createApiClient = (options: ApiClientOptions) => {
         API_PATHS.analysisResponse(id),
         AnalysisSchema,
         RespondToAnalysisRequestSchema.parse(input),
+      ),
+
+    /**
+     * A manager disagreeing with a finding — Phase 4 E2.
+     *
+     * **This is the legally load-bearing call in the product.** It is the evidence
+     * that a human looked at an automated judgement about an employee and made
+     * their own, which is what keeps the analysis advisory rather than
+     * determinative. `reason` is `.min(1)` in the contract: an override with no
+     * reason proves a click happened, not that anybody thought.
+     *
+     * It creates a row and changes nothing about the finding. The analysis the MR
+     * read stays exactly as they read it — otherwise the record of what they were
+     * shown, and replied to, would be rewritten by the person reviewing it.
+     */
+    createAnalysisOverride: (
+      id: string,
+      input: CreateAnalysisOverrideRequest,
+    ): Promise<AnalysisOverride> =>
+      request(
+        'POST',
+        API_PATHS.analysisOverrides(id),
+        AnalysisOverrideSchema,
+        CreateAnalysisOverrideRequestSchema.parse(input),
       ),
 
     syncPush: (input: SyncPushRequest): Promise<SyncPushResponse> =>
