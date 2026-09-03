@@ -21,11 +21,12 @@ export type { ContrastResult, ContrastUsage, Rgb, WcagLevel } from './contrast.j
 export { brandPalette } from './palette.js';
 export type { PaletteColor } from './palette.js';
 
-export { requiredContrastPairs, tokens } from './tokens.js';
+export { fontFamilyFor, requiredContrastPairs, tokens } from './tokens.js';
 export type {
   ColorTokens,
   ContrastPair,
   DesignTokens,
+  FontTokens,
   RadiusTokens,
   SpaceTokens,
   TypeStyle,

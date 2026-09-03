@@ -68,7 +68,7 @@ describe('when nothing is outstanding', () => {
       ...emptyQueue,
       items: [item({ status: 'synced', syncedAt: '2026-09-02T12:09:00+05:30' })],
     };
-    expect(indicatorStateFor(state)).toEqual({ kind: 'idle', at: '2026-09-02T12:09:00+05:30' });
+    expect(indicatorStateFor(state)).toEqual({ kind: 'idle', at: '12:09' });
   });
 
   it('takes the most recent stamp when several items synced', () => {
@@ -83,6 +83,31 @@ describe('when nothing is outstanding', () => {
         }),
       ],
     };
-    expect(indicatorStateFor(state)).toEqual({ kind: 'idle', at: '2026-09-02T12:09:00+05:30' });
+    expect(indicatorStateFor(state)).toEqual({ kind: 'idle', at: '12:09' });
+  });
+});
+
+describe('the last-sent time is a clock, not a timestamp', () => {
+  it('shows 12:09, never the contract ISO string', () => {
+    // Found by looking at the home screen: this rendered
+    // "Everything sent 2026-09-03T08:57:43.905Z" — milliseconds, Z suffix and all.
+    // The indicator prints `at` verbatim, so formatting is the caller's job.
+    const state = {
+      ...emptyQueue,
+      items: [item({ status: 'synced', syncedAt: '2026-09-02T12:09:00+05:30' })],
+    };
+    const result = indicatorStateFor(state);
+    expect(result).toEqual({ kind: 'idle', at: '12:09' });
+  });
+
+  it('keeps the offset the server sent rather than the handset’s idea of it', () => {
+    // The Z form is UTC. An MR in IST reading it off their own screen would have
+    // been five and a half hours out; slicing characters keeps the server's offset.
+    const state = {
+      ...emptyQueue,
+      items: [item({ status: 'synced', syncedAt: '2026-09-02T08:57:43.905Z' })],
+    };
+    expect(indicatorStateFor(state).kind).toBe('idle');
+    expect(JSON.stringify(indicatorStateFor(state))).not.toMatch(/T|Z|\./u);
   });
 });

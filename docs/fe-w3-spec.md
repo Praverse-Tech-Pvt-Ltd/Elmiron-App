@@ -495,6 +495,65 @@ The consequence is visible rather than hidden: after a doctor consents, the visi
 screen says in as many words that recording is not in this build and nothing is
 being captured. An MR who believed otherwise would speak as though it were.
 
+### Phase 1 — the typeface, closed 3 September 2026
+
+**The app shipped in Roboto for three phases.** Phase 1 §03 is titled "DM Sans, 400
+minimum, no exceptions"; every size, weight, line height and tracking value in the
+scale was implemented, and no font file was ever loaded. There was no `expo-font`
+dependency, no `fontFamily` token and no `fontFamily` on any component, so every
+screen rendered in the platform face. Nothing caught it, and nothing was going to:
+the platform font at the right size and weight looks like a deliberate choice, and
+a test asserting `fontSize` passes either way.
+
+Now: `@expo-google-fonts/dm-sans` supplies four faces, `app/_layout.tsx` registers
+them, and `tokens.font` maps each weight to its family name. **Android does not
+synthesise a weight from a family** — each weight is a separately registered family
+and `fontWeight` alone gets whatever single face the system matched — so
+`fontFamilyFor(weight)` is the only way a component may reach for one, and
+`tokens.test.ts` asserts every role in the scale resolves to a `DMSans_` family.
+Four faces and not nine: §03 bans DM Sans below 400 anywhere, and nothing in the
+scale reaches 800.
+
+The first paint waits for the faces, because letting them swap in afterwards
+reflows every screen a beat late — on sign-in that moves the field the MR is
+already typing into. A load *failure* does not block: the app comes up in the
+platform font rather than not at all, since a missing typeface is a cosmetic
+failure and refusing to start over one would make it a total failure in the field.
+
+**`StatusGlyph` is deliberately excluded and must stay excluded.** Its four marks
+are U+2713 and U+2715 rather than letters. A webfont that happens not to carry a
+codepoint renders tofu, and a tofu box where a synced tick belongs is worse than a
+tick in the platform's face — which is guaranteed to have them on every OEM build
+this product targets. The mark never carries meaning alone (§02, and `ListItem`
+requires a `detail` string beside it), so the face it renders in is cosmetic while
+a missing codepoint would not be.
+
+**The "one Cormorant moment" is NOT built, and this is a decision.** §03 reserves
+Cormorant Garamond for a login splash reading "Relief at the root." That is brand
+copy for a pharmaceutical mark this company may not have the right to use:
+`docs/brand-identifier-decision.md` records that **ELMIRON® is a third party's
+registered trademark** (IVAX Research, LLC; associated with Janssen), and commit
+`f34ceef` removed it from the permanent identifiers for exactly that reason. The
+display name is a freely-changeable string defaulting to a neutral one. Putting the
+tagline on the first screen every user sees would reintroduce what that work took
+out, so the splash waits on the trademark ruling — open item O2 — and not on
+engineering.
+
+**Three primitives are now pinned.** `IconButton`, `TextField` and `Card` had no
+test of their own. All three were exercised through the screen suites, so they were
+never untested — only unpinned: no test named the rule each exists to enforce, and
+a change that broke the rule while keeping the screens rendering would have gone
+through green. `primitives.test.tsx` asserts the rules themselves — a glyph never
+appears without words, the label is a sibling and not a placeholder, the error
+carries the correction, offline is a dashed edge and never a warning colour.
+
+**And one defect found by looking at the running app:** the sync indicator rendered
+its timestamp raw — "Everything sent 2026-09-03T08:57:43.905Z" on the home screen,
+milliseconds and Z suffix included. Worse than ugly: the Z is UTC, so an MR in IST
+was shown a time five and a half hours from the one on their own clock.
+`indicatorStateFor` now formats through `clockFrom`, which slices the characters
+and keeps the offset the server sent.
+
 ---
 
 ## 5. What this specification does not cover

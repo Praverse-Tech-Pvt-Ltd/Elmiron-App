@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { tokens } from '@fieldforce/ui-tokens';
+import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
 import { BodyText, Heading, Label } from './Text';
 import { Button } from './Button';
 import { Screen } from './Screen';
@@ -163,6 +163,7 @@ const styles = StyleSheet.create({
     color: tokens.color.textSecondary,
     fontSize: tokens.typography.body.size,
     fontWeight: '500',
+    fontFamily: fontFamilyFor('500'),
   },
   empty: { gap: tokens.space.sm },
   /**

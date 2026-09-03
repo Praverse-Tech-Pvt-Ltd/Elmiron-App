@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateContrast, formatRatio } from './contrast.js';
 import { brandPalette } from './palette.js';
-import { requiredContrastPairs, tokens } from './tokens.js';
+import { fontFamilyFor, requiredContrastPairs, tokens } from './tokens.js';
 
 describe('tokens', () => {
   it('is labelled brand, because Phase 1 is committed', () => {
@@ -48,5 +48,41 @@ describe('required contrast pairs', () => {
       result.passes,
       `${pair.name}: ${formatRatio(result.ratio)} against a ${String(result.minimum)}:1 minimum`,
     ).toBe(true);
+  });
+});
+
+/**
+ * Phase 1 §03 is titled "DM Sans, 400 minimum, no exceptions", and for the first
+ * three phases the app shipped in Roboto: every size, weight and tracking value
+ * matched the scale and no face was ever loaded. Nothing caught it, because the
+ * platform font at the right size looks like a deliberate choice.
+ */
+describe('the typeface', () => {
+  it('has a family for every weight the scale uses', () => {
+    // The failure this prevents is silent: `fontFamilyFor` on a weight with no
+    // entry returns undefined, React Native falls back to the platform font, and
+    // one role in the scale renders in Roboto beside eight in DM Sans.
+    // Keyed rather than `Object.entries`, which widens the value to `any` and
+    // would let a role with no weight at all slip through this loop untyped.
+    const roles = Object.keys(tokens.typography) as (keyof typeof tokens.typography)[];
+    expect(roles.length).toBeGreaterThan(0);
+    for (const role of roles) {
+      expect(fontFamilyFor(tokens.typography[role].weight), role).toMatch(/^DMSans_/u);
+    }
+  });
+
+  it('names each face by its weight, so Android gets the right one', () => {
+    // Android does not synthesise a weight from a family — each weight is a
+    // separately registered family, and `fontWeight` alone gets whatever single
+    // face the system matched.
+    expect(fontFamilyFor('400')).toBe('DMSans_400Regular');
+    expect(fontFamilyFor('500')).toBe('DMSans_500Medium');
+    expect(fontFamilyFor('600')).toBe('DMSans_600SemiBold');
+    expect(fontFamilyFor('700')).toBe('DMSans_700Bold');
+  });
+
+  it('carries no face below 400, which §03 bans anywhere', () => {
+    const weights = Object.keys(tokens.font);
+    expect(weights).toEqual(['400', '500', '600', '700']);
   });
 });

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { tokens } from '@fieldforce/ui-tokens';
+import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
 import { BodyText } from './Text';
 import { StatusGlyph } from './StatusGlyph';
 import type { StatusKind } from './StatusGlyph';
@@ -69,6 +69,7 @@ const styles = StyleSheet.create({
     fontSize: tokens.typography.label.size,
     lineHeight: tokens.typography.label.lineHeight,
     fontWeight: tokens.typography.control.weight,
+    fontFamily: fontFamilyFor(tokens.typography.control.weight),
   },
 });
 

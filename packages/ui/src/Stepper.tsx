@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { tokens } from '@fieldforce/ui-tokens';
+import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
 import { Figure, Label } from './Text';
 
 /**
@@ -53,6 +53,7 @@ const styles = StyleSheet.create({
   keyDisabled: { opacity: 0.5 },
   glyph: {
     fontSize: tokens.typography.figure.size / 2,
+    fontFamily: fontFamilyFor(tokens.typography.figure.weight),
     lineHeight: tokens.typography.figure.size,
     color: tokens.color.textPrimary,
   },

@@ -94,6 +94,31 @@ export interface RadiusTokens {
   readonly pill: number;
 }
 
+/**
+ * The typeface, one family name per weight.
+ *
+ * **Android does not synthesise a weight from a family.** `fontWeight: '600'` over
+ * a `fontFamily` of "DM Sans" gets you whatever single face the system matched,
+ * which on the OEM builds this product targets is the regular one — the scale
+ * renders at the right size and the wrong weight, and nothing fails. React Native
+ * documents this: on Android each weight is a separate registered family. So the
+ * family name carries the weight, and `fontFamilyFor` is the only way a component
+ * is allowed to reach for one.
+ *
+ * The names are `@expo-google-fonts/dm-sans`'s own export identifiers, because
+ * `useFonts` registers each face under the key it is given and a name invented here
+ * would register nothing. `apps/field/app/_layout.tsx` loads them.
+ *
+ * §03 bans DM Sans below 400 anywhere, so 100–300 are absent by construction: a
+ * weight this map has no entry for cannot be asked for.
+ */
+export interface FontTokens {
+  readonly '400': string;
+  readonly '500': string;
+  readonly '600': string;
+  readonly '700': string;
+}
+
 export interface TypeStyle {
   readonly size: number;
   readonly lineHeight: number;
@@ -167,6 +192,7 @@ export interface DesignTokens {
    */
   readonly status: 'placeholder' | 'brand';
   readonly color: ColorTokens;
+  readonly font: FontTokens;
   readonly space: SpaceTokens;
   readonly radius: RadiusTokens;
   readonly typography: TypographyTokens;
@@ -199,6 +225,12 @@ export const tokens: DesignTokens = {
     offlineEdge: brandPalette.offlineEdge,
     recording: brandPalette.recording,
   },
+  font: {
+    '400': 'DMSans_400Regular',
+    '500': 'DMSans_500Medium',
+    '600': 'DMSans_600SemiBold',
+    '700': 'DMSans_700Bold',
+  },
   space: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 },
   radius: { sm: 4, md: 8, well: 12, control: 16, card: 20, pill: 999 },
   typography: {
@@ -222,6 +254,16 @@ export const tokens: DesignTokens = {
     reachZoneFraction: 281 / 844,
   },
 };
+
+/**
+ * The family for a weight in the committed scale.
+ *
+ * Every piece of text in `packages/ui` goes through this. A component that sets
+ * `fontWeight` without it renders in the platform's own face — which is what the
+ * whole app did until this was added, and which nothing caught because Roboto at
+ * the right size and weight looks like a deliberate choice.
+ */
+export const fontFamilyFor = (weight: TypeStyle['weight']): string => tokens.font[weight];
 
 export interface ContrastPair {
   readonly name: string;

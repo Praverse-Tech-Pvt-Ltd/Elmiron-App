@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, Text as RnText } from 'react-native';
-import { tokens } from '@fieldforce/ui-tokens';
+import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
 import { useSurfaceInk } from './surface';
 
 export interface TextProps {
@@ -24,6 +24,7 @@ const styles = StyleSheet.create({
     fontSize: tokens.typography.figure.size,
     lineHeight: tokens.typography.figure.lineHeight,
     fontWeight: tokens.typography.figure.weight,
+    fontFamily: fontFamilyFor(tokens.typography.figure.weight),
     letterSpacing: tokens.typography.figure.letterSpacing,
     fontVariant: ['tabular-nums'],
   },
@@ -37,6 +38,7 @@ const styles = StyleSheet.create({
     fontSize: tokens.typography.display.size,
     lineHeight: tokens.typography.display.lineHeight,
     fontWeight: tokens.typography.display.weight,
+    fontFamily: fontFamilyFor(tokens.typography.display.weight),
     letterSpacing: tokens.typography.display.letterSpacing,
   },
   /**
@@ -50,21 +52,25 @@ const styles = StyleSheet.create({
     fontSize: tokens.typography.value.size,
     lineHeight: tokens.typography.value.lineHeight,
     fontWeight: tokens.typography.value.weight,
+    fontFamily: fontFamilyFor(tokens.typography.value.weight),
   },
   heading: {
     fontSize: tokens.typography.heading.size,
     lineHeight: tokens.typography.heading.lineHeight,
     fontWeight: tokens.typography.heading.weight,
+    fontFamily: fontFamilyFor(tokens.typography.heading.weight),
   },
   body: {
     fontSize: tokens.typography.body.size,
     lineHeight: tokens.typography.body.lineHeight,
     fontWeight: tokens.typography.body.weight,
+    fontFamily: fontFamilyFor(tokens.typography.body.weight),
   },
   label: {
     fontSize: tokens.typography.label.size,
     lineHeight: tokens.typography.label.lineHeight,
     fontWeight: tokens.typography.label.weight,
+    fontFamily: fontFamilyFor(tokens.typography.label.weight),
   },
 });
 

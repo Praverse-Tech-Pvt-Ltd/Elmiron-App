@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { tokens } from '@fieldforce/ui-tokens';
+import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
 import { Label } from './Text';
 
 /**
@@ -56,6 +56,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: tokens.color.textPrimary,
     fontSize: tokens.typography.value.size,
+    fontFamily: fontFamilyFor(tokens.typography.value.weight),
     lineHeight: tokens.typography.value.lineHeight,
     paddingVertical: tokens.space.sm,
   },
@@ -73,6 +74,7 @@ const styles = StyleSheet.create({
     fontSize: tokens.typography.label.size,
     lineHeight: tokens.typography.label.lineHeight,
     fontWeight: tokens.typography.label.weight,
+    fontFamily: fontFamilyFor(tokens.typography.label.weight),
   },
 });
 

@@ -57,6 +57,20 @@ const MARK: Record<StatusKind, string> = {
 };
 
 const styles = StyleSheet.create({
+  /**
+   * **No `fontFamily`, and that is deliberate — do not "fix" it.**
+   *
+   * Every other piece of text in this package is pinned to DM Sans. These four
+   * marks are not, because the glyphs are U+2713 and U+2715 rather than letters:
+   * a webfont that happens not to carry a codepoint renders tofu, and a tofu box
+   * where a synced tick should be is worse than a tick in the platform's own face.
+   * The system font is the one thing guaranteed to have them on every OEM build
+   * this product targets.
+   *
+   * The mark never carries meaning alone — §02, and `ListItem` requires a `detail`
+   * string beside it — so the face it renders in is a cosmetic question, while a
+   * missing codepoint would not be.
+   */
   mark: { fontWeight: '700', textAlign: 'center' },
   dot: { borderRadius: tokens.radius.pill },
   ring: { borderRadius: tokens.radius.pill, borderStyle: 'dashed' },

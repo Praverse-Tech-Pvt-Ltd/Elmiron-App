@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
-import { tokens } from '@fieldforce/ui-tokens';
+import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
 
 /**
  * A 52pt square control. Phase 1 §05: "always has a text label somewhere on
@@ -44,6 +44,7 @@ const styles = StyleSheet.create({
     fontSize: tokens.typography.control.size,
     lineHeight: tokens.typography.control.lineHeight,
     fontWeight: tokens.typography.control.weight,
+    fontFamily: fontFamilyFor(tokens.typography.control.weight),
     color: tokens.color.textPrimary,
   },
   glyphActive: { color: tokens.color.onAccent },

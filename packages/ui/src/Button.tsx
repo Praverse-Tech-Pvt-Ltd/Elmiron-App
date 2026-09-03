@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
-import { tokens } from '@fieldforce/ui-tokens';
+import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
 import { Label } from './Text';
 
 /**
@@ -92,6 +92,7 @@ const styles = StyleSheet.create({
     fontSize: tokens.typography.control.size,
     lineHeight: tokens.typography.control.lineHeight,
     fontWeight: tokens.typography.control.weight,
+    fontFamily: fontFamilyFor(tokens.typography.control.weight),
   },
   onAccent: { color: tokens.color.onAccent },
   onWash: { color: tokens.color.textPrimary },
