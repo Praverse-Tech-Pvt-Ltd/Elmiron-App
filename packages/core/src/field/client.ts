@@ -79,8 +79,8 @@ import { AnalysisOverrideSchema, AnalysisSchema } from './analysis.js';
 import type { Analysis, AnalysisOverride } from './analysis.js';
 import { ConsentRecordSchema, ConsentTextVersionSchema } from './consent.js';
 import type { ConsentRecord, ConsentTextVersion } from './consent.js';
-import { RecordingSchema, VoiceNoteSchema } from './capture.js';
-import type { Recording, VoiceNote } from './capture.js';
+import { UploadSessionSchema } from './endpoints.js';
+import type { UploadSession } from './endpoints.js';
 
 export interface ApiClientOptions {
   /** Base URL of the API, e.g. `http://localhost:54321/functions/v1`. No trailing slash. */
@@ -426,11 +426,11 @@ export const createApiClient = (options: ApiClientOptions) => {
      * stopped before the microphone opens rather than after, but the check that
      * counts is the one they cannot reach.
      */
-    createRecording: (input: CreateRecordingRequest): Promise<Recording> =>
+    createRecording: (input: CreateRecordingRequest): Promise<UploadSession> =>
       request(
         'POST',
         API_PATHS.recordings,
-        RecordingSchema,
+        UploadSessionSchema,
         CreateRecordingRequestSchema.parse(input),
       ),
 
@@ -443,11 +443,11 @@ export const createApiClient = (options: ApiClientOptions) => {
      * two into one friendly sentence about "recording". They are different things
      * with different consents and the contract keeps them apart.
      */
-    createVoiceNote: (input: CreateVoiceNoteRequest): Promise<VoiceNote> =>
+    createVoiceNote: (input: CreateVoiceNoteRequest): Promise<UploadSession> =>
       request(
         'POST',
         API_PATHS.voiceNotes,
-        VoiceNoteSchema,
+        UploadSessionSchema,
         CreateVoiceNoteRequestSchema.parse(input),
       ),
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import uuid from 'expo-modules-core/src/uuid';
 import {
   AudioModule,
@@ -28,15 +28,16 @@ import { blockReason, elapsedLabel, voiceNoteRequest } from '../../src/capture/r
  * before the MR has seen a single benefit, is the abandonment moment
  * `src/onboarding/permissions.ts` was written to avoid.
  *
- * **Nothing is uploaded.** `createVoiceNote` records the note's existence — id,
- * duration, size, when — and the audio itself needs the resumable upload path in
- * `API_PATHS.uploadSession`, which is BE-W7 and has no client here yet. The file
- * stays on the device and the screen does not claim otherwise.
+ * **Nothing is uploaded, and the screen says so.** `createVoiceNote` answers with
+ * an `UploadSession` — somewhere to put the bytes and a resumable offset — not a
+ * filed note. The upload itself is `API_PATHS.uploadSession`, BE-W7, with no client
+ * here yet, so the audio stays on the device and the MR is told that rather than
+ * "sent". This response shape is also where the first version of the client method
+ * was wrong: typed as `VoiceNote` it compiled cleanly and failed the moment a real
+ * device ran it.
  */
 export default function VoiceNoteRoute(): ReactNode {
   const { visitId } = useLocalSearchParams<{ visitId: string }>();
-  const router = useRouter();
-
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const state = useAudioRecorderState(recorder);
 
@@ -44,6 +45,7 @@ export default function VoiceNoteRoute(): ReactNode {
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [granted, setGranted] = useState<boolean | null>(null);
   const [captured, setCaptured] = useState<{ uri: string; seconds: number } | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
 
@@ -134,8 +136,15 @@ export default function VoiceNoteRoute(): ReactNode {
           recordedAt: new Date().toISOString(),
         }),
       )
-      .then(() => {
-        router.back();
+      .then((session) => {
+        // The server answers with somewhere to put the bytes, not with a filed
+        // note. Nothing here uploads yet — `API_PATHS.uploadSession` is BE-W7 and
+        // has no client — so the MR is told the note is on the phone rather than
+        // filed. Saying "sent" over an unsent file is the one thing the queue
+        // screen's whole design exists to prevent.
+        setSaved(
+          `Kept on this phone. ${String(session.totalBytes)} bytes are expected by the server; uploading them is not in this build.`,
+        );
       })
       .catch((error: unknown) => {
         setFailure({
@@ -172,9 +181,11 @@ export default function VoiceNoteRoute(): ReactNode {
         onHoldStart={start}
         onStartAgain={() => {
           setCaptured(null);
+          setSaved(null);
         }}
         prompt="What should I put in the report?"
         recording={state.isRecording}
+        saved={saved}
         subject={`Your note · ${doctor?.fullName ?? 'this visit'}`}
         {...(captured === null ? {} : { onSave: save })}
       />

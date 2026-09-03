@@ -42,6 +42,16 @@ export interface VoiceNoteScreenProps {
   /** Present once something has been captured and not yet discarded. */
   readonly onSave?: () => void;
   readonly busy?: boolean;
+  /**
+   * What actually happened to the note, once it has been sent.
+   *
+   * Its own prop rather than a hard-coded "Sent" because the true sentence is not
+   * that: the server answers a create with an upload session, and until the upload
+   * path exists the audio is still only on this phone. A screen that said "sent"
+   * over an unsent file would be the exact lie the sync queue was designed to
+   * prevent.
+   */
+  readonly saved?: string | null;
   /** Why the microphone cannot open. Blocks the control entirely. */
   readonly blocked?: string | null;
   readonly failure?: { readonly title: string; readonly detail: string } | null;
@@ -84,6 +94,7 @@ export const VoiceNoteScreen = ({
   onStartAgain,
   onSave,
   busy = false,
+  saved = null,
   blocked = null,
   failure = null,
 }: VoiceNoteScreenProps): ReactNode => {
@@ -100,6 +111,7 @@ export const VoiceNoteScreen = ({
     <SurfaceContext.Provider value="hero">
       <View style={styles.dark}>
         <Label>{subject}</Label>
+        {saved === null ? null : <Statement>{saved}</Statement>}
         <Display>{prompt}</Display>
         <Statement>{hint}</Statement>
 
