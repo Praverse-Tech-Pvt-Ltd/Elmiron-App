@@ -12,6 +12,8 @@ import {
   GetMeResponseSchema,
   ListAnalysesResponseSchema,
   CreateAnalysisOverrideRequestSchema,
+  CreateRecordingRequestSchema,
+  CreateVoiceNoteRequestSchema,
   RespondToAnalysisRequestSchema,
   ListCallReportsResponseSchema,
   ListConsentRecordsResponseSchema,
@@ -40,6 +42,8 @@ import type {
   ListAnalysesRequest,
   ListAnalysesResponse,
   CreateAnalysisOverrideRequest,
+  CreateRecordingRequest,
+  CreateVoiceNoteRequest,
   RespondToAnalysisRequest,
   ListCallReportsRequest,
   ListCallReportsResponse,
@@ -75,6 +79,8 @@ import { AnalysisOverrideSchema, AnalysisSchema } from './analysis.js';
 import type { Analysis, AnalysisOverride } from './analysis.js';
 import { ConsentRecordSchema, ConsentTextVersionSchema } from './consent.js';
 import type { ConsentRecord, ConsentTextVersion } from './consent.js';
+import { RecordingSchema, VoiceNoteSchema } from './capture.js';
+import type { Recording, VoiceNote } from './capture.js';
 
 export interface ApiClientOptions {
   /** Base URL of the API, e.g. `http://localhost:54321/functions/v1`. No trailing slash. */
@@ -407,6 +413,42 @@ export const createApiClient = (options: ApiClientOptions) => {
         API_PATHS.analysisOverrides(id),
         AnalysisOverrideSchema,
         CreateAnalysisOverrideRequestSchema.parse(input),
+      ),
+
+    /**
+     * A consultation recording — Phase 3 D6.
+     *
+     * **`consentRecordId` is required and the server rejects the row unless that
+     * record's outcome is `consented`.** The gate is deliberately on the server:
+     * a client-side check is a check the client can be made to skip, and this is
+     * the one write in the product where skipping it means recording a doctor who
+     * said no. The device checks too — see `capture/recording.ts` — so the MR is
+     * stopped before the microphone opens rather than after, but the check that
+     * counts is the one they cannot reach.
+     */
+    createRecording: (input: CreateRecordingRequest): Promise<Recording> =>
+      request(
+        'POST',
+        API_PATHS.recordings,
+        RecordingSchema,
+        CreateRecordingRequestSchema.parse(input),
+      ),
+
+    /**
+     * The MR's own voice note — Phase 3 D7.
+     *
+     * **No consent record, and that is correct rather than an omission.** A voice
+     * note is the MR dictating to themselves after the visit; there is no third
+     * party in it, and `onboarding/microphone.tsx` already refuses to collapse the
+     * two into one friendly sentence about "recording". They are different things
+     * with different consents and the contract keeps them apart.
+     */
+    createVoiceNote: (input: CreateVoiceNoteRequest): Promise<VoiceNote> =>
+      request(
+        'POST',
+        API_PATHS.voiceNotes,
+        VoiceNoteSchema,
+        CreateVoiceNoteRequestSchema.parse(input),
       ),
 
     syncPush: (input: SyncPushRequest): Promise<SyncPushResponse> =>

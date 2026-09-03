@@ -5,6 +5,7 @@ import { Banner } from './Banner';
 import { BodyText, Figure, Heading, Label } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
+import { RecordingIndicator } from './RecordingIndicator';
 import { Spinner } from './Spinner';
 
 /**
@@ -46,6 +47,37 @@ export interface VisitScreenProps {
    * report about a visit that has not happened yet.
    */
   readonly onWriteReport?: () => void;
+  /**
+   * Phase 3 D6 — the recording bar, when one is running.
+   *
+   * **It is the first thing on the screen and cannot be scrolled away.** The
+   * design cites Apple 2.5.14 and the reason is the doctor across the desk: that
+   * audio is being captured has to be visible from wherever the MR has navigated
+   * to, not only on the screen that started it.
+   *
+   * `onStop` keeps the recording; `onStopAndDelete` destroys it. Both are offered
+   * because a doctor changing their mind mid-visit must not have to explain
+   * themselves, and the MR needs a control that means "gone" rather than "stopped".
+   */
+  readonly recording?: {
+    readonly elapsed: string;
+    /** "Recording · agreed at 11:58" — the authority beside the fact. */
+    readonly label: string;
+    readonly onStop: () => void;
+    readonly onStopAndDelete: () => void;
+  };
+  /**
+   * Starts a consultation recording. Absent whenever one may not be started.
+   *
+   * Optional rather than always-present-and-disabled: a control the MR can see but
+   * not use invites them to hunt for the reason. `recordingBlockedReason` carries
+   * the sentence instead, and the two are never both present.
+   */
+  readonly onStartRecording?: () => void;
+  /** Why no recording may be started. Shown in place of the control. */
+  readonly recordingBlockedReason?: string | null;
+  /** D7. Offered on every visit, consent or not — a voice note has no third party. */
+  readonly onRecordVoiceNote?: () => void;
   /**
    * Phase 3 — where the visit stands on the recording question.
    *
@@ -97,6 +129,10 @@ export const VisitScreen = ({
   durationLabel = null,
   onWriteReport,
   onRecordSamples,
+  onStartRecording,
+  recordingBlockedReason = null,
+  onRecordVoiceNote,
+  recording,
   consent,
   loading = false,
   failure = null,
@@ -107,6 +143,30 @@ export const VisitScreen = ({
 
   return (
     <>
+      {recording === undefined ? null : (
+        <>
+          {/*
+            First in the tree, so it sits above everything else on the screen. The
+            MR can scroll the visit; they cannot scroll this out of sight.
+          */}
+          <RecordingIndicator elapsed={recording.elapsed} state="recording" />
+          <Label muted>{recording.label}</Label>
+          <View style={styles.foot}>
+            <Button label="Stop recording" onPress={recording.onStop} variant="secondary" />
+            {/*
+              `destructive`, and §05 puts a destructive control outside the reach
+              zone deliberately — a resting thumb must not be able to destroy a
+              recording the doctor agreed to.
+            */}
+            <Button
+              label="Stop and delete it"
+              onPress={recording.onStopAndDelete}
+              variant="destructive"
+            />
+          </View>
+        </>
+      )}
+
       <View style={styles.head}>
         <Heading>{doctorName}</Heading>
         {clinic === null ? null : <Label muted>{clinic}</Label>}
@@ -163,6 +223,21 @@ export const VisitScreen = ({
       <View style={styles.foot}>
         {stage === 'during' && consent?.outcome === 'unasked' && consent.onAsk !== undefined ? (
           <Button label="Ask about recording" onPress={consent.onAsk} variant="secondary" />
+        ) : null}
+        {stage === 'during' && recording === undefined && onStartRecording !== undefined ? (
+          <Button label="Record this visit" onPress={onStartRecording} variant="secondary" />
+        ) : null}
+        {stage === 'during' && recording === undefined && recordingBlockedReason !== null ? (
+          // The reason instead of the control. §02 keeps `attention` for a
+          // condition with a remedy — a doctor who said no is not a failure.
+          <Banner
+            detail={recordingBlockedReason}
+            title="No recording can be made"
+            tone="attention"
+          />
+        ) : null}
+        {stage !== 'before' && onRecordVoiceNote !== undefined ? (
+          <Button label="Record a voice note" onPress={onRecordVoiceNote} variant="secondary" />
         ) : null}
         {stage === 'during' && onRecordSamples !== undefined ? (
           <Button label="Record what you left" onPress={onRecordSamples} variant="secondary" />

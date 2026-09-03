@@ -8,10 +8,18 @@
     "scheme": "com.praversetech.fieldforce",
     "platforms": ["android"],
     "android": {
-      "package": "com.praversetech.fieldforce",
-      "edgeToEdgeEnabled": true
+      "package": "com.praversetech.fieldforce"
     },
-    "plugins": ["expo-router", "expo-status-bar"],
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Elmiron Field records a consultation only after the doctor agrees on screen, and your own voice notes when you hold the button."
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": true
     }

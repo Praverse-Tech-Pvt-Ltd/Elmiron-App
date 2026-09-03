@@ -7,12 +7,27 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 // expo-modules-core, which is already a dependency of expo-router — adding a
 // crypto package would mean another native rebuild for one function.
 import uuid from 'expo-modules-core/src/uuid';
+import {
+  AudioModule,
+  RecordingPresets,
+  setAudioModeAsync,
+  useAudioRecorder,
+  useAudioRecorderState,
+} from 'expo-audio';
 import { ApiRequestError } from '@fieldforce/core';
 import type { ConsentRecord, Doctor, Visit } from '@fieldforce/core';
 import { Screen, VisitScreen } from '@fieldforce/ui';
 import { createClientForScenario } from '../../src/api';
 import { takeFix } from '../../src/capture/location';
 import { actionLabelFor, blockedReason, checkInRequest, stageOf } from '../../src/capture/visit';
+import {
+  authorisingConsent,
+  blockReason,
+  elapsedLabel,
+  recordingBlock,
+  recordingLabel,
+  recordingRequest,
+} from '../../src/capture/recording';
 import { checkInQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { clockFrom } from '../../src/today/plan';
 
@@ -30,6 +45,12 @@ export default function VisitRoute(): ReactNode {
   const [visit, setVisit] = useState<Visit | null>(null);
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [consent, setConsent] = useState<ConsentRecord | null>(null);
+  const [consents, setConsents] = useState<readonly ConsentRecord[]>([]);
+  const [micGranted, setMicGranted] = useState(false);
+  const [recordingStartedAt, setRecordingStartedAt] = useState<string | null>(null);
+
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorderState = useAudioRecorderState(recorder);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [blocked, setBlocked] = useState<string | null>(null);
@@ -56,6 +77,7 @@ export default function VisitRoute(): ReactNode {
     // means the ledger is append-only, so "what stands now" is the last thing
     // captured rather than the first — reading the earliest would show a doctor's
     // withdrawn consent as though it still held.
+    setConsents(consents?.items ?? []);
     setConsent(
       (consents?.items ?? [])
         .filter((record) => record.visitId === id)
@@ -82,7 +104,93 @@ export default function VisitRoute(): ReactNode {
     };
   }, [load]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void AudioModule.getRecordingPermissionsAsync()
+      .then((permission) => {
+        if (!cancelled) setMicGranted(permission.granted);
+      })
+      .catch(() => {
+        if (!cancelled) setMicGranted(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const stage = stageOf(visit);
+
+  /**
+   * Whether a consultation may be recorded right now.
+   *
+   * The device check, which exists so the refusal happens *before* the microphone
+   * opens. The server checks the same thing on `createRecording` and that is the
+   * check that counts — but a recording made and then rejected is a recording that
+   * existed on a phone in a doctor's room, and deleting it afterwards does not
+   * undo that.
+   */
+  const block = recordingBlock(consents, micGranted);
+  const authorising = authorisingConsent(consents);
+
+  const startRecording = (): void => {
+    if (block !== null || authorising === null) return;
+    void (async () => {
+      const permission = await AudioModule.requestRecordingPermissionsAsync();
+      setMicGranted(permission.granted);
+      if (!permission.granted) return;
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      setRecordingStartedAt(new Date().toISOString());
+    })().catch((error: unknown) => {
+      setFailure({
+        title: 'Recording did not start',
+        detail: error instanceof Error ? error.message : 'Unknown failure',
+      });
+    });
+  };
+
+  /**
+   * Stop, and either keep the recording or destroy it.
+   *
+   * **`keep: false` files nothing.** The doctor changing their mind means the audio
+   * should not exist, so no row is written — a `recordings` row with the file
+   * deleted underneath it is a record that a recording was made, which is the
+   * opposite of what they asked for.
+   */
+  const stopRecording = (keep: boolean): void => {
+    if (!recorderState.isRecording) return;
+    const seconds = Math.round(recorderState.durationMillis / 1000);
+    const startedAt = recordingStartedAt;
+    setRecordingStartedAt(null);
+
+    void recorder
+      .stop()
+      .then(async () => {
+        if (!keep || visit === null || authorising === null || startedAt === null) return;
+        await createClientForScenario().createRecording(
+          recordingRequest({
+            id: uuid.v4(),
+            visitId: visit.id,
+            consentRecordId: authorising.id,
+            durationSeconds: seconds,
+            // The preset's own bitrate, not a guess: HIGH_QUALITY is 128 kbps.
+            bitrateKbps: 128,
+            // Real bytes arrive with the upload, which is BE-W7 and has no client
+            // here. `positive()` needs a value; this is not a measurement and the
+            // upload replaces it.
+            sizeBytes: 1,
+            recordedAt: startedAt,
+          }),
+        );
+      })
+      .catch((error: unknown) => {
+        setFailure({
+          title: keep ? 'The recording was not filed' : 'Recording did not stop cleanly',
+          detail: error instanceof Error ? error.message : 'Unknown failure',
+        });
+      });
+  };
 
   const advance = (): void => {
     if (visit === null || busy) return;
@@ -170,6 +278,27 @@ export default function VisitRoute(): ReactNode {
             router.push(`/consent/${visit?.id ?? id}`);
           },
         }}
+        {...(recorderState.isRecording && authorising !== null
+          ? {
+              recording: {
+                elapsed: elapsedLabel(recorderState.durationMillis / 1000),
+                label: recordingLabel(clockFrom(authorising.capturedAt)),
+                onStop: () => {
+                  stopRecording(true);
+                },
+                onStopAndDelete: () => {
+                  stopRecording(false);
+                },
+              },
+            }
+          : {})}
+        onRecordVoiceNote={() => {
+          router.push(`/voice-note/${visit?.id ?? id}`);
+        }}
+        {...(block === null && !recorderState.isRecording
+          ? { onStartRecording: startRecording }
+          : {})}
+        recordingBlockedReason={block === null ? null : blockReason(block)}
         onRecordSamples={() => {
           router.push(`/samples/${visit?.id ?? id}`);
         }}

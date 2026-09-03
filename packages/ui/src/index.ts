@@ -121,6 +121,8 @@ export type {
   TransparencyState,
 } from './TransparencyScreen';
 export { VisitScreen } from './VisitScreen';
+export { VoiceNoteScreen } from './VoiceNoteScreen';
+export type { VoiceNoteScreenProps } from './VoiceNoteScreen';
 export type { VisitScreenProps } from './VisitScreen';
 export { TodayScreen } from './TodayScreen';
 export type { TodayNextVisit, TodayScreenProps } from './TodayScreen';

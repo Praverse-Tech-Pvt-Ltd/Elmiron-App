@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -37,23 +38,48 @@ const FACES = {
   CormorantGaramond_500Medium,
 };
 
+/**
+ * How long the first paint will wait for the typeface before going without it.
+ *
+ * Long enough that a normal load is never seen as a flash of the wrong font,
+ * short enough that a hang is a blink rather than a broken app.
+ */
+const FONT_DEADLINE_MS = 3_000;
+
 export default function RootLayout(): ReactNode {
   const [fontsLoaded, fontError] = useFonts(FACES);
 
   /**
-   * Nothing renders until the faces are registered — but a failure does not block
-   * the app.
+   * The first paint waits for the faces — but never indefinitely.
    *
-   * Rendering first and letting the fonts swap in would reflow every screen a
-   * beat after it appeared, and on the sign-in screen that means the field the MR
-   * is already typing into moves under their thumb. So the first paint waits.
+   * Rendering first and letting the fonts swap in reflows every screen a beat
+   * after it appears, and on sign-in that moves the field the MR is already
+   * typing into. So the first paint waits.
    *
-   * `fontError` is the other half and it is not a crash: if a face cannot be read,
-   * the app comes up in the platform's font rather than not at all. A missing
-   * typeface is a cosmetic failure and this app is used in the field — refusing to
-   * start over one would turn it into a total one.
+   * **It waits with a deadline, and that is not belt-and-braces.** `useFonts`
+   * reports loaded or failed; it does not promise to do either. On the first run
+   * of the dev build this hook did neither for as long as anyone watched, and the
+   * app sat on a white screen with no error, no log and a live JS bundle — the
+   * gate below was the whole cause. An app that renders nothing for ever because
+   * a typeface did not arrive is worse in every way than one that renders in the
+   * platform font, so after `FONT_DEADLINE_MS` it gives up waiting and paints.
+   *
+   * `fontError` is the same judgement for the case the hook does report: a missing
+   * typeface is cosmetic, and this app is used in the field, so refusing to start
+   * over one would turn a cosmetic failure into a total one.
    */
-  if (!fontsLoaded && fontError === null) return null;
+  const [waitedLongEnough, setWaitedLongEnough] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setWaitedLongEnough(true);
+    }, FONT_DEADLINE_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, []);
+
+  if (!fontsLoaded && fontError === null && !waitedLongEnough) return null;
 
   return (
     <SafeAreaProvider>
