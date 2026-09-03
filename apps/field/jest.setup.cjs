@@ -19,3 +19,18 @@ jest.mock(
   'react-native-safe-area-context',
   () => require('react-native-safe-area-context/jest/mock').default,
 );
+
+// AsyncStorage is a native module, so it is `null` under jest and every call
+// throws — which takes down the whole suite file, not just the assertion.
+//
+// The library ships a mock that behaves like the real store (an in-memory map with
+// the same promise-returning API), which is what these tests want: onboarding
+// progress is *read* by the entry route and the battery screen, and asserting
+// "first run redirects to setup, and does not once it is finished" needs storage
+// that actually remembers within a test.
+//
+// Unlike the safe-area mock above there is no `.default` here — this one is a
+// CommonJS module whose export IS the replacement.
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
+);

@@ -1,9 +1,15 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import { SyncQueueItemSchema } from '@fieldforce/core';
 import { QueueScreen } from '@fieldforce/ui';
 import { emptyQueue, syncQueueReducer } from '../sync/reducer';
 import type { SyncEvent } from '../sync/events';
+
+// The route now reads the outbox off disk and can retry it, so it pulls in the API
+// client — whose module validates EXPO_PUBLIC_* at load and throws under jest.
+// Mocked at the same boundary the other route tests use.
+jest.mock('../api', () => ({ createClientForScenario: () => ({}) }));
+
 import Queue from '../../app/queue';
 
 /**

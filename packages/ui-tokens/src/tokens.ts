@@ -76,9 +76,21 @@ export interface SpaceTokens {
   readonly xl: number;
 }
 
+/**
+ * Phase 1 §05 names three radii the original scale did not carry: a 16 on every
+ * control, a 20 on every card and sheet, and a 12 on the tinted wells inside a
+ * card. `sm` and `md` predate the design and are kept because existing screens use
+ * them; new work takes `control`, `card` or `well`, which are the design's own.
+ */
 export interface RadiusTokens {
   readonly sm: number;
   readonly md: number;
+  /** Tinted well inside a card — a semantic fill, a quote block, a chip. */
+  readonly well: number;
+  /** Buttons, inputs, icon buttons. Phase 1 §05. */
+  readonly control: number;
+  /** Cards, sheets, the hero. Phase 1 §05. */
+  readonly card: number;
   readonly pill: number;
 }
 
@@ -113,6 +125,10 @@ export interface TypographyTokens {
   /** 14.5/400 — "31.7 km · on this month's claim". */
   readonly secondary: TypeStyle;
   readonly label: TypeStyle;
+  /** 17/600 — every button label. Phase 1 §05, and never uppercased. */
+  readonly control: TypeStyle;
+  /** 19/400 — the value inside an input, larger than body on purpose. §05. */
+  readonly value: TypeStyle;
 }
 
 /**
@@ -132,6 +148,11 @@ export interface TargetTokens {
   readonly primary: number;
   /** Pressed while walking, in a corridor, without looking. */
   readonly inVisit: number;
+  /**
+   * A list row and a sheet row. Taller than the touch floor because a row is read
+   * before it is tapped, and the reading is what needs the height. Phase 1 §05.
+   */
+  readonly row: number;
   /** Minimum gap between adjacent targets. */
   readonly gap: number;
   /** Fraction of screen height reserved for the reach zone (281/844). */
@@ -179,7 +200,7 @@ export const tokens: DesignTokens = {
     recording: brandPalette.recording,
   },
   space: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 },
-  radius: { sm: 4, md: 8, pill: 999 },
+  radius: { sm: 4, md: 8, well: 12, control: 16, card: 20, pill: 999 },
   typography: {
     figure: { size: 40, lineHeight: 44, weight: '600', letterSpacing: -1.8 },
     display: { size: 30, lineHeight: 34, weight: '600', letterSpacing: -1.05 },
@@ -188,12 +209,15 @@ export const tokens: DesignTokens = {
     body: { size: 16, lineHeight: 24, weight: '400' },
     secondary: { size: 14.5, lineHeight: 21, weight: '400' },
     label: { size: 13.5, lineHeight: 18, weight: '500' },
+    control: { size: 17, lineHeight: 22, weight: '600' },
+    value: { size: 19, lineHeight: 24, weight: '400' },
   },
   target: {
     floor: 44,
     secondary: 52,
     primary: 60,
     inVisit: 66,
+    row: 70,
     gap: 8,
     reachZoneFraction: 281 / 844,
   },

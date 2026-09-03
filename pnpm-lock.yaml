@@ -81,6 +81,9 @@ importers:
       expo-linking:
         specifier: ~57.0.5
         version: 57.0.5(expo@57.0.12)(react-native@0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(react@19.2.3)(supports-color@8.1.1))(@react-native/metro-config@0.87.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)(supports-color@8.1.1)
+      expo-location:
+        specifier: ~57.0.14
+        version: 57.0.14(expo@57.0.12)(supports-color@8.1.1)(typescript@5.9.3)
       expo-router:
         specifier: ~57.0.12
         version: 57.0.12(99a42d846f021c2eec3c941d89878ef9)
@@ -3012,6 +3015,11 @@ packages:
     peerDependencies:
       react: '*'
       react-native: '*'
+
+  expo-location@57.0.14:
+    resolution: {integrity: sha512-LX4r9842hHluqiCdA0zcgFpxxZsILh5MorhMOnpuPa4IpOaph4kOfKWVESO9Q6opM1+ryw/eOAo3/B7k8IIjPQ==}
+    peerDependencies:
+      expo: '*'
 
   expo-modules-autolinking@57.0.11:
     resolution: {integrity: sha512-cvbEwYDKGhvMWoStZVceCdFRvrizm82uNMIDKIeo6NO4X/QC7PN4Eqm7Vn57DmgBdZNBJIk/647/NpNowPqAxQ==}
@@ -6587,7 +6595,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
       - typescript
-    optional: true
 
   '@expo/inline-modules@0.1.5(supports-color@8.1.1)(typescript@5.9.3)':
     dependencies:
@@ -6834,7 +6841,7 @@ snapshots:
       '@expo/config': 57.0.7(supports-color@8.1.1)(typescript@5.9.3)
       '@expo/config-plugins': 57.0.7(supports-color@8.1.1)(typescript@5.9.3)
       '@expo/config-types': 57.0.2
-      '@expo/image-utils': 0.11.4(supports-color@8.1.1)(typescript@5.9.3)
+      '@expo/image-utils': 0.11.5(supports-color@8.1.1)(typescript@5.9.3)
       '@expo/json-file': 11.0.1
       '@react-native/normalize-colors': 0.86.2
       debug: 4.4.3(supports-color@8.1.1)
@@ -6881,7 +6888,6 @@ snapshots:
       typescript: 5.9.3
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   '@expo/router-server@57.0.5(@expo/metro-runtime@57.0.9)(expo-constants@57.0.10)(expo-font@57.0.1)(expo-router@57.0.12)(expo-server@57.0.2)(expo@57.0.12)(react@19.2.3)(supports-color@8.1.1)':
     dependencies:
@@ -9153,6 +9159,14 @@ snapshots:
       - expo
       - supports-color
     optional: true
+
+  expo-location@57.0.14(expo@57.0.12)(supports-color@8.1.1)(typescript@5.9.3):
+    dependencies:
+      '@expo/image-utils': 0.11.5(supports-color@8.1.1)(typescript@5.9.3)
+      expo: 57.0.12(b6d7d01b32f271fbf9dab02c7456431d)
+    transitivePeerDependencies:
+      - supports-color
+      - typescript
 
   expo-modules-autolinking@57.0.11(supports-color@8.1.1)(typescript@5.9.3):
     dependencies:

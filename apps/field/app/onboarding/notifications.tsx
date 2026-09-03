@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
-import { BodyText, Heading, ListRow, PrimaryButton, Screen } from '@fieldforce/ui';
+import { BodyText, Button, Heading, ListRow, Screen } from '@fieldforce/ui';
 import { capSentence, NOTIFICATION_TYPES } from '../../src/onboarding/notifications';
 
 /**
@@ -17,7 +17,15 @@ import { capSentence, NOTIFICATION_TYPES } from '../../src/onboarding/notificati
  *
  * Both actions leave the screen. "Not now" is not a lesser choice rendered as one:
  * notifications denied is an ordinary state, and the app has no behaviour that
- * depends on this being granted.
+ * depends on this being granted. They are the same `Button` variant for that reason.
+ *
+ * **Why both are `secondary` and not both `primary`.** §04 gives a screen one
+ * primary action; two filled accent buttons made this screen read as two competing
+ * primaries. The resolution is §05's own worked example — `OverrideControl` renders
+ * Agree and Disagree as two identical `secondary` controls, because a genuine
+ * either/or has no single action the app is pushing. Equal weight is preserved
+ * exactly; what is dropped is the false claim that either answer is *the* thing to
+ * do here.
  */
 export default function NotificationsRationale(): ReactNode {
   const router = useRouter();
@@ -39,8 +47,8 @@ export default function NotificationsRationale(): ReactNode {
         screen is the rationale that precedes it — showing the reasons after Android
         has already asked is the pattern that produces a reflexive "deny".
       */}
-      <PrimaryButton label="Allow notifications" onPress={next} />
-      <PrimaryButton label="Not now" onPress={next} />
+      <Button label="Allow notifications" onPress={next} variant="secondary" />
+      <Button label="Not now" onPress={next} variant="secondary" />
     </Screen>
   );
 }

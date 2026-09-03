@@ -62,11 +62,13 @@ const styles = StyleSheet.create({
     borderColor: tokens.color.border,
     paddingVertical: tokens.space.sm,
     paddingHorizontal: tokens.space.md,
-    minHeight: 48,
+    minHeight: tokens.target.secondary,
     justifyContent: 'center',
   },
   actionDone: { borderColor: tokens.color.accent },
-  pressed: { opacity: 0.75 },
+  // §05: press darkens the fill. Fading a bordered control on warm paper lightens
+  // it, which is the opposite of the feedback the design asks for.
+  pressed: { backgroundColor: tokens.color.wash },
 });
 
 /**

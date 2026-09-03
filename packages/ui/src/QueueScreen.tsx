@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { BodyText, Heading, Label } from './Text';
+import { Button } from './Button';
 import { Screen } from './Screen';
 
 /**
@@ -34,6 +35,8 @@ export interface QueueScreenItem {
   readonly entity: string;
   readonly status: 'queued' | 'in_flight' | 'synced' | 'conflict' | 'failed';
   readonly attemptCount: number;
+  /** Server clock, set when the server took delivery. `null` while still queued. */
+  readonly syncedAt?: string | null;
 }
 
 export interface QueueScreenProps {
@@ -41,6 +44,14 @@ export interface QueueScreenProps {
   readonly rejections: Readonly<Record<string, QueueScreenRejection>>;
   /** Overridable so a test can move the threshold without editing the component. */
   readonly longRetryAfterAttempts?: number;
+  /**
+   * S3's "Try again now". Absent until something can actually retry — a button
+   * that does nothing on the screen reporting a failure is the cruellest possible
+   * place for one.
+   */
+  readonly onRetry?: () => void;
+  /** S3's "Tell the help desk". Absent until there is a help desk to tell. */
+  readonly onContactSupport?: () => void;
 }
 
 export type QueueRowState = 'sent' | 'waiting' | 'waiting-long' | 'refused' | 'needs-attention';
@@ -61,6 +72,49 @@ export const rowStateFor = (
   if (rejection !== undefined) return rejection.deadLettered ? 'needs-attention' : 'refused';
   if (item.status === 'synced') return 'sent';
   return item.attemptCount >= longRetryAfterAttempts ? 'waiting-long' : 'waiting';
+};
+
+/**
+ * S3 — what is stuck, and what got through despite it.
+ *
+ * **Scoping the damage is the whole job of this block.** An MR who sees "upload
+ * failed" at 19:10 has no way to tell whether their day's work exists. Naming the
+ * entities that did go through, and the ones that did not, is the difference
+ * between a bad evening and a re-entered day.
+ *
+ * `refused` items are deliberately NOT counted here. A refusal is the server
+ * answering, and the row already carries its sentence verbatim; folding it into
+ * "won't go" would turn a decision into a malfunction.
+ *
+ * Returns `null` when nothing is stuck, so the caller renders no block at all
+ * rather than an empty reassurance.
+ */
+export interface QueueStuckSummary {
+  readonly count: number;
+  readonly stuckEntities: readonly string[];
+  readonly sentEntities: readonly string[];
+}
+
+export const stuckSummaryFor = (
+  items: readonly QueueScreenItem[],
+  rejections: Readonly<Record<string, QueueScreenRejection>>,
+  longRetryAfterAttempts: number = LONG_RETRY_AFTER_ATTEMPTS,
+): QueueStuckSummary | null => {
+  const stuck = items.filter((item) => {
+    const state = rowStateFor(item, rejections[item.id], longRetryAfterAttempts);
+    return state === 'waiting-long' || state === 'needs-attention';
+  });
+  if (stuck.length === 0) return null;
+
+  const unique = (values: readonly string[]): readonly string[] => [...new Set(values)].sort();
+
+  return {
+    count: stuck.length,
+    stuckEntities: unique(stuck.map((item) => item.entity)),
+    sentEntities: unique(
+      items.filter((item) => item.status === 'synced').map((item) => item.entity),
+    ),
+  };
 };
 
 /**
@@ -98,7 +152,10 @@ const styles = StyleSheet.create({
     borderRadius: tokens.radius.sm,
     backgroundColor: tokens.color.surface,
     gap: tokens.space.xs,
-    minHeight: 44,
+    // §04's absolute floor for anything tappable, from the token rather than as a
+    // literal. A queue row is read more than it is tapped, so it sits at the floor
+    // and not at the 70 §05 gives a visit row.
+    minHeight: tokens.target.floor,
     justifyContent: 'center',
   },
   statusLine: { flexDirection: 'row', alignItems: 'center', gap: tokens.space.sm },
@@ -108,7 +165,86 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   empty: { gap: tokens.space.sm },
+  /**
+   * S3 is "the only critical colour in the whole flow", and it earns it: an upload
+   * that has been tried and refused to go is a genuine failure, unlike waiting,
+   * offline or refused-by-the-server, which are all normal states.
+   */
+  stuck: {
+    borderRadius: tokens.radius.well,
+    backgroundColor: tokens.color.criticalFill,
+    borderLeftWidth: 4,
+    borderLeftColor: tokens.color.critical,
+    padding: tokens.space.md,
+    gap: tokens.space.xs,
+  },
+  reassurance: {
+    borderTopWidth: 1,
+    borderTopColor: tokens.color.hairline,
+    paddingTop: tokens.space.sm,
+    gap: 2,
+  },
+  actions: { flexDirection: 'row', gap: tokens.space.sm, paddingTop: tokens.space.xs },
+  grow: { flex: 1 },
 });
+
+const list = (values: readonly string[]): string =>
+  values.length <= 1
+    ? (values[0] ?? '')
+    : `${values.slice(0, -1).join(', ')} and ${values[values.length - 1] ?? ''}`;
+
+/**
+ * The block S3 puts above the rows.
+ *
+ * Everything in it is a fact about the queue the MR is looking at. There is no
+ * "things to try" list unless there is something to try with — advice to "get on
+ * WiFi and tap Send" on a screen with no Send button is advice that cannot be
+ * followed.
+ */
+const StuckBlock = ({
+  summary,
+  onRetry,
+  onContactSupport,
+}: {
+  readonly summary: QueueStuckSummary;
+  readonly onRetry?: (() => void) | undefined;
+  readonly onContactSupport?: (() => void) | undefined;
+}): ReactNode => (
+  <View accessibilityRole="alert" accessible style={styles.stuck}>
+    <BodyText>
+      {summary.count === 1 ? '1 thing won’t go' : `${String(summary.count)} things won’t go`}
+    </BodyText>
+    <Label muted>{`Stuck: ${list(summary.stuckEntities)}. It is still safe on your phone.`}</Label>
+
+    <View style={styles.reassurance}>
+      {summary.sentEntities.length === 0 ? null : (
+        <Label muted>{`Everything else went through — ${list(summary.sentEntities)}.`}</Label>
+      )}
+      {/*
+        Said out loud, because the MR is the person most likely to assume otherwise.
+        It is also literally true of this system: there is no ranking, score or
+        percentile anywhere to count it against, and the backend has tests asserting
+        those columns do not exist.
+      */}
+      <Label muted>This is not counted against you. The upload failed, not you.</Label>
+    </View>
+
+    {onRetry === undefined && onContactSupport === undefined ? null : (
+      <View style={styles.actions}>
+        {onRetry === undefined ? null : (
+          <View style={styles.grow}>
+            <Button label="Try again now" onPress={onRetry} variant="secondary" />
+          </View>
+        )}
+        {onContactSupport === undefined ? null : (
+          <View style={styles.grow}>
+            <Button label="Tell the help desk" onPress={onContactSupport} variant="quiet" />
+          </View>
+        )}
+      </View>
+    )}
+  </View>
+);
 
 const QueueRow = ({
   item,
@@ -149,12 +285,19 @@ export const QueueScreen = ({
   items,
   rejections,
   longRetryAfterAttempts = LONG_RETRY_AFTER_ATTEMPTS,
+  onRetry,
+  onContactSupport,
 }: QueueScreenProps): ReactNode => {
   const outstanding = items.filter((item) => item.status !== 'synced');
+  const summary = stuckSummaryFor(items, rejections, longRetryAfterAttempts);
 
   return (
     <Screen scrollable>
       <Heading>Your upload queue</Heading>
+
+      {summary === null ? null : (
+        <StuckBlock onContactSupport={onContactSupport} onRetry={onRetry} summary={summary} />
+      )}
 
       {outstanding.length === 0 ? (
         <View style={styles.empty}>

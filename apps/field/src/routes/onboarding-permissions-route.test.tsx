@@ -1,6 +1,35 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
+import { tokens } from '@fieldforce/ui-tokens';
 import { NOTIFICATION_TYPES, capSentence } from '../onboarding/notifications';
+
+/**
+ * The fill and height actually in force on the control carrying `label`, found by
+ * walking up from the text to the first ancestor that sets a background. Comparing
+ * these between two actions is how "de-emphasises neither" becomes checkable rather
+ * than a comment.
+ */
+const flatten = (style: unknown): Record<string, unknown> => {
+  // Merged by hand rather than with `StyleSheet.flatten`: the repo's ESLint rule
+  // bars react-native's primitives from apps/field entirely, and a test is not an
+  // exemption from the rule that keeps components in @fieldforce/ui.
+  if (Array.isArray(style))
+    return Object.assign({}, ...style.map(flatten)) as Record<string, unknown>;
+  if (typeof style === 'object' && style !== null) return style as Record<string, unknown>;
+  return {};
+};
+
+const fillAndHeightOf = (label: string): { backgroundColor: unknown; minHeight: unknown } => {
+  let node = screen.getByText(label).parent;
+  while (node !== null) {
+    const style = flatten(node.props['style']);
+    if (style['backgroundColor'] !== undefined) {
+      return { backgroundColor: style['backgroundColor'], minHeight: style['minHeight'] };
+    }
+    node = node.parent;
+  }
+  throw new Error(`no ancestor of "${label}" sets a backgroundColor`);
+};
 
 const mockBack = jest.fn();
 const mockPush = jest.fn();
@@ -34,6 +63,16 @@ describe('A3 — notifications name what they are and cap the count', () => {
   it('offers declining as an ordinary choice, not a warning', async () => {
     await render(<NotificationsRationale />);
     expect(screen.getByText('Not now')).toBeTruthy();
+  });
+
+  it('weights allowing and declining identically', async () => {
+    // "'Not now' is not a lesser choice rendered as one" is the screen's own claim,
+    // and it is only true if the two controls are the same size and the same fill.
+    // Neither takes the primary accent: §04 gives a screen one primary action and a
+    // permission ask has no single answer the app is entitled to push.
+    await render(<NotificationsRationale />);
+    expect(fillAndHeightOf('Allow notifications')).toEqual(fillAndHeightOf('Not now'));
+    expect(fillAndHeightOf('Allow notifications').backgroundColor).not.toBe(tokens.color.accent);
   });
 });
 
@@ -69,6 +108,15 @@ describe('A4 — the microphone, and the separation that must not collapse', () 
     await render(<MicrophoneRationale />);
     expect(screen.getByText('Recording a consultation is separate')).toBeTruthy();
   });
+
+  it('weights allowing and declining identically', async () => {
+    // Consent to a microphone is not an outcome this screen steers towards, so
+    // neither control is dressed as the expected answer. Same assertion as its two
+    // sibling screens, because the claim is the same on all three.
+    await render(<MicrophoneRationale />);
+    expect(fillAndHeightOf('Allow the microphone')).toEqual(fillAndHeightOf('Not now'));
+    expect(fillAndHeightOf('Allow the microphone').backgroundColor).not.toBe(tokens.color.accent);
+  });
 });
 
 describe('S4 — location denied', () => {
@@ -89,8 +137,9 @@ describe('S4 — location denied', () => {
 
   it('gives two actions and de-emphasises neither', async () => {
     // "Two equal actions" is a claim about the markup, not only the copy. Both are
-    // PrimaryButtons and both are enabled; rendering "Carry on by hand" as a quieter
-    // control would be the app arguing with a decision it just said it accepted.
+    // the same Button variant and both are enabled; rendering "Carry on by hand" as
+    // a quieter control would be the app arguing with a decision it just said it
+    // accepted.
     await render(<LocationDenied />);
 
     const turnOn = screen.getByText('Turn location back on');
@@ -103,6 +152,21 @@ describe('S4 — location denied', () => {
     // would, and neither action may answer "disabled".
     expect(screen.getAllByRole('button').length).toBe(2);
     expect(screen.queryAllByRole('button', { disabled: true })).toEqual([]);
+
+    // And equal in the pixels, not only in the count. The previous version of this
+    // test would have passed just as happily with one action promoted to the filled
+    // accent — "two buttons, neither disabled" is true of a coercive screen too.
+    expect(fillAndHeightOf('Turn location back on')).toEqual(fillAndHeightOf('Carry on by hand'));
+  });
+
+  it('does not give either action the primary accent fill', async () => {
+    // §04 gives a screen ONE primary action. Two accent fills read as two competing
+    // primaries; §05 resolves a genuine either/or the way OverrideControl does, with
+    // two identical secondary controls. Asserted against the token rather than a hex
+    // literal, so a palette change cannot silently satisfy it.
+    await render(<LocationDenied />);
+    expect(fillAndHeightOf('Turn location back on').backgroundColor).not.toBe(tokens.color.accent);
+    expect(fillAndHeightOf('Carry on by hand').backgroundColor).not.toBe(tokens.color.accent);
   });
 
   it('does not dress a normal state as a failure', async () => {

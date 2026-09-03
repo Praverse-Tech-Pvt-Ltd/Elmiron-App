@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { OemBatteryScreen } from '@fieldforce/ui';
 import type { SetupStepView } from '@fieldforce/ui';
 import { detectDeviceOem, deviceLauncher } from '../../src/onboarding/device';
+import { batteryStepsDone, saveBatteryStepsDone } from '../../src/onboarding/progress';
 import { intentsFor } from '../../src/onboarding/intents';
 import type { SettingsIntent } from '../../src/onboarding/intents';
 import { launchSettings, offerableIntents } from '../../src/onboarding/launch';
@@ -35,6 +36,19 @@ export default function BatterySetup(): ReactNode {
   const [offered, setOffered] = useState<readonly SettingsIntent[]>([]);
   const [done, setDone] = useState<readonly string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // The ticks survive leaving the screen. They used to live only in component
+  // state, so an MR who set all three, walked away and came back was told they had
+  // done nothing — on the one screen whose entire job is to survive being left.
+  useEffect(() => {
+    let live = true;
+    void batteryStepsDone().then((ids) => {
+      if (live) setDone(ids);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   useEffect(() => {
     // Rule 1: probe before offering. Until this resolves, `offered` is empty and the
@@ -90,12 +104,19 @@ export default function BatterySetup(): ReactNode {
       steps={steps}
       notice={notice}
       onToggleDone={(id) => {
-        setDone((current) =>
-          current.includes(id) ? current.filter((each) => each !== id) : [...current, id],
-        );
+        setDone((current) => {
+          const next = current.includes(id)
+            ? current.filter((each) => each !== id)
+            : [...current, id];
+          void saveBatteryStepsDone(next);
+          return next;
+        });
       }}
       onContinue={() => {
-        router.push('/home');
+        // A9 closes first run, not this screen. The last thing a new MR sees before
+        // their day is what the app records about them — which is the point of
+        // putting it there rather than in a settings menu they never open.
+        router.push('/transparency');
       }}
     />
   );

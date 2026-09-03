@@ -4,6 +4,15 @@ import { BodyText as mockBodyText } from '@fieldforce/ui';
 
 const mockSession = jest.fn();
 jest.mock('../session', () => ({ useSession: () => mockSession() }));
+
+// The MR branch is the day view now, and it fetches. Mocked at the client boundary
+// like the doctors route does — importing the real one pulls in `src/config`, which
+// validates EXPO_PUBLIC_* at module load and throws under jest.
+const mockListVisits = jest.fn<() => Promise<unknown>>();
+const mockListDoctors = jest.fn<() => Promise<unknown>>();
+jest.mock('../api', () => ({
+  createClientForScenario: () => ({ listVisits: mockListVisits, listDoctors: mockListDoctors }),
+}));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
   // Rendered through @fieldforce/ui rather than react-native's Text: apps/field is
@@ -13,15 +22,21 @@ jest.mock('expo-router', () => ({
   Redirect: ({ href }: { href: string }) => mockBodyText({ children: `redirect:${href}` }),
 }));
 
-import Home from '../../app/home';
+import Home from '../../app/(tabs)/home';
 
 const signedInAs = (role: string) => ({ status: 'signed-in', role, signOut: jest.fn() });
 
 describe('app/home.tsx — the role-aware shell', () => {
-  it('shows the MR their own day', async () => {
+  it('shows the MR their own day, not a row promising one later', async () => {
+    // "My day — FE-W3" was a placeholder for exactly this screen; B1 replaces it.
+    // The MR's home IS the day, so the assertion is that the day rendered.
     mockSession.mockReturnValue(signedInAs('mr'));
+    mockListVisits.mockResolvedValue({ items: [] });
+    mockListDoctors.mockResolvedValue({ items: [] });
     await render(<Home />);
-    expect(screen.getByText('My day')).toBeTruthy();
+    // The day view's own furniture, not a navigation row that leads to one.
+    expect(await screen.findByText('Nothing planned for today')).toBeTruthy();
+    expect(screen.queryByText('My day')).toBeNull();
     expect(screen.queryByText('Team')).toBeNull();
     expect(screen.queryByText('Administration')).toBeNull();
   });
@@ -30,14 +45,14 @@ describe('app/home.tsx — the role-aware shell', () => {
     mockSession.mockReturnValue(signedInAs('field_manager'));
     await render(<Home />);
     expect(screen.getByText('Team')).toBeTruthy();
-    expect(screen.queryByText('My day')).toBeNull();
+    expect(screen.queryByText('Nothing planned for today')).toBeNull();
   });
 
   it('shows an admin the administration surface', async () => {
     mockSession.mockReturnValue(signedInAs('admin'));
     await render(<Home />);
     expect(screen.getByText('Administration')).toBeTruthy();
-    expect(screen.queryByText('My day')).toBeNull();
+    expect(screen.queryByText('Nothing planned for today')).toBeNull();
   });
 
   it('names the role it read from the token rather than inferring one', async () => {
@@ -52,13 +67,17 @@ describe('app/home.tsx — the role-aware shell', () => {
   // trees un-cleaned and `screen` then reports on the wrong one — which also breaks
   // the NEXT test in the file, not this one.
   it.each(['mr', 'field_manager', 'admin'])(
-    'gives %s the shared destination — this is navigation, not permission',
+    'renders a surface for %s rather than redirecting them away',
     async (role) => {
-      // Hiding a row is a courtesy. The server denies what a role may not do whether
-      // or not the row is on screen, so no role loses the shared surface here.
+      // The shared Doctors destination used to be a row here and is now a tab.
+      // `app/(tabs)/_layout.tsx` lists it unconditionally — there is no role branch
+      // in that file — so the guarantee it carried ("hiding a row is a courtesy;
+      // the server decides what a role may do") is now structural rather than
+      // something this test can observe. What home still owes every signed-in role
+      // is a screen of their own, which is what this asserts.
       mockSession.mockReturnValue(signedInAs(role));
       await render(<Home />);
-      expect(screen.getAllByText('Doctors').length).toBeGreaterThan(0);
+      expect(screen.queryByText('redirect:/sign-in')).toBeNull();
     },
   );
 

@@ -25,6 +25,8 @@ export default function SignIn(): ReactNode {
       });
   };
 
+  const blocked = busy || email === '' || password === '';
+
   return (
     <Screen scrollable>
       <Heading>Sign in</Heading>
@@ -50,10 +52,17 @@ export default function SignIn(): ReactNode {
         autoCapitalize="none"
         editable={!busy}
       />
+      {/*
+        Phase 1 §05 pairs every disabled control with the reason it is disabled —
+        without one the button greys out and says nothing, which reads as a broken
+        app rather than as an unfinished form. `PrimaryButton` renders the note only
+        while disabled, so it appears and disappears with the blocked state.
+      */}
       <PrimaryButton
         label={busy ? 'Signing in…' : 'Sign in'}
         onPress={submit}
-        disabled={busy || email === '' || password === ''}
+        disabled={blocked}
+        note={busy ? 'Checking your details.' : 'Enter your email and password.'}
       />
     </Screen>
   );

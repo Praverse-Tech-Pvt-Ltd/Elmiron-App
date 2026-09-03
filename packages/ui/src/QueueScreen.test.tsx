@@ -1,5 +1,5 @@
-import { describe, expect, it } from '@jest/globals';
-import { render, screen } from '@testing-library/react-native';
+import { describe, expect, it, jest } from '@jest/globals';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import { SyncQueueItemSchema, SyncRejectionCodeSchema } from '@fieldforce/core';
 import { LONG_RETRY_AFTER_ATTEMPTS, QueueScreen, rowStateFor } from './QueueScreen';
 import type { QueueScreenRejection } from './QueueScreen';
@@ -207,5 +207,81 @@ describe('the glyph is decorative', () => {
 
     expect(typeof char).toBe('string');
     expect(ALLOWED_GLYPHS.has(char as string)).toBe(true);
+  });
+});
+
+/**
+ * S3 — the upload that keeps failing.
+ *
+ * The design calls this "the only critical colour in the whole flow", and the two
+ * things it must do are scope the damage precisely and say out loud that the
+ * failure is the system's, not the MR's.
+ */
+describe('S3 — when something will not go', () => {
+  const stuck = () =>
+    item({ id: '15151515-1515-4515-8515-151515151502', entity: 'recording', attemptCount: 5 });
+
+  it('says how many things are stuck, not just that something failed', async () => {
+    await render(<QueueScreen items={[stuck()]} rejections={{}} />);
+    expect(screen.getByText('1 thing won’t go')).toBeTruthy();
+  });
+
+  it('names what did get through, so the MR knows their day exists', async () => {
+    // The difference between a bad evening and a re-entered day. An MR who sees
+    // only "upload failed" has no way to tell which half of their work survived.
+    await render(
+      <QueueScreen
+        items={[stuck(), item({ id: '15151515-1515-4515-8515-151515151503', status: 'synced' })]}
+        rejections={{}}
+      />,
+    );
+    expect(screen.getByText(/Everything else went through/u)).toBeTruthy();
+    expect(screen.getByText(/Stuck: recording/u)).toBeTruthy();
+  });
+
+  it('states that the failure is not counted against the MR', async () => {
+    await render(<QueueScreen items={[stuck()]} rejections={{}} />);
+    expect(
+      screen.getByText('This is not counted against you. The upload failed, not you.'),
+    ).toBeTruthy();
+  });
+
+  it('shows nothing of the sort while items are merely waiting', async () => {
+    // Waiting is a normal state. Raising a critical block for it is how an app
+    // teaches an MR that its warnings mean nothing.
+    await render(<QueueScreen items={[item({ attemptCount: 0 })]} rejections={{}} />);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('does not fold a server refusal into "won’t go"', async () => {
+    // A refusal is the server answering, and the row carries its sentence verbatim.
+    // Counting it as a malfunction would turn a decision into a fault.
+    await render(
+      <QueueScreen items={[item({ attemptCount: 0 })]} rejections={{ [item().id]: rejection() }} />,
+    );
+    expect(screen.queryByText(/won’t go/u)).toBeNull();
+  });
+
+  it('offers no advice it cannot back and no button that does nothing', async () => {
+    // S3 suggests "get on WiFi and tap Send". With no Send action wired, that is
+    // advice the MR cannot follow, on the screen least able to afford it.
+    await render(<QueueScreen items={[stuck()]} rejections={{}} />);
+    expect(screen.queryByText('Try again now')).toBeNull();
+    expect(screen.queryByText('Tell the help desk')).toBeNull();
+  });
+
+  it('offers both actions once there is somewhere for them to go', async () => {
+    const onRetry = jest.fn();
+    await render(
+      <QueueScreen
+        items={[stuck()]}
+        onContactSupport={() => undefined}
+        onRetry={onRetry}
+        rejections={{}}
+      />,
+    );
+    await fireEvent.press(screen.getByText('Try again now'));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Tell the help desk')).toBeTruthy();
   });
 });

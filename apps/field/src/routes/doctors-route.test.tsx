@@ -1,11 +1,35 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { render, screen, waitFor } from '@testing-library/react-native';
 import { ApiRequestError } from '@fieldforce/core';
 
 const mockListDoctors = jest.fn<() => Promise<unknown>>();
-jest.mock('../api', () => ({ createClientForScenario: () => ({ listDoctors: mockListDoctors }) }));
+// The list ranks by how long since the last visit, so the route reads both
+// collections. Visits default to empty in every case below; the assertions here are
+// about how a server DECISION is presented, and an empty visit list keeps that the
+// only variable.
+const mockListVisits = jest.fn<() => Promise<unknown>>();
+// The "On plan" chip filters against the server's approved beat plan, so the route
+// reads that too. Empty by default here: these cases are about how a server
+// DECISION is presented, and an empty plan keeps that the only variable.
+const mockListBeatPlans = jest.fn<() => Promise<unknown>>();
+jest.mock('../api', () => ({
+  createClientForScenario: () => ({
+    listDoctors: mockListDoctors,
+    listVisits: mockListVisits,
+    listBeatPlans: mockListBeatPlans,
+  }),
+}));
+// The list opens a profile, so the route reads the router. Mocked because the real
+// module pulls in `standard-navigation`, which ships untransformed ESM that jest's
+// transformIgnorePatterns does not cover.
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 
-import Doctors from '../../app/doctors';
+import Doctors from '../../app/(tabs)/doctors';
+
+beforeEach(() => {
+  mockListVisits.mockResolvedValue({ items: [], nextCursor: null });
+  mockListBeatPlans.mockResolvedValue({ items: [], nextCursor: null });
+});
 
 const denial = new ApiRequestError(403, {
   code: 'permission_denied',
@@ -48,8 +72,10 @@ describe('app/doctors.tsx — how the client presents a server decision', () => 
 
   it('names what is loading rather than showing a bare spinner', async () => {
     mockListDoctors.mockReturnValue(new Promise(() => undefined));
+    mockListVisits.mockReturnValue(new Promise(() => undefined));
+    mockListBeatPlans.mockReturnValue(new Promise(() => undefined));
     await render(<Doctors />);
-    expect(screen.getByLabelText('Loading doctors')).toBeTruthy();
+    expect(screen.getByLabelText('Getting your doctor list')).toBeTruthy();
   });
 
   it('separates a transport failure from a denial', async () => {

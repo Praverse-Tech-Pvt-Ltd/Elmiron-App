@@ -315,6 +315,188 @@ enforcement. Which one is promised to the MR changes what the app must show.
 
 ---
 
+## 4a. Answered — 2 September 2026
+
+Recorded here rather than in a chat window, next to the questions they answer.
+
+**1. Collection frequency and precision — DISCRETE FIXES ONLY.** A position is taken
+when the MR presses check-in or check-out, and at no other time. Consequences,
+accepted knowingly:
+
+- No `ACCESS_BACKGROUND_LOCATION`, no location foreground service, no persistent
+  notification, and **no Play Store background-location declaration**.
+- **Mileage stays straight-line between visits and under-reports real travel.** That
+  is a known, explainable property, not a defect to be fixed later by widening
+  collection.
+- **Phase 2's B4 cannot be built as drawn.** B4 is an arrival prompt fired by a
+  geofence; a geofence needs background location. It becomes a manual arrival
+  action the MR presses.
+- **"2.4 km from here" and "11 min by bike" remain unbuildable** on B1, B3 and B9.
+  Those need a position while the app is merely open, which this decision does not
+  permit. Distance shown *at* check-in is a different thing and is server-computed.
+
+**4 and 5. Denied or coarse-only permission — DEGRADE, and location is advisory.**
+Taken from the design rather than invented: S4 states "The app fully works with
+location denied", and the schema supports it — `geofence_status` has `unavailable`
+as a legal value and `distance_from_clinic_metres` is nullable.
+
+> **BLOCKED ON BACKEND.** The contract does not currently express this.
+> `CreateCheckInRequestSchema.coordinates` is required and non-nullable, so a
+> check-in with no fix cannot be sent at all. S4's promise is unimplementable until
+> `coordinates` becomes nullable, or a `manual-no-fix` variant exists. Inventing a
+> sentinel coordinate on the client is not an option: the server computes
+> `distance_from_clinic_metres` from it, and a fabricated position becomes a
+> distance in somebody's expense claim.
+
+**2, 3 and 6 — narrowed, not closed.** With no background collection, 6 ("does
+collection stop at shift end") has nothing to stop: the app never collects unless
+the MR presses a button. 3 (the Play prominent-disclosure) is partly served by the
+transparency screen, which is now built and reachable from home. 2 (location
+retention) remains open and inherits the backend's disabled retention workflows.
+
+### Two further decisions, taken the same day
+
+**§3.6's never-build line stands.** No screen displays a transcript, analysis or AI
+summary. The Coaching tab renders a placeholder saying the work is blocked, and the
+call report is written by the MR rather than auto-drafted. Phase 1's `CitationSpan`
+and `FindingCard` remain built, tested and unused.
+
+**Availability inference is permitted.** B9's "best time to catch him" and B3's
+"best window" may be derived **from the MR's own visit history** — when they went
+and how long they stayed. This is scheduling help, not prescriber profiling: C14's
+boundary stands, and nothing about what a doctor prescribes or about their patients
+is recorded anywhere in this app.
+
+### Three further decisions, taken 3 September 2026 — C5 and B7
+
+Recorded when the last two Phase 2 frames were built, for the same reason the rest
+of §4a is here: each is a place where the drawn design and the repository disagree,
+and the disagreement is settled in writing rather than in a comment nobody reads.
+
+**C5's UCPMP cap meter is NOT built, and must not be faked.** C5 draws "6 of 12
+packs" against the monthly cap and states that "the app won't let you go past it".
+Nothing in the repository can supply that ceiling: `samples_and_inputs` has no
+limit column and no check constraint, `20260811000400_rls_policies.sql` grants a
+plain `insert` with no cap predicate, and no endpoint or RPC computes a month to
+date. `SampleAndInputSchema`'s comment that "UCPMP caps are enforced server-side"
+describes an intention, not the schema as it stands.
+
+`SamplesScreen` therefore takes an optional `cap` and a **required** `capNote`, and
+today only the note is shown: the app says plainly that it is not counting and
+tells the MR to keep their own count. A meter drawn from an invented number is the
+worst thing this screen could contain — an MR who believes the app is holding the
+compliance line stops holding it themselves, and hears otherwise as a finding with
+their name on it. The meter is written and tested behind the `cap` prop, ready for
+the day something authoritative answers.
+
+> **BLOCKED ON BACKEND.** A monthly-cap read — the limit and the MR's month to
+> date, per doctor — is what turns the note back into the control C5 draws.
+
+**C5 asks the MR for the declared value, which C5 does not draw.**
+`CreateSampleAndInputRequest.declaredValueInr` is required, and there is no product
+catalogue in the contract, the schema or the mock to resolve it from. The two
+available options were to ask or to post a zero. A zero is a false declaration into
+a table that is append-only by grant and audit-logged by trigger, and cannot be
+edited afterwards; the MR is also the one person who knows what they handed over.
+So the field exists, is validated (digits, at most two decimal places — not
+`Number()`, which accepts `''`, `0x10` and `1e3`), and is labelled as the MR's own
+declaration. This is `MileageScreen`'s refusal to invent a rupee figure applied to
+a *write*, which is why it is asked for rather than merely explained.
+
+**B7 confirms a standing fact, not an event at 18:22.** B7 draws location being
+switched off at the end of the day. Under §4a's discrete-fixes decision there is
+nothing to switch off: a position is read on a check-in or check-out press and
+never between them. Announcing a stop the app never needed would teach the MR that
+it tracks them continuously — the precise belief the transparency screen exists to
+correct. `DayEndScreen` therefore says "Nothing is being recorded" in the present
+tense, and there is no "Start day tomorrow" action because there is no day to
+start. C11's ordering is kept exactly: the confirmation is the first card, it
+renders before the network answers, and a failed load leaves it standing with the
+totals absent.
+
+Three of B7's figures are also absent, each for a reason already recorded
+elsewhere: the ₹627 needs a per-kilometre rate that exists in no contract; "ran
+9h 27m" is clock arithmetic `today/plan.ts` rules out, so the two server stamps are
+shown instead; and "6.2 MB data used" has no source, as `settings/content.ts`
+already notes for the same figures on C4.
+
+### Phase 3 — the consent handoff, decided 3 September 2026
+
+The handoff screen itself is built: D1, D2, D4 as the three variants, D3 as the
+legal layer, D5 as what the MR gets back. What follows is every place the design
+and the repository disagreed.
+
+**All three variants ship, and `columns` is the one turned on.** `CONSENT_VARIANT`
+in `src/consent/content.ts` is the whole of switching. There is no experiment
+framework in this app and inventing one to hold a single value would be the wrong
+order of work — but the design's instruction is to test all three and *measure the
+decline rate*, so all three are built and tested rather than one being chosen and
+the others discarded. **A variant that produces near-total consent is not a good
+result.** It is evidence the screen is applying pressure.
+
+**The server's notice is on the face of the screen, verbatim, in every variant.**
+This is the largest departure from the drawing. The design's screens are entirely
+app-authored copy; `ConsentRecord` carries `consentTextVersionId` and
+`displayedLanguage`, and `ConsentTextVersion` carries a SHA-256 of its own text, so
+that what was agreed to can be reconstructed. A screen that showed only app copy
+and pointed the record at some other version would make the ledger attest to text
+the doctor never saw. So `getActiveConsentText` is fetched per visit, its
+`fullText` is rendered, and the itemised facts, the one-sentence summary and the
+two consequence panels are framing *around* it.
+
+> **UNGUARDED, AND IT NEEDS A PROCESS.** The app-authored summary states terms — the
+> retention period above all — that also appear in the notice. If a customer edits
+> the notice on their server, nothing in this app can detect the disagreement.
+> `content.test.ts` pins every term to one constant so the app cannot contradict
+> itself, and both texts are on screen together so a human can catch it. That is
+> the limit of what code can do here; the rest is a content-review obligation.
+
+**No notice, no question.** `blockedReason` in `src/consent/record.ts` is a hard
+gate: with no active version there is no `consentTextVersionId`, so the screen is
+not shown, the doctor is not asked, and the MR is told why. A Yes with nothing
+behind it writes a row nobody can reconstruct.
+
+**The language is chosen on the screen, from what the server has.** The design sets
+the doctor's language per territory in Settings; `TerritorySchema` has no language
+field and neither does anything else in the contract. The MR picks instead, from
+the languages `listConsentTextVersions` reports a live notice in — which is better
+than a territory default anyway, because the MR knows which language *this* doctor
+reads. A retired version (`effectiveUntil` in the past) is never offered.
+
+**Landscape is deferred, not faked.** D1 and D4 are drawn 844 × 390. `app.json`
+locks the app to portrait, `expo-screen-orientation` is not a dependency, and
+adding it means a native module and a build that leaves Expo Go. Each variant's
+information order survives the rotation, so they are laid out down the screen.
+
+**`#16180F` is the committed hero ink instead.** Phase 1 bans a third grey; a
+second near-black is the same drift. White on `#1F211C` is 16.25:1 against the
+design's quoted 17.92, and the inversion's purpose — stop looking like the app the
+doctor just watched the rep use — is untouched.
+
+**Both answers are `secondary`, not a primary and a secondary.** The accent appears
+nowhere on a consent face. `OverrideControl` already established that a genuine
+either/or gets two identical `secondary` controls, and §05 allows no fifth button
+variant to be invented. "Give the phone back" is a muted pressable rather than
+`Button variant="quiet"`, because `quiet` renders its label in the accent green.
+
+**D6 and D7 are NOT built, and must not be until audio capture exists.** The
+recording bar and the voice note are the two frames in Phase 3's "After" section
+that depend on capturing audio. This app has no audio dependency at all — no
+`expo-av`, no `expo-audio` — and §5 below already places audio capture, voice
+notes and resumable upload in FE-W4.
+
+> Building the indicator now would put a bar reading "Recording · he agreed at
+> 11:58" on screen while the app captured nothing. On this product that is not an
+> unfinished feature, it is a false statement to a doctor who has just been asked
+> to trust it, and it is the single worst thing in this repository to ship early.
+> `RecordingIndicator` remains built, tested and deliberately unrendered.
+
+The consequence is visible rather than hidden: after a doctor consents, the visit
+screen says in as many words that recording is not in this build and nothing is
+being captured. An MR who believed otherwise would speak as though it were.
+
+---
+
 ## 5. What this specification does not cover
 
 Named so that scope does not expand quietly:

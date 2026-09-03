@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
-import { BodyText, Heading, Label, PrimaryButton, Screen } from '@fieldforce/ui';
+import { BodyText, Button, Heading, Label, Screen } from '@fieldforce/ui';
 
 /**
  * A4 — the microphone, asked at the first real visit and never at sign-in.
@@ -22,6 +22,19 @@ import { BodyText, Heading, Label, PrimaryButton, Screen } from '@fieldforce/ui'
  *
  * If a future edit shortens this screen, the two paragraphs below are the ones that
  * have to survive.
+ *
+ * **Both actions carry the same weight.** Consenting to a microphone is not the
+ * outcome this screen is steering towards — it is the one the MR is being given
+ * enough information to choose. Sibling screens (`notifications`, `location-denied`)
+ * make the same claim and resolve it the same way.
+ *
+ * **Why both are `secondary` and not both `primary`.** §04 gives a screen one
+ * primary action; two filled accent buttons made this screen read as two competing
+ * primaries. The resolution is §05's own worked example — `OverrideControl` renders
+ * Agree and Disagree as two identical `secondary` controls, because a genuine
+ * either/or has no single action the app is pushing. Equal weight is preserved
+ * exactly; what is dropped is the false claim that either answer is *the* thing to
+ * do here.
  */
 export default function MicrophoneRationale(): ReactNode {
   const router = useRouter();
@@ -48,8 +61,8 @@ export default function MicrophoneRationale(): ReactNode {
         and you will be asked about it there — not here.
       </BodyText>
 
-      <PrimaryButton label="Allow the microphone" onPress={next} />
-      <PrimaryButton label="Not now" onPress={next} />
+      <Button label="Allow the microphone" onPress={next} variant="secondary" />
+      <Button label="Not now" onPress={next} variant="secondary" />
     </Screen>
   );
 }

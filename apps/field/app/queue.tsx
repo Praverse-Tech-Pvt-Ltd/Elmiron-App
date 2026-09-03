@@ -1,6 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { QueueScreen } from '@fieldforce/ui';
+import { createClientForScenario } from '../src/api';
+import { loadQueueState } from '../src/sync/async-storage-store';
+import { flushOutbox } from '../src/sync/outbox';
 import { emptyQueue } from '../src/sync/reducer';
 import type { SyncQueueState } from '../src/sync/reducer';
 
@@ -17,12 +20,31 @@ import type { SyncQueueState } from '../src/sync/reducer';
  * straight through is what makes TypeScript verify the fit; if the reducer's state
  * ever diverges from what the screen accepts, this line stops compiling.
  *
- * The state is `emptyQueue` and never changes yet, deliberately. Nothing enqueues
- * until FE-W3 and there is no persistent store — PowerSync is a native module needing
- * a development build that does not exist. Wiring a fake source here would be a
- * screen that lies about the MR's day.
+ * The state now comes off disk. It used to be a hardcoded `emptyQueue`, because
+ * nothing enqueued and there was no store; both are true no longer, and a screen
+ * showing "everything is sent" while a check-in sat unsent would be the exact lie
+ * that comment was written to avoid.
+ *
+ * "Try again now" is wired here rather than inside the screen: retrying is a
+ * network operation and `packages/ui` has no client, which is the same boundary
+ * that keeps the queue's verdicts server-owned.
  */
 export default function Queue(): ReactNode {
-  const [state] = useState<SyncQueueState>(emptyQueue);
-  return <QueueScreen items={state.items} rejections={state.rejections} />;
+  const [state, setState] = useState<SyncQueueState>(emptyQueue);
+
+  const refresh = (): void => {
+    void loadQueueState().then(setState);
+  };
+
+  useEffect(refresh, []);
+
+  return (
+    <QueueScreen
+      items={state.items}
+      onRetry={() => {
+        void flushOutbox(createClientForScenario()).then(refresh);
+      }}
+      rejections={state.rejections}
+    />
+  );
 }

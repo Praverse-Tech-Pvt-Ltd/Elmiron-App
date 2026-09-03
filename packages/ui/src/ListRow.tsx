@@ -3,6 +3,14 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { BodyText, Label } from './Text';
 
+/**
+ * The plain row: a title, an optional detail, an optional press.
+ *
+ * Phase 1 §05 specifies `ListItem` — 70pt, with a mandatory status glyph — for
+ * every row that reports the state of a visit. This one stays for rows that report
+ * no state at all, such as a navigation destination, and it takes its size and its
+ * press fill from the tokens rather than from the literals it used to carry.
+ */
 export interface ListRowProps {
   readonly title: string;
   readonly detail?: string;
@@ -14,13 +22,14 @@ const styles = StyleSheet.create({
   base: {
     paddingVertical: tokens.space.md,
     paddingHorizontal: tokens.space.md,
-    borderRadius: tokens.radius.sm,
+    borderRadius: tokens.radius.card,
     backgroundColor: tokens.color.surface,
     gap: tokens.space.xs,
-    minHeight: 48,
+    minHeight: tokens.target.secondary,
     justifyContent: 'center',
   },
-  pressed: { opacity: 0.75 },
+  // §05: press darkens the fill. It never fades and never scales.
+  pressed: { backgroundColor: tokens.color.wash },
 });
 
 export const ListRow = ({ title, detail, onPress }: ListRowProps): ReactNode => {

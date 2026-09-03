@@ -89,6 +89,10 @@ export const OemBatteryScreen = ({
     <PrimaryButton
       label={videoAvailable ? 'Show me a 20-second video' : VIDEO_PENDING_LABEL}
       disabled={!videoAvailable}
+      // The label already carries the fact; the reason line carries what happens
+      // next, so the disabled control is not a dead end. §05 requires the line and
+      // this one earns its place rather than repeating the label.
+      note="It will appear here once it has been recorded. The steps above work without it."
       onPress={() => {
         onWatchVideo?.();
       }}
