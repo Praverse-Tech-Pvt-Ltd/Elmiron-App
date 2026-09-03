@@ -126,5 +126,7 @@ export type { VoiceNoteScreenProps } from './VoiceNoteScreen';
 export type { VisitScreenProps } from './VisitScreen';
 export { TodayScreen } from './TodayScreen';
 export type { TodayNextVisit, TodayScreenProps } from './TodayScreen';
+export { TabIcon } from './TabIcon';
+export type { TabIconName, TabIconProps } from './TabIcon';
 export { TextField } from './TextField';
 export type { TextFieldProps } from './TextField';

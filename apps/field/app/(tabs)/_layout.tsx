@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Tabs } from 'expo-router';
 import { tokens } from '@fieldforce/ui-tokens';
+import { TabIcon } from '@fieldforce/ui';
 
 /**
  * B1's tab bar: Today · Doctors · Coaching · Me.
@@ -14,10 +15,18 @@ import { tokens } from '@fieldforce/ui-tokens';
  * still `/home` and `/doctors`, and every existing link and deep link continues to
  * work.
  *
- * Labels only, no icons. `@expo/vector-icons` is not a dependency of this app and
- * adding an icon set for four labels would be weight for decoration; §05 also says
- * an icon never carries meaning alone, so the label is the part that has to be
- * there.
+ * **Icons and labels, not icons instead of labels.** This bar carried labels only
+ * for three phases, on the grounds that an icon set was weight for decoration.
+ * Phase 4 D1 draws all four tabs with a glyph above the word, so the icons are now
+ * here — but the reason the old comment gave still binds: §05 says an icon never
+ * carries meaning alone, so every `Tabs.Screen` keeps its `title` and the words
+ * are what a new MR reads.
+ *
+ * They are drawn in `View`s rather than pulled from an icon font. `@expo/vector-
+ * icons` would reintroduce the tofu hazard the `tabBarIcon` note below describes,
+ * and `react-native-svg` is a native module — another prebuild and another Gradle
+ * build — for four shapes that are a box, a circle, a bubble and three lines. See
+ * `packages/ui/src/TabIcon.tsx`.
  */
 export default function TabsLayout(): ReactNode {
   return (
@@ -31,17 +40,42 @@ export default function TabsLayout(): ReactNode {
           fontSize: tokens.typography.label.size,
           fontWeight: tokens.typography.label.weight,
         },
-        // No icon, and this is what removes it rather than merely leaving it
-        // unset: the default renders a placeholder glyph, which arrives as tofu on
+        // Explicitly set, exactly as it was when it returned null: leaving it
+        // unset renders the platform's placeholder glyph, which arrives as tofu on
         // the OEM font stacks this product targets — the same failure the queue
-        // screen's glyph comment already warns about. Labels carry the meaning.
+        // screen's glyph comment warns about. What changed is that the slot now
+        // holds a drawn shape instead of nothing.
         tabBarIcon: () => null,
       }}
     >
-      <Tabs.Screen name="home" options={{ title: 'Today' }} />
-      <Tabs.Screen name="doctors" options={{ title: 'Doctors' }} />
-      <Tabs.Screen name="coaching" options={{ title: 'Coaching' }} />
-      <Tabs.Screen name="me" options={{ title: 'Me' }} />
+      <Tabs.Screen
+        name="home"
+        options={{
+          title: 'Today',
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="today" />,
+        }}
+      />
+      <Tabs.Screen
+        name="doctors"
+        options={{
+          title: 'Doctors',
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="doctors" />,
+        }}
+      />
+      <Tabs.Screen
+        name="coaching"
+        options={{
+          title: 'Coaching',
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="coaching" />,
+        }}
+      />
+      <Tabs.Screen
+        name="me"
+        options={{
+          title: 'Me',
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="me" />,
+        }}
+      />
     </Tabs>
   );
 }
