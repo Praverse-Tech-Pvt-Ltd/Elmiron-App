@@ -1,0 +1,45 @@
+-- ============================================================================
+-- The seventh instance of one root cause: sequences
+--
+-- Supabase's default privileges hand `anon`, `authenticated` and `service_role` a grant on
+-- every new object in `public`, and no migration can change that default -- the default ACL
+-- belongs to `supabase_admin` and `postgres` is refused when it tries to alter it
+-- (FIX-06 D2). Every migration in this schema therefore revokes for itself, and two tests
+-- fail the build when one forgets.
+--
+-- **Neither test covered sequences.** `foundations.spec.ts` and `rls.spec.ts` read
+-- `information_schema.role_table_grants`, which lists tables and views and not sequences;
+-- `rls.spec.ts`'s function guard reads `pg_proc`. A sequence is in neither place, so three
+-- of them have carried a grant to `anon` since the migrations that created them:
+--
+--   audit_log_id_seq                       | {postgres=rwU/postgres,anon=w/postgres,...}
+--   audio_destruction_log_id_seq           | {...,anon=w/postgres,...}
+--   restore_reconciliation_findings_id_seq | {...,anon=w/postgres,...}
+--
+-- They are the only three sequences in `public`: every other table keys on a uuid. These
+-- three use `generated always as identity`.
+--
+-- **What `w` on a sequence permits.** `UPDATE` is the privilege that carries `nextval()`,
+-- `setval()` and `currval()`. So the grant lets `anon` reset the identity counter of the
+-- **audit log** -- rewinding it produces duplicate-key failures on every subsequent audit
+-- write, which is a denial of service against the one table this product uses to prove
+-- what happened.
+--
+-- **UNVERIFIED: whether there is a reachable path to exploit it.** PostgREST does not
+-- expose `setval` and no function in `public` calls it, so as far as this repository can
+-- see the grant is unreachable in practice. That is not a reason to keep it. The posture
+-- rule -- nothing in `public` is reachable by `anon` unless it is deliberately and
+-- explicitly so -- exists precisely because reachability changes when somebody adds a
+-- function, and the grant would then already be in place.
+--
+-- `authenticated` and `service_role` keep their grants. `write_audit_row()` is
+-- `SECURITY DEFINER` and does not need them today, but revoking a privilege from the role
+-- every write actually runs as is a change to who can do what, and this migration is about
+-- closing an unintended grant to the unauthenticated role. Recorded rather than bundled.
+--
+-- Rollback: services/api/rollbacks/20260908000400_revoke_sequence_grants.down.sql
+-- ============================================================================
+
+revoke all on sequence public.audit_log_id_seq                       from anon, public;
+revoke all on sequence public.audio_destruction_log_id_seq           from anon, public;
+revoke all on sequence public.restore_reconciliation_findings_id_seq from anon, public;
