@@ -1363,3 +1363,36 @@ These are machine-load timeouts rather than defects, but the consequence is wort
 plainly: **a green suite on a loaded developer machine is not evidence, and a red one is
 not necessarily a defect.** CI is the arbiter. If these ever fail on CI, where the load
 profile is different, treat them as real and investigate rather than re-running.
+
+### `upload.spec.ts` › "destroys the object of an upload the MR simply never came back to"
+
+**A real race between two spec files, not a flake.** Found during FIX-02 and
+investigated rather than re-run, per the rule above.
+
+```
+AssertionError: expected 0 to be greater than or equal to 1
+  tests/upload.spec.ts:770  expect(result.abandoned).toBeGreaterThanOrEqual(1)
+```
+
+**Mechanism.** Exactly two specs call the global purge worker —
+`grep -ln "runPurge" tests/*.spec.ts` returns `consent-audio.spec.ts` and
+`upload.spec.ts` — and `services/api/vitest.config.ts` sets no `fileParallelism`, so
+vitest runs spec files concurrently. `runPurge` claims due rows across the whole
+database, so whichever spec's purge runs first can claim the other's abandoned grant,
+and the second sees `abandoned === 0`.
+
+**Evidence it is the parallelism and not the code:**
+
+```sh
+npx vitest run tests/upload.spec.ts              # 35 passed, three consecutive runs
+npx vitest run --no-file-parallelism             # 349 passed, twice
+npx vitest run                                   # intermittently 1 failed | 348 passed
+```
+
+**Not fixed here, because the fix is a choice.** Either the two specs stop sharing the
+worker (each purge scoped to its own fixture rows), or the workspace sets
+`fileParallelism: false` and pays the wall-clock cost. The second is a repo-wide control
+change and the first is the better answer; both are somebody's decision, not a drive-by.
+
+**It has never failed on CI**, which is why it went unnoticed — the hosted runner's
+timing differs. Re-check with the three commands above rather than assuming.
