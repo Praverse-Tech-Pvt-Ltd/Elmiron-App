@@ -5665,3 +5665,155 @@ command that produces it* (40 → 34 → 35), with the query to re-derive it.
 - `@fieldforce/field`: **341 vitest** (was 332; +9) **+ 72 jest**.
 - `verify:rollbacks`: schema empty. **24 migrations, 24 rollback files.**
 - `turbo run typecheck lint`: **16 successful, 16 total**.
+
+---
+
+### FIX-08 — CI dependency graph, and doctor search at real density (7 September 2026)
+
+> **This section corrects FIX-07's doctor-search claim.** FIX-07 reported doctor search at
+> **3.42 ms** and called the three-second requirement met "by three orders of magnitude".
+> That number was measured against **five visible doctors** and should not have been
+> presented as a result. **It is replaced by 77 ms at 176 doctors, below.** FIX-07's *visit*
+> numbers — 11.32 ms for 2,088 visible of 208,800 — stand unchanged and are still the
+> volume case.
+
+#### Part B — CI through the dependency graph, and the latent cases
+
+**B1. Turbo was the better fix and FIX-07's build step is gone.** `turbo.json` already
+declares `test: { dependsOn: ["^build"] }` — the mechanism existed and the job was
+bypassing it. Every test invocation now runs `pnpm turbo run test --filter …`. Verified
+locally: `turbo run test --filter @fieldforce/mock` reports **2 tasks**, the build and the
+test.
+
+`--force` on the api job only, for a stated reason: that suite talks to a real database and
+a turbo cache hit would replay a previous pass without running anything, defeating the
+guarantee the job's own comment claims — that `db.ts` hard-fails on an unreachable database
+so a green run means the tests executed. A cached green is precisely the "control that
+cannot be exercised" this repo wrote a rule about two sessions ago.
+
+**B2. Every job that invokes a workspace script directly**, and what each needs:
+
+| where | invocation | state |
+| --- | --- | --- |
+| `ci.yml:64,68,73,75,80` | 5 unit-test jobs | **Were latent** — not broken, because `pnpm run build` runs first at line 60, but each depended on that ordering. **Moved to turbo.** |
+| `ci.yml:122` | `@fieldforce/api test` | The one that broke. **Moved to turbo with `--force`.** |
+| `ci.yml:133` | `verify:rollbacks` | A script, not a turbo task. Runs after the tests in the same job; documented in place |
+| **`retention.yml:103`** | **`purge:audio`** | **Production, hourly, no build step** |
+| **`retention.yml:112`** | **`check:purge-health`** | **Production, no build step** |
+| **`retention-watchdog.yml:73`** | **`check:purge-health`** | **Production, no build step** |
+
+**The three production ones are the real finding.** Turbo cannot help — they run plain
+scripts, not turbo tasks — and neither workflow has a build step. If any of those scripts
+ever imports `@fieldforce/core`, **the retention worker stops deleting audio, hourly, in
+production, silently.** This project has already had that failure in another guise: the
+workflows sat `disabled_manually` from 23 August and nobody noticed until the database
+auto-paused for want of traffic.
+
+They are safe today **by convention** — `seed-one-mr.mjs` records that the scripts stay
+"plain `.mjs`, `pg`, and `fetch`" — and nothing enforced it. `scripts-convention.spec.ts`
+now does, and it is mutation-proved: adding an `@fieldforce/core` import to
+`check-purge-health.mjs` fails the test and names the file.
+
+**B3. CI run `34125236407`: success, 2m58s.** `migrations · Gate 0 RLS suite · rollbacks`
+2m19s; `typecheck · lint · format · unit tests` 2m6s.
+
+#### Part C — doctor search, re-measured
+
+**C1 — density, and why 176.** Derived rather than picked: the retention design sizes for
+**100 MRs x 8 visits/day x 22 working days**, so an MR makes ~176 calls a month. At roughly
+one call per doctor per month, one MR's searchable list is **~176 doctors**. The seed now
+generates that per territory (`--doctors-per-territory`, default 176), giving **3,520
+doctors** across 20 areas instead of 100.
+
+**C2 — the hierarchy, and the finding that reframes the whole CTE question.**
+
+| | |
+| --- | --- |
+| depth | **3** — 1 national, 4 regions, 20 areas |
+| territories | 25 |
+| doctors per area / total | **176 / 3,520** |
+| territories an **MR** walks | **1** |
+| territories a **field_manager** walks | **6** |
+| territories an **admin** walks | 25 |
+
+**`visible_territory_ids` does not recurse for an MR at all.** The body is:
+
+```sql
+if v_role = 'mr' then
+  return query select v_territory;   -- one row, no recursion
+  return;
+end if;
+```
+
+The recursive CTE is the **`field_manager` branch only**; `admin` returns every territory
+without recursing either. So **measuring the recursive CTE as an MR is impossible by
+construction** — FIX-07's 0.17 ms measured a single-row return and was never evidence about
+the CTE. Both my framing and the brief's had this wrong.
+
+**C3/C4 — the untuned numbers.** Measured as each role, with claims set and
+`set role authenticated`:
+
+| as | query | visible rows | execution |
+| --- | --- | ---: | ---: |
+| **MR** | `search_doctors('Doctor', ..., 50)` | 176 doctors | **77.02 ms** |
+| **MR** | `search_doctors('SYNTHETIC', ..., 200)` | 176 doctors | 74.21 ms |
+| **MR** | `current_user_visible_territory_ids()` | 1 territory | 0.08 ms |
+| **field_manager** | `current_user_visible_territory_ids()` — **the CTE actually running** | 6 territories | **0.21 ms** |
+| **field_manager** | `search_doctors('Doctor', ..., 200)` | 880 doctors | 60.66 ms |
+
+**Is doctor search under three seconds of server execution? Yes — 77 ms against 3,000 ms.**
+Now against a real result set: 176 visible doctors, 50 items returned, 6,810 shared buffer
+hits.
+
+**C5 — what that number does and does not cover.** It is **local**, from the Docker stack on
+a Windows developer machine, and it is **server execution only**. It excludes the network,
+PostgREST, the connection pooler and the client render. The three-second requirement is a
+person waiting in a room, so **server execution is one component of that budget and is not
+the budget**; on an Indian mobile network the network term will dominate 77 ms. These are
+**not production numbers** and must not be quoted as such.
+
+**C6 — no tuning, and per C7 nothing about `visible_territory_ids` was changed.** 77 ms
+against 3,000 ms leaves no term dominating, and premature indexing costs write throughput on
+a table taking 208,800 rows.
+
+Two observations registered rather than acted on: **6,810 buffer hits for 3,520 doctors** is
+high, and `search_doctors` evaluates its `matched` CTE **twice** — once for `items` and once
+for `truncated` — which would be the first thing to look at if density rises. And the
+hierarchy is only three levels deep, so the manager's 0.21 ms is a shallow-tree figure; a
+deeper org chart would need re-measuring.
+
+#### Part D
+
+**D1 — mileage was converted, to the `daily_mileage` RPC.** Both FIX-07 statements were true
+and the wording made them look contradictory. `GET /mileage`, the path the *contract*
+declares, has no backend — no `mileage` table or view exists (FIX-03, `BE-W52`).
+`daily_mileage(p_from, p_to, p_mr_id)` is the real surface, it is what `listMileage` calls,
+and it is what the B4 mutation targeted.
+
+| call | goes to | status |
+| --- | --- | --- |
+| `record_check_in` / `record_check_out` | Supabase RPC | **real** |
+| create visit / update visit | Supabase table + RLS | **real** |
+| mileage | **Supabase RPC `daily_mileage`** — *not* the contract's `GET /mileage` | **real** |
+| consent | `services/mock` | fixture — blocked on the offline decision |
+| samples | `services/mock` | fixture — blocked on UCPMP enforcement |
+| doctors, beat plans, visit *lists*, analyses | `services/mock` | fixtures |
+
+**D2 — the two mutations, side by side.**
+
+| mutation | what it removes | result |
+| --- | --- | --- |
+| `BEFORE INSERT` trigger returning `NULL` | the write | **4 of 13 failed** — three persistence *and* the refusal |
+| `visits_insert_own` to `with check (true)` | the refusal | **1 of 13 failed** — only the refusal; persistence green |
+
+Neither proves the path alone. The first shows the write is real; the second shows the
+refusal is. Recorded in `.ai-collab/constraints.md` with the second rule from **D3**: a
+table-write refusal can only ever be RLS `42501`, so an MR gets one message for every policy
+failure, where an RPC can raise a specific actionable code. Not a defect here — a trade-off
+to choose knowingly before more paths become direct table writes.
+
+#### Counts
+
+- `@fieldforce/api`: **391 passed, 16 files** (was 390; +1 convention guard).
+- `verify:rollbacks`: schema empty. 24 migrations, 24 rollback files.
+- `turbo run typecheck lint`: **16 successful, 16 total**.

@@ -221,3 +221,38 @@ select (select count(*) from pg_tables  where schemaname='public') as tables,
 
 A number in prose is a snapshot. A number next to the query that produces it is a fact
 anybody can re-derive.
+
+---
+
+## Two rules about table writes (FIX-08)
+
+### A table-write path needs two mutations, because removing the insert removes the refusal
+
+On an **RPC** write the refusal lives in a function body and survives the insert being
+removed, so one mutation separates the two halves cleanly — FIX-06's check-in mutation
+failed three persistence tests and left three refusal tests green.
+
+On a **table** write the refusal *is* the insert being policy-checked. Remove the insert
+and the refusal disappears with it, so a single mutation cannot tell you whether the
+refusal test was ever real. Worked example, FIX-07 and FIX-08 on `visits`:
+
+| mutation | result |
+| --- | --- |
+| `BEFORE INSERT` trigger returning `NULL` (removes the write) | **4 of 13 failed** — three persistence *and* the refusal |
+| `visits_insert_own` weakened to `with check (true)` (removes the refusal) | **1 of 13 failed** — only the refusal; persistence green |
+
+Neither proves the path on its own. **Run both.** The first proves the write is real; the
+second proves the refusal is. Half a path proven is not a proven path.
+
+### A table-write refusal can only ever be RLS `42501`
+
+A policy either admits a row or does not. It cannot say *why*, so an MR gets the same
+message for the wrong territory, the wrong MR, and every other policy failure alike. An
+RPC can `raise ... using errcode`, which is how `45001`, `45002` and `45003` came to
+exist and why an MR can be told to re-read a notice or wait for their shift.
+
+That is not a defect in the visit path — there is only one way a visit insert can fail
+and the message is not ambiguous today. It is a **trade-off being chosen**, and it should
+be chosen knowingly: converting a path to a direct table write buys RLS's simplicity and
+gives up the ability to tell the user which rule they hit. Where a refusal has more than
+one cause and the user could act differently on each, that path wants an RPC.
