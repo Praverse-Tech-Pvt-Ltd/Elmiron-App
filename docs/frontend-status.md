@@ -214,3 +214,84 @@ What has not changed in three weeks: nothing has been pushed, CI has never run, 
 **Repo:** `PROJECT-OVERVIEW.md` · `.ai-collab/decisions.md` · `.ai-collab/constraints.md` · `docs/gotchas.md` · `docs/frontend-plan-v2.md` · `docs/brand-identifier-decision.md` · `docs/backend-request-scope-rename.md`
 
 **Claude side:** `frontend-plan-v2.md` · `frontend-prompt-w1.md` · `frontend-prompt-r1-rename.md` · `frontend-prompt-h1-harness.md` · `frontend-prompt-w2b-final.md` · `gemini-prompt-android-setup.md` · `design-plan.md` *(still needs committing to repo `docs/`)*
+
+---
+
+## 7 September 2026 — the run, re-done from a cold machine
+
+*Appended, not edited. Everything above is the 3 September snapshot and stays as
+written. This section records what a cold start actually took, four days later, and
+corrects two claims above.*
+
+**No code changed.** Head is still `32cb85e` on
+`fe/phase2-c5-b7-and-phase3-consent`, tree clean, **54 commits ahead of
+`origin/main` and 0 behind**. CI has still never executed.
+
+### What was verified by running it
+
+The app was installed, started and **signed into** on the emulator (`Pixel_10`,
+API 36 / Android 16 — `ro.build.version.sdk` = 36, release 16). Metro bundled
+`expo-router/entry` in 1.34s, 1701 modules, no warnings that reached the screen
+beyond the standard dev-client notice. Sign-in with a freshly seeded MR
+(`pnpm --filter @fieldforce/api seed:mr`) landed on the Today screen with the next
+visit, the 2-of-3 counter, the sync line and the four-tab bar all rendering.
+
+**This corrects one line in "Unverified" above.** That section says "nothing has
+been round-tripped through Supabase". **Authentication now has been** — the sign-in
+went to local GoTrue on `:54321` and returned a session the app accepted. The rest
+of the claim stands unchanged: every domain read on that home screen came from
+`services/mock` on `:4010`, which returns static fixtures and persists nothing. **No
+`POST` write has been round-tripped through Supabase.**
+
+### Suite
+
+`pnpm turbo run lint typecheck test` → **23/23 tasks successful** (fully cached; no
+input had changed since 3 September). `@fieldforce/api` was additionally re-run
+uncached against the live local stack: **344 passed, 14 files, 0 skipped**. Counts
+are otherwise unchanged from the table above — 1,086 across seven workspaces and two
+runners.
+
+### One new toolchain trap, found today
+
+**`pnpm --filter @fieldforce/field exec expo start` is broken in this repo** and the
+documented run recipe in `handoff-frontend.md` §"How to run the frontend" therefore
+fails at its last line:
+
+```
+Error: Cannot find module 'C:\dev\Elmiron-App\apps\field\node_modules\expo\bin\cli'
+```
+
+`node-linker=hoisted` (set in `.npmrc` and `pnpm-workspace.yaml`, and itself the fix
+for the Windows CMake path-length failure recorded above) puts `expo` in the **root**
+`node_modules`. `pnpm exec` still resolves the workspace-local `.bin` shim first, and
+that shim points at a path the hoisted layout does not create. Working invocation:
+
+```bash
+cd apps/field && node ../../node_modules/expo/bin/cli start --dev-client
+```
+
+**Not yet written into `docs/gotchas.md`.** It belongs there next to the other
+hoisting consequences, alongside the note that the recipe's package id is
+`com.praversetech.fieldforce` — the root `app.json` still carries the stale
+`com.anonymous.elmironapp` from a prebuild run in the wrong directory, and
+`adb shell monkey` against that id aborts with "No activities found to run."
+
+### The environment a cold start needs, which the recipe does not say
+
+Docker was not running, so `pnpm db:start` had nothing to talk to; the first attempt
+after starting Docker Desktop failed with `LegacyStatusDbNotReadyError` and succeeded
+on retry once the `supabase_db_Elmiron-App` container reported healthy. **Sign-in is
+unreachable without that stack** — auth is Supabase, not the mock, so "start the
+mock and run the app" is not enough to get past the first screen.
+
+The terminal `JAVA_HOME` on this machine is **JDK 25**, not the JDK 17 the Gradle
+build needs. It did not matter today because the existing debug APK was reinstalled
+rather than rebuilt. It will matter the moment anyone rebuilds.
+
+### Unchanged, and still the whole story
+
+FE-G1 and FE-G2 are **device** gates and today was an emulator, so both remain open
+and this run is recorded as `emulator-passed / device-pending`. The push, the
+handset, and the eight backend asks in `handoff-frontend.md` §2 are all exactly where
+they were on 3 September. **Nothing in this section is progress; it is confirmation
+that four-day-old work still starts.**
