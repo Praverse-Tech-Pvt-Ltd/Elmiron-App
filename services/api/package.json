@@ -13,7 +13,8 @@
     "check:purge-health": "node scripts/check-purge-health.mjs",
     "reconcile:restore": "node scripts/reconcile-after-restore.mjs",
     "seed:reference": "node scripts/seed-reference-data.mjs",
-    "seed:mr": "node scripts/seed-one-mr.mjs"
+    "seed:mr": "node scripts/seed-one-mr.mjs",
+    "seed:synthetic": "node scripts/seed-synthetic.mjs"
   },
   "dependencies": {
     "@fieldforce/core": "workspace:*"
