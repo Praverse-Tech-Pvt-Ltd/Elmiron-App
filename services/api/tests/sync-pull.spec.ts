@@ -156,6 +156,82 @@ describe.skipIf(!reachable)('sync_pull refuses before it reads', () => {
   });
 });
 
+describe.skipIf(!reachable)('the cursor is bounded, and says so rather than guessing', () => {
+  it('refuses a cursor older than the freeze horizon with 45006, not 45005', async () => {
+    // A frozen xid is visible in EVERY snapshot, so a frozen row reads as "already seen"
+    // and is silently dropped from the pull. The bound is a proof, not a margin: a row
+    // still owed to the client changed after the cursor was issued, so its xmin is newer
+    // than the cursor's, and a tuple cannot be frozen until age(xmin) reaches
+    // vacuum_freeze_min_age. Below that age, nothing owed can have been frozen.
+    //
+    // `vacuum_freeze_min_age` is USERSET, so the boundary can be walked here through the
+    // real code path rather than by waiting for 25,000,000 transactions. (A client cannot
+    // do the same to escape the bound: PostgREST does not pass arbitrary GUCs, and
+    // raising it would only hurt the client that raised it.)
+    //
+    // On a committed connection, because a cursor cannot age inside the transaction that
+    // issued it -- the xid counter does not move until transactions commit.
+    await asCommittedUser(world.users.puneMr, async (client) => {
+      const first = await pull(client, { entities: ['doctor'], limit: 1 });
+      // Each of these consumes a transaction id, which is what `age()` counts.
+      for (let i = 0; i < 5; i += 1) await client.query('select pg_current_xact_id()');
+      // Limit becomes 2 transactions; the cursor above is now older than that.
+      await client.query('set vacuum_freeze_min_age = 4');
+      try {
+        await expect(pull(client, { cursor: first.nextCursor })).rejects.toMatchObject({
+          code: '45006',
+        });
+      } finally {
+        await client.query('reset vacuum_freeze_min_age');
+      }
+    });
+  }, 30_000);
+
+  it('accepts the same cursor when it is inside the horizon', async () => {
+    // Without this, the test above would pass against a function that refuses every
+    // cursor, which is a bound that has become an outage.
+    await asCommittedUser(world.users.puneMr, async (client) => {
+      const first = await pull(client, { entities: ['doctor'], limit: 1 });
+      for (let i = 0; i < 5; i += 1) await client.query('select pg_current_xact_id()');
+      const second = await pull(client, { cursor: first.nextCursor, entities: ['doctor'] });
+      expect(second.completeness.omits).toContain('delete');
+    });
+  }, 30_000);
+
+  it('reports the maximum cursor age, so the limit is visible before it bites', async () => {
+    await inRolledBackTransaction(async (client) => {
+      await asUser(client, world.users.puneMr);
+      const response = await pull(client, { limit: 1 });
+      expect(
+        (response.completeness as unknown as { maxCursorAgeTransactions: number })
+          .maxCursorAgeTransactions,
+      ).toBeGreaterThan(0);
+    });
+  });
+
+  it('REFUSES an oversized cursor rather than truncating it', async () => {
+    // Truncation is the dangerous option, not the safe one: `xmin:xmax:` with a shortened
+    // xip_list is still a syntactically valid snapshot, describing a different set of
+    // in-flight transactions. It would parse, and answer a different question.
+    await inRolledBackTransaction(async (client) => {
+      await asUser(client, world.users.puneMr);
+      const oversized = `{"v":1,"since":null,"upto":null,"pad":"${'x'.repeat(9000)}"}`;
+      expect(Buffer.byteLength(oversized, 'utf8')).toBeGreaterThan(8192);
+      await expect(pull(client, { cursor: oversized })).rejects.toMatchObject({ code: '45005' });
+    });
+  });
+
+  it('accepts a cursor just under the cap, so the cap is a cap and not a wall', async () => {
+    await inRolledBackTransaction(async (client) => {
+      await asUser(client, world.users.puneMr);
+      const first = await pull(client, { entities: ['doctor'], limit: 1 });
+      expect(Buffer.byteLength(first.nextCursor, 'utf8')).toBeLessThan(8192);
+      const second = await pull(client, { cursor: first.nextCursor, entities: ['doctor'] });
+      expect(second.completeness.phase).toBe(1);
+    });
+  });
+});
+
 describe.skipIf(!reachable)('sync_pull says what it is not', () => {
   it('carries the incompleteness as a FIELD in every response', async () => {
     await inRolledBackTransaction(async (client) => {
