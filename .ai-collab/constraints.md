@@ -256,3 +256,71 @@ and the message is not ambiguous today. It is a **trade-off being chosen**, and 
 be chosen knowingly: converting a path to a direct table write buys RLS's simplicity and
 gives up the ability to tell the user which rule they hit. Where a refusal has more than
 one cause and the user could act differently on each, that path wants an RPC.
+
+### On an RLS table, a non-leakproof predicate can never use an index
+
+> **Postgres will not evaluate a non-leakproof qual before a security qual. On a table
+> with RLS policies, a predicate whose operator is not `LEAKPROOF` is therefore demoted to
+> a post-filter and can never become an index condition for any non-superuser. It
+> sequentially scans, at every scale, forever, and nothing in the plan says why.**
+
+This is a correctness rule, not a planner preference: a fast operator that can raise or
+time differently would leak the contents of rows the policy is hiding. It cost this
+project a doctor search that seq-scanned every row on every keystroke for a month, with
+`doctors_full_name_trgm_idx` sitting there unused since the day it was created.
+
+**Check before assuming an index will help a text predicate on an RLS table:**
+
+```sql
+select o.oprname, o.oprcode::regproc as impl, p.proleakproof
+  from pg_operator o
+  join pg_proc p on p.oid = o.oprcode
+  join pg_type l on l.oid = o.oprleft
+ where l.typname = 'text' and not p.proleakproof
+ order by o.oprname;
+```
+
+`texteq` (`=`) is leakproof. **Not leakproof:** `~~` `LIKE`, `~~*` `ILIKE`, `!~~`, `!~~*`,
+`~` `!~` `~*` `!~*` regex, `SIMILAR TO` (which compiles to `~`), every `pg_trgm` similarity
+and distance operator (`%`, `<%`, `%>`, `<<%`, `<->`, `<->>`, and friends), `@@` full-text
+match, and **any function you wrote yourself**, because user-defined functions are not
+leakproof unless declared so.
+
+**Measured, on `public.doctors` at 99,968 rows, same role, same column, same index:**
+
+| predicate | plan | time |
+| --- | --- | ---: |
+| `full_name ilike '%…%'` as `authenticated` | Seq Scan, 201,488 buffers | 2,205.952 ms |
+| `full_name = '…'` as `authenticated` | Bitmap Index Scan | 0.396 ms |
+| `full_name ilike '%…%'` as `postgres` (BYPASSRLS) | Bitmap Index Scan | 0.279 ms |
+
+**How to notice.** `explain (analyze)` **as the real role**. The whole effect vanishes for
+a role holding `BYPASSRLS`, which `postgres` has here — so a plan taken as `postgres` is
+not a plan of what your users run.
+
+**The fix is `security definer` with the scope applied in the body**, which is the access
+model this schema already uses for the nine tables that have RLS forced and no policies at
+all. `alter function texticlike leakproof` is superuser-only and would be the wrong trade
+anyway: global, to buy speed in one function.
+
+#### Two traps that travel with it
+
+**A disjunction with one non-indexable branch scans everything.** The first attempt at the
+fix above was `security definer` with the RLS predicate transcribed verbatim,
+`or is_admin()` included, and it still seq-scanned at 2,310 ms. `is_admin()` does not
+depend on the row, so it does not belong in the row predicate. Resolve anything
+row-independent to a value *before* the query and the predicate becomes indexable.
+
+**A parameter test in a predicate is fine until the plan goes generic.**
+`p_query is null or … ilike …` uses the index under a custom plan, which folds `$1 is
+null`, and seq-scans under a generic one, which cannot. A cached plan becomes generic
+after five executions:
+
+```sql
+set plan_cache_mode = force_generic_plan;   -- with the null branch: Seq Scan
+                                            -- without it: Bitmap Index Scan
+```
+
+Fast five times and slow for ever after is the worst shape a performance defect can take,
+because the first person to measure it sees the fast number. Branch in plpgsql instead of
+writing one predicate that has to serve both cases.
