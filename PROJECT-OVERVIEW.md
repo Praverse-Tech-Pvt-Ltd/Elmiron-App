@@ -6063,3 +6063,441 @@ per day.
 **BE-W64** — the doctor search predicate is not sargable and the trigram indexes are dead.
 
 ---
+
+---
+
+### FIX-10 — the index that never fired (7 September 2026)
+
+**Not done, and stated first: samples were not converted, the samples screen's message
+was not removed or softened, the console coaching screens were not wired, no card was
+removed, and no dependency was added.**
+
+#### CI and counts
+
+FIX-09's four commits pushed as `f526e0a..700df2f`. Run **`34133501523`, success**, both
+jobs: *typecheck · lint · format · unit tests* and *migrations · Gate 0 RLS suite ·
+rollbacks*.
+
+| package | at 700df2f | after FIX-10, locally |
+| --- | ---: | ---: |
+| `@fieldforce/api` | 398 passed / 16 files | **425 passed / 17 files** |
+| `@fieldforce/field` | 341 passed / 23 files | unchanged |
+| `@fieldforce/ui-tokens` | 54 / 3 | unchanged |
+| `@fieldforce/mock` | 40 / 1 | unchanged |
+| `@fieldforce/core` | 21 / 3 | unchanged |
+| `@fieldforce/ui` | 4 / 1 | unchanged |
+
+**+27**: 14 equivalence cases, 2 guards against those cases being vacuous, 2 new guards on
+the rewrite, 9 on the cap deadline. No skips — every summary line reads `N passed (N)`.
+`verify:rollbacks`: *"All rollbacks applied in reverse order; public schema is empty"* —
+**27 migrations, 27 rollback files**. `turbo run typecheck lint`: **16 successful, 16 total**.
+
+---
+
+#### B1 — the cause was not what FIX-09 said it was
+
+FIX-09 recorded that `doctors_full_name_trgm_idx` never fired because
+`p_query is null or … ilike` is not sargable. **That is wrong, and the correction is the
+finding.** Measured on the live database at 99,968 rows:
+
+| context | predicate | plan | time |
+| --- | --- | --- | ---: |
+| `postgres` | the exact null-OR disjunction, ILIKE via a parameter | **Bitmap Index Scan** on `doctors_full_name_trgm_idx` | 0.055 ms |
+| `authenticated` | a bare ILIKE, **no null-OR at all** | **Seq Scan**, 201,488 buffers | 2,205.952 ms |
+| `authenticated` | `full_name = '…'`, same column, same role | **Bitmap Index Scan** on the same index | 0.396 ms |
+
+The disjunction is not the difference. The difference is between rows two and three, and
+it is one property:
+
+```
+select proname, proleakproof from pg_proc where proname in ('texteq','texticlike');
+ texteq     | t
+ texticlike | f
+```
+
+`public.doctors` has RLS enabled **and forced**. Postgres will not evaluate a
+non-leakproof qual before a security qual, because an operator that can raise or time
+differently would leak the contents of rows the policy is hiding. So the ILIKE is demoted
+to a post-filter and **cannot become an index condition while the scope comes from RLS**.
+That is a correctness rule, not a planner preference: no index and no rewrite of the
+predicate could have changed it. The index was unusable by construction from the day it
+was created.
+
+**The null-OR is still a real trap, just a latent one.** Under a custom plan Postgres
+folds `$1 is null` and keeps the index; under a generic plan — which a cached plan becomes
+after five executions — it cannot:
+
+```
+set plan_cache_mode = force_generic_plan;
+-- with the null branch:      Seq Scan, Rows Removed by Filter: 99968
+-- with the null branch gone: Bitmap Index Scan on doctors_full_name_trgm_idx
+```
+
+A query that is fast five times and slow for ever after is the worst shape a performance
+defect can take, because the first person to measure it sees the fast number. Split anyway.
+
+**And a third cause, found by the first attempt failing.** `security definer` with the two
+policies transcribed verbatim — `territory_id in (…) or is_admin()` — **still produced a
+Seq Scan at 2,310 ms**. A disjunction with one non-indexable branch forces a scan of
+everything, and `is_admin()` does not depend on the row. The scope is now resolved to a
+`uuid[]` before the query runs, so the row predicate is a plain
+`territory_id = any(v_scope)`. `territory_id` is `not null` on this table, so enumerating
+every territory for an admin is exactly equivalent to the admin policy rather than merely
+close to it.
+
+#### B2 — the plan, at 99,968 doctors
+
+The claim is the plan, not the number. Same fixture, same role, same query; only the body
+differs.
+
+**Old body (`security invoker`, RLS is the scope), selective query:**
+
+```
+ Seq Scan on doctors d  (cost=7.77..28811.12 rows=7 width=217)
+   Filter: (is_active AND ((ANY (territory_id = (hashed SubPlan 3).col1)) OR is_admin())
+            AND ((full_name ~~* '%…%') OR (specialty ~~* '%…%') OR (registration_number = '…')))
+   Rows Removed by Filter: 99968
+   Buffers: shared hit=201476
+ Execution Time: 2265.220 ms
+```
+
+**New body, wide scope (admin, 573 territories), same query:**
+
+```
+ Bitmap Heap Scan on doctors d  (actual time=4.176..4.212 rows=11 loops=1)
+   Recheck Cond: ((full_name ~~* '%…%') OR (specialty ~~* '%…%') OR (registration_number = '…'))
+   ->  BitmapOr
+         ->  Bitmap Index Scan on doctors_full_name_trgm_idx        (rows=11)
+         ->  Bitmap Index Scan on doctors_specialty_trgm_idx        (rows=0)
+         ->  Bitmap Index Scan on doctors_registration_number_idx   (rows=0)
+ Execution Time: 4.331 ms
+```
+
+**New body, narrow scope (an MR, one territory), same query:**
+
+```
+ Bitmap Heap Scan on doctors d  (actual time=0.819..0.819 rows=0 loops=1)
+   Recheck Cond: (territory_id = ANY ('{c44809e4-…}'::uuid[]))
+   Filter: (is_active AND ((full_name ~~* '%…%') OR …))
+   ->  Bitmap Index Scan on doctors_territory_id_idx  (rows=176)
+ Execution Time: 0.852 ms
+```
+
+and the empty-query listing branch, same MR:
+
+```
+ Index Only Scan using doctors_territory_active_name_idx on doctors d  (rows=176)
+   Index Cond: ((territory_id = ANY ('{…}')) AND (is_active = true))
+   Heap Fetches: 0
+   Buffers: shared hit=6
+ Execution Time: 0.157 ms
+```
+
+Seq Scan gone in every case.
+
+#### B3 — the curve, old beside new
+
+`search_doctors` as an MR, 176 visible at every scale, server execution only.
+
+| total doctors | query | **OLD** | buffers | **NEW** | buffers |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 3,520 | `'Doctor'` | 72.574 ms | 6,923 | **2.137 ms** | 228 |
+| 3,520 | selective | 73.361 ms | 6,810 | **0.426 ms** | 74 |
+| 3,520 | null (listing) | 75.146 ms | 6,810 | **0.598 ms** | 72 |
+| 30,272 | `'Doctor'` | 632.599 ms | 61,332 | **2.259 ms** | 341 |
+| 30,272 | selective | 633.244 ms | 61,219 | **0.541 ms** | 187 |
+| 30,272 | null (listing) | 636.425 ms | 61,219 | **0.646 ms** | 185 |
+| 99,968 | `'Doctor'` | 2,190.503 ms | 203,373 | **2.600 ms** | 357 |
+| 99,968 | selective | 2,151.731 ms | 201,486 | **0.612 ms** | 185 |
+| 99,968 | null (listing) | 2,194.394 ms | 201,399 | **0.557 ms** | 183 |
+
+**Old: linear in total doctors.** 72 → 633 → 2,190 ms over a 28× table; buffers 6.9k → 61k
+→ 203k, tracking table size exactly.
+
+**New: flat.** 2.137 → 2.259 → 2.600 ms over the same 28×; buffers 228 → 341 → 357. The
+residual growth is the planner's own bookkeeping, not the scan. **The curve is no longer
+linear in total table size — it is constant in it, and linear in what the caller can see**,
+which is the shape it should always have had. 843× at the largest scale.
+
+**A correction to FIX-09's fixture, which nobody has flagged yet.** Every synthetic doctor
+is named `SYNTHETIC Doctor SYN-…`, so the query `'Doctor'` matches **all 99,968 rows**.
+FIX-09's three-scale curve therefore measured "return the first 50 rows of a query that
+matches everything", not "find a doctor". No index can help a predicate that is true for
+every row, so on the old body the numbers were right but were measuring the wrong thing.
+The B3 table keeps `'Doctor'` for comparability with FIX-09 and adds a genuinely selective
+query beside it.
+
+#### B4 — which index, named
+
+Both, and it depends on the caller's scope, which is correct rather than a compromise:
+
+| caller | index the plan names |
+| --- | --- |
+| admin, 573 territories, name search | **`doctors_full_name_trgm_idx`**, in a `BitmapOr` with `doctors_specialty_trgm_idx` and `doctors_registration_number_idx` |
+| MR, one territory, name search | `doctors_territory_id_idx`, then the ILIKE as a filter over 176 rows |
+| MR, empty query | `doctors_territory_active_name_idx`, **Index Only Scan**, `Heap Fetches: 0` |
+
+For an MR the trigram index is *not* the one used, and should not be: 176 rows reached
+through the territory index and filtered is cheaper than a trigram lookup across 99,968.
+The planner is now free to make that choice, which is the whole change. It was not free
+before — every caller got the sequential scan.
+
+#### B5 — equivalence, checked rather than asserted
+
+14 cases, each running the **old body verbatim under a second name in the same
+transaction** and comparing the whole jsonb payload: null, empty string, whitespace-only,
+a single character (below the trigram extraction threshold), a substring, a bare accent,
+an accent inside a name, a case difference, a specialty rather than a name, an exact
+registration number, a query matching nothing, and three limit boundaries (truncation,
+below the floor, above the ceiling). **All 14 identical.**
+
+Two guards so the comparison cannot be vacuous: one asserts the legacy body actually
+returns the fixture doctor, and one asserts the accent fixtures are found — including that
+`'Renée'` matches `dr renée fixture` and **does not** match `DR RENEE FIXTURE`, because
+ILIKE is case-insensitive and not accent-insensitive and the rewrite must not have quietly
+acquired `unaccent` on the way past.
+
+The equivalence also proves the two scoping mechanisms agree: the legacy body is
+`security invoker` and scoped by the RLS policies, the new one by its own predicate.
+
+#### B6 — indexes with zero scans, and which of those means anything
+
+After the full suite plus the perf runs: **37 of 109 indexes in `public` have
+`idx_scan = 0`.** Raw, that number says nothing. Sorted:
+
+| group | count | what it means |
+| --- | ---: | --- |
+| Primary keys and unique constraints | **13** | Not dead. They enforce on every insert; being scanned is not their job |
+| Small-table effect | ~12 | `territories` (573 rows), `user_profiles` (105), `territory_shift_windows`, `consent_text_versions`, `upload_grants`. A sequential scan of a page is correct and the planner is right |
+| Surfaces that do not exist yet | ~5 | `audit_log_action_idx`, `audit_log_actor_idx` (2.5 MB together) exist for a console audit view; the console is deliberately unwired. `restore_findings_*` belong to a CLI run on empty data |
+| Reverse-lookup indexes for queries nobody writes yet | ~4 | `clinic_addresses_doctor_id_idx`, `samples_and_inputs_visit_id_idx`, `voice_notes_visit_idx`, `check_outs_visit_id_idx`. A foreign key is enforced through the *referenced* key, so these do nothing until a query needs them |
+| **The BE-W64 pair** | **2** | `doctors_full_name_trgm_idx` (2,616 kB) and `doctors_specialty_trgm_idx` (136 kB) — see below |
+
+**Nothing else in the schema has the leakproof problem, and that is checked rather than
+assumed.** `grep -rn "ilike" services/api/supabase/migrations/*.sql` returns eleven hits;
+nine are `v_message ilike '%…%'` inside exception handlers, matching a text *variable* with
+no table and no index involved. The only ILIKE that touches a column anywhere in this
+schema is `search_doctors`, in the two versions of it and now the third.
+
+**The one that is still worth a decision.** After the fix, `doctors_full_name_trgm_idx` is
+reachable but is used only on the wide-scope path. In this workload — which is what a
+pilot looks like, MRs with one territory each — it recorded **zero scans**, while
+`doctors_territory_active_name_idx` recorded **33,635**. It is not dead any more, but it is
+2.6 MB and write amplification on every doctor insert, maintained for the admin search
+path. Whether that is worth keeping is a judgement for the reviewer; it was not removed.
+
+**UNVERIFIED, and this is the honest limit of B6.** At fixture and synthetic scale the
+small-table effect is indistinguishable from genuine deadness for most of the 37. Settling
+it needs `pg_stat_user_indexes` from a database carrying real traffic, and production is
+unreachable from this machine. What can be said without production is exactly what is
+above: the constraint-backed ones are fine, the ILIKE audit is complete, and the trigram
+pair's status is measured rather than guessed.
+
+#### C — the cap decision now has a deadline
+
+**C1, the choice: a dated threshold plus a CI step, not an expiry that starts refusing.**
+
+`org_default_shift_window` — the precedent BE-W21 followed — expires a **permissive value**
+back to a strict default, and its own header explains why: *"if the client never sends the
+real working hours, the system tells them by failing, which is the only message anyone
+reliably reads."* The cap cannot borrow that shape directly, because here the permissive
+state is the **absence** of a value. The only structural analogue would be to start
+refusing sample writes on a date, which punishes an MR for a decision nobody asked them to
+make — on a path that still writes to `services/mock` and would land on real MRs the day it
+is converted.
+
+So the deadline binds the people who own the decision:
+
+| rejected | why |
+| --- | --- |
+| refuse sample writes after the date | punishes the wrong party, and lands the day the write path is converted |
+| a startup warning | a log line nobody reads is what this project already calls a flag that is *"real and invisible"* |
+| a calendar-dependent unit test | would break `pnpm test` for a developer who owns none of this, and then it gets skipped |
+| pick a default cap | explicitly forbidden, and the exact failure `20260907000700` was written to avoid |
+
+**What was built.** `ucpmp_sample_cap_decision_due` = `2026-11-06`, sixty days out — the
+same ceiling `validate_app_threshold()` already imposes on the shift window, borrowed
+rather than invented. `public.ucpmp_cap_decision_status()` reports
+`{capConfigured, dueAt, overdue, daysRemaining, question}`.
+`check:decision-debt` turns that into a CI step in the migrations job.
+
+**C2 is satisfied by where it lives, not by weakening it.** Local development is untouched
+and the test suite never depends on the date: `decision-debt.spec.ts` exercises the
+deadline by writing a **backdated row**, the technique `20260816000200` records for its own
+expiry — *"a backdated row with a backdated expiry is a legitimate correction to the record
+AND the only honest way to exercise the far side of the boundary."* Only CI is
+calendar-sensitive.
+
+**It fails closed.** A missing or null deadline reads as **overdue**, not as "no deadline",
+so the alarm cannot be silenced by removing the row that carries it. That is the FIX-05
+`ALTER DEFAULT PRIVILEGES` failure — a control that looked like one and enforced nothing —
+written into an assertion.
+
+**Deferring is possible and meant to be.** `app_thresholds` carries a statement-level
+`reject_mutation` trigger, so the row cannot be edited or deleted (asserted: SQLSTATE
+`23001`). A later deadline is a new row with a reason in its note — dated, attributable,
+and on the record.
+
+**Proved end to end, not only in unit tests.** With a backdated row:
+
+```
+$ pnpm --filter @fieldforce/api check:decision-debt
+A DECISION IS OVERDUE:
+  - the UCPMP sample cap is still unconfigured and its decision deadline
+    (2026-01-01T00:00:00+00:00) has passed.
+…
+Do NOT invent a value to clear this. Either set the real one, or file a
+migration moving ucpmp_sample_cap_decision_due with the reason in its note.
+EXIT CODE: 1
+```
+
+and as the schema ships: `overdue: false`, `daysRemaining: 60`, exit 0.
+
+**C4, both mutations, count unchanged at 9 each:**
+
+| mutation | result |
+| --- | --- |
+| `ucpmp_cap_decision_status()` replaced with one that always returns `overdue: false` | **5 failed / 4 passed** — every database assertion, including the fail-closed one |
+| the script's overdue branch made unreachable (`if (false)`) | **6 failed / 3 passed** — the five above plus the pure evaluator's own case |
+
+Neither dropped the case count, so neither was a no-op.
+
+---
+
+#### D1 — the five questions the ADR flags as needing a human, verbatim
+
+Quoted from `docs/adr-sync-pull.md` §5, with one line each on what changes depending on
+the answer. Nothing below needs the ADR read to be answered.
+
+> **1. The tombstone window (§2.3). How long may a record of a deleted thing be kept, and
+> does a consent tombstone conflict with the withdrawal promise? Legal, not technical.**
+
+*What changes:* a longer window means a handset can be offline longer before it needs a
+full re-sync; a shorter one means more full re-syncs. If a **consent** tombstone is not
+allowed at all, consent cannot be in the pull, and a withdrawal will never reach a handset
+that is offline when it happens.
+
+> **2. What an MR keeps when they lose a territory (§2.5). Privacy question with a product
+> answer.**
+
+*What changes:* whether an MR who is reassigned keeps the old territory's doctor list,
+visits and beat plan on their phone indefinitely, or is told those records are gone — and
+if told, whether the app says "deleted" (false, and for a consent record dangerously so)
+or "no longer yours".
+
+> **3. Whether an updates-only pull may ship (§4), given it must tell the user it cannot
+> see deletions.**
+
+*What changes:* 8 half-days of work either ships in the next increment or waits for
+another 7. If it ships, the app must say plainly that it cannot see removals, because an
+MR watching their list update will reasonably conclude it is current.
+
+> **4. Whether consent and analyses belong in the pull at all. Every such read writes an
+> audit row — per pull, per MR, per day. That is a volume and a compliance decision before
+> it is a schema one.**
+
+*What changes:* 100 MRs pulling every 15 minutes is roughly 3,000 audit rows a day per
+entity type. Including them makes the pull the largest writer of audit rows in the system;
+excluding them means consent state on a handset can only ever be what that handset itself
+recorded.
+
+> **5. The offline consent question from FIX-02 §3 is upstream of all of this. If consent
+> capture cannot be queued offline, a pull that carries consent records is solving a
+> problem the product does not have yet.**
+
+*What changes:* this one gates questions 1 and 4. Answer it first; if consent is never
+captured offline, most of the consent-in-sync design disappears rather than being decided.
+
+#### D2 — the six design questions, recommendation in two lines each
+
+| § | question | recommendation |
+| --- | --- | --- |
+| **2.1** | watermark, composite cursor, or a sequence column? | **A composite `(updated_at, id)` cursor, opaque to the client.** It closes the paging hole with no schema change and `id` is already unique so the order is total; a sequence column is strictly more correct and costs a column, an index and a trigger on every synced table |
+| **2.2** | how not to lose a row committed mid-pull? | **Serve the pull from one `repeatable read` snapshot** and return its boundary as the cursor. Exact rather than probabilistic; **an overlap window is explicitly rejected** — it is a guess that silently loses data when the guess is wrong |
+| **2.3** | how are deletes represented? | **Tombstones with their own retention**, the window set from the same threshold machinery as everything else. Plain tombstones conflict with the 90-day destruction promise; plain absence leaves a client unable to tell "deleted" from "unchanged" |
+| **2.4** | RLS scoping, or a `SECURITY DEFINER` RPC? | **RPC.** Not really a choice: nine tables have RLS forced with **zero policies** and cannot be read any other way, and reads of `consent_records` and `analyses` must write an audit row that no SELECT trigger exists to write |
+| **2.5** | what happens when a row leaves the caller's scope? | **A distinct `reason` on the change — `deleted` \| `out_of_scope`.** Silence leaves a former territory's doctors on the handset for ever; calling it `deleted` tells the MR something false, and for a consent record dangerously so |
+| **2.6** | RPC or table read? | **RPC.** A table read can only ever refuse with RLS `42501`, so every failure reaches the MR as one message, where an RPC can distinguish *cursor expired, re-sync* — an instruction the client can act on — from *cursor unrecognised* and *user deactivated* |
+
+`packages/core` consequences, from ADR §3: `since` becomes an opaque `cursor`, the response
+gains `nextCursor`, `serverTime` stops being the thing the client stores, `deleted: boolean`
+becomes `reason`, and the FIX-06 error contract gains at least two refusal codes.
+
+#### D3 — the 29 half-days, and what could ship alone
+
+| piece | half-days | ships alone? |
+| --- | ---: | --- |
+| Contract changes (§3) | 2 | No — everything depends on it |
+| `sync_pull` RPC: cursor, snapshot, RLS scoping, audit | 8 | **Yes** — an updates-only pull |
+| Tombstones + their retention + a full-resync path | 5 | No |
+| `out_of_scope` handling | 2 | **Yes**, after tombstones |
+| Client pull consumer in `apps/field/src/sync/` | 5 | No |
+| `FE-W18` conflict resolution | 4 | No |
+| `FE-W19` offline day on a handset (FE-G2) | 3 | No |
+| **Total** | **29** | |
+
+**Is an updates-only pull worth shipping, or worse than nothing?** **Worth shipping, and
+recommended as the first increment — conditionally.** It delivers the product promise that
+is broken today: an MR learns that a manager changed tomorrow's visits. It cannot tell a
+handset that anything was removed, so a deleted or reassigned record persists on the device
+until a full re-sync.
+
+**It is worse than nothing if it ships silently.** An MR who sees their list updating will
+reasonably conclude it is current, and a stale doctor on a beat plan is a wasted visit
+rather than a cosmetic bug. The condition is not a nicety: the app has to say what the pull
+cannot see. That makes question 3 above a real decision rather than a formality.
+
+The estimate moved **23 → 29** because §2.3 and §2.5 turned out to be two pieces of work
+rather than one line. That is the third growth on inspection, and the denominator has still
+not stabilised.
+
+---
+
+#### E1 — G-PERF, stated as it actually stands
+
+**G-PERF is met for SERVER EXECUTION at the scales measured, and OPEN as written.**
+
+Server execution, `search_doctors` as an MR, after BE-W64: **2.137 ms at 3,520 doctors,
+2.259 ms at 30,272, 2.600 ms at 99,968** — flat in table size where it was linear, and
+three orders of magnitude inside the three-second budget.
+
+**That is not the requirement.** The requirement is *a doctor found in under three seconds
+in a waiting room*, which is end to end. Server execution excludes the network, PostgREST's
+serialisation, the connection pooler, the handset's parse and the render — and on an Indian
+mobile network those are the larger terms, not the rounding error.
+
+**End-to-end has never been measured at any scale.** Not before BE-W64 and not after.
+Measuring it needs a physical handset on a real network, which is **blocker B3**, open for
+three weeks. Until then the gate is met for the component this repository can measure and
+unmet for the requirement as written, and describing it as met would be how the first
+waiting room becomes the test.
+
+What BE-W64 does change: the server term is no longer the one that will break it, at any
+table size this product is likely to see. Before, 99,968 doctors alone exhausted two-thirds
+of the budget with nothing else counted.
+
+#### E2 — added to the escalation list
+
+**The UCPMP sample cap**, alongside per-territory shift hours:
+
+> What is the UCPMP sample cap, on what dimension (per doctor / per MR / per product
+> family; per month or per quarter), and **who at the client owns that number?**
+
+Deadline **6 November 2026**, after which CI fails. Until it is answered,
+`enforce_ucpmp_sample_cap()` is inert, samples are accepted uncounted, and the samples
+screen keeps saying so — which remains the truthful state and is why the message was not
+removed.
+
+The unsent list now reads: O1 · O8 · LLM provider + DPA · audio + drug list · reference
+data · shift hours · **UCPMP cap** · PV sign-off · Supabase storage-deletion DPA.
+
+#### What FIX-10 did not do
+
+- **The samples write path was not converted**, and **the samples screen's message was not
+  removed or softened.**
+- **The console coaching screens were not wired and no card was removed.**
+- **No dependency was added.**
+- **`doctors_full_name_trgm_idx` was not dropped**, though B6 measures it as unused on the
+  MR path. That is a decision, not a cleanup.
+
+---

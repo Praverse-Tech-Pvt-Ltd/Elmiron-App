@@ -1396,3 +1396,69 @@ change and the first is the better answer; both are somebody's decision, not a d
 
 **It has never failed on CI**, which is why it went unnoticed — the hosted runner's
 timing differs. Re-check with the three commands above rather than assuming.
+
+---
+
+## 7 September 2026 — an index cannot be used under RLS if its operator is not LEAKPROOF
+
+This one cost a year of a sequential scan on the doctor search, and nothing in the plan
+output says why. **If you add an index for a text search on a table with RLS policies, it
+will not be used, and you will not be told.**
+
+Postgres will not evaluate a **non-leakproof** qual before a **security qual**, because an
+operator that can raise or time differently would leak the contents of rows the policy is
+hiding. A qual that cannot be evaluated first cannot become an index condition. So on any
+RLS-protected table:
+
+```sql
+select proname, proleakproof from pg_proc where proname in ('texteq','textlike','texticlike');
+ texteq     | t     -- = uses the index
+ textlike   | f     -- LIKE  does NOT
+ texticlike | f     -- ILIKE does NOT
+```
+
+Measured on `public.doctors` at 99,968 rows, same role, same column, same index:
+
+| predicate | plan | time |
+| --- | --- | ---: |
+| `full_name ilike '%…%'` as `authenticated` | Seq Scan, 201,488 buffers | 2,205.952 ms |
+| `full_name = '…'` as `authenticated` | Bitmap Index Scan on `doctors_full_name_trgm_idx` | 0.396 ms |
+| `full_name ilike '%…%'` as `postgres` (BYPASSRLS) | Bitmap Index Scan on the same index | 0.279 ms |
+
+**How to notice.** `explain (analyze)` as the real role, never as `postgres` — the whole
+effect disappears for a role with `BYPASSRLS`, which `postgres` has here
+(`select rolbypassrls from pg_roles where rolname = current_user` → `t`). A plan taken as
+`postgres` is not a plan of what your users run.
+
+**The fix is `security definer` with the scope applied in the body**, which is what
+`20260907000800_search_doctors_sargable.sql` does. `alter function texticlike leakproof` is
+not available (superuser-only; this project's `postgres` is `rolsuper = f`) and would be
+the wrong trade anyway — global, to buy speed in one function.
+
+### Two traps that travel with it
+
+**`OR` with one non-indexable branch scans everything.** The first version of that fix was
+`security definer` with the RLS predicate transcribed verbatim, `or is_admin()` included,
+and it still seq-scanned at 2,310 ms. `is_admin()` does not depend on the row, so it does
+not belong in the row predicate — resolve the scope to a `uuid[]` first and the predicate
+becomes a plain `territory_id = any(...)`, which the planner can use.
+
+**A parameter test in a predicate is fine until the plan goes generic.** `p_query is null
+or … ilike …` uses the index under a custom plan and seq-scans under a generic one, and a
+cached plan becomes generic after five executions:
+
+```sql
+set plan_cache_mode = force_generic_plan;   -- with the null branch: Seq Scan
+                                            -- without it: Bitmap Index Scan
+```
+
+A query that is fast five times and slow for ever after is the worst shape this can take,
+because the first person to measure it sees the fast number. Branch in plpgsql instead.
+
+### And the fixture trap that hid it twice
+
+The synthetic seed names every doctor `SYNTHETIC Doctor SYN-…`, so searching for `'Doctor'`
+matches **100% of rows**. No index can help a predicate true for every row, so a
+measurement using that query cannot distinguish a broken plan from a query with nothing to
+optimise. Derive a selective query from the fixture — `substring(full_name from 18)` off
+one row — rather than typing a word that happens to be in every name.

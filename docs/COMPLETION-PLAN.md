@@ -717,3 +717,30 @@ see the FIX-09 §B2 table for what is UNVERIFIED.
 **S5 re-estimated by FIX-09:** 23 half-days → **29**. Breakdown, and which pieces could ship
 alone, in `docs/adr-sync-pull.md` §4. BE-W62 and BE-W63 above are the two contract holes that
 ADR §1.1 states in full.
+
+### Closed and added by FIX-10
+
+**BE-W64 is done**, and the diagnosis in its FIX-09 entry was wrong. The trigram indexes
+were not unusable because `p_query is null or … ilike` is non-sargable — measured as
+`postgres`, that exact disjunction uses the index in 0.055 ms. They were unusable because
+`texticlike` is not `LEAKPROOF` and `public.doctors` has RLS forced, so Postgres refuses to
+evaluate the ILIKE before the policy's security qual. `search_doctors` is now
+`security definer` with the scope resolved to a `uuid[]` before the query, and the listing
+and search branches are split. **2,190.503 ms → 2.600 ms at 99,968 doctors, and flat in
+table size instead of linear.** Verification as written in the BE-W64 row is superseded by
+the plans recorded in `PROJECT-OVERVIEW.md` → FIX-10 §B2.
+
+| ID | Title | Changes | Deps | Blocker | Est | Verification |
+|---|---|---|---|---|---|---|
+| **DECIDE-3** | Do the doctor trigram indexes earn their keep? | `doctors` | BE-W64 | **Reviewer** | — | After BE-W64 the indexes are reachable, but only on a wide-scope path. In a pilot-shaped workload `doctors_full_name_trgm_idx` recorded **0 scans** against `doctors_territory_active_name_idx`'s **33,635**, while costing 2,616 kB and write amplification on every doctor insert. Keep them for admin search, or drop them. Not a cleanup — a decision |
+| **BE-W65** | UCPMP cap: answer the question or move the date | `app_thresholds` | — | **Client** | 0 | `check:decision-debt` fails CI from **6 November 2026**. Either `ucpmp_sample_cap_quantity` is set from an authoritative source, or a new migration moves `ucpmp_sample_cap_decision_due` with the reason in its note. Do NOT invent a value. See the escalation list |
+| **G-PERF** | restated, not a new task | — | — | **B3 (handset)** | — | Met for **server execution** at 3,520 / 30,272 / 99,968 doctors (2.1 / 2.3 / 2.6 ms). **Open as written**: "under three seconds in a waiting room" is end to end, and end to end has never been measured at any scale. Needs a physical handset on a real network |
+
+**Not registered, and the reason.** 37 of 109 indexes in `public` show `idx_scan = 0`, but
+13 back primary keys or unique constraints and most of the rest are the small-table effect
+at fixture scale. Separating genuinely dead indexes from merely unexercised ones needs
+`pg_stat_user_indexes` from a database carrying real traffic, and production is unreachable
+from the working machine. Recorded as UNVERIFIED in FIX-10 §B6 rather than turned into
+tasks nobody can act on. The one thing that *was* settled: `search_doctors` is the only
+place in the whole schema where an ILIKE touches a column, so no other index carries the
+leakproof problem.
