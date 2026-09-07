@@ -14,12 +14,14 @@ import {
   CheckInSchema,
   CheckOutSchema,
   DoctorSchema,
+  GeofenceStatusSchema,
   MileageDaySchema,
   SampleAndInputSchema,
   SampleOrInputKindSchema,
   TerritoryShiftWindowSchema,
   VisitSchema,
 } from './entities.js';
+import type { CheckIn, CheckOut } from './entities.js';
 import { ConsentOutcomeSchema, ConsentRecordSchema, ConsentTextVersionSchema } from './consent.js';
 import { RecordingSchema, TranscriptSchema, VoiceNoteSchema } from './capture.js';
 import { UploadSessionStateSchema } from './upload.js';
@@ -532,3 +534,93 @@ export const toRecordCheckInBody = (input: CreateCheckInRequest): RecordCheckInB
   p_accuracy_metres: input.coordinates.accuracyMetres,
   p_source: input.source,
 });
+
+/**
+ * The row `record_check_in` actually returns, as PostgREST serialises it.
+ *
+ * Measured against the running stack in FIX-06 rather than assumed:
+ *
+ * ```json
+ * {"id":"...","visit_id":"...","mr_id":"...","latitude":18.52,"longitude":73.85,
+ *  "accuracy_metres":null,"geofence_status":"unavailable",
+ *  "distance_from_clinic_metres":null,"source":"automatic",
+ *  "occurred_at":"2026-09-07T06:30:00+00:00","created_at":"...","received_at":"...",
+ *  "shift_window_source":"territory"}
+ * ```
+ *
+ * Three things the contract's `CheckIn` does not share with it: snake_case keys, flat
+ * `latitude`/`longitude` where the entity nests `coordinates`, and `shift_window_source`,
+ * which the entity has no field for. A request mapper existed since BE-W3; nothing ever
+ * mapped the response, because until FIX-06 no client had ever received one.
+ */
+export const CheckInRowSchema = z.object({
+  id: UuidSchema,
+  visit_id: UuidSchema,
+  mr_id: UuidSchema,
+  latitude: z.number(),
+  longitude: z.number(),
+  accuracy_metres: z.number().nullable(),
+  geofence_status: GeofenceStatusSchema,
+  distance_from_clinic_metres: z.number().nullable(),
+  source: CaptureSourceSchema,
+  occurred_at: IsoDateTimeSchema,
+  received_at: IsoDateTimeSchema,
+  created_at: IsoDateTimeSchema,
+});
+export type CheckInRow = z.infer<typeof CheckInRowSchema>;
+
+/**
+ * `check_ins` row to `CheckIn`.
+ *
+ * Parses rather than casts. A row that does not match is a contract violation and should
+ * throw here, at the edge, rather than surface three screens later as an undefined field.
+ */
+export const fromCheckInRow = (row: unknown): CheckIn => {
+  const parsed = CheckInRowSchema.parse(row);
+  return CheckInSchema.parse({
+    id: parsed.id,
+    visitId: parsed.visit_id,
+    mrId: parsed.mr_id,
+    coordinates: {
+      latitude: parsed.latitude,
+      longitude: parsed.longitude,
+      accuracyMetres: parsed.accuracy_metres,
+      // The row has no separate column: `occurred_at` IS when the device took the fix.
+      capturedAt: parsed.occurred_at,
+    },
+    geofenceStatus: parsed.geofence_status,
+    distanceFromClinicMetres: parsed.distance_from_clinic_metres,
+    source: parsed.source,
+    occurredAt: parsed.occurred_at,
+    receivedAt: parsed.received_at,
+    createdAt: parsed.created_at,
+  });
+};
+
+export const CheckOutRowSchema = CheckInRowSchema.extend({
+  duration_seconds: z.number().int().nullable(),
+});
+export type CheckOutRow = z.infer<typeof CheckOutRowSchema>;
+
+export const fromCheckOutRow = (row: unknown): CheckOut => {
+  const parsed = CheckOutRowSchema.parse(row);
+  return CheckOutSchema.parse({
+    id: parsed.id,
+    visitId: parsed.visit_id,
+    mrId: parsed.mr_id,
+    coordinates: {
+      latitude: parsed.latitude,
+      longitude: parsed.longitude,
+      accuracyMetres: parsed.accuracy_metres,
+      // The row has no separate column: `occurred_at` IS when the device took the fix.
+      capturedAt: parsed.occurred_at,
+    },
+    geofenceStatus: parsed.geofence_status,
+    distanceFromClinicMetres: parsed.distance_from_clinic_metres,
+    source: parsed.source,
+    occurredAt: parsed.occurred_at,
+    receivedAt: parsed.received_at,
+    durationSeconds: parsed.duration_seconds,
+    createdAt: parsed.created_at,
+  });
+};
