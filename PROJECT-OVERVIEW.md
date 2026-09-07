@@ -7268,3 +7268,350 @@ and each is a different action.
   one, which is why it carries no deadline mechanism and does carry an escalation.
 
 ---
+
+---
+
+### FIX-13 — the minutes, the contract gap, and tombstones (8 September 2026)
+
+**Not done, and stated first: no client was wired to anything, the console was not wired,
+no card was removed, samples were not converted, the samples screen's message was not
+removed, and no dependency was added.** `pg_cron` was scoped, not installed.
+
+#### CI and counts
+
+FIX-12's three commits pushed as `9995cbc..d42fd58`. Run **`34155565813`: success**, both
+jobs. api **459 passed / 18 files** on that run.
+
+| package | at d42fd58 (CI) | after FIX-13, locally |
+| --- | ---: | ---: |
+| `@fieldforce/api` | 459 / 18 | **474 passed / 19 files** |
+| `@fieldforce/mock` | 40 / 1 | 40 / 1 |
+| `@fieldforce/field` | 341 / 23 | unchanged |
+| `@fieldforce/ui-tokens` | 54 / 3 | unchanged |
+| `@fieldforce/core` | 21 / 3 | unchanged |
+| `@fieldforce/ui` | 4 / 1 | unchanged |
+
+**+15**: 4 error-contract, 9 phase-2 sync, 2 rewritten completeness assertions that became
+three. No skips — every summary line reads `N passed (N)`. `verify:rollbacks`: *"All
+rollbacks applied in reverse order; public schema is empty"* — **32 migrations, 32 rollback
+files**. `turbo run typecheck lint`: **16 successful, 16 total**.
+
+---
+
+#### A2 — the minutes hypothesis is refuted. This repository is public.
+
+**The premise of the whole calculation is false, and it is one query:**
+
+```
+$ gh api repos/Praverse-Tech-Pvt-Ltd/Elmiron-App --jq '{private, visibility}'
+{"private": false, "visibility": "public"}
+
+$ gh api repos/.../events --jq '[.[] | select(.type=="PublicEvent") | .created_at]'
+["2026-08-06T06:18:53Z"]        # identical to created_at
+```
+
+**The repository has been public since the instant it was created**, fifteen days before
+the outage and eight days before the retention workflows were first enabled. GitHub Actions
+on standard hosted runners is free and unmetered for public repositories; the monthly
+allowance applies to **private** repositories only. **So Actions minutes cannot have caused
+the August outage, and cannot cause the next one.**
+
+**The cadence was also misread.** `retention-watchdog.yml` is `cron: '15 * * * *'`, which is
+*hourly at minute 15* — a 15-minute **offset** from `retention.yml`'s `'0 * * * *'`, not a
+15-minute cadence. The comment in the file says "on a 15-minute offset so it checks after"
+the purge. So it is ~730 runs a month, not ~2,880.
+
+**The measured burn, for completeness, from 441 runs in August:**
+
+| workflow | runs | wall clock | billable minutes |
+| --- | ---: | ---: | ---: |
+| Audio retention | 211 | 77.2 min | 211 |
+| Audio retention watchdog | 205 | 67.3 min | 205 |
+| CI | 25 | 67.3 min | 156 |
+| **Total** | **441** | | **572** |
+
+Billable rounds each **job** up to a whole minute — CI has two jobs, the others one — and
+every scheduled run rounds to exactly 1. August is understated because the workflows were
+disabled from the 23rd; **projected to a full month at the configured hourly crons that is
+730 + 730 = 1,460 minutes for the schedules, plus roughly 150–300 for CI: about
+1,600–1,800 a month.**
+
+**Against a hypothetical private-repo Free allowance of 2,000 minutes, that is under it —
+and against this repository's actual allowance it is irrelevant, because a public repository
+has none.** UNVERIFIED: the 2,000/3,000 figures were not confirmed; the org billing endpoint
+returned `410 This endpoint has been moved` and its replacement needs `admin:org`, which
+this token does not have. It does not matter for the conclusion.
+
+**So what did cause it? Still UNVERIFIED, and now with a shorter list.** The remaining
+candidates are Actions disabled at the org level, an account restriction, or a platform
+incident — all of which need the org audit log, which returns `404` to this token. What is
+now excluded is the explanation everyone reached for.
+
+**The prediction is also withdrawn.** There is no billing-cycle boundary for this repository
+to trip over on 1 October.
+
+#### A3 — `pg_cron` scoped, and it is not "the same SQL on a different clock"
+
+**Verdict: it cannot replace `retention.yml` without a second implementation, which is the
+thing this project rejected twice. It can do something smaller and genuinely useful.**
+
+The purge is **not pure SQL.** Its shape is claim → delete → confirm, and the middle step is
+an HTTP `DELETE` to the Supabase Storage API:
+
+```
+purge-expired-audio.mjs:3   import { deleteStorageObject } from './storage.mjs';
+storage.mjs:48              const response = await fetch(`${config.apiUrl}/storage/v1/object/...`)
+```
+
+A row in `storage.objects` is not the object; deleting the row leaves the file behind. So
+`pg_cron` alone cannot run this at all.
+
+`pg_cron` **is available** on this stack (1.6.4, not installed) and `pg_net` **is already
+installed** (0.20.4), so `pg_cron` + `pg_net` could technically do it. That is where it
+stops being attractive:
+
+- **`pg_net` is asynchronous.** It queues a request and writes the result to
+  `net._http_response` later. The current worker confirms a row only after a successful
+  delete and records a failure otherwise; with `pg_net` that handshake needs a *second*
+  scheduled job to reap responses and then call `confirm_audio_destroyed` or
+  `record_audio_purge_failure`. **That is a second implementation of the error handling, in
+  plpgsql, alongside the existing one in JavaScript.**
+- **The subtle branch would have to be rewritten too.** Supabase Storage returns HTTP **400**
+  with `{"statusCode":"404", …}` in the *body* when an object is already gone.
+  `storage.mjs` exists because BE-W6 got that wrong and the bug went unnoticed *because the
+  branch was never reached*. Re-implementing it in SQL is exactly the risk this project has
+  spent ten sessions removing.
+- **The JavaScript path does not go away regardless.** `reconcile-after-restore.mjs` also
+  calls `deleteStorageObject`.
+
+So on the reviewer's own test — *no second implementation and no second language* — this
+fails it. **It differs from the rejected Edge Functions proposal only in where the second
+implementation would live, not in whether there would be one.**
+
+**What `pg_cron` could do, and it is worth its own task.** The SQL-only half —
+`close_stale_upload_sessions()`, plus a periodic `audio_purge_health()` read — needs no HTTP
+at all. Scheduling those inside the database would generate steady database traffic, which
+is the thing whose absence let the free-tier project auto-pause in August (**B14**). That is
+a small, separable change that closes a real problem without touching the purge.
+
+**UNVERIFIED, and it decides whether that is worth doing:** whether Supabase counts internal
+`pg_cron` activity as the traffic that prevents a free-tier pause. The pause is documented
+against project *inactivity* without defining whether internal jobs qualify. **Registered as
+BE-W69 rather than assumed**, and installing `pg_cron` is a dependency — asking first.
+
+#### A4 — the diagnostic is in `docs/gotchas.md`
+
+The signature, the two `gh api` queries that identify it, a healthy job beside a failed one
+for comparison, and the public-repo check that rules out the billing explanation before
+anybody spends a session on it. Including the trap: **`gh run view --log-failed` returning
+`log not found` is confirmation, not an obstacle** — there is no log because there was no
+run, and reading it as "the logs expired" sends you looking for a code defect that does not
+exist.
+
+---
+
+#### B — the 45xxx gap, closed by a derived control
+
+`services/api/tests/error-contract.spec.ts`. **The list is derived from the live database,
+not maintained**, which is the difference between a control and a second thing to forget.
+
+```sql
+select distinct m[1] as token
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  cross join lateral regexp_matches(p.prosrc, 'errcode\s*=\s*''([A-Za-z0-9_]+)''', 'g') m
+ where n.nspname = 'public';
+```
+
+**Two things a naive derivation gets wrong, and writing it found both.**
+
+**1. `errcode` takes condition NAMES as well as codes.** The query above returns sixteen
+tokens: twelve five-character codes and four names —
+
+```
+0A000 22023 28000 42501 45001 45002 45003 45004 45005 45006 45007 45008
+check_violation  foreign_key_violation  restrict_violation  unique_violation
+```
+
+`reject_mutation`, the append-only enforcement on nine tables, raises
+`errcode = 'restrict_violation'`, **not** `'23001'`. A regex for `'[0-9A-Z]{5}'` misses it
+and every other named condition — and would then have reported `23001` as a contract entry
+nothing raises, sending the next reader to delete a mapping that is load-bearing. The names
+are resolved **by raising them and catching the SQLSTATE**, because Postgres publishes no
+catalogue of the mapping and any table written into the test would be the hand-maintained
+list it exists to avoid.
+
+**2. Scanning the migration FILES is not scanning the database.** A code raised in a
+superseded `create or replace` body still appears in the files and is raised by nothing.
+`pg_proc` holds what is live — the same rule this project already applies to function
+bodies.
+
+**B3 — both mutations, count unchanged at 4 each:**
+
+| mutation | result |
+| --- | --- |
+| `'45008'` removed from `BY_SQLSTATE` | **B1 fails**: `expected [ '45008' ] to deeply equal []` |
+| `'45099'` added to `BY_SQLSTATE`, raised by nothing | **B2 fails**: `expected [ '45099' ] to deeply equal []` |
+
+Each failed its own assertion and only its own.
+
+**B4 — nothing beyond `45004`.** The sixteen resolved SQLSTATEs and the sixteen contract
+entries match exactly in both directions. `45004` itself was already fixed in FIX-12; had
+this control existed in FIX-09 it would have caught it the same day.
+
+`BY_SQLSTATE` is now exported from `packages/core` so the test compares against the module
+rather than a regex over its text, and cannot drift from it.
+
+---
+
+#### C — sync_pull phase 2: tombstones and leave-scope
+
+**C6 first, because it is the one place phase 2 could create a compliance problem.**
+
+**How a tombstone is stopped from telling a caller that a record they were never permitted
+to see has been deleted.**
+
+A tombstone is an existence claim: *"doctor 7f3a… was deleted"* tells a reader that doctor
+7f3a… existed. **It cannot be filtered at read time, because the row is gone** — there is
+nothing left for a policy to evaluate. Two independent protections, and the first does the
+real work:
+
+1. **The scope is captured at the moment of the event, and RLS admits the tombstone only to
+   a caller for whom that FORMER scope was visible.** `sync_events` stores exactly one of
+   `former_mr_id` (who owned the visit or beat plan) or `former_territory_id` (which
+   territory the doctor was in) — enforced by a check constraint, because a row with
+   neither is invisible to everyone and a row with both is ambiguous about which policy
+   admits it. The policy is `former_mr_id in (select visible_user_ids())` or
+   `former_territory_id in (select current_user_visible_territory_ids())`. **A caller who
+   could never see the record can never match its tombstone**, and that is a policy on a
+   stored value rather than an argument about ordering.
+
+2. **No tombstone is emitted on a full re-sync at all.** A pull with a null cursor is a
+   client rebuilding from nothing; it holds no stale rows to correct, so a tombstone could
+   only tell it about records it never had.
+
+**Payload-free does not mean scope-free, and that is the design rather than a compromise.**
+The scope keys are the only thing a tombstone carries beyond the id, the type and the
+reason — no name, no date, no outcome, no text. What a visit tombstone retains is that an MR
+once had a visit with that id, which is the minimum needed to tell **that MR, and only that
+MR**, to drop it.
+
+Also: **there is no INSERT, UPDATE or DELETE policy on `sync_events`.** Rows arrive through
+a `SECURITY DEFINER` trigger and leave through a `SECURITY DEFINER` purge, so a client can
+neither forge a tombstone for somebody else's record nor suppress its own. Asserted: both
+attempts refuse with `42501`.
+
+**C1 — one table, one stream.** Deletes and leave-scope are the same shape — *"this id is no
+longer yours, and here is why"* — and are merged into the same `(updated_at, id)` order as
+rows. They inherit phase 1's snapshot visibility for free: the event is written by an
+`AFTER` trigger in the same transaction as the change, so its `xmin` is that transaction's
+and it becomes visible exactly when the change commits.
+
+**C2 — `out_of_scope` is its own reason class.** Emitted when the *scope key* changes —
+`doctors.territory_id`, or `visits.mr_id` / `beat_plans.mr_id`. The old owner receives
+`out_of_scope`; the **new owner receives the same record as an ordinary `upserted`** through
+the row path, because its `xmin` changed. Both halves are asserted.
+
+**C3 — the completeness field shrinks, and that is asserted.**
+
+| pull | `reflects` | `omits` |
+| --- | --- | --- |
+| incremental | `insert, update, delete, out_of_scope` | `[]` |
+| full re-sync | `insert, update` | `delete, out_of_scope` |
+
+The full re-sync still declares the omission **because it is still true** — it carries no
+tombstones by design — and its `note` says the honest thing instead: everything you are
+entitled to see is in the stream, so anything absent from it is gone; replace rather than
+merge. A completeness field that does not move as capability grows becomes a lie in the
+other direction, and a client still warning about missing deletes after they arrive is as
+wrong as one that never warned.
+
+**C4 — the lifetime is the FIX-12 cursor bound, expressed the same way.**
+`age(event.xmin) >= vacuum_freeze_min_age / 2`. In transactions, not days, so the two
+cannot drift apart and nothing has to convert between them. The pull filters expired events
+*and* `purge_expired_sync_events()` deletes them, so the guarantee holds between purge runs.
+Safe rather than merely convenient: an event older than the oldest acceptable cursor has
+already reached every client entitled to it, because any client whose cursor is younger has
+seen it and any client whose cursor is older is refused with `45006`.
+
+**C5 — nine tests, all passing.**
+
+| what | result |
+| --- | --- |
+| a delete arrives after the update that preceded it, `payload: null` | yes |
+| a tombstone sorts after an earlier update of a different record | yes — index ordering asserted |
+| a full re-sync carries no tombstones | yes |
+| a reassigned record arrives as `out_of_scope`, **never** `deleted`, and the row still exists | yes |
+| the new owner sees it as an ordinary `upserted` with a payload | yes |
+| **C6: an MR in another territory is never told the record existed** | absent from the pull **and** invisible in `sync_events` itself, with a positive control proving the event does exist and the former owner can see it |
+| no client can write or suppress an event | `42501` on both |
+| an event past the maximum cursor age is not served | yes, and the stale cursor is refused `45006` |
+| the purge deletes exactly the expired ones | `0` before, `>0` after, row gone |
+
+**Two rewritten assertions, stated rather than quietly changed.** The phase-1 tests
+*"carries the incompleteness as a FIELD"* and *"a completed sweep does not return the same
+row again"* asserted `omits` contains `delete`. **That was true and phase 2 makes it false**
+— which is the change C3 asked to be asserted, not a weakening. They now assert what did not
+change: the field is present, required and machine-readable in every response, and
+`reflects` and `omits` never overlap. The phase-dependent content is asserted by the two new
+C3 tests, one per direction.
+
+**Two defects caught by existing Gate 0 guards while building this**, and worth recording
+because both are the project's characteristic shape:
+`rls.spec.ts`'s *"leaves anon with nothing at all"* and `foundations.spec.ts`'s *"grants
+TRUNCATE on nothing in public"* both failed on the new table. Supabase's default privileges
+hand `anon`, `authenticated` and `service_role` a full grant on every new table in `public`
+and no migration can change that default — **the same class as FIX-05's 65 anon-executable
+functions, wearing tables.** Fixed with the revokes every other table in this schema carries.
+
+**C7 — both mutations, count unchanged at 28 each:**
+
+| mutation | what it removes | result |
+| --- | --- | --- |
+| `emit_sync_event()` neutered to return without inserting | **the write** | **6 failed / 22 passed** — every tombstone, leave-scope, disclosure and expiry case |
+| the RLS policy replaced with `using (true)` | **the scope refusal** | **2 failed / 26 passed** — the C6 disclosure case, and the new-owner case, which fails because with no scoping the southern MR receives an `out_of_scope` event for a doctor they have just *gained* |
+
+Neither alone proves the path: the first shows the events are real, the second shows the
+scoping is. The second mutation is the important one — it is the compliance failure, and the
+suite fails on exactly it.
+
+**C8 — no client was wired.** Server and contract only.
+
+**`packages/core` needed no change**, which is worth noting rather than glossing:
+`SyncChangeReasonSchema` already declared `deleted` and `out_of_scope`, and
+`SyncCompletenessSchema`'s enums already admitted them. The phase-1 contract was written for
+a server that did not exist yet and turned out to fit the one that does. `services/mock` was
+moved to phase 2 in step, including one payload-free tombstone, so the fixture does not
+teach a client to warn about a gap that has closed.
+
+#### The project's own finding about itself
+
+Five sessions have now found the same shape, and it is worth stating as a prediction rather
+than a list:
+
+| found in | what was believed, written down, and never exercised |
+| --- | --- |
+| FIX-02 | `capture_consent` recorded the version the doctor was shown |
+| FIX-05/06 | `ALTER DEFAULT PRIVILEGES` protected future migrations |
+| FIX-09/10 | the trigram index served doctor search |
+| FIX-09 | `45004` reached the MR as an actionable refusal |
+| FIX-12 | the August failures were a retention problem |
+| FIX-13 | the outage was Actions minutes on a private repository |
+
+**The characteristic defect of this codebase is not bad code. It is unexercised code that
+looks exercised**, and the only detector that has ever worked is trying to use it — which is
+also why the four hollow tests were all found by mutation rather than by review.
+
+**That predicts where the next one is: anything not yet called by a real client.** Which,
+today, is every response shape in the contract — `sync_pull` phases 1 and 2 included, since
+C8 forbade wiring one.
+
+#### What FIX-13 did not do
+
+- **No client was wired to anything.** The phase-2 response shape is unexercised by any real
+  consumer, which by the paragraph above is where the next finding will be.
+- **`pg_cron` was scoped, not installed.** It is a dependency, and the rule is to ask.
+- **No index was dropped** (BE-W67), **no accent search was added** (BE-W66), the console
+  was not wired, no card was removed, samples were not converted, and the samples screen's
+  message was not removed.
+
+---

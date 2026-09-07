@@ -770,3 +770,29 @@ BE-W64 trigram pair, already DECIDE-3; the other five (`audit_log_action_idx`,
 exist yet, chiefly the console. **They cannot be classified further without
 `pg_stat_user_indexes` from a database carrying real traffic, and production is unreachable
 from the working machine.** UNVERIFIED, deliberately.
+
+### Added by FIX-13
+
+| ID | Title | Changes | Deps | Blocker | Est | Verification |
+|---|---|---|---|---|---|---|
+| **BE-W69** | Schedule the SQL-only retention half inside the database | new migration, `pg_cron` | — | **Dependency approval** | 2 | `close_stale_upload_sessions()` and a periodic `audio_purge_health()` read need no HTTP, so `pg_cron` can run them. The purge itself cannot move — it makes an HTTP `DELETE` to Storage, and doing that with `pg_net` means a second, asynchronous implementation of the claim/confirm error handling in plpgsql beside the JavaScript one (FIX-13 A3). **UNVERIFIED and it decides whether this is worth doing at all:** whether Supabase counts internal `pg_cron` activity as the traffic that prevents a free-tier pause. The documentation defines the pause against project inactivity without saying whether internal jobs qualify. Verification: `select * from cron.job`, a run recorded in `cron.job_run_details`, and — the part that matters — a project that does not pause across a quiet week |
+| **BE-W70** | The August outage cause is still unidentified | — | — | **Operator** | 0 | Actions minutes are ruled out: the repository has been **public** since `created_at`, and public repositories have no Actions allowance to exhaust. What remains needs the org audit log, which returns `404` to a token without `admin:org`: Actions disabled at org level, an account restriction, or a platform incident. Verification: the audit log around `2026-08-21T22:11:01Z`, or a definite statement that it cannot be retrieved |
+
+**Withdrawn, and worth saying so.** The prediction that the outage would recur at a billing
+cycle boundary around 1 October does not survive the public-repository finding. There is no
+allowance for this repository to exhaust and no cycle for it to trip over. The signature to
+watch for is in `docs/gotchas.md` regardless, because whatever the cause was, it was not
+this repository's code and it will look identical if it returns.
+
+**Closed by FIX-13.**
+
+- **BE-W61 phase 2** — payload-free tombstones and `out_of_scope`, scoped by the scope the
+  record HAD so a tombstone cannot disclose that a record existed to a caller who was never
+  entitled to see it. `completeness.omits` is now empty on an incremental pull. What remains
+  of S5 is the client half: **FE-W22** (a pull consumer), **FE-W18** (conflict resolution)
+  and **FE-W19** (an offline day on a handset), none of which this session was permitted to
+  touch.
+- **The `45xxx` contract gap** — closed by a control rather than by vigilance.
+  `error-contract.spec.ts` derives every SQLSTATE the live database raises and fails the
+  build in **both** directions. Nothing beyond `45004` was found, and `45004` was already
+  fixed in FIX-12.
