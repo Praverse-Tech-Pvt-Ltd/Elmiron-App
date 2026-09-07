@@ -187,3 +187,65 @@ this moved while backend was stopped:
 5. **Add the deep-link redirect entry** (§4.1) — one line, no dependencies.
 6. Only after the above: pick up wherever `PROJECT-OVERVIEW.md`'s next backend prompt
    points, or write one.
+
+---
+
+## Correction — 7 September 2026 (FIX-01)
+
+This section corrects two facts stated earlier in this file and elsewhere. **The earlier
+statements are left in place**, per the section-freezing rule in `.ai-collab/decisions.md`.
+
+### "40 public tables" is 34 tables and 6 views
+
+**Replaces:** the figure `40 public tables` at line 66 of this file, in the account of the
+7 September production resume, and the same figure in `.ai-collab/decisions.md` under
+7 September.
+
+Measured against the applied 19-migration schema:
+
+```
+tables in public                             -> 34
+RLS enabled | forced | total (relkind='r')   -> 34 | 34 | 34
+policies in public                           -> 41
+views in public                              ->  6
+tables + views                               -> 40
+```
+
+`34 + 6 = 40`. The most likely origin is a count over `information_schema.tables`, which
+includes views unless filtered to `table_type = 'BASE TABLE'`.
+
+**`PROJECT-OVERVIEW.md` was already correct** — it has said "34 tables … 41 policies,
+6 views" since BE-W2. The append-only record outranked the handoff, which is what it is for.
+
+**Scope of this correction, stated honestly:** the measurement above was taken on a **local**
+stack running the same 19 migrations. Production could not be verified from the machine that
+found this — the Elmiron-App project is not in the Supabase account connected there, and no
+production credentials are present. The *arithmetic* is not in doubt; that production carries
+the identical schema is inferred from the migration count and is **UNVERIFIED**. Anyone with
+production access should confirm with:
+
+```sql
+select
+  (select count(*) from pg_tables where schemaname='public') as tables,
+  (select count(*) from pg_views  where schemaname='public') as views;
+```
+
+Nothing about the resume account changes: the project was paused, was resumed, and lost
+nothing. Only the noun is wrong.
+
+### There is no root `app.json`
+
+**Replaces:** the claim — carried in `docs/frontend-handoff-2026-09-07.md` (lines 94 and
+186), `docs/frontend-status.md` (line 276) and `PROJECT-OVERVIEW.md` (line 3820) — that the
+**root** `app.json` still declares `com.anonymous.elmironapp` from a prebuild run in the
+wrong directory.
+
+```
+$ find . -maxdepth 2 -name app.json -not -path "./node_modules/*"
+./apps/field/app.json
+```
+
+There is no root `app.json`. `apps/field/app.json` correctly declares
+`"package": "com.praversetech.fieldforce"`, and `com.anonymous.elmironapp` now survives
+**only in the four prose references above**. Any task list carrying "fix the stale package
+id in the root app.json" should treat it as a no-op and correct the prose instead.

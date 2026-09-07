@@ -622,3 +622,38 @@ FE-W8-blocking entries — the package ID and the account owner are one conversa
 - **Decision:** A `###` section in `PROJECT-OVERVIEW.md` is editable while its sprint is open. **Once the sprint closes, the section freezes.** Any later correction goes in the current section, dated, saying what it replaced and where.
 - **Why:** To prevent erasing the discovery of errors and maintain a durable, auditable record of the project's actual history.
 
+
+---
+
+## 7 September 2026 — FIX-01 corrections
+
+Recorded under the section-freezing rule above: the earlier statements stay, and the
+correction is made here, dated, saying what it replaced and where.
+
+### "40 public tables" is 34 tables and 6 views
+
+- **Replaces:** "40 public tables" in the 7 September production-resume entry of this file,
+  and the same figure in `handoff.md` line 66.
+- **Correct figures**, measured against the applied 19-migration schema: **34 tables**, RLS
+  enabled **and forced** on all 34, **41 policies**, **6 views**. `34 + 6 = 40`.
+- **Why the wrong number is plausible:** `information_schema.tables` counts views unless
+  filtered to `table_type = 'BASE TABLE'`. A count taken that way returns exactly 40.
+- **`PROJECT-OVERVIEW.md` was already right** and has been since BE-W2. The append-only
+  record outranked the handoff, exactly as the precedence rule intends.
+- **UNVERIFIED, and it matters:** the measurement was taken on a **local** stack running the
+  same 19 migrations. The machine that found this has no production credentials and the
+  project is absent from its connected Supabase account, so *production* was not re-counted.
+  The arithmetic is certain; that production carries the identical schema is inferred.
+- **Nothing else in the resume entry changes.** The pause happened, the resume worked, and
+  nothing was lost. Only the noun was wrong.
+
+### There is no root `app.json`
+
+- **Replaces:** the claim in `docs/frontend-handoff-2026-09-07.md:94,186`,
+  `docs/frontend-status.md:276` and `PROJECT-OVERVIEW.md:3820` that a **root** `app.json`
+  still carries `com.anonymous.elmironapp`.
+- **Fact:** `find . -maxdepth 2 -name app.json` returns only `./apps/field/app.json`, which
+  declares `com.praversetech.fieldforce`. The stale identifier survives **only in prose**.
+- **Consequence:** the recurring task "fix the stale package id in the root app.json" is a
+  no-op. It has been carried forward through at least three documents as though it were
+  outstanding engineering work.
