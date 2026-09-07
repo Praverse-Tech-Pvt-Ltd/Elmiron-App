@@ -4690,3 +4690,187 @@ is a migration, a contract change and a client change, and it needs its own prom
 Supabase account connected to this machine, `~/.elmiron-prod.env` does not exist here, and
 there is no linked project-ref. Every finding above comes from the local stack running the
 same 19 migrations, and from the committed source.
+
+---
+
+### FIX-02 — consent capture records the displayed version (7 September 2026)
+
+> **A TEST WAS DELETED IN THIS CHANGE, AND IT WAS FAILING WHEN IT WAS DELETED.**
+>
+> `consent-audio.spec.ts > consent capture > "records %s as a complete, successful
+> capture"` asserted that the stored `consent_text_version_id` equalled whatever
+> `active_consent_text` returned at write time, and its comment defended that as the
+> property under test: *"the version comes from the server's catalogue rather than from
+> the caller."*
+>
+> **That is the defect, not the requirement.** `packages/core/src/field/consent.ts:47`
+> states the requirement in words — *"The exact text version displayed on screen. **Not
+> the current version.**"* The assertion contradicted the contract, and its intermittent
+> failure was the schema telling the truth. It was replaced by tests that assert the
+> contract's property instead. It was **not** removed to make CI green — the mutation
+> proof below shows the replacements fail without the fix.
+
+#### A1 — is `active_consent_text` bounded to the present? **Yes. Hypothesis refuted.**
+
+```sql
+where v.language = p_language
+  and v.effective_from <= now()
+  and (v.effective_until is null or v.effective_until > now())
+```
+
+A row dated next month is **not** active, and a retired row is excluded. There is no
+second defect here. Asked and answered rather than assumed.
+
+#### A2 — is the ordering deterministic on ties? **No, and it is now.**
+
+`order by effective_from desc limit 1` had no tie-break. Every fixture run seeds its own
+`en-IN` notice at `now()`, so rows genuinely compete at the same instant and the winner
+was arbitrary — the mechanism behind the "one run in ten" flake.
+
+`created_at` does not settle it either: `now()` is the **transaction** timestamp, so two
+rows inserted in one transaction tie on both columns. The new ordering is
+`effective_from desc, created_at desc, id desc`. **`id` is the primary key**, so it is
+unique and not null, and appending it guarantees a total order and therefore a repeatable
+answer.
+
+Recorded honestly: `id desc` is deterministic but arbitrary as a *business* rule. Two
+notices genuinely in force for one language at the same instant is undefined data, and
+the durable fix is a constraint forbidding it. **That is left for the reviewer.**
+
+#### A3 — is there a server handler between the endpoint and the function? **No. None has ever been written.**
+
+There is no `services/api/supabase/functions/` directory. `capture_consent` is referenced
+by exactly four places: its definition (`20260815000300_audio_consent_retention.sql:46`),
+its grant (line 861), its rollback, and the test file. Nothing in `packages/core`,
+`apps/field` or `services/mock` calls it — the mock serves the endpoint from its own
+fixtures, which is why the client's `consentTextVersionId` has never actually been
+dropped in practice. **The contract-to-schema gap has never been exercised**, and the fix
+is correspondingly smaller: there was no handler to update.
+
+#### The fix — `20260907000100_consent_records_displayed_version.sql`
+
+`capture_consent` takes `p_consent_text_version_id uuid` and stores it. If that version is
+not the currently active one for the language, it **raises** — the MR is told the notice
+changed and must re-read it and ask again. Never a silent substitution, and never a
+fallback to the active version.
+
+**The old function is dropped, not replaced.** Adding a parameter creates an *overload*,
+not a replacement; leaving the six-argument version in place would have left
+`authenticated` holding `EXECUTE` on the defective path, and the fix would have been
+reachable around. Verified: exactly one `capture_consent` now exists, and a test asserts
+that count so the overload cannot come back.
+
+**A new SQLSTATE, `45001`, deliberately outside the four standard codes used elsewhere in
+these migrations.** The stale-notice refusal is the only failure in this function with a
+remedy the MR can carry out, so the client has to be able to tell it apart from every
+other refusal. Matching on message text would be the alternative, and message text is not
+a contract.
+
+**`displayed_language` still comes from the resolved row**, which is provably the language
+of the stored document because the version was checked against that language first.
+
+#### The mutation proof — and the weakness it exposed in the new tests
+
+**Mutation 1, the whole migration reverted.** `40 tests, 5 failed`. The count did **not**
+drop, so the mutation was not a no-op.
+
+**It also showed that three of the new tests do not prove the fix.** Two of the three
+`it.each` cases *passed* under the reverted migration. The reason is structural and worth
+recording: each test seeds a private language with exactly one notice, so re-deriving the
+active version and recording the supplied parameter return the **same value**. For a
+capture that succeeds, the defective and the fixed implementations are observationally
+identical.
+
+**So the fix's entire observable content is the refusal.** The discriminating tests are
+the ones that assert it, and the `it.each` is a regression guard on storage and shape, not
+a proof. Saying otherwise would overstate what the suite establishes.
+
+**Mutation 2, targeted.** The staleness check alone was removed, keeping the new signature
+— so the failure could not be attributed to the signature change. `40 tests, 2 failed`:
+the superseded-notice refusal and the non-existent-version rejection. Count unchanged.
+**Those two tests prove the check itself.**
+
+Both mutations were reverted with `pnpm db:reset` and the restoration verified by querying
+the live function body, not by assuming the reset worked.
+
+#### A contradiction in the brief, resolved and flagged
+
+The prompt asked for both *"a capture supplying version V stores V, even when a newer
+version W is active"* and *"a capture supplying a stale version raises"*. **These are
+mutually exclusive** — if W is newer then V is stale. Resolved in favour of the refusal,
+which the same prompt requires as B2, and the no-silent-substitution property is proved
+the stronger way instead: after the refusal, **no `consent_records` row exists at all**,
+checked as the table owner so that row-level security cannot make an empty result look
+like proof.
+
+#### Counts
+
+- `@fieldforce/api`: **349 passed, 14 files** (was 344). Four tests removed, nine added.
+- `consent-audio.spec.ts` alone: **40 passed**, three consecutive runs.
+- `verify:rollbacks`: *"All rollbacks applied in reverse order; public schema is empty."*
+  **20 migrations, 20 rollback files.**
+- `typecheck` and `lint` clean on `@fieldforce/api`.
+
+#### A test race the fix converted from silent to loud
+
+The first version of the new tests read the active `en-IN` version in one statement and
+captured against it in the next. Under `READ COMMITTED` another spec can commit a newer
+notice between the two — and the fixed function then **correctly refuses**. The old
+defect's race did not disappear; it changed from a silent wrong write into a visible
+refusal, which is the entire point, but it made the test intermittent.
+
+The new tests each seed **their own language** rather than competing on the shared `en-IN`
+catalogue. The property under test is unchanged and the contention is gone.
+
+#### D1 — detecting the class automatically (scoped, not built)
+
+A CI check that walks every `*RequestSchema` in `packages/core`, and for each required
+field asks whether any database function parameter or table column could receive it.
+Fails the build when one cannot.
+
+- **Catches:** a contract field the schema has nowhere to put — exactly the
+  `consentTextVersionId` case, at the commit that introduces it.
+- **Misses:** shape mismatches where both sides exist but disagree in meaning
+  (`coordinates` as one object versus `p_latitude`/`p_longitude` as two scalars);
+  renamed-but-equivalent fields; and a parameter that exists and is then ignored inside
+  the function body. It proves a field *can* be consumed, never that it *is*.
+- **Cost:** roughly half a day. It needs the live schema, so it belongs in the existing
+  database CI job rather than the lint job.
+
+#### D2 — run by hand, and it found a second instance
+
+Nine candidates, of which most are false positives from a deliberately over-inclusive
+heuristic — `coordinates` is received as `p_latitude`/`p_longitude`, and `response` and
+`items` do exist as `p_response` and `p_items` but were missed by the parser.
+
+**One survives inspection, and it is the same class of defect:**
+
+> **`CompleteUploadRequestSchema.checksum`.** The contract requires
+> `checksum: z.string().length(64)` — *"SHA-256 of the complete file, hex encoded"* — and
+> `complete_upload(p_grant_id, p_object_id, p_duration_seconds, p_size_bytes,
+> p_recorded_at, p_bitrate_kbps)` has **no checksum parameter**. No column in any table
+> stores a file checksum either. **The integrity check the contract promises does not
+> exist**, on the resumable upload path for audio, where a truncated or corrupted upload
+> is exactly what it would catch.
+
+Not fixed here — it is a new task, not part of this session.
+
+#### B5 — existing rows
+
+**70 `consent_records` rows exist locally**, all test-fixture residue, and `pnpm db:reset`
+clears them. **Production is UNVERIFIED** — the Elmiron-App project is absent from the
+Supabase account connected to this machine and `~/.elmiron-prod.env` does not exist here.
+
+**No backfill was attempted and none should be.** What a doctor was shown cannot be
+recovered from a row that recorded something else. Any row written by the old path has a
+`consent_text_version_id` that is *probably* right — it is wrong only where the notice
+changed between display and capture — and there is no way to tell which. **This is a
+records decision, not an engineering one.** The options are to accept them as-is, to
+annotate them as written under the old path, or to re-consent. That is the reviewer's.
+
+#### B6 — callers of the old signature
+
+Four references, all updated: the definition and its grant, the rollback, and
+`consent-audio.spec.ts`. No seed script, no mock and no application code called it. **No
+default was added for the new parameter** — a default would have quietly restored the old
+behaviour for every existing caller, which is the failure this fix exists to remove.
