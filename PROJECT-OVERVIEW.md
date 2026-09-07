@@ -5498,3 +5498,170 @@ rather than committed as decoration**.
   **23 migrations, 23 rollback files.**
 - `turbo run typecheck lint`: **16 successful, 16 total**. `format:check` clean apart from
   `apps/console/next-env.d.ts`, the gitignored CRLF artefact CI never sees.
+
+---
+
+### FIX-07 — visits and mileage, and the first performance measurement (7 September 2026)
+
+**Consent and samples were NOT converted. The console was NOT wired and the "manager
+console is not here" card was NOT removed.** Consent waits on the offline-capture
+decision; samples wait because nothing server-side counts UCPMP caps, and the samples
+screen keeps its copy telling the MR the app is not counting — untouched and unsoftened.
+
+#### Part A — CI went red, and it was mine
+
+**Run `34121392694`: failure.** Not the known `upload.spec.ts` race. `write-path.spec.ts`
+failed to **collect**: `1 failed | 14 passed` file-wise with **377 tests passed and none
+failed**, which is the shape of a missing import rather than a broken assertion.
+
+**Cause.** The `migrations` job runs `pnpm --filter @fieldforce/api test` **directly, not
+through turbo**, so nothing builds workspace dependencies for it. That was invisible until
+FIX-06 made `write-path.spec.ts` the first database test to import `@fieldforce/core`,
+whose `dist/` does not exist in that job. Fixed by adding a build step to the job.
+
+Worth naming as a class: **a job that runs one workspace's script directly gets no
+dependency graph.** The other job runs `pnpm run build` first and would never have shown
+this.
+
+#### Part B — visits and mileage
+
+**Real vs fixture, updated from FIX-06:**
+
+| call | goes to | status |
+| --- | --- | --- |
+| `record_check_in` / `record_check_out` | Supabase RPC | **real** |
+| **create visit / update visit** | **Supabase table + RLS** | **real** |
+| **mileage** | **`daily_mileage` RPC** | **real** |
+| consent | `services/mock` | fixture — blocked on a design decision |
+| samples | `services/mock` | fixture — blocked on UCPMP enforcement |
+| doctors, beat plans, visit *lists*, analyses | `services/mock` | fixtures |
+
+**B2 — response-shape divergences found.** Four, and one is a defect rather than a mapping
+gap:
+
+1. **`CreateVisitRequest` could never have satisfied the insert policy.** It has never
+   declared `mrId`; `visits_insert_own` requires `mr_id = auth.uid()`; the column had no
+   default. **A visit create as the contract describes it would have failed against any
+   real server.** Nobody found it because no client had ever posted one.
+   **This is a schema change made to meet the contract, and it is stated as such:**
+   migration `20260907000600` defaults `mr_id` to `auth.uid()`. The default is stronger
+   than having the client send its own uid — a client that can send the field can send
+   somebody else's, and the policy would refuse it, but the identity would be travelling
+   over the wire for no reason. The policy still evaluates `mr_id = auth.uid()` after the
+   default applies.
+2. **PostgREST answers a table insert with an ARRAY**, even for one row.
+   `supabase-js` `.single()` unwraps it; anything reading the raw response must not assume
+   an object.
+3. **`GET /mileage` has no backend**, as FIX-03 recorded (`BE-W52`). The real surface is
+   `daily_mileage(p_from, p_to, p_mr_id)`, returning snake_case rows.
+   `fromMileageRow` maps them.
+4. **`CreateVisitBody` had to be a type alias, not an interface.** TypeScript gives type
+   aliases an implicit index signature and interfaces none, so only the alias is assignable
+   to the `Record<string, unknown>` a client's `insert()` takes.
+
+**B3 — no new SQLSTATE was minted, and that is the finding, not an omission.** Every
+refusal on these two paths is an RLS policy outcome: `42501` for a doctor outside the MR's
+territory, already mapped to `not_permitted`. There is no deliberate `raise` anywhere on
+the visit-create, visit-update or mileage paths — `grep` for `raise exception` mentioning
+visits returns only `'visit % is not yours'` inside *other* RPCs. Minting a code for a
+refusal nobody raises would be decoration.
+
+**B4 — three mutations, three results.** Each removed the write and left the case count
+unchanged:
+
+| mutation | result |
+| --- | --- |
+| visit **create** — `BEFORE INSERT` trigger returning `NULL` | **4 failed / 13**, count unchanged |
+| visit **update** — `BEFORE UPDATE` trigger returning `NULL` | **1 failed / 13**, exactly the update test |
+| **mileage** — `daily_mileage` filter replaced with `where false` | **1 failed / 13**, exactly the positive control |
+
+**The first one needs its result explained rather than smoothed over.** Four failed, not
+three: the out-of-territory *refusal* test failed alongside the three persistence tests.
+That is structural, not a flaw in the test. On a **table** write the refusal **is** the
+insert being policy-checked, so removing the insert removes the refusal too. On an **RPC**
+write — FIX-06's check-in — the refusal is raised before any insert, which is why that
+mutation left its refusal tests green. Two different write shapes, two different mutation
+signatures, and the difference is worth knowing before reading the next one.
+
+A first attempt at that mutation was **void and was redone**: an unscoped trigger also
+blocked fixture seeding, so `beforeAll` threw and all 13 tests *skipped*. Skipped is worse
+than dropped — nothing was proved. Scoping it to `auth.uid() is not null` left setup
+working and the client writes blocked.
+
+#### Part C — BE-W38. RLS read performance, measured for the first time.
+
+**These are LOCAL numbers**, from the Docker stack on a Windows developer machine. They
+are **not production behaviour** and are not presented as such. They are also **server
+execution only** — no network round trip — whereas the three-second requirement is about a
+waiting room, i.e. end to end.
+
+Seeded with `BE-W17` at the pilot shape: 100 MRs, a year of history, **208,800 visits and
+check-ins**. Measured **as an MR**, with the JWT claims set and `set role authenticated` —
+not as `postgres`, not as `service_role`, because the RLS and territory-visibility path is
+the entire question.
+
+| query | plan | execution |
+| --- | --- | ---: |
+| **doctor search** (`search_doctors`) | Function Scan | **3.42 ms** |
+| visit list, 50 rows | Seq Scan on `visits`, 2,088 visible of 208,800 | 11.32 ms |
+| Today — the next planned visit | Seq Scan | 10.06 ms |
+| **`current_user_visible_territory_ids()`** | Function Scan | **0.17 ms** |
+
+**C3 — is doctor search under three seconds? Yes, by three orders of magnitude.** 3.42 ms
+against a 3,000 ms budget.
+
+**The recursive-CTE fear is refuted.** `visible_territory_ids` was the named suspect —
+"the shape that turns 40 ms into 4 s". Measured at pilot volume it is **0.17 ms**. It is
+not the problem, and per C5 nothing about it was changed.
+
+**One caveat that limits what this proves, stated because it is easy to miss.** Each
+synthetic MR sees **5 doctors** — RLS filters the 100-doctor table to their area — so the
+doctor search was measured against a thin result set. The `visits` numbers (2,088 visible
+of 208,800, full sequential scan) are the meaningful volume result. If a real MR's beat is
+50–200 doctors, the search should be re-measured against a fixture with that density;
+`seed-synthetic.mjs` currently generates five per area.
+
+**C4 — no tuning was done, deliberately.** The instruction was to index what the plans show
+*dominating*. Nothing dominates: the slowest query is 11 ms against a 3,000 ms budget. The
+`Seq Scan on visits` is the only shape that would degrade with volume — an index on
+`visits(mr_id)` would convert it — but tuning an 11 ms query to prove a before/after would
+produce a number that flatters the work and muddies the baseline. **Registered as an
+observation, not a change.**
+
+#### Part D
+
+**D1 — the nine tables with RLS forced and zero policies.** All nine are deliberate; none
+looks like an oversight.
+
+| table | why it has no policy |
+| --- | --- |
+| `analyses` | RPC-only reads, because every read must be audited and Postgres has no SELECT trigger |
+| `analysis_overrides` | same, FIX-05 |
+| `audit_log` | append-only; no client read path exists at all (FIX-03 found it ABSENT) |
+| `audio_destruction_log` | retention worker's own record |
+| `audio_purge_runs` | purge bookkeeping, worker-only |
+| `restore_reconciliation_runs` | operator artefact, `docs/restore-runbook.md` |
+| `restore_reconciliation_findings` | same |
+| `transcripts_raw` | the redaction boundary — must never be client-readable |
+| `transcripts_redacted` | AI layer, nothing consumes it yet |
+
+**Two things the count hides, both worth more than the list:**
+
+- **`consent_records` is not in the nine and behaves as if it were.** It has exactly one
+  policy — `consent_records_insert_own`, an INSERT policy — and **no SELECT policy and no
+  SELECT grant**. So ten tables are unreadable directly, not nine. "Has policies" and "is
+  readable" are independent, and a review that counts policies will miss this.
+- **The redaction gate holds.** `llm_gateway` can read `transcripts_redacted` (`true`) and
+  **cannot** read `transcripts_raw` (`false`).
+
+**D2** — three conventions appended to `.ai-collab/constraints.md`: *test the mechanism,
+not the state* (the inert `ALTER DEFAULT PRIVILEGES` as the worked example); *audit the
+response shape as each endpoint converts*; and *a count that changes is recorded as the
+command that produces it* (40 → 34 → 35), with the query to re-derive it.
+
+#### Counts
+
+- `@fieldforce/api`: **390 passed, 15 files** (was 383; +7). `--no-file-parallelism`.
+- `@fieldforce/field`: **341 vitest** (was 332; +9) **+ 72 jest**.
+- `verify:rollbacks`: schema empty. **24 migrations, 24 rollback files.**
+- `turbo run typecheck lint`: **16 successful, 16 total**.

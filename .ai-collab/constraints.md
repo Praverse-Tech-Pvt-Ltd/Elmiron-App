@@ -166,3 +166,58 @@ parameter to receive it, and nothing detected the mismatch. When a request schem
 declares a required field, some function parameter or column must be able to consume
 it; if none can, either the contract is wrong or the schema is. Do not resolve that by
 dropping the field silently.
+
+---
+
+## Three rules earned the hard way (FIX-07)
+
+### A control that cannot be exercised is not a control. Test the mechanism, not the state.
+
+FIX-05 revoked `EXECUTE` from `PUBLIC` on all 86 functions and reported **65 → 0**. That
+number was true and it measured the *current state*. The same change added
+`alter default privileges … revoke execute on functions from public` to make the posture
+automatic, and **that half was inert** — the default ACL for new functions in `public`
+belongs to `supabase_admin`, grants `anon` explicitly rather than through `PUBLIC`, and
+`postgres` cannot alter another role's defaults. A function created the next day would
+have been `anon`-executable again.
+
+Nothing in the review caught it, because "65 → 0" looks like proof and is not. The
+mechanism was never exercised: nobody created a function and checked what it was born
+with. **Ask what would have to happen for this control to fail, then make that happen.**
+
+The replacement is a test that fails the build when any function in `public` is
+`anon`-executable, with a positive control that creates one and asserts it *is* — so a
+green result cannot mean a broken query.
+
+### Audit the response shape as each endpoint converts
+
+`toRecordCheckInBody` mapped the check-in *request* from BE-W3 onward. Nothing mapped a
+response, because **no client had ever received one** — every read and write went to
+`services/mock`, which returns the contract's own shape by construction. The first real
+call found snake_case keys, flat `latitude`/`longitude` where the contract nests
+`coordinates`, and a `shift_window_source` field the entity has no room for.
+
+The request-side drift audit (FIX-03) found thirteen divergences across 44 endpoints. The
+response side is a surface of the same size that nothing has ever exercised. **Do not
+sweep it — check it as each endpoint converts**, because a sweep produces a list nobody
+acts on and a conversion produces a fix.
+
+### A count that changes is recorded as the command that produces it, not as a number
+
+`40 public tables` → corrected to `34` in FIX-03 → now `35`, because FIX-05 added
+`analysis_overrides`. Each figure was true when written and each was stale within days,
+and the FIX-03 correction notice in `handoff.md` is itself now wrong.
+
+The repo already applies this to negative claims — *"any 'has never fired' claim carries
+the command that re-checks it"*. Extend it to counts:
+
+```sql
+select (select count(*) from pg_tables  where schemaname='public') as tables,
+       (select count(*) from pg_views   where schemaname='public') as views,
+       (select count(*) from pg_policies where schemaname='public') as policies,
+       (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.prokind='f') as functions;
+```
+
+A number in prose is a snapshot. A number next to the query that produces it is a fact
+anybody can re-derive.
