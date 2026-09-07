@@ -11,6 +11,7 @@
     "verify:rollbacks": "node scripts/verify-rollbacks.mjs",
     "purge:audio": "node scripts/purge-expired-audio.mjs",
     "check:purge-health": "node scripts/check-purge-health.mjs",
+    "check:decision-debt": "node scripts/check-decision-debt.mjs",
     "reconcile:restore": "node scripts/reconcile-after-restore.mjs",
     "seed:reference": "node scripts/seed-reference-data.mjs",
     "seed:mr": "node scripts/seed-one-mr.mjs",
