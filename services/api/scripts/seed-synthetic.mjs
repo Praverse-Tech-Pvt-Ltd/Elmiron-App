@@ -37,6 +37,13 @@ import { Client } from 'pg';
  * Override with `--doctors-per-territory` if the real beat size turns out different;
  * the number matters more than the default.
  *
+ * **`--areas-per-region` scales the axis that actually grows.** RLS filters `doctors` at
+ * the table level, so a search scans the whole table and then filters -- the cost tracks
+ * TOTAL doctors, not the 176 one MR can see. Adding areas grows the table while every MR
+ * still sees exactly one area's worth, which is the only way to vary that axis on its own.
+ * A national field force holding 30,000 or 100,000 doctors is an ordinary size, and
+ * 3,520 is not.
+ *
  * Usage, from the repository root with the local stack up:
  *
  *   pnpm --filter @fieldforce/api seed:synthetic
@@ -92,7 +99,13 @@ export const parseHistoryDays = (value) => {
 };
 
 export const parseSeedSyntheticArgs = (argv) => {
-  const args = { mrs: 100, history: '1y', doctorsPerTerritory: 176, dbUrl: undefined };
+  const args = {
+    mrs: 100,
+    history: '1y',
+    doctorsPerTerritory: 176,
+    areasPerRegion: 5,
+    dbUrl: undefined,
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     const value = argv[i + 1];
@@ -100,6 +113,7 @@ export const parseSeedSyntheticArgs = (argv) => {
       flag === '--mrs' ||
       flag === '--history' ||
       flag === '--doctors-per-territory' ||
+      flag === '--areas-per-region' ||
       flag === '--db-url'
     ) {
       if (value === undefined || value.startsWith('--')) {
@@ -108,6 +122,7 @@ export const parseSeedSyntheticArgs = (argv) => {
       i += 1;
       if (flag === '--mrs') args.mrs = Number(value);
       if (flag === '--doctors-per-territory') args.doctorsPerTerritory = Number(value);
+      if (flag === '--areas-per-region') args.areasPerRegion = Number(value);
       if (flag === '--history') args.history = value;
       if (flag === '--db-url') args.dbUrl = value;
       continue;
@@ -116,6 +131,11 @@ export const parseSeedSyntheticArgs = (argv) => {
   }
   if (!Number.isInteger(args.mrs) || args.mrs <= 0) {
     throw new Error(`--mrs must be a positive integer. Got: ${String(args.mrs)}`);
+  }
+  if (!Number.isInteger(args.areasPerRegion) || args.areasPerRegion <= 0) {
+    throw new Error(
+      `--areas-per-region must be a positive integer. Got: ${String(args.areasPerRegion)}`,
+    );
   }
   if (!Number.isInteger(args.doctorsPerTerritory) || args.doctorsPerTerritory <= 0) {
     throw new Error(
@@ -154,6 +174,7 @@ export const alreadySeeded = async (client) => {
 export const seedSynthetic = async (options = {}) => {
   const mrs = options.mrs ?? 100;
   const doctorsPerTerritory = options.doctorsPerTerritory ?? 176;
+  const areasPerRegion = options.areasPerRegion ?? 5;
   const historyDays = parseHistoryDays(options.history ?? '1y');
   const dbUrl = options.dbUrl ?? process.env.SUPABASE_DB_URL ?? DEFAULT_DB_URL;
 
@@ -175,7 +196,6 @@ export const seedSynthetic = async (options = {}) => {
     const orgId = randomUUID();
     const managersPerRegion = 1;
     const regions = Math.max(1, Math.ceil(mrs / 25));
-    const areasPerRegion = 5;
 
     await client.query('begin');
 
@@ -361,7 +381,7 @@ export const seedSynthetic = async (options = {}) => {
       counts[t] = rows[0].n;
     }
 
-    return { runId, mrs, historyDays, doctorsPerTerritory, counts };
+    return { runId, mrs, historyDays, doctorsPerTerritory, areasPerRegion, counts };
   } catch (error) {
     await client.query('rollback').catch(() => {});
     throw error;
