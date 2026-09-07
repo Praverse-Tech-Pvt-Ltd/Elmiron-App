@@ -333,6 +333,26 @@ export const CreateAnalysisOverrideRequestSchema = z.object({
 });
 export type CreateAnalysisOverrideRequest = z.infer<typeof CreateAnalysisOverrideRequestSchema>;
 
+/**
+ * The read half of `GET /analyses/:id/overrides`, added in FIX-05.
+ *
+ * The path has been declared since BE-W6 with only a POST behind it, and until FIX-05
+ * there was no table either -- `services/mock` answered the POST with `201` and a
+ * fabricated row that `apps/console` rendered. This shape is taken from
+ * `public.list_analysis_overrides` rather than invented, so the mock and the database
+ * agree: that they did not is the whole of the FIX-03 drift finding.
+ *
+ * `readAt` and `auditLogId` are not decoration. Every read of an analysis or an
+ * override writes an `audit_log` row **before** it returns, and the id of that row comes
+ * back with the data so a caller can point at its own read in the trail.
+ */
+export const ListAnalysisOverridesResponseSchema = z.object({
+  data: z.array(AnalysisOverrideSchema),
+  readAt: IsoDateTimeSchema,
+  auditLogId: z.number().int().positive(),
+});
+export type ListAnalysisOverridesResponse = z.infer<typeof ListAnalysisOverridesResponseSchema>;
+
 // ---------------------------------------------------------------------------
 // Offline sync — week 4
 // ---------------------------------------------------------------------------

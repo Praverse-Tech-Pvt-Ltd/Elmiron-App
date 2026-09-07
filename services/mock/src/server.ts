@@ -487,6 +487,11 @@ const routes: Route[] = [
     }),
   },
   {
+    // FIX-05. Until then this POST was the only override route and there was no table
+    // behind it at all: it returned 201 with a fabricated row that apps/console
+    // rendered as "the evidence of human oversight". `findingId` is now echoed from the
+    // request rather than taken from a fixture, so the mock stops inventing which
+    // finding a manager overrode.
     method: 'POST',
     pattern: '/analyses/:id/overrides',
     handler: (ctx) => ({
@@ -494,7 +499,29 @@ const routes: Route[] = [
       body: {
         ...first(fx.analysisOverrides),
         analysisId: ctx.params['id'] ?? fx.IDS.analysis,
+        findingId: asRecord(ctx.body)['findingId'] ?? null,
         reason: asString(asRecord(ctx.body)['reason'], first(fx.analysisOverrides).reason),
+      },
+    }),
+  },
+  {
+    // The read half. Shaped from `public.list_analysis_overrides`, not from this
+    // file's fixtures -- `data`, `readAt` and `auditLogId` are what the database
+    // returns, and the audit id is there because every read of an override writes its
+    // audit row before returning.
+    method: 'GET',
+    pattern: '/analyses/:id/overrides',
+    handler: (ctx) => ({
+      body: {
+        data:
+          ctx.scenario === 'empty'
+            ? []
+            : fx.analysisOverrides.map((o) => ({
+                ...o,
+                analysisId: ctx.params['id'] ?? fx.IDS.analysis,
+              })),
+        readAt: '2026-09-07T17:05:00+05:30',
+        auditLogId: 1,
       },
     }),
   },
