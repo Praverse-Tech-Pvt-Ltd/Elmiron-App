@@ -175,7 +175,19 @@ export const SampleAndInputSchema = z.object({
   kind: SampleOrInputKindSchema,
   itemName: z.string().min(1),
   quantity: z.number().int().positive(),
-  /** UCPMP caps are enforced server-side; this is the declared value in INR. */
+  /**
+   * The declared value in INR.
+   *
+   * This comment used to say "UCPMP caps are enforced server-side". Nothing enforced
+   * them -- `docs/fe-w3-spec.md` §C5 called it "an intention, not the schema as it
+   * stands" -- and BE-W21 built the mechanism: a trigger on `samples_and_inputs` that
+   * refuses an entry breaching `ucpmp_sample_cap_quantity` with SQLSTATE 45004.
+   *
+   * **The ceiling itself is deliberately unset**, because nothing in this repository
+   * states what it is, and a cap invented to make a constraint compile looks enforced
+   * while being wrong invisibly. Until somebody with authority sets that threshold,
+   * samples are accepted and uncounted and the app says so on the samples screen.
+   */
   declaredValueInr: z.number().nonnegative(),
   occurredAt: IsoDateTimeSchema,
   receivedAt: IsoDateTimeSchema,

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
+import type { Client } from 'pg';
 import {
   fromCheckInRow,
   fromMileageRow,
@@ -7,8 +8,8 @@ import {
   refusalForSqlState,
   toCreateVisitBody,
 } from '@fieldforce/core';
-import { requireDatabase, withClient } from './db.js';
-import { mintAccessToken, rest } from './auth.js';
+import { inRolledBackTransaction, requireDatabase, withClient } from './db.js';
+import { asUser, mintAccessToken, rest } from './auth.js';
 import { seedFixtures } from './fixtures.js';
 import type { FixtureWorld } from './fixtures.js';
 
@@ -316,5 +317,129 @@ describe.skipIf(!reachable)('mileage comes from the server, never from the devic
     });
     const rows = response.body as unknown[];
     expect(rows).toHaveLength(0);
+  });
+});
+
+describe.skipIf(!reachable)('UCPMP sample caps are enforced by the database', () => {
+  const insertSample = async (client: Client, quantity: number, id = randomUUID()) =>
+    client.query(
+      `insert into public.samples_and_inputs
+         (id, visit_id, mr_id, doctor_id, kind, item_name, quantity, occurred_at)
+       values ($1, $2, $3, $4, 'sample', 'PROBE-ITEM', $5, now())`,
+      [id, world.visits.pune, world.users.puneMr.id, world.doctors.pune, quantity],
+    );
+
+  const setCap = async (client: Client, cap: number | null) =>
+    client.query(
+      `insert into public.app_thresholds (key, value, unit, scope, note)
+       values ('ucpmp_sample_cap_quantity', $1::jsonb, 'packs', 'global', 'test')`,
+      [cap === null ? 'null' : String(cap)],
+    );
+
+  it('accepts a sample when no cap is configured — today behaviour, unchanged', async () => {
+    // The threshold ships null. Nothing is enforced, nothing pretends to be, and the
+    // samples screen keeps telling the MR the app is not counting.
+    await inRolledBackTransaction(async (client: Client) => {
+      const id = randomUUID();
+      await insertSample(client, 500, id);
+      const stored = await client.query('select 1 from public.samples_and_inputs where id = $1', [
+        id,
+      ]);
+      expect(stored.rows).toHaveLength(1);
+    });
+  });
+
+  it('reports cap null while unconfigured, so no client can draw a meter', async () => {
+    await inRolledBackTransaction(async (client: Client) => {
+      await asUser(client, world.users.puneMr);
+      const status = await client.query<{ cap: string | null }>(
+        `select public.sample_cap_status($1, 'PROBE-ITEM') ->> 'cap' as cap`,
+        [world.doctors.pune],
+      );
+      expect(status.rows[0]?.cap).toBeNull();
+    });
+  });
+
+  it('REFUSES a distribution that would exceed the cap, with SQLSTATE 45004', async () => {
+    await inRolledBackTransaction(async (client: Client) => {
+      await setCap(client, 10);
+      await insertSample(client, 8);
+      await expect(insertSample(client, 5)).rejects.toMatchObject({ code: '45004' });
+    });
+  });
+
+  it('never trims the quantity to fit — it refuses the whole entry', async () => {
+    // Silent truncation would be the worst outcome: the MR believes they gave five and
+    // the record says two, and neither of them ever finds out.
+    await inRolledBackTransaction(async (client: Client) => {
+      await setCap(client, 10);
+      await insertSample(client, 8);
+      const id = randomUUID();
+      // Assert the REFUSAL, not just the absence of a row. Rolling back to a savepoint
+      // removes the row whether it was refused or accepted, so an absence check alone
+      // passes under a mutation that deletes the guard -- which is exactly what the
+      // first B4 mutation showed when this test wrongly stayed green.
+      await client.query('savepoint trim');
+      const refused = await insertSample(client, 5, id).then(
+        () => false,
+        () => true,
+      );
+      await client.query('rollback to savepoint trim');
+      expect(refused).toBe(true);
+
+      const stored = await client.query('select 1 from public.samples_and_inputs where id = $1', [
+        id,
+      ]);
+      expect(stored.rows).toHaveLength(0);
+    });
+  });
+
+  it('the refusal carries the cap, the count and the period', async () => {
+    // "You have exceeded the cap" without the numbers is not an action.
+    await inRolledBackTransaction(async (client: Client) => {
+      await setCap(client, 10);
+      await insertSample(client, 8);
+      const detail = await insertSample(client, 5).then(
+        () => '',
+        (error: unknown) =>
+          typeof error === 'object' && error !== null && 'detail' in error
+            ? String(error.detail)
+            : '',
+      );
+      expect(detail).toContain('cap 10');
+      expect(detail).toContain('already given 8');
+    });
+  });
+
+  it('allows a distribution that fits exactly', async () => {
+    await inRolledBackTransaction(async (client: Client) => {
+      await setCap(client, 10);
+      await insertSample(client, 8);
+      const id = randomUUID();
+      await insertSample(client, 2, id);
+      const stored = await client.query('select 1 from public.samples_and_inputs where id = $1', [
+        id,
+      ]);
+      expect(stored.rows).toHaveLength(1);
+    });
+  });
+
+  it('counts per doctor and per item, not globally', async () => {
+    await inRolledBackTransaction(async (client: Client) => {
+      await setCap(client, 10);
+      await insertSample(client, 9);
+      // A different item for the same doctor has its own budget.
+      const id = randomUUID();
+      await client.query(
+        `insert into public.samples_and_inputs
+           (id, visit_id, mr_id, doctor_id, kind, item_name, quantity, occurred_at)
+         values ($1, $2, $3, $4, 'sample', 'A-DIFFERENT-ITEM', 9, now())`,
+        [id, world.visits.pune, world.users.puneMr.id, world.doctors.pune],
+      );
+      const stored = await client.query('select 1 from public.samples_and_inputs where id = $1', [
+        id,
+      ]);
+      expect(stored.rows).toHaveLength(1);
+    });
   });
 });
