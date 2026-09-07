@@ -1,5 +1,5 @@
 {
-  "name": "@elmiron/api",
+  "name": "@fieldforce/api",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,10 +12,11 @@
     "purge:audio": "node scripts/purge-expired-audio.mjs",
     "check:purge-health": "node scripts/check-purge-health.mjs",
     "reconcile:restore": "node scripts/reconcile-after-restore.mjs",
-    "seed:reference": "node scripts/seed-reference-data.mjs"
+    "seed:reference": "node scripts/seed-reference-data.mjs",
+    "seed:mr": "node scripts/seed-one-mr.mjs"
   },
   "dependencies": {
-    "@elmiron/core": "workspace:*"
+    "@fieldforce/core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.9.2",

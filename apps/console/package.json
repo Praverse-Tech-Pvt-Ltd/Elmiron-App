@@ -1,19 +1,29 @@
 {
-  "name": "@elmiron/console",
+  "name": "@fieldforce/console",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Next.js manager and admin consoles. PLACEHOLDER — Frontend owns this.",
+  "description": "Next.js manager and admin consoles. Compact density over the Phase 1 tokens.",
   "scripts": {
+    "dev": "next dev -p 3100",
+    "build": "next build",
+    "start": "next start -p 3100",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint src",
-    "test": "echo \"no tests in apps/console yet\""
+    "test": "vitest run"
   },
   "dependencies": {
-    "@elmiron/core": "workspace:*",
-    "@elmiron/ui-tokens": "workspace:*"
+    "@fieldforce/core": "workspace:*",
+    "@fieldforce/ui-tokens": "workspace:*",
+    "next": "^15.5.25",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "@types/node": "^24.13.3",
+    "@types/react": "~19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
   }
 }

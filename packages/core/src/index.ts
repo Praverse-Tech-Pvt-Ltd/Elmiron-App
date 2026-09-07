@@ -1,5 +1,5 @@
 /**
- * @elmiron/core — interface contract I1.
+ * @fieldforce/core — interface contract I1.
  *
  * Single source of truth for entity shapes, API request/response shapes and the
  * typed client. Frontend, the manager console and the AI/ML pipeline all build
@@ -8,9 +8,9 @@
  *
  * The package is split into two namespaces:
  *
- *   `@elmiron/core/shared` — identity, primitives, errors, pagination, config.
+ *   `@fieldforce/core/shared` — identity, primitives, errors, pagination, config.
  *                            A second app consumes these unchanged.
- *   `@elmiron/core/field`  — the MR domain: doctors, visits, capture, consent,
+ *   `@fieldforce/core/field`  — the MR domain: doctors, visits, capture, consent,
  *                            analysis, sync.
  *
  * This root entry re-exports both, so no consumer has to change. Import from the

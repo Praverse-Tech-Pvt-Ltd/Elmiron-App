@@ -10,7 +10,7 @@ import { Client } from 'pg';
  * run is a claim, not a rollback. This is destructive by design, so it runs LAST
  * in CI's database job, after the test suites.
  *
- * Local use: `pnpm --filter @elmiron/api verify:rollbacks && pnpm db:reset`
+ * Local use: `pnpm --filter @fieldforce/api verify:rollbacks && pnpm db:reset`
  */
 
 const DEFAULTS = {

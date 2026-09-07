@@ -7,13 +7,23 @@ import {
   CreateCheckInRequestSchema,
   CreateCheckOutRequestSchema,
   CreateConsentRecordRequestSchema,
+  CreateSampleAndInputRequestSchema,
   CreateVisitRequestSchema,
   GetMeResponseSchema,
   ListAnalysesResponseSchema,
+  CreateAnalysisOverrideRequestSchema,
+  CreateRecordingRequestSchema,
+  CreateVoiceNoteRequestSchema,
+  RespondToAnalysisRequestSchema,
   ListCallReportsResponseSchema,
   ListConsentRecordsResponseSchema,
+  ListConsentTextVersionsResponseSchema,
   ListDoctorsResponseSchema,
   ListTerritoriesResponseSchema,
+  ListBeatPlansResponseSchema,
+  ListMileageResponseSchema,
+  ListSamplesAndInputsResponseSchema,
+  toRecordCheckInBody,
   ListVisitsResponseSchema,
   SyncPullRequestSchema,
   SyncPullResponseSchema,
@@ -26,17 +36,29 @@ import type {
   CreateCheckInRequest,
   CreateCheckOutRequest,
   CreateConsentRecordRequest,
+  CreateSampleAndInputRequest,
   CreateVisitRequest,
   GetMeResponse,
   ListAnalysesRequest,
   ListAnalysesResponse,
+  CreateAnalysisOverrideRequest,
+  CreateRecordingRequest,
+  CreateVoiceNoteRequest,
+  RespondToAnalysisRequest,
   ListCallReportsRequest,
   ListCallReportsResponse,
+  GetActiveConsentTextRequest,
   ListConsentRecordsRequest,
   ListConsentRecordsResponse,
+  ListConsentTextVersionsResponse,
   ListDoctorsRequest,
   ListDoctorsResponse,
   ListTerritoriesResponse,
+  ListBeatPlansRequest,
+  ListBeatPlansResponse,
+  ListMileageRequest,
+  ListMileageResponse,
+  ListSamplesAndInputsResponse,
   ListVisitsRequest,
   ListVisitsResponse,
   SyncPullRequest,
@@ -45,10 +67,20 @@ import type {
   SyncPushResponse,
   WithdrawConsentRequest,
 } from './endpoints.js';
-import { CallReportSchema, CheckInSchema, CheckOutSchema, VisitSchema } from './entities.js';
-import type { CallReport, CheckIn, CheckOut, Visit } from './entities.js';
-import { ConsentRecordSchema } from './consent.js';
-import type { ConsentRecord } from './consent.js';
+import {
+  CallReportSchema,
+  CheckInSchema,
+  CheckOutSchema,
+  SampleAndInputSchema,
+  VisitSchema,
+} from './entities.js';
+import type { CallReport, CheckIn, CheckOut, SampleAndInput, Visit } from './entities.js';
+import { AnalysisOverrideSchema, AnalysisSchema } from './analysis.js';
+import type { Analysis, AnalysisOverride } from './analysis.js';
+import { ConsentRecordSchema, ConsentTextVersionSchema } from './consent.js';
+import type { ConsentRecord, ConsentTextVersion } from './consent.js';
+import { UploadSessionSchema } from './endpoints.js';
+import type { UploadSession } from './endpoints.js';
 
 export interface ApiClientOptions {
   /** Base URL of the API, e.g. `http://localhost:54321/functions/v1`. No trailing slash. */
@@ -132,6 +164,38 @@ export const createApiClient = (options: ApiClientOptions) => {
         ListDoctorsResponseSchema,
       ),
 
+    /**
+     * The plan the server approved, with its entries in `plannedSequence` order.
+     *
+     * Read-only here on purpose. `BeatPlan` carries `version` and
+     * `supersedesBeatPlanId`, which say that a changed plan is a NEW row rather
+     * than an edit of the old one — reordering or amending a plan is the server's
+     * operation, and there is no client method for it because the client is not
+     * the thing that decides what an MR's day is.
+     */
+    listBeatPlans: (params: Partial<ListBeatPlansRequest> = {}): Promise<ListBeatPlansResponse> =>
+      request(
+        'GET',
+        `${API_PATHS.beatPlans}${toQueryString(params as Record<string, QueryValue>)}`,
+        ListBeatPlansResponseSchema,
+      ),
+
+    /**
+     * The server's own mileage, per day.
+     *
+     * Read-only, and there is deliberately no client-side distance calculation to
+     * pair with it. `daily_mileage()` derives this from the check-in fixes the
+     * server holds; a distance computed on the device would be, in the contract's
+     * own words about `distanceFromClinicMetres`, "an expense claim it wrote
+     * itself".
+     */
+    listMileage: (params: ListMileageRequest): Promise<ListMileageResponse> =>
+      request(
+        'GET',
+        `${API_PATHS.mileage}${toQueryString(params as unknown as Record<string, QueryValue>)}`,
+        ListMileageResponseSchema,
+      ),
+
     listVisits: (params: Partial<ListVisitsRequest> = {}): Promise<ListVisitsResponse> =>
       request(
         'GET',
@@ -142,15 +206,33 @@ export const createApiClient = (options: ApiClientOptions) => {
     createVisit: (input: CreateVisitRequest): Promise<Visit> =>
       request('POST', API_PATHS.visits, VisitSchema, CreateVisitRequestSchema.parse(input)),
 
+    /**
+     * Check-in goes through the RPC, never through `POST /check-ins`.
+     *
+     * The server refuses the direct write in as many words — "Direct writes to
+     * /check-ins are not permitted. Call record_check_in instead — work-hours,
+     * geofence and duration are enforced there." Posting to the REST path returned
+     * `permission_denied` every time, which is the server protecting rules the
+     * client must not be able to skip.
+     *
+     * `toRecordCheckInBody` already existed in the contract for this conversion,
+     * which is the strongest evidence the RPC was always the intended path and the
+     * REST call was the mistake.
+     */
     createCheckIn: (input: CreateCheckInRequest): Promise<CheckIn> =>
-      request('POST', API_PATHS.checkIns, CheckInSchema, CreateCheckInRequestSchema.parse(input)),
+      request(
+        'POST',
+        API_PATHS.recordCheckIn,
+        CheckInSchema,
+        toRecordCheckInBody(CreateCheckInRequestSchema.parse(input)),
+      ),
 
     createCheckOut: (input: CreateCheckOutRequest): Promise<CheckOut> =>
       request(
         'POST',
-        API_PATHS.checkOuts,
+        API_PATHS.recordCheckOut,
         CheckOutSchema,
-        CreateCheckOutRequestSchema.parse(input),
+        toRecordCheckInBody(CreateCheckOutRequestSchema.parse(input)),
       ),
 
     listCallReports: (
@@ -168,6 +250,83 @@ export const createApiClient = (options: ApiClientOptions) => {
         API_PATHS.callReports,
         CallReportSchema,
         CreateCallReportRequestSchema.parse(input),
+      ),
+
+    /**
+     * What an MR handed over at a visit — Phase 2 C5.
+     *
+     * **Insert only, and there is no update or delete to pair with it.**
+     * `samples_and_inputs` grants `select, insert` to `authenticated` and nothing
+     * else, and every row is mirrored into the audit log by trigger. A correction
+     * is a new row, not an edit — which is the same append-only rule consent
+     * records follow, and for the same reason: this is the evidence that a
+     * transfer of value happened.
+     *
+     * `id` is device-generated so a retry from a doorway with one bar is one
+     * handover rather than two.
+     */
+    createSampleAndInput: (input: CreateSampleAndInputRequest): Promise<SampleAndInput> =>
+      request(
+        'POST',
+        API_PATHS.samplesAndInputs,
+        SampleAndInputSchema,
+        CreateSampleAndInputRequestSchema.parse(input),
+      ),
+
+    /**
+     * Everything the caller may see under `samples_and_inputs_select_own_or_team`.
+     *
+     * There is deliberately no cap parameter and no cap in the response. The
+     * UCPMP monthly limit exists in no column, no constraint and no function in
+     * the schema today, so a client that asked for it would be asking for
+     * something nobody computes — see `SamplesScreen` for what is shown instead.
+     */
+    listSamplesAndInputs: (
+      params: Record<string, QueryValue> = {},
+    ): Promise<ListSamplesAndInputsResponse> =>
+      request(
+        'GET',
+        `${API_PATHS.samplesAndInputs}${toQueryString(params)}`,
+        ListSamplesAndInputsResponseSchema,
+      ),
+
+    /**
+     * The notice that is in force for a language, right now — Phase 3.
+     *
+     * **Nothing may be shown to a doctor without this call succeeding.** A consent
+     * record carries `consentTextVersionId` and `displayedLanguage` so that what
+     * was agreed to can be reconstructed afterwards; a screen that showed
+     * app-authored copy and then pointed the record at some other version would
+     * make the ledger attest to text the doctor never saw. So the notice is
+     * fetched, shown verbatim, and its id is what the record carries.
+     *
+     * The version is **not** cached across visits here. `effectiveUntil` exists on
+     * the entity, which means a version can stop being current between one visit
+     * and the next, and a stale id in a consent row is exactly the defect the
+     * hash on `ConsentTextVersion` exists to detect.
+     */
+    getActiveConsentText: (params: GetActiveConsentTextRequest): Promise<ConsentTextVersion> =>
+      request(
+        'GET',
+        `${API_PATHS.consentTextActive}${toQueryString(params as unknown as Record<string, QueryValue>)}`,
+        ConsentTextVersionSchema,
+      ),
+
+    /**
+     * Every notice version the caller may see, current and past.
+     *
+     * Used for one thing on the device: discovering **which languages a notice
+     * actually exists in**, so the MR is offered those and no others. A language
+     * picker built from a hard-coded list offers a doctor a language the server
+     * cannot produce a notice in, and the handoff then dead-ends in front of them.
+     */
+    listConsentTextVersions: (
+      params: Record<string, QueryValue> = {},
+    ): Promise<ListConsentTextVersionsResponse> =>
+      request(
+        'GET',
+        `${API_PATHS.consentTextVersions}${toQueryString(params)}`,
+        ListConsentTextVersionsResponseSchema,
       ),
 
     /** All three outcomes use this call and all three succeed. */
@@ -202,6 +361,94 @@ export const createApiClient = (options: ApiClientOptions) => {
         'GET',
         `${API_PATHS.analyses}${toQueryString(params as Record<string, QueryValue>)}`,
         ListAnalysesResponseSchema,
+      ),
+
+    /**
+     * One analysis, by id — Phase 4 D2.
+     *
+     * Fetched rather than picked out of a list already in hand, because reading it
+     * is an event: `mrViewedAt` is stamped by the server on this call, and it is
+     * what makes "you saw this before your manager acted on it" a fact the audit
+     * log can support rather than a claim the UI makes about itself.
+     */
+    getAnalysis: (id: string): Promise<Analysis> =>
+      request('GET', API_PATHS.analysis(id), AnalysisSchema),
+
+    /**
+     * The MR's reply to their own analysis — D3.
+     *
+     * **Attached, never overwriting.** The contract names it that way and the
+     * schema keeps `mrResponse` beside the findings rather than inside them: a
+     * reply that edited the finding would destroy the thing being contested. The
+     * response comes back on the analysis, so the caller re-renders from the
+     * server's copy rather than its own optimistic one.
+     */
+    respondToAnalysis: (id: string, input: RespondToAnalysisRequest): Promise<Analysis> =>
+      request(
+        'POST',
+        API_PATHS.analysisResponse(id),
+        AnalysisSchema,
+        RespondToAnalysisRequestSchema.parse(input),
+      ),
+
+    /**
+     * A manager disagreeing with a finding — Phase 4 E2.
+     *
+     * **This is the legally load-bearing call in the product.** It is the evidence
+     * that a human looked at an automated judgement about an employee and made
+     * their own, which is what keeps the analysis advisory rather than
+     * determinative. `reason` is `.min(1)` in the contract: an override with no
+     * reason proves a click happened, not that anybody thought.
+     *
+     * It creates a row and changes nothing about the finding. The analysis the MR
+     * read stays exactly as they read it — otherwise the record of what they were
+     * shown, and replied to, would be rewritten by the person reviewing it.
+     */
+    createAnalysisOverride: (
+      id: string,
+      input: CreateAnalysisOverrideRequest,
+    ): Promise<AnalysisOverride> =>
+      request(
+        'POST',
+        API_PATHS.analysisOverrides(id),
+        AnalysisOverrideSchema,
+        CreateAnalysisOverrideRequestSchema.parse(input),
+      ),
+
+    /**
+     * A consultation recording — Phase 3 D6.
+     *
+     * **`consentRecordId` is required and the server rejects the row unless that
+     * record's outcome is `consented`.** The gate is deliberately on the server:
+     * a client-side check is a check the client can be made to skip, and this is
+     * the one write in the product where skipping it means recording a doctor who
+     * said no. The device checks too — see `capture/recording.ts` — so the MR is
+     * stopped before the microphone opens rather than after, but the check that
+     * counts is the one they cannot reach.
+     */
+    createRecording: (input: CreateRecordingRequest): Promise<UploadSession> =>
+      request(
+        'POST',
+        API_PATHS.recordings,
+        UploadSessionSchema,
+        CreateRecordingRequestSchema.parse(input),
+      ),
+
+    /**
+     * The MR's own voice note — Phase 3 D7.
+     *
+     * **No consent record, and that is correct rather than an omission.** A voice
+     * note is the MR dictating to themselves after the visit; there is no third
+     * party in it, and `onboarding/microphone.tsx` already refuses to collapse the
+     * two into one friendly sentence about "recording". They are different things
+     * with different consents and the contract keeps them apart.
+     */
+    createVoiceNote: (input: CreateVoiceNoteRequest): Promise<UploadSession> =>
+      request(
+        'POST',
+        API_PATHS.voiceNotes,
+        UploadSessionSchema,
+        CreateVoiceNoteRequestSchema.parse(input),
       ),
 
     syncPush: (input: SyncPushRequest): Promise<SyncPushResponse> =>

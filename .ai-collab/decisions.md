@@ -275,6 +275,289 @@ one-line form for scanning.
 
 ---
 
+## FE-W1 — 14 August 2026 · Model: Claude Opus 5
+
+Written up in full in `PROJECT-OVERVIEW.md` -> FE-W1. One-line form for scanning.
+
+### Extraction rule removes the capability, not the symptom
+
+- **Decision:** `apps/field` cannot import React Native visual primitives at all.
+- **Alternatives:** a lint rule failing when a component is *defined* there (what was
+  specified); a naming or directory convention.
+- **Why this won:** same shape as "there is no upload endpoint without consent, not a
+  disabled button". Detection finds a component after someone writes it; removing the
+  materials means it cannot be written.
+- **Cost accepted:** `import * as RN from 'react-native'` routes around it. Stops the
+  accident, not the intent.
+
+### No hoisting; the isolated-linker guard is intact
+
+- **Decision:** `pnpm-workspace.yaml` unchanged. The Expo resolution failures were
+  caused by `disableHierarchicalLookup` in our own Metro config, not by pnpm.
+- **Alternatives:** repo-wide `nodeLinker: hoisted`; `publicHoistPattern` globs.
+- **Why this won:** neither is needed once the Metro setting is removed. Hoisting
+  would have deleted the install-time "cannot import what you have not declared"
+  guarantee for `core`, `mock` and `api` to accommodate one app.
+- **Compensating control added anyway:** `import/no-extraneous-dependencies`, so the
+  property also holds at lint time if anyone hoists later.
+
+### Production credentials moved out of the repo tree
+
+- **Decision:** nine values to `~/.elmiron-prod.env`. Repo `.env` keeps localhost and
+  public constants only.
+- **Why this won:** three denylists had accumulated around one hazard, and the
+  directory is uploaded to a third party at build time. Removing the class beats a
+  fourth denylist.
+
+---
+
+## FE-W8 open item — the Android signing key
+
+**Decide before the first Play Store upload. Unrecoverable afterwards.**
+
+EAS Build generates the Android keystore and holds it on Expo's servers. Google
+requires every update to an installed app to carry the same signing key, and there is
+no recovery path if access to that key is lost — a lost Expo account means an app
+that can never be updated, only republished under a new listing.
+
+Two mitigations. Pick one:
+
+1. **Download and back up the keystore** (`eas credentials`) somewhere durable and
+   outside the Expo account.
+2. **Enrol in Play App Signing**, so Google holds the app signing key and Expo holds
+   only an upload key — an upload key can be reset if lost.
+
+*Confidence: medium-high on the Play App Signing model. Verify against current Play
+Console documentation before relying on it — this was not verified against Google's
+docs during FE-W1.*
+
+Cheap now, impossible later. Same pattern as the region choice and the D-U-N-S lead
+time.
+
+---
+## FE-W8 BLOCKING — the Android package ID and the Play Console account
+
+**Two decisions, neither of them the developer''s, both permanent after the first
+Play Store upload.** `com.praversetech.elmironmr` is currently in `app.json` as a
+**placeholder I chose from the GitHub organisation name.** It has not been approved
+by anyone.
+
+### 1. Whose Play Console account ships this?
+
+It decides the package ID, who owns the store listing, who holds the keystore, and
+what happens to all three if the client relationship ends. Pairs directly with the
+EAS keystore item below — the same question asked from the other side.
+
+- **Praverse ships it:** we control releases and the signing key; the client depends
+  on us to publish, and transferring a listing later is a manual Google process.
+- **The client ships it:** they own the listing and the identity permanently; we need
+  access to build and release, and the package ID should be theirs from the start.
+
+### 2. Should a pharmaceutical brand name be in a permanent public identifier?
+
+If "Elmiron" is the client''s mark rather than ours, `com.praversetech.elmironmr`
+bakes their trademark into a string that **can never be changed** — a different
+package ID is a different app listing, with no upgrade path for anyone who installed
+the first one. Something neutral, `com.praversetech.fieldforce`, costs nothing today
+and avoids a conversation that has no good outcome later.
+
+**Owner:** reviewer. **Needed by:** before the first Play upload, FE-W8.
+**Until then:** the placeholder stays and is not to be treated as decided.
+
+---
+
+## FE-W1 — accepted deviations
+
+### `apps/field/tsconfig.json` does not extend the repo base
+
+- **Decision:** it extends `expo/tsconfig.base` and repeats every strictness flag
+  explicitly, dropping exactly one: `noPropertyAccessFromIndexSignature`.
+- **Why:** the repo base sets `module: NodeNext`, which requires `.js` extensions on
+  relative imports; Metro does not resolve them. And Expo inlines environment values
+  by rewriting `process.env.EXPO_PUBLIC_X` at build time, matching **dot access
+  only** — the bracket access that rule demands is not rewritten and yields
+  `undefined` in a release bundle while working fine in development.
+- **Do not "fix" this back.** Re-adding the flag and switching to bracket access
+  breaks env inlining in release builds only, which is the worst place to find it.
+
+### "Declined is not an error" has no control yet — FE-W4
+
+Today `Banner` and `ColorTokens` carry comments saying `critical` is never for a
+declined consent. **A comment is not a control.** The consent screen is FE-W4; the
+test belongs with it, and it should assert that the `declined` path:
+
+- carries no error styling and no `critical` token,
+- has no confirmation or "are you sure?" step,
+- has a tap target no smaller than `consented`, and
+- sits at equal visual weight — neither outcome is the secondary action.
+
+Recorded now so the control is built with the screen rather than remembered after.
+
+---
+## Standing rule while the project is blocked — 14 August 2026
+
+Fourteen items need a human; engineering is otherwise stopped. The rule for what may
+still be built:
+
+> **Pure logic with tests can be built ahead. Anything that renders waits for a
+> device.**
+
+The FE-W2 reducer qualified because it is the hardest logic in the frontend, fully
+decidable from the contract in `packages/core`, and verifiable by its own test suite
+today. FE-W3 has no equivalent — doctor search filtering, mileage formatting and
+refusal-state selection are a few small pure functions, and everything else in that
+sprint renders.
+
+**A screen that cannot be run is the "code nothing has executed" trap**, which this
+project has already paid for twice. Manufacturing work to keep the queue from looking
+short would be the wrong instinct, and is explicitly not to be done.
+
+---
+
+## FE-W2 open item — what the queue screen shows during a long retry
+
+Raised in review and not yet built, because no queue screen exists.
+
+An item honestly sitting `queued` after fifty failed attempts is **correct** — the
+client never dead-letters and the server holds the budget. It is also a trust
+problem: indefinite silent retry reads to an MR as "nothing is happening", and
+`my_upload_queue()` is described in the plan as their only proof the day's work is
+safe.
+
+This is a screen-state decision, not a dead-letter decision, and it belongs in FE-W2
+rather than FE-W7 polish. The queue must visibly distinguish **retrying normally**
+from **retrying for six hours** — the second is not an error state and must not be
+styled as one, but it cannot look identical to the first either.
+
+Build it with the screen. The reducer already carries what it needs
+(`attemptCount`, `oldestUnsyncedClientCreatedAt`); nothing in the state machine has
+to change.
+
+## What "the blocked period" means, precisely
+
+Named because "blocked" without an object is how a status becomes unfalsifiable.
+
+**Blocked on:** a physical Android device, an Expo account (`eas login`), push
+credentials for the repository, an elevated shell for `LongPathsEnabled`, the brand
+guideline, and the Play account / package ID decision.
+
+**Not blocked on:** the AI layer. Contract I3 is late and is the highest-consequence
+open item, but the sprint order was deliberately arranged so FE-W2 through FE-W5 do
+not depend on it. It is not what is stopping work today.
+
+The distinction matters because the first list is procurement and credentials — an
+afternoon and a purchase — while the second is a measurement nobody has taken.
+---
+
+## Push sequencing while CI has never run — 14 August 2026
+
+Three pushes, each green before the next. Not a preference; a diagnosis rule.
+
+1. **The ten existing commits alone.** First CI run has one candidate cause:
+   existing code against existing config.
+2. **The render harness alone** — `jest-expo` wired into turbo and CI, plus the
+   deliberately-failing test. A red CI here is the runner configuration and nothing
+   else.
+3. **Everything else** — route tests, the queue screen, the rest of FE-W2b.
+
+Folding 2 into 3 gives a red CI two candidate causes. Folding 2 into 1 gives it
+three. The stop condition that kept FE-W2b from starting exists to stop exactly this,
+and it has the same failure mode one layer down.
+
+**Not yet reflected in `docs/frontend-prompt-w2b.md`**, deliberately: it only binds at
+execution time, and by then there will be CI results to fold into the same amendment.
+One amendment beats two.
+
+### Revised 17 August 2026 — four pushes, not three
+
+The O2 rename is a code change touching ~70 files. It slots in **before** the
+harness, because a harness written against the old namespace gets rewritten a week
+later.
+
+1. **The thirteen existing commits alone** — one candidate cause: existing code
+   against existing config.
+2. **The O2 rename alone** — `com.praversetech.fieldforce`, the `elmironmr` URL
+   scheme, and the `@elmiron/*` workspace scope, in one pass. Approved 17 August;
+   **not to be executed until push 1 has had a CI run.**
+3. **The render harness alone** — `jest-expo` wired into turbo and CI.
+4. **Route tests, queue screen, the rest of FE-W2b.**
+
+No exception was made for the rename despite it being a change the reviewer wanted.
+A red CI with two candidate causes costs more than a day of waiting.
+### Related, and not self-service
+
+Push currently 403s with `gh` unauthenticated. Checking the PAT scope is a human
+action in GitHub's web UI, not something reachable from the repository — and the push
+does not have to come from this session at all. The commits exist; any authenticated
+client moves them.
+
+If a push still 403s **after** authenticating, that is the org-permission branch on
+`Praverse-Tech-Pvt-Ltd` and it needs someone with admin. Worth raising the same day
+rather than discovering it on a third attempt.
+---
+
+## How dates in the record are read — 17 August 2026
+
+Recorded because two documents disagreed and the wrong one was almost "corrected".
+
+> **A `###` section header carries the date of the work it describes, taken from the
+> commit timestamp. It is never edited afterwards. Summary and handoff documents
+> carry their own snapshot date. Where the two differ, that is provenance, not
+> drift.**
+
+The case that produced it: `PROJECT-OVERVIEW.md` carries FE-W1, FE-W2 and BE-W8 as
+14 August 2026, matching the commits that hold them. `handoff.md` and a frontend
+status summary say 17 August. The temptation was to edit the FE sections to agree
+with the summary — which would have inverted which document is authoritative, and
+would have created a fresh inconsistency by leaving BE-W8 at the old date.
+
+The append-only log yields to nothing. The summary is the document that gets updated.
+
+Consequence worth stating: a section header is **not** a reliable "when did this get
+written" for anything that spans days, and should not be used to order work across
+roles. Use the commit history for that.
+---
+
+## O2 — the name in permanent identifiers: EXECUTED, commit `f34ceef` (17 Aug 2026)
+
+**Status: RULED 17 Aug -> EXECUTED 17 Aug.** The ruling below is kept in full; it is
+not superseded, it is done. Package id `com.praversetech.fieldforce`, scheme
+`praversefieldforce`, scope `@fieldforce/*`, display name moved to configuration.
+472 tests unchanged, all three old tokens at zero in code and config. Full write-up:
+`PROJECT-OVERVIEW.md` -> FE-R1. **Superseded by FE-R1a:** the scheme is now the reverse-DNS form `com.praversetech.fieldforce`,
+verified into the generated `AndroidManifest.xml` by `expo prebuild`. **Outstanding from it: Backend must add**
+`praversefieldforce://auth-callback` **to `additional_redirect_urls` — no deep-link
+scheme was ever in that allow-list, so this is a pre-existing gap the rename
+surfaced.**
+
+### The original ruling
+
+`docs/brand-identifier-decision.md`, 17 August 2026.
+
+Escalated from a naming question to a legal one on one finding: **ELMIRON® is a
+registered trademark of a third party** (IVAX Research, LLC, per the FDA prescribing
+information), so `com.praversetech.elmironmr` would put another company''s
+pharmaceutical mark into a permanent public Play Store identifier published under
+Praverse''s account. Whether that is a problem needs counsel, not engineering.
+
+The brief''s substance, so it is not lost if the file moves:
+
+- Only **two** identifiers actually matter — the Android package ID and the URL
+  scheme. The other 187 occurrences are free to change.
+- The cost curve has a specific cliff: after a pilot with 100 MRs, renaming the
+  package forces an uninstall, **and queued offline work does not survive an
+  uninstall unless it has already synced.** That turns a branding decision into a
+  data-loss one.
+- Recommended option: neutral identifier (`com.praversetech.fieldforce`), keeping the
+  **display name** as a separate freely-changeable string. That decouples branding
+  from the irreversible choice and unblocks FE-W8 without waiting for the trademark
+  answer.
+
+Needs: a trademark position for software in India (counsel), the Play Console account
+owner (client), and sign-off to rename if option B. Pairs with the existing
+FE-W8-blocking entries — the package ID and the account owner are one conversation.
+---
+
 ## Where the earlier ones live
 
 | Decision | Where |
@@ -285,5 +568,14 @@ one-line form for scanning.
 | RLS decides which rows, never what values | → "Standing principle" |
 | Three requirements dropped (roles, versioning, source search) | → "Closed by the reviewer, 12 Aug" |
 | `app_thresholds` is append-only, not updatable | → BE-W6 |
-| Team-size floor of 8 for the consent anomaly | → BE-W6 |
 | Withdrawal cascade order, and why the object is not deleted inline | → BE-W6 |
+
+---
+
+## 27 August 2026 · Model: Gemini 3.1 Pro
+
+### Section freezing rule
+
+- **Decision:** A `###` section in `PROJECT-OVERVIEW.md` is editable while its sprint is open. **Once the sprint closes, the section freezes.** Any later correction goes in the current section, dated, saying what it replaced and where.
+- **Why:** To prevent erasing the discovery of errors and maintain a durable, auditable record of the project's actual history.
+

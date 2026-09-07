@@ -1,0 +1,45 @@
+{
+  "name": "@fieldforce/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Every shared component. apps/field consumes this and defines none of its own; apps/console joins in FE-W6.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint src",
+    "test": "vitest run && jest",
+    "test:logic": "vitest run",
+    "test:render": "jest"
+  },
+  "dependencies": {
+    "@fieldforce/ui-tokens": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=19",
+    "react-native": ">=0.86",
+    "react-native-safe-area-context": ">=5"
+  },
+  "devDependencies": {
+    "@fieldforce/core": "workspace:*",
+    "@jest/globals": "^29.7.0",
+    "@react-native/jest-preset": "^0.86.2",
+    "@testing-library/react-native": "^14.0.1",
+    "@types/react": "~19.2.2",
+    "jest": "^29.7.0",
+    "jest-expo": "~57.0.4",
+    "react": "19.2.3",
+    "react-native": "0.86.2",
+    "react-native-safe-area-context": "~5.7.0",
+    "test-renderer": "^1.2.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

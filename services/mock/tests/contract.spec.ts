@@ -44,7 +44,7 @@ import {
   VoiceNoteSchema,
   createApiClient,
   pageResponseSchema,
-} from '@elmiron/core';
+} from '@fieldforce/core';
 import { startMockServer } from '../src/server.js';
 import { IDS } from '../src/fixtures.js';
 
@@ -52,7 +52,7 @@ import { IDS } from '../src/fixtures.js';
  * The mock is only a contract if something checks it against the contract.
  *
  * Every route below is fetched for real and parsed with the schema from
- * `@elmiron/core`. A fixture that drifts from the published types fails here, in
+ * `@fieldforce/core`. A fixture that drifts from the published types fails here, in
  * CI, rather than in a frontend screen three weeks later.
  */
 

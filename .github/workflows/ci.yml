@@ -19,6 +19,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          # The append-only guard below diffs against the base, so it needs history.
+          fetch-depth: 0
+
+      # PROJECT-OVERVIEW.md is append-only and some of its sections are frozen. That
+      # rule lived only as prose inside the file it protects, and a `prettier --write`
+      # walked through it and reformatted a frozen table. A human caught it, which is
+      # not a control. This is the control: any deletion from the file fails the build.
+      - name: PROJECT-OVERVIEW.md is append-only
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="origin/${{ github.base_ref }}"
+          else
+            # Push events: compare against what the branch was before this push.
+            # `origin/main...HEAD` is empty once the push has landed and would pass
+            # vacuously, which is the failure mode this guard exists to avoid.
+            BASE="${{ github.event.before }}"
+          fi
+          echo "Comparing $BASE...HEAD"
+          DELETED=$(git diff --numstat "$BASE...HEAD" -- PROJECT-OVERVIEW.md | awk '{print $2}')
+          DELETED=${DELETED:-0}
+          echo "Deleted lines: $DELETED"
+          if [ "$DELETED" -gt 0 ]; then
+            echo "::error file=PROJECT-OVERVIEW.md::$DELETED line(s) removed. This file is append-only; frozen sections are never edited. Add a correction section instead."
+            git diff "$BASE...HEAD" -- PROJECT-OVERVIEW.md | grep '^-[^-]' | head -40
+            exit 1
+          fi
 
       - uses: pnpm/action-setup@v4
 
@@ -34,9 +61,23 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm run lint
       - run: pnpm run format:check
-      - run: pnpm --filter @elmiron/core test
+      - run: pnpm --filter @fieldforce/core test
+      # The WCAG contrast guard. It fails the build when a design token drops below
+      # its required ratio, and it had never run here — the step simply did not
+      # exist, so the control was decorative in CI from the day it was written.
+      - run: pnpm --filter @fieldforce/ui-tokens test
+      # Added with this package's first real tests, in the same commit, because a
+      # workspace that gains a suite and not a CI line is how ui-tokens stayed
+      # decorative. Runs both runners: vitest for the boundary check, jest for
+      # component rendering.
+      - run: pnpm --filter @fieldforce/ui test
       # Contract I2: proves every mock response still parses against packages/core.
-      - run: pnpm --filter @elmiron/mock test
+      - run: pnpm --filter @fieldforce/mock test
+      # Two runners in one workspace, both invoked by this script: vitest for logic
+      # (*.test.ts) and jest-expo for rendering (*.test.tsx). src/runner-boundary
+      # asserts the two globs cannot overlap. Neither needs a device or a native
+      # build; if this step ever starts wanting one, the approach is wrong.
+      - run: pnpm --filter @fieldforce/field test
 
   database:
     name: migrations · Gate 0 RLS suite · rollbacks
@@ -67,14 +108,14 @@ jobs:
           CI: 'true'
           SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           SUPABASE_URL: http://127.0.0.1:54321
-        run: pnpm --filter @elmiron/api test
+        run: pnpm --filter @fieldforce/api test
 
       # Destructive, so it runs last. A rollback file that has never been executed
       # is a claim, not a rollback.
       - name: Verify every migration can be rolled back
         env:
           SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-        run: pnpm --filter @elmiron/api verify:rollbacks
+        run: pnpm --filter @fieldforce/api verify:rollbacks
 
       - name: Stop Supabase
         if: always()

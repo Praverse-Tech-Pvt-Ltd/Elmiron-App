@@ -1,9 +1,9 @@
 {
-  "name": "@elmiron/ui-tokens",
+  "name": "@fieldforce/ui-tokens",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Design tokens. Placeholder — Frontend populates this from design-tokens.json.",
+  "description": "Design tokens and the WCAG contrast validator that guards them. Palette values are a placeholder until the brand guideline is committed.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -16,12 +16,13 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint src",
-    "test": "echo \"no tests in ui-tokens yet\""
+    "test": "vitest run"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
   }
 }

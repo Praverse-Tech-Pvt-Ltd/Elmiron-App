@@ -576,7 +576,645 @@ update public.recordings set purge_after = now() - interval '10 days' where id =
 
 **The general rule, for any table in this schema:** before writing a fixture that
 sets a column a trigger also writes to, check for a `before insert` trigger on that
-table (`\d public.<table>` in psql, or grep the migrations for
+table (`\d public.<table` in psql, or grep the migrations for
 `before insert ... execute function`). If one exists and touches the column, the
 fixture needs the insert-then-update shape above — a single `INSERT` with the
 "right" value is not evidence the value survived.
+
+---
+
+## Expo, Metro and pnpm — FE-W1
+
+### `disableHierarchicalLookup` in `metro.config` breaks resolution under pnpm
+
+Expo's monorepo guide gives a Metro config with
+`config.resolver.disableHierarchicalLookup = true`. **That guide assumes npm or
+yarn.** Under those, every package is flat at the workspace root and the upward
+walk finds only duplicates, so switching it off is a speed-up. Under pnpm a
+package's own dependencies live nested inside the virtual store, and the upward
+walk is the only way to reach them.
+
+With it on, the bundle fails one package at a time:
+
+```
+Unable to resolve module @expo/metro-runtime from .../expo-router/entry-classic.js
+Unable to resolve module whatwg-fetch      from .../@expo/metro-runtime/src/...
+Unable to resolve module invariant         from .../expo-router/build/renderRootComponent.js
+```
+
+Each name belongs to a package **you did not install and cannot fix by
+installing**, because the import is inside somebody else's file. It reads as a
+broken dependency tree. It is a resolver setting.
+
+**Fix: do not set it.** Set `watchFolders` and `nodeModulesPaths` and stop there.
+With hierarchical lookup left on, the app bundles under pnpm's default isolated
+linker with no hoisting at all.
+
+**What this cost, and what it nearly cost.** The first two failures were read as
+"pnpm cannot do React Native", and the fix reached for was `nodeLinker: hoisted`
+across the workspace. That would have worked, and it would have silently deleted
+the install-time guarantee that a package cannot import what it has not declared —
+for `core`, `mock` and `api` as well, to accommodate one app. If you find yourself
+hoisting to fix a resolution error, check `disableHierarchicalLookup` first.
+
+### When a fix needs a repo-wide control weakened for one workspace, the diagnosis is wrong
+
+Stated separately because it generalises past Metro.
+
+The two resolution failures above were read as "pnpm cannot do React Native", and
+the fix reached for was `nodeLinker: hoisted` across the workspace. That would have
+worked. It would also have deleted, for `core`, `mock` and `api` as well, the
+install-time guarantee that a package cannot import what it has not declared — to
+accommodate one app. The actual cause was one line of our own Metro config.
+
+**The install-time guard was correctly reporting a real problem, and we were about
+to remove it for being right.**
+
+So: *a fix that requires weakening a repo-wide control to accommodate one workspace
+is evidence that the diagnosis is wrong, not that the control is too strict.* Bound
+the attempt, find the local cause, and only then decide whether the control is
+actually the obstacle. The same shape appears earlier in this file — the RLS test
+that "proved" nothing because it connected as `postgres`, and the idempotency check
+that never fired because the 404 arrived inside an HTTP 400.
+### `node-linker` in `.npmrc` is silently ignored by pnpm 11
+
+pnpm 11 reads its settings from `pnpm-workspace.yaml`, not `.npmrc`. A
+`node-linker=hoisted` line in `.npmrc` produces no warning, no error, and no
+effect — `pnpm install` reports "Already up to date" and the layout is unchanged.
+The equivalent key is `nodeLinker` in `pnpm-workspace.yaml`, alongside `storeDir`
+and `allowBuilds`.
+
+Related: changing the linker does not relink an existing tree. Every
+`node_modules` has to be removed first, or the install is a no-op.
+
+### Metro does not substitute `.js` for `.tsx`
+
+TypeScript's NodeNext resolution maps `./Thing.js` onto `./Thing.tsx`, which is why
+the rest of this repo writes `.js` extensions on relative imports. Metro does not.
+A bundler-resolved package — `packages/ui` — must use **extensionless** relative
+imports, or every import fails at bundle time while `tsc` reports nothing wrong.
+
+### Expo reads `.env` from the app directory, not the workspace root
+
+`EXPO_PUBLIC_*` values in the repo-root `.env` are invisible to `apps/field`. The
+app needs its own `.env`. Both are gitignored by the root `.gitignore` (`.env`
+matches at any depth), and `apps/field/.env` must hold **only** `EXPO_PUBLIC_*`
+values, every one of which is inlined into the shipped bundle and readable from
+the APK.
+
+### `expo install` rewrites `package.json` and adds config plugins
+
+It reformats the file and appends a `plugins` array to `app.json` — including
+entries for packages you did not ask it to configure. Re-read both files after
+running it rather than assuming only dependencies moved.
+
+## pnpm on Windows — FE-W1
+
+### `corepack enable --install-directory "$env:APPDATA\npm"` fails with ENOENT
+
+The fix recorded above under "Node and pnpm on Windows" assumes
+`%APPDATA%\npm` exists. On a machine where npm has never installed a global
+package it does not, and corepack reports:
+
+```
+Internal Error: ENOENT: no such file or directory, lstat 'C:\Users\<user>\AppData\Roaming\npm'
+```
+
+The directory is already on `PATH`, which is what makes this confusing — `PATH`
+lists it, so it looks present. Create it first:
+
+```powershell
+New-Item -ItemType Directory -Path "$env:APPDATA\npm" -Force
+corepack enable --install-directory "$env:APPDATA\npm"
+```
+
+### Moving the repo invalidates `node_modules`, and pnpm will not purge it without a TTY
+
+After moving the checkout to a new path, `pnpm install` aborts:
+
+```
+[ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY] Aborted removal of modules directory due to no TTY
+```
+
+`CI=true` allows the purge — **and then blocks the next install that changes the
+lockfile**, because `CI` also implies `--frozen-lockfile`. Set it for the purge,
+unset it before adding a dependency. The two failures look unrelated and are the
+same variable.
+
+
+## Credentials and `.env` — FE-W1
+
+### Classify by value shape, not by key name
+
+Moving production credentials out of the repo, a first pass filtered on key names —
+`*_SECRET_KEY`, `*_ACCESS_TOKEN`, `*_DB_URL`, `*_POOLER_*`. It moved six values and
+left three behind: `SUPABASE_URL`, `SUPABASE_JWKS_URL` and
+`EXPO_PUBLIC_SUPABASE_URL`, all pointing at the deployed project.
+
+None of those names sounds like a secret, and strictly none is one. **A URL is a
+pointer, and a pointer decides which database you talk to.** The Expo one is the
+worse of the three: it would have sent the mobile app at production, where there is
+no seed reference data and no shift window, so every capture refuses — a confusing
+failure rather than a dangerous one, and still the opposite of the instruction that
+sign-in runs against the local stack.
+
+Scan the values, not the names:
+
+```bash
+grep -nE '=(https?://[a-z0-9]+\.supabase\.co|postgres(ql)?://)' .env
+```
+
+Anything matching `<ref>.supabase.co` or a `postgres://` authority is remote no
+matter what the key is called. A name-based filter cannot find it, because the name
+was chosen before anyone knew which environment the value would hold.
+
+### Filenames arrive stripped of hyphens from the claude.ai download
+
+Three files landed as `frontendplanv2.md`, `frontendpromptw1.md` and
+`blockedonyou.md`, each of which should have been hyphenated. The cause is the
+download step, not git, OneDrive or Windows.
+
+The alternate data stream on the file shows it:
+
+```powershell
+Get-Content docs\blocked-on-you.md -Stream Zone.Identifier
+```
+```
+[ZoneTransfer]
+ZoneId=3
+ReferrerUrl=https://claude.ai/cowork/...
+HostUrl=https://claude.ai/api/organizations/<org>/files/<uuid>/contents
+```
+
+The download URL carries a UUID and **no filename**, so the name is generated
+client-side from the document title — and the generator strips every non-alphanumeric
+character rather than replacing it with a hyphen. "Blocked on you" becomes
+`blockedonyou`. The `.md` extension survives because only the basename is sanitised.
+
+**Consequence:** every document arriving this way needs renaming before it is
+committed, and the repo convention (`backend-prompt-w6.md`) makes the un-hyphenated
+form obvious — which is the only reason all three were caught. Rename on arrival; do
+not assume the name you gave the document is the name on disk.
+
+The same stream is worth checking whenever a file's name or encoding looks wrong: it
+records where the file actually came from, which no amount of looking at the contents
+will tell you.
+
+### The development machine's clock drifted, and tests must not read it
+
+Observed during FE-W2: git stamped most of a session''s commits `2026-08-14` while
+the tooling reported the date as `2026-08-17`, and a later commit in the same session
+stamped `2026-08-17`. Roughly three days, inside one working session.
+
+`docs/frontend-plan-v2.md` §3.4 already says the **client''s** clock is not trusted
+and that every record carries a server `received_at` alongside the device''s
+`occurred_at`. That is a product rule about an MR''s phone. This is a different
+problem with the same shape: **the development machine''s clock is not trustworthy
+either.**
+
+The consequence is specific. Any fixture, seed or assertion that reaches for local
+time — `new Date()`, `Date.now()`, `now()` in a seed, a relative window like "within
+the last hour" — is a flaky test, and it fails *differently* in CI than locally
+because the two clocks disagree. With CI having never run on the frontend, the first
+green-locally-red-in-CI run is where that gets discovered, and it reads as a logic
+bug rather than a clock one.
+
+**Rule: anything time-sensitive in a test takes an injected or fixed value.** Pass the
+instant in, freeze it, or use a constant. Never read the machine. The backend suites
+already do the equivalent — `received_at` is stamped by trigger from
+`clock_timestamp()` and asserted against the row, not against the test runner''s idea
+of now.
+
+If a date in a report and a date in a commit disagree, neither is automatically
+wrong. See `.ai-collab/decisions.md` — "How dates in the record are read".
+
+### `pnpm db:start` fails with a named-pipe error when Docker Desktop is not running
+
+```
+{"_tag":"Error","error":{"code":"LegacyDockerLifecycleInspectError",
+ "message":"failed to inspect container health: failed to connect to the docker API at
+ npipe:////./pipe/dockerDesktopLinuxEngine..."}}
+```
+
+Reads as a Supabase CLI fault and is not one. Docker Desktop does not start with
+Windows by default, so after any reboot the daemon pipe is simply absent. Start
+Docker Desktop, wait for the daemon, then re-run. The tell is `npipe://` in the
+message — a Supabase problem never mentions a Windows named pipe.
+
+Worth pairing with the existing note that a database suite reports **skipped**, not
+failed, when nothing is reachable. Reboot, forget Docker, run the suite, read
+"green": that is the whole trap in one sequence.
+
+### Renaming an identifier that is also a word in the prose
+
+FE-R1 had to remove a trademark from package identifiers while leaving the same word
+alone in documentation that legitimately describes the drug. A naive
+case-insensitive sweep of the brand name would have rewritten 189 occurrences across
+70 files, most of them prose, and produced an unreviewable diff.
+
+**The technique: pick tokens that are only ever identifiers.** Here
+`@elmiron/` (with the trailing slash) is always the npm scope, `elmironmr` is always
+the package id or scheme, and bare `Elmiron` is always the drug. Three exact,
+case-sensitive substitutions touched 51 files and 91 occurrences, every one of them
+an identifier, and left the prose untouched by construction rather than by review.
+
+Order matters when one token contains another: `com.praversetech.elmironmr` has to be
+replaced **before** `elmironmr`, or the result is
+`com.praversetech.praversefieldforce`.
+
+The verification then has to report the deliberately-unchanged count *separately*, or
+a reviewer reading "17 files still match" cannot tell a design decision from a miss.
+
+### `expo prebuild` rewrites your package.json scripts
+
+Running `npx expo prebuild --platform android` to inspect the generated manifest also
+rewrote `apps/field`'s `android` script from `expo start --android` to
+`expo run:android`. That is correct for a project that keeps its native directories
+and wrong for one that does not — and it lands silently in a file you were not
+editing.
+
+If you prebuild only to inspect the output, check `git status` afterwards and revert
+what you did not mean to change. Deleting the generated `android/` directory does not
+undo the script edit.
+
+**Worth doing anyway.** `expo config --type public` and `--type introspect` both
+resolved a dotted URI scheme happily while `intentFilters` stayed empty, because the
+scheme is applied to the manifest during prebuild rather than at config time. Only
+the prebuild proved `<data android:scheme="com.praversetech.fieldforce"/>` actually
+lands. Config-level checks would have passed either way.
+
+### Searching a built bundle finds APIs the app never calls
+
+Grepping the tree for `signInWithOtp` matched `apps/field/dist/*.hbc` — the compiled
+Hermes bundle, which contains `supabase-js`'s own implementation of every auth method
+whether the app calls one or not.
+
+Exclude build output when asking "does our code use X". The answer from a bundle is
+always yes.
+
+### Anything that lands in AndroidManifest.xml is verified at prebuild, never at config
+
+**The general rule. The deep-link scheme in FE-R1a was only the first instance.**
+
+`expo config --type public` and `expo config --type introspect` both resolve the
+*config*. They do not generate the *manifest*. A value can resolve perfectly at
+config level and never reach `AndroidManifest.xml`, and both commands will report
+success while it happens.
+
+Measured in FE-R1a: with a dotted URI scheme set, `--type introspect` returned
+`scheme: com.praversetech.fieldforce` and `intentFilters: []` — empty. Only
+`npx expo prebuild --platform android` produced the actual
+`<data android:scheme="com.praversetech.fieldforce"/>` that proves it lands.
+
+**This sits directly in front of FE-W3 and FE-W4.** The same blind spot applies to
+every value a config plugin writes into the native manifest:
+
+| Sprint | Value | Written by |
+| --- | --- | --- |
+| FE-W3 | `ACCESS_BACKGROUND_LOCATION`, `FOREGROUND_SERVICE_LOCATION` | Transistorsoft background geolocation |
+| FE-W4 | background audio mode, `FOREGROUND_SERVICE_MICROPHONE` | `expo-audio` |
+
+If any of those resolve at config level and do not reach the manifest, the result is
+a **runtime failure on a real device that presents as a native-module bug** — you
+will spend the day reading Transistorsoft issues. The check is one command:
+
+```bash
+npx expo prebuild --platform android --no-install
+```
+
+then grep the generated `android/app/src/main/AndroidManifest.xml` for the permission
+or intent filter you expect. Delete `android/` afterwards if you do not keep native
+directories — **and check `git status`**, because prebuild also rewrites
+`package.json` scripts (see the entry above).
+
+### Repo search convention — exclude build artifacts
+
+Grepping this repo for "does our code use X" gives wrong answers unless build output
+is excluded. `apps/field/dist/*.hbc` is a compiled Hermes bundle containing
+`supabase-js`'s entire SDK, so a search for `signInWithOtp` matches there whether or
+not the app has ever called it. That false positive cost time once in FE-R1a.
+
+`apps/field/dist/` is **gitignored, not tracked** (`.gitignore:6` — `dist/`), so
+`git ls-files` based searches are already clean. Filesystem searches are not.
+
+Exclude, when asking what the source does:
+
+```
+dist/  build/  .expo/  android/  ios/  node_modules/  *.hbc  *.map  coverage/
+```
+
+The reliable form is to search tracked files only:
+
+```bash
+git ls-files | grep -vE '^docs/|\.(md|html)$' | xargs grep -n 'thingYouAreLookingFor'
+```
+
+Documentation is excluded separately there for a different reason — see the
+identifier-versus-prose entry above.
+
+## The render harness — FE-H1
+
+### Jest cannot resolve a bare preset name under pnpm
+
+```
+● Validation Error:
+  Preset jest-expo not found.
+```
+
+`jest-expo` is installed and linked at `apps/field/node_modules/jest-expo`, and
+node's own resolver finds it from that directory without complaint. Jest uses its
+**own** resolver, running from inside `.pnpm/jest@29.../node_modules`, which does not
+search the workspace. The error says the package is missing when it is present.
+
+Resolve the path in the config instead, from the config file's own location:
+
+```js
+// jest.config.cjs
+preset: require('node:path').dirname(require.resolve('jest-expo/jest-preset')),
+```
+
+**`dirname` matters.** Passing the resolved *file* gives a different and equally
+confusing error: `Module .../jest-preset.js should have "jest-preset.js" or
+"jest-preset.json" file at the root`. Jest wants the directory containing the preset.
+
+### The working `transformIgnorePatterns`
+
+`jest-expo`'s preset transforms React Native and Expo packages inside `node_modules`
+and skips everything else. That is right until a workspace package is consumed as
+**TypeScript source** rather than built JavaScript — which is how `@fieldforce/ui` is
+set up, so Metro and Next.js can each transpile it. Without the scope added, jest
+hands raw TSX to node and dies on the first `<`.
+
+Verbatim, from `apps/field/jest.config.cjs`:
+
+```js
+transformIgnorePatterns: [
+  'node_modules/(?!(?:.pnpm/)?((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|@fieldforce/.*))',
+],
+```
+
+The `(?:.pnpm/)?` and the trailing `@fieldforce/.*` are the two additions to the
+stock pattern.
+
+### `@testing-library/react-native` v14: `render` is async
+
+**The most misleading error in this sprint.** In RTL v14 `render` returns a Promise.
+Called without `await`, it yields a thenable whose prototype is
+`constructor, then, catch, finally` — no query methods — and `screen` throws:
+
+```
+`render` function has not been called
+```
+
+which reads as though render was never invoked, rather than as an un-awaited promise
+one line above. Symptoms: `view.getByText is not a function`, and `screen` throwing
+immediately after an apparently successful render.
+
+```tsx
+await render(<Thing />);          // not: const view = render(<Thing />)
+expect(screen.getByText('x')).toBeTruthy();
+```
+
+Queries come from the module-level `screen`, not from a return value. Every render
+test needs this.
+
+### Never `Set-Content -Encoding utf8` on Windows PowerShell 5.1 — it writes a BOM
+
+`jest-haste-map` refuses the file outright:
+
+```
+Error: Cannot parse .../package.json as JSON: Unexpected token '', "{
+  "name"... is not valid JSON
+```
+
+PowerShell 5.1's `utf8` means **UTF-8 with BOM**. A BOM had sat in a tracked
+`apps/field/package.json` across several commits, because nothing else parsed it
+strictly enough to notice — `git`, `pnpm`, `tsc`, `eslint` and `prettier` all
+tolerate it.
+
+Use one of these when writing a file other tools will parse:
+
+```powershell
+[System.IO.File]::WriteAllText($path, $text)          # no BOM, any PS version
+Set-Content $path $text -Encoding utf8NoBOM           # PowerShell 6+ only
+```
+
+To find existing ones:
+
+```bash
+git ls-files | while read -r f; do head -c 3 "$f" | od -An -tx1 | grep -q 'ef bb bf' && echo "$f"; done
+```
+
+## Mutation testing — a rule, not a technique
+
+### A mutation that removes the check is not a proof of the check
+
+Found while mutation-testing the vitest/jest boundary. The first mutation *replaced*
+vitest's include glob with `.test.tsx`, intending to create an overlap. Instead it
+stopped vitest matching `runner-boundary.test.ts` at all: the check never ran, and
+the result read as green.
+
+**A mutation must leave the assertion running and make it fail.** If the test count
+drops, the mutation deleted the test rather than breaking it, and the proof is void.
+
+Check the count, not just the colour:
+
+```
+before mutation   44 passed
+bad mutation      40 passed          <- check vanished, proves nothing
+good mutation     2 failed | 42 passed
+```
+
+The correct version *widened* the include to `['src/**/*.test.ts', 'src/**/*.test.tsx']`,
+which keeps the boundary test running and makes it fail on its own assertion.
+
+This applies to everything mutation-tested on this project, including the FE-W2
+reducer guards and the FE-W1 contrast controls — all of which were verified by
+failure count rather than by colour, but none of which stated the rule.
+
+### Adding a workspace does not add it to CI — check, do not presume
+
+CI names each suite explicitly rather than running `turbo run test`, so a new
+workspace's tests are invisible in CI until somebody adds a line. Nothing warns.
+`ui-tokens` carried the WCAG contrast guard — a build-failing accessibility control —
+and it had **never executed in CI**, because the step was simply absent. The local
+runs were green the whole time.
+
+Every workspace with a real test script must appear in a workflow. Audit with:
+
+```bash
+git ls-files '*package.json' | while read -r f; do
+  n=$(python -c "import json,sys;print(json.load(open(sys.argv[1],encoding='utf-8')).get('name',''))" "$f")
+  t=$(python -c "import json,sys;print(json.load(open(sys.argv[1],encoding='utf-8')).get('scripts',{}).get('test',''))" "$f")
+  case "$t" in ""|echo*) continue;; esac
+  grep -q -- "--filter $n test" .github/workflows/*.yml || echo "NOT IN CI: $n"
+done
+```
+
+As of FE-H1 all five run: `core`, `ui-tokens`, `mock` and `field` in the static job,
+`api` in the database job. **`packages/ui` is the next one to catch** — its `test`
+script is still a placeholder `echo`, so the audit skips it, and it will need a CI
+line the day it gains a real suite.
+
+The general shape: a control that is only invoked by a list somebody maintains by
+hand is a control that will eventually be left off the list.
+
+### Report test BLOCKS and CASES separately wherever `it.each` exists
+
+`app/home.tsx`'s route tests are 6 `it()` blocks that execute as 8 cases, because one
+block is an `it.each` over three roles. A report quoting 6 while the runner prints 8
+is a count nobody can reconcile — the same failure as a single total hiding a
+per-runner split.
+
+State both, always:
+
+```
+app/home.tsx   6 blocks / 8 cases
+```
+
+Sits alongside the mutation rule above: both are about counts that look sound and are
+not.
+
+### `it.each` with `as const` tuples produces a signature a destructured callback fails
+
+```
+error TS2345: Argument of type '(_state: "waiting" | ..., label: ..., over: ...) => Promise<void>'
+is not assignable to parameter of type '(...args: readonly ["waiting", ...] | readonly [...]) => ...'
+```
+
+The `as const` makes each row a distinct readonly tuple type, and the callback must
+satisfy every one of them at once. Use an array of **objects** instead — jest's `$var`
+interpolation works on object keys, so the case names stay readable:
+
+```tsx
+it.each([
+  { label: 'Waiting to send', attemptCount: 0 },
+  { label: 'Still trying', attemptCount: 3 },
+])('renders the label "$label"', async ({ label, attemptCount }) => { /* ... */ });
+```
+
+### `Array.prototype.reduce` infers the accumulator from the array, not from the seed
+
+Driving the reducer over a literal array of events fails to typecheck: TypeScript
+widens the array to a union of its element shapes and then insists the accumulator is
+that union, so `state.items` "does not exist".
+
+Annotate the array, not the reduce:
+
+```ts
+const events: SyncEvent[] = [ /* ... */ ];
+const state = events.reduce(syncQueueReducer, emptyQueue);
+```
+
+---
+
+## Android Toolchain and Build
+
+### AndroidLocationsException: "Several environment variables ... contain different paths"
+
+AGP reports this error while printing two IDENTICAL paths. The real rule is that only ONE mechanism may be defined. If both `ANDROID_PREFS_ROOT` and `ANDROID_USER_HOME` are set, the build fails even when they point to the same location.
+
+### ANDROID_PREFS_ROOT injected by IDE
+
+This variable was set at PROCESS scope only, injected by the IDE (Android Studio). A registry check shows nothing, and unsetting it in one shell session does not persist. To ensure a clean environment, build from an external terminal where the variable is not present.
+
+### Emulator API version vs compileSdkVersion
+
+The emulator's system image API (e.g., API 37) and the `compileSdkVersion` (e.g., API 36) are separate SDK components. Having an API 37 emulator does not provide the API 36 platform required for compilation. Both must be installed via the SDK Manager.
+
+### JDK 25 failure (JEP 472) on native modules
+
+JDK 25 fails during CMake configuration with a restricted-method error (JEP 472) when building `react-native-screens` and `react-native-worklets`. JDK 17 is the documented project requirement. Note that Android Studio's Gradle JDK and the terminal's `JAVA_HOME` are separate settings; both must be pointed at JDK 17 to ensure consistency between IDE and CLI builds.
+
+### General Rule: Pinned Toolchain
+
+The toolchain for this project is deliberately pinned to documented versions. Newer versions of the JDK or SDK platforms are not necessarily better and may introduce breaking changes or incompatibilities. Always match the versions specified in the project documentation.
+
+---
+
+## Checking a historical file with `npx` inside a bare `git worktree`
+
+**The trap:** to find out whether a file was already failing `format:check` at an older
+commit, the obvious move is a throwaway worktree at that commit and `npx prettier
+--check .` inside it. A worktree has no `node_modules`, so `npx` does not find the
+repo's pinned prettier — it downloads a different one and answers a different
+question, silently, with no error and no version printed.
+
+On 31 August this reported **one** non-conforming file at `90ede3c`. The correct
+method found **two**: `apps/field/jest.config.cjs` was also non-conforming and the
+worktree run missed it entirely. A wrong "it was already fine" is worse than no answer,
+because it closes the question.
+
+**The method that works** — extract the historical content into the working repo,
+where the installed tooling is, and run the repo's own binary against it:
+
+```sh
+mkdir -p /tmp/check && git show 90ede3c:apps/field/jest.config.cjs > /tmp/check/jest.config.cjs
+npx prettier --check /tmp/check/jest.config.cjs     # run FROM the repo, not the worktree
+```
+
+Keep the original filename: prettier infers its parser from the extension, and a
+`.cjs` renamed to `.txt` is silently skipped.
+
+**The general rule:** any command whose behaviour depends on `node_modules` —
+prettier, eslint, tsc, jest — answers a different question inside a worktree that has
+none. Either install into the worktree or bring the file to the tooling.
+
+---
+
+## Known flakes
+
+Tests that have failed without a known cause. An entry here is a debt, not a
+dismissal: it records the one observation precisely enough that the second one can
+be recognised as a pattern rather than re-explained away.
+
+### `apps/field` — `doctors.tsx` › "renders a denial as a denial, never as an empty list"
+
+**The one failure, 31 August 2026.** It failed on the first run of
+`pnpm --filter @fieldforce/field test` immediately after `apps/field/jest.setup.cjs`
+was added and `setupFiles` was wired into `apps/field/jest.config.cjs` — the run in
+which jest first loaded a setup file that had not existed on the previous run. Result
+that run: `Test Suites: 1 failed, 5 passed, 6 total`, `Tests: 1 failed, 23 passed, 24
+total`, this test the only failure.
+
+**The four outcomes since.** `test:render` alone: passed, 24/24. Then three
+consecutive full `test` runs (vitest + jest): passed, 44 + 24 each time. No change to
+the test or to the component between the failure and the four passes.
+
+**Hypothesis, and it is only that:** jest's transform cache was stale for that one
+run — the setup file changed what the module registry looks like, and the failing run
+was the one that straddled the change. Nothing was measured. The failure output was
+not captured before the re-run, which is itself the mistake: a flake with no captured
+output is a flake that cannot be diagnosed later.
+
+> If this test fails once more under any conditions, it is investigated as a real
+> race and not re-run. A test asserting a denial is enforced, that passes
+> intermittently, is worse than no test.
+
+### JDK 25 fails the Android native build, and the error names a warning
+
+`./gradlew assembleDebug` dies on `:react-native-worklets:configureCMakeDebug` with:
+
+```
+> WARNING: A restricted method in java.lang.System has been called
+```
+
+A *warning* reported as the thing that went wrong. JDK 24+ restricts native access
+(JEP 472) and emits that line on stderr; the CMake configure task treats non-empty
+stderr as failure. The machine here has JDK 25 as the only JDK — Android Studio's
+bundled JBR is 25 too, so `JAVA_HOME` does not help.
+
+**Setting `org.gradle.jvmargs` in `gradle.properties` does NOT fix it.** The warning
+comes from a forked worker, not the Gradle JVM, and the property does not reach it.
+What works is the environment variable, which every JVM inherits:
+
+```powershell
+$env:JAVA_TOOL_OPTIONS="--enable-native-access=ALL-UNNAMED"
+./gradlew assembleDebug
+```
+
+Build time after that: **6m 40s** cold, producing a 230MB debug APK.
+
+`apps/field/android/` is gitignored and regenerated by `expo prebuild`, so any fix
+written into `gradle.properties` is erased by the next prebuild. The environment
+variable is the durable form, which is why it is recorded here rather than in a file.

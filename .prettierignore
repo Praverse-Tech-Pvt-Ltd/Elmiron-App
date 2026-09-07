@@ -19,3 +19,15 @@ CLAUDE.md
 # Agent-local settings. Git-ignored globally, so it never reaches CI — but Prettier
 # still saw it and failed `format:check` locally on a file nobody can commit.
 .claude/
+
+# Append-only, with frozen sections. `prettier --write` reformatted a frozen table
+# once already. The CI guard in .github/workflows/ci.yml catches a deletion; this
+# stops the formatter from making one in the first place.
+PROJECT-OVERVIEW.md
+
+
+# The committed design documents. These are the specification of record, exported
+# from Claude Design — reformatting them rewrites the thing screens are built
+# against. `support.js` is deliberately absent (see the commit that added them);
+# the markup is the spec, the inert press states are not.
+docs/design/

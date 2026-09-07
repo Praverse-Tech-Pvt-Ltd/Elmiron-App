@@ -21,7 +21,7 @@ services/api/supabase/.branches/
 .claude/skills/
 
 # .ai-collab/ and handoff.md are tracked as of BE-W8. BE-W6 originally kept them
-# untracked on staleness grounds; that decision is reversed by explicit request —
+# untracked on staleness grounds; that decision is reversed by explicit request â€”
 # they are now committed and expected to be updated regularly, not treated as a
 # point-in-time snapshot. PROJECT-OVERVIEW.md and docs/gotchas.md remain the
 # durable, cumulative record; these are the working notes alongside them.
@@ -32,11 +32,56 @@ services/api/supabase/.branches/
 #
 # graphify's own docs recommend committing this so the team shares one map. We do
 # not, for two reasons: it is ~4 MB of mostly graph.html and cache/, and it is a
-# derived artefact that goes stale the moment a migration lands — the same
+# derived artefact that goes stale the moment a migration lands â€” the same
 # staleness argument that keeps handoff.md out of git above.
 #
 # Requires `pip install "graphifyy[sql]"` first. The base package bundles 36
 # tree-sitter grammars, SQL is not one of them, and without it every .sql file
-# contributes nothing — which on this repo silently omits the entire RLS
+# contributes nothing â€” which on this repo silently omits the entire RLS
 # enforcement layer while still producing a confident-looking graph.
 graphify-out/
+
+# Expo generated native directories
+apps/field/android/
+apps/field/ios/
+
+# Root-anchored native directories. `apps/field/android/` above is a path from the
+# repo root and does NOT match a directory called `android/` at the root — an
+# `expo prebuild` / `run:android` invoked from the wrong working directory produced
+# exactly that on 27 August and it sat untracked and visible to `git add -A`.
+/android/
+/ios/
+
+# The Expo config that same misdirected prebuild generated at the root, with the
+# default `com.anonymous.*` package. The real app config is apps/field/app.json.
+/app.json
+
+# Build and bundler logs written next to whatever directory the command ran in.
+# Named patterns rather than `*.txt`, which would swallow real files later.
+build_*.txt
+current_build*.txt
+root_build*.txt
+metro-*.txt
+.gradle_home/
+
+# Screenshots captured while driving the emulator by hand.
+screen*.png
+
+# Expo rewrites this on `expo start`, replacing whatever is in it with its own
+# "should not be edited" note — which is why the working tree was never clean. It was
+# committed on the theory that `pnpm typecheck` needs it on a fresh clone; that is no
+# longer true (verified 31 Aug: the field typecheck passes with the file absent), so
+# it is untracked rather than fought with.
+apps/field/expo-env.d.ts
+
+# Expo regenerates this on prebuild. Its only entry is `expo-env.d.ts`, which the root
+# already ignores above — verified by removing the file and re-running check-ignore,
+# which still reported this .gitignore's rule as redundant. Committing it would invite
+# the same churn expo-env.d.ts caused: Expo rewrites it, the tree goes dirty, nobody
+# edited anything.
+apps/field/.gitignore
+
+# Offline backups. A bundle is the whole repository in one file; committing one into
+# the repository it backs up is circular and would double its size on every refresh.
+*.bundle
+

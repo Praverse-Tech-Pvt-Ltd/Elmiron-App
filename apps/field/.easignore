@@ -1,0 +1,18 @@
+# EAS uploads the project to Expo's build servers. That is acceptable only because
+# nothing secret travels with it, so the exclusion is stated here explicitly rather
+# than inherited from .gitignore and assumed.
+#
+# The repo root .env holds a Supabase service-role key and production connection
+# strings. It is gitignored, and gitignored files are already excluded from the EAS
+# upload — this file makes that a stated rule rather than a side effect, because the
+# cost of being wrong once is a leaked production credential.
+.env
+.env.*
+!.env.example
+
+# Nothing in these is needed to build the app.
+**/node_modules
+**/.turbo
+**/dist
+services/api
+docs

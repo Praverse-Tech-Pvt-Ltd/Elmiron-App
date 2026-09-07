@@ -70,4 +70,4 @@ jobs:
           # This is a secondary "has the worker gone completely silent" signal --
           # see check-purge-health.mjs and 20260817000200_purge_backlog_stall_detection.sql.
           PURGE_RUN_SILENCE_HOURS: '12'
-        run: pnpm --filter @elmiron/api check:purge-health
+        run: pnpm --filter @fieldforce/api check:purge-health

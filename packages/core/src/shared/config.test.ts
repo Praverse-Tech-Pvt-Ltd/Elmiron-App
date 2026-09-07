@@ -7,14 +7,14 @@ const VALID = {
   APP_JWT_AUDIENCE: 'authenticated',
   APP_SITE_URL: 'http://127.0.0.1:3000',
   APP_ADDITIONAL_REDIRECT_URLS: 'http://127.0.0.1:3000, https://127.0.0.1:3000',
-  APP_DEEP_LINK_SCHEME: 'elmironmr',
+  APP_DEEP_LINK_SCHEME: 'com.praversetech.fieldforce',
 };
 
 describe('loadAppConfig', () => {
   it('loads every value from the environment', () => {
     const config = loadAppConfig(VALID);
     expect(config.jwtAudience).toBe('authenticated');
-    expect(config.deepLinkScheme).toBe('elmironmr');
+    expect(config.deepLinkScheme).toBe('com.praversetech.fieldforce');
     expect(config.additionalRedirectUrls).toHaveLength(2);
   });
 

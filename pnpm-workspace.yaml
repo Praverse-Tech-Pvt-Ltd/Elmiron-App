@@ -1,3 +1,4 @@
+nodeLinker: hoisted
 storeDir: .pnpm-store
 
 packages:

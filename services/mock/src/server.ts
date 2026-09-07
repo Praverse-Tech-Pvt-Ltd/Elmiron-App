@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
-import { API_PATHS } from '@elmiron/core';
-import type { ApiError, ApiErrorCode } from '@elmiron/core';
+import { API_PATHS } from '@fieldforce/core';
+import type { ApiError, ApiErrorCode } from '@fieldforce/core';
 import * as fx from './fixtures.js';
 
 /**

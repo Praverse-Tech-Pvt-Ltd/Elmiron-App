@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Field Force",
+    "slug": "field-force",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "com.praversetech.fieldforce",
+    "platforms": ["android"],
+    "android": {
+      "package": "com.praversetech.fieldforce"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Elmiron Field records a consultation only after the doctor agrees on screen, and your own voice notes when you hold the button."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

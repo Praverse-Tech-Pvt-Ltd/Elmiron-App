@@ -39,7 +39,7 @@ import { Client } from 'pg';
  * feature of the audit log rather than a hole in it. organisations has no audit
  * trigger, so organisation inserts write nothing to audit_log.
  *
- * Run: pnpm --filter @elmiron/api seed:reference -- --data path/to/reference.json --apply --db-url "<pooler url>"
+ * Run: pnpm --filter @fieldforce/api seed:reference -- --data path/to/reference.json --apply --db-url "<pooler url>"
  */
 
 const NAMESPACE = 'elmiron-reference-data-seed';

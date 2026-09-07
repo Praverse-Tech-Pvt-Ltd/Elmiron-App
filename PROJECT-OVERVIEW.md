@@ -2475,3 +2475,1983 @@ $ pnpm db:reset && pnpm --filter @elmiron/api test
     `visible_territory_ids()` run a recursive CTE per policy evaluation. Both carry a
     5s `statement_timeout` and neither has been measured against a realistic territory
     tree. Worth a look before the field APIs land in week 3.
+
+---
+
+### FE-W1 — Foundations (14 August 2026)
+
+First frontend sprint. `apps/field` and `packages/ui-tokens` were placeholders from
+BE-W1 until this one; `packages/ui` did not exist.
+
+#### FE-G1 — UNMET, and not dressed up
+
+**No physical Android device was available.** The gate is "a signed-in APK on a
+physical Android device" and it has not been met. No emulator run is offered in its
+place.
+
+What was proven instead, and it is less: the app **bundles**. `expo export
+--platform android` produces a 3.8 MB Hermes bundle, which exercises Metro,
+workspace resolution, the three `@elmiron/*` imports and the `EXPO_PUBLIC_*`
+inlining. It does not exercise signing, installation, the Android runtime, or
+sign-in on a device.
+
+Also outstanding for the APK: `eas login`, which needs credentials only the
+developer can enter.
+
+#### The build path changed mid-sprint
+
+The plan chose local Gradle. The machine has no JDK, no Android SDK and no `adb`,
+so installing that toolchain _was_ the risk local Gradle was chosen to avoid. The
+reviewer reversed it: **EAS Build for FE-W1**, local Gradle from around FE-W3 when
+native config changes get frequent.
+
+Free tier, verified at expo.dev/pricing on 14 August 2026: **15 Android builds a
+month, low-priority queue with 90+ minute waits at peak, 1 concurrency.** Enough for
+this sprint, and a reason not to stay on it once rebuilds get frequent.
+
+#### `packages/ui-tokens` — a validator and a control, not a palette
+
+**No brand palette was produced, deliberately.** `docs/design-plan.md` and the brand
+guideline were written outside the repo and never committed, so the only brand facts
+available are two contrast ratios. Inventing colours to fit them and documenting the
+assumption would produce something that looks authoritative and is wrong in a way
+nobody catches until the client sees it. The reviewer's instruction was explicit.
+
+What exists instead:
+
+| Piece                    | What it is                                                                                                                                                           |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contrast.ts`            | WCAG 2.2 validator — real relative luminance, the 0.03928 linearisation cut-off the criterion is written against, ratios compared unrounded                          |
+| `palette.ts`             | Neutral placeholder values, marked placeholder in the constant name, in `tokens.status`, and in the file header. **The one file to replace when the brand arrives.** |
+| `tokens.ts`              | Token structure. Every colour is a reference into the palette, so a brand swap touches one file                                                                      |
+| `brand-specification.ts` | What the guideline specifies, with colour values left `null`                                                                                                         |
+
+**The brand finding is a control, not a note.** `brand-specification.test.ts` runs
+the recorded ratios through the validator and asserts they fail:
+
+| Pair                         | Recorded   | AA needs | Verdict                                                                                       |
+| ---------------------------- | ---------- | -------- | --------------------------------------------------------------------------------------------- |
+| Primary button label on fill | **2.54:1** | 4.5:1    | Fails AA and AAA, at every text size — 2.54 is below even the 3:1 non-text floor              |
+| Badge label on fill          | **4.33:1** | 4.5:1    | Fails AA for normal text. Clears the 3:1 large-text floor, which is how it gets waved through |
+
+The colour fields being `null` is load-bearing: the test that compares a computed
+ratio against the recorded one is vacuous today and activates the moment somebody
+fills them in. Either the finding is confirmed against real colours, or the recorded
+number was wrong and the build says so.
+
+**Placeholder pairs, measured** — every pair with a WCAG obligation is asserted on
+every test run, so a brand swap that introduces an inaccessible pair fails here
+rather than reaching a screen:
+
+```
+text      17.40:1  min 4.5  PASS   primary text on background
+text      15.96:1  min 4.5  PASS   primary text on surface
+text       8.86:1  min 4.5  PASS   secondary text on background
+text       8.12:1  min 4.5  PASS   secondary text on surface
+text       6.42:1  min 4.5  PASS   primary button label on primary button fill
+non-text   6.42:1  min 3    PASS   primary button fill against the page
+text       6.53:1  min 4.5  PASS   critical text on background
+```
+
+38 tests. **Mutation-tested**, per the convention: linearisation removed → 8 failed;
+AA threshold lowered 4.5 → 2.5 → 8 failed; a colour literal pasted into `tokens.ts`
+instead of a palette reference → 3 failed. Restored: 38/38.
+
+#### The extraction rule — strengthened past what was asked, on purpose
+
+The ask was a lint rule that fails the build when `apps/field` **defines** a
+component. What is enforced instead: **`apps/field` cannot import React Native's
+visual primitives at all.** `View`, `Text`, `Pressable`, `StyleSheet`, `TextInput`,
+`FlatList` and the rest are restricted imports there. Non-visual APIs — `Platform`,
+`AppState`, `Linking` — stay available, and route files still work because composing
+`@elmiron/ui` needs none of the restricted names.
+
+This is the same move as _"there is no upload endpoint without consent, not a
+disabled button"_: remove the capability rather than detect the symptom. A naming or
+file-location rule detects a component after someone writes it; this one means the
+materials are not in the building.
+
+**Recorded here as a deliberate strengthening so it does not get "simplified" back
+into a convention later.**
+
+Proof it fails the build:
+
+```
+apps/field/src/ExtractionRuleProbe.tsx
+  1:10  error  'StyleSheet' import from 'react-native' is restricted...
+  1:22  error  'Text' import from 'react-native' is restricted...
+  1:28  error  'View' import from 'react-native' is restricted...
+✖ 3 problems (3 errors, 0 warnings)
+```
+
+Probe removed, `pnpm --filter @elmiron/field lint` exits 0.
+
+#### A guard removed is a guard replaced — `import/no-extraneous-dependencies`
+
+React Native's package graph is not pnpm-clean: `expo-router` imports
+`@expo/metro-runtime` without declaring it, which imports `whatwg-fetch` without
+declaring it, and so on. The first instinct was `nodeLinker: hoisted` across the
+workspace, which works — and silently deletes the install-time guarantee that a
+package cannot import what it has not declared, for `core`, `mock` and `api` too, to
+accommodate one app.
+
+**That turned out to be unnecessary.** The real cause was
+`disableHierarchicalLookup` in this repo's own `metro.config.cjs`, copied from
+Expo's monorepo guide, which assumes npm or yarn. Under pnpm it makes nested
+dependencies unreachable. Removed, the app bundles under pnpm's **default isolated
+linker with no hoisting configured at all** — `pnpm-workspace.yaml` is unchanged
+from `origin/main`.
+
+`eslint-plugin-import`'s `no-extraneous-dependencies` was added regardless. The
+install-time property now also holds at lint time, in CI, for every workspace — so
+it survives the next time somebody is tempted to hoist their way out of a resolution
+error. Proven: an undeclared `import prettier` in `packages/core` fails lint; removed,
+exit 0.
+
+#### The four `APP_*` values
+
+`loadAppConfig()` has existed since BE-W1 with no caller. This app is the first, and
+it throws on absence rather than defaulting.
+
+| Value                          | Set to                      | Why                                                                                                                                                                                                                   |
+| ------------------------------ | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `APP_JWT_AUDIENCE`             | `authenticated`             | What Supabase puts in `aud`. Matches `config.test.ts` and the local stack                                                                                                                                             |
+| `APP_SITE_URL`                 | `http://127.0.0.1:3000`     | The console's dev origin. Mobile does not use it; it is required and must be a real URL                                                                                                                               |
+| `APP_ADDITIONAL_REDIRECT_URLS` | `elmironmr://auth-callback` | The only redirect an Android app needs. The schema permits an empty list for mobile-only; a real deep link is better than an empty one because it is the value that has to be right when auth callbacks land in FE-W4 |
+| `APP_DEEP_LINK_SCHEME`         | `elmironmr`                 | Matches `scheme` in `app.json` and the example in `config.test.ts`. These two must agree or the callback silently fails                                                                                               |
+
+All four are also mirrored as `EXPO_PUBLIC_APP_*`, because Expo only inlines that
+prefix. Every one is public by nature — an audience, a redirect target and a URL
+scheme are readable in any APK regardless. **The publishable key is the only Supabase
+key that may carry the prefix.**
+
+#### Production credentials left the repository
+
+`.env` held a service-role key, three remote connection strings and a Supabase
+access token, and `SUPABASE_URL`, `SUPABASE_JWKS_URL` and `EXPO_PUBLIC_SUPABASE_URL`
+all pointed at the deployed project — including the one the mobile app reads, while
+the sprint brief says sign-in runs against the **local** stack.
+
+Nine values moved to `~/.elmiron-prod.env`, outside the tree. The repo `.env` now
+holds localhost and public constants only; a check confirms no remaining value is
+anything else. Loading production is now a deliberate act, documented in the file
+header and in `docs/gotchas.md`.
+
+This replaces a denylist with the removal of a class. `.easignore` was added too —
+EAS uploads the project directory, and the reasoning that made that acceptable
+("`apps/field` carries no secrets") depended on a gitignore rule holding.
+
+#### What was built in `apps/field`
+
+Expo SDK 57, React 19.2.3, React Native 0.86.2, expo-router, Android only — no iOS
+key in `app.json`, no `react-dom`, no `react-native-web`. The default template was
+not used: it ships `@expo/ui`, `expo-glass-effect`, `expo-symbols` and a
+`src/components` directory, three of which are iOS-flavoured and the last of which
+violates the extraction rule on the first commit.
+
+Routes: `_layout` (session provider), `index` (session-restoring redirect),
+`sign-in`, `home` (role-aware), `doctors`. `src/` holds config, the Supabase client,
+the API client and claim reading — no components.
+
+**The role is read, not inferred.** `src/claims.ts` decodes `app_role`,
+`app_territory_id` and `app_is_active` from the token the auth hook mints, and throws
+if they are absent rather than falling back to a least-privileged view — a token
+without them means the app is pointed at a project where the hook is not enabled,
+which should be loud. It does not verify the signature, and says so: the server does
+that, and these claims decide which rows render, not what anyone may do.
+
+**The non-happy path is wired first.** `app/doctors.tsx` runs against the mock's
+`denied` scenario, and renders a denial with its own state — never an empty list.
+An empty list is what a client-side filter looks like, and the client never decides
+what an MR may see.
+
+#### Verification
+
+All against the local stack, Docker up:
+
+```
+pnpm run build          Tasks: 3 successful
+pnpm run typecheck      Tasks: 9 successful
+pnpm run lint           Tasks: 7 successful
+pnpm run format:check   All matched files use Prettier code style!
+
+@elmiron/ui-tokens   38 passed (38)
+@elmiron/core        21 passed (21)
+@elmiron/mock        40 passed (40)
+@elmiron/api        333 passed (333), 13 files    <- passed, not skipped
+verify:rollbacks     all 19 reversed, public schema empty; restored with db:reset
+```
+
+The `api` number matters here specifically: this sprint changed how packages
+resolve, and `api` is the workspace with the most to lose. It was run with the stack
+up so the result reads _passed_ rather than _skipped_ — the distinction
+`docs/gotchas.md` warns about.
+
+#### A note for anyone bisecting this sprint
+
+FE-W1 landed as five commits so a revert can be surgical. **`pnpm-lock.yaml` is
+entirely in the first of them**, because one lockfile cannot be split across commits
+that each add dependencies.
+
+The consequence: checking out an intermediate commit and running
+`pnpm install --frozen-lockfile` fails, because the lockfile there describes
+dependencies the `package.json` files at that commit do not yet declare. **That is
+not a broken tree.** Only the final state of the series is installable. Reverting any
+single commit works normally, which is what the split was for.
+
+#### Deliberately not built
+
+| Left out                                                        | Why                                                                  |
+| --------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Any feature screen — check-in, consent, recording, call reports | FE-W2 onward                                                         |
+| Anything showing a transcript, analysis or AI output            | Blocked, and may be cancelled outright                               |
+| Any ranking, score, rank, percentile or grade                   | Regulatory line, not a preference                                    |
+| Anything in `apps/console`                                      | FE-W6                                                                |
+| Any iOS configuration                                           | Android only, permanently                                            |
+| A brand palette                                                 | No committed source. See above                                       |
+| `graphify-out/`                                                 | Optional derived artifact; the code and migrations are the authority |
+
+#### What I think is wrong, or worth arguing with
+
+**1. `apps/field/tsconfig.json` cannot extend the repo base, and that is a real
+divergence.** The base sets `module: NodeNext`, which requires `.js` extensions on
+relative imports; Metro does not resolve them. The app extends `expo/tsconfig.base`
+and repeats every strictness flag explicitly. One flag is genuinely dropped:
+`noPropertyAccessFromIndexSignature`, because Expo inlines env values by rewriting
+`process.env.EXPO_PUBLIC_X` and only matches dot access — the bracket access that
+rule demands yields `undefined` in a release bundle while working in development.
+Dropping a strictness flag to satisfy a bundler is worth someone else's eyes.
+
+**2. The extraction rule has one hole I could not close cheaply.** `import * as RN
+from 'react-native'` is not reliably caught by `no-restricted-imports` with
+`importNames`. Anyone deliberately routing around the rule can. It stops the
+accident, not the intent — which is the honest description of most lint rules, but
+worth stating rather than implying the boundary is airtight.
+
+**3. `com.praversetech.elmironmr` is a guess.** The Android application id is
+permanent once published to Play and I derived it from the GitHub organisation
+without being told. Change it before the first upload if it is wrong; afterwards it
+cannot be changed at all.
+
+**4. The `declined`-is-not-an-error rule has no test yet.** `Banner` documents that
+`critical` is never for a declined consent, and `ColorTokens` repeats it — both are
+comments. The consent screen is FE-W4 and the real control belongs with it, but a
+comment is not a control and should not be mistaken for one in the meantime.
+
+---
+
+### FE-W2 (part) — the offline queue state machine (14 August 2026)
+
+**Advanced, not closed. FE-G2 is UNMET** — the gate is a full simulated day in
+airplane mode on a real device, syncing clean afterwards, and there is no device and
+no development build. Nothing below is offered as meeting it.
+
+This exists because FE-W2 is the one sprint that could proceed while fourteen items
+wait on a human. It is also, by the sprint order's own design, work that survives
+either answer to contract I3 — the AI-dependent screens are FE-W9 onward precisely so
+that a cut AI layer deletes nothing built before it.
+
+#### What was built, and the boundary that made it safe to build early
+
+Writing a queue before the persistence layer exists risks encoding assumptions that
+PowerSync then contradicts — discovered in FE-W3 with the state machine wired into
+four screens. So the split is:
+
+| Built now                                                                | Deliberately not built          |
+| ------------------------------------------------------------------------ | ------------------------------- |
+| `sync/reducer.ts` — pure `(state, event) => state`                       | The PowerSync local store       |
+| `sync/events.ts` — every transition as data                              | Anything that renders the queue |
+| `sync/explanation.ts` — rejection code → what the MR is shown and can do | Any native-module code          |
+| `sync/store.ts` — the **interface** PowerSync will implement             | Its implementation              |
+
+The reducer decides every transition from the contract in
+`packages/core/src/field/sync.ts` alone. A test asserts it — the reducer's source is
+checked for any mention of storage, so if a transition ever needs to know where rows
+live, that test fails rather than the boundary quietly eroding.
+
+`store.ts` is an interface with no implementor, stated as such in the file. Writing
+the adapter now would mean shipping code that has never been executed, which this
+project has already caught twice — `close_stale_upload_sessions()` and a purge worker
+nothing ran. Catching the third before it happens rather than after.
+
+#### The three rules that are easy to get backwards
+
+1. **`duplicate` is success.** The item id is the server's idempotency key, so
+   retrying something already accepted returns `duplicate`. Rendering that as failure
+   puts a red row in front of an MR whose work landed perfectly. Accepted and
+   duplicate are deliberately not distinguished on screen.
+2. **A failed attempt decides nothing.** No verdict means the server never saw it.
+   The item returns to `queued` — never to `failed`, never dropped. A test drives
+   twenty consecutive failed pushes across a simulated offline day and asserts all
+   three items are still queued and countable.
+3. **A rejection is not a toast.** It persists in the state until resolved or
+   reinstated. A rejection the MR did not happen to be looking at is a lost day.
+
+Two further properties worth naming: the reducer refuses a rejection that arrives
+with no `rejectionCode`, rather than showing an unexplained failure; and `syncedAt`
+is stamped from the server's `receivedAt`, never the device clock. The one derived
+field that _is_ a device timestamp is named `oldestUnsyncedClientCreatedAt` so its
+provenance cannot be mistaken at the call site.
+
+#### The MR-readable sentence is Backend's, verbatim
+
+`explanation.ts` passes the server's sentence through unchanged and **never
+fabricates prose for a refusal**. When the server sends none, the fallback says the
+app does not have the reason — which is true — rather than guessing at one. A test
+asserts the fallback names no cause: not shift, geofence, territory, hours or
+location. `outside_shift_window` is somebody else's misconfiguration and
+`outside_geofence` is about where the MR stood; showing the wrong one to someone who
+genuinely did the work is how trust in the app dies.
+
+The one judgement that does belong to the client is what the MR can do next — retry
+or escalate — and a test iterates every code in `SyncRejectionCodeSchema`, so a new
+code added by Backend fails here rather than rendering an undefined action.
+
+#### Dead letters
+
+Reinstatement returns an item to the queue and records who did it and why. The
+reducer **throws on an empty or whitespace reason**: attribution plus a mandatory
+reason is the entire control, since there is deliberately no fault taxonomy behind it
+— at the point of rejection a wrong shift window and an MR error are
+indistinguishable. The original rejection is kept after reversal; erasing it would
+erase why somebody had to intervene.
+
+#### Verification
+
+36 tests, `pnpm --filter @elmiron/field test`. **Mutation-tested**, per the
+convention:
+
+| Mutation                                 | Result   |
+| ---------------------------------------- | -------- |
+| A failed attempt marks the item `failed` | 2 failed |
+| Enqueue de-duplication removed           | 1 failed |
+| `syncedAt` taken from the device clock   | 1 failed |
+| Reinstatement reason no longer required  | 2 failed |
+| The fallback invents a cause             | 1 failed |
+
+Restored: 36/36.
+
+#### Known gap, flagged rather than left
+
+**Nothing calls the reducer yet.** It is wired to a screen in FE-W3, and until then
+its only caller is its test suite. That is the shape the project has twice been
+burned by, so it is recorded here rather than discovered later. The distinction from
+those two cases: this code _is_ executed, on every test run, and its behaviour is
+asserted — what is missing is a production caller, not verification.
+
+#### Dead-lettering is the server''s. The client only ever learns of it.
+
+Asked directly during review, and worth stating because it is the kind of thing
+someone improves later by adding a local retry limit.
+
+**The client never dead-letters an item on its own.** `deadLettered` is set from one
+place only — a server verdict whose status is `dead_lettered`. The reducer counts
+attempts but compares that count to nothing; there is no local ceiling and no
+threshold to tune.
+
+The reason is that the server holds the attempt budget and the forgiveness baseline.
+If the client could decide an item was dead locally, the two systems could disagree
+about whether an MR''s work is recoverable — and the MR is looking at the client''s
+answer. The client renders what it is told.
+
+Two tests pin it: fifty consecutive failed attempts leave the item `queued` with
+nothing dead-lettered and nothing rejected; and a verdict carrying
+`attemptsRemaining: 0` still produces no dead letter unless the status itself says
+`dead_lettered`, so the client cannot reinterpret a number into a verdict.
+
+Mutation-tested — a local ceiling that dead-letters after three attempts fails 2 of 40.
+
+#### The storage boundary is asserted on the import list, not on a substring
+
+The first version scanned the reducer''s source for `store`, `persist`, `sqlite` and
+`powersync`. That catches the obvious violation and misses an aliased import, a
+callback that does IO, or a helper module persisting on the reducer''s behalf — a
+substring scan standing in for an architectural property.
+
+The assertion is now on the **import list**, which is enumerable and cannot be
+aliased around: every import in `reducer.ts` must be `import type`, and the set of
+sources must be exactly `@elmiron/core` and `./events`. Side-effect imports are
+asserted absent separately, since `import ''./x''` has no bindings to inspect. A file
+that imports nothing but types cannot do IO at all.
+
+The substring scan is kept as a secondary check — it catches a storage-shaped local
+helper that an import list would not — and is labelled as the weaker of the two.
+
+Mutation-tested: a value import added under an alias fails 1 of 40.
+
+#### Terminology: checks are not gates
+
+Two different things were being called the same word, three lines apart, and that is
+how a reader walks away with the wrong picture.
+
+- **Checks** (or guards) are the script-level ones: `build`, `typecheck`, `lint`,
+  `format:check`, `test`. "9/9 checks" means the turbo tasks passed.
+- **Gates** are **FE-G1 … FE-G5** and their backend equivalents. They are
+  demonstrations on real hardware or against real data, and no number of passing
+  checks substitutes for one.
+
+**As of FE-W2, every check passes and no frontend gate has passed.** FE-G1 (a
+signed-in APK on a physical Android device) and FE-G2 (a full simulated day in
+airplane mode, syncing clean) are both open. FE-W1 and FE-W2 are therefore both open
+sprints, and 472 passing tests do not change that.
+
+#### Where the working notes live
+
+`.ai-collab/decisions.md` holds decisions not yet written up here, plus the
+FE-W8-blocking items and the standing rule for the current blocked period. **This
+file is the durable record; if the two disagree, this one is right.** The pointer is
+here so the two do not quietly become parallel sources of truth.
+
+#### Known residual — a function can ride in on `payload`
+
+Written up rather than guarded, deliberately. Raised in review of FE-W2 and recorded
+here before the next sprint so it is a known limit rather than a surprise.
+
+**What the hole is.** `SyncQueueItem.payload` is
+`z.record(z.string(), z.unknown())`. The import-list assertion proves `reducer.ts`
+imports nothing but types, and every type in its surface — `SyncQueueItem`,
+`ServerVerdict`, `SyncEvent`, `SyncItemReinstatement`, `SyncQueueState` — declares no
+function members anywhere. But an import list constrains what a file _pulls in_, not
+what is _handed to it_. At the type level `unknown` is not a function, so a
+JSON-shape assertion over these types passes while a function could still arrive
+inside `payload` at runtime. Purity would then live at the call site rather than in
+the file, and the guard cannot tell the difference.
+
+**Why no guard was added.** A type-level assertion would pass today and would still
+pass with a function in `payload`, because `unknown` satisfies it — so it would read
+as closing the hole while closing nothing. A runtime check walking every payload for
+function values would cost work on every transition to defend against a shape the
+reducer never dereferences. Both are worse than an accurate note.
+
+**What actually closes it.** Narrowing the contract: `payload` typed as a recursive
+JSON value in `packages/core` rather than `unknown`. That is Backend's file and a
+contract change, so it is a request rather than something Frontend does — worth
+raising if a payload ever needs to be inspected rather than carried.
+
+**The specific change that makes this dangerous.** Today the reducer only ever
+_carries_ `payload` — it is copied between states and never read into, never
+destructured, never called. **The moment any code path begins invoking or
+dereferencing something out of `payload`, this stops being a residual and becomes a
+live arbitrary-execution path**, and the import-list guard will still be green while
+it happens. If that change is ever proposed, narrow the contract first.
+
+---
+
+### FE-R1 — Package identifier rename (17 August 2026)
+
+Executes the ruling in `docs/brand-identifier-decision.md`. Commit **`f34ceef`**,
+53 files. Push #2 of four, run before the harness so harness tests are not written
+against a namespace that changes a week later.
+
+**Why now:** ELMIRON is a third party's registered pharmaceutical trademark, and the
+package id and URL scheme become permanent and public the moment anything is
+published. Nothing is published, no deep link exists in the wild, no user has the app
+installed — this is the cheapest it will ever be.
+
+#### The mapping
+
+| Item                    | From                         | To                                                        |
+| ----------------------- | ---------------------------- | --------------------------------------------------------- |
+| Android `applicationId` | `com.praversetech.elmironmr` | `com.praversetech.fieldforce`                             |
+| Deep link scheme        | `elmironmr`                  | `praversefieldforce`                                      |
+| npm workspace scope     | `@elmiron/*` (7 packages)    | `@fieldforce/*`                                           |
+| Display name            | `"Elmiron MR"`, hardcoded    | configuration, default `"Field Force"`                    |
+| Expo slug               | `elmiron-field`              | `field-force` — **beyond the three specified, see below** |
+
+#### The two choices I was asked to propose
+
+**Deep link scheme — `praversefieldforce`.** Neutral, carries no drug or brand name,
+and vendor-prefixed: custom schemes are first-come-first-served on a device, so a bare
+`fieldforce` is a plausible collision with any other field-force app the MR installs.
+It matches option B of the approved brief, so it introduces no new decision, and it
+satisfies the scheme regex in `loadAppConfig` (`^[a-z][a-z0-9+.-]*$`).
+
+_Considered and not chosen:_ reverse-DNS (`com.praversetech.fieldforce` as the scheme
+itself), which is the lowest-collision form and current best practice. Rejected only
+because it diverges from the approved brief and is more verbose in every redirect
+URL. **If the reviewer prefers it, it is a one-token change and still free.**
+
+**npm scope — `@fieldforce`.** Consistent with the package id, names the product
+rather than the brand. Registry availability is irrelevant: all seven packages are
+`"private": true` and are never published.
+
+_Flagged:_ if `packages/core` is ever shared with the patient app, `@fieldforce/core`
+will be slightly wrong for it — a patient app is not a field force. Not solved here,
+and not worth a third name today.
+
+#### What changed, and what deliberately did not
+
+The sweep keyed on **three tokens, each of which is always an identifier and never
+prose about the drug**: `@elmiron/` (with the slash) is always the npm scope;
+`com.praversetech.elmironmr` is the package id; `elmironmr` is the scheme. Bare
+"Elmiron" is the drug name and was not touched.
+
+| Area                 | Files  | Replacements |
+| -------------------- | ------ | ------------ |
+| `apps/`              | 18     | 34           |
+| `packages/`          | 16     | 21           |
+| `services/`          | 11     | 17           |
+| `.github/` workflows | 3      | 7            |
+| `.env.example`       | 1      | 6            |
+| `eslint.config.mjs`  | 1      | 4            |
+| root `package.json`  | 1      | 2            |
+| **Total**            | **51** | **91**       |
+
+Plus `app.json`, the new `app.config.ts` and the regenerated lockfile — 53 in the
+commit.
+
+**17 documentation files still mention Elmiron, deliberately.** Naming a drug in
+documentation that describes the drug is accurate use; putting a third party's mark
+in a package id is not. Those change only when O2 itself resolves — which brand,
+which molecule, which legal entity — and that decision has not been made.
+
+#### Verification — this replaced CI, which has still never run
+
+| Check                       | Result                                               |
+| --------------------------- | ---------------------------------------------------- |
+| `pnpm run build`            | 3/3                                                  |
+| `pnpm run typecheck`        | 9/9                                                  |
+| `pnpm run lint`             | 7/7                                                  |
+| `pnpm format:check`         | clean                                                |
+| `expo config --type public` | resolves; `name` comes from `app.config.ts`          |
+| `loadAppConfig()`           | does not throw; `deepLinkScheme: praversefieldforce` |
+
+**Test counts, before → after — identical, and `api` _passed_ rather than skipped:**
+
+| Suite       | Before  | After   |
+| ----------- | ------- | ------- |
+| `ui-tokens` | 38      | 38      |
+| `core`      | 21      | 21      |
+| `field`     | 40      | 40      |
+| `mock`      | 40      | 40      |
+| `api`       | 333     | 333     |
+| **Total**   | **472** | **472** |
+
+**Zero-reference searches.** Tracked files, documentation excluded (`docs/`,
+`.ai-collab/`, `*.md`, `*.html`):
+
+```
+--- token: com\.praversetech\.elmironmr     matches: 0
+--- token: elmironmr                        matches: 0
+--- token: @elmiron/                         matches: 0
+
+untracked env files:  .env  0 hits    apps/field/.env  0 hits
+
+package id : "package": "com.praversetech.fieldforce"
+scheme     : "scheme": "praversefieldforce"
+scopes     : @fieldforce/{api,console,core,field,mock,ui,ui-tokens}
+```
+
+The 17 remaining documentation matches are **excluded by design, not missed** — the
+search reports them separately for exactly that reason.
+
+#### Backend request — the Supabase redirect allow-list
+
+**Requested, not changed.** `services/api` is read-only to Frontend.
+
+`services/api/supabase/config.toml` currently has:
+
+```toml
+additional_redirect_urls = ["http://127.0.0.1:3000", "https://127.0.0.1:3000"]
+```
+
+**Exact value to add:** `praversefieldforce://auth-callback`
+
+An important detail: **no deep-link scheme was ever in that list**, old or new. So the
+rename did not break this — it surfaced a pre-existing gap. Nothing is broken today
+because FE-W1 sign-in uses the password grant, which involves no redirect. It bites at
+the first magic-link, OTP or OAuth flow, and the failure will look like an auth
+problem rather than a configuration one. Any hosted project needs the same addition.
+
+#### Reversal path
+
+`git revert f34ceef` restores all 53 tracked files. **Three things it does not do:**
+
+1. **`pnpm install` must be re-run.** The lockfile is in the commit and reverts with
+   it, but `node_modules` still holds the new scope symlinks until an install relinks
+   them.
+2. **Two untracked `.env` files were changed and are not in the diff.** Restore by
+   hand:
+   - root `.env` — `APP_DEEP_LINK_SCHEME`, `APP_ADDITIONAL_REDIRECT_URLS`,
+     `EXPO_PUBLIC_APP_DEEP_LINK_SCHEME`, `EXPO_PUBLIC_APP_ADDITIONAL_REDIRECT_URLS`
+     back to `elmironmr` / `elmironmr://auth-callback`
+   - `apps/field/.env` — the same two `EXPO_PUBLIC_*` values
+3. `app.config.ts` is a new file; the revert deletes it, which returns the display
+   name to a hardcoded string in `app.json`. That is the intended consequence of a
+   revert, not a leftover.
+
+Nothing external needs undoing: no Expo project exists under either slug, nothing has
+been published, and no store listing has ever claimed either package id.
+
+#### Ambiguous cases
+
+**One, and I decided it rather than leaving it.** Doc comments inside code that
+reference the package by name — `@elmiron/core — interface contract I1` in
+`packages/core/src/index.ts`, and six similar. These are prose, but the string they
+contain is a package identifier, and leaving them would have made the comments
+factually wrong about a package that no longer exists under that name. The
+three-token rule covers them: `@elmiron/` is always the scope. Recorded here because
+it is the closest thing to a §2 edge case in the whole sweep.
+
+#### What I think is worth arguing with
+
+**1. The Expo slug was not in the prompt's three, and I changed it anyway.**
+`elmiron-field` is a public identifier appearing in EAS project URLs and carrying the
+mark. Leaving it while renaming everything else would have defeated the purpose, and
+no Expo project exists yet to be renamed later. But it _is_ a decision beyond the
+brief, it is one line in `app.json`, and it is the reviewer's to veto.
+
+**2. The scope rename structurally cannot be done without editing read-only
+workspaces.** `services/api` and `packages/core` are read-only to Frontend, and their
+`package.json` names are part of `@elmiron/*`. The instruction to do the scope in this
+pass authorises it, but "the scope is mechanical and free" is true of the edit and not
+of the ownership boundary. Worth Backend knowing their workspace was touched, even
+though every changed line there is the substitution.
+
+**3. Local verification replacing CI has one specific blind spot.** Everything here
+was checked on Windows; CI runs on Linux. Local checks cannot catch a case-sensitivity
+failure. The risk is genuinely low — this rename changed file _contents_ and no file
+_paths_, so there is no new casing to get wrong — but "verification replaces CI"
+should not be read as "verification equals CI." It does not.
+
+---
+
+### FE-R1a — Reverse-DNS scheme, and the OTP gap it exposed (17 August 2026)
+
+Follows FE-R1. Two things: take the strictly-better scheme while it is still free,
+and answer a question FE-R1 filed too quietly.
+
+#### The scheme is now reverse-DNS
+
+|                  | From (FE-R1)                         | To (FE-R1a)                                   |
+| ---------------- | ------------------------------------ | --------------------------------------------- |
+| Deep link scheme | `praversefieldforce`                 | `com.praversetech.fieldforce`                 |
+| Redirect URL     | `praversefieldforce://auth-callback` | `com.praversetech.fieldforce://auth-callback` |
+
+Guaranteed-unique rather than probably-unique, and identical to the package id, so
+there is one string to remember instead of two. A scheme is irreversible in the same
+way a package id is — once any link exists in the wild it cannot change — and FE-R1's
+whole premise was fixing the irreversible things while they are free. Doing that 95%
+and leaving a known-better option on the table contradicts the sprint's own logic.
+
+**It was conditional on the toolchain, not on the RFC.** Dots are legal in a URI
+scheme under RFC 3986, but "legal" and "the toolchain is happy" are different claims.
+Verified at three levels:
+
+| Level                                  | Result                                                                                                                                       |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `expo config --type public`            | resolves, `scheme: com.praversetech.fieldforce`                                                                                              |
+| `expo config --type introspect`        | resolves; note `intentFilters` is empty at config level — the scheme is applied during prebuild, not here                                    |
+| **`expo prebuild --platform android`** | `<data android:scheme="com.praversetech.fieldforce"/>` in the generated `AndroidManifest.xml`, with matching `applicationId` and `namespace` |
+| `loadAppConfig()`                      | does not throw; `new URL(...)` parses the redirect, protocol `com.praversetech.fieldforce:`                                                  |
+
+The prebuild check is the one that mattered — the config-level checks would have
+passed even if the manifest generation choked. The generated `android/` directory was
+deleted afterwards; it is gitignored and no native project is committed.
+
+**One prebuild side effect, reverted.** `expo prebuild` rewrote `apps/field`'s
+`android` script from `expo start --android` to `expo run:android`. That is not part
+of the rename, and with `android/` deleted it would not work. `git checkout` on that
+file, verified.
+
+#### Files FE-R1a's four-file edit missed
+
+_(Header corrected before this section settled: FE-R1 wrote these files correctly to the
+then-current scheme. It was FE-R1a's narrower edit that did not reach them.)_
+
+`packages/core/src/shared/config.test.ts` and `config.ts` carried the scheme as a
+test fixture and a doc example. FE-R1's sweep had rewritten them from `elmironmr` to
+`praversefieldforce`; FE-R1a's four-file edit did not reach them, leaving an
+intermediate value in the tree. Both now carry the final scheme.
+
+**Worth naming: the fixture change incidentally strengthens the test.**
+`config.test.ts` now round-trips a dotted scheme through the `^[a-z][a-z0-9+.-]*$`
+validation, so the regex's acceptance of dots is asserted rather than assumed. That
+was a by-product of completing the rename, not a change made for its own sake.
+
+#### The file counts, reconciled
+
+Three different numbers appeared in the FE-R1 report because each counted a different
+set. Stated explicitly so the record is citable:
+
+| Figure | What it counts                                                                                                                                                    |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **49** | Tracked code/config files containing `@elmiron` _before_ the sweep — the initial inventory                                                                        |
+| **51** | Tracked files the sweep actually rewrote — 49 plus the two carrying `elmironmr` but not `@elmiron/` (`apps/field/app.json`, `packages/core/src/shared/config.ts`) |
+| **91** | Token occurrences replaced across those 51 files                                                                                                                  |
+| **53** | Files in commit `f34ceef` — the 51, plus `app.config.ts` (new) and `pnpm-lock.yaml` (regenerated)                                                                 |
+| **4**  | Files changed by FE-R1a                                                                                                                                           |
+
+#### The OTP question — answered: it was never built
+
+FE-R1 reported the empty Supabase redirect allow-list as a wrinkle. It is not a
+wrinkle, and the question it raised has a definite answer.
+
+**Client-side, only four auth calls exist**, all in `apps/field/src/session.tsx` and
+`api.ts`: `getSession`, `onAuthStateChange`, `signInWithPassword`, `signOut`. There
+is no `signInWithOtp`, no `verifyOtp`, no `signInWithOAuth`, no `emailRedirectTo`
+anywhere in `apps/field` or `packages`.
+
+_A grep does report one match in `apps/field/dist/` — that is the built Hermes
+bundle, which contains `supabase-js`'s own implementation of those methods whether or
+not the app calls them. It is a false positive and worth knowing about, because it
+will recur for anyone searching the tree for API usage._
+
+**So of the two possibilities: not built.** Nothing is passing a test that asserts
+something weaker than it appears to — there is no OTP test at all, in
+`services/api/tests` or anywhere else.
+
+**Where the gap actually sits.** BE-W1 enabled email + password **and** email OTP on
+the platform (`otp_length = 6`, `otp_expiry = 3600`, `enable_confirmations = false`
+in `config.toml`). The FE-W1 prompt asked only for "sign-in against the local
+Supabase stack", which the password grant satisfies literally. So this is a gap
+between **platform capability and client implementation**, not a misreported FE-W1
+deliverable — but it is a gap, and it was not previously written down.
+
+Consequences, recorded so they are not rediscovered in FE-W7:
+
+- **OTP sign-in could not work today even if it were built**, because no deep-link
+  scheme has ever been in `additional_redirect_urls`.
+- Password sign-in is unaffected — it involves no redirect. Nothing is broken now.
+- The failure, when it comes, will present as "auth is broken on real devices" and
+  will look like a client bug. It is a server allow-list entry.
+
+#### Backend request — updated value
+
+Supersedes the value in FE-R1. `services/api` is read-only to Frontend, so this is a
+request.
+
+`services/api/supabase/config.toml` currently:
+
+```toml
+additional_redirect_urls = ["http://127.0.0.1:3000", "https://127.0.0.1:3000"]
+```
+
+**Add:** `com.praversetech.fieldforce://auth-callback`
+
+Same addition needed on any hosted project. **The FE-R1 value
+(`praversefieldforce://auth-callback`) is superseded and should not be added** — it
+was never deployed anywhere, so nothing needs removing.
+
+#### Verification — the full §5 gate, re-run
+
+| Check                               | Result                                                                            |
+| ----------------------------------- | --------------------------------------------------------------------------------- |
+| `pnpm run build`                    | 3/3                                                                               |
+| `pnpm run typecheck`                | 9/9                                                                               |
+| `pnpm run lint`                     | 7/7                                                                               |
+| `pnpm format:check`                 | clean                                                                             |
+| Tests                               | ui-tokens 38 · core 21 · field 40 · mock 40 · api **333 passed** — 472, unchanged |
+| Stale tokens in code + config       | `praversefieldforce` 0 · `elmironmr` 0 · `@elmiron/` 0                            |
+| Untracked `.env`, `apps/field/.env` | 0 stale hits each                                                                 |
+
+#### Left alone, deliberately
+
+- **`@fieldforce/core`** stays, wart and all. The packages are `private` and never
+  published, so the scope is reversible at any time — irreversible things get fixed
+  now, reversible ones get fixed when they bite.
+- **A duplicate `APP_ADDITIONAL_REDIRECT_URLS` key in `.env.example`**, one from
+  BE-W1 (`http://127.0.0.1:3000`) and one from FE-W1's appended block. The later
+  entry wins in every dotenv implementation, so behaviour is defined, but it is
+  confusing to read. **Noticed while sweeping and not fixed** — the no-opportunistic-
+  fixes rule cuts both ways. Flagged for whoever owns `.env.example` next.
+
+#### Reversal path
+
+`git revert` the FE-R1a commit restores the four tracked files. Beyond it:
+
+- root `.env` and `apps/field/.env` are untracked and carry the scheme in four and
+  two places respectively — restore by hand.
+- No `pnpm install` needed; FE-R1a changed no dependency or lockfile.
+- Nothing external: no Expo project, no published app, no link in the wild.
+
+---
+
+### FE-H1 — Render test harness (17 August 2026)
+
+Push #3 of four. Harness only — route tests and the queue screen are push #4, so that
+when CI eventually runs, a red result has one candidate cause.
+
+**This push does not close FE-G1 or FE-G2.** Both need hardware. Every check below is
+local; CI has still never run on any frontend code.
+
+#### Packages — six, not two, and why
+
+The prompt authorised `jest-expo` and `@testing-library/react-native`. The registry
+confirmed the deprecation exactly as stated:
+
+> `@testing-library/jest-native`: **DEPRECATED** — "This package is no longer
+> maintained. Please use the built-in Jest matchers available in
+> @testing-library/react-native v12.4+."
+
+`@testing-library/react-native` **14.0.1** installed, `jest-expo` **57.0.4**. No third
+matcher package.
+
+But the authorised two do not run. `peerDependenciesMeta` marks only `expo` and
+`react-server-dom-webpack` optional for jest-expo, and only `jest` optional for RTL:
+
+| Package                          | Why it is required                                                                      |
+| -------------------------------- | --------------------------------------------------------------------------------------- |
+| `jest` 29.7                      | jest-expo is a **preset**, not a runner. Not declared anywhere in this repo before now. |
+| `@react-native/jest-preset` 0.86 | jest-expo peer, not optional                                                            |
+| `test-renderer` 1.2              | RTL v14 peer, not optional. Distinct from `react-test-renderer`.                        |
+| `@jest/globals` 29.7             | typings for `describe`/`it`/`expect` — see below                                        |
+
+**`test-renderer` was verified before installing**, because a generically-named v1.x
+package arriving as a transitive peer is the shape of a typosquat. It is published by
+`mdjastrzebski`, who is **one of the 17 maintainers of
+`@testing-library/react-native`** — a direct publisher overlap, checkable from the
+registry alone. RTL 14.0.1's own `peerDependencies` names it. 607k downloads/week,
+~20% of RTL's 3.04M, consistent with v14-only adoption.
+
+**`@jest/globals` rather than `@types/jest`, and the reason is structural.**
+`@types/jest` declares `describe`/`it`/`expect` **globally**, so they would
+type-resolve inside the `.test.ts` files vitest runs — the runner boundary would be
+invisible at the type level. Explicit imports from `'@jest/globals'` and `'vitest'`
+make which runner owns a file legible in its first three lines. The split enforces
+itself rather than relying on a convention.
+
+#### Two runners in one workspace
+
+Chosen over migrating the 40 existing vitest tests: they are the most carefully
+constructed in the codebase and porting them between runners risks silently weakening
+an assertion in a way no count would show.
+
+```
+*.test.ts   -> vitest   logic, node, no renderer
+*.test.tsx  -> jest     rendering, jest-expo preset
+```
+
+`apps/field/jest.config.cjs` and `apps/field/vitest.config.ts`. Scripts:
+`test` runs both, `test:logic` and `test:render` run one each. Wired into CI as
+`pnpm --filter @fieldforce/field test`, which invokes both.
+
+**The boundary is enforced, not conventional.** `src/runner-boundary.test.ts`, 4
+tests, asserts every vitest include ends `.test.ts`, every jest testMatch ends
+`.test.tsx`, that vitest keeps an explicit `.test.tsx` exclusion even though the
+include already implies it, and that no string can satisfy both.
+
+#### The negative control
+
+`src/harness.test.tsx`, committed in the passing orientation. Inverted:
+
+```
+● render harness › does not find text that was never rendered — the negative control
+  Unable to find an element with text: text that is not rendered
+Tests:  1 failed, 1 passed, 2 total
+```
+
+Restored: 2 passed.
+
+**The boundary check was mutation-tested too, and the first attempt was a dud worth
+recording.** Replacing vitest's include with `.test.tsx` stopped vitest matching
+`runner-boundary.test.ts` at all — nothing ran, and the result read as green.
+_Widening_ the include to `['src/**/*.test.ts', 'src/**/*.test.tsx']` is the correct
+mutation, and fails 2 of 44:
+
+```
+vitest include "src/**/*.test.tsx" must end in .test.ts
+```
+
+#### Test counts, before → after
+
+| Suite       | Runner | Before | After  | Delta             |
+| ----------- | ------ | ------ | ------ | ----------------- |
+| `field`     | vitest | 40     | **44** | +4 boundary tests |
+| `field`     | jest   | —      | **2**  | +2 harness tests  |
+| `ui-tokens` | vitest | 38     | 38     | —                 |
+| `core`      | vitest | 21     | 21     | —                 |
+| `mock`      | vitest | 40     | 40     | —                 |
+| `api`       | vitest | 333    | 333    | —                 |
+
+**Totals are no longer meaningful as a single number.** From here on, report per
+runner: **476 vitest + 2 jest**.
+
+The six added tests, each pinning a fact:
+
+1. _sends only .test.ts to vitest_ — every vitest include ends `.test.ts`
+2. _sends only .test.tsx to jest_ — every jest testMatch ends `.test.tsx`
+3. _keeps vitest excluding .test.tsx_ — the redundant exclusion survives a widened include
+4. _cannot match the same file in both runners_ — no string satisfies both
+5. _renders a component from @fieldforce/ui_ — the whole chain: TSX transformed, workspace package transformed as source, RN tree mounted, queries read it back
+6. _the negative control_ — the harness fails when an assertion is wrong
+
+#### Verification
+
+| Check                                                      | Result                                         |
+| ---------------------------------------------------------- | ---------------------------------------------- |
+| `pnpm run build`                                           | 3/3                                            |
+| `pnpm run typecheck`                                       | 9/9                                            |
+| `pnpm run lint`                                            | 7/7                                            |
+| `pnpm format:check`                                        | clean                                          |
+| `api` with the stack up                                    | **333 passed**, 13 files — passed, not skipped |
+| Harness needs a device, emulator, prebuild or native build | **No.** Node only.                             |
+
+`apps/field/dist/` is **gitignored, not tracked** (`.gitignore:6` — `dist/`), and is
+excluded from jest discovery along with `.expo/`, `android/` and `ios/`.
+
+#### What it cost — four traps, all now in gotchas.md
+
+1. **Jest cannot resolve a bare preset name under pnpm.** `Preset jest-expo not
+found` while node's `require.resolve('jest-expo/jest-preset')` succeeds from the
+   same directory. Fixed with `path.dirname(require.resolve(...))`.
+2. **A UTF-8 BOM in `apps/field/package.json`** — written by an earlier
+   `Set-Content -Encoding utf8`, which on PowerShell 5.1 means _with_ BOM. It had sat
+   in a tracked file across several commits.
+3. **RTL v14's `render` is async.** Un-awaited, it yields a thenable with no query
+   methods, and `screen` throws _"`render` function has not been called"_.
+4. **`transformIgnorePatterns` needed `@fieldforce` added** — `packages/ui` is
+   consumed as TypeScript source.
+
+#### What I think is worth arguing with
+
+**1. CI has never run `ui-tokens`.** Found while wiring, not fixed here — the
+no-opportunistic-fixes rule holds. It is addressed in the commit immediately
+following this one, because `check-contrast` is a build-failing accessibility guard
+that has been decorative in CI since it was written.
+
+**2. Six packages is three more than a harness ought to need**, and the count is
+driven by RTL v14's peer graph rather than by anything this project chose. Worth
+re-examining if RTL's peers consolidate.
+
+**3. The `screen` API works, but only after `await`.** Push #4 will write dozens of
+render tests, and every one needs `await render(...)`. That is stated in the push #4
+prompt rather than left to be rediscovered per test.
+
+---
+
+### FE-W2b - Route tests and queue screen (17 August 2026)
+
+Push #4, the last of the sequence, and the first MR-facing surface in this project.
+
+**FE-G1 and FE-G2 remain OPEN.** Both need a physical Android device and there is
+none. Nothing below is offered as meeting either. Every number here is local; CI has
+still never run on any frontend code.
+
+#### Three commits, kept separate for diagnosability
+
+| Commit    | Contents                                                           |
+| --------- | ------------------------------------------------------------------ |
+| `cca4ac5` | `packages/ui` gains the harness and its CI line in the same commit |
+| `62d480f` | Route tests for the five FE-W1 files                               |
+| `1e580a3` | The queue screen, its binding, and both mutation proofs            |
+
+#### The five route files
+
+Seventeen `it()` blocks, nineteen executed cases - `app/home.tsx` uses `it.each` over
+three roles. **Both figures are stated because quoting one while the runner prints the
+other is how a count stops being auditable.**
+
+| Route             | Blocks / cases | What the tests pin                                                                                                                                                                                                                                                                                 |
+| ----------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/index.tsx`   | 3 / 3          | A cold start shows a _named_ restoring state rather than guessing a destination; a restored session goes to `/home`, an absent one to `/sign-in`                                                                                                                                                   |
+| `app/sign-in.tsx` | 3 / 3          | Submit disabled until both fields are filled; both inputs carry accessible labels; no failure banner before anything has been attempted                                                                                                                                                            |
+| `app/home.tsx`    | 6 / 8          | Each role sees its own destination and not another's; the role is the one **read from the token**, displayed rather than inferred; all three roles keep the shared destination, because hiding a row is navigation and not permission; a signed-out session redirects instead of rendering a shell |
+| `app/doctors.tsx` | 5 / 5          | A denial renders **as a denial and never as an empty list**; the server's sentence verbatim; an empty territory and a refused one are distinguishable; the loading state names what it loads; a transport failure is not reported as a permission problem                                          |
+| `app/_layout.tsx` | **0**          | **Not tested - see below**                                                                                                                                                                                                                                                                         |
+
+**`app/_layout.tsx` could not be meaningfully tested today.** It composes
+`SafeAreaProvider`, `SessionProvider` and `StatusBar` around expo-router's `<Stack/>`,
+which resolves routes from the filesystem at runtime. Rendering it in isolation
+exercises the providers and not the composition, so the only honest assertion
+available is that it did not throw - the kind this prompt forbids. It is covered
+indirectly: every other route test mounts a component that reads the session context
+the layout provides.
+
+**No client-side permission logic was added or implied.** These tests pin how the
+client _presents_ a server decision.
+
+#### The queue screen
+
+Component in `packages/ui/src/QueueScreen.tsx`; `apps/field/app/queue.tsx` is a
+binding that reads state, passes it down and renders. Nothing else.
+
+**It decides nothing.** There is no branch in the file that could promote, demote,
+reorder or retire an item.
+
+`packages/ui` cannot import the reducer - a package must not depend on an app - so
+`QueueScreenProps` is declared structurally and a real `SyncQueueState` satisfies it
+by shape. **The binding passing state straight through is the compile-time check that
+the two agree**; if the reducer's state diverges, that line stops compiling.
+
+| State                        | Glyph    | Label                                                                         | Backed by                                                                                                 |
+| ---------------------------- | -------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| empty                        | `U+2713` | **Everything is sent** + "Nothing is waiting to leave this phone."            | `items: []`, and a fully-synced queue                                                                     |
+| queued, retrying normally    | `U+21BB` | **Waiting to send**                                                           | `SyncQueueItemSchema.parse`, `attemptCount: 0`                                                            |
+| queued, retrying a long time | `U+25F7` | **Still trying**                                                              | same, `attemptCount >= 3`; also produced by driving five real `attempt_failed` events through the reducer |
+| rejected                     | `U+2715` | **Refused** + the server's sentence                                           | reducer fed a real `rejected` verdict                                                                     |
+| dead-lettered                | `U+2298` | **Needs someone to look** + "This can be sent again once someone reviews it." | `deadLettered: true`                                                                                      |
+
+**Inputs are parsed through `@fieldforce/core`'s Zod schemas, not taken from
+`services/mock` fixtures.** Section 2 named the wrong mechanism for the right goal:
+mock fixtures are server-response shapes while the screen consumes reducer state, so
+they would need translating through the reducer anyway - and a drifted fixture passes
+while a drifted parse throws. The `apps/field` test runs the chain end to end:
+contract-parsed input, the real reducer, the screen. Nothing between them is a
+fixture.
+
+_Recorded separately, not fixed here:_ `services/mock`'s fixtures are unreachable -
+`main: ./dist/index.js`, no `exports` map, and an entrypoint with a top-level
+`await startMockServer()` that starts a listener on import. A real defect for whoever
+needs them next.
+
+#### The long-retry threshold
+
+**`LONG_RETRY_AFTER_ATTEMPTS = 3`. Display only.**
+
+Three tests assert it changes presentation and nothing else: the item is
+byte-identical either side of the threshold (same status, same id); a row that crosses
+it **does not move**, because position is read as priority and priority is a verdict
+the server owns; and no number of attempts - 500 in the test - ever becomes a refusal.
+
+**No duration is computed anywhere on this screen.** The only timestamp rendered is
+**`RejectionRecord.receivedAt`**, the server's own clock, and only for items the
+server has actually answered. A queued item has no server timestamp, so the screen
+shows **no time at all** for it rather than passing off `clientCreatedAt` - the
+device's clock - as though the server knew about the work. A test asserts that
+absence. This also sidesteps the drifted-dev-clock trap recorded in `gotchas.md`.
+
+#### Both mutation proofs - the count held at 15 in each
+
+```
+MUTATION 1 - the threshold issues a verdict instead of choosing words
+  return item.attemptCount >= longRetryAfterAttempts ? 'refused' : 'waiting';
+  -> Tests: 4 failed, 11 passed, 15 total
+     renders the label "Still trying"
+     changes the words and nothing about the item
+     does not move a row that crosses it
+     never turns a long wait into a refusal
+
+MUTATION 2 - the client wraps its own wording around the server's sentence
+  <BodyText>{`The server said: ${rejection.explanation}`}</BodyText>
+  -> Tests: 1 failed, 14 passed, 15 total
+     renders verbatim, with nothing wrapped around it
+
+restored -> Tests: 15 passed, 15 total
+```
+
+Neither mutation dropped the case count, so in both the assertion ran and failed
+rather than vanishing.
+
+#### Per-runner counts
+
+**A single total would now span two runners and five workspaces and hide which one
+moved.** Reported per runner from here on.
+
+| Workspace   | Runner | Before | After                                  |
+| ----------- | ------ | ------ | -------------------------------------- |
+| `field`     | vitest | 44     | 44                                     |
+| `field`     | jest   | 2      | **24**                                 |
+| `ui`        | vitest | -      | **4**                                  |
+| `ui`        | jest   | -      | **17**                                 |
+| `ui-tokens` | vitest | 38     | 38                                     |
+| `core`      | vitest | 21     | 21                                     |
+| `mock`      | vitest | 40     | 40                                     |
+| `api`       | vitest | 333    | **333 passed** - stack up, not skipped |
+
+Added, each pinning a fact: 4 boundary + 2 harness in `ui`; 19 route cases and 3 chain
+cases in `field`; and in `ui`'s screen suite - 2 empty-state, 3 state labels, 1
+dead-letter reversibility, 2 verbatim-sentence, 2 timestamp, 3 threshold, 2 glyph.
+
+#### Accessibility - asserted versus deferred
+
+**Asserted in the renderer:**
+
+- Every one of the five states renders a **text label**, so meaning is never carried
+  by colour or glyph alone.
+- The glyph is **invisible to the accessibility tree** - proved by the query engine
+  itself, since RTL skips hidden elements and the glyph cannot be found without
+  `includeHiddenElements: true`, while its label can. Without this TalkBack would
+  announce "clockwise open circle arrow, Waiting to send".
+- Glyphs are **Basic Unicode, below U+2800 and outside the emoji blocks**, asserted by
+  codepoint.
+- Both sign-in inputs carry accessible labels; the loading state names what it loads.
+
+**Deferred to device verification - not checked, and not implied to be:**
+
+- **44px touch targets.** `minHeight: 44` is set on rows and buttons; a renderer does
+  not lay out, so nothing here measures a real target.
+- **16px body, weight 400 minimum.** The tokens say so and `ui-tokens` asserts the
+  contrast ratios, but rendered type size is not measured here.
+- **Outdoor legibility at partial brightness** - the FE-W7 sunlight audit.
+- **Glyph rendering on real OEM font stacks.** Non-emoji codepoints reduce the tofu
+  risk; they do not eliminate it on Xiaomi/Oppo/Vivo ROMs.
+- **Whether TalkBack honours `importantForAccessibility`** in the built app, as
+  opposed to the test renderer's accessibility tree.
+
+#### The lint-rule extension - proposal only, not implemented
+
+The current rule bans React Native visual primitives in `apps/field`, so a full
+reusable screen assembled from `@fieldforce/ui` components can sit there undetected.
+
+**Proposed:** in `apps/field/app/**`, fail when a file declares **any JSX-returning
+function other than its default export**. That encodes _routes bind, screens render_
+about as directly as a lint rule can - a binding has exactly one component and it is
+the route.
+
+**What it would wrongly reject:**
+
+1. **Inline component mocks in tests.** The two route test files mock `Redirect` as a
+   function returning a node. Exempting `*.test.tsx` reopens the hole in exactly the
+   files that grew it last time; not exempting them means mocks move to a shared
+   helper.
+2. **A genuinely route-specific render helper** - a three-line branch a route extracts
+   for readability - would be forced into `packages/ui` even when nothing else will
+   ever consume it.
+
+**Noise on current code: low.** All five routes have exactly one JSX-returning default
+export and would pass unchanged. It fires only on the two test files.
+
+**My read:** worth having, with mocks moved to a shared test helper rather than
+exempting test files. But it is a real cost on a real pattern, and if the answer is
+that no rule expresses this cleanly, enforcing it in review and recording that is
+better than a rule with a carve-out big enough to hide the thing it was written to
+catch.
+
+#### CI membership
+
+Re-audited. **Every workspace with a real test script is invoked by CI:** `core`,
+`ui-tokens`, `ui`, `mock` and `field` in the static job, `api` in the database job.
+`packages/ui` was the next predicted victim of the hand-maintained list and was caught
+on schedule - its CI line landed in the same commit as its first tests.
+
+#### What I think is worth arguing with
+
+**1. `docs/design-plan.md` is still not in the repo, and I could not put it there.**
+The prompt's "Read first" lists it, and it lives on the Claude side where this session
+cannot reach it. I built to the numbers in the prompt itself - 16px, weight 400, 44px,
+press states, icon plus label. That was sufficient here, but this is the ninth
+instance of a document existing only where the reader is not, and it is the one
+instruction in this prompt I could not follow.
+
+**2. Nothing links to the queue screen.** `app/queue.tsx` is reachable by URL and by
+nothing else - no navigation row points at it, because adding one was not asked for
+and would be an unrequested feature. Under this project's own convention that anything
+built should be called by something, that is worth a decision rather than a silent
+gap.
+
+**3. The binding renders `emptyQueue` and never changes.** That is honest - nothing
+enqueues until FE-W3 and there is no store - but it means the screen a human can reach
+today always shows the empty state. The five states are exercised by tests, not by the
+app.
+
+**4. `@fieldforce/core` was added as a devDependency of `packages/ui`** so its tests
+could parse through the contract schemas. A workspace package rather than a new
+external one, but a dependency addition nonetheless, and it is the mechanical
+consequence of ruling B.
+
+---
+
+### Record correction (27 August 2026)
+
+On 27 August, it was identified that the generated ndroid/ directory was untracked despite FE-R1a claiming it was gitignored. The root .gitignore has been updated and the directory is now correctly excluded. This note is appended as a durable record of the discovery.
+
+### FE-Build-1  Native build and hoisting (27 August 2026)
+
+The first successful native build of the Field app on Android. This phase resolved the toolchain blockers and established the path-length-compatible project layout.
+
+#### Toolchain blockers and fixes
+
+| Blocker | Fix |
+| --- | --- |
+| **JDK 25 failure** | JDK 17 installed and configured for both Gradle and Terminal JAVA_HOME. JEP 472 restricted-method errors on native modules (Screens/Worklets) resolved. |
+| **Path length limits** | Switched pnpm to `hoisted` linker. `CMAKE_OBJECT_PATH_MAX` (250 chars) was being exceeded by deep `node_modules/.pnpm` nesting. |
+| **Location Exception** | Ensured only `ANDROID_USER_HOME` is defined; IDE-injected `ANDROID_PREFS_ROOT` process-level variable identified and cleared. |
+| **Missing SDK Platform** | API 36 platform installed to match `compileSdkVersion`. |
+
+#### Hoisting decision
+
+The project root path (`C:\\dev\\Elmiron-App`) combined with pnpm\u0027s default symlink-heavy layout produced object file paths of ~195 characters before reaching the module source. The CMake build for `react-native-worklets` failed because generated object paths exceeded Windows\u0027s 250-character ceiling. Hoisting flattened the tree, reducing nesting by ~4 levels and ~60 characters.
+
+**Version mismatch resolved.** The first hoisted install drifted `react-native-worklets` from 0.11.4 to 0.12.1 due to open peer-dependency ranges. This broke the build with `error: no member named \u0027executeSync\u0027 in \u0027worklets::WorkletRuntime\u0027`. Resolved by restoring the lockfile and re-running install, pinning the hoisted layout to the documented versions.
+
+#### Verification
+
+- **FE-G1 State:** **emulator-passed / device-pending**. The app runs on the Pixel 10 API 37.1 emulator; sign-in and field capture await a physical device.
+- **Test Fidelity:** 521 tests pass across 2 runners. Hoisting verified as safe for both Frontend (Jest/Metro) and Backend (Vitest/Node) resolution.
+- **api suite:** **333 PASSED** against the local Supabase stack.
+
+---
+
+### Corrections to FE-Build-1 (31 August 2026)
+
+The FE-Build-1 section above is frozen and stays as written. Four of its claims are
+wrong or unverified. Each is corrected here, with the source of the error named.
+
+**1. The Android API level.**
+
+_Original claim:_ two different numbers for the same setting — "API 36 platform
+installed to match `compileSdkVersion`" in the blocker table, and "Pixel 10 API 37.1
+emulator" under Verification.
+
+_Correction:_ **36 is right; 37.1 is wrong.** On disk:
+
+- `apps/field/android/app/build.gradle:88,93,94` — `compileSdk`, `minSdkVersion` and
+  `targetSdkVersion` are all `rootProject.ext.*`, so no literal lives in the project.
+- `node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle:65` supplies
+  the default the ext resolves to: `safeExtGet("compileSdkVersion", 36)`.
+- The build's own merged manifest is the proof of what was actually compiled —
+  `apps/field/android/app/build/intermediates/merged_manifest/debug/processDebugMainManifest/AndroidManifest.xml:8-9`:
+  `minSdkVersion="24"`, `targetSdkVersion="36"`.
+- The running emulator reports `ro.build.version.sdk=36`, release 16 — API 36,
+  Android 16.
+
+There is no API 37 anywhere. 37.1 is most likely the Android Emulator _tool_ version
+read as an API level; the two are unrelated numbers.
+
+_Note on the directory:_ `apps/field/android/` does exist on disk, ignored by
+`.gitignore:45`. It was not regenerated for this check — the values above come from
+build outputs already present.
+
+_Source of error:_ the FE-Build-1 report.
+
+**2. "Traced to `CMAKE_OBJECT_PATH_MAX`" — it was not traced.**
+
+_Original claim:_ the path-length failure was "traced to" `CMAKE_OBJECT_PATH_MAX`
+(250 chars) being exceeded by `node_modules/.pnpm` nesting.
+
+_Correction:_ it was **hypothesised**, not traced. Nothing measured the actual object
+path length before or after. The hoisting fix worked, and a fix that works is
+consistent with the hypothesis without proving it — the same fix would have resolved
+several other path-related failures equally well. Relabel as: hypothesis, supported
+by the fix succeeding.
+
+_Source of error:_ the reviewer.
+
+**3. The saving from shortening the repo root was ~160 characters, not ~60.**
+
+_Original claim:_ hoisting reduced nesting by "~4 levels and ~60 characters".
+
+_Correction:_ the figure is **~160**. The `.pnpm` path segment appears **twice**, at
+roughly 80 characters each. The conclusion is unchanged — shortening the root alone
+was insufficient and hoisting was required — but the number supporting it was wrong.
+
+_Source of error:_ the reviewer.
+
+**4. "Pinned to the documented versions" understates what the hoisted install moved.**
+
+_Original claim:_ the `react-native-worklets` 0.11.4 → 0.12.1 drift was "resolved by
+restoring the lockfile and re-running install, pinning the hoisted layout to the
+documented versions".
+
+_Correction:_ the worklets pin held — `node_modules/react-native-worklets` is 0.11.4
+on disk and the package does not appear in the lockfile drift at all. But the hoisted
+install added **40 package versions** to `pnpm-lock.yaml` and removed **none**
+(1145 → 1185 keys; `git diff 7bee3f4^ HEAD -- pnpm-lock.yaml`). No _direct_
+dependency's own resolved version changed — `apps/field` still resolves `expo@57.0.12`
+and `expo-constants@57.0.10`, which is what is installed — but a second, newer copy of
+the Expo and Metro toolchains entered the tree through `jest-expo`'s peer resolution:
+`expo@57.0.16`, `@expo/cli@57.0.18`, `metro@0.84.5` and 37 others. The test runner is
+no longer necessarily running against the toolchain the app builds with. Nothing has
+been changed in response; a version pin is a decision, not a cleanup.
+
+_Source of error:_ the FE-Build-1 report.
+
+---
+
+### FE-Push-1 — first push and first CI run (31 August 2026)
+
+**Commits ready to push: 29.** Everything from `dd9c1a4` (FE-W1 §1) to `90ede3c`
+(glyph codepoint allowlist) — the entire frontend line of work, none of it ever built
+or tested by any machine other than the one that wrote it.
+
+**The push failed. CI did not run.**
+
+```
+remote: Permission to Praverse-Tech-Pvt-Ltd/Elmiron-App.git denied to Devpt1904.
+fatal: unable to access 'https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App.git/':
+The requested URL returned error: 403
+```
+
+The credential helper offers the account `Devpt1904`, which has no write access to
+`Praverse-Tech-Pvt-Ltd/Elmiron-App`. Commits are authored as
+`Dev Patel <softwares@praversetech.com>`, so the identity writing the commits and the
+identity authenticating the push are different accounts. `gh auth status` reports no
+logged-in host. Resolving this is a human action and was not attempted.
+
+**Consequence: every claim about CI remains unverified.** In particular the WCAG
+contrast guard — added to `.github/workflows/ci.yml:41` as
+`pnpm --filter @fieldforce/ui-tokens test` in commit `791c3c6`, precisely because it
+had never executed — **still has not executed.** It is in the workflow file, and the
+workflow file has never run on this branch. There is no file named `check-contrast.ts`
+in the repository; the guard is `packages/ui-tokens/src/contrast.test.ts`, reached
+through that workspace's `test` script.
+
+**One failure is predictable without running CI.** `format:check` runs
+`prettier --check .`, `.prettierignore` does not exclude `PROJECT-OVERVIEW.md`, and
+that file is already non-conforming at `90ede3c` — before this section was added. The
+`static` job will fail at that step until either the file is formatted (which would
+rewrite the frozen FE-Build-1 section) or the file is added to `.prettierignore`
+alongside the other reviewer-authored documents. That is a decision, not a cleanup,
+so it is recorded here rather than taken.
+
+---
+
+### FE-Build-2c — repo hygiene and first push (31 August 2026)
+
+**The second directory was a stale clone, not a fork.** `C:/Users/devp0/StudioProjects/Elmiron-App`
+shares this repo's `origin`. Its HEAD is `b5d03a5`, which is **exactly `origin/main`** —
+outcome **(b)**: the clone is at the true tip, and it also carries substantial
+uncommitted work (a second, independent `apps/field` and `apps/console` built there
+in a separate session, plus token and lint changes). Not divergence in history; no
+commits exist there that are absent here.
+
+The `@elmiron/*` package names in that directory are not a different project. They
+are what `origin/main` still says, because the R1 rename to `@fieldforce/*` is among
+the commits that have never been pushed. `git show origin/main:apps/field/package.json`
+returns `"name": "@elmiron/field"`; the local file says `"@fieldforce/field"`.
+
+**A correction to the FE-Build-2b report,** which called those two directories
+"divergent frontend lines" and asked which was canonical: that was wrong. This repo
+is canonical; the other is a clone of the unrenamed published state. Nothing there
+needs reconciling and nothing was deleted, moved or modified.
+
+**This checkout's `origin/main` ref was stale.** Before `git fetch` it pointed at
+`d3b841f`; the real tip is `b5d03a5`. The branch is **30 ahead, 2 behind** — the two
+missing commits are `1ad5aa0` and `b5d03a5`, both Backend retention records. A push
+will be rejected as non-fast-forward until they are integrated. That is a rebase-or-merge
+decision and was not taken here.
+
+**The root-level `android/`.** `.gitignore` had `apps/field/android/`, which is a path
+from the repo root and does not match a directory named `android/` at the root. The
+stray tree was produced by an Expo prebuild/run invoked from the **repo root** instead
+of `apps/field`: `android/`, its `gradlew`, `settings.gradle` and a root `app.json`
+all carry the same 27 August 15:24 timestamp, and that `app.json` contains Expo's
+default `"package": "com.anonymous.elmironapp"` — the name Expo generates when it
+finds no app config, which is exactly what the root of this monorepo looks like to it.
+`root_build.txt` records the resulting Gradle run. The directory has **not** been
+deleted; it is evidence of how it was produced.
+
+Now ignored, root-anchored with a leading slash: `/android/`, `/ios/`, `/app.json`,
+plus `build_*.txt`, `current_build*.txt`, `root_build*.txt`, `metro-*.txt`,
+`.gradle_home/` and `screen*.png`. Named patterns rather than `*.txt`, which would
+swallow real files later. **The general rule:** a `.gitignore` entry containing a
+slash is anchored to the repo root, so `apps/field/android/` never protects any other
+directory of the same name.
+
+**The append-only rule is now mechanical.** It previously existed only as prose inside
+the file it protects, and a `prettier --write` reformatted a frozen table — caught by a
+human, which is not a control. Two changes:
+
+- `PROJECT-OVERVIEW.md` added to `.prettierignore`, so the formatter cannot make the
+  edit.
+- A step in the `static` job of `.github/workflows/ci.yml` fails the build when a
+  change to this file deletes any line: `git diff --numstat <base>...HEAD` field 2,
+  non-zero is a failure. It compares against `github.event.before` on a push and
+  `origin/<base_ref>` on a pull request — `origin/main...HEAD` is empty once a push has
+  landed and would pass vacuously, which is the failure mode the guard exists to avoid.
+  The job's checkout now uses `fetch-depth: 0`.
+
+**Negative control, because a guard that has never failed is indistinguishable from a
+guard that cannot fail.** On a scratch branch, one line was deleted from the frozen
+FE-Build-1 table and the same logic run:
+
+```
+Comparing main...HEAD
+Deleted lines: 1
+ERROR: 1 line(s) removed. PROJECT-OVERVIEW.md is append-only.
+-| **Missing SDK Platform** | API 36 platform installed to match `compileSdkVersion`. |
+exit=1
+```
+
+The positive control passes on the genuine append-only commit `6dc4a6d` (`Deleted
+lines: 0`). The scratch branch was deleted and the frozen line verified present.
+
+**The push failed again, on authorisation, not on content.**
+
+```
+remote: Permission to Praverse-Tech-Pvt-Ltd/Elmiron-App.git denied to Devpt1904.
+fatal: unable to access 'https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App.git/':
+The requested URL returned error: 403
+```
+
+Two blockers now stand between this work and CI: the credential helper offers
+`Devpt1904`, which has no write access to the org repository, and the branch is two
+commits behind `origin/main`. **CI has still never run on any frontend code**, the
+contrast guard in `packages/ui-tokens/src/contrast.test.ts` has still never executed,
+and the append-only guard added above has never executed either — it is verified only
+by the local negative control recorded here.
+
+---
+
+### FE-Build-2d — safe-area inset and origin divergence (31 August 2026)
+
+**The two commits on origin are Backend's, and the push is not a fast-forward.**
+
+| | |
+| --- | --- |
+| `b5d03a5` | Maanav Shah <126866160+Rabbitshah@users.noreply.github.com>, Sun 23 Aug 2026 14:14 +0530 — "Record: retention workflows disabled again, 23 August". Touches `.ai-collab/decisions.md` (+23). |
+| `1ad5aa0` | Maanav Shah <126866160+Rabbitshah@users.noreply.github.com>, Fri 14 Aug 2026 14:28 +0530 — "BE-W8: record the real scheduled retention run, not a manual dispatch". Touches `.ai-collab/decisions.md` (+13 −3) and `PROJECT-OVERVIEW.md` (+44 −19). |
+
+Both are Backend record-keeping. Neither touches frontend code, `packages/`, `apps/`
+or the lockfile.
+
+`git merge-base --is-ancestor origin/main HEAD` exits **1**. The histories have
+genuinely diverged: 31 local commits over a base that no longer includes origin's two.
+**A merge or rebase is required**, and that is the reviewer's decision — nothing was
+merged, rebased, pulled or reset here.
+
+One thing to know before choosing: `1ad5aa0` **deletes 19 lines** from
+`PROJECT-OVERVIEW.md`. Whichever way the two lines of history are reconciled, that
+deletion will appear in the range the new append-only guard inspects, and the guard
+will fail the build on it. The guard is right and the commit predates it; the
+reconciliation needs a decision about which base the guard compares against.
+
+**The safe-area defect is every screen, not the sign-in screen.**
+
+`react-native-safe-area-context` is a dependency and `SafeAreaProvider` **is** mounted
+in `apps/field/app/_layout.tsx`. Nothing consumed it. The `Stack` runs with
+`headerShown: false`, so no navigation header reserved the status bar either.
+
+| Route | Renders inside `Screen` | Consumed an inset before this change |
+| --- | --- | --- |
+| `app/index.tsx` | yes | no |
+| `app/sign-in.tsx` | yes | no |
+| `app/home.tsx` | yes | no |
+| `app/doctors.tsx` | yes | no |
+| `app/queue.tsx` | via `QueueScreen`, which renders `Screen` | no |
+
+A repo-wide grep for `SafeAreaView`, `useSafeAreaInsets` or `edges=` returned three
+hits, all of them the provider in `_layout.tsx`.
+
+**The fix is one component: `packages/ui/src/Screen.tsx`.** Every route renders inside
+it, so the inset is applied there once, added to the token padding rather than
+replacing it — `space.md` is the design's margin, the inset is the device's hardware,
+and neither substitutes for the other. There is no pixel literal; the numbers come
+from `useSafeAreaInsets()`. A per-screen `SafeAreaView` was rejected: it leaves the
+next new screen broken by default, which is exactly how this defect arrived.
+
+The hook throws when no provider is mounted, and that is kept — a missing provider
+should fail loudly rather than silently render zero insets. It does mean both jest
+projects need the library's own mock, which is now installed in
+`packages/ui/jest.setup.cjs` and `apps/field/jest.setup.cjs`.
+
+**The test, and the negative control.** `packages/ui/src/Screen.test.tsx` asserts
+arithmetic, not the presence of a wrapper: `padding === space.md + inset`, with a
+distinct non-zero value on each edge, so an implementation that wired `insets.top`
+into all four sides fails. Note that the shipped mock's insets are **all zero** unless
+a context supplies otherwise — a test resting on its defaults would assert
+`md + 0 === md` and pass with the fix removed — so the test supplies its own metrics
+through `SafeAreaProvider`.
+
+With the inset removed from `Screen`:
+
+```
+● Screen safe-area inset › adds the device inset to the token padding when the screen does not scroll
+  Expected: 63
+  Received: 16
+● Screen safe-area inset › adds it to the content container when the screen scrolls
+  Expected: 63
+  Received: 16
+Tests: 2 failed, 17 passed, 19 total
+```
+
+Restored: `Tests: 19 passed, 19 total`. `packages/ui` render tests went 17 → 19; the
+vitest side is unchanged at 4; `apps/field` is unchanged at 44 + 24. No count dropped.
+
+**What the test does not prove.** Mock insets are not device insets. It proves the
+arithmetic and that the value reaches the content container; it does not prove the
+number is right on a punch-hole display, in landscape, with a three-button navigation
+bar, or with the gesture bar. **Deferred verification: a fresh screenshot of the
+sign-in screen on the Pixel 10 emulator showing the heading clear of the status bar.**
+Until that exists the defect is fixed-and-tested, not closed.
+
+**`apps/field/expo-env.d.ts` was a generated file, and is now untracked.** Expo
+rewrites it on `expo start` — it had already replaced the committed comment with its
+own "This file should not be edited and should be in your git ignore". It was
+committed on the theory that `pnpm typecheck` needs it on a fresh clone; that was
+tested on 31 August by moving the file aside, and the field typecheck passes without
+it. `git rm --cached` plus a root `.gitignore` entry. This is part of why the working
+tree has never been clean.
+
+**Two corrections to the record, both the reviewer's.**
+
+1. _Original claim:_ repeated references, across several prompts, to
+   `check-contrast.ts`. _Correction:_ **no file of that name exists.** The contrast
+   guard is `packages/ui-tokens/src/contrast.test.ts`. _Source of error:_ the
+   reviewer, after having written the rule that forbids referencing artefacts not
+   present in the repo.
+2. _Original claim:_ the contrast guard was "present in the repo but never invoked —
+   decorative". _Correction:_ the mechanism was wrong. A `.test.ts` runs with its
+   workspace's suite; it was never uninvoked locally. The accurate statement is that
+   **CI has never executed, so no test in this repo has ever run anywhere except the
+   authoring machine.** Same risk, different cause — and a different fix, since
+   nothing needed wiring up, only a pipeline that runs.
+   _Source of error:_ the reviewer.
+
+**Two failures CI will hit, both pre-existing and neither fixed here.**
+`packages/ui/src/QueueScreen.test.tsx:200` fails `lint` with
+`@typescript-eslint/no-explicit-any` and `no-unsafe-member-access` — verified
+pre-existing by stashing every change from this session and re-running. And
+`apps/field/jest.config.cjs` was non-conforming for `format:check` as committed in
+`1aafc5c`; it is conforming now only because this session's edit to that file ran it
+through the formatter.
+
+---
+
+### FE-Build-2e — reconciliation with origin (31 August 2026)
+
+**Merge, not rebase — and the reasoning matters more than the ruling.** Both backend
+commits touch `PROJECT-OVERVIEW.md` and `.ai-collab/decisions.md`, which the frontend
+line also touches. Replaying 32 commits through a conflicting file means resolving
+substantially the same conflict up to 32 times, and every pass is a fresh chance to
+drop a line from a file whose whole point is that nothing gets dropped. One merge is
+one conflict, one resolution, one reviewable diff.
+
+**In the event there were no conflicts at all.** `git merge origin/main` auto-merged
+both files with the `ort` strategy: `.ai-collab/decisions.md` (+36 −3),
+`PROJECT-OVERVIEW.md` (+44 −19). The two sides had edited different regions — backend
+its own retention sections, frontend appending at the end — so nothing needed
+adjudicating and no resolution rule had to be applied.
+
+What the two commits contained: `b5d03a5` (Maanav Shah, 23 Aug) recorded the retention
+workflows being disabled again; `1ad5aa0` (Maanav Shah, 14 Aug) corrected the claim
+about the scheduled retention run and rewrote the surrounding paragraphs, which is
+where the 19 deletions come from. Backend's own edit to backend's own section,
+predating the append-only rule.
+
+**Nothing frontend was lost.** `git diff backup/pre-merge-31aug HEAD --stat` shows
+exactly two files changed — `.ai-collab/decisions.md` and `PROJECT-OVERVIEW.md` — and
+no other path. The R1 rename `f34ceef` ("FE-R1: remove a third party's trademark from
+the permanent identifiers") is still an ancestor of HEAD, and `apps/field/package.json`
+still reads `@fieldforce/field`. All ten `### FE-` sections are present. Test counts
+are identical either side of the merge: core 21, mock 40, ui-tokens 38, ui 4 + 19,
+field 44 + 24, api 333 — **523 across six packages**, before and after.
+`backup/pre-merge-31aug` is kept.
+
+**Correction — the append-only guard was never at risk, and the error was mine.**
+
+_Original claim (FE-Build-2d, and repeated):_ `1ad5aa0`'s 19 deletions "will land in
+the range the new append-only guard inspects, and the guard will fail on it", so the
+reconciliation needed a decision about the guard's base.
+
+_Correction:_ **wrong, and demonstrated wrong.** `git diff A...B` is
+`git diff $(git merge-base A B) B`; it excludes everything on A's side of the base.
+After the merge, `origin/main` **is** the merge base — `git merge-base origin/main
+HEAD` returns `b5d03a5`, which is `origin/main` itself — so the range contains only
+commits absent from origin, and `1ad5aa0` is not among them. Run against the merged
+HEAD, the guard's exact command gives:
+
+```
+$ git diff --numstat origin/main...HEAD -- PROJECT-OVERVIEW.md
+1512	0	PROJECT-OVERVIEW.md
+Deleted lines: 0
+PASS: append-only respected.
+```
+
+1512 insertions, **zero deletions**, exit 0. Three-dot semantics already handle this
+and no redesign is needed. `git log --oneline origin/main...HEAD` lists 33 commits and
+`1ad5aa0` is not one of them.
+
+_Source of error:_ Claude Code, reasoning about the range instead of running it — on
+a guard whose entire justification was that a rule nobody has executed is not a
+control.
+
+**The lint failure blocking `static` is fixed.** `packages/ui/src/QueueScreen.test.tsx`
+reached into the rendered tree with `(glyph as any).props['children']` to read the
+status glyph. The `any` was avoidable, so it was typed rather than silenced:
+`children` is `ReactTestInstance | string`, and the test now narrows, throwing a
+legible error if the tree ever changes shape, instead of reading `.props` off a string
+and asserting on `undefined`. It also now asserts the value is a string before
+checking it against the allowlist — strictly stronger than before. Repo-wide `lint`:
+**7 tasks, 7 successful.** Render suite unchanged at 19.
+
+**`format:check` has never run in CI, and the one failure we found was found by
+accident.** `apps/field/jest.config.cjs` was non-conforming as committed in `1aafc5c`
+and conforms now only because an unrelated edit in FE-Build-2d ran it through
+prettier — nobody looked for it. Confirmed after the fact by checking that file's
+content at `90ede3c` with the repo's own prettier: non-conforming. Repo-wide
+`format:check` now reports exactly one file, `services/api/scripts/seed-one-mr.mjs`,
+which is **untracked** and therefore invisible to CI; it has been left alone. No
+tracked file is non-conforming.
+
+A method note, because it nearly produced a wrong answer: checking formatting in a
+`git worktree` of an old commit reported only `PROJECT-OVERVIEW.md` and missed
+`jest.config.cjs`. The worktree has no `node_modules`, so `npx` fetched a different
+prettier. **Check historical formatting by extracting the file into the working repo,
+not by running the tool in a dependency-less worktree.**
+
+**The flake is logged, not closed.** `docs/gotchas.md` gains a "Known flakes" heading
+and an entry for `apps/field` › `doctors.tsx` › "renders a denial as a denial" — one
+failure, on the first run after `jest.setup.cjs` was added, four passes since, with a
+stale-transform-cache hypothesis recorded as a hypothesis. The entry carries the rule
+that a second occurrence is investigated as a real race and not re-run. It also
+records the mistake made at the time: the failure output was not captured before the
+re-run, so there is nothing to diagnose from.
+
+---
+
+### FE-Build-2f — untracked files closed, push-readiness recorded (31 August 2026)
+
+**The canonical status document was not in the repository.** `docs/frontend-status.md`
+opens by declaring itself canonical, and a pointer file exists specifically to redirect
+readers to it — a duplicate having been reduced on the grounds that two documents
+claiming the same truth diverge. It was untracked for the entire project to date, so
+the one document everyone was told to read was the one document not in the repo, while
+a rule requiring referenced documents to be present was in force. It is committed now.
+
+_Original claim:_ the frontend status lives at `docs/frontend-status.md` and the
+duplicate defers to it. _Correction:_ true of the content, false of the repository —
+the file existed only in the working tree of one machine, and a fresh clone had the
+pointer without the target. _Source of error:_ the reviewer.
+
+**It was stale in three of the four respects checked**, and was corrected rather than
+rewritten: the merge with origin was absent, the safe-area fix was absent, and the
+test figure read 521 with `ui` jest at 17 (now 523 and 19). It was already accurate
+that CI has never run. Four further corrections while in there: the commit count
+("23+" → 34, previously flagged as unverified), JDK 25 and the path-length blocker
+moved from LIVE to resolved, "the app has never been built" replaced with
+`emulator-passed / device-pending`, and the emulator corrected from "Pixel 10 Pro XL /
+API 37.1" to **Pixel_10, API 36 / Android 16** — the tool version having been read as
+an API level. A new "Since FE-W2b" section records FE-Build-1 through 2f.
+
+**`apps/field/.gitignore` is redundant, and is ignored rather than committed.** Its
+only entry is `expo-env.d.ts`; with the file moved aside, `git check-ignore -v`
+reports `.gitignore:75` — the root already covers it. Committing it would invite the
+churn `expo-env.d.ts` itself caused, since Expo rewrites it on prebuild and the tree
+goes dirty with nobody having edited anything.
+
+**The `npx`-in-a-worktree trap is recorded in `docs/gotchas.md`.** A worktree has no
+`node_modules`, so `npx` fetches different tooling and silently answers a different
+question: it reported one non-conforming file at `90ede3c` where the correct method —
+extract the historical file into the working repo and run the repo's own binary —
+found two. Generalised there to anything depending on `node_modules`: prettier,
+eslint, tsc, jest.
+
+**`docs/push-readiness.md` is new**, and is deliberately a statement of exposure
+rather than a status or a plan: 34 commits waiting, the oldest `dd9c1a4` from
+**14 August**; every quality figure self-reported because CI has never executed;
+`origin/main` still serving the pre-rename `@elmiron/*` identifiers, so a clone today
+carries a third party's trademark in the package names; one blocking action owned by a
+human — `repo` scope on the token, plus `workflow` scope now that
+`.github/workflows/ci.yml` has changed; and two deferred verifications that need the
+emulator, the safe-area screenshot and the glyph rendering check.
+
+**This is the final local commit before the token is resolved.** Nothing remains that
+does not require either the GitHub token or a device. **No feature work proceeds until
+CI has run green once** — FE-W3 does not start on the strength of 523 tests that have
+only ever run on the machine that wrote them.
+
+---
+
+### FE-Build-2g — offline backup and corrected push diagnosis (31 August 2026)
+
+**Correction: the 403 was never a token scope problem, and the error text said so all
+along.**
+
+_Original claim,_ recorded in FE-Push-1, FE-Build-2c, 2d, 2e and 2f and carried into
+`docs/push-readiness.md`: the push is blocked on a personal access token lacking
+`repo` scope, with `workflow` scope needed as well.
+
+_Correction:_ the failure is
+`remote: Permission to Praverse-Tech-Pvt-Ltd/Elmiron-App.git denied to Devpt1904`,
+HTTP 403 — an **authorisation failure at the account level.** `Devpt1904` has no write
+access to the repository. A token carries the permissions of the account that issued
+it and cannot exceed them, so no scope change reaches this. GitHub names the account
+and says *denied*; it does not say that for a missing scope, which presents
+differently.
+
+The fix needs another person, and is one of: an org owner grants `Devpt1904` write
+access, directly or through a team; or the push is made from an account that already
+holds it — `Rabbitshah` authored **and committed** `b5d03a5` on 23 August, so that
+account can write here; or, as a fallback only, a SAML SSO authorisation, which would
+present as its own distinct error and does not match this one. The `workflow` scope
+requirement is real but **secondary** — it applies only once a push is authorised at
+all, because `.github/workflows/ci.yml` is among the modified files.
+
+_Source of error:_ the reviewer, and Claude Code for repeating it without reading the
+message closely. What caught it was writing `docs/push-readiness.md`: stating the
+blocker for a stranger meant pasting the error verbatim, and the verbatim text names
+an account rather than a scope. **A diagnosis nobody has to write out is a diagnosis
+nobody checks.**
+
+**Which makes the single-machine exposure the live risk, not the push.** A permissions
+grant depends on another person and may take days; thirty-six commits since 14 August,
+including the FE-R1 trademark rename that exists nowhere else, sit on one laptop.
+`backup/pre-merge-31aug` protects against a bad merge and against nothing else.
+
+**`C:/dev/elmiron-app-31aug2026.bundle`** — 1,043,791 bytes, one file, complete
+history and all five refs, no remote and no permissions required. `git bundle verify`:
+*"is okay"*, *"records a complete history"*, sha1. Test-restored by cloning it to a
+scratch directory: tip `142e6bc` matching the source, 71 commits matching the source,
+`f34ceef` an ancestor of HEAD (exit 0), `backup/pre-merge-31aug` carried across as a
+remote-tracking ref at `f658ab2`, and `apps/field/package.json` reading
+`@fieldforce/field`. The scratch clone was then deleted. `*.bundle` is gitignored — a
+bundle committed into the repository it backs up is circular.
+
+**The bundle is not yet a backup.** It is on the same disk as the repository. It
+becomes one when a copy exists off this machine, and not before. That copy is a human
+action and nothing here can perform it.
+
+---
+
+### FE-W3-SPEC — field capture specified, decisions raised (31 August 2026)
+
+`docs/fe-w3-spec.md` exists. **No FE-W3 code was written, no dependency added, and
+nothing under `apps/`, `packages/` or `services/` was touched except to read it.**
+
+**The finding that matters: the backend is not greenfield here, and it is narrower than
+"tracking".** `check_ins` and `check_outs` store one fix each;
+`public.daily_mileage()` sums straight-line hops between consecutive check-ins and
+reads no other source of position; there is no location-fix, trace or breadcrumb table
+among the thirty-four; and `SyncEntitySchema` has no entity for one. `packages/core`,
+`services/api` and `services/mock` agree field for field — **no contradictions found**.
+Choosing continuous tracking is therefore new schema, a new sync entity, a new
+retention rule and a necessity argument, not a client-side feature.
+
+**The second finding: location has no retention at all.** Audio carries `purge_after`,
+a retention worker, a destruction log and an intake-stops-if-retention-stalls check.
+Check-in coordinates have no purge column and no deletion path. Today the honest answer
+to "how long is location kept" is **forever, and nothing deletes it** — while the
+retention machinery that would have to enforce any answer is itself currently disabled.
+
+**Six decisions are raised and none is answered:** collection frequency and precision;
+retention; what the MR is told and when; behaviour on denial or coarse-only grant;
+whether location makes a visit valid or is advisory metadata; and whether shift-end
+enforcement is client-side or server-side. They are policy with legal consequences
+under the DPDP Act and employment law, they need a human decision and in places
+qualified legal advice, and the specification says so at the head of that section
+rather than choosing.
+
+Android behaviour is sourced inline to Android developer documentation and Play policy.
+**Four claims are marked unverified rather than stated:** the exact expiry conditions of
+"only this time"; permission auto-reset for unused apps; the presentation of the
+foreground-service notification on Android 13+; and the OEM specifics for Oppo, Vivo and
+Samsung, since only the Xiaomi page was read. OEM behaviour is recorded as empirical and
+crowd-sourced, because the vendors do not document it.
+
+One consequence worth surfacing early: `ACCESS_BACKGROUND_LOCATION` triggers a Google
+Play permissions declaration with a video and a prominent in-app disclosure, and the
+policy's listed acceptable uses are all user-benefiting features. An employee-monitoring
+framing is not among them. That is the same shape as the Apple probe in
+`docs/mr-work-split.md`, and the same answer applies: find out early.
+
+**No FE-W3 code is to be written until those decisions are answered and CI has run
+green once.** Both conditions, not either.
+
+
+---
+
+### FE-W3 — onboarding, permissions and OEM battery setup (1 September 2026)
+
+**Plan W3 was skipped and is now closed.** `docs/mr-work-split.md` §2 gives Week 3
+Frontend as "Onboarding: permission rationale + per-OEM battery setup". Weeks 4 and part
+of 5 were built instead. This closes it.
+
+**The numbering correction, recorded because two things now carry the same name.**
+Earlier prompts and the two commits below used "FE-W3" for field capture and background
+geolocation:
+
+- `db2ab2e` docs: specify FE-W3 field capture before building it
+- `3b64ea1` docs: record FE-W3-SPEC — six decisions open, no code until they are answered
+
+That was wrong. **Field capture, geofence, check-in and shift start/end are plan W5.**
+Plan W3 is this sprint. `docs/fe-w3-spec.md` and the `FE-W3-SPEC` entry above are
+therefore *W5* specifications under a W3 filename, and neither has been renamed here —
+renaming a committed spec mid-flight is worse than a recorded correction. **The gate in
+that entry — "no FE-W3 code until those decisions are answered and CI has run green
+once" — belongs to the W5 work and is untouched.** Nothing in this sprint requests a
+position, reads a fix, or crosses into it.
+
+#### Detection, and the Realme/Oppo trap
+
+`apps/field/src/onboarding/oem.ts` maps `{ manufacturer, brand, model }` to one of five
+families. The input is a plain object, not a native module: `Platform.constants` is read
+once in `device.ts` and passed in, so the mapping — the part with the bugs in it — is
+testable under vitest with no device.
+
+**Brand is matched before manufacturer, and that ordering is the whole point.** Realme
+was spun out of Oppo and Realme handsets have historically reported `manufacturer=OPPO`
+while reporting `brand=realme`. Reading manufacturer first is a passing-looking
+implementation that walks a Realme user through ColorOS's three-settings-in-three-places
+flow when Realme UI puts two settings on one screen — nothing on their phone matches
+what the app tells them to tap. **Negative control run:** deleting the `realme` brand row
+so the lookup falls through to `manufacturer=OPPO` fails with
+`expected 'oppo' to be 'realme'`, and the row was restored.
+
+Two smaller decisions, both asserted: matching is on **exact tokens, never substrings**,
+because a false positive ("vivobook") is strictly worse than `unknown`; and the lookups
+are `Map`s rather than object literals, because the key comes off the device and
+`brand: "constructor"` resolves through `Object.prototype` to a function that is not
+`undefined`. `unknown` is a first-class outcome with its own screen — it is the majority
+of the world, every Pixel and every emulator.
+
+#### The unresolvable-intent rule
+
+`startActivity` with a component that does not resolve throws
+`ActivityNotFoundException`. Not a rejected promise — a crash, on the settings screen of
+the onboarding flow, on first run, on exactly the device population the feature exists
+for. `apps/field/src/onboarding/intents.ts` holds **one table, one place**, and
+`launch.ts` enforces four rules: probe before offering; render usefully with zero working
+intents; wrap the launch regardless; never throw. `launchSettings` has no throwing path
+and returns `'opened' | 'unresolvable' | 'failed'` — there is deliberately no `'error'`
+member, because a settings screen that will not open is the ordinary condition here.
+
+**Read from `IntentModule.kt` in the installed React Native rather than from the docs**,
+because the three APIs are not interchangeable:
+
+- `sendIntent(action)` builds `Intent(action)`, calls `resolveActivity` first and
+  **rejects** rather than throwing.
+- `openSettings()` builds `ACTION_APPLICATION_DETAILS_SETTINGS` **with the `package:`
+  data URI** and catches into a rejection. `sendIntent` can set extras but not data, so
+  that action sent as a bare action would resolve, launch and land nowhere — a
+  working-looking button that does nothing, which is worse than no button.
+- `openURL`/`canOpenURL` build `Intent(ACTION_VIEW, Uri.parse(url))` and never parse a
+  component out of an `intent://` URL.
+
+**So React Native cannot target a vendor component at all**, and `expo-intent-launcher` —
+a native module, therefore a dev-client rebuild — is not a dependency. The four
+component-targeted vendor intents are declared in the table, marked inexpressible, and
+their buttons never render. **The designed fallback is not hypothetical: it is the
+shipping default on every device.** Widening `SUPPORTED_TARGET_KINDS` is the only change
+needed when the module lands; no screen changes with it.
+
+One narrowing is recorded rather than hidden: React Native exposes no `resolveActivity`
+for a bare action, so `probe` returns true for the two expressible kinds and the real
+check is the one `sendIntent` performs natively immediately before launching. The check
+still precedes any activity start; what is lost is only hiding the button in advance, and
+rule 2 is what makes that acceptable.
+
+#### The screens
+
+A5-A8 are one component (`packages/ui/src/OemBatteryScreen.tsx`) with four sets of copy
+in `oem-content.ts`, plus a generic screen for `unknown`. Steps carry a Done state, which
+is **not persisted**: these are settings on the phone, the app cannot read back whether
+the MR changed them, and a tick surviving a restart would be the app asserting something
+it does not know.
+
+**The 20-second videos do not exist.** The control renders **disabled, labelled
+"20-second video — not recorded yet"**, rather than being omitted — omitting it would
+leave no trace that a designed element is missing. No third-party link: putting these
+steps on YouTube would send an MR's device identity to Google on first run of an app
+whose premise is careful handling of what it collects.
+
+A3 names all four notification types and states a numeric cap. A4 defers the microphone
+to the first real visit and **keeps the MR's own voice note separate from recording the
+doctor** — asserted as two distinct rendered nodes, so a rewrite that merges them into
+one friendly sentence about "recording" fails. S4 gives two actions as two
+`PrimaryButton`s, equal in the markup and not only in the copy.
+
+**Background location is not requested, declared or prepared for.** Android will not
+grant it in the same prompt as foreground location, and `FE-W3-SPEC` raises the Play
+declaration as an open decision. `REQUESTS_BACKGROUND_LOCATION = false` is asserted.
+
+**S4's ₹600 and 14 minutes are the design's estimates and the screen says so on screen.**
+Nothing here measured them: no MR has been timed and the mock service is fixtures.
+
+#### Denial blocks nothing, asserted as a property
+
+`permissions.ts` states the three S4 rules as functions rather than prose, and
+`permissions.test.ts` checks them across **all 27 permission combinations**:
+`reachableRoutes(denied)` equals `reachableRoutes(granted)`; `persistentBannerFor` is
+always `null`; `shouldPromptForLocation` is false for `app-launch`, `screen-focus` and
+`elapsed-time` across 500 simulated launches and true only for
+`explicit-user-request`. There is no attempt counter and no backoff — those are designs
+for asking repeatedly. Manual check-in is returned in every state.
+
+These read as tautologies. They are tautologies a future `if (location === 'denied')`
+would break, which is the point.
+
+#### Boundary
+
+No geofence, check-in/out or shift start/end (plan W5). No consent handoff (plan W6, and
+it needs the doctor test first). No recording UI (plan W7). No dependency added.
+
+#### Tests
+
+| Package | Before | After |
+| --- | --- | --- |
+| `@fieldforce/field` vitest | 44 | 115 |
+| `@fieldforce/field` jest | 24 | 48 |
+| `@fieldforce/ui` vitest / jest | 4 / 19 | 4 / 19 |
+| `@fieldforce/core` vitest | 21 | 21 |
+| **Total** | **112** | **207** |
+
+`pnpm typecheck`, `pnpm lint` and the format check pass. `prettier --check` still reports
+`services/api/scripts/seed-one-mr.mjs`, which is untracked and predates this work.
+
+`expo export --platform android` was also run, and the Hermes bundle contains the copy
+from all four new screens. That is more than the tests prove: it shows the new routes
+resolve under **Metro**, whose resolution differs from both TypeScript's and jest's — the
+onboarding modules were first written with NodeNext `.js` import specifiers, which
+typechecked and would have failed to bundle. One environment note: the `expo` shim in
+`apps/field/node_modules/.bin` points at a path that does not exist under this repo's
+`nodeLinker: hoisted`, so `pnpm run export` fails with `Cannot find module`. Invoking
+`node node_modules/expo/bin/cli` from the repo root works. Pre-existing, not from this
+sprint.
+
+#### Run on the emulator
+
+The debug build was run against Metro on a Pixel emulator (`com.praversetech.fieldforce`,
+Android 16) and the flow was exercised by hand.
+
+**Intent resolution, queried directly from the package manager rather than inferred:**
+
+| Intent | Resolves |
+| --- | --- |
+| `IGNORE_BATTERY_OPTIMIZATION_SETTINGS` | yes — `Settings$AppBatteryUsageActivity` |
+| `APPLICATION_DETAILS_SETTINGS` + `package:` data | yes — `applications.InstalledAppDetails` |
+| `com.miui.securitycenter/...AutoStartManagementActivity` | no activity found |
+| `com.coloros.safecenter/...StartupAppListActivity` | no activity found |
+| `com.vivo.permissionmanager/...BgStartUpManagerActivity` | no activity found |
+
+**Two of two expressible intents resolve; three of three vendor components do not** —
+which is the expected shape on a Pixel and is exactly what the design predicts.
+
+The emulator detects as `unknown` and got the generic screen, with both steps, both
+"What you'll see" lines, both Done toggles and both shortcuts. Pressing them:
+
+- step 1 opened **App battery usage**;
+- step 2 opened **this app's own App info page**, with its battery entry on it.
+
+**That second result is the justification for the `app-settings` kind existing.** Sent as
+a bare action through `sendIntent`, `APPLICATION_DETAILS_SETTINGS` has no `package:` data
+and does not reach that page — the button would have looked like it worked and gone
+nowhere. It was written as its own kind on the strength of reading `IntentModule.kt`, and
+the device confirms the reading.
+
+The app returned intact from both launches, the Done toggle flipped to "Done", and
+**logcat shows no `ReactNativeJS` warning or error at all.** The LogBox toast visible in
+the screenshots is Metro failing to serve `LogBoxImages` — a `react-native@0.86.3` /
+`0.86.2` skew under pnpm, present before this work and unrelated to it.
+
+S4 was rendered on the device too: two buttons of identical weight, and the estimate
+disclaimer under the ₹600 line.
+
+#### Not verified without a physical device
+
+The emulator is AOSP. It has none of the four vendor ROMs on it, so it cannot answer the
+questions this feature exists to answer. The following are **unverified**, and the first
+three are the feature's whole subject:
+
+1. **That any vendor component intent resolves on any real handset.** Every one is
+   crowd-sourced; none has been opened on a Xiaomi, Oppo, Vivo or Realme.
+2. **That `Platform.constants.Brand`/`Manufacturer` carry the values assumed** — in
+   particular that a current Realme still reports `manufacturer=OPPO`. The mapping is
+   tested; the fingerprints it is tested against are not observed from hardware.
+3. **That the numbered steps match what the current MIUI, ColorOS, Funtouch and Realme UI
+   actually show**, including the "What you'll see" wording, which is the line whose
+   entire job is matching the vendor's screen.
+4. **That `Linking.openSettings()` and the battery-optimisation action reach a useful
+   page on each of the four skins.** Both work on the AOSP emulator (above); the skins
+   reorganise these pages and that is not evidence about them.
+5. **That the app survives the OEM killers at all** — the premise of the sprint, testable
+   only by leaving a build in a pocket for an hour on each of the four.
+6. Android 11+ package-visibility behaviour without a `<queries>` declaration.
+
+#### Copy that is not sourced
+
+`docs/design/` **is not in this repository** — the four Phase documents were never
+committed — so this was built from the written extract in the prompt, and the gaps are
+flagged in code rather than filled in:
+
+- **A8's numbered steps are not in the extract.** Its two step titles are derived from
+  the extract's own words ("two settings, same screen", and Realme UI's ColorOS lineage
+  whose settings A6 names), and A8 carries **no "What you'll see" line** because that text
+  would be fabricated. `A8_STEP_DETAIL_IS_UNSOURCED` and a test hold the gap open.
+- **A3's four notification names are derived from features in this codebase**, not
+  transcribed from Phase 2, and **the cap number is not sourced at all** —
+  `NAMES_ARE_DERIVED`, `DAILY_CAP_IS_UNSOURCED`. Both must be checked against Phase 2
+  before this screen ships.
+- A1, A2 and S1-S3 were **not built**. The extract does not describe them and inventing
+  screens is worse than leaving the sprint visibly partial.

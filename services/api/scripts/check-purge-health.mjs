@@ -13,7 +13,7 @@ import { Client } from 'pg';
  * purge itself. A watchdog that shares a process with the thing it watches dies with
  * it and reports nothing.
  *
- * Run: pnpm --filter @elmiron/api check:purge-health
+ * Run: pnpm --filter @fieldforce/api check:purge-health
  */
 
 const DEFAULTS = {
@@ -116,7 +116,7 @@ if (
     for (const reason of reasons) console.error(`  - ${reason}`);
     console.error(
       '\nThe 90-day retention promise is made on privacy grounds and is currently not being kept.\n' +
-        'Run `pnpm --filter @elmiron/api purge:audio` and find out why the schedule stopped.',
+        'Run `pnpm --filter @fieldforce/api purge:audio` and find out why the schedule stopped.',
     );
     process.exit(1);
   }
