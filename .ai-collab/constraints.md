@@ -130,3 +130,39 @@ Not rules — recurring decisions, with the answer this project has settled on.
 - **A flag nobody displays is a log line with extra steps.** If a mitigation depends
   on somebody reading it, and the screen does not exist yet, prefer the strict rule
   or give the mitigation an expiry.
+
+---
+
+## Re-derive facts the server owns. Record facts the client witnessed. (FIX-02)
+
+**The test:** if the client and the server disagree, whose answer is the evidence?
+
+- **The server's** — re-derive it at write time and ignore anything the client sent.
+  Whether an MR is inside their shift window is the server's fact. It owns the
+  territory's window and the clock, a client-supplied answer would be worthless, and
+  `record_check_in` correctly re-resolves it through `resolve_shift_window`. The same
+  goes for role, visible territories, quarantine state and the request's own IP.
+- **The client's** — record what it sent, and refuse if it cannot be reconciled.
+  Which consent notice a doctor read before agreeing is a fact only the handset
+  witnessed. Re-deriving it substitutes a different document for the one actually
+  shown, and produces a record attesting to text nobody saw.
+
+**Why this is written down.** `capture_consent` re-derived the active consent text at
+write time. It looked like the safe, server-authoritative choice — the same instinct
+that is correct for the shift window — and it silently recorded the wrong document
+whenever the notice changed between display and capture. `consent_records` is
+append-only, so each of those attestations would have been permanent.
+
+The failure was worse than one function. **The test asserted the defect as the
+requirement** — that the stored version equals the currently active one — and defended
+it in a comment as "the version comes from the server's catalogue rather than from the
+caller." A wrong idea that reaches the test suite stops being a bug and becomes the
+specification. It surfaced only as an intermittent failure that had been dismissed as
+a flake for weeks.
+
+**Corollary — the contract is not advisory.** `packages/core` had required
+`consentTextVersionId` all along, and `apps/field` sent it. The database had no
+parameter to receive it, and nothing detected the mismatch. When a request schema
+declares a required field, some function parameter or column must be able to consume
+it; if none can, either the contract is wrong or the schema is. Do not resolve that by
+dropping the field silently.
