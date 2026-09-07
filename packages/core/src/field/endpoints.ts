@@ -9,6 +9,7 @@ import {
 import { TerritorySchema, UserProfileSchema } from '../shared/identity.js';
 import {
   BeatPlanSchema,
+  BeatPlanStatusSchema,
   CallReportSchema,
   CaptureSourceSchema,
   CheckInSchema,
@@ -705,6 +706,102 @@ export const VisitRowSchema = z.object({
   updated_at: IsoDateTimeSchema,
 });
 export type VisitRow = z.infer<typeof VisitRowSchema>;
+
+/**
+ * FIX-14 C4 — the two row shapes a `sync_pull` payload actually carries.
+ *
+ * **A pull payload is a ROW, and `Doctor` and `BeatPlan` are AGGREGATES.** `sync_pull`
+ * returns `to_jsonb(d)` for a doctor, which is the `doctors` table and nothing else —
+ * while `DoctorSchema` requires `clinicAddresses`, which lives in `clinic_addresses`, and
+ * `BeatPlanSchema` requires `entries`, which lives in `beat_plan_entries`. Neither can be
+ * built from a pull.
+ *
+ * **Which side is right: both, about different things.** The aggregates are right about
+ * what a doctor is on a doctor screen. The pull is right that it carries rows — joining
+ * the children in would change what the payload means, would cross a second table's RLS,
+ * and would make every beat-plan change re-send its whole entry list. So the row types are
+ * named rather than the aggregates weakened, exactly as `VisitRowSchema` already does, and
+ * a consumer that needs the full aggregate reads the children separately.
+ *
+ * `Visit` needs no such split: every field `VisitSchema` declares is a column on `visits`,
+ * which is why `fromVisitRow` has worked since FIX-07.
+ *
+ * **`organisation_id` is parsed and dropped.** It is a real column and the payload carries
+ * it, because `to_jsonb(d)` is an implicit `select *` — so the app receives an
+ * organisation id it has no use for, and any column added to `doctors` in future reaches
+ * every handset without anybody deciding it should. Registered as BE-W71; dropping it here
+ * is the client half.
+ */
+export const DoctorRowSchema = z.object({
+  id: UuidSchema,
+  full_name: z.string().min(1),
+  registration_number: z.string().nullable(),
+  specialty: z.string().nullable(),
+  qualification: z.string().nullable(),
+  territory_id: UuidSchema,
+  assigned_mr_id: UuidSchema.nullable(),
+  organisation_id: UuidSchema,
+  is_active: z.boolean(),
+  created_at: IsoDateTimeSchema,
+  updated_at: IsoDateTimeSchema,
+});
+export type DoctorRow = z.infer<typeof DoctorRowSchema>;
+
+/** `Doctor` minus the children a row cannot carry. */
+export const DoctorRecordSchema = DoctorSchema.omit({ clinicAddresses: true });
+export type DoctorRecord = z.infer<typeof DoctorRecordSchema>;
+
+export const fromDoctorRow = (row: unknown): DoctorRecord => {
+  const parsed = DoctorRowSchema.parse(row);
+  return DoctorRecordSchema.parse({
+    id: parsed.id,
+    fullName: parsed.full_name,
+    registrationNumber: parsed.registration_number,
+    specialty: parsed.specialty,
+    qualification: parsed.qualification,
+    territoryId: parsed.territory_id,
+    assignedMrId: parsed.assigned_mr_id,
+    isActive: parsed.is_active,
+    createdAt: parsed.created_at,
+    updatedAt: parsed.updated_at,
+  });
+};
+
+export const BeatPlanRowSchema = z.object({
+  id: UuidSchema,
+  mr_id: UuidSchema,
+  territory_id: UuidSchema,
+  plan_date: IsoDateSchema,
+  status: BeatPlanStatusSchema,
+  approved_by_user_id: UuidSchema.nullable(),
+  approved_at: IsoDateTimeSchema.nullable(),
+  version: z.number().int().positive(),
+  supersedes_beat_plan_id: UuidSchema.nullable(),
+  created_at: IsoDateTimeSchema,
+  updated_at: IsoDateTimeSchema,
+});
+export type BeatPlanRow = z.infer<typeof BeatPlanRowSchema>;
+
+/** `BeatPlan` minus the entries a row cannot carry. */
+export const BeatPlanRecordSchema = BeatPlanSchema.omit({ entries: true });
+export type BeatPlanRecord = z.infer<typeof BeatPlanRecordSchema>;
+
+export const fromBeatPlanRow = (row: unknown): BeatPlanRecord => {
+  const parsed = BeatPlanRowSchema.parse(row);
+  return BeatPlanRecordSchema.parse({
+    id: parsed.id,
+    mrId: parsed.mr_id,
+    territoryId: parsed.territory_id,
+    planDate: parsed.plan_date,
+    status: parsed['status'],
+    approvedByUserId: parsed.approved_by_user_id,
+    approvedAt: parsed.approved_at,
+    version: parsed.version,
+    supersedesBeatPlanId: parsed.supersedes_beat_plan_id,
+    createdAt: parsed.created_at,
+    updatedAt: parsed.updated_at,
+  });
+};
 
 /**
  * A type alias rather than an interface, deliberately: TypeScript gives type aliases an
