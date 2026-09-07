@@ -1462,3 +1462,83 @@ matches **100% of rows**. No index can help a predicate true for every row, so a
 measurement using that query cannot distinguish a broken plan from a query with nothing to
 optimise. Derive a selective query from the fixture — `substring(full_name from 18)` off
 one row — rather than typing a word that happens to be in every name.
+
+---
+
+## 8 September 2026 — `runner_id: 0` means nothing ran. Do not debug the workflow.
+
+Between 21 and 23 August every workflow in this repository failed, hourly, for 34 hours,
+and the project auto-paused as a consequence. **Diagnosing it took a session; it should
+take two minutes.** This is the entry that makes that true.
+
+**The signature.** A job that fails in ~3 seconds with `runner_id: 0`, an empty
+`runner_name`, and `steps: []`, on a run whose `conclusion` is `failure` (not
+`startup_failure`), **across more than one workflow at the same moment**.
+
+```bash
+# The one query that identifies it. If runner_id is 0 and steps is 0, nothing executed.
+gh api repos/OWNER/REPO/actions/runs/<RUN_ID>/jobs \
+  --jq '.jobs[] | {name, conclusion, runner_id, runner_name, steps: (.steps|length),
+                   started: .started_at, completed: .completed_at}'
+```
+
+A healthy job for comparison, from the last success before the August break:
+
+```
+runner_id 1000000703 | runner_name 'GitHub Actions 1000000703' | steps 12 | 23s
+```
+
+and the failures, on three different workflows:
+
+```
+runner_id 0 | runner_name '' | steps 0 | 3s      Audio retention,          21 Aug 22:11
+runner_id 0 | runner_name '' | steps 0 | 2s      CI (both jobs),           23 Aug 08:44
+```
+
+**`gh run view --log-failed` returns `log not found`, and that is confirmation rather than
+an obstacle.** There is no log because there was no run. Anyone who reads "log not found"
+as "the logs expired" will go looking for a code defect that does not exist.
+
+**Is it repo-wide?** This is the discriminator between an infrastructure problem and a
+broken workflow. One query:
+
+```bash
+gh api "repos/OWNER/REPO/actions/runs?per_page=100&created=YYYY-MM-DD..YYYY-MM-DD" \
+  --jq '[.workflow_runs[] | {name, event, conclusion}] | group_by(.name)
+        | map({workflow: .[0].name, n: length,
+               fail: (map(select(.conclusion=="failure")) | length)})'
+```
+
+In August that returned failures on `Audio retention`, `Audio retention watchdog` **and**
+`CI` on a push, with a single clean transition and no successes afterwards:
+
+```
+TRANSITION success -> failure at 2026-08-21T22:11:01Z
+runs after: 65   successes after: 0
+```
+
+Three unrelated workflows failing at the same instant is not three bugs.
+
+**What it is not, for this repository.** The obvious cause is Actions minutes or a spending
+limit — and **it cannot be that here**, because Actions minutes on standard hosted runners
+are free and unmetered for **public** repositories, and this one has been public since the
+day it was created:
+
+```bash
+$ gh api repos/OWNER/REPO --jq '{private, visibility}'
+{"private": false, "visibility": "public"}
+
+$ gh api repos/OWNER/REPO/events --jq '[.[] | select(.type=="PublicEvent") | .created_at]'
+["2026-08-06T06:18:53Z"]     # same instant as created_at: public from birth
+```
+
+Check both of those before reaching for the billing explanation. **UNVERIFIED: what the
+August cause actually was.** The remaining candidates — Actions temporarily disabled at the
+org level, an account restriction, or a platform incident — all need the org audit log,
+which needs `admin:org` and returns 404 to this token.
+
+**What to do when it recurs.** Do not edit a workflow, do not disable one, and do not
+change the retention code. Check the three things above, then look at the org's Actions
+settings and githubstatus.com. And **write down that you disabled something and why** — the
+August disable had a perfectly good reason (34 hours of red builds) that nobody recorded,
+which is how `handoff.md` came to say "this was not a response to a failure" for a month.
