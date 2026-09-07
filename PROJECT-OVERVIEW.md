@@ -6501,3 +6501,433 @@ data · shift hours · **UCPMP cap** · PV sign-off · Supabase storage-deletion
   MR path. That is a decision, not a cleanup.
 
 ---
+
+---
+
+### FIX-11 — sync_pull phase 1 (7–8 September 2026)
+
+**Not done, and stated first: the console was not wired, no card was removed, consent and
+samples were not converted, the samples screen's message was not removed, `apps/field` was
+NOT wired to the new pull, and no dependency was added.**
+
+#### CI and counts
+
+FIX-10's three commits pushed as `700df2f..8853b3d`. **That run failed, on my own error**,
+and the failure is recorded here rather than smoothed over.
+
+**Run `34150819478`: `migrations · Gate 0 RLS suite · rollbacks` failed** with:
+
+```
+error: function public.ucpmp_cap_decision_status() does not exist
+  code: '42883'
+```
+
+FIX-10 put the new `check:decision-debt` step **after** `verify:rollbacks`, which rolls
+every migration back and leaves the public schema empty. The function it reads was gone by
+the time it read it. **The control behaved correctly** — it failed *closed* on an answer it
+could not read, which is exactly what it was built to do — and the ordering was wrong.
+Anything that reads the schema has to run before the step that destroys it. Moved, with the
+reason written into `ci.yml` beside it.
+
+**Run `34151349872` for `59255eb`: success**, both jobs, and the decision step ran and
+reported *"UCPMP sample cap decision is outstanding, 60 day(s) to the deadline."*
+
+| package | at 59255eb (CI) | after FIX-11, locally |
+| --- | ---: | ---: |
+| `@fieldforce/api` | **431 passed / 17 files** | **443 passed / 18 files** |
+| `@fieldforce/field` | 341 / 23 | unchanged |
+| `@fieldforce/ui-tokens` | 54 / 3 | unchanged |
+| `@fieldforce/mock` | 40 / 1 | unchanged |
+| `@fieldforce/core` | 21 / 3 | unchanged |
+| `@fieldforce/ui` | 4 / 1 | unchanged |
+
+No skips — every summary line reads `N passed (N)`. `verify:rollbacks`: *"All rollbacks
+applied in reverse order; public schema is empty"* — **29 migrations, 29 rollback files**.
+`turbo run typecheck lint`: **16 successful, 16 total**.
+
+#### A2 — G-CRON is confirmed, for the first time
+
+Both retention workflows were re-enabled on 7 September after a failure streak whose last
+scheduled runs were 22–23 August. **Both have now had a scheduled run succeed.**
+
+| workflow | run | created | event | conclusion |
+| --- | --- | --- | --- | --- |
+| `retention.yml` | **34135046578** | 2026-09-07T14:49:25Z | `schedule` | **success** |
+| `retention-watchdog.yml` | **34136136779** | 2026-09-07T15:01:48Z | `schedule` | **success** |
+
+Every other run in both listings is `"conclusion":"failure"` and dated 22–23 August. So the
+answer to *"has a run with `event: schedule` succeeded since the re-enable"* is **yes**, and
+the re-enable took.
+
+**How the two possible answers were told apart, since the question asked.** "Not enough
+time has passed" and "the re-enable did not take" look identical from a green CI badge, and
+are distinguished by the `event` field: a `workflow_dispatch` run proves a human pressed a
+button, and only a `schedule` run proves the cron fired. Both rows above are `schedule`.
+The run log settles the rest — it is not merely that the job started:
+
+```
+purge 38e1d02f-…: closed 0 stale session(s), claimed 0, destroyed 0, failed 0
+{ "stalled": false, "destroyedTotal": 0, … }
+Audio retention is healthy.
+```
+
+It reached the production database, did its work, and found nothing to purge. **That also
+retires, in passing, the worry that the database had auto-paused again** — an unreachable
+database would have failed the step, which is how the August outage was eventually noticed.
+
+#### B1 — the rule, written where conventions live
+
+`.ai-collab/constraints.md`, as a rule rather than a war story:
+
+> **Postgres will not evaluate a non-leakproof qual before a security qual. On a table with
+> RLS policies, a predicate whose operator is not `LEAKPROOF` is therefore demoted to a
+> post-filter and can never become an index condition for any non-superuser. It
+> sequentially scans, at every scale, forever, and nothing in the plan says why.**
+
+with the check to run before assuming an index will help, the three measured plans from
+FIX-10, the instruction to `explain` **as the real role** (the effect vanishes for
+`BYPASSRLS`, which `postgres` holds here), and both secondary traps: a disjunction with one
+non-indexable branch, and the null branch as a generic-plan trap. The reusable half is also
+in `docs/gotchas.md` from FIX-10.
+
+#### B2 — the blast radius, and it is one function
+
+**`ILIKE` is not the only non-leakproof operator.** Enumerated from the catalogue rather
+than remembered — 22 of them take `text` on the left:
+
+```
+!~  !~*  !~~  !~~*  %  %>  %>>  <%  <->  <->>  <->>>  <<%  <<->  <<<->  @@  ||  ~  ~*  ~~  ~~*
+```
+
+so `LIKE`, `ILIKE`, all four regex forms, `SIMILAR TO` (which compiles to `~`), every
+`pg_trgm` similarity and distance operator, and full-text `@@`. Plus every function anybody
+writes, since user-defined functions are not leakproof unless declared so.
+
+**Every occurrence in the migrations, and what each one is:**
+
+| where | occurrence | on a growing path? |
+| --- | --- | --- |
+| `20260812000100:528-529` | `search_doctors` v1, `d.full_name ilike` / `d.specialty ilike` | **Superseded.** Dead text in an old migration; the live body is BE-W64's |
+| `20260814000100:372-373` | `search_doctors` v2, same two | **Superseded**, same reason |
+| `20260907000800:156-157` | `search_doctors` v3 — the live one | **Fixed by BE-W64.** `security definer`, scope resolved to a `uuid[]` first |
+| `20260813000200:395`, `20260814000100:230`, `20260816000300:1334-1336` | `v_message ilike '%shift window%'` and four siblings | **No.** A `text` *variable* inside an exception mapper. No table, no column, no index |
+| `20260816000400:376` | `p_storage_key like 'voice-notes/%'` | **No.** A function parameter, not a column |
+| `20260907000300:34` | `array_to_string(p.proacl, ',') like '%authenticated=X%'` | **No.** `pg_proc`, a catalogue with no RLS, in a migration that ran once |
+| `20260816000500:46` | "purged at ninety days like a recording" | **No.** Prose inside a `comment on` |
+
+Regex, `SIMILAR TO` and trigram distance: **zero occurrences anywhere in the migrations**,
+confirmed by grep for `~`, `~*`, `!~`, `<->`, `<%`, `%>`, `<<%` and `@@`.
+
+**And the structural answer, which is stronger than the grep.** The rule can only cost
+anything where an index exists that the predicate might have used. There are exactly **two
+GIN or expression indexes in the entire `public` schema**, both on `doctors`, both the ones
+BE-W64 addressed:
+
+```
+ doctors | doctors_full_name_trgm_idx | gin | … (full_name gin_trgm_ops)   | rls: t | forced: t
+ doctors | doctors_specialty_trgm_idx | gin | … (specialty gin_trgm_ops)   | rls: t | forced: t
+```
+
+Every other index in the schema is a plain btree reachable through leakproof operators. So
+the blast radius is one function, it has been fixed, and the next person to add a text index
+to an RLS table is the one the rule in `constraints.md` is written for.
+
+#### B3 — the 38 zero-scan indexes, classified rather than approximated
+
+FIX-10 said "13 + ~12 + ~5", which left about seven unexplained. Re-measured after a full
+suite and the perf runs, and this time each index is joined to its table's own statistics
+so a zero can be interpreted instead of guessed at. **38 of 109** (one more than FIX-10:
+`doctors_territory_id_idx`, which lost to the composite at this scale).
+
+| group | count | why the zero means what it means |
+| --- | ---: | --- |
+| Backs a primary key or unique constraint | **13** | Enforces on every insert. Being scanned is not its job |
+| Table has no live rows at census | **3** | `sync_batches`, `sync_items`, `voice_notes` — written and rolled back by the suite |
+| Table under 1,000 rows | **12** | A sequential scan of a page or two is the correct plan. `territories` (80), `user_profiles` (169), `consent_records` (44), `upload_grants` (10) and friends |
+| **Table of 1,000+ rows, heavily queried, this index still unused** | **10** | The only interesting group — see below |
+
+The last 10 are the reviewer's "seven", and they are interesting precisely because their
+tables were *not* idle: `doctors` recorded **52,523** index scans, `user_profiles` 45,035,
+`visits` 20,006. A zero here means another index won, not that nothing looked.
+
+| index | table rows | disposition |
+| --- | ---: | --- |
+| `doctors_territory_id_idx` | 3,541 | **Redundant.** Strict prefix of `doctors_territory_active_name_idx` — BE-W67 |
+| `beat_plans_mr_id_idx` | 2,110 | **Redundant.** Strict prefix of `beat_plans_one_per_mr_per_day_version` — BE-W67 |
+| `doctors_full_name_trgm_idx` | 3,541 | BE-W64's, admin-path only. Already DECIDE-3 |
+| `doctors_specialty_trgm_idx` | 3,541 | Same |
+| `doctors_registration_number_idx` | 3,541 | Reachable only through the `BitmapOr` in `search_doctors`, which fires at wide scope. Measured firing in FIX-10 §B2 |
+| `doctors_assigned_mr_id_idx` | 3,541 | Nothing filters on `assigned_mr_id`. Scope is by territory, not by assignment |
+| `audit_log_action_idx` | 20,777 | 1,264 kB for a console audit view that is not built |
+| `audit_log_actor_idx` | 20,777 | 1,288 kB, same |
+| `visits_doctor_id_idx` | 16,842 | A per-doctor visit history is a screen that does not exist |
+| `beat_plans_territory_date_idx` | 2,110 | A manager's territory-wide plan view, likewise |
+
+`beat_plan_entries_beat_plan_id_idx` is a third strict prefix (of
+`beat_plan_entries_unique_doctor`) and did not appear above only because its table is empty
+at census. All three redundancies were found mechanically rather than by eye:
+
+```sql
+where a.amname = 'btree' and b.amname = 'btree'
+  and not a.partial and not b.partial and not a.indisunique
+  and b.indkey::text like a.indkey::text || ' %'
+```
+
+**UNVERIFIED, and this is the honest limit.** The last five — the audit, visit and beat-plan
+indexes — are indistinguishable from dead until a database with real traffic is measured,
+because "no screen uses this yet" and "no screen will ever use this" look the same in
+`pg_stat_user_indexes`. Production is unreachable from the working machine.
+
+#### B4 — accent-insensitive search, registered
+
+`'Renée'` does not find `DR RENEE FIXTURE`, and `'Renee'` does not find `Dr Renée Fixture`.
+That is asserted in `field.spec.ts` today **as a guard**, because preserving old behaviour
+was the point of the FIX-10 equivalence suite and ILIKE is case-insensitive but not
+accent-insensitive.
+
+As an equivalence assertion it is correct. As product behaviour it is a defect: for Indian
+transliterated names and any European surname, an MR who types the name they were given
+does not find the doctor. `unaccent` beside the trigram index is the standard answer.
+**Registered as BE-W66, not fixed** — it needs a new extension, and the rule is to ask.
+
+---
+
+#### C1 — the two holes, and how each is closed
+
+**Hole 1, paging across a tie: a composite `(updated_at, id)` ordering key in an opaque
+cursor.** `id` is a primary key, so no two rows can tie and the order is total; the resume
+comparison `(updated_at, id) > (last_updated_at, last_id)` is exact rather than
+approximate. The cursor is opaque by contract because its shape has to change when
+tombstones arrive, and a client that parses it will depend on the shape.
+
+**Hole 2, the row committed mid-pull: transaction snapshots, not a timestamp.** This is
+the one that loses data silently and surfaces months later as *"a visit that never synced"*,
+so the reasoning is written out in the migration header and repeated here.
+
+`updated_at` is stamped with `now()`, which is **transaction start** time. A transaction
+that begins at 10:00:00 and commits at 10:00:05 writes rows stamped 10:00:00. A pull at
+10:00:02 cannot see them, and if it advances a watermark to 10:00:02, the next pull asks
+for changes after 10:00:02 and **those rows are never returned again.** No care with the
+timestamp fixes it, because the timestamp is written before the visibility it stands in for.
+
+| option | verdict |
+| --- | --- |
+| Overlap window — re-request the last N seconds | **Rejected.** N is a guess, and when the guess is wrong the loss is silent |
+| Monotonic sequence column | **Rejected, and the ADR was wrong about it.** ADR §2.1(c) says "commit order and sequence order agree". They do not: `nextval()` is evaluated when the row is written, not when it commits, so a long transaction takes a low number and commits after a short one that took a higher one. The identical defect, at the cost of a column, an index and a trigger on every synced table |
+| **Transaction snapshot** | **Chosen** |
+
+The cursor carries two snapshots — `since`, from the end of the previous sweep, and `upto`,
+taken once at the start of this one — and a row is returned when
+
+```sql
+pg_visible_in_snapshot(xmin, upto) and not pg_visible_in_snapshot(xmin, since)
+```
+
+A transaction still in flight when `since` was taken is by definition not visible in it, so
+whenever it commits, the row it wrote qualifies. **Nothing can be missed, regardless of how
+long a writing transaction runs**, because visibility is what is tested rather than a value
+written inside it. Every `UPDATE` writes a new row version with a new `xmin`, so "changed
+since" and "not visible then, visible now" are the same question.
+
+**Two snapshots rather than one** because a sweep spans pages: `upto` is frozen for the
+whole sweep, so a row committed between page 1 and page 3 cannot appear on page 3 with a
+lower `(updated_at, id)` than page 1 already passed. It is picked up by the next sweep,
+whose `since` is this sweep's `upto`.
+
+The cost is **duplicates, never omissions** — a row written across a sweep boundary can
+arrive twice, so a consumer must upsert, which it must anyway.
+
+**KNOWN BOUND, UNVERIFIED beyond arithmetic.** `xmin` is a 32-bit `xid` and the cast to
+`xid8` cannot recover the epoch, so the comparison is meaningful only while the database
+has not wrapped 2^32 transactions since the cursor was issued. Years at this write volume,
+and the remedy already exists (`45005`, start again) — but **nothing detects the
+condition**. Registered as BE-W68 rather than hidden.
+
+**A property worth stating, found by a test failing.** A pull cannot see rows written by the
+caller's own uncommitted transaction — they are not committed, and the snapshot says so.
+In production every pull is its own transaction and never wrote anything, so the case does
+not arise; in tests it means a fixture has to really commit, which is why
+`sync-pull.spec.ts` uses a second connection rather than the usual rolled-back one.
+
+#### C2 / C3 / C4 — what was built
+
+`public.sync_pull(p_cursor text, p_entities text[], p_limit integer) returns jsonb`,
+migration `20260907001100_sync_pull_phase1.sql`, rollback checked in.
+
+- **Inserts and updates only.** No deletes, no leave-scope. Entities: `visit`, `beat_plan`,
+  `doctor`.
+- **C3, the incompleteness is a FIELD.** Every response carries a required `completeness`
+  object: `reflects: ['insert','update']`, `omits: ['delete','out_of_scope']`,
+  `entities`, `omittedEntities`, and a `note` that says a removed or reassigned record will
+  keep appearing until a full re-sync and that this must not be presented as a current
+  view. A client that parses a response cannot avoid receiving it and does not have to
+  version-sniff to know the pull is partial.
+- **C4, an RPC.** FIX-08's finding stands: a table read can only ever refuse with RLS
+  `42501`, where an RPC can raise something a client can act on. `45005` — *"sync cursor is
+  not recognised"* — carries the instruction *start again with a null cursor*, which is a
+  full re-sync rather than a retry. `45006`, *cursor expired*, was deliberately **not**
+  minted: it becomes meaningful when tombstones acquire a retention window, and a code that
+  can never be raised is the same class of thing as an index that can never be used.
+- **`security invoker`, deliberately the opposite of BE-W64**, and worth stating so the two
+  do not look inconsistent. `search_doctors` needed an index on a non-leakproof predicate,
+  which RLS forbids. `sync_pull` filters on a snapshot function over an already-scoped row
+  set — the indexable part *is* the scope — so RLS costs nothing here, and letting the
+  policies do the scoping avoids transcribing three tables' policies into one body where a
+  transcription error is a cross-territory leak.
+- **The moment consent or analyses enter this pull it must become `security definer`**,
+  because every read of those must write an audit row first and Postgres has no SELECT
+  trigger. That is the engineering consequence of §5 question 4, and it is why they are not
+  here.
+
+#### C5 — what changed in `packages/core`, and why
+
+The contract as written could not be implemented correctly.
+
+| was | is | why |
+| --- | --- | --- |
+| `since: IsoDateTime` | `cursor: string` (opaque) | A timestamp cannot address a position inside a tie, and it is the hole-2 trap |
+| — | `limit: number` | The server clamps 1–500; the client could not previously ask |
+| `deleted: boolean` | `reason: 'upserted' \| 'deleted' \| 'out_of_scope'` | One boolean was standing for three events — destroyed, consent-withdrawn, and no longer yours. Telling an MR a consent record was *deleted* when it was reassigned is false in a direction that matters |
+| — | `nextCursor: string` (required) | `hasMore` alone is unactionable |
+| — | `completeness` (required) | C3 |
+| `entity: SyncEntity` | `entity: SyncPullEntity` | **A new enum, not a widening of the old one.** `SyncEntitySchema` is the outbox's list — things a handset creates. Adding `beat_plan` and `doctor` to it would widen the *write* surface to buy a name for a read |
+| `serverTime` | unchanged, and re-documented | It looks like a watermark and is exactly the trap. The docstring now says so |
+
+`services/mock` was reshaped to match, because leaving it emitting the old shape would have
+recreated the drift FIX-03 spent a session auditing — `contract.spec.ts` asserts the mock
+against `SyncPullResponseSchema` and would have caught it. Its old handler mapped
+`fx.syncQueue`, **the outbox**, into pull results, so the frontend has been building against
+a pull that echoed back what the device had just sent, with `deleted` always false,
+`hasMore` always false and a hard-coded clock. Only visits survive that mapping.
+
+**The response shape is UNEXERCISED.** No real client has received one — C8 forbade wiring
+`apps/field` in this session, and the mock is a fixture. Every FIX-06 finding about
+response-side drift was found the moment a real client first received a real response, and
+that has not happened here yet.
+
+#### C6 — the tests
+
+`services/api/tests/sync-pull.spec.ts`, **12 passed**.
+
+| what | result |
+| --- | --- |
+| Unauthenticated caller | refused `28000` |
+| A cursor the server did not issue | refused **`45005`**, not a generic error |
+| A cursor from an unknown version | refused `45005` |
+| **Pagination across a tie** — 7 doctors sharing one `updated_at`, page size 2 | every row exactly once: none skipped, none repeated, and the boundary lands inside the tie three times over (asserted, so the test cannot pass by not paging) |
+| **A row committed mid-pull** | returned by the next pull, and its own `updated_at` asserted to be *older* than the moment the cursor was issued — the exact condition under which a watermark loses it |
+| A completed sweep, pulled again | returns nothing, so snapshot cursors do not turn every pull into a full re-send |
+| Incompleteness present on the **first** page | yes |
+| Incompleteness present on the **last** page | yes — the page a client is most likely to read as "done, therefore complete" |
+| Only `upserted` is ever emitted in phase 1 | yes |
+| **Out-of-subtree**: an MR from another region | an **ABSENCE, not a refusal**, and stated as such — `visits_select_own_or_team` is a SELECT policy and a policy filters rather than raising, so the caller cannot distinguish "no changes" from "not yours". Acceptable here because a pull has no action to offer for someone else's rows; recorded rather than left ambiguous |
+| A doctor outside the territory | never appears |
+| The entity filter | honoured |
+
+#### C7 — three mutations, count unchanged at 12 each
+
+| mutation | what it removes | result |
+| --- | --- | --- |
+| **A.** the snapshot test replaced by a timestamp watermark — the design the ADR rejected, with everything else untouched | loss-freedom | **1 failed / 11 passed** — exactly *"a row committed DURING a pull arrives on the next pull"*, and nothing else |
+| **B.** `completeness` renamed out of the response | the statement of incompleteness | **3 failed / 9 passed** — both C3 assertions and the completed-sweep test |
+| **C.** the `id` tiebreak dropped, leaving `updated_at` alone | deterministic paging | **1 failed / 11 passed** — exactly the tie test |
+
+None dropped the case count, so none was a no-op. Mutation A is the important one: it is
+the naive implementation, and the suite tells the two apart on the single behaviour that
+distinguishes them.
+
+#### Where phase 1 stopped, and on which question
+
+Nothing in Part C stopped early. Phase 1 was scoped in advance to the part that does not
+depend on a human answer, and it reached the end of that scope:
+
+- **deletes** stop at ADR §5 question 1 — the tombstone window, and whether a consent
+  tombstone conflicts with the withdrawal promise. Legal.
+- **leave-scope** stops at question 2 — what an MR keeps when they lose a territory.
+  Privacy, with a product answer.
+- **consent and analyses in the pull** stop at question 4 — an audit row per pull, per MR,
+  per day — and question 5 is upstream of it.
+
+Those three are why `completeness.omits` is not empty, and why it is a field.
+
+---
+
+#### D1 — the deadline warns before it fires
+
+`ucpmp_sample_cap_decision_due` still fails CI on **6 November 2026**. From **16 October** —
+21 days, the last third of the 60-day window — `check:decision-debt` prints a GitHub Actions
+`::warning::` and **exits 0**.
+
+`warn` and `overdue` are **mutually exclusive in the database**, not in the script. A
+warning still true on the day the build goes red teaches a reader to treat the red as a
+warning too, and that is how a control stops working without anybody switching it off.
+
+Proved both ways rather than asserted. With a deadline ten days out:
+
+```
+::warning title=Decision due::the UCPMP sample cap decision is due on 2026-09-17… -- 10 day(s) left.
+A DECISION IS COMING DUE: … This is not failing the build yet. It will.
+EXIT: 0
+```
+
+and with a backdated one, exit 1. Six new tests: four against the database — inside the
+window, outside it, overdue, and cap configured — and two pure, including a negative so a
+function that warns *always* cannot pass.
+
+#### D2 — the five questions that need a human, verbatim
+
+Quoted from `docs/adr-sync-pull.md` §5. Requested in FIX-10 and FIX-11 and reproduced here
+so they can be routed without opening the file. Each carries one line on what changes.
+
+> **1. The tombstone window (§2.3). How long may a record of a deleted thing be kept, and
+> does a consent tombstone conflict with the withdrawal promise? Legal, not technical.**
+
+*What changes:* a longer window lets a handset stay offline longer before it needs a full
+re-sync; a shorter one means more full re-syncs. If a **consent** tombstone is not permitted
+at all, consent cannot be in the pull, and a withdrawal will never reach a handset that was
+offline when it happened.
+
+> **2. What an MR keeps when they lose a territory (§2.5). Privacy question with a product
+> answer.**
+
+*What changes:* whether a reassigned MR keeps the old territory's doctor list, visits and
+beat plan on their phone indefinitely, or is told those records are gone — and if told,
+whether the app says "deleted" (false, and for a consent record dangerously so) or "no
+longer yours".
+
+> **3. Whether an updates-only pull may ship (§4), given it must tell the user it cannot
+> see deletions.**
+
+*What changes:* the 8 half-days built in this session either reach an MR in the next
+increment or wait for the other 21. If it ships, the app must say plainly that it cannot see
+removals — the server half now says so in a field, and nothing yet displays it.
+
+> **4. Whether consent and analyses belong in the pull at all. Every such read writes an
+> audit row — per pull, per MR, per day. That is a volume and a compliance decision before
+> it is a schema one.**
+
+*What changes:* 100 MRs pulling every 15 minutes is roughly 3,000 audit rows a day per
+entity type, which would make the pull the largest writer of audit rows in the system.
+Excluding them means consent state on a handset can only ever be what that handset itself
+recorded. It also decides whether `sync_pull` stays `security invoker`: an audited read
+requires `security definer`.
+
+> **5. The offline consent question from FIX-02 §3 is upstream of all of this. If consent
+> capture cannot be queued offline, a pull that carries consent records is solving a problem
+> the product does not have yet.**
+
+*What changes:* this gates 1 and 4. Answer it first; if consent is never captured offline,
+most of the consent-in-sync design disappears rather than being decided.
+
+#### What FIX-11 did not do
+
+- **`apps/field` was not wired to the pull.** Server side and contract only, per C8. The
+  response shape is therefore **unexercised by any real client**, which is the state in
+  which FIX-06 found every response-side drift instance it found.
+- **The console was not wired, no card was removed, consent and samples were not converted,
+  and the samples screen's message was not removed.**
+- **No dependency was added.** `unaccent` (BE-W66) needs one and was registered rather than
+  installed.
+- **No index was dropped.** The three prefix redundancies are BE-W67.
+
+---

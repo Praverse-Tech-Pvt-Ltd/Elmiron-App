@@ -744,3 +744,29 @@ from the working machine. Recorded as UNVERIFIED in FIX-10 §B6 rather than turn
 tasks nobody can act on. The one thing that *was* settled: `search_doctors` is the only
 place in the whole schema where an ILIKE touches a column, so no other index carries the
 leakproof problem.
+
+### Added by FIX-11
+
+| ID | Title | Changes | Deps | Blocker | Est | Verification |
+|---|---|---|---|---|---|---|
+| **BE-W66** | Doctor search does not match across accents | `search_doctors`, new migration | BE-W64 | — | 2 | `'Renée'` does not find `DR RENEE FIXTURE` and `'Renee'` does not find `Dr Renée Fixture` — asserted today in `field.spec.ts` as an equivalence guard, because it is the behaviour the old body had. For Indian transliterated names and any European surname that is a usability defect, not a correctness one: an MR who types the name they were told will not find the doctor. `unaccent` alongside the trigram index is the standard answer — `create extension unaccent`, an immutable wrapper, and a functional index on `unaccent(full_name)`. **Ask before adding the extension.** Verification: both spellings find both rows, the plan still names a trigram index, and the FIX-10 equivalence suite is re-pointed at the new intended behaviour rather than deleted |
+| **BE-W67** | Three indexes are strict prefixes of another index | `doctors`, `beat_plans`, `beat_plan_entries` | — | — | 1 | `doctors_territory_id_idx` (7) inside `doctors_territory_active_name_idx` (7 9 3); `beat_plans_mr_id_idx` (2 4) inside `beat_plans_one_per_mr_per_day_version` (2 4 10); `beat_plan_entries_beat_plan_id_idx` (2) inside `beat_plan_entries_unique_doctor` (2 3). All btree, none partial, so the wider index serves every lookup the narrower one does. Each is write amplification on every insert for nothing. Verification: drop them, and the FIX-10 plans in `PROJECT-OVERVIEW.md` §B2 still name an index rather than a Seq Scan — the listing branch in particular, which currently uses the composite |
+| **BE-W68** | `sync_pull` cannot detect a cursor from before an xid wraparound | `sync_pull` | BE-W61 | — | 2 | `xmin` is a 32-bit `xid` and the cast to `xid8` cannot recover the epoch, so a cursor issued more than 2^32 transactions ago compares meaninglessly rather than failing. At this product's write volume that is years away, and the remedy already exists — `45005`, "start again with a null cursor" — but nothing detects the condition. Verification: a cursor carrying an epoch, and a test that a cursor from a previous epoch raises `45005` rather than returning a wrong answer |
+
+**Phase 2 of BE-W61 is unchanged and still blocked on people, not engineering.** Deletes,
+tombstone retention, `out_of_scope`, and consent or analyses in the pull all wait on the
+five questions in `docs/adr-sync-pull.md` §5. Phase 1 stopped exactly where they start,
+and the response says so in a field.
+
+**Not registered, and the reason.** 38 of 109 indexes report `idx_scan = 0` after a full
+suite and the perf runs. 13 back primary keys or unique constraints and do not need to be
+scanned to do their job; 3 sit on tables with no live rows at census time; 12 sit on tables
+under a thousand rows, where a sequential scan is the correct plan and the zero says
+nothing. The remaining 10 are on tables that WERE heavily queried — `doctors` alone
+recorded 52,523 index scans — so those zeros mean "another index won", which is a fact
+about this workload and not about production. Three of them are BE-W67 above; two are the
+BE-W64 trigram pair, already DECIDE-3; the other five (`audit_log_action_idx`,
+`audit_log_actor_idx`, `visits_doctor_id_idx`, `beat_plans_*`) serve screens that do not
+exist yet, chiefly the console. **They cannot be classified further without
+`pg_stat_user_indexes` from a database carrying real traffic, and production is unreachable
+from the working machine.** UNVERIFIED, deliberately.
