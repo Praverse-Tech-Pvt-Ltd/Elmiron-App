@@ -4874,3 +4874,116 @@ Four references, all updated: the definition and its grant, the rollback, and
 `consent-audio.spec.ts`. No seed script, no mock and no application code called it. **No
 default was added for the new parameter** — a default would have quietly restored the old
 behaviour for every existing caller, which is the failure this fix exists to remove.
+
+---
+
+### FIX-03 — mock/database drift audit (7 September 2026)
+
+#### Part A — pushed, and CI is green
+
+Eight commits pushed, `ea4fdad..bf96918`. **CI run `34111696975`: success, 2m43s**, both
+jobs — `typecheck · lint · format · unit tests` (2m4s, ID 101709191813) and
+`migrations · Gate 0 RLS suite · rollbacks` (2m39s, ID 101709191976). The `api` suite is
+**349 passing**. `main` is green.
+
+#### B1 — the architecture question. Answer: **(i)**, and it was decided deliberately.
+
+**No middle tier is missing.** The intended path is client → PostgREST/RPC with row-level
+security, and Edge Functions were **considered and rejected**, twice, with reasons on the
+record:
+
+- `PROJECT-OVERVIEW.md:1575` — *"The Edge Function route means a second implementation of a
+  compliance-critical worker, in a second language"*, plus *"the local stack runs no edge
+  runtime, so an edge-function purge could not be exercised by the tests at all."*
+- `PROJECT-OVERVIEW.md:485` — the same route rejected for reads, in favour of routing every
+  read through a `SECURITY DEFINER` function.
+- `PROJECT-OVERVIEW.md:70` — *"What does not exist yet: HTTP endpoints beyond what PostgREST
+  generates from the schema."*
+
+Edge Functions survive in the plans only for the future AI pipeline (`mr-app-plan.md:368`)
+and as a rejected option for the retention scheduler. **S3's estimate does not rest on a
+missing tier.**
+
+#### B2 — the audit
+
+44 declared paths; `services/mock` defines **52 routes over 43 of them**.
+
+| Pass | ALIGNED | DIVERGENT | NO-BACKEND |
+| --- | --- | --- | --- |
+| Automated (naive table-name heuristic) | 29 | 8 | 7 |
+| **After manual resolution** | **30** | **13** | **1** |
+
+Five of the automated NO-BACKENDs turned out to have a database surface the *contract does
+not name*, which is a divergence rather than an absence. `/me` resolves fine. Only
+`/sync/pull` has genuinely nothing behind it.
+
+**The shape of the problem, and why nobody saw it.** `services/mock` imports `API_PATHS`
+from the contract, so it implements the **contract's** shape faithfully — which is why 52
+routes cover 43 of 44 paths and the mock's 40 conformance tests pass. The mock is right
+about the contract. **The contract is wrong about the database.** It declares REST-shaped
+paths while the database, following the recorded decision above, serves those surfaces
+through hand-written RPCs. Seven functions granted to `authenticated` —
+`list_consent_records`, `read_consent_record`, `list_analyses`, `read_analysis`,
+`daily_mileage`, `begin_upload`, `complete_upload` — appear **zero** times in
+`packages/core/src/field/endpoints.ts`.
+
+This is the `capture_consent` defect generalised: contract and schema were each internally
+coherent and were never checked against each other.
+
+#### The five that matter most
+
+1. **`POST /analyses/:id/overrides` has no backend at all.** No `analysis_overrides` table
+   exists (`select tablename … like '%analys%'` returns only `analyses`), and no function
+   has `override` in its name. The mock returns **201 with a fabricated row** —
+   `id`, `findingId`, `overriddenByUserId` from fixtures — and `apps/console`'s analysis
+   review renders it. **This is the product displaying something no server has ever said**,
+   which is the one thing it says it never does. It is also the row `fe-w3-spec.md` calls
+   "the evidence of human oversight".
+2. **`/consent-records` and `/consent-records/withdrawals`** —
+   `has_table_privilege('authenticated','public.consent_records','SELECT')` is **false**.
+   The real surface is `list_consent_records` / `read_consent_record`, neither named in the
+   contract. Consent path, so category 1.
+3. **`POST /sync/pull` — no `sync_pull` function exists.** `sync_push` exists and is
+   granted; the pull half of offline sync has no server side at all. This is upstream of
+   `FE-W18` and therefore of **FE-G2**.
+4. **`/analyses`, `/analyses/:id`, `/analyses/:id/response`** — `analyses` is not
+   selectable by `authenticated`; `list_analyses`, `read_analysis` and
+   `respond_to_analysis` are the real surface and are unnamed in the contract.
+5. **`/uploads/:id` and `/uploads/completion`** — no relation resolves `uploads`. The real
+   surface is `begin_upload` / `resume_upload` / `complete_upload` /
+   `record_upload_progress` / `abandon_upload` / `my_upload_queue`. **Blocks BE-W16**, the
+   audio upload path.
+
+Also found: **`GET /sync/queue` exists only in the mock** — not in `API_PATHS`, and no
+caller in `apps/field` or `packages/core`. Dead surface.
+
+#### C — `runPurge` concurrency. Verdict: **test-only. Production is not exposed.**
+
+The hypothesis was that the worker assumes single-instance execution on a path that
+permanently deletes audio. **It does not.** `claim_expired_audio` claims every row with
+`for update skip locked`, sets `purge_state = 'claimed'` and `claimed_by_run_id`, and
+re-claims anything whose `claimed_at` is older than a 15-minute lease. Two instances
+partition the work; they cannot claim the same row.
+
+Production cannot run two anyway. `retention.yml` sets
+`concurrency: group: audio-retention, cancel-in-progress: false`, so a slow run **queues**
+the next rather than overlapping, and `retention-watchdog.yml` runs `check:purge-health` —
+**not** the purge worker — under its own separate group.
+
+The intermittent suite failure is two **spec files** sharing one global worker.
+`abandoned` comes from `close_stale_upload_sessions()`, a plain
+`update … where state = 'open' … returning` counted by the caller: whichever spec's purge
+runs first closes the sessions, and the second counts zero. Row locks serialise it, so
+there is no corruption — only a split count. Recorded in `docs/gotchas.md`; no production
+task raised.
+
+#### Tasks
+
+Thirteen new tasks in **`docs/COMPLETION-PLAN.md` §10 — "Drift tasks — added by FIX-03"**,
+`BE-W47`–`BE-W59` and `FE-W21`, ranked by the consequence order above. Includes the two
+items FIX-02 left open — the missing upload `checksum` and the same-instant consent
+constraint — and `FE-W21`, which records that **no client code maps SQLSTATE at all today**
+(`grep -rn "sqlstate\|45001\|errcode" apps/field/src apps/console/src packages/core/src`
+returns nothing), so the FIX-02 refusal would currently reach an MR as a generic failure.
+
+**Nothing in Part B, C or D was fixed.** The audit was read-only by instruction.
