@@ -249,3 +249,101 @@ There is no root `app.json`. `apps/field/app.json` correctly declares
 `"package": "com.praversetech.fieldforce"`, and `com.anonymous.elmironapp` now survives
 **only in the four prose references above**. Any task list carrying "fix the stale package
 id in the root app.json" should treat it as a no-op and correct the prose instead.
+
+---
+
+## Correction — 8 September 2026: the 23 August disable WAS preceded by failures, and the cause was not the workflows
+
+**Replaces:** the claim at §5, *"Both had been running green on real hourly/15-min cron
+since the 14 August re-enable — this was not a response to a failure, and no reason was
+given."* The first half of that sentence is true up to a point in time; **the second half
+is wrong.** The text above is left exactly as written, per the section-freezing rule.
+
+### What the run history says
+
+```
+$ gh api "repos/.../actions/runs?created=2026-08-20..2026-08-24"
+runs in 20-24 Aug: 100
+  ('Audio retention',          'schedule', 'failure') -> 33
+  ('Audio retention',          'schedule', 'success') -> 17
+  ('Audio retention watchdog', 'schedule', 'failure') -> 32
+  ('Audio retention watchdog', 'schedule', 'success') -> 17
+  ('CI',                       'push',     'failure') ->  1
+```
+
+There is **exactly one transition** in that window, and no flapping:
+
+```
+TRANSITION success -> failure at 2026-08-21T22:11:01Z   (run 32531877892)
+runs after the transition: 65
+any success after it: 0
+workflows affected: ['Audio retention', 'Audio retention watchdog', 'CI']
+last success anywhere before it: 2026-08-21T21:12:17Z
+```
+
+So both retention workflows had been failing for **about 34 hours** before the 23 August
+disable, and so had CI.
+
+### What made them fail — and it was not the retention code
+
+The job objects are the evidence, and the comparison is decisive:
+
+```
+last success  21 Aug 21:12 -> runner_id 1000000703, runner_name 'GitHub Actions 1000000703', steps: 12, 23s
+first failure 21 Aug 22:11 -> runner_id 0,          runner_name '',                          steps:  0,  3s
+23 Aug CI push, both jobs  -> runner_id 0,          runner_name '',                          steps:  0,  2s
+```
+
+**No runner was ever assigned and no step ever ran.** That is not a purge failure, a
+database failure, a credential failure or a migration failure — nothing in this repository
+executed. `gh run view --log-failed` returns `log not found` for every one of them, which
+is consistent: there is no log because there was no run.
+
+The signature — a job created, never dispatched, `conclusion: failure` rather than
+`startup_failure` (so the workflow parsed and the job existed), across **every** workflow
+including CI on a push — is what GitHub produces when a job cannot be allocated a hosted
+runner. The ordinary cause is Actions minutes or a spending limit being exhausted at the
+account level.
+
+**UNVERIFIED: the specific account-level cause.** That is on a billing page this machine
+cannot read. What *is* verified is that it was infrastructure-level and repository-wide,
+not workflow- or code-level.
+
+### The sequence, corrected
+
+1. **21 Aug ~21:12–22:11** — jobs stop being assigned runners. Every workflow, not just
+   retention.
+2. **21–23 Aug** — 65 consecutive failures, zero successes.
+3. **23 Aug** — the retention workflows are disabled.
+4. **24 Aug – 6 Sept** — **zero workflow runs of any kind.**
+5. **7 Sept** — re-enabled; both scheduled runs succeed with real runners and all steps.
+
+**The reviewer's proposed sequence — "failed 22 Aug → disabled rather than fixed → no
+traffic → auto-paused" — is right about the order and wrong about the middle.** They were
+not disabled *rather than fixed*: nothing in this repository could have fixed them, because
+nothing in this repository was running. Disabling a workflow that fails every hour without
+executing a line is a reasonable response to noise. **The consequence still stands
+exactly**: no runs → no traffic → the free-tier project auto-paused → unnoticed for two
+weeks.
+
+And §5's "no reason was given" is now explained, if not excused: there *was* a reason, it
+was 34 hours of red builds, and it was not written down.
+
+### Is the cause still present?
+
+**No.** The 7 September scheduled runs were assigned real runners and executed every step:
+
+```
+retention.yml          run 34135046578  2026-09-07T14:49:25Z  event: schedule  success
+retention-watchdog.yml run 34136136779  2026-09-07T15:01:48Z  event: schedule  success
+
+purge 38e1d02f-…: closed 0 stale session(s), claimed 0, destroyed 0, failed 0
+{ "stalled": false, "destroyedTotal": 0, … }
+Audio retention is healthy.
+```
+
+**UNVERIFIED: what changed.** Nothing in this repository explains it. A billing-cycle reset
+between 21 August and 7 September is consistent with the evidence and is not evidence.
+**What to watch:** the same signature — `runner_id: 0`, zero steps, a few seconds — is how
+it will look if it recurs, and it will look identical for CI and for retention, which is
+the quickest way to tell an account-level outage from a code failure.
