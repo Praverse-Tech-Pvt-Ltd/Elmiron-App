@@ -4987,3 +4987,213 @@ constraint — and `FE-W21`, which records that **no client code maps SQLSTATE a
 returns nothing), so the FIX-02 refusal would currently reach an MR as a generic failure.
 
 **Nothing in Part B, C or D was fixed.** The audit was read-only by instruction.
+
+---
+
+### FIX-04 — orphan function audit and synthetic seed (7 September 2026)
+
+#### Part A — pushed, CI green
+
+`bf96918..69f6957`. **Run `34113543946`: success, 2m44s**, both jobs.
+
+#### Part B — the seven orphan functions
+
+**All seven are `SECURITY DEFINER`**, so RLS does not apply inside them and each
+function's own filtering is the entire access control. That much of the hypothesis is
+confirmed.
+
+`EXECUTE` is held by `authenticated` **and by `PUBLIC`** — `has_function_privilege('anon',
+…, 'EXECUTE')` is `true` for all seven. That is Postgres's default for functions rather
+than anything specific to these, but it means the anon path had to be tested, not assumed.
+
+**A correction to the premise.** `app_role` has exactly **three** values — `mr`,
+`field_manager`, `admin`. There is no `marketing`, `urologist`, `gynaecologist`, `patient`
+or `pv_officer`, because S6 and S7 are blocked on the data-controller model. A 7 × 8 matrix
+cannot be built. What exists is 7 × 4, plus the case that actually matters today: **an MR
+reaching another organisation's data.**
+
+##### B4 — the matrix, measured
+
+Seeded a consent record and an analysis owned by MR1, then called each function as each
+identity. `mr2_other_org` is a second MR in a different organisation and territory tree.
+
+| function | anon | mr1 (owner) | mr2 (other org) | field_manager | admin (+reason) |
+| --- | --- | --- | --- | --- | --- |
+| `list_consent_records` | REFUSED 28000 | DATA (1 row) | **EMPTY []** | **EMPTY []** | DATA (1 row) |
+| `read_consent_record` | REFUSED 28000 | DATA | **EMPTY null** | **EMPTY null** | DATA |
+| `list_analyses` | REFUSED 28000 | DATA (2 rows) | **EMPTY []** | **EMPTY []** | DATA (2 rows) |
+| `read_analysis` | REFUSED 28000 | DATA | **EMPTY null** | **EMPTY null** | DATA |
+| `daily_mileage` | **0 rows** | 1 row | 0 rows | 0 rows | 0 rows |
+| `begin_upload` | REFUSED 28000 | GRANTED | REFUSED 42501 | REFUSED 42501 | REFUSED 42501 |
+| `complete_upload` | REFUSED 28000 | REFUSED 42501 | REFUSED 42501 | REFUSED 42501 | REFUSED 42501 |
+
+##### B5 — verdict: **clean. No cell disclosed data to a caller who should not have it.**
+
+Stated plainly because a clean result is the useful outcome here. Every consent and
+analysis read returned the caller's own data, an empty result, or a refusal. No
+cross-organisation disclosure. `begin_upload` refuses a visit that is not yours with
+`42501`. `admin` reads are gated on a typed reason (`22023` without one) and every one of
+the four audited functions **writes its `audit_log` row before it selects**, which is the
+break-glass ordering the brief asks for.
+
+**On the EMPTY cells, which look like the finding and are not.** The prompt expected a
+refusal rather than an empty result. That question was **settled by the reviewer on
+10 August 2026** and the settlement is recorded at `PROJECT-OVERVIEW.md:2386`: *"`403`,
+`200 []` and `0 rows affected` are all acceptable; the property is non-disclosure and
+non-mutation … The RPC-only-reads option was explicitly rejected as cosmetic."* These four
+RPCs exist for a different reason, recorded at line 170: **the audit rule.** Every read of
+`consent_records` and `analyses` must be logged, Postgres has no SELECT trigger, so the
+tables carry no SELECT grant and the reads go through logged functions. Direct table access
+**is** `permission denied` — amendment criterion 3.
+
+**`daily_mileage` measured separately**, because it was the one function that did not
+refuse anon. It has no `auth.uid()` check at all; it relies entirely on
+`c.mr_id in (select public.visible_user_ids())`. Measured:
+
+```
+visible_user_ids() as anon  -> 0 rows
+daily_mileage as anon       -> 0 rows
+daily_mileage as owning MR  -> 1 rows
+```
+
+**No disclosure.** It refuses by emptiness rather than by raising, which is acceptable
+under the amended criterion — but it is the only one of the seven whose safety rests
+entirely on a helper returning empty, with no second control behind it. Worth knowing if
+`visible_user_ids()` is ever refactored.
+
+##### Coverage, and the one real gap
+
+Six of the seven are already exercised by the suite — `read_consent_record`,
+`list_analyses` and `read_analysis` by `rls.spec.ts`, the adversarial Gate 0 suite itself.
+So the claim that the matrix had never been run against them is **false for six of seven**.
+
+**`list_consent_records` has no test anywhere** — `grep -rl list_consent_records
+services/api/tests/*.spec.ts` returns nothing. It is the only one of the seven with zero
+coverage, on the consent path. Registered as a task, not fixed.
+
+**Re-check command**, because a "has never fired" claim rots fastest:
+
+```sh
+docker exec supabase_db_Elmiron-App psql -U postgres -d postgres -f /tmp/matrix.sql
+```
+
+(the matrix script is reproducible from this section; it seeds, calls each function as each
+identity inside one transaction, and rolls back).
+
+#### Part C — BE-W17, the synthetic seed generator. Built.
+
+`services/api/scripts/seed-synthetic.mjs`, wired as
+`pnpm --filter @fieldforce/api seed:synthetic`.
+
+```
+pnpm --filter @fieldforce/api seed:synthetic --mrs 100 --history 1y
+```
+
+**Measured, 100 MRs and a year, in 13 seconds:**
+
+| table | rows |
+| --- | --- |
+| organisations | 1 |
+| territories | 25 (three levels: national → 4 regions → 20 areas) |
+| territory_shift_windows | 4 (on regions, so areas resolve by walking up) |
+| user_profiles | 105 |
+| doctors | 100 |
+| visits | **208,800** |
+| check_ins | **208,800** |
+| beat_plans | 26,100 |
+
+Eight visits per MR per weekday, which is the shape BE-W8 sized retention for. Generated
+set-wise with `generate_series` rather than row by row; a round trip per row would have
+taken hours.
+
+**Three guards, because this script is dangerous by nature:**
+
+1. **Localhost only, enforced in code, no `--force`** — the same pattern and the same
+   reasoning as `verify:rollbacks`. Refused against
+   `db.abcdefgh.supabase.co` before opening a connection.
+2. **It refuses to run twice.** A second run reports that a `SYNTHETIC` organisation
+   already exists and stops, rather than doubling the dataset and quietly invalidating any
+   measurement taken against it.
+3. **Everything it creates is named `SYNTHETIC`.** The file header states in its first
+   line that this is **not** `seed-reference-data.mjs` and would be actively harmful in a
+   real database — an MR would see doctors who do not exist.
+
+**The accounts cannot sign in**, by design: `auth.users` rows are inserted directly with
+no password hash. `seed:mr` remains the way to make a user you can actually sign in as.
+Stated in the header so nobody discovers it at a sign-in screen.
+
+**Only three roles are seeded**, and the header says why: `app_role` has three values.
+Seeding the nine a pilot will need is not possible, and faking it would produce a fixture
+that lies about what the schema can express.
+
+**Verification, all run:** the small case (5 MRs / 30 days → 105 visits) and the full case
+above; a second run refuses; a remote URL refuses; `verify:rollbacks` still reports *"All
+rollbacks applied in reverse order; public schema is empty"*; and the api suite is
+**349 passed, 14 files** with the 208,800-row dataset in place — so nothing in the suite
+depended on an empty database. Lint and prettier clean.
+
+**No performance measurement was taken.** Building the fixture and measuring against it are
+separate tasks and separate reviews.
+
+#### Part D — `sync_pull` scoped
+
+**D1.** `sync_push(p_batch_id uuid, p_items jsonb)` exists and is granted. **Nothing named
+`sync_pull` exists** — no function, no view, no table, and no reference in any of the 20
+migrations. The public functions matching `sync%` are exactly `sync_push`,
+`sync_queue_status` and `sync_rejection_explanation`.
+
+**D2 — and the half nobody mentioned.** The contract is fully specified:
+
+```ts
+SyncPullRequest  { since: IsoDateTime | null, entities: SyncEntity[] | null }
+SyncPullResponse { changes: [{ entity, entityId, deleted: boolean,
+                               payload: object | null, updatedAt }],
+                   serverTime, hasMore }
+```
+
+So the intended design is a **watermark** (`since`), not a cursor, with deletes as
+**tombstones** (`deleted: true`). The mock returns the fixture queue with `deleted` always
+`false`, `hasMore` always `false`, and a **hard-coded `serverTime`** — so the frontend has
+never seen a delete, a second page, or a moving clock.
+
+**And `apps/field` has no pull consumer at all.** `apps/field/src/sync/` is entirely
+outbox and push — `outbox.ts`, `flusher.tsx`, `reducer.ts`, `indicator.ts`. `grep` for
+`syncPull`, `since` or `hasMore` across it returns nothing. **Sync is half-built on both
+sides**, not just the server's.
+
+**D3 — what must be decided before anyone writes it**
+
+1. **`hasMore` cannot be honoured by a watermark alone.** With many rows sharing an
+   `updatedAt`, a page boundary inside that group is unresolvable — the next `since` either
+   repeats rows or skips them. Needs a composite cursor `(updated_at, id)`. **This is a
+   contract change, not an implementation detail.**
+2. **The watermark gap.** If the client stores `serverTime` as the next `since`, rows
+   committed during the pull but stamped earlier are missed **permanently**. Needs an
+   overlap window, or `updated_at` taken from commit order rather than transaction time.
+3. **What a delete means.** Retention destroying audio, a consent-withdrawal cascade, and a
+   row leaving the caller's scope are three different events. The contract has one boolean.
+4. **Scope departure specifically.** When a territory is reassigned, does the row arrive as
+   `deleted: true`, or just stop appearing? If it stops appearing, the handset keeps data
+   the MR may no longer see. If it arrives as a delete, the client cannot tell a retention
+   destruction from a reassignment.
+5. **Auditing.** `PROJECT-OVERVIEW.md:170` requires every read of `consent_records` and
+   `analyses` to be logged. If a pull carries either, it writes audit rows **per pull, per
+   MR, per day**. That is a volume decision before it is a code one.
+
+**D4 — revised estimates.** S5 was `FE-W18` 4 + `FE-W19` 3 + `FE-W20` 1 = **8 half-days**.
+
+| Work | Half-days |
+| --- | --- |
+| `sync_pull` server function — scoping, tombstones, audit, RLS filtering | 8 |
+| Contract change for the cursor (D3.1) and the watermark gap (D3.2) | 2 |
+| Client pull consumer — does not exist today | 5 |
+| `FE-W18` conflict resolution — unchanged, but now gated on all of the above | 4 |
+| `FE-W19` offline day on a handset | 3 |
+| `FE-W20` handset install | 1 |
+| **Total** | **23** |
+
+**S5 roughly triples**, and pull is not optional polish: the app promises the MR a
+notification "when tomorrow's visits are ready, and when a manager changes them", and
+without pull it can never learn that either happened.
+
+Thirteen FIX-03 tasks plus these are in `docs/COMPLETION-PLAN.md` §10.

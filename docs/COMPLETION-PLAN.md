@@ -674,3 +674,23 @@ work rather than colliding. `retention.yml` additionally sets
 next instead of overlapping, and `retention-watchdog.yml` runs `check:purge-health` — not
 the purge worker — under its own separate group. The intermittent suite failure is two
 **spec files** sharing one global worker, recorded in `docs/gotchas.md`.
+
+### Added by FIX-04
+
+| ID | Title | Changes | Deps | Blocker | Est | Verification |
+|---|---|---|---|---|---|---|
+| **BE-W60** | `list_consent_records` has no test anywhere | `services/api/tests/rls.spec.ts` | — | — | 1 | `grep -rl list_consent_records services/api/tests/*.spec.ts` returns a file. It is the only one of the seven audited RPCs with zero coverage, and it is on the consent path. Assert: anon refused `28000`; a second org's MR gets no rows; admin without a reason refused `22023`; the audit row is written **before** the select |
+| **BE-W61** | `sync_pull` — the server half does not exist | new migration | BE-W17 | — | 8 | `select count(*) from pg_proc where proname='sync_pull'` → `1`; a pull with `since=null` returns the caller's scope and nothing outside it, proven against a second org |
+| **BE-W62** | The pull contract cannot paginate | `packages/core` | — | — | 2 | `hasMore` with a bare `since` watermark is unresolvable when rows share `updated_at`. Needs a composite `(updated_at, id)` cursor. Verification: two pages over 100 rows sharing one timestamp lose and duplicate nothing |
+| **BE-W63** | The watermark gap | `packages/core`, BE-W61 | BE-W62 | — | 2 | A row committed during a pull but stamped before `serverTime` is currently missed permanently. Verification: commit a row mid-pull; the next pull returns it |
+| **FE-W22** | `apps/field` has no pull consumer | `apps/field/src/sync/` | BE-W61 | — | 5 | `grep -rn "syncPull\|hasMore" apps/field/src/sync/` returns nothing today. Verification: a manager's beat-plan change reaches the handset |
+| **DECIDE-1** | What a `deleted: true` means | decision | — | **Product** | — | Retention destruction, consent-withdrawal cascade, and leaving the caller's scope are three events with one boolean between them. Also: does a reassigned row arrive as a delete, or just stop appearing? |
+| **DECIDE-2** | Whether a pull carrying consent or analyses writes an audit row per pull | decision | — | **Reviewer** | — | `PROJECT-OVERVIEW.md:170` requires every read of both to be logged. Per pull, per MR, per day is a volume decision before it is a code one |
+
+**Correction to BE-W57.** FIX-03 called `GET /sync/queue` "dead surface". The mock
+documents it as deliberate — *"Not in packages/core: an inspection route for the
+offline-sync scenario, so Frontend can drive the sync-queue UI without a device."* It is
+intentional and currently uncalled. Decide whether it survives; do not delete it as an
+accident.
+
+**S5 re-estimated by FIX-04:** 8 half-days → **23**. See `PROJECT-OVERVIEW.md` → FIX-04 §D4.
