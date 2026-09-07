@@ -4530,3 +4530,163 @@ green suite on this machine is conditional on machine load; CI is the arbiter.
 See **`docs/COMPLETION-PLAN.md`** for the task list (IDs continue from `BE-W8` / `FE-W9`),
 the dependency graph, the critical path to G-PILOT, the cut list, twelve risks, and the
 refused-task list.
+
+---
+
+### FIX-01 — consent capture race, investigation (7 September 2026)
+
+Read-only investigation of the CI failure on run `34106670307`,
+`consent-audio.spec.ts > consent capture > "records consented as a complete, successful
+capture"`, 343 of 344 passing. **No fix was written. No test, isolation level or migration
+was changed.** The job was not re-run.
+
+Checkout guard passed on substance rather than path: namespace `@fieldforce/*`, remote
+`Praverse-Tech-Pvt-Ltd/Elmiron-App`, `f34ceef` an ancestor of `HEAD`.
+
+**Verdict first: this is not a test-only race. It is a latent consent-integrity defect, and
+the test has been asserting the defect as though it were the requirement.**
+
+#### The volatility diagnosis — confirmed
+
+`\df+` on the live database:
+
+| Function | Language | Volatility | Security |
+| --- | --- | --- | --- |
+| `public.capture_consent` | plpgsql | **volatile** | definer |
+| `public.active_consent_text` | sql | **stable** | definer |
+
+Under `READ COMMITTED` a `STABLE` function uses the statement snapshot while a `VOLATILE`
+one takes a fresh snapshot per invocation, so the test's single-statement mitigation narrows
+the window and cannot close it. That much of the earlier diagnosis holds. **It is also not
+the important part.**
+
+#### A2 — `capture_consent` re-derives. It does not accept what the client displayed.
+
+Signature, from the live database:
+
+```
+capture_consent(p_id uuid, p_visit_id uuid, p_outcome consent_outcome,
+                p_language text, p_not_asked_reason text, p_captured_at timestamptz)
+```
+
+**There is no consent-text-id parameter.** The body resolves it server-side and stores what
+it resolved:
+
+```sql
+v_text := public.active_consent_text(p_language);
+...
+insert into public.consent_records (..., consent_text_version_id, displayed_language, ...)
+values (..., v_text.id, v_text.language, ...)
+```
+
+`active_consent_text` is `order by v.effective_from desc limit 1` over rows currently in
+force — **whatever is newest right now**, not what was on the screen.
+
+#### A3 — the version displayed can differ from the version recorded
+
+1. The client reads the notice versions and displays one — call it **v1**. The doctor reads
+   v1 and agrees.
+2. A newer version **v2** becomes active (`effective_from <= now()`).
+3. The client calls `capture_consent(..., 'en-IN', ...)`.
+4. Inside, `active_consent_text('en-IN')` returns **v2**.
+5. The row stores `consent_text_version_id = v2`.
+
+**The newer one gets stored.** The record attests that the doctor agreed to a document they
+never saw. `consent_records` has no UPDATE policy and is append-only by trigger, so the
+false attestation is permanent by design.
+
+#### A4 — the client is not at fault. It sends the right thing and the server discards it.
+
+- `packages/core/src/field/consent.ts:47` — "The exact text version displayed on screen.
+  **Not the current version.**" on `consentTextVersionId: UuidSchema`
+- `packages/core/src/field/consent.ts:12` — "A record always references the exact
+  `consentTextVersionId` that was displayed … Without that pair you cannot reconstruct what
+  the doctor actually agreed to."
+- `packages/core/src/field/endpoints.ts:222,232` — `consentTextVersionId` is required on the
+  create-consent request.
+- `apps/field/src/consent/record.ts:110` — `consentTextVersionId: draft.version.id`
+- `apps/field/src/consent/record.ts:14` — "a consent record must be able to prove what was
+  on the screen."
+
+**The contract states the requirement in words, and the client honours it. The database
+function has no parameter to receive it.** Contract I1 and the schema disagree, and the
+schema wins at runtime.
+
+#### A5 — nothing rejects a stale version
+
+`\d public.consent_records`: seven check constraints, none about the text version. The only
+constraint on `consent_text_version_id` is `consent_records_consent_text_version_id_fkey` —
+referential integrity, requiring the version to **exist**, not to be the one displayed or
+still in force. One trigger, `consent_records_audit`, which writes the audit row. **It
+silently accepts.**
+
+`capture_consent` raises only when there is *no* active text at all
+(`'no active consent text for language %'`). A stale-but-valid version is never detected,
+because it is never transmitted.
+
+#### A6 — the pattern is common; the defect is not
+
+38 VOLATILE-writer / STABLE-resolver pairs exist across the schema. Most re-resolve
+**authorisation or server-observed fact** — `effective_role`, `visible_user_ids`,
+`is_within_shift`, `visit_is_quarantined`, `audio_purge_is_stalled`, `current_client_ip` —
+and for those, re-deriving at write time is **correct**: you want the current permission,
+not a stale client assertion.
+
+The defect shape is narrower: *re-resolving a value the client displayed and storing it as
+evidence of what was displayed.* The closest analogue, `record_check_in` →
+`resolve_shift_window`, stores `v_window.source`, but that is a server-observed fact about
+the check-in, and nobody is asked to agree to a shift window.
+
+**On this evidence the defect is unique to `capture_consent`.** The expectation that the
+pattern rarely appears once holds for the *pattern*, not for the *bug*.
+
+#### A7 — which of the two is true
+
+**(i) The production path can record the wrong consent version.** The function is deployed,
+`SECURITY DEFINER`, and granted `EXECUTE` to `authenticated`.
+
+**With one material qualifier that changes the urgency and not the diagnosis:** no client
+currently reaches it. As recorded in `PLAN-01`, no write path in `apps/field` touches
+Supabase at all — the app writes to `services/mock`, which persists nothing. **The defect is
+real and latent, not active.** It becomes live the moment the real write path lands
+(`FE-W15` / `FE-W16` in `docs/COMPLETION-PLAN.md`), which is the next build work planned.
+
+**The test is the second finding, and it is worth as much as the first.** It asserts
+
+```js
+expect(result.rows[0]?.consent_text_version_id).toBe(result.rows[0]?.active_id);
+```
+
+— that the stored version equals the *currently active* one, which is precisely what
+`consent.ts:47` says must **not** be guaranteed. The suite encodes the defect as the
+requirement, and its inline comment defends it: "the version comes from the server's
+catalogue rather than from the caller." Fixing the test's isolation level would have made
+the failure disappear and cemented the behaviour. That is why no fix was written here.
+
+**Recommended shape, for review and not implemented:** `capture_consent` takes the displayed
+`p_consent_text_version_id`, stores that, and **raises** if it is no longer in force — so a
+stale notice becomes a refusal the MR can see and re-ask, never a silent substitution. That
+is a migration, a contract change and a client change, and it needs its own prompt.
+
+#### Part B — record corrections made in this session
+
+- **BE-W9** — `docs/gotchas.md`, appended (145 insertions, 0 deletions): the broken
+  `pnpm --filter … exec expo start` under `nodeLinker: hoisted` and its working invocation;
+  `adb reverse` dying with the emulator; stopping node processes before `pnpm install`; the
+  CMake 3.22.1 long-path failure and the 3.31.6 pin that every `expo prebuild` erases; the
+  OOM-killed first native build; `| tail` masking a non-zero exit; `pnpm 11` forwarding `--`
+  literally; and the parallel-turbo timeout flake.
+- **BE-W10** — corrections appended to `handoff.md` (62 insertions) and
+  `.ai-collab/decisions.md` (35 insertions), both as new dated sections leaving the earlier
+  claims in place: **"40 public tables" is 34 tables + 6 views** (`information_schema.tables`
+  counts views unless filtered to `BASE TABLE`), and **there is no root `app.json`** — the
+  stale `com.anonymous.elmironapp` survives only in four prose references.
+- **BE-W12** — the path-based checkout guard is replaced by a namespace + remote + `f34ceef`
+  check, recorded in `docs/gotchas.md` as a runnable command. Verified both ways: **exit 0**
+  in this tree, **exit 1** in a worktree at `f34ceef^`, a real historical `@elmiron/*` tree.
+  The worktree was removed afterwards.
+
+**UNVERIFIED.** Production was not inspected: the Elmiron-App project is absent from the
+Supabase account connected to this machine, `~/.elmiron-prod.env` does not exist here, and
+there is no linked project-ref. Every finding above comes from the local stack running the
+same 19 migrations, and from the committed source.
