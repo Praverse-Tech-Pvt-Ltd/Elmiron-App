@@ -301,6 +301,21 @@ one-line form for scanning.
   Whatever kept the project paused for two weeks (no traffic at all) will recur
   the same way if the workflows stay off and nothing else touches the database.
 
+### Retention workflows re-enabled
+
+- **Decision:** `retention.yml` and `retention-watchdog.yml` re-enabled via
+  `gh workflow enable`, at 08:40 UTC, 7 September — same session as the pause above,
+  on explicit instruction.
+- **Closes the loop from this same entry:** the project auto-paused specifically
+  because these were off with no other traffic touching the database. Re-enabling
+  them is what keeps that from recurring; leaving production resumed with the
+  schedules still off would just delay the same pause, not prevent it.
+- **Not yet observed on a real cron cycle this time** — both went from
+  `disabled_manually` straight to `active`; the next scheduled fire (hourly for
+  retention, `:15` for the watchdog) has not been checked. Worth a quick
+  `gh run list --workflow=retention.yml --json event,createdAt,conclusion` next
+  session rather than assuming green.
+
 ---
 
 ## FE-W1 — 14 August 2026 · Model: Claude Opus 5

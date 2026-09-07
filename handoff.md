@@ -175,10 +175,11 @@ this moved while backend was stopped:
 1. ~~Confirm production is actually reachable~~ **Done, 7 September** — it had
    auto-paused (free tier, no traffic since the 23 Aug disable); resumed and
    reverified with a real query. See §3.
-2. **Decide on `retention.yml` / `retention-watchdog.yml`, now that production is
-   reachable again.** Re-enable, or make a deliberate decision to leave them off and
-   say why — currently no reason is on record (§5), and leaving them off is what
-   caused the pause in the first place.
+2. ~~Decide on `retention.yml` / `retention-watchdog.yml`~~ **Done, 7 September** —
+   both re-enabled (`gh workflow enable`). **Not yet reconfirmed on a real cron
+   cycle** — check `gh run list --workflow=retention.yml
+   --json event,createdAt,conclusion` for an `event: schedule` success before
+   trusting it, same as BE-W8 required the first time.
 3. **Decide on the `.ai-collab/` split and the migration-audit-trail gap** (§6), or
    consciously defer again with a reason.
 4. **Send the two drafted-but-unsent escalations** (§7.2, §7.3) — both have been
