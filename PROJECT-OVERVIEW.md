@@ -5197,3 +5197,148 @@ notification "when tomorrow's visits are ready, and when a manager changes them"
 without pull it can never learn that either happened.
 
 Thirteen FIX-03 tasks plus these are in `docs/COMPLETION-PLAN.md` §10.
+
+---
+
+### FIX-05 — the oversight record (7 September 2026)
+
+**The coaching screens in `apps/console` were NOT wired to this backend, and the "manager
+console is not here" card was NOT removed.** Both were explicitly out of scope. A later
+reader must not take this section as evidence that the console is now backed by real data:
+it still renders `services/mock` fixtures. Removing the card is gated behind wiring the
+console, which is a separate task and a separate review.
+
+**Part A.** `69f6957..8180a67` pushed. **CI run `34116030264`: success, 2m16s**, both jobs.
+
+#### Part B — `analysis_overrides`, the artefact §3.6 was reversed on
+
+Migration `20260907000200_analysis_overrides.sql`. A table, an append-only trigger, two
+`SECURITY DEFINER` functions, and no policies — matching `analyses`, so direct table access
+is a genuine `permission denied` rather than an empty result.
+
+**`finding_id` carries no foreign key, and that is deliberate.** There is no findings table
+in this schema; the analysis engine that would produce findings is weeks 8-10 and may be
+cut. Inventing a table to satisfy one column would be worse than an unconstrained uuid, and
+the contract has always declared `findingId` nullable.
+
+##### B2 — append-only, proved against every role
+
+| role | UPDATE | DELETE | TRUNCATE |
+| --- | --- | --- | --- |
+| `postgres` (table owner) | REFUSED 23001 | REFUSED 23001 | REFUSED 23001 |
+| `service_role` | REFUSED 42501 | REFUSED 42501 | REFUSED 23001 |
+| `authenticated` | REFUSED 42501 | REFUSED 42501 | REFUSED 42501 |
+| `anon` | REFUSED 42501 | REFUSED 42501 | REFUSED 42501 |
+
+**After every attempt the row still said what it said** — `reason` unchanged. `23001` is
+`restrict_violation` from the statement-level `reject_mutation` trigger, which is why the
+owner and `service_role` are refused too: they hold BYPASSRLS and would never see a policy.
+A policy here would have protected the row from everybody except the two roles most able to
+rewrite history.
+
+##### B3 — the RLS matrix
+
+| actor | `create_analysis_override` | `list_analysis_overrides` | raw `SELECT` on the table |
+| --- | --- | --- | --- |
+| `anon` | REFUSED 42501 | REFUSED 42501 | REFUSED 42501 |
+| the MR the analysis is about | REFUSED 42501 | **OK** | REFUSED 42501 |
+| manager, inside the subtree | **CREATED** | OK | REFUSED 42501 |
+| manager, another region | **REFUSED 42501** | **REFUSED 42501** | REFUSED 42501 |
+| admin (with a reason) | CREATED | OK | REFUSED 42501 |
+
+**The out-of-subtree cases are refusals, not empty results.** That is a deliberate
+departure from `read_analysis`, which returns `null` for an invisible row — settled as
+acceptable on 10 August because no client consumes those RPCs. This one has a client, and a
+UI cannot render a denial as a denial if the server returns nothing.
+
+**An MR may read overrides about themselves and may not write one.** Being able to see what
+a manager recorded about you is the half of the design that makes the system contestable; a
+finding the subject can erase is not oversight of the subject.
+
+**B5 honoured.** No `agree` or `acknowledge` path was added, and a test asserts no function
+in the schema matches `%agree%`, `%acknowledge%` or `%endorse%`. `fe-w3-spec.md` records
+why: agreement is the absence of an override, and a row for it *"would turn every
+unreviewed finding into an implied endorsement the moment somebody wanted a metric out of
+it."*
+
+##### B4 — the read path
+
+`ListAnalysisOverridesResponseSchema` added to `packages/core`, shaped from
+`public.list_analysis_overrides` rather than invented — `{ data, readAt, auditLogId }`. The
+mock now serves **GET** as well as POST in that shape, and its POST echoes the request's
+`findingId` instead of a fixture's. Round trip against the running mock:
+
+```
+POST /analyses/abc/overrides {"reason":"proof of round trip","findingId":null}
+  -> 201 {... "findingId":null, "reason":"proof of round trip" ...}
+GET  /analyses/abc/overrides
+  -> {"data":[{...}], "readAt":"...", "auditLogId":1}
+```
+
+Before FIX-05 that GET returned `No mock route for GET /analyses/abc/overrides`.
+
+#### Part C — grant hygiene, a second control
+
+Migration `20260907000300_revoke_public_execute.sql`.
+
+**Before: 65 of 86 functions in `public` were reachable by `anon`. After: 0.** The other 21
+had already been revoked one at a time as they were written — the purge worker's internals,
+the trigger functions, `custom_access_token_hook`, `visible_territory_ids`. **The practice
+existed and was applied unevenly.** This applies it to the rest, and sets
+`alter default privileges … revoke execute on functions from public` so the next migration
+inherits the posture rather than having to remember.
+
+The seven audited in FIX-04, before and after:
+
+| function | `anon` EXECUTE before | after | `authenticated` after |
+| --- | --- | --- | --- |
+| `list_consent_records` | **true** | false | true |
+| `read_consent_record` | **true** | false | true |
+| `list_analyses` | **true** | false | true |
+| `read_analysis` | **true** | false | true |
+| `daily_mileage` | **true** | false | true |
+| `begin_upload` | **true** | false | true |
+| `complete_upload` | **true** | false | true |
+
+**Nothing changed about who can do what.** Every function `authenticated` could call
+before, it can call after — the grant is explicit rather than inherited. What changed is
+that `anon` is now refused *by the grant*, before the body runs, instead of only by the
+`auth.uid()` check inside it. The api suite passed unchanged immediately after the revoke,
+so nothing depended on the `PUBLIC` grant.
+
+**C3.** `daily_mileage` was the weakest cell in the FIX-04 matrix — the only function that
+did not refuse `anon`, returning zero rows because `visible_user_ids()` was empty. It now
+has two controls, and both are pinned by tests: one asserts `anon` gets `42501`, another
+asserts `has_function_privilege('anon', …)` is `false`, so a future change to
+`visible_user_ids()` cannot silently reopen it.
+
+#### Part D — the two riders
+
+**D1 — `BE-W60`.** `list_consent_records` had no test anywhere. Five now cover it: anon
+refused, another manager's subtree discloses nothing, a positive control, an admin without
+a reason refused `22023`, and the audit row written **before** the data returns.
+**Mutation-tested:** replacing the scope filter with `where (true)` failed exactly the
+subtree test, 96 tests still collected, so the mutation was not a no-op.
+
+**D2 — `BE-W19`.** The deep-link redirect is in `config.toml`. Verified:
+
+```
+$ docker exec supabase_auth_Elmiron-App printenv GOTRUE_URI_ALLOW_LIST
+http://127.0.0.1:3000,https://127.0.0.1:3000,com.praversetech.fieldforce://auth-callback
+```
+
+**The same entry is needed on any hosted project** and this file does not provide it —
+there it belongs in Authentication → URL Configuration → Redirect URLs. Inert today because
+the app uses the password grant; it bites the first time OTP, magic link or OAuth is
+enabled, and presents as a callback that vanishes rather than as a configuration error.
+
+#### Counts
+
+- `@fieldforce/api`: **375 passed, 14 files** (was 349; 26 added).
+- One failure under parallel `vitest`: the **known** `upload.spec.ts` cross-spec purge race
+  recorded in `docs/gotchas.md`. `--no-file-parallelism` → **375 passed**, which is the
+  re-check that entry prescribes. Not new, not related.
+- `verify:rollbacks`: *"All rollbacks applied in reverse order; public schema is empty."*
+  **22 migrations, 22 rollback files.**
+- `turbo run typecheck lint`: **16 successful, 16 total**. `format:check` clean apart from
+  `apps/console/next-env.d.ts`, the gitignored CRLF artefact CI never sees.
