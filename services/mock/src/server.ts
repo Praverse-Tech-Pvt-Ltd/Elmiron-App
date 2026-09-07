@@ -690,20 +690,46 @@ const routes: Route[] = [
   {
     method: 'POST',
     pattern: API_PATHS.syncPull,
+    // BE-W61 phase 1. Reshaped to the contract the server now implements: an opaque
+    // cursor instead of a `since` timestamp, `reason` instead of `deleted`, and a
+    // required `completeness` block.
+    //
+    // The old fixture mapped `fx.syncQueue` — the OUTBOX — into pull results, so the
+    // frontend has been building against a pull that echoed back what the device had
+    // just sent, with `deleted` always false, `hasMore` always false and a hard-coded
+    // clock. Only visits survive that mapping now, because a pull carries what the
+    // SERVER changed and the queue is a list of what a handset created.
     handler: (ctx) => ({
       body: {
         changes:
           ctx.scenario === 'empty'
             ? []
-            : fx.syncQueue.map((item) => ({
-                entity: item.entity,
-                entityId: item.entityId,
-                deleted: false,
-                payload: item.payload,
-                updatedAt: item.clientCreatedAt,
-              })),
+            : fx.syncQueue
+                .filter((item) => item.entity === 'visit')
+                .map((item) => ({
+                  entity: 'visit' as const,
+                  entityId: item.entityId,
+                  reason: 'upserted' as const,
+                  payload: item.payload,
+                  updatedAt: item.clientCreatedAt,
+                })),
         serverTime: '2026-08-10T17:05:00+05:30',
         hasMore: false,
+        // Opaque by contract, so its content is arbitrary and deliberately not a
+        // timestamp: a fixture that looked like a watermark would teach the client the
+        // habit the real cursor exists to break.
+        nextCursor: 'mock-cursor-1',
+        completeness: {
+          phase: 1,
+          reflects: ['insert' as const, 'update' as const],
+          omits: ['delete' as const, 'out_of_scope' as const],
+          entities: ['visit' as const, 'beat_plan' as const, 'doctor' as const],
+          omittedEntities: ['consent_record', 'analysis'],
+          note:
+            'Deletions and records that left your scope are NOT reflected. A record ' +
+            'removed on the server, or reassigned away from you, will keep appearing ' +
+            'until a full re-sync. Do not present this as a current view.',
+        },
       },
     }),
   },

@@ -405,25 +405,104 @@ export const SyncQueueStatusResponseSchema = z.object({
 export type SyncQueueStatusResponse = z.infer<typeof SyncQueueStatusResponseSchema>;
 export type SyncPushResponse = z.infer<typeof SyncPushResponseSchema>;
 
+/**
+ * BE-W61 — what a PULL can carry, which is not what a PUSH can carry.
+ *
+ * `SyncEntitySchema` is the outbox's list: things a handset creates and sends. A pull is
+ * the other direction — things the SERVER changes that an MR needs to be told about — and
+ * the two sets are not the same. Reusing the push enum would have meant adding
+ * `beat_plan` and `doctor` to the list of things a device may claim to have created,
+ * which is a widening of the write surface to buy a name for a read.
+ */
+export const SyncPullEntitySchema = z.enum(['visit', 'beat_plan', 'doctor']);
+export type SyncPullEntity = z.infer<typeof SyncPullEntitySchema>;
+
+/**
+ * Why this is an opaque cursor and not the `since: IsoDateTime` the contract had.
+ *
+ * A timestamp cannot express a position inside a group of rows sharing one `updated_at`,
+ * so `hasMore` was unactionable — the next page either repeated rows or skipped them.
+ * Worse, `updated_at` is stamped at TRANSACTION START, so a transaction that begins
+ * before a pull and commits after it writes a row the pull cannot see and the next
+ * watermark has already passed: **lost permanently**, and discovered months later as "a
+ * visit that never synced".
+ *
+ * The server therefore issues a cursor carrying transaction snapshots. It is opaque on
+ * purpose: a client that parses it will eventually depend on its shape, and the shape has
+ * to change when tombstones arrive. Store it, send it back, do not read it.
+ */
+export const SyncCursorSchema = z.string().min(1);
+
 export const SyncPullRequestSchema = z.object({
-  /** Omit for a full initial pull. */
-  since: IsoDateTimeSchema.nullish(),
-  entities: z.array(SyncEntitySchema).nullish(),
+  /** Null for a full initial pull. Otherwise the `nextCursor` from the last response. */
+  cursor: SyncCursorSchema.nullish(),
+  entities: z.array(SyncPullEntitySchema).nullish(),
+  limit: z.number().int().min(1).max(500).nullish(),
 });
 export type SyncPullRequest = z.infer<typeof SyncPullRequestSchema>;
+
+/**
+ * Why a change carries a `reason` rather than `deleted: boolean`.
+ *
+ * A boolean has to stand for three different events — a record destroyed on retention, a
+ * record whose consent was withdrawn, and a record that simply stopped being this MR's —
+ * and a client cannot tell them apart. One is a retention event and one is not, and
+ * telling an MR that a consent record was *deleted* when it was merely reassigned is
+ * false in a direction that matters.
+ *
+ * **Phase 1 emits `upserted` and nothing else.** The other two are declared because the
+ * server will emit them and a client should be written to switch on the field rather than
+ * on its own version number — but see `completeness` before assuming they can arrive.
+ */
+export const SyncChangeReasonSchema = z.enum(['upserted', 'deleted', 'out_of_scope']);
+export type SyncChangeReason = z.infer<typeof SyncChangeReasonSchema>;
+
+/**
+ * **The response says what it is not.**
+ *
+ * `docs/adr-sync-pull.md` §4: an updates-only pull is worth shipping first, and worse
+ * than nothing if it ships silently, because an MR watching their list update will
+ * reasonably conclude it is current — and a stale doctor on a beat plan is a wasted visit
+ * rather than a cosmetic bug.
+ *
+ * So incompleteness is a REQUIRED FIELD, not a comment and not an optional hint. A client
+ * that parses a response receives it whether or not it thought to ask, and can decide
+ * what to show without knowing which server version it is talking to.
+ */
+export const SyncCompletenessSchema = z.object({
+  phase: z.number().int().positive(),
+  /** Change kinds this response reflects. */
+  reflects: z.array(z.enum(['insert', 'update', 'delete', 'out_of_scope'])),
+  /** Change kinds it does NOT. Non-empty means the client's view will drift. */
+  omits: z.array(z.enum(['insert', 'update', 'delete', 'out_of_scope'])),
+  entities: z.array(SyncPullEntitySchema),
+  /** Entities this pull does not carry at all, whatever was asked for. */
+  omittedEntities: z.array(z.string()),
+  note: z.string(),
+});
+export type SyncCompleteness = z.infer<typeof SyncCompletenessSchema>;
 
 export const SyncPullResponseSchema = z.object({
   changes: z.array(
     z.object({
-      entity: SyncEntitySchema,
+      entity: SyncPullEntitySchema,
       entityId: UuidSchema,
-      deleted: z.boolean(),
+      reason: SyncChangeReasonSchema,
       payload: z.record(z.string(), z.unknown()).nullable(),
       updatedAt: IsoDateTimeSchema,
     }),
   ),
+  /**
+   * The server's clock, for display and for skew detection.
+   *
+   * **Not the thing to store as a watermark.** It looks like one and is exactly the trap
+   * described on `SyncCursorSchema`. Persist `nextCursor`.
+   */
   serverTime: IsoDateTimeSchema,
   hasMore: z.boolean(),
+  /** Always present. Send it back verbatim; never construct one. */
+  nextCursor: SyncCursorSchema,
+  completeness: SyncCompletenessSchema,
 });
 export type SyncPullResponse = z.infer<typeof SyncPullResponseSchema>;
 

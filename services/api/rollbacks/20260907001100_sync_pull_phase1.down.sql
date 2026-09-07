@@ -1,0 +1,21 @@
+-- Rollback for 20260907001100_sync_pull_phase1.sql
+-- Apply by hand: psql "$SUPABASE_DB_URL" -f <this file>
+--
+-- Returns the schema to having no server half of sync at all: `sync_push` exists, and an
+-- MR's handset again has no way to learn that tomorrow's visits are ready or that a
+-- manager changed them. `apps/field` is not wired to this in phase 1, so applying this
+-- breaks nothing that is running -- but check before assuming that is still true:
+--
+--   grep -rn "sync_pull" apps/ packages/
+--
+-- If a client has been wired since, it must be shipped a version that stops calling this
+-- BEFORE this is applied. A client that calls a missing function gets 42883, which is not
+-- one of the refusals the error contract maps, so it would surface to an MR as an
+-- unexplained failure rather than as anything actionable.
+--
+-- No table, column, index or grant was created by the migration, so there is nothing else
+-- to undo. `packages/core` keeps its schema changes: a contract that describes a pull the
+-- server no longer offers is a smaller problem than a contract that has silently gone
+-- back to describing one that never worked.
+
+drop function if exists public.sync_pull(text, text[], integer);
