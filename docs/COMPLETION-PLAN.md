@@ -694,3 +694,26 @@ intentional and currently uncalled. Decide whether it survives; do not delete it
 accident.
 
 **S5 re-estimated by FIX-04:** 8 half-days → **23**. See `PROJECT-OVERVIEW.md` → FIX-04 §D4.
+
+### Added by FIX-09
+
+| ID | Title | Changes | Deps | Blocker | Est | Verification |
+|---|---|---|---|---|---|---|
+| **BE-W64** | Doctor search is linear in **total** table size, and the trigram indexes are dead | `search_doctors` (live definition is `20260814000100_manager_surface.sql:370`), new migration | BE-W17 | — | 3 | The plan shows `Seq Scan on doctors` with `d.full_name ilike '%'\|\|p_query\|\|'%'` dominating. `doctors_full_name_trgm_idx` and `doctors_specialty_trgm_idx` have existed since `20260812000100_field_operations.sql:490-495` and are **never used**, because the predicate is a disjunction beginning `p_query is null or btrim(p_query) = ''` and is therefore not sargable. Adding another index cannot help; the branch has to move out of the `where`. Verification: re-run the FIX-09 C2 measurement at 99,968 doctors and show `Bitmap Index Scan on doctors_full_name_trgm_idx` in the plan, with execution under 300 ms. Measured today: **74.985 ms @ 3,520 · 664.133 ms @ 30,272 · 2,081.963 ms @ 99,968**, linear, server execution only |
+
+**Not registered, and the reason.** `search_doctors` references its `matched` CTE twice, and
+FIX-08 recorded that as a doubled scan. Measured at 99,968 doctors it is not: one scan
+2,107 ms, two scans 4,154 ms, `search_doctors` itself **2,082 ms** — Postgres materialises a
+CTE referenced more than once. No task, and the FIX-08 claim is corrected in
+`PROJECT-OVERVIEW.md` → FIX-09 §C3.
+
+**S3 note.** BE-W21 (UCPMP caps) is done as a *mechanism*: the trigger, the refusal `45004`
+and `sample_cap_status` are in `20260907000700_ucpmp_sample_caps.sql`, and
+`ucpmp_sample_cap_quantity` is deliberately `null`. **It is not finished as a control until
+somebody with authority sets that threshold**, and until then the samples screen keeps
+telling the MR the app is not counting. That is a human input, not an engineering task —
+see the FIX-09 §B2 table for what is UNVERIFIED.
+
+**S5 re-estimated by FIX-09:** 23 half-days → **29**. Breakdown, and which pieces could ship
+alone, in `docs/adr-sync-pull.md` §4. BE-W62 and BE-W63 above are the two contract holes that
+ADR §1.1 states in full.

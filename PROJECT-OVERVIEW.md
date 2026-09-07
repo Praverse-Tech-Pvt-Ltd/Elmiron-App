@@ -5817,3 +5817,249 @@ to choose knowingly before more paths become direct table writes.
 - `@fieldforce/api`: **391 passed, 16 files** (was 390; +1 convention guard).
 - `verify:rollbacks`: schema empty. 24 migrations, 24 rollback files.
 - `turbo run typecheck lint`: **16 successful, 16 total**.
+
+---
+
+### FIX-09 — UCPMP caps, doctor search at scale, and the sync_pull ADR (7 September 2026)
+
+**Stated first, because the prompt asked for it: the samples write path was NOT converted
+to Supabase, and the samples screen's message was NOT removed.** The screen still tells the
+MR the app is not counting, and that is still true — the ceiling is deliberately unset (B2).
+The console coaching screens were not wired and no card was removed.
+
+#### CI and counts
+
+`f526e0a` — run **`34132076584`, success, 2m59s**, both jobs.
+
+| package | tests | files |
+| --- | ---: | ---: |
+| `@fieldforce/api` | **391 passed** | 16 |
+| `@fieldforce/field` | 341 passed | 23 |
+| `@fieldforce/ui-tokens` | 54 passed | 3 |
+| `@fieldforce/mock` | 40 passed | 1 |
+| `@fieldforce/core` | 21 passed | 3 |
+| `@fieldforce/ui` | 4 passed | 1 |
+
+None skipped — every summary line reads `N passed (N)` with no skip term.
+
+After Part B, locally: **`@fieldforce/api` 398 passed, 16 files** (was 391; +7 cap tests).
+`verify:rollbacks`: *"All rollbacks applied in reverse order; public schema is empty"* —
+**25 migrations, 25 rollback files**. `turbo run typecheck lint`: **16 successful, 16 total**.
+`format:check` clean apart from the gitignored `apps/console/next-env.d.ts` CRLF artefact
+already recorded in `docs/gotchas.md`.
+
+#### B1 — the comment that lied
+
+`packages/core/src/field/entities.ts:178` said, since BE-W1:
+
+> `/** UCPMP caps are enforced server-side; this is the declared value in INR. */`
+
+Nothing enforced them. `samples_and_inputs` had no limit column, no check constraint, no
+month-to-date computation, and `20260811000400_rls_policies.sql` granted a plain insert with
+no cap predicate. `docs/fe-w3-spec.md` §C5 had already said so — the comment *"describes an
+intention, not the schema as it stands"* — and the comment outlived the correction. Replaced
+with a block that says what BE-W21 built and that the ceiling is unset.
+
+#### B2 — the cap parameters, and what is UNVERIFIED
+
+**`20260907000700_ucpmp_sample_caps.sql` builds the mechanism and leaves the ceiling `null`,
+on the `org_default_shift_window` precedent.**
+
+| parameter | value | source |
+| --- | --- | --- |
+| `ucpmp_sample_cap_quantity` | **`null` — UNSET on purpose** | **UNVERIFIED. Nothing in this repository states the UCPMP ceiling.** Needs a human with the code in front of them |
+| dimension | per doctor, per item, per **calendar** month | **UNVERIFIED.** The narrowest defensible reading of UCPMP's limit on samples supplied to a medical practitioner. Per MR, per product family, or per quarter are all arguable |
+| period boundary | `date_trunc('month', occurred_at)`, server-side | Implementation choice, recorded |
+| a **value** ceiling | **deliberately out of scope** | UCPMP 2024 expresses one ceiling as a percentage of the company's domestic sales for the year — a company-level annual figure this application does not hold and must not guess |
+
+**Why not pick a number.** §C5 of `fe-w3-spec.md` refuses to draw the cap meter from an
+invented ceiling, and the reasoning is stronger for a constraint than for a meter: a meter
+drawn from an invented number misleads, but a constraint built on one *looks enforced*,
+produces refusals an MR cannot argue with, and is wrong in a direction nobody can see. With
+the threshold null the trigger takes its `return new` branch and a sample write behaves
+exactly as it does today — accepted, uncounted, and the screen still says so. The moment
+somebody with authority sets the row, the database enforces it and the meter has something
+true to draw.
+
+The migration also adds `sample_cap_status(p_doctor_id, p_item_name, p_at)`, which is the
+read `fe-w3-spec.md` §C5 recorded as **"BLOCKED ON BACKEND"**. It returns `cap: null` when
+unconfigured, so the screen keeps its note rather than drawing a ceiling from a null.
+
+#### B3 — the refusal
+
+**SQLSTATE `45004`**, in the project-defined range `45001`–`45003` established by FIX-02 and
+FIX-06. Not `22023`, which the migrations raise 64 times for unrelated reasons and which
+therefore carries no information. `detail` carries the cap, the amount already given, this
+entry's quantity and the period start, because *"you have exceeded the cap"* without those
+four numbers is not something an MR can act on. `hint` says to stop and speak to a manager.
+
+A **trigger**, not a check constraint: the rule is a sum over a month for one doctor and
+item, and a check constraint sees only the row in front of it. A trigger also fires for
+`service_role` and the table owner, which a policy would not.
+
+#### B4 — both mutations
+
+| # | mutation | result | count |
+| --- | --- | --- | ---: |
+| 1 | `create or replace ... enforce_ucpmp_sample_cap() ... begin return new; end` — the guard removed | **2 failed / 18 passed**, then after strengthening **3 failed / 17 passed** | 20, unchanged |
+| 2 | a `before insert` trigger returning `null` for `PROBE-ITEM` and `A-DIFFERENT-ITEM` only — the write removed | **6 failed / 14 passed** | 20, unchanged |
+
+Neither mutation dropped the case count, so neither was a no-op.
+
+**Mutation 1 caught a test that was not testing anything.** *"never trims the quantity to
+fit — it refuses the whole entry"* passed **under the mutation**, because it asserted the
+row's absence and the surrounding `rollback to savepoint` discarded the row whether the
+trigger refused or not. Rewritten to assert on the refusal itself — the SQLSTATE and the
+`detail` string — after which the mutation fails it. A test a savepoint would have passed
+for you is the same class of defect as a suite that skips: green, and proving nothing.
+
+Mutation 2 is scoped to the two probe item names. An unscoped `return null` blocked fixture
+seeding, and every cap test then **skipped** rather than failed — the void-proof shape this
+project has now hit twice.
+
+#### C1–C2 — doctor search, measured against the axis that grows
+
+FIX-08 measured 77 ms at **176 visible** doctors out of **3,520 in the table** and treated
+the visible count as the variable. It is not: RLS filters `doctors` at the table level, so
+the scan reads the whole table and filters afterwards. `--areas-per-region` was added to
+`seed-synthetic.mjs` to grow the table while holding the visible count at 176, which is the
+only way to move that axis alone.
+
+`search_doctors('Doctor', null, 50)` as an MR, `explain (analyze, buffers)`, server
+execution only:
+
+| total doctors | areas/region | visible to the MR | shared buffer hits | execution |
+| ---: | ---: | ---: | ---: | ---: |
+| 3,520 | 5 | 176 | 6,892 | **74.985 ms** |
+| 30,272 | 43 | 176 | 61,326 | **664.133 ms** |
+| 99,968 | 142 | 176 | 203,102 | **2,081.963 ms** |
+
+**The curve is linear.** Buffers per doctor: 1.96, 2.03, 2.03 — flat. Milliseconds per
+thousand doctors: 21.3, 21.9, 20.8 — flat. A 28× table gives a 27.8× time. Nothing about the
+plan degrades; there is simply nothing bounding the work.
+
+**The plan is a `Seq Scan on doctors` with the `ILIKE` on `full_name` dominating.** The
+trigram GIN indexes have existed since `20260812000100_field_operations.sql:490-495`, added
+under a comment promising *"an MR standing in a waiting room needs a doctor in under three
+seconds"* — and **they are dead**. The live predicate is
+`p_query is null or btrim(p_query) = '' or d.full_name ilike '%'||p_query||'%' or …`, and a
+disjunction whose first branch is `p_query is null` is not sargable: the planner cannot use
+an index for a condition that may be satisfied without consulting the column. Confirmed by
+attempting to create `doctors_full_name_trgm_idx` at the largest scale — **`ERROR: relation
+"doctors_full_name_trgm_idx" already exists`** — and the next run still seq-scanned, at
+2,089.780 ms over 201,537 buffers.
+
+#### C3 — the double CTE cost nothing, and my FIX-08 claim was wrong
+
+`search_doctors` references its `matched` CTE twice — once to build `items`, once for
+`truncated`. FIX-08 asserted that this doubles the scan. **Measured at 99,968 doctors, it
+does not:**
+
+| what was measured | time |
+| --- | ---: |
+| one scan of the predicate | **2,107.126 ms** |
+| two scans of the same predicate | **4,153.549 ms** |
+| `search_doctors` itself | **2,081.963 ms** |
+
+`search_doctors` runs at one scan, not two. Postgres **materialises a CTE that is referenced
+more than once**, so `matched` is evaluated once and read twice. The double reference costs
+nothing measurable and is **not registered**. C3 asked whether it is material; it is not, and
+the earlier claim is corrected here rather than quietly dropped.
+
+#### C4 — the verdict, untuned numbers first
+
+**Untuned: 75 ms at 3,520 doctors, 664 ms at 30,272, 2,082 ms at 99,968.**
+
+**Server execution passes 3,000 ms at roughly 144,000 doctors** — linear extrapolation from
+20.8 ms per thousand, which the flat per-row costs justify.
+
+**This is server execution only.** It excludes the network, PostgREST's JSON serialisation,
+the connection pooler, the handset's parse and the render. The three-second promise in
+`20260812000100_field_operations.sql:486` is an end-to-end promise made to an MR standing in
+a waiting room, so the real budget is exhausted well before 144,000 — at 100,000 doctors,
+2,082 ms of server time leaves under a second for everything else on a mobile network, which
+is not enough.
+
+**The verdict: not a defect at the pilot's size, a certain one at a national field force's.**
+At the modelled pilot — 100 MRs, ~3,520 doctors — 75 ms is comfortable and tuning it would be
+premature. At 30,000, 664 ms is noticeable but survivable. At 100,000 it is a broken promise.
+Nothing about the query changes at those sizes; only the table does.
+
+#### C5 — not tuned, and why
+
+**C3 forbids restructuring the function in this session, and the fix is a restructuring, not
+an index.** The indexes already exist. Adding another cannot help while the predicate stays
+non-sargable — the planner will keep choosing the sequential scan, and a second dead index
+would look like a fix in the migration list while changing nothing. Registered as **BE-W64**
+in `docs/COMPLETION-PLAN.md` §10 with the predicate the plan shows dominating, the shape of
+the correction, and the measurement to repeat afterwards.
+
+#### C6 — six is the fixture, not a maximum
+
+**Every `field_manager` in this hierarchy sees exactly six territories: min 6, max 6, mean
+6.00 across all four managers.** It is not "the one that happened to be tested" and it is not
+a ceiling either — it is `1 + --areas-per-region`, a property of the seed knob. Measured on
+the live database:
+
+| role | users | min | max | mean |
+| --- | ---: | ---: | ---: | ---: |
+| `admin` | 1 | 25 | 25 | 25.00 |
+| `field_manager` | 4 | **6** | **6** | 6.00 |
+| `mr` | 100 | 1 | 1 | 1.00 |
+
+The tree is three deep — one national root with 4 children, 4 regions with 5 children each,
+20 leaf areas with none — and managers sit at the region level, so the fan-out is uniform by
+construction. **The deepest and widest actor is the `admin` at the root, at 25 territories**,
+and no manager in this fixture is deeper than any other. At the C2 scales the same arithmetic
+gives a manager 44 and 143 territories respectively, since `--areas-per-region` was 43 and
+142 — derived from the seed's shape, not separately measured.
+
+`visible_territory_ids` remains cheap regardless: FIX-08 measured 0.166 ms for an MR, where
+the "recursive CTE" carries no recursion at all because a leaf territory has no children.
+
+#### D — the sync_pull ADR
+
+`docs/adr-sync-pull.md`. **A decision record, not an implementation — no code was written**,
+and none should be until §5's five questions have a human answer.
+
+Two findings stand on their own even if the design is rejected. **`hasMore` cannot be
+honoured by a bare watermark**: rows sharing an `updated_at` put a page boundary inside a
+group the `since` timestamp cannot address, so the next page either repeats rows or skips
+them, and the contract has no cursor field to carry the position. **A row committed during a
+pull but stamped before it is missed permanently**: under `READ COMMITTED` a transaction that
+began before the pull can commit after it, at an `updated_at` the client has already advanced
+past — and `serverTime`, which looks like the safe next watermark, is exactly the trap.
+
+`services/mock` implements the pull with `deleted` always `false`, `hasMore` always `false`
+and a **hard-coded `serverTime`**, so the frontend has been built against a pull that has
+never produced a delete, a second page, or a moving clock.
+
+**The estimate moves 23 → 29 half-days** (FIX-04 → FIX-09), because §2.3 deletes and §2.5
+scope-loss turned out to be two pieces of work rather than one line. An updates-only pull is
+recommended as the first shippable increment — 8 of the 29 — **but only if the app says what
+it cannot do**, because an MR watching their list update will reasonably conclude it is
+current, and a stale doctor on a beat plan is a wasted visit rather than a cosmetic bug.
+
+Three of the five open questions are not engineering questions: whether a **consent**
+tombstone conflicts with the withdrawal promise (legal); what an MR keeps on their handset
+when they lose a territory (privacy, with a product answer); and whether consent and analyses
+belong in a pull at all, given every such read must write an audit row per pull, per MR,
+per day.
+
+#### What FIX-09 did not do
+
+- **The samples write path was not converted.** `apps/field` still writes samples to
+  `services/mock`. B5 said not to, and the ordering matters: converting the write before a
+  ceiling exists would move the apology from the screen into a database that silently accepts
+  everything.
+- **The samples screen's message was not removed or softened.** It still says the app is not
+  counting, which is still true.
+- **The console coaching screens were not wired and no card was removed.**
+- **`search_doctors` was not restructured and no index was added.** Registered as BE-W64.
+- **No dependency was added.**
+
+#### Registered in `docs/COMPLETION-PLAN.md` §10
+
+**BE-W64** — the doctor search predicate is not sargable and the trigram indexes are dead.
+
+---
