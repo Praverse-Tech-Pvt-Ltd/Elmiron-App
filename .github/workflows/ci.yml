@@ -61,23 +61,23 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm run lint
       - run: pnpm run format:check
-      - run: pnpm --filter @fieldforce/core test
+      - run: pnpm turbo run test --filter @fieldforce/core
       # The WCAG contrast guard. It fails the build when a design token drops below
       # its required ratio, and it had never run here — the step simply did not
       # exist, so the control was decorative in CI from the day it was written.
-      - run: pnpm --filter @fieldforce/ui-tokens test
+      - run: pnpm turbo run test --filter @fieldforce/ui-tokens
       # Added with this package's first real tests, in the same commit, because a
       # workspace that gains a suite and not a CI line is how ui-tokens stayed
       # decorative. Runs both runners: vitest for the boundary check, jest for
       # component rendering.
-      - run: pnpm --filter @fieldforce/ui test
+      - run: pnpm turbo run test --filter @fieldforce/ui
       # Contract I2: proves every mock response still parses against packages/core.
-      - run: pnpm --filter @fieldforce/mock test
+      - run: pnpm turbo run test --filter @fieldforce/mock
       # Two runners in one workspace, both invoked by this script: vitest for logic
       # (*.test.ts) and jest-expo for rendering (*.test.tsx). src/runner-boundary
       # asserts the two globs cannot overlap. Neither needs a device or a native
       # build; if this step ever starts wanting one, the approach is wrong.
-      - run: pnpm --filter @fieldforce/field test
+      - run: pnpm turbo run test --filter @fieldforce/field
 
   database:
     name: migrations · Gate 0 RLS suite · rollbacks
@@ -101,15 +101,6 @@ jobs:
         run: pnpm exec supabase --workdir services/api start -x realtime,vector,imgproxy,studio
 
       # Includes services/api/tests/rls.spec.ts — the Gate 0 adversarial suite.
-      # FIX-07. This job runs `pnpm --filter @fieldforce/api test` directly rather than
-      # through turbo, so nothing builds the workspace dependencies for it. That was
-      # invisible until a database test first imported from `@fieldforce/core`
-      # (`write-path.spec.ts`, FIX-06) and the file failed to COLLECT -- the run showed
-      # "1 failed | 14 passed" file-wise with 377 tests passed and none failed, which is
-      # what a missing import looks like rather than a broken assertion.
-      - name: Build the workspace dependency the database tests import
-        run: pnpm --filter @fieldforce/core build
-
       # SUPABASE_DB_URL being set does not make the tests run; db.ts hard-fails in CI
       # if the database is unreachable, so a green run always means they executed.
       - name: Database and Gate 0 tests
@@ -117,13 +108,28 @@ jobs:
           CI: 'true'
           SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           SUPABASE_URL: http://127.0.0.1:54321
-        run: pnpm --filter @fieldforce/api test
+        # Through turbo, not `pnpm --filter ... test` directly. `turbo.json` declares
+        # `test: { dependsOn: ["^build"] }`, so the dependency graph builds
+        # `@fieldforce/core` for us. FIX-07 fixed this with a hand-added build step,
+        # which worked and preserved the problem: an ordering somebody has to remember,
+        # in a repo whose own rule is that a control invoked by a hand-maintained list
+        # will eventually be left off it.
+        #
+        # `--force` because this suite talks to a real database. A turbo cache hit would
+        # replay a previous pass without running anything, which would silently defeat
+        # the guarantee below -- `db.ts` can only hard-fail on an unreachable database if
+        # the tests actually execute.
+        run: pnpm turbo run test --filter @fieldforce/api --force
 
       # Destructive, so it runs last. A rollback file that has never been executed
       # is a claim, not a rollback.
       - name: Verify every migration can be rolled back
         env:
           SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        # A script rather than a turbo task, so it stays a direct invocation. Its
+        # workspace dependency is already built by the test step above, and
+        # `verify-rollbacks.mjs` imports nothing from `packages/core` by design -- see
+        # the scripts convention enforced in `rls.spec.ts`.
         run: pnpm --filter @fieldforce/api verify:rollbacks
 
       - name: Stop Supabase
