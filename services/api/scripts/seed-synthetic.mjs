@@ -26,6 +26,17 @@ import { Client } from 'pg';
  * `verify:rollbacks` is: a rule a human has to remember is not a control. There is no
  * `--force`.
  *
+ * **Why 176 doctors per territory, and not a round number.** It is derived from this
+ * product's own volume assumption rather than picked: the retention design sizes for
+ * 100 MRs x 8 visits/day x 22 working days/month, so an MR makes ~176 calls a month. At
+ * roughly one call per doctor per month -- the coverage an Indian pharma field force is
+ * typically planned around -- the searchable list for one MR is ~176 doctors. Five
+ * doctors, which this script generated until FIX-08, made a doctor-search measurement
+ * meaningless: RLS filtered the table to five rows and the query never did any work.
+ *
+ * Override with `--doctors-per-territory` if the real beat size turns out different;
+ * the number matters more than the default.
+ *
  * Usage, from the repository root with the local stack up:
  *
  *   pnpm --filter @fieldforce/api seed:synthetic
@@ -81,16 +92,22 @@ export const parseHistoryDays = (value) => {
 };
 
 export const parseSeedSyntheticArgs = (argv) => {
-  const args = { mrs: 100, history: '1y', dbUrl: undefined };
+  const args = { mrs: 100, history: '1y', doctorsPerTerritory: 176, dbUrl: undefined };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     const value = argv[i + 1];
-    if (flag === '--mrs' || flag === '--history' || flag === '--db-url') {
+    if (
+      flag === '--mrs' ||
+      flag === '--history' ||
+      flag === '--doctors-per-territory' ||
+      flag === '--db-url'
+    ) {
       if (value === undefined || value.startsWith('--')) {
         throw new Error(`${flag} needs a value.`);
       }
       i += 1;
       if (flag === '--mrs') args.mrs = Number(value);
+      if (flag === '--doctors-per-territory') args.doctorsPerTerritory = Number(value);
       if (flag === '--history') args.history = value;
       if (flag === '--db-url') args.dbUrl = value;
       continue;
@@ -99,6 +116,11 @@ export const parseSeedSyntheticArgs = (argv) => {
   }
   if (!Number.isInteger(args.mrs) || args.mrs <= 0) {
     throw new Error(`--mrs must be a positive integer. Got: ${String(args.mrs)}`);
+  }
+  if (!Number.isInteger(args.doctorsPerTerritory) || args.doctorsPerTerritory <= 0) {
+    throw new Error(
+      `--doctors-per-territory must be a positive integer. Got: ${String(args.doctorsPerTerritory)}`,
+    );
   }
   parseHistoryDays(args.history);
   return args;
@@ -131,6 +153,7 @@ export const alreadySeeded = async (client) => {
 
 export const seedSynthetic = async (options = {}) => {
   const mrs = options.mrs ?? 100;
+  const doctorsPerTerritory = options.doctorsPerTerritory ?? 176;
   const historyDays = parseHistoryDays(options.history ?? '1y');
   const dbUrl = options.dbUrl ?? process.env.SUPABASE_DB_URL ?? DEFAULT_DB_URL;
 
@@ -269,9 +292,9 @@ export const seedSynthetic = async (options = {}) => {
                  t.id
             from public.territories t
             join public.territories r on r.id = t.parent_id
-            cross join generate_series(1, 5) d
+            cross join generate_series(1, $4) d
            where r.parent_id = $3`,
-      [orgId, SYNTHETIC_MARKER, rootId],
+      [orgId, SYNTHETIC_MARKER, rootId, doctorsPerTerritory],
     );
 
     // --- a year of visits and check-ins --------------------------------------
@@ -293,8 +316,8 @@ export const seedSynthetic = async (options = {}) => {
                select d2.id from public.doctors d2
                 where d2.territory_id = p.territory_id
                 order by d2.id
-                offset ((day_offset * 8 + slot) % 5) limit 1)`,
-      [historyDays, `${SYNTHETIC_MARKER}%`],
+                offset ((day_offset * 8 + slot) % $3) limit 1)`,
+      [historyDays, `${SYNTHETIC_MARKER}%`, doctorsPerTerritory],
     );
 
     await client.query(
@@ -338,7 +361,7 @@ export const seedSynthetic = async (options = {}) => {
       counts[t] = rows[0].n;
     }
 
-    return { runId, mrs, historyDays, counts };
+    return { runId, mrs, historyDays, doctorsPerTerritory, counts };
   } catch (error) {
     await client.query('rollback').catch(() => {});
     throw error;
