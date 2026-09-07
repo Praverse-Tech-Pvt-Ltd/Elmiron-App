@@ -4455,3 +4455,78 @@ flagged in code rather than filled in:
   before this screen ships.
 - A1, A2 and S1-S3 were **not built**. The extract does not describe them and inventing
   screens is worse than leaving the sprint visibly partial.
+
+---
+
+### PLAN-01 — completion plan produced (7 September 2026)
+
+Produced under §9 of the reviewer's Completion Brief v2. **No implementation.** Nothing
+pushed. Output is `docs/COMPLETION-PLAN.md` plus this section.
+
+**What was verified, with evidence**
+
+- **The frontend branch is merged and the push is not blocked.** `git push --dry-run` →
+  `Everything up-to-date`; both `a60423a` and `32cb85e` are ancestors of `main`.
+  **CI has run four times on `main` today and all four passed**, including run
+  `34095377527` on the commit carrying all four design phases. **B2 is closed.**
+- **The suite is 1,086 tests across seven workspaces and two runners**, measured per
+  workspace with `--force`: core 21, ui-tokens 54, ui 4 + 221, field 320 + 72, console 10,
+  api 344, mock 40.
+- **The app captures audio.** `expo-audio@~57.0.4`; `useAudioRecorder` in
+  `apps/field/app/visit/[id].tsx` and `app/voice-note/[visitId].tsx`. The upload endpoint
+  is declared and **no client reaches it** — `voice-note/[visitId].tsx:141`.
+- **No write path reaches Supabase.** `grep` for `supabase.from`/`.insert(`/`.upsert(`/
+  `.update(` across `apps/field` returns nothing. Authentication is the only real
+  round-trip. **G-WRITE is open.**
+- **The mock persists nothing** — proven by POSTing a probe string, failing to read it
+  back (`No mock route for GET /analyses/abc/overrides`), and finding it in no later
+  response.
+- **`GET /analyses/:id/overrides`, the audit-log read path and the retention read path are
+  all absent**, confirming the three S2 endpoint claims.
+- **G-CRON is not met.** The most recent *scheduled* run of either retention workflow is
+  23 August 2026 and it failed. Re-enabled 7 September; nothing has fired since.
+  Re-check: `gh run list --workflow=retention.yml --json event,createdAt,conclusion`.
+
+**What was corrected**
+
+- **34 tables, not 40.** Live query: 34 tables, RLS enabled **and forced** on all 34,
+  41 policies, 6 views — `34 + 6 = 40`. The handoffs conflated tables with views. This
+  section of `PROJECT-OVERVIEW.md` was already right.
+- **The 1,049-across-six test table is stale**; the 1,086-across-seven figure is correct.
+  The seventh workspace is `@fieldforce/console`.
+- **§3.6 is closed, not open.** `docs/fe-w3-spec.md:557-580` records a **second** reversal
+  on 3 September reopening E1 and E2, both of which are built in `apps/console`. But
+  `apps/console/src/app/admin/page.tsx:154-160` still renders **"The manager console is
+  not here — §3.6 forbids that"**, and `docs/frontend-status.md:34,43` still lists them as
+  held. A user-facing screen currently states a constraint that no longer applies.
+- **There is no root `app.json`.** The stale `com.anonymous.elmironapp` exists only in
+  prose (`docs/frontend-handoff-2026-09-07.md:94,186`, `docs/frontend-status.md:276`, and
+  line 3820 of this file). `apps/field/app.json` correctly declares
+  `com.praversetech.fieldforce`. The brief's S0 code task is a no-op.
+- **The brief's checkout guard fails open.** It requires the toplevel to be
+  `C:/dev/Elmiron-App`. This machine is `C:/Users/Admin/StudioProjects/Elmiron-App` — a
+  third path, verified legitimate by namespace (`@fieldforce/*`), remote, and the presence
+  of `f34ceef`. The guard should test namespace and remote, not path.
+
+**What remains UNVERIFIED**
+
+- **Every production claim.** `list_projects` on the connected Supabase account returns
+  only `HealthMate Mennie` and `praverse-ems`; the Elmiron-App project is not in it.
+  `~/.elmiron-prod.env` does not exist here, there is no repo-root `.env`, and
+  `services/api/supabase/.temp/project-ref` is absent. `ACTIVE_HEALTHY`, the 19 deployed
+  migrations, the absence of reference data (B11) and the free-plan pause (B14) are all
+  taken from documents and were **not** confirmed from this machine.
+- The local database's 29 organisations / 101 territories / 38 doctors are **test-fixture
+  residue from the 344-test `api` suite**, not reference data, and are not evidence
+  against B11.
+- The full G-RLS adversarial matrix was not re-run in this session; the 344 `api` tests
+  passed against a live local stack.
+
+**One environment finding.** Under `turbo run test` with the emulator, Docker and Metro
+running, `@fieldforce/ui` and `@fieldforce/field` produced four `Exceeded timeout of
+5000 ms` failures. Run sequentially per workspace on the same commit, all 1,086 pass. A
+green suite on this machine is conditional on machine load; CI is the arbiter.
+
+See **`docs/COMPLETION-PLAN.md`** for the task list (IDs continue from `BE-W8` / `FE-W9`),
+the dependency graph, the critical path to G-PILOT, the cut list, twelve risks, and the
+refused-task list.
