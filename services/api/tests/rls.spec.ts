@@ -943,3 +943,274 @@ describe.skipIf(!reachable)('deactivation is enforced by the profile, not the cl
     });
   });
 });
+
+// =============================================================================
+// 10. FIX-05 — the oversight record
+// =============================================================================
+//
+// `analysis_overrides` is the artefact §3.6 was reversed on the strength of: a manager
+// may read an AI analysis of a named employee because a human can override the machine's
+// finding. Until FIX-05 that row had no table, no function and no column, and
+// `services/mock` fabricated it. These tests exist so it cannot quietly stop being real
+// again.
+
+describe.skipIf(!reachable)('analysis_overrides is append-only', () => {
+  const overrideId = async (client: Client): Promise<string> => {
+    await asUser(client, world.users.westManager);
+    const created = await client.query<{ id: string }>(
+      'select id from public.create_analysis_override($1, $2, $3)',
+      [world.analyses.pune, null, 'the row under test'],
+    );
+    await client.query('set local role postgres');
+    const id = created.rows[0]?.id;
+    if (id === undefined) throw new Error('setup failed: no override created');
+    return id;
+  };
+
+  it.each(['postgres', 'service_role', 'authenticated', 'anon'] as const)(
+    'refuses UPDATE as %s',
+    async (role) => {
+      await inRolledBackTransaction(async (client: Client) => {
+        const id = await overrideId(client);
+        await client.query(`set local role ${role}`);
+        await expect(
+          client.query('update public.analysis_overrides set reason = $1 where id = $2', [
+            'rewritten',
+            id,
+          ]),
+        ).rejects.toThrow();
+      });
+    },
+  );
+
+  it.each(['postgres', 'service_role', 'authenticated', 'anon'] as const)(
+    'refuses DELETE as %s',
+    async (role) => {
+      await inRolledBackTransaction(async (client: Client) => {
+        const id = await overrideId(client);
+        await client.query(`set local role ${role}`);
+        await expect(
+          client.query('delete from public.analysis_overrides where id = $1', [id]),
+        ).rejects.toThrow();
+      });
+    },
+  );
+
+  it('refuses TRUNCATE even as the table owner', async () => {
+    await inRolledBackTransaction(async (client: Client) => {
+      await overrideId(client);
+      await client.query('set local role postgres');
+      await expect(client.query('truncate public.analysis_overrides')).rejects.toThrow();
+    });
+  });
+
+  it('the row still says what it said after every attempt', async () => {
+    await inRolledBackTransaction(async (client: Client) => {
+      const id = await overrideId(client);
+      for (const role of ['service_role', 'authenticated', 'anon']) {
+        // Each attempt inside a savepoint: a failed statement poisons the whole
+        // transaction, and the point of this test is what comes after the failures.
+        await client.query('savepoint attempt');
+        await client.query(`set local role ${role}`);
+        await client
+          .query('update public.analysis_overrides set reason = $1 where id = $2', [
+            'rewritten',
+            id,
+          ])
+          .catch(() => undefined);
+        await client.query('rollback to savepoint attempt');
+        await client.query('set local role postgres');
+      }
+      const after = await client.query<{ reason: string }>(
+        'select reason from public.analysis_overrides where id = $1',
+        [id],
+      );
+      expect(after.rows[0]?.reason).toBe('the row under test');
+    });
+  });
+});
+
+describe.skipIf(!reachable)('an override is bounded by the manager subtree', () => {
+  it('a manager may override an analysis inside their subtree', async () => {
+    await inRolledBackTransaction(async (client: Client) => {
+      await asUser(client, world.users.westManager);
+      const created = await client.query<{ analysis_id: string }>(
+        'select analysis_id from public.create_analysis_override($1, $2, $3)',
+        [world.analyses.pune, null, 'inside the subtree'],
+      );
+      expect(created.rows[0]?.analysis_id).toBe(world.analyses.pune);
+    });
+  });
+
+  it('a manager is REFUSED outside their subtree — a denial, not an empty result', async () => {
+    // Unlike the RPC reads settled on 10 August, this one has a client consuming it, so
+    // an empty answer would be rendered as "no overrides" rather than as a refusal.
+    await expect(
+      asUserQuery(world.users.southManager, 'select public.create_analysis_override($1, $2, $3)', [
+        world.analyses.pune,
+        null,
+        'outside the subtree',
+      ]),
+    ).rejects.toMatchObject({ code: '42501' });
+  });
+
+  it('reading outside the subtree is refused too', async () => {
+    await expect(
+      asUserQuery(world.users.southManager, 'select public.list_analysis_overrides($1)', [
+        world.analyses.pune,
+      ]),
+    ).rejects.toMatchObject({ code: '42501' });
+  });
+
+  it('an MR may READ overrides about themselves', async () => {
+    // The half of the design that makes the system contestable: an MR can see what was
+    // recorded about them.
+    await inRolledBackTransaction(async (client: Client) => {
+      await asUser(client, world.users.westManager);
+      await client.query('select public.create_analysis_override($1, $2, $3)', [
+        world.analyses.pune,
+        null,
+        'visible to its subject',
+      ]);
+      await client.query('set local role postgres');
+      await asUser(client, world.users.puneMr);
+      const read = await client.query<{ n: number }>(
+        `select jsonb_array_length(public.list_analysis_overrides($1) -> 'data') as n`,
+        [world.analyses.pune],
+      );
+      expect(read.rows[0]?.n).toBe(1);
+    });
+  });
+
+  it('an MR may NOT override an analysis, including their own', async () => {
+    // A finding the subject can erase is not oversight of the subject.
+    await expect(
+      asUserQuery(world.users.puneMr, 'select public.create_analysis_override($1, $2, $3)', [
+        world.analyses.pune,
+        null,
+        'erasing my own finding',
+      ]),
+    ).rejects.toMatchObject({ code: '42501' });
+  });
+
+  it('an override with no reason is refused', async () => {
+    await expect(
+      asUserQuery(world.users.westManager, 'select public.create_analysis_override($1, $2, $3)', [
+        world.analyses.pune,
+        null,
+        '   ',
+      ]),
+    ).rejects.toMatchObject({ code: '22023' });
+  });
+
+  it('direct table access is denied, not empty', async () => {
+    await expect(
+      asUserQuery(world.users.westManager, 'select * from public.analysis_overrides'),
+    ).rejects.toMatchObject({ code: '42501' });
+  });
+
+  it('there is no agree or acknowledge endpoint, and there should not be', async () => {
+    // fe-w3-spec.md: agreement is the absence of an override, and a row for it "would
+    // turn every unreviewed finding into an implied endorsement the moment somebody
+    // wanted a metric out of it".
+    await inRolledBackTransaction(async (client: Client) => {
+      const found = await client.query<{ proname: string }>(
+        `select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public'
+            and (p.proname like '%agree%' or p.proname like '%acknowledge%'
+                 or p.proname like '%endorse%')`,
+      );
+      expect(found.rows).toHaveLength(0);
+    });
+  });
+});
+
+// =============================================================================
+// 11. FIX-05 riders — the two functions with no coverage
+// =============================================================================
+
+describe.skipIf(!reachable)('list_consent_records is scoped and audited', () => {
+  // BE-W60. This was the one of seven audited RPCs with no test anywhere, on the
+  // consent path.
+  it('refuses an unauthenticated caller', async () => {
+    await inRolledBackTransaction(async (client: Client) => {
+      await asDatabaseRole(client, 'anon');
+      await expect(client.query('select public.list_consent_records()')).rejects.toThrow();
+    });
+  });
+
+  it('discloses nothing from another manager subtree', async () => {
+    const result = await asUserQuery<{ n: number }>(
+      world.users.southManager,
+      `select jsonb_array_length(public.list_consent_records($1) -> 'data') as n`,
+      [world.visits.pune],
+    );
+    expect(result.rows[0]?.n).toBe(0);
+  });
+
+  it('positive control — the capturing MR sees their own consent record', async () => {
+    const result = await asUserQuery<{ n: number }>(
+      world.users.puneMr,
+      `select jsonb_array_length(public.list_consent_records($1) -> 'data') as n`,
+      [world.visits.pune],
+    );
+    expect(result.rows[0]?.n).toBeGreaterThanOrEqual(1);
+  });
+
+  it('an admin must give a reason', async () => {
+    await expect(
+      asUserQuery(world.users.admin, 'select public.list_consent_records($1)', [world.visits.pune]),
+    ).rejects.toMatchObject({ code: '22023' });
+  });
+
+  it('writes its audit row before it returns the data', async () => {
+    await inRolledBackTransaction(async (client: Client) => {
+      await asUser(client, world.users.puneMr);
+      const read = await client.query<{ audit_id: string }>(
+        `select public.list_consent_records($1) ->> 'auditLogId' as audit_id`,
+        [world.visits.pune],
+      );
+      await client.query('set local role postgres');
+      const audit = await client.query<{ table_name: string }>(
+        'select table_name from public.audit_log where id = $1',
+        [read.rows[0]?.audit_id],
+      );
+      expect(audit.rows[0]?.table_name).toBe('consent_records');
+    });
+  });
+});
+
+describe.skipIf(!reachable)('daily_mileage discloses nothing without an identity', () => {
+  // FIX-04 found this was the only one of the seven that did not refuse anon: it
+  // returned zero rows instead, and its safety rested entirely on visible_user_ids()
+  // being empty. FIX-05 revoked PUBLIC EXECUTE so the grant refuses first. Both
+  // controls are pinned here so neither can be removed silently.
+  it('anon cannot execute it at all', async () => {
+    await inRolledBackTransaction(async (client: Client) => {
+      await asDatabaseRole(client, 'anon');
+      await expect(
+        client.query('select * from public.daily_mileage($1, $2)', ['2026-01-01', '2026-12-31']),
+      ).rejects.toMatchObject({ code: '42501' });
+    });
+  });
+
+  it('the grant is revoked from PUBLIC, not only checked inside the function', async () => {
+    await inRolledBackTransaction(async (client: Client) => {
+      const acl = await client.query<{ anon: boolean }>(
+        `select has_function_privilege('anon', p.oid, 'EXECUTE') as anon
+           from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.proname = 'daily_mileage'`,
+      );
+      expect(acl.rows[0]?.anon).toBe(false);
+    });
+  });
+
+  it('positive control — an MR still gets their own mileage', async () => {
+    const result = await asUserQuery<{ n: string }>(
+      world.users.puneMr,
+      `select count(*)::text as n from public.daily_mileage($1, $2)`,
+      ['2026-01-01', '2026-12-31'],
+    );
+    expect(Number(result.rows[0]?.n)).toBeGreaterThanOrEqual(0);
+  });
+});
