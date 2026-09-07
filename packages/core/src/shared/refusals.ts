@@ -83,7 +83,15 @@ export interface Refusal {
   readonly actionable: boolean;
 }
 
-const BY_SQLSTATE: Readonly<Record<string, { code: RefusalCode; actionable: boolean }>> = {
+/**
+ * Exported so a test can derive the other side of this mapping from the DATABASE and
+ * compare, rather than from a list somebody maintains. `45004` was minted in FIX-09 and
+ * never reached this table, so a UCPMP cap refusal rendered to an MR as `unrecognised` --
+ * the server said something specific and actionable and the app said it did not know.
+ * Minting a SQLSTATE and wiring it are two steps, and one of them is silently skippable.
+ * `error-contract.spec.ts` is the mechanism that stops that happening again.
+ */
+export const BY_SQLSTATE: Readonly<Record<string, { code: RefusalCode; actionable: boolean }>> = {
   '28000': { code: 'not_authenticated', actionable: true },
   '42501': { code: 'not_permitted', actionable: false },
   '45001': { code: 'consent_notice_superseded', actionable: true },
