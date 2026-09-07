@@ -9,5 +9,6 @@
 export * from './primitives.js';
 export * from './identity.js';
 export * from './errors.js';
+export * from './refusals.js';
 export * from './pagination.js';
 export * from './config.js';
