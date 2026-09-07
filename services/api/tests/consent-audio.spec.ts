@@ -117,69 +117,227 @@ const committedConsentedVisit = async (): Promise<{
 // =============================================================================
 
 describe.skipIf(!reachable)('consent capture', () => {
+  /**
+   * FIX-02 replaced the test that used to live here, and the reason is recorded
+   * because a deleted test is otherwise indistinguishable from a hidden failure.
+   *
+   * The old test asserted that the stored `consent_text_version_id` equalled
+   * whatever `active_consent_text` returned at write time -- "the version comes
+   * from the server's catalogue rather than from the caller." That is the defect,
+   * not the requirement. `packages/core/src/field/consent.ts` states the
+   * requirement in words: "The exact text version displayed on screen. **Not the
+   * current version.**" The old assertion contradicted the contract, and its
+   * intermittent failure was the schema telling the truth.
+   */
   it.each(['consented', 'declined', 'not_asked'] as const)(
-    'records %s as a complete, successful capture',
+    'records %s against the version the client displayed',
     async (outcome) => {
-      await asUserTx(world.users.puneMr, async (client) => {
-        // Both halves in ONE statement, so they share one snapshot.
+      await inRolledBackTransaction(async (client) => {
+        // A language of this test's own, seeded here rather than read from the
+        // shared `en-IN` catalogue.
         //
-        // Every fixture run seeds its own `en-IN` consent text with effective_from
-        // now(), so all runs compete to be the active version. Read across two
-        // statements under READ COMMITTED, another spec file committing its fixture
-        // between them changes the answer, and this fails claiming capture_consent
-        // stamped the wrong version. Flaky roughly one run in ten with the BE-W7
-        // suite at ten spec files; rarer, but present, before that.
-        //
-        // The property being tested is unchanged: the version comes from the
-        // server's catalogue rather than from the caller. The stronger guard is the
-        // structural test below — capture_consent has no version parameter at all.
+        // `en-IN` is contended: every fixture run seeds its own notice at `now()`,
+        // so between reading the active version and capturing against it, another
+        // spec can commit a newer one -- and after FIX-02 the function correctly
+        // REFUSES that capture. The race is real and the refusal is the point, but
+        // it belongs in the test that asserts it, not underneath an unrelated
+        // assertion about storage. A private language removes the contention
+        // entirely and leaves the property being tested unchanged.
+        const language = `zz-${randomUUID().slice(0, 8)}`;
+        const displayed = randomUUID();
+        await client.query(
+          `insert into public.consent_text_versions (id, version_label, language, full_text)
+           values ($1, $2, $3, 'The notice that was on the screen.')`,
+          [displayed, `fix02-each-${randomUUID().slice(0, 8)}`, language],
+        );
+
+        await asUser(client, world.users.puneMr);
         const result = await client.query<{
           outcome: string;
           consent_text_version_id: string;
-          active_id: string;
+          displayed_language: string;
         }>(
-          `select c.outcome,
-                  c.consent_text_version_id,
-                  (select a.id from public.active_consent_text('en-IN') a) as active_id
-             from public.capture_consent($1, $2, $3, $4, $5) c`,
+          `select c.outcome, c.consent_text_version_id, c.displayed_language
+             from public.capture_consent($1, $2, $3, $4, $5, $6) c`,
           [
             randomUUID(),
             world.visits.pune,
             outcome,
-            'en-IN',
+            language,
+            displayed,
             outcome === 'not_asked' ? 'Doctor was called away.' : null,
           ],
         );
         expect(result.rows[0]?.outcome).toBe(outcome);
-        // Whatever the server's catalogue says is active — not a version the test
-        // or the client chose.
-        expect(result.rows[0]?.consent_text_version_id).toBe(result.rows[0]?.active_id);
+        // The version the caller displayed, stored verbatim.
+        expect(result.rows[0]?.consent_text_version_id).toBe(displayed);
+        expect(result.rows[0]?.displayed_language).toBe(language);
       });
     },
   );
 
-  it('takes the text version from the server catalogue, not from the client', async () => {
-    // capture_consent has no parameter for the version at all. A client that
-    // reports it displayed v4 when v5 is current is either stale or lying, and
-    // there is no way to tell which — so the question is never asked.
+  it('refuses a capture whose notice was superseded, and writes nothing', async () => {
+    // The property the whole fix exists for. A newer notice becomes active between
+    // the doctor reading one and the capture landing. The old path silently stored
+    // the newer one -- an attestation to a document nobody saw.
+    await inRolledBackTransaction(async (client) => {
+      const language = `zz-${randomUUID().slice(0, 8)}`;
+      const stale = randomUUID();
+      // The notice that was on the screen, dated a minute ago.
+      await client.query(
+        `insert into public.consent_text_versions
+           (id, version_label, language, full_text, effective_from)
+         values ($1, $2, $3, 'The notice the doctor read.', now() - interval '1 minute')`,
+        [stale, `fix02-stale-${randomUUID().slice(0, 8)}`, language],
+      );
+      // Superseded before the capture landed. Strictly newer, and active.
+      await client.query(
+        `insert into public.consent_text_versions (id, version_label, language, full_text)
+         values ($1, $2, $3, 'A newer notice than the one that was displayed.')`,
+        [randomUUID(), `fix02-newer-${randomUUID().slice(0, 8)}`, language],
+      );
+
+      await asUser(client, world.users.puneMr);
+      const captureId = randomUUID();
+
+      // A failed statement poisons the transaction, so the refusal is taken inside
+      // a savepoint and the row check runs after rolling back to it.
+      await client.query('savepoint fix02');
+      await expect(
+        client.query('select public.capture_consent($1, $2, $3, $4, $5)', [
+          captureId,
+          world.visits.pune,
+          'consented',
+          language,
+          stale,
+        ]),
+      ).rejects.toMatchObject({ code: '45001' });
+      await client.query('rollback to savepoint fix02');
+
+      // Never a silent substitution: the refusal leaves no row at all. Checked as
+      // the owner, so row-level security cannot make an empty result look like proof.
+      await client.query('set local role postgres');
+      const written = await client.query('select 1 from public.consent_records where id = $1', [
+        captureId,
+      ]);
+      expect(written.rowCount).toBe(0);
+    });
+  });
+
+  it('rejects a consent text version that does not exist', async () => {
+    await asUserTx(world.users.puneMr, async (client) => {
+      await expect(
+        client.query('select public.capture_consent($1, $2, $3, $4, $5)', [
+          randomUUID(),
+          world.visits.pune,
+          'consented',
+          'en-IN',
+          randomUUID(),
+        ]),
+      ).rejects.toThrow(/does not exist/);
+    });
+  });
+
+  it('rejects a capture with no displayed version at all', async () => {
+    await asUserTx(world.users.puneMr, async (client) => {
+      await expect(
+        client.query('select public.capture_consent($1, $2, $3, $4, $5)', [
+          randomUUID(),
+          world.visits.pune,
+          'consented',
+          'en-IN',
+          null,
+        ]),
+      ).rejects.toThrow(/requires the consent text version that was displayed/);
+    });
+  });
+
+  it('does not treat a future-dated notice as active', async () => {
+    // `active_consent_text` is bounded in both directions. Checked rather than
+    // assumed during FIX-02, and asserted here so that it stays true.
+    await inRolledBackTransaction(async (client) => {
+      const language = `zz-${randomUUID().slice(0, 8)}`;
+      const inForce = randomUUID();
+      await client.query(
+        `insert into public.consent_text_versions
+           (id, version_label, language, full_text, effective_from)
+         values ($1, $2, $3, 'In force.', now() - interval '1 minute')`,
+        [inForce, `fix02-inforce-${randomUUID().slice(0, 8)}`, language],
+      );
+      await client.query(
+        `insert into public.consent_text_versions
+           (id, version_label, language, full_text, effective_from)
+         values ($1, $2, $3, 'Not in force yet.', now() + interval '1 day')`,
+        [randomUUID(), `fix02-future-${randomUUID().slice(0, 8)}`, language],
+      );
+
+      const active = (
+        await client.query<{ id: string }>(`select id from public.active_consent_text($1)`, [
+          language,
+        ])
+      ).rows[0]?.id;
+      // The future row is newer by effective_from and still must not win.
+      expect(active).toBe(inForce);
+    });
+  });
+
+  it('resolves two notices sharing an instant deterministically', async () => {
+    // The flake's root cause: fixtures compete at `now()`, and `order by
+    // effective_from desc limit 1` had no tie-break. `id` is the primary key, so
+    // appending it gives a total order and therefore a repeatable answer.
+    await inRolledBackTransaction(async (client) => {
+      const language = `zz-${randomUUID().slice(0, 8)}`;
+      for (const label of ['tie-a', 'tie-b']) {
+        // Both rows take `now()`, the transaction timestamp, so they tie on
+        // effective_from AND created_at. Only the primary key separates them.
+        await client.query(
+          `insert into public.consent_text_versions (id, version_label, language, full_text)
+           values ($1, $2, $3, 'Same instant as its sibling.')`,
+          [randomUUID(), `fix02-${label}-${randomUUID().slice(0, 8)}`, language],
+        );
+      }
+
+      const seen = new Set<string>();
+      for (let i = 0; i < 5; i += 1) {
+        // Separate statements, so each takes its own snapshot under READ COMMITTED.
+        const row = await client.query<{ id: string }>(
+          `select id from public.active_consent_text($1)`,
+          [language],
+        );
+        seen.add(String(row.rows[0]?.id));
+      }
+      expect(seen.size).toBe(1);
+    });
+  });
+
+  it('takes the displayed text version as a parameter', async () => {
+    // The inverse of the structural test FIX-02 removed. That one asserted
+    // capture_consent had NO version parameter, on the grounds that a client
+    // reporting a version it did not display is "either stale or lying". The client
+    // cannot prove what it showed either way -- but re-deriving guarantees the
+    // record is wrong whenever the notice changed, which is worse than recording
+    // the only witness there is and refusing when it disagrees.
     await inRolledBackTransaction(async (client) => {
       const args = await client.query<{ parameters: string }>(
         `select pg_get_function_arguments(p.oid) as parameters
            from pg_proc p join pg_namespace n on n.oid = p.pronamespace
           where n.nspname = 'public' and p.proname = 'capture_consent'`,
       );
-      expect(args.rows[0]?.parameters).not.toMatch(/version/i);
+      // Exactly one, so the defective overload cannot survive alongside the fix.
+      expect(args.rows).toHaveLength(1);
+      expect(args.rows[0]?.parameters).toMatch(/p_consent_text_version_id uuid/);
     });
   });
 
   it('refuses a language with no active consent text', async () => {
     await expect(
       asUserTx(world.users.puneMr, (client) =>
-        client.query('select public.capture_consent($1, $2, $3, $4)', [
+        client.query('select public.capture_consent($1, $2, $3, $4, $5)', [
           randomUUID(),
           world.visits.pune,
           'consented',
           'xx-XX',
+          world.consentTextVersionId,
         ]),
       ),
     ).rejects.toThrow(/no active consent text/);
@@ -188,15 +346,25 @@ describe.skipIf(!reachable)('consent capture', () => {
   it('is idempotent on the client-generated id', async () => {
     await asUserTx(world.users.puneMr, async (client) => {
       const id = randomUUID();
-      await client.query('select public.capture_consent($1, $2, $3, $4)', [
+      const language = `zz-${randomUUID().slice(0, 8)}`;
+      const active = randomUUID();
+      await client.query('set local role postgres');
+      await client.query(
+        `insert into public.consent_text_versions (id, version_label, language, full_text)
+         values ($1, $2, $3, 'The notice for this replay.')`,
+        [active, `fix02-idem-${randomUUID().slice(0, 8)}`, language],
+      );
+      await asUser(client, world.users.puneMr);
+      await client.query('select public.capture_consent($1, $2, $3, $4, $5)', [
         id,
         world.visits.pune,
         'declined',
-        'en-IN',
+        language,
+        active,
       ]);
       const replay = await client.query<{ outcome: string }>(
-        'select outcome from public.capture_consent($1, $2, $3, $4)',
-        [id, world.visits.pune, 'consented', 'en-IN'],
+        'select outcome from public.capture_consent($1, $2, $3, $4, $5)',
+        [id, world.visits.pune, 'consented', language, active],
       );
       // The replay does not overwrite the original with a different outcome.
       expect(replay.rows[0]?.outcome).toBe('declined');
