@@ -5342,3 +5342,159 @@ enabled, and presents as a callback that vanishes rather than as a configuration
   **22 migrations, 22 rollback files.**
 - `turbo run typecheck lint`: **16 successful, 16 total**. `format:check` clean apart from
   `apps/console/next-env.d.ts`, the gitignored CRLF artefact CI never sees.
+
+---
+
+### FIX-06 — the first real write (7 September 2026)
+
+**The console coaching screens were NOT wired and the "manager console is not here" card
+was NOT removed.** Both are held pending the scope decision. Nothing in this section
+changes what `apps/console` renders.
+
+**Part A.** `8180a67..8129210` pushed. **CI run `34117692053`: success, 2m28s**, both jobs.
+
+#### Part B — FE-W15. A write that is still there afterwards.
+
+Until today the only real round trip in this product was authentication. A check-in now
+goes to Supabase.
+
+**Exactly what is real on the check-in path, and what is not:**
+
+| call | goes to | status |
+| --- | --- | --- |
+| `record_check_in` | **Supabase RPC** | **real, persists** |
+| `record_check_out` | **Supabase RPC** | **real, persists** |
+| everything else on the screen — visits, doctors, beat plan, samples, mileage, consent | `services/mock` | **fixtures. Persist nothing** |
+
+**The screen is half converted and must not be described as converted.** Consent is
+blocked on the offline design decision from FIX-02 §3; the rest are separate reviews.
+
+**Three things found by doing it rather than planning it:**
+
+1. **The contract's `ApiClient` cannot reach Supabase.** It sends `authorization` and no
+   `apikey`; Supabase's gateway refuses that with `401` before PostgREST is reached —
+   measured. `apps/field` therefore calls through `supabase-js`, which already holds both
+   the key and the live session, rather than growing a second copy of the auth plumbing.
+2. **No response mapper existed.** `toRecordCheckInBody` has mapped the *request* since
+   BE-W3, but PostgREST returns snake_case with flat `latitude`/`longitude` where the
+   contract nests `coordinates`, plus a `shift_window_source` the entity has no field for.
+   Nothing had ever mapped a response because no client had ever received one.
+   `fromCheckInRow` / `fromCheckOutRow` now do, and they **parse rather than cast**.
+3. **`Coordinates.capturedAt` has no column.** It maps from `occurred_at`, which *is* when
+   the device took the fix.
+
+**B3 — the proof.** Row read back from the database by id after an HTTP round trip, and
+**`received_at` is the server's clock**: the handset claimed a fixed date and the server
+stamped now, so the two differ by a measured non-zero interval. A device that lies about
+its clock cannot move `received_at`.
+
+**B4 — mutation proof.** The insert was removed from `record_check_in`. **3 of 6 failed —
+exactly the three persistence assertions — with the case count unchanged at 6.** The three
+refusal tests correctly stayed green, since a refusal does not depend on an insert.
+
+**B5 — the refusal path.** With the check-in outside the 09:00–19:00 window:
+
+```
+POST /rest/v1/rpc/record_check_in  ->  400
+{"code":"45003","message":"check-in at 2026-09-07 16:30:00+00 is outside the
+ configured shift window for territory ..."}
+```
+
+**And it wrote nothing** — asserted, because a refusal that leaves a row behind is worse
+than one that fails loudly. A visit belonging to another MR is refused `42501`.
+
+**B6.** No shift-window, geofence or permission logic was added to the client. The rule
+lives in `record_check_in`, which resolves the window from the *doctor's* territory.
+
+#### Part C — the error contract
+
+Every deliberate SQLSTATE the schema raises, counted across all migrations:
+
+| SQLSTATE | raises | mapped to |
+| --- | ---: | --- |
+| `22023` | 64 | `invalid_request` — **deliberately generic** |
+| `42501` | 43 | `not_permitted` |
+| `28000` | 31 | `not_authenticated` |
+| `23514` (`check_violation`) | 16 | `invalid_for_this_record` |
+| `23503` (`foreign_key_violation`) | 4 | `references_missing_record` |
+| `0A000` | 2 | `not_supported` |
+| `23001` (`restrict_violation`) | 2 | `append_only` |
+| `23505` (`unique_violation`) | 1 | `already_exists` |
+| `45001` | 1 | `consent_notice_superseded` |
+| **`45002`** | new | `shift_window_not_configured` |
+| **`45003`** | new | `outside_shift_window` |
+
+**C2 could not be done with the codes that existed.** The shift-window refusals both
+raised `22023`, which is raised **64 times** for unrelated reasons — mapping it to "your
+shift window is wrong" would be a guess dressed as a fact, and matching the message
+instead would make English the contract. So they were given their own codes, `45002` and
+`45003`, in the range `45001` established in FIX-02. Migration
+`20260907000400_shift_refusal_codes.sql` is the three live function bodies with only the
+errcode substituted.
+
+**C4 — the rule that matters most.** An unmapped SQLSTATE returns `unrecognised` and the
+UI says so. A wrong explanation sends the MR to do the wrong thing and they have no way to
+tell it was wrong.
+
+**C5 — mutation proof.** `45003` was removed from the mapping table: **1 failed, exactly
+that case, 332 still collected.**
+
+Each refusal also carries `actionable` — whether the person holding the phone can do
+something now (re-read the notice, wait for the shift) or whether it needs somebody else.
+
+#### Part D — the architecture, and a control that was not one
+
+**D1.** Recorded in `.ai-collab/architecture.md` → "The access model, as implemented".
+The short version, with counts from the applied schema:
+
+- 35 tables, 41 policies, **9 tables with RLS forced and zero policies** — including
+  `analyses`, `consent_records` and `analysis_overrides`.
+- **88 functions.** Access to those nine happens only through `SECURITY DEFINER`
+  functions whose bodies hold the scope logic and write the audit row first.
+- **So the authorisation surface is 88 function bodies, not 41 policies.** A reviewer who
+  reads `pg_policies` and stops has read the smaller half.
+- This differs from `plan-backend.md` §2's *"Enforce it in Postgres row-level security.
+  Not in application code"*. It was chosen twice with reasons on the record
+  (`PROJECT-OVERVIEW.md:483` and `:170` — Postgres has no SELECT trigger, so a policy
+  cannot satisfy "every read of these two tables is audited" and a function can). The note
+  argues for neither; it records what is true so the next review reads the right artefact.
+
+**D2 — and this is the finding of Part D. FIX-05's default privilege is inert.**
+
+FIX-05 Part C added
+`alter default privileges in schema public revoke execute on functions from public` so
+future migrations would inherit the posture. **They do not.**
+
+```
+pg_default_acl, schema public, objtype f
+  -> owner: supabase_admin
+  -> {postgres=X/supabase_admin, anon=X/supabase_admin, authenticated=X/..., service_role=X/...}
+```
+
+The default ACL for new functions in `public` belongs to **`supabase_admin`**, and it
+grants `anon` **explicitly** rather than through `PUBLIC` — so revoking `PUBLIC` leaves it
+untouched. Migrations run as `postgres` (`select current_user` during one returns it), and
+`alter default privileges for role supabase_admin …` is refused outright:
+`permission denied to change default privileges (42501)`.
+
+**Proved, not reasoned:** a throwaway function created inside a transaction returned
+`has_function_privilege('anon', …, 'EXECUTE') = true` both before and after an attempted
+fix. So the 65-of-86 finding would have recurred with the next migration.
+
+**A migration cannot fix this, so the control is a test instead.** `rls.spec.ts` now fails
+the build if *any* function in `public` is `anon`-executable, plus a positive control that
+creates a function with the defaults and asserts it *is* — so a green result cannot mean
+the query is broken. A second migration attempting
+`revoke execute on functions from anon` was written, proved ineffective, and **deleted
+rather than committed as decoration**.
+
+#### Counts
+
+- `@fieldforce/api`: **383 passed, 15 files** (was 375; +8 — six write-path, two grant
+  posture). Run with `--no-file-parallelism`, per the `upload.spec.ts` race in
+  `docs/gotchas.md`.
+- `@fieldforce/field`: **332 vitest** (was 320; +12) **+ 72 jest**, all passing.
+- `verify:rollbacks`: *"All rollbacks applied in reverse order; public schema is empty."*
+  **23 migrations, 23 rollback files.**
+- `turbo run typecheck lint`: **16 successful, 16 total**. `format:check` clean apart from
+  `apps/console/next-env.d.ts`, the gitignored CRLF artefact CI never sees.
