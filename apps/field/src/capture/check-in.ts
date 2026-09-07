@@ -4,6 +4,8 @@ import {
   refusalForSqlState,
   toRecordCheckInBody,
 } from '@fieldforce/core';
+import { resolveClient } from './client';
+import type { RpcCaller } from './client';
 import type {
   CheckIn,
   CheckOut,
@@ -53,40 +55,11 @@ export type CheckOutOutcome =
   | { readonly kind: 'recorded'; readonly checkOut: CheckOut }
   | { readonly kind: 'refused'; readonly refusal: Refusal };
 
-/**
- * Minimal shape of what `supabase-js` returns, so this module can be tested without it.
- *
- * `code` on the error is the SQLSTATE. That is the whole reason the refusal contract can
- * exist: the database's own vocabulary survives the round trip intact.
- */
-export interface RpcCaller {
-  rpc(
-    fn: string,
-    args: Record<string, unknown>,
-  ): PromiseLike<{ data: unknown; error: { code?: string | null; message: string } | null }>;
-}
-
-/**
- * The live client, resolved lazily.
- *
- * `../supabase` imports `../config`, which calls `loadAppConfig` at module load and throws
- * on a missing `EXPO_PUBLIC_*` value -- deliberately, so a misconfigured build fails on the
- * first screen rather than silently. That is right for the app and wrong for a unit test,
- * which has no `.env` and does not need one to check a mapping. Importing on use keeps both.
- */
-const resolveCaller = async (caller?: RpcCaller): Promise<RpcCaller> => {
-  if (caller !== undefined) return caller;
-  // No cast: the supabase-js client already satisfies `RpcCaller` structurally, which is
-  // the point of declaring the interface that narrowly.
-  const { supabase } = await import('../supabase');
-  return supabase;
-};
-
 export const recordCheckIn = async (
   input: CreateCheckInRequest,
   caller?: RpcCaller,
 ): Promise<CheckInOutcome> => {
-  const rpc = await resolveCaller(caller);
+  const rpc = await resolveClient(caller);
   const { data, error } = await rpc.rpc('record_check_in', toRecordCheckInBody(input));
 
   if (error !== null) {
@@ -102,7 +75,7 @@ export const recordCheckOut = async (
   input: CreateCheckOutRequest,
   caller?: RpcCaller,
 ): Promise<CheckOutOutcome> => {
-  const rpc = await resolveCaller(caller);
+  const rpc = await resolveClient(caller);
   const { data, error } = await rpc.rpc('record_check_out', toRecordCheckInBody(input));
 
   if (error !== null) {

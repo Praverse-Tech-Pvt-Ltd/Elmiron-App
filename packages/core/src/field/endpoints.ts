@@ -16,12 +16,13 @@ import {
   DoctorSchema,
   GeofenceStatusSchema,
   MileageDaySchema,
+  VisitStatusSchema,
   SampleAndInputSchema,
   SampleOrInputKindSchema,
   TerritoryShiftWindowSchema,
   VisitSchema,
 } from './entities.js';
-import type { CheckIn, CheckOut } from './entities.js';
+import type { CheckIn, CheckOut, MileageDay, Visit } from './entities.js';
 import { ConsentOutcomeSchema, ConsentRecordSchema, ConsentTextVersionSchema } from './consent.js';
 import { RecordingSchema, TranscriptSchema, VoiceNoteSchema } from './capture.js';
 import { UploadSessionStateSchema } from './upload.js';
@@ -594,6 +595,101 @@ export const fromCheckInRow = (row: unknown): CheckIn => {
     occurredAt: parsed.occurred_at,
     receivedAt: parsed.received_at,
     createdAt: parsed.created_at,
+  });
+};
+
+/**
+ * A visit as PostgREST accepts and returns it.
+ *
+ * FIX-07. Unlike check-in, a visit is written straight to the table -- `visits` has
+ * INSERT, SELECT and UPDATE policies and the grants to match, so there is no RPC in the
+ * way and no server-side rule the client could skip.
+ *
+ * **`mr_id` is absent from the request on purpose.** `CreateVisitRequestSchema` has never
+ * declared it, and the insert policy requires `mr_id = auth.uid()`. Migration
+ * `20260907000600` gives the column that default, so the caller cannot assert its own
+ * identity and cannot assert anyone else's. Sending it would be the client claiming
+ * something the server already knows.
+ */
+export const VisitRowSchema = z.object({
+  id: UuidSchema,
+  mr_id: UuidSchema,
+  doctor_id: UuidSchema,
+  beat_plan_id: UuidSchema.nullable(),
+  clinic_address_id: UuidSchema.nullable(),
+  status: VisitStatusSchema,
+  scheduled_for: IsoDateTimeSchema.nullable(),
+  started_at: IsoDateTimeSchema.nullable(),
+  completed_at: IsoDateTimeSchema.nullable(),
+  received_at: IsoDateTimeSchema,
+  created_at: IsoDateTimeSchema,
+  updated_at: IsoDateTimeSchema,
+});
+export type VisitRow = z.infer<typeof VisitRowSchema>;
+
+/**
+ * A type alias rather than an interface, deliberately: TypeScript gives type aliases an
+ * implicit index signature and interfaces none, so only this form is assignable to the
+ * `Record<string, unknown>` a database client's `insert()` takes.
+ */
+export type CreateVisitBody = {
+  id: string;
+  doctor_id: string;
+  beat_plan_id: string | null;
+  clinic_address_id: string | null;
+  scheduled_for: string | null;
+};
+
+export const toCreateVisitBody = (input: CreateVisitRequest): CreateVisitBody => ({
+  id: input.id,
+  doctor_id: input.doctorId,
+  beat_plan_id: input.beatPlanId ?? null,
+  clinic_address_id: input.clinicAddressId ?? null,
+  scheduled_for: input.scheduledFor ?? null,
+});
+
+export const fromVisitRow = (row: unknown): Visit => {
+  const parsed = VisitRowSchema.parse(row);
+  return VisitSchema.parse({
+    id: parsed.id,
+    mrId: parsed.mr_id,
+    doctorId: parsed.doctor_id,
+    beatPlanId: parsed.beat_plan_id,
+    clinicAddressId: parsed.clinic_address_id,
+    status: parsed.status,
+    scheduledFor: parsed.scheduled_for,
+    startedAt: parsed.started_at,
+    completedAt: parsed.completed_at,
+    receivedAt: parsed.received_at,
+    createdAt: parsed.created_at,
+    updatedAt: parsed.updated_at,
+  });
+};
+
+/**
+ * A row from `daily_mileage(p_from, p_to, p_mr_id)`.
+ *
+ * The contract declares this surface as `GET /mileage`, which has no backend at all --
+ * there is no `mileage` table or view. FIX-03 registered that as `BE-W52`; this is the
+ * client half of it. `distance_metres` is summed server-side from stored coordinates
+ * ordered by `occurred_at`, because a client-reported distance is an expense claim the
+ * claimant wrote for themselves.
+ */
+export const MileageRowSchema = z.object({
+  mr_id: UuidSchema,
+  travel_date: IsoDateSchema,
+  check_in_count: z.number().int().nonnegative(),
+  distance_metres: z.number().nonnegative(),
+});
+export type MileageRow = z.infer<typeof MileageRowSchema>;
+
+export const fromMileageRow = (row: unknown): MileageDay => {
+  const parsed = MileageRowSchema.parse(row);
+  return MileageDaySchema.parse({
+    mrId: parsed.mr_id,
+    travelDate: parsed.travel_date,
+    checkInCount: parsed.check_in_count,
+    distanceMetres: parsed.distance_metres,
   });
 };
 
