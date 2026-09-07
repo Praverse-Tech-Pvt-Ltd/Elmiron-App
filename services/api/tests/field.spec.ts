@@ -605,8 +605,11 @@ describe.skipIf(!reachable)('doctor search', () => {
   });
 
   it('never returns a doctor outside the caller territory', async () => {
-    // The function is SECURITY INVOKER, so the doctors policy is the scope filter.
-    // A search that could widen scope would be a hole with a convenient name.
+    // BE-W64 made the function SECURITY DEFINER, so the doctors policies are no longer
+    // what scopes this: the predicate in the body is. That trade is only safe if this
+    // assertion is real, so it is the load-bearing test of the rewrite rather than a
+    // nice-to-have. A search that could widen scope would be a hole with a convenient
+    // name.
     await asUserTx(world.users.puneMr, async (client) => {
       const result = await searchDoctors(client, 'Fixture');
       const ids = result.items.map((d) => d.id);
@@ -641,9 +644,19 @@ describe.skipIf(!reachable)('doctor search', () => {
     });
   });
 
-  it('uses the trigram index rather than a sequential scan', async () => {
-    // An MR in a waiting room has three seconds. Asserting the plan rather than the
-    // wall clock keeps this honest on a two-row fixture table.
+  it('the trigram index exists and CAN be used - which is all this ever proved', async () => {
+    // Kept, renamed, and demoted. This ran green from BE-W3 to FIX-10 under the title
+    // "uses the trigram index rather than a sequential scan", while `search_doctors`
+    // sequentially scanned every row on every call: 2,190 ms over 99,968 doctors.
+    //
+    // It never touched the function. It runs a BARE table query, as `postgres` (which
+    // holds BYPASSRLS), with `enable_seqscan = off` -- three departures from the thing
+    // it claimed to be testing, each of which independently hides the defect. The
+    // fourth hollow test this project's mutation discipline has turned up.
+    //
+    // What it legitimately proves is that the index is present and its operator class
+    // matches, which is worth keeping. The tests below are the ones that watch the
+    // function.
     await inRolledBackTransaction(async (client) => {
       await client.query('set local enable_seqscan = off');
       const plan = await client.query<{ 'QUERY PLAN': string }>(
@@ -651,6 +664,179 @@ describe.skipIf(!reachable)('doctor search', () => {
       );
       const text = plan.rows.map((r) => r['QUERY PLAN']).join('\n');
       expect(text).toMatch(/doctors_full_name_trgm_idx/);
+    });
+  });
+
+  it('is SECURITY DEFINER, which is the whole reason any index can be used', async () => {
+    // Not decoration. `texticlike` is not LEAKPROOF and `public.doctors` has RLS
+    // forced, so Postgres refuses to evaluate an ILIKE before the policy's security
+    // qual -- measured at 99,968 rows: a bare ILIKE under RLS seq-scans at 2,205.952 ms
+    // while `full_name = '...'` (leakproof `texteq`) on the same column, same role,
+    // uses `doctors_full_name_trgm_idx` in 0.396 ms.
+    //
+    // Reverting this flag would restore a search linear in total table size with no
+    // other test failing, because every behavioural test in this file passes either
+    // way. That is what this one is for.
+    await inRolledBackTransaction(async (client) => {
+      const result = await client.query<{ prosecdef: boolean }>(
+        `select prosecdef from pg_proc where proname = 'search_doctors'`,
+      );
+      expect(result.rows).toHaveLength(1);
+      expect(result.rows[0]?.prosecdef).toBe(true);
+    });
+  });
+
+  it('keeps is_admin() out of the row predicate, so the scope stays indexable', async () => {
+    // The first BE-W64 attempt was SECURITY DEFINER with the two policies transcribed
+    // verbatim, `OR is_admin()` included. It still produced a Seq Scan at 2,310 ms: a
+    // disjunction with one non-indexable branch forces a scan of everything, and
+    // `is_admin()` does not depend on the row. Resolving the scope to a uuid[] before
+    // the query is what turned 2,190 ms into 2.6 ms; putting the OR back would undo it
+    // silently, so the body is asserted rather than trusted.
+    await inRolledBackTransaction(async (client) => {
+      const result = await client.query<{ src: string }>(
+        `select prosrc as src from pg_proc where proname = 'search_doctors'`,
+      );
+      const body = result.rows[0]?.src ?? '';
+      expect(body).toMatch(/territory_id = any\(v_scope\)/);
+      expect(body).not.toMatch(/or\s+public\.is_admin\(\)/i);
+    });
+  });
+});
+
+// =============================================================================
+// BE-W64 - the rewrite returns exactly what the old body returned
+// =============================================================================
+
+/**
+ * The body from `20260814000100_manager_surface.sql:350-386`, verbatim, under a
+ * different name. A sargable rewrite that quietly changes what a search returns is
+ * worse than a slow search, so "faster" is not the claim being made here: "identical"
+ * is, and it is checked rather than asserted.
+ *
+ * SECURITY INVOKER, exactly as the original was, so it is scoped by the RLS policies
+ * while the new one is scoped by its own predicate. That difference is the point: the
+ * two scoping mechanisms have to agree, and this is where that is proved.
+ */
+const LEGACY_SEARCH = `
+  create function public.search_doctors_legacy(
+    p_query        text default null,
+    p_territory_id uuid default null,
+    p_limit        integer default 50
+  )
+  returns jsonb language sql stable set search_path = '' as $legacy$
+    with bounded as (
+      select least(greatest(coalesce(p_limit, 50), 1), 200) as lim
+    ),
+    matched as (
+      select d.*
+        from public.doctors d, bounded
+       where d.is_active
+         and (p_territory_id is null or d.territory_id = p_territory_id)
+         and (
+           p_query is null
+           or btrim(p_query) = ''
+           or d.full_name ilike '%' || p_query || '%'
+           or d.specialty ilike '%' || p_query || '%'
+           or d.registration_number = p_query
+         )
+       order by d.full_name
+       limit (select lim + 1 from bounded)
+    )
+    select jsonb_build_object(
+      'items', coalesce(
+        (select jsonb_agg(to_jsonb(m) order by m.full_name)
+           from (select * from matched order by full_name limit (select lim from bounded)) m),
+        '[]'::jsonb),
+      'truncated', (select count(*) from matched) > (select lim from bounded),
+      'limit', (select lim from bounded)
+    );
+  $legacy$;
+`;
+
+/**
+ * Cases chosen for where a rewrite actually breaks, not for coverage: null and empty
+ * string are the two the sargable split had to branch on, a single character is below
+ * the trigram extraction threshold so the planner falls back, and accent and case
+ * decide whether ILIKE semantics survived the move.
+ */
+const EQUIVALENCE_CASES: Array<{ name: string; query: string | null; limit?: number }> = [
+  { name: 'null - the listing branch', query: null },
+  { name: 'empty string - the other listing branch', query: '' },
+  { name: 'whitespace only, which btrim collapses to empty', query: '   ' },
+  { name: 'a single character, below the trigram threshold', query: 'F' },
+  { name: 'a substring match', query: 'ixtur' },
+  { name: 'an accent', query: '\u00e9' },
+  { name: 'an accent inside a name', query: 'Ren\u00e9e' },
+  { name: 'a case difference', query: 'fIxTuRe' },
+  { name: 'a specialty rather than a name', query: 'Urol' },
+  { name: 'an exact registration number', query: 'MH-1001' },
+  { name: 'a query matching nothing at all', query: 'zzzzzzzz' },
+  { name: 'a limit that forces truncation', query: 'Fixture', limit: 1 },
+  { name: 'a limit below the floor', query: 'Fixture', limit: 0 },
+  { name: 'a limit above the ceiling', query: 'Fixture', limit: 5000 },
+];
+
+describe.skipIf(!reachable)('doctor search: BE-W64 is behaviour-preserving', () => {
+  const withBothBodies = async (fn: (client: Client) => Promise<void>): Promise<void> =>
+    inRolledBackTransaction(async (client) => {
+      await client.query(LEGACY_SEARCH);
+      await client.query(
+        `grant execute on function
+           public.search_doctors_legacy(text, uuid, integer) to authenticated`,
+      );
+      // Names the fixture does not carry, because accent and case folding cannot be
+      // tested against rows that contain neither.
+      await client.query(
+        `insert into public.doctors (organisation_id, full_name, specialty, territory_id) values
+           ($1, 'Dr Ren\u00e9e Fixture', 'Cardiology', $2),
+           ($1, 'DR RENEE FIXTURE',  'cardiology', $2),
+           ($1, 'dr ren\u00e9e fixture', 'Cardiology', $2)`,
+        [world.organisationId, world.territories.pune],
+      );
+      await asUser(client, world.users.puneMr);
+      await fn(client);
+    });
+
+  for (const testCase of EQUIVALENCE_CASES) {
+    it(`returns identical results for ${testCase.name}`, async () => {
+      await withBothBodies(async (client) => {
+        const args = [testCase.query, testCase.limit ?? null];
+        const fresh = await client.query<{ payload: unknown }>(
+          'select public.search_doctors($1, null, $2) as payload',
+          args,
+        );
+        const legacy = await client.query<{ payload: unknown }>(
+          'select public.search_doctors_legacy($1, null, $2) as payload',
+          args,
+        );
+        expect(fresh.rows[0]?.payload).toEqual(legacy.rows[0]?.payload);
+      });
+    });
+  }
+
+  it('the legacy body is actually reachable, so the comparison is not vacuous', async () => {
+    // Without this, a typo in LEGACY_SEARCH that returned null for everything would
+    // make every case above compare null to null and pass.
+    await withBothBodies(async (client) => {
+      const result = await client.query<{ payload: { items: Array<{ id: string }> } }>(
+        `select public.search_doctors_legacy('Fixture', null, 50) as payload`,
+      );
+      expect(result.rows[0]?.payload.items.map((d) => d.id)).toContain(world.doctors.pune);
+    });
+  });
+
+  it('and the accent fixtures are actually found, so the accent cases are not vacuous', async () => {
+    await withBothBodies(async (client) => {
+      const result = await client.query<{ payload: { items: Array<{ full_name: string }> } }>(
+        `select public.search_doctors('Ren\u00e9e', null, 50) as payload`,
+      );
+      const names = result.rows[0]?.payload.items.map((d) => d.full_name) ?? [];
+      expect(names).toContain('Dr Ren\u00e9e Fixture');
+      expect(names).toContain('dr ren\u00e9e fixture');
+      // ILIKE is case-insensitive but NOT accent-insensitive, and the rewrite must not
+      // have quietly acquired unaccent along the way.
+      expect(names).not.toContain('DR RENEE FIXTURE');
     });
   });
 });
