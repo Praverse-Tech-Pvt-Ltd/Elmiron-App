@@ -11,6 +11,10 @@ export interface CapDecisionStatus {
   capConfigured: boolean;
   dueAt: string | null;
   overdue: boolean;
+  /** Mutually exclusive with `overdue`: a warning still true on the day the build goes red teaches a reader to ignore the red. */
+  warn: boolean;
+  warnFromAt: string | null;
+  warnDays: number;
   daysRemaining: number | null;
   question: string;
 }
@@ -18,6 +22,8 @@ export interface CapDecisionStatus {
 export interface DecisionDebtVerdict {
   clear: boolean;
   reasons: string[];
+  /** Printed, never fatal. `clear` alone decides the exit code. */
+  warnings: string[];
 }
 
 export declare const evaluateDecisionDebt: (

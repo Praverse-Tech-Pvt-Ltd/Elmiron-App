@@ -121,17 +121,6 @@ jobs:
         # the tests actually execute.
         run: pnpm turbo run test --filter @fieldforce/api --force
 
-      # Destructive, so it runs last. A rollback file that has never been executed
-      # is a claim, not a rollback.
-      - name: Verify every migration can be rolled back
-        env:
-          SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-        # A script rather than a turbo task, so it stays a direct invocation. Its
-        # workspace dependency is already built by the test step above, and
-        # `verify-rollbacks.mjs` imports nothing from `packages/core` by design -- see
-        # the scripts convention enforced in `rls.spec.ts`.
-        run: pnpm --filter @fieldforce/api verify:rollbacks
-
       # BE-W21. `ucpmp_sample_cap_quantity` is null on purpose -- nothing in this
       # repository states the UCPMP ceiling, and a constraint built on an invented
       # number looks enforced while being wrong invisibly. The cost of that honesty is
@@ -145,12 +134,30 @@ jobs:
       # it gets skipped and stops being a control. `decision-debt.spec.ts` tests the
       # mechanism against a backdated row instead, so the suite never depends on today.
       #
+      # BEFORE `verify:rollbacks`, and this is load-bearing rather than tidy. FIX-10 put
+      # it after, where the schema has just been rolled back to empty, and the step
+      # failed with `function public.ucpmp_cap_decision_status() does not exist` on run
+      # 34150819478. The control was correct -- it failed CLOSED, which is what it was
+      # designed to do when it cannot read an answer -- and the ordering was wrong.
+      # Anything that reads the schema has to run before the step that destroys it.
+      #
       # If this step is red: do NOT invent a cap value to clear it. Either set the real
       # one, or file a migration moving the deadline with the reason in its note.
       - name: No decision is past its deadline
         env:
           SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: pnpm --filter @fieldforce/api check:decision-debt
+
+      # Destructive, so it runs last. A rollback file that has never been executed
+      # is a claim, not a rollback.
+      - name: Verify every migration can be rolled back
+        env:
+          SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        # A script rather than a turbo task, so it stays a direct invocation. Its
+        # workspace dependency is already built by the test step above, and
+        # `verify-rollbacks.mjs` imports nothing from `packages/core` by design -- see
+        # the scripts convention enforced in `rls.spec.ts`.
+        run: pnpm --filter @fieldforce/api verify:rollbacks
 
       - name: Stop Supabase
         if: always()

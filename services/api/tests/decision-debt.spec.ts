@@ -114,6 +114,67 @@ describe.skipIf(!reachable)('the UCPMP cap decision has a deadline that bites', 
     });
   });
 
+  it('warns for the 21 days before the deadline, without going overdue', async () => {
+    // The point of the window: a red build arriving unannounced is treated as an
+    // obstacle to get past, a warning three weeks earlier as a question. Ten days out
+    // is inside the window and not yet overdue.
+    await inRolledBackTransaction(async (client) => {
+      await supersede(
+        client,
+        'ucpmp_sample_cap_decision_due',
+        JSON.stringify(new Date(Date.now() + 10 * 86_400_000).toISOString()),
+        2,
+      );
+      const s = await status(client);
+      expect(s['warn']).toBe(true);
+      expect(s['overdue']).toBe(false);
+      expect(s['warnDays']).toBe(21);
+    });
+  });
+
+  it('does not warn while the deadline is further out than the window', async () => {
+    // Without this the previous test would pass against a function that warns always,
+    // which is a warning nobody reads.
+    await inRolledBackTransaction(async (client) => {
+      await supersede(
+        client,
+        'ucpmp_sample_cap_decision_due',
+        JSON.stringify(new Date(Date.now() + 40 * 86_400_000).toISOString()),
+        2,
+      );
+      const s = await status(client);
+      expect(s['warn']).toBe(false);
+      expect(s['overdue']).toBe(false);
+    });
+  });
+
+  it('stops warning once it is overdue, rather than warning and failing at once', async () => {
+    // Mutually exclusive on purpose. A caller that treats `warn` as "not yet serious"
+    // must never still see it on the day the build goes red, or it reads the red as a
+    // warning too.
+    await inRolledBackTransaction(async (client) => {
+      await supersede(client, 'ucpmp_sample_cap_decision_due', '"2026-01-01T00:00:00Z"', 2);
+      const s = await status(client);
+      expect(s['overdue']).toBe(true);
+      expect(s['warn']).toBe(false);
+    });
+  });
+
+  it('does not warn once the cap is configured', async () => {
+    await inRolledBackTransaction(async (client) => {
+      await supersede(
+        client,
+        'ucpmp_sample_cap_decision_due',
+        JSON.stringify(new Date(Date.now() + 10 * 86_400_000).toISOString()),
+        2,
+      );
+      await supersede(client, 'ucpmp_sample_cap_quantity', '10', 1);
+      const s = await status(client);
+      expect(s['warn']).toBe(false);
+      expect(s['warnFromAt']).toBeNull();
+    });
+  });
+
   it('the threshold row cannot be quietly edited or deleted', async () => {
     // `app_thresholds` carries a statement-level reject_mutation trigger, which is what
     // makes "a deferral is on the record" true rather than aspirational.
@@ -133,7 +194,7 @@ describe('check:decision-debt turns that status into a CI failure', () => {
   it('is clear when the decision is not overdue', () => {
     expect(
       evaluateDecisionDebt({ capConfigured: false, overdue: false, daysRemaining: 60 }),
-    ).toEqual({ clear: true, reasons: [] });
+    ).toEqual({ clear: true, reasons: [], warnings: [] });
   });
 
   it('fails, with the date, when the decision is overdue', () => {
@@ -144,6 +205,31 @@ describe('check:decision-debt turns that status into a CI failure', () => {
     });
     expect(result.clear).toBe(false);
     expect(result.reasons.join(' ')).toContain('2026-11-06');
+  });
+
+  it('warns without failing inside the window', () => {
+    const result = evaluateDecisionDebt({
+      capConfigured: false,
+      overdue: false,
+      warn: true,
+      dueAt: '2026-11-06T00:00:00Z',
+      daysRemaining: 10,
+    });
+    // The distinction the whole window rests on: something is said, nothing is failed.
+    expect(result.clear).toBe(true);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings.join(' ')).toContain('2026-11-06');
+  });
+
+  it('says nothing at all while the deadline is outside the window', () => {
+    const result = evaluateDecisionDebt({
+      capConfigured: false,
+      overdue: false,
+      warn: false,
+      dueAt: '2026-11-06T00:00:00Z',
+      daysRemaining: 60,
+    });
+    expect(result).toEqual({ clear: true, reasons: [], warnings: [] });
   });
 
   it('fails closed on a status it cannot read', () => {

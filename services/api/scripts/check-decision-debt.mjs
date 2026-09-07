@@ -37,29 +37,51 @@ const DEFAULTS = {
 /**
  * Pure, so the overdue path is testable without waiting for November.
  *
+ * Three states, not two. `clear` decides the exit code; `warnings` are printed and do
+ * NOT fail the build. A control that goes red three weeks early has moved the deadline
+ * and lied about which day it was -- but a red build arriving unannounced on the day is
+ * treated as an obstacle to get past, where a warning three weeks earlier is treated as
+ * a question. So: warn, then fail.
+ *
  * @param {Record<string, unknown>} status the jsonb from public.ucpmp_cap_decision_status()
- * @returns {{ clear: boolean, reasons: string[] }}
+ * @returns {{ clear: boolean, reasons: string[], warnings: string[] }}
  */
 export const evaluateDecisionDebt = (status) => {
   const reasons = [];
+  const warnings = [];
 
   // Fail closed on a shape this script does not recognise. A control that treats an
   // unreadable answer as "fine" is the inert `ALTER DEFAULT PRIVILEGES` of FIX-05.
   if (status === null || typeof status !== 'object') {
-    return { clear: false, reasons: ['ucpmp_cap_decision_status() returned nothing readable.'] };
+    return {
+      clear: false,
+      reasons: ['ucpmp_cap_decision_status() returned nothing readable.'],
+      warnings,
+    };
   }
 
+  const due =
+    status.dueAt === null || status.dueAt === undefined ? 'never set' : String(status.dueAt);
+
   if (status.overdue === true) {
-    const due =
-      status.dueAt === null || status.dueAt === undefined ? 'never set' : String(status.dueAt);
     reasons.push(
       `the UCPMP sample cap is still unconfigured and its decision deadline (${due}) has passed.`,
     );
   } else if (status.overdue !== false) {
     reasons.push(`ucpmp_cap_decision_status() returned overdue=${String(status.overdue)}.`);
+  } else if (status.warn === true) {
+    // Not a failure. `warn` and `overdue` are mutually exclusive in the database, so
+    // this branch can never suppress the one above.
+    warnings.push(
+      `the UCPMP sample cap decision is due on ${due}` +
+        (status.daysRemaining === null || status.daysRemaining === undefined
+          ? ''
+          : ` -- ${String(status.daysRemaining)} day(s) left`) +
+        '. After that this step fails the build.',
+    );
   }
 
-  return { clear: reasons.length === 0, reasons };
+  return { clear: reasons.length === 0, reasons, warnings };
 };
 
 export const checkDecisionDebt = async (overrides = {}) => {
@@ -81,8 +103,19 @@ if (
   process.argv[1] !== undefined &&
   import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))
 ) {
-  const { status, clear, reasons } = await checkDecisionDebt();
+  const { status, clear, reasons, warnings } = await checkDecisionDebt();
   console.log(JSON.stringify(status, null, 2));
+
+  for (const warning of warnings) {
+    // ::warning:: is a GitHub Actions annotation, so this surfaces on the run summary
+    // rather than only inside a log nobody opens on a green build.
+    console.log(`::warning title=Decision due::${warning}`);
+    console.error(`\nA DECISION IS COMING DUE:\n  - ${warning}`);
+    console.error(
+      '\nWhat is the UCPMP sample cap, on what dimension, and who at the client owns\n' +
+        'that number? This is not failing the build yet. It will.',
+    );
+  }
 
   if (!clear) {
     console.error('\nA DECISION IS OVERDUE:');
