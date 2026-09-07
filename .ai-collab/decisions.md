@@ -275,6 +275,34 @@ one-line form for scanning.
 
 ---
 
+## 7 September 2026 · Model: Claude Sonnet 5
+
+### Production had auto-paused; resumed and verified, not assumed
+
+- **Finding:** asked to confirm production was reachable ahead of a handoff rewrite,
+  a live pooler connection failed with `tenant/user postgres.pgfdbzoapmleqtoezhoa
+  not found` — a Supabase-side error, not DNS or local network. Checked directly via
+  the Management API (`GET /v1/projects/<ref>`) rather than guessing from the
+  connection error alone: `status: "INACTIVE"`. The org is on the **free** plan.
+  Free-tier Supabase projects auto-pause after a period of no database activity —
+  and both retention workflows had been `disabled_manually` since 23 August (above),
+  which removed the only regular traffic keeping it warm. Self-inflicted, not an
+  infrastructure failure, and said so plainly rather than left ambiguous.
+- **Decision:** resumed, on explicit instruction, via `POST
+  /v1/projects/<ref>/restore`. Polled `GET /v1/projects/<ref>` until
+  `ACTIVE_HEALTHY` (`COMING_UP` → `RESTORING` → `ACTIVE_HEALTHY`, ~3 minutes).
+- **Verified with a real query afterward, not the API status alone:** 19 migrations
+  recorded, 40 public tables, and all three BE-W8 addendum thresholds intact
+  (`purge_batch_limit=250`, `purge_backlog_multiplier=3`,
+  `purge_max_silence_hours=12`). Nothing was lost across the pause.
+- **Still true, not resolved by this:** both retention workflows remain
+  `disabled_manually`. Resuming the project makes it reachable again; it does not
+  put anything back on schedule, and no instruction to re-enable was given here.
+  Whatever kept the project paused for two weeks (no traffic at all) will recur
+  the same way if the workflows stay off and nothing else touches the database.
+
+---
+
 ## FE-W1 — 14 August 2026 · Model: Claude Opus 5
 
 Written up in full in `PROJECT-OVERVIEW.md` -> FE-W1. One-line form for scanning.

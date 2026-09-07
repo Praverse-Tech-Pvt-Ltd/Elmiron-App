@@ -51,29 +51,37 @@ verify:rollbacks           19/19 reversed, public schema empty, database restore
 monorepo `pnpm run build` was **not** waited on this session (frontend packages make it
 slow); backend-scoped checks above ran directly and are what this handoff is based on.
 
-## 3. Production — state as of 14 August, **not reconfirmed today**
+## 3. Production — reconfirmed 7 September, after being found paused
 
-Everything below was true and independently verified on the remote when BE-W8 closed.
-**A live pooler connection attempted this session failed** —
-`FATAL: tenant/user postgres.pgfdbzoapmleqtoezhoa not found` — which is a Supabase-side
-error, not a DNS or local-network one. This could mean the project was paused
-(inactivity is plausible: three weeks with the retention workflows disabled, §5), the
-project reference changed, or the credentials in `.env` are stale. **Not diagnosed
-further this session — flagged as the top open item, not glossed over.**
+**Update, same session as the paragraph below was first written:** a live connection
+attempt failed with `tenant/user postgres.pgfdbzoapmleqtoezhoa not found`. Checked via
+the Management API rather than guessed at: `status: "INACTIVE"` — the project had
+**auto-paused**. The org is on Supabase's free plan, and free-tier projects pause after
+a period of no database activity; both retention workflows had been
+`disabled_manually` since 23 August, which removed the only regular traffic keeping it
+warm. Self-inflicted, not an infrastructure failure.
 
-| Fact, as last verified (14 Aug) | |
+**Resumed and reverified with a real query, not the dashboard's word for it:**
+`POST /v1/projects/<ref>/restore`, polled to `ACTIVE_HEALTHY` (~3 minutes), then
+confirmed directly — 19 migrations, 40 public tables, and all three BE-W8 threshold
+values intact (`purge_batch_limit=250`, `purge_backlog_multiplier=3`,
+`purge_max_silence_hours=12`). Nothing was lost across the pause. Full timeline in
+`.ai-collab/decisions.md` → 7 September.
+
+**Still true: both retention workflows remain `disabled_manually`.** Resuming the
+project makes it reachable; it does not put anything back on a schedule. If they stay
+off with nothing else touching the database, the project will pause again the same
+way — this is not a one-time fix.
+
+| Fact, as verified (14 Aug, reconfirmed 7 Sept) | |
 | --- | --- |
 | Migrations applied | 19 (includes both BE-W8 additions) |
-| Tables | 34+ |
+| Tables | 40 |
 | RLS enabled and forced | on every table |
 | Custom access token hook | enabled, proven by a real sign-in |
 | `purge_max_silence_hours` / `purge_batch_limit` / `purge_backlog_multiplier` | 12h / 250 / 3 — the backlog-based stall fix (§5) |
 | Seeded reference data | **none.** No orgs, territories, doctors, consent-text. Capture refuses, correctly. |
 | GitHub Actions secrets | all three set (`SUPABASE_DB_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`) |
-
-**First action for whoever picks this up: confirm the project is actually reachable**
-(`supabase migration list --db-url <pooler>` or the dashboard) before trusting anything
-else in this section.
 
 ## 4. What frontend has been waiting on backend for
 
@@ -123,9 +131,11 @@ Full detail is `PROJECT-OVERVIEW.md` → `### BE-W8` and its `§7` addendum, and
   as of 23 August. Both had been running green on real hourly/15-min cron since the
   14 August re-enable — this was not a response to a failure, and no reason was given.
   **This is the reminder-mechanism gap flagged in `decisions.md`: a disabled workflow
-  is silent, and three weeks have now passed with no automated signal from
-  production at all.** Combined with §3's connectivity failure, this is the actual
-  state of retention enforcement right now: **unknown, not "working."**
+  is silent, and it directly caused the project to auto-pause (§3)** — three weeks
+  with no traffic at all, on a free-tier project, is exactly what makes Supabase pause
+  it. Production is reachable again as of 7 September (§3), but **the schedules are
+  still off**, so the same thing will happen again unless someone either re-enables
+  them or decides, on purpose, to accept the pause-and-manually-resume cycle.
 
 ## 6. Explicitly deferred, not forgotten
 
@@ -162,11 +172,13 @@ this moved while backend was stopped:
 
 ## 8. Immediate next steps, in order
 
-1. **Confirm production is actually reachable** (§3). This blocks trusting anything
-   else about the deployed state.
-2. **If reachable: re-enable `retention.yml` / `retention-watchdog.yml`**, or make a
-   deliberate decision to leave them off and say why (currently no reason is on
-   record — see §5).
+1. ~~Confirm production is actually reachable~~ **Done, 7 September** — it had
+   auto-paused (free tier, no traffic since the 23 Aug disable); resumed and
+   reverified with a real query. See §3.
+2. **Decide on `retention.yml` / `retention-watchdog.yml`, now that production is
+   reachable again.** Re-enable, or make a deliberate decision to leave them off and
+   say why — currently no reason is on record (§5), and leaving them off is what
+   caused the pause in the first place.
 3. **Decide on the `.ai-collab/` split and the migration-audit-trail gap** (§6), or
    consciously defer again with a reason.
 4. **Send the two drafted-but-unsent escalations** (§7.2, §7.3) — both have been
