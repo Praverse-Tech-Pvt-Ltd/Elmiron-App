@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
 import { API_PATHS } from '@fieldforce/core';
-import type { ApiError, ApiErrorCode } from '@fieldforce/core';
+import type { ApiError, ApiErrorCode, SyncPullResponse } from '@fieldforce/core';
 import * as fx from './fixtures.js';
 
 /**
@@ -706,13 +706,25 @@ const routes: Route[] = [
             ? []
             : fx.syncQueue
                 .filter((item) => item.entity === 'visit')
-                .map((item) => ({
-                  entity: 'visit' as const,
+                .map((item): SyncPullResponse['changes'][number] => ({
+                  entity: 'visit',
                   entityId: item.entityId,
-                  reason: 'upserted' as const,
+                  reason: 'upserted',
                   payload: item.payload,
                   updatedAt: item.clientCreatedAt,
-                })),
+                }))
+                // One payload-free tombstone, so the client has the shape to build
+                // against rather than discovering it the first time a record is deleted.
+                // `payload: null` is the property, not an omission.
+                .concat([
+                  {
+                    entity: 'visit',
+                    entityId: '00000000-0000-4000-8000-0000000000ff',
+                    reason: 'deleted',
+                    payload: null,
+                    updatedAt: '2026-08-10T16:00:00+05:30',
+                  },
+                ]),
         serverTime: '2026-08-10T17:05:00+05:30',
         hasMore: false,
         // Opaque by contract, so its content is arbitrary and deliberately not a
@@ -720,9 +732,17 @@ const routes: Route[] = [
         // habit the real cursor exists to break.
         nextCursor: 'mock-cursor-1',
         completeness: {
-          phase: 1,
-          reflects: ['insert' as const, 'update' as const],
-          omits: ['delete' as const, 'out_of_scope' as const],
+          // Phase 2. Kept in step with the server deliberately: FIX-03 spent a session
+          // auditing mock/database drift, and a fixture that still says "deletes are not
+          // reflected" would teach the client to warn about a gap that has closed.
+          phase: 2,
+          reflects: [
+            'insert' as const,
+            'update' as const,
+            'delete' as const,
+            'out_of_scope' as const,
+          ],
+          omits: [],
           entities: ['visit' as const, 'beat_plan' as const, 'doctor' as const],
           omittedEntities: ['consent_record', 'analysis'],
           note:

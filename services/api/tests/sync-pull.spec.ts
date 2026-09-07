@@ -194,7 +194,7 @@ describe.skipIf(!reachable)('the cursor is bounded, and says so rather than gues
       const first = await pull(client, { entities: ['doctor'], limit: 1 });
       for (let i = 0; i < 5; i += 1) await client.query('select pg_current_xact_id()');
       const second = await pull(client, { cursor: first.nextCursor, entities: ['doctor'] });
-      expect(second.completeness.omits).toContain('delete');
+      expect(second.completeness.phase).toBe(2);
     });
   }, 30_000);
 
@@ -227,22 +227,56 @@ describe.skipIf(!reachable)('the cursor is bounded, and says so rather than gues
       const first = await pull(client, { entities: ['doctor'], limit: 1 });
       expect(Buffer.byteLength(first.nextCursor, 'utf8')).toBeLessThan(8192);
       const second = await pull(client, { cursor: first.nextCursor, entities: ['doctor'] });
-      expect(second.completeness.phase).toBe(1);
+      expect(second.completeness.phase).toBe(2);
     });
   });
 });
 
 describe.skipIf(!reachable)('sync_pull says what it is not', () => {
-  it('carries the incompleteness as a FIELD in every response', async () => {
+  it('carries the completeness as a FIELD in every response', async () => {
+    // **Rewritten by phase 2, deliberately, and this is the change C3 asked to be
+    // asserted.** Until 20260908000300 this read `omits` contains 'delete' and
+    // 'out_of_scope', which was true and is now false: deletes arrive as tombstones and
+    // leave-scope as its own reason. A completeness field that does not move as the
+    // capability grows becomes a lie in the other direction -- a client still warning
+    // about missing deletes after they arrive is as wrong as one that never warned.
+    //
+    // What did NOT change is the requirement: the field is present, required, and
+    // machine-readable in every response. That is what is asserted here.
     await inRolledBackTransaction(async (client) => {
       await asUser(client, world.users.puneMr);
       const first = await pull(client, { limit: 1 });
-      // Not a comment, not an optional hint, not something a client has to know to ask
-      // for. A pull presented as current when it is not is worse than no pull.
-      expect(first.completeness.omits).toContain('delete');
-      expect(first.completeness.omits).toContain('out_of_scope');
-      expect(first.completeness.reflects).toEqual(['insert', 'update']);
-      expect(first.completeness.note).toMatch(/NOT reflected/);
+      expect(first.completeness.phase).toBe(2);
+      expect(first.completeness.omittedEntities).toContain('consent_record');
+      expect(first.completeness.omittedEntities).toContain('analysis');
+      // `reflects` and `omits` must partition, never overlap: a client reading one and
+      // not the other must not be able to reach a different conclusion.
+      const overlap = first.completeness.reflects.filter((r) =>
+        first.completeness.omits.includes(r),
+      );
+      expect(overlap).toEqual([]);
+    });
+  });
+
+  it('C3: an INCREMENTAL pull no longer claims to omit deletes', async () => {
+    await asCommittedUser(world.users.puneMr, async (client) => {
+      const first = await pull(client, { entities: ['doctor'], limit: 500 });
+      const second = await pull(client, { cursor: first.nextCursor, entities: ['doctor'] });
+      expect(second.completeness.reflects).toEqual(['insert', 'update', 'delete', 'out_of_scope']);
+      expect(second.completeness.omits).toEqual([]);
+    });
+  });
+
+  it('C3: a FULL RE-SYNC still says it carries no deletions, because it does not', async () => {
+    // A null cursor emits no tombstones at all -- deliberately, see the migration's
+    // section 1. So the honest statement is different, not absent: everything you are
+    // entitled to see is in the stream, so anything missing from it is gone. A client
+    // must replace rather than merge.
+    await inRolledBackTransaction(async (client) => {
+      await asUser(client, world.users.puneMr);
+      const full = await pull(client, { limit: 1 });
+      expect(full.completeness.omits).toContain('delete');
+      expect(full.completeness.note).toMatch(/full re-sync/i);
     });
   });
 
@@ -257,7 +291,11 @@ describe.skipIf(!reachable)('sync_pull says what it is not', () => {
         guard += 1;
       }
       expect(response.hasMore).toBe(false);
-      expect(response.completeness.omits).toContain('delete');
+      // The page a client is most likely to read as "done, therefore complete" still
+      // carries the field. Its CONTENT is phase-dependent and asserted above; its
+      // presence is not negotiable.
+      expect(response.completeness.phase).toBe(2);
+      expect(response.completeness.entities.length).toBeGreaterThan(0);
     });
   });
 
@@ -435,8 +473,299 @@ describe.skipIf(!reachable)('a row committed DURING a pull is not lost', () => {
       const second = await pull(client, { cursor: first.nextCursor, entities: ['doctor'] });
       expect(second.changes).toEqual([]);
       expect(second.hasMore).toBe(false);
-      // ...and it still says what it is not.
-      expect(second.completeness.omits).toContain('delete');
+      // ...and it still carries the field, now saying it omits nothing.
+      expect(second.completeness.omits).toEqual([]);
     });
   });
+});
+
+// =============================================================================
+// BE-W61 phase 2 — tombstones and leave-scope
+// =============================================================================
+
+/**
+ * Everything here runs on committed connections. A tombstone is written by an AFTER
+ * trigger in the same transaction as the delete, so its `xmin` is that transaction's — and
+ * phase 1's snapshot rule reports the caller's own in-progress transaction as not visible.
+ * A rolled-back fixture would therefore stage an event the pull correctly cannot see.
+ */
+
+/** Runs `fn` with a committed doctor in the Pune territory, then removes it. */
+const withDoctor = async (
+  name: string,
+  fn: (id: string, admin: Client) => Promise<void>,
+): Promise<void> => {
+  const { Client: PgClient } = await import('pg');
+  const w = new PgClient({ connectionString: DB_URL });
+  await w.connect();
+  const id = randomUUID();
+  try {
+    await w.query(
+      `insert into public.doctors (id, organisation_id, full_name, territory_id)
+       values ($1, $2, $3, $4)`,
+      [id, world.organisationId, name, world.territories.pune],
+    );
+    await fn(id, w);
+  } finally {
+    await w.query('delete from public.doctors where id = $1', [id]).catch(() => undefined);
+    await w
+      .query('delete from public.sync_events where entity_id = $1', [id])
+      .catch(() => undefined);
+    await w.end();
+  }
+};
+
+describe.skipIf(!reachable)('phase 2: deletes arrive as payload-free tombstones', () => {
+  it('a delete arrives, after the update that preceded it, with no payload', async () => {
+    await withDoctor('Dr Tombstone Fixture', async (id, admin) => {
+      const cursor = await asCommittedUser(world.users.puneMr, async (client) => {
+        const first = await pull(client, { entities: ['doctor'], limit: 500 });
+        expect(first.changes.map((c) => c.entityId)).toContain(id);
+        return first.nextCursor;
+      });
+
+      // An update, then the delete, in that order and in separate transactions.
+      await admin.query(
+        `update public.doctors set full_name = 'Dr Tombstone Fixture II' where id = $1`,
+        [id],
+      );
+      await admin.query('delete from public.doctors where id = $1', [id]);
+
+      await asCommittedUser(world.users.puneMr, async (client) => {
+        const next = await pull(client, { cursor, entities: ['doctor'], limit: 500 });
+        const mine = next.changes.filter((c) => c.entityId === id);
+        // The update cannot appear: the row is gone, so there is nothing to serialise.
+        // What must appear is the delete, and it must be last for this id.
+        expect(mine.length).toBeGreaterThan(0);
+        expect(mine[mine.length - 1]?.reason).toBe('deleted');
+        // Payload-free, in the wire format and not only in the table.
+        expect(mine[mine.length - 1]?.payload).toBeNull();
+      });
+    });
+  }, 30_000);
+
+  it('the tombstone sorts after an earlier update of a different record', async () => {
+    // C1's ordering requirement, exercised where it is observable: a delete must not
+    // arrive before an update that happened earlier, or a client ends up in a state no
+    // sequence of events explains.
+    await withDoctor('Dr Order A Fixture', async (idA, admin) => {
+      await withDoctor('Dr Order B Fixture', async (idB) => {
+        const cursor = await asCommittedUser(world.users.puneMr, (client) =>
+          pull(client, { entities: ['doctor'], limit: 500 }).then((r) => r.nextCursor),
+        );
+        await admin.query(`update public.doctors set specialty = 'Cardiology' where id = $1`, [
+          idB,
+        ]);
+        await admin.query('delete from public.doctors where id = $1', [idA]);
+
+        await asCommittedUser(world.users.puneMr, async (client) => {
+          const next = await pull(client, { cursor, entities: ['doctor'], limit: 500 });
+          const ids = next.changes.map((c) => c.entityId);
+          expect(ids).toContain(idB);
+          expect(ids).toContain(idA);
+          expect(ids.indexOf(idB)).toBeLessThan(ids.indexOf(idA));
+        });
+      });
+    });
+  }, 30_000);
+
+  it('carries NO tombstones on a full re-sync', async () => {
+    // The second protection from the migration's section 1. A client rebuilding from
+    // nothing has no stale rows to correct, so a tombstone could only tell it about
+    // records it never held.
+    await withDoctor('Dr Resync Fixture', async (id, admin) => {
+      await admin.query('delete from public.doctors where id = $1', [id]);
+      await asCommittedUser(world.users.puneMr, async (client) => {
+        const full = await pull(client, { entities: ['doctor'], limit: 500 });
+        expect(full.changes.every((c) => c.reason === 'upserted')).toBe(true);
+        expect(full.changes.map((c) => c.entityId)).not.toContain(id);
+      });
+    });
+  }, 30_000);
+});
+
+describe.skipIf(!reachable)('phase 2: leaving scope is not deletion', () => {
+  it('a reassigned record arrives as out_of_scope, never as deleted', async () => {
+    await withDoctor('Dr Reassigned Fixture', async (id, admin) => {
+      const cursor = await asCommittedUser(world.users.puneMr, (client) =>
+        pull(client, { entities: ['doctor'], limit: 500 }).then((r) => r.nextCursor),
+      );
+      // Moved to the southern territory: still exists, no longer this MR's.
+      await admin.query('update public.doctors set territory_id = $2 where id = $1', [
+        id,
+        world.territories.south,
+      ]);
+
+      await asCommittedUser(world.users.puneMr, async (client) => {
+        const next = await pull(client, { cursor, entities: ['doctor'], limit: 500 });
+        const mine = next.changes.filter((c) => c.entityId === id);
+        expect(mine).toHaveLength(1);
+        // The whole point. "Deleted" is false, and for a consent record it would be
+        // dangerously false; the client must be able to render "no longer yours" without
+        // inferring it from an absence.
+        expect(mine[0]?.reason).toBe('out_of_scope');
+        expect(mine[0]?.reason).not.toBe('deleted');
+        expect(mine[0]?.payload).toBeNull();
+      });
+
+      // And the row is genuinely still there, so this is not a delete wearing a name.
+      const still = await admin.query('select 1 from public.doctors where id = $1', [id]);
+      expect(still.rowCount).toBe(1);
+    });
+  }, 30_000);
+
+  it('the NEW owner sees the same record as an ordinary upsert', async () => {
+    // The other half: a record that left one scope entered another, and nothing about
+    // the leave-scope event should stop the new owner receiving it normally.
+    await withDoctor('Dr Handover Fixture', async (id, admin) => {
+      const cursor = await asCommittedUser(world.users.southMr, (client) =>
+        pull(client, { entities: ['doctor'], limit: 500 }).then((r) => r.nextCursor),
+      );
+      await admin.query('update public.doctors set territory_id = $2 where id = $1', [
+        id,
+        world.territories.south,
+      ]);
+      await asCommittedUser(world.users.southMr, async (client) => {
+        const next = await pull(client, { cursor, entities: ['doctor'], limit: 500 });
+        const mine = next.changes.filter((c) => c.entityId === id);
+        expect(mine).toHaveLength(1);
+        expect(mine[0]?.reason).toBe('upserted');
+        expect(mine[0]?.payload).not.toBeNull();
+      });
+    });
+  }, 30_000);
+});
+
+describe.skipIf(!reachable)('phase 2: a tombstone cannot disclose a record you never had', () => {
+  it('C6: an MR in another territory is never told the record existed', async () => {
+    // The sharp case. A tombstone is an existence claim -- "doctor 7f3a… was deleted"
+    // tells a reader that doctor 7f3a… existed. It cannot be filtered at read time,
+    // because the row is gone and there is nothing left to evaluate a policy against.
+    //
+    // So the scope is captured at the moment of the event and RLS admits the tombstone
+    // only to a caller for whom that FORMER scope was visible.
+    await withDoctor('Dr Never Yours Fixture', async (id, admin) => {
+      const cursor = await asCommittedUser(world.users.southMr, (client) =>
+        pull(client, { entities: ['doctor'], limit: 500 }).then((r) => r.nextCursor),
+      );
+      await admin.query('delete from public.doctors where id = $1', [id]);
+
+      await asCommittedUser(world.users.southMr, async (client) => {
+        const next = await pull(client, { cursor, entities: ['doctor'], limit: 500 });
+        expect(next.changes.map((c) => c.entityId)).not.toContain(id);
+      });
+
+      // Not merely absent from the pull: invisible in the table it lives in, so a future
+      // reader of sync_events cannot reach it either.
+      await asCommittedUser(world.users.southMr, async (client) => {
+        const rows = await client.query('select 1 from public.sync_events where entity_id = $1', [
+          id,
+        ]);
+        expect(rows.rowCount).toBe(0);
+      });
+
+      // Positive control: the event does exist, and the MR who owned the record can see
+      // it. Without this the assertions above would pass against a trigger that emits
+      // nothing at all.
+      const asOwner = await admin.query('select 1 from public.sync_events where entity_id = $1', [
+        id,
+      ]);
+      expect(asOwner.rowCount).toBe(1);
+      await asCommittedUser(world.users.puneMr, async (client) => {
+        const rows = await client.query('select 1 from public.sync_events where entity_id = $1', [
+          id,
+        ]);
+        expect(rows.rowCount).toBe(1);
+      });
+    });
+  }, 30_000);
+
+  it('no client can write or suppress an event', async () => {
+    // There is no INSERT, UPDATE or DELETE policy on sync_events. Rows arrive through a
+    // SECURITY DEFINER trigger and leave through a SECURITY DEFINER purge, so a client
+    // can neither forge a tombstone for somebody else's record nor delete its own.
+    await inRolledBackTransaction(async (client) => {
+      await asUser(client, world.users.puneMr);
+      await client.query('savepoint p2');
+      await expect(
+        client.query(
+          `insert into public.sync_events (entity, entity_id, reason, former_mr_id)
+           values ('visit', $1, 'deleted', $2)`,
+          [randomUUID(), world.users.puneMr.id],
+        ),
+      ).rejects.toMatchObject({ code: '42501' });
+      await client.query('rollback to savepoint p2');
+      await expect(client.query('delete from public.sync_events')).rejects.toMatchObject({
+        code: '42501',
+      });
+    });
+  });
+});
+
+describe.skipIf(!reachable)('phase 2: tombstones expire on the cursor bound, not a guess', () => {
+  it('an event older than the maximum cursor age is not served', async () => {
+    // C4. The lifetime is the FIX-12 bound expressed the same way -- in transactions,
+    // not days -- so the two cannot drift apart. Walked here by lowering
+    // `vacuum_freeze_min_age`, exactly as the cursor bound is.
+    await withDoctor('Dr Expiring Fixture', async (id, admin) => {
+      const cursor = await asCommittedUser(world.users.puneMr, (client) =>
+        pull(client, { entities: ['doctor'], limit: 500 }).then((r) => r.nextCursor),
+      );
+      await admin.query('delete from public.doctors where id = $1', [id]);
+
+      await asCommittedUser(world.users.puneMr, async (client) => {
+        // First, with the real setting: the tombstone is served.
+        const fresh = await pull(client, { cursor, entities: ['doctor'], limit: 500 });
+        expect(fresh.changes.map((c) => c.entityId)).toContain(id);
+      });
+
+      // Age the transaction counter past a tiny limit, then pull again.
+      await asCommittedUser(world.users.puneMr, async (client) => {
+        for (let i = 0; i < 6; i += 1) await client.query('select pg_current_xact_id()');
+        await client.query('set vacuum_freeze_min_age = 4');
+        try {
+          // The cursor is now expired too, so a fresh sweep is what a real client would
+          // do -- and a full re-sync carries no tombstones at all, which is the point:
+          // by the time an event expires, nobody entitled to it can still ask.
+          const full = await pull(client, { entities: ['doctor'], limit: 500 });
+          expect(full.changes.map((c) => c.entityId)).not.toContain(id);
+          await expect(pull(client, { cursor })).rejects.toMatchObject({ code: '45006' });
+        } finally {
+          await client.query('reset vacuum_freeze_min_age');
+        }
+      });
+    });
+  }, 30_000);
+
+  it('the purge deletes exactly the expired ones', async () => {
+    await withDoctor('Dr Purge Fixture', async (id, admin) => {
+      await admin.query('delete from public.doctors where id = $1', [id]);
+      const before = await admin.query('select 1 from public.sync_events where entity_id = $1', [
+        id,
+      ]);
+      expect(before.rowCount).toBe(1);
+
+      // Nothing is expired at the real setting.
+      const none = await admin.query<{ n: number }>(
+        'select public.purge_expired_sync_events() as n',
+      );
+      expect(Number(none.rows[0]?.n)).toBe(0);
+
+      // With the limit lowered, it goes.
+      for (let i = 0; i < 6; i += 1) await admin.query('select pg_current_xact_id()');
+      await admin.query('set vacuum_freeze_min_age = 4');
+      try {
+        const purged = await admin.query<{ n: number }>(
+          'select public.purge_expired_sync_events() as n',
+        );
+        expect(Number(purged.rows[0]?.n)).toBeGreaterThan(0);
+        const after = await admin.query('select 1 from public.sync_events where entity_id = $1', [
+          id,
+        ]);
+        expect(after.rowCount).toBe(0);
+      } finally {
+        await admin.query('reset vacuum_freeze_min_age');
+      }
+    });
+  }, 30_000);
 });
