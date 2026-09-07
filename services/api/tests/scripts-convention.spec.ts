@@ -29,6 +29,11 @@ import { describe, expect, it } from 'vitest';
 
 const SCRIPTS_DIR = new URL('../scripts/', import.meta.url).pathname;
 
+const CI_WORKFLOW = new URL('../../../.github/workflows/ci.yml', import.meta.url).pathname;
+
+/** Windows: `/C:/…` from a file URL is not a path anything can open. */
+const local = (fromUrl: string): string => fromUrl.replace(/^\/([A-Za-z]:)/, '$1');
+
 describe('services/api/scripts stay free of workspace imports', () => {
   it('no script imports @fieldforce/core', async () => {
     const dir = SCRIPTS_DIR.replace(/^\/([A-Za-z]:)/, '$1');
@@ -49,5 +54,60 @@ describe('services/api/scripts stay free of workspace imports', () => {
     // If this fails: the script is fine, but `retention.yml` and
     // `retention-watchdog.yml` need a build step before they will run in production.
     expect(offenders).toEqual([]);
+  });
+});
+
+/**
+ * FIX-12 A4 — nothing that reads the schema may run after the step that destroys it.
+ *
+ * `verify:rollbacks` applies every rollback in reverse and leaves `public` empty. FIX-10
+ * put `check:decision-debt` after it and CI failed with
+ * `function public.ucpmp_cap_decision_status() does not exist` (run 34150819478). The
+ * control was correct — it failed CLOSED on an answer it could not read — and its
+ * position was wrong.
+ *
+ * **That is the second CI defect in three sessions where a correct check sat in the wrong
+ * place in a mutating environment**: FIX-08's was the dependency graph, this was schema
+ * state. The class is worth a control of its own, because the dangerous version is not the
+ * one that failed. A step that reads an empty schema and *passes* — a count that is
+ * legitimately zero, a "no rows found, nothing to do" — proves nothing and says green.
+ *
+ * A comment saying "runs last" is not a control; this is. It asserts the *ordering*
+ * rather than any particular step name, so a future step added at the bottom of the job
+ * fails here rather than in six months.
+ */
+describe('nothing runs after the step that empties the schema', () => {
+  it('verify:rollbacks is the last step in its job except for teardown', async () => {
+    const yaml = await readFile(local(CI_WORKFLOW), 'utf8');
+    const steps = [...yaml.matchAll(/^ {6}- name: (.+)$/gm)].map((m) => m[1]?.trim() ?? '');
+
+    // A positive control: if the regex ever stops matching, this test would pass while
+    // checking nothing.
+    expect(steps.length).toBeGreaterThan(3);
+
+    const destructive = steps.findIndex(
+      (name) => name === 'Verify every migration can be rolled back',
+    );
+    expect(destructive).toBeGreaterThan(-1);
+
+    // Teardown is allowed to follow, and only teardown. It touches containers, not the
+    // schema, and it carries `if: always()` so it must run even when an earlier step
+    // failed.
+    const after = steps.slice(destructive + 1);
+    expect(after).toEqual(['Stop Supabase']);
+  });
+
+  it('the decision check is positioned before it, not merely present', async () => {
+    // The specific instance of the rule above, named, because this is the one that has
+    // already gone wrong once.
+    const yaml = await readFile(local(CI_WORKFLOW), 'utf8');
+    // The RUN lines, not any mention: the comment above the decision step names
+    // `verify:rollbacks` while explaining why it must not follow it, and matching prose
+    // would have this test asserting the position of a sentence.
+    const decision = yaml.indexOf('run: pnpm --filter @fieldforce/api check:decision-debt');
+    const rollbacks = yaml.indexOf('run: pnpm --filter @fieldforce/api verify:rollbacks');
+    expect(decision).toBeGreaterThan(-1);
+    expect(rollbacks).toBeGreaterThan(-1);
+    expect(decision).toBeLessThan(rollbacks);
   });
 });
