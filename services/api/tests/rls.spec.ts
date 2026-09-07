@@ -1214,3 +1214,58 @@ describe.skipIf(!reachable)('daily_mileage discloses nothing without an identity
     expect(Number(result.rows[0]?.n)).toBeGreaterThanOrEqual(0);
   });
 });
+
+// =============================================================================
+// 12. FIX-06 D2 — the grant posture is a test, because it cannot be a default
+// =============================================================================
+
+describe.skipIf(!reachable)('no function in public is reachable by anon', () => {
+  /**
+   * FIX-05 revoked EXECUTE from PUBLIC on all 86 functions and added
+   * `alter default privileges in schema public revoke execute on functions from public`
+   * so the next migration would inherit the posture. **FIX-06 proved that inert.**
+   *
+   * The default ACL governing new functions in `public` belongs to `supabase_admin`, not
+   * `postgres`, and it grants `anon` EXPLICITLY rather than through PUBLIC:
+   *
+   *   pg_default_acl -> supabase_admin | public | f |
+   *     {postgres=X/supabase_admin, anon=X/supabase_admin, ...}
+   *
+   * Migrations run as `postgres`, and `alter default privileges for role supabase_admin`
+   * is refused with `permission denied to change default privileges (42501)`. So no
+   * migration can change what the next function is born with.
+   *
+   * That leaves two options: a hand-maintained revoke in every migration that adds a
+   * function -- which is the "control invoked by a list" this repo already rejects -- or
+   * a test that fails the build the moment one is missed. This is the test.
+   */
+  it('fails the build if a new function is left anon-executable', async () => {
+    await inRolledBackTransaction(async (client: Client) => {
+      const reachable = await client.query<{ proname: string }>(
+        `select p.proname
+           from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public'
+            and p.prokind = 'f'
+            and has_function_privilege('anon', p.oid, 'EXECUTE')
+          order by p.proname`,
+      );
+      // If this fails, the migration that added the named function needs
+      // `revoke execute on function public.<name>(<args>) from public, anon;`
+      expect(reachable.rows.map((r) => r.proname)).toEqual([]);
+    });
+  });
+
+  it('demonstrates why: a function created with the defaults IS anon-executable', async () => {
+    // The positive control for the test above. Without it, a green result could mean the
+    // posture holds or could mean the query is broken.
+    await inRolledBackTransaction(async (client: Client) => {
+      await client.query(
+        'create function public.fix06_default_probe() returns int language sql as $$ select 1 $$',
+      );
+      const probe = await client.query<{ anon: boolean }>(
+        `select has_function_privilege('anon', 'public.fix06_default_probe()', 'EXECUTE') as anon`,
+      );
+      expect(probe.rows[0]?.anon).toBe(true);
+    });
+  });
+});
