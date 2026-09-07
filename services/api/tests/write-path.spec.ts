@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { fromCheckInRow, refusalForSqlState } from '@fieldforce/core';
+import {
+  fromCheckInRow,
+  fromMileageRow,
+  fromVisitRow,
+  refusalForSqlState,
+  toCreateVisitBody,
+} from '@fieldforce/core';
 import { requireDatabase, withClient } from './db.js';
 import { mintAccessToken, rest } from './auth.js';
 import { seedFixtures } from './fixtures.js';
@@ -180,5 +186,135 @@ describe.skipIf(!reachable)('the refusal path is a refusal, not a silent success
       },
     });
     expect(response.status).toBeGreaterThanOrEqual(400);
+  });
+});
+
+describe.skipIf(!reachable)('a visit is written to the table, not through an RPC', () => {
+  it('creates a visit WITHOUT sending mr_id, and the server fills it', async () => {
+    // The contract's CreateVisitRequest has never declared mrId, and the insert policy
+    // requires mr_id = auth.uid(). Migration 20260907000600 makes that satisfiable by
+    // defaulting the column, so the caller cannot assert an identity at all.
+    const id = randomUUID();
+    const body = toCreateVisitBody({ id, doctorId: world.doctors.pune });
+    expect(Object.keys(body)).not.toContain('mr_id');
+
+    const response = await rest('/visits', {
+      method: 'POST',
+      token: mintAccessToken(world.users.puneMr),
+      body,
+      headers: { Prefer: 'return=representation' },
+    });
+    expect(response.status).toBe(201);
+
+    const stored = await withClient((client) =>
+      client.query<{ mr_id: string }>('select mr_id from public.visits where id = $1', [id]),
+    );
+    expect(stored.rows).toHaveLength(1);
+    expect(stored.rows[0]?.mr_id).toBe(world.users.puneMr.id);
+  });
+
+  it('the created row maps cleanly through the shared contract mapper', async () => {
+    const id = randomUUID();
+    const response = await rest('/visits', {
+      method: 'POST',
+      token: mintAccessToken(world.users.puneMr),
+      body: toCreateVisitBody({ id, doctorId: world.doctors.pune }),
+      headers: { Prefer: 'return=representation' },
+    });
+    // PostgREST answers a table insert with an ARRAY even for one row; supabase-js
+    // unwraps it with .single(). The mapper takes the object, so the test does too.
+    const rows = response.body as unknown[];
+    const visit = fromVisitRow(rows[0]);
+    expect(visit.id).toBe(id);
+    expect(visit.mrId).toBe(world.users.puneMr.id);
+    expect(visit.status).toBe('planned');
+  });
+
+  it('updates a visit the MR owns', async () => {
+    const id = randomUUID();
+    await rest('/visits', {
+      method: 'POST',
+      token: mintAccessToken(world.users.puneMr),
+      body: toCreateVisitBody({ id, doctorId: world.doctors.pune }),
+      headers: { Prefer: 'return=representation' },
+    });
+
+    await rest(`/visits?id=eq.${id}`, {
+      method: 'PATCH',
+      token: mintAccessToken(world.users.puneMr),
+      body: { status: 'in_progress', started_at: '2026-09-07T12:00:00+05:30' },
+      headers: { Prefer: 'return=representation' },
+    });
+
+    const stored = await withClient((client) =>
+      client.query<{ status: string }>('select status from public.visits where id = $1', [id]),
+    );
+    expect(stored.rows[0]?.status).toBe('in_progress');
+  });
+
+  it('refuses a doctor outside the MR territory, and writes nothing', async () => {
+    const id = randomUUID();
+    const response = await rest('/visits', {
+      method: 'POST',
+      token: mintAccessToken(world.users.puneMr),
+      body: toCreateVisitBody({ id, doctorId: world.doctors.south }),
+      headers: { Prefer: 'return=representation' },
+    });
+
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    const body = response.body as { code?: string };
+    expect(refusalForSqlState(body.code).code).toBe('not_permitted');
+
+    const stored = await withClient((client) =>
+      client.query('select 1 from public.visits where id = $1', [id]),
+    );
+    expect(stored.rows).toHaveLength(0);
+  });
+
+  it("refuses to update another MR's visit", async () => {
+    const response = await rest(`/visits?id=eq.${world.visits.south}`, {
+      method: 'PATCH',
+      token: mintAccessToken(world.users.puneMr),
+      body: { status: 'in_progress' },
+      headers: { Prefer: 'return=representation' },
+    });
+    // The update policy filters rather than raising, so the honest assertion is that
+    // nothing changed -- non-mutation, which is the amended Gate 0 criterion.
+    const stored = await withClient((client) =>
+      client.query<{ status: string }>('select status from public.visits where id = $1', [
+        world.visits.south,
+      ]),
+    );
+    expect(stored.rows[0]?.status).not.toBe('in_progress');
+    expect([200, 204, 403, 404]).toContain(response.status);
+  });
+});
+
+describe.skipIf(!reachable)('mileage comes from the server, never from the device', () => {
+  it('returns the MR own days through daily_mileage', async () => {
+    const response = await rest('/rpc/daily_mileage', {
+      method: 'POST',
+      token: mintAccessToken(world.users.puneMr),
+      body: { p_from: '2026-01-01', p_to: '2026-12-31' },
+    });
+    expect(response.status).toBe(200);
+    const rows = response.body as unknown[];
+    expect(Array.isArray(rows)).toBe(true);
+    // The fixtures give puneMr check-ins, so this is a positive control rather than a
+    // vacuous pass: an empty array here would mean the scoping or the join is broken.
+    expect(rows.length).toBeGreaterThan(0);
+    const day = fromMileageRow(rows[0]);
+    expect(day.mrId).toBe(world.users.puneMr.id);
+    expect(day.distanceMetres).toBeGreaterThanOrEqual(0);
+  });
+
+  it('discloses nothing about another MR', async () => {
+    const response = await rest('/rpc/daily_mileage', {
+      method: 'POST',
+      token: mintAccessToken(world.users.puneMr),
+      body: { p_from: '2026-01-01', p_to: '2026-12-31', p_mr_id: world.users.southMr.id },
+    });
+    const rows = response.body as unknown[];
+    expect(rows).toHaveLength(0);
   });
 });

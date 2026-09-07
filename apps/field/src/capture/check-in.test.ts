@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { recordCheckIn } from './check-in';
-import type { RpcCaller } from './check-in';
+import type { RpcCaller } from './client';
 
 /**
  * FE-W15 and the error contract, on the client side.
