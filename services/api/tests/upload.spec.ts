@@ -766,8 +766,26 @@ describe.skipIf(!reachable)('abandoned partial uploads', () => {
       await expireSession(client, grant.id);
     });
 
-    const result = await runPurge({ dbUrl: DB_URL });
-    expect(result.abandoned).toBeGreaterThanOrEqual(1);
+    await runPurge({ dbUrl: DB_URL });
+
+    // Assert on THIS grant, not on `result.abandoned`.
+    //
+    // `abandoned` is the count from `close_stale_upload_sessions()`, a sweep across the
+    // whole table. `consent-audio.spec.ts` also calls `runPurge`, vitest runs spec files
+    // in parallel, and whichever purge lands first takes the rows -- so the counter is
+    // shared state and asserting on it was asserting that no other spec got there first.
+    // Recorded in docs/gotchas.md, intermittent since FIX-02, and it finally failed on CI
+    // in run 34130197312 rather than only locally.
+    //
+    // The property this test is about is that the session stops being `open` without
+    // anybody abandoning it. That is true whichever purge did the closing, and the
+    // destruction assertions below still prove the object goes.
+    const closed = await withClient((client) =>
+      client.query<{ state: string }>('select state from public.upload_grants where id = $1', [
+        grant.id,
+      ]),
+    );
+    expect(closed.rows[0]?.state).not.toBe('open');
 
     await purgeUntilDestroyed('upload_grants', grant.id);
     expect(await storageObjectExists(grant.storage_key)).toBe(false);
