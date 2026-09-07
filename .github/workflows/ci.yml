@@ -101,6 +101,15 @@ jobs:
         run: pnpm exec supabase --workdir services/api start -x realtime,vector,imgproxy,studio
 
       # Includes services/api/tests/rls.spec.ts — the Gate 0 adversarial suite.
+      # FIX-07. This job runs `pnpm --filter @fieldforce/api test` directly rather than
+      # through turbo, so nothing builds the workspace dependencies for it. That was
+      # invisible until a database test first imported from `@fieldforce/core`
+      # (`write-path.spec.ts`, FIX-06) and the file failed to COLLECT -- the run showed
+      # "1 failed | 14 passed" file-wise with 377 tests passed and none failed, which is
+      # what a missing import looks like rather than a broken assertion.
+      - name: Build the workspace dependency the database tests import
+        run: pnpm --filter @fieldforce/core build
+
       # SUPABASE_DB_URL being set does not make the tests run; db.ts hard-fails in CI
       # if the database is unreachable, so a green run always means they executed.
       - name: Database and Gate 0 tests
