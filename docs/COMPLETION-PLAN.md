@@ -607,3 +607,70 @@ last two-week outage happened), and the RLS adversarial suite.
 *Produced by Claude Code under the reviewer's Completion Brief v2 §9. No implementation was
 performed in this session. Nothing was pushed. Every production statement is marked
 UNVERIFIED because this machine has no production credentials.*
+
+---
+
+## 10. Drift tasks — added by FIX-03
+
+Found by the mock/database audit of 7 September 2026. **Nothing here was fixed** — the
+audit was read-only and each row is a task. IDs continue from `BE-W46` / `FE-W20`.
+
+**The shape of the problem, stated once.** `packages/core` declares REST-shaped paths.
+The database, following the recorded decision at `PROJECT-OVERVIEW.md:483` — *"Route
+every read through a `SECURITY DEFINER` function … Costs: no PostgREST auto-generated
+endpoints — every read is a hand-written RPC"* — serves those surfaces through RPCs the
+contract never names. `services/mock` imports `API_PATHS`, so it faithfully implements
+the **contract's** shape, which is why 52 mock routes cover 43 of the 44 declared paths
+and nothing looked wrong. The mock is right about the contract and the contract is wrong
+about the database.
+
+`grep -c "list_consent_records\|read_consent_record\|list_analyses\|read_analysis\|daily_mileage\|begin_upload\|complete_upload" packages/core/src/field/endpoints.ts` → **0**.
+Seven functions the database grants to `authenticated` have no path in the contract.
+
+### Category 1 — consent, adverse-event, audit and retention paths
+
+| ID | Title | Changes | Deps | Blocker | Est | Verification |
+|---|---|---|---|---|---|---|
+| **BE-W47** | `POST /analyses/:id/overrides` has **no backend at all** | migration; `packages/core` | — | — | 4 | `select count(*) from pg_tables where tablename='analysis_overrides'` → `1`; an override written by the console is read back by id. Today the table does not exist, no function names `override`, and the mock returns `201` with a fabricated row |
+| **BE-W48** | `/consent-records` and `/consent-records/withdrawals` are not reachable as declared | `packages/core`; possibly new RPC paths | — | — | 3 | `has_table_privilege('authenticated','public.consent_records','SELECT')` → `false` today. After: the contract names `list_consent_records` / `read_consent_record`, and a signed-in MR reads their own consent rows through the declared path |
+
+### Category 2 — the mock accepts what the database will refuse (silent loss at cutover)
+
+| ID | Title | Changes | Deps | Blocker | Est | Verification |
+|---|---|---|---|---|---|---|
+| **BE-W49** | `/analyses`, `/analyses/:id`, `/analyses/:id/response` — `analyses` is not selectable | `packages/core` | — | — | 2 | `has_table_privilege('authenticated','public.analyses','SELECT')` → `false`. The real surface is `list_analyses` / `read_analysis` / `respond_to_analysis`, all granted and none named in the contract |
+| **BE-W50** | `/uploads/:id` and `/uploads/completion` have no REST backing | `packages/core` | BE-W16 | — | 3 | No table or view resolves `uploads`. The real surface is `begin_upload`, `resume_upload`, `complete_upload`, `record_upload_progress`, `abandon_upload`, `my_upload_queue` |
+| **BE-W51** | `POST /sync/pull` — **no `sync_pull` function exists at all** | migration or contract | FE-W18 | — | 3 | `select count(*) from pg_proc where proname='sync_pull'` → `0`. `sync_push` exists and is granted; the pull half of offline sync has no server side |
+| **BE-W52** | `/mileage` — no `mileage` table or view | `packages/core` | — | — | 1 | `daily_mileage()` is granted and is the real surface; the contract does not name it |
+| **BE-W53** | `/transcripts/:id` — the table is `transcripts_raw` **and** `transcripts_redacted` | `packages/core` | I3 | **B6** | 2 | Which of the two a client may ever read is the redaction boundary, not a naming detail. No `transcripts` relation exists |
+| **BE-W54** | `/shift-window` duplicates `/rpc/my_shift_window` | `packages/core` | — | — | 1 | Two declared paths for one surface; only the RPC has a backend. Pick one |
+| **BE-W55** | `/me` has no single backing relation | `packages/core` | — | — | 1 | `user_profiles` is selectable and `current_user_visible_territory_ids()` exists; confirm the composed shape matches what the mock returns |
+
+### Category 3 — the mock invents values the database will not supply
+
+This category matters most against this product's stated principle: **it never displays
+anything the server has not told it.** A fixture is not a server.
+
+| ID | Title | Changes | Deps | Blocker | Est | Verification |
+|---|---|---|---|---|---|---|
+| **BE-W56** | The override the console displays is fabricated end to end | see BE-W47 | BE-W47 | — | — | The mock's `POST /analyses/:id/overrides` returns `id`, `findingId` and `overriddenByUserId` from `fx.analysisOverrides` while **no table exists to hold any of them**. `apps/console`'s analysis-review screen renders that row. Proven in FIX-01: a POSTed probe returned `201` and was unreadable and unfindable afterwards |
+| **BE-W57** | `GET /sync/queue` exists only in the mock | `services/mock` | — | — | 1 | Not in `API_PATHS`, and `grep -rn "sync/queue" apps/field packages/core` → no caller. Dead surface; delete it or promote it to the contract |
+
+### From FIX-02, registered here
+
+| ID | Title | Changes | Deps | Blocker | Est | Verification |
+|---|---|---|---|---|---|---|
+| **BE-W58** | `CompleteUploadRequestSchema.checksum` has nowhere to go | migration; `complete_upload` | — | — | 2 | Contract requires a 64-char SHA-256 "of the complete file"; `complete_upload(p_grant_id, p_object_id, p_duration_seconds, p_size_bytes, p_recorded_at, p_bitrate_kbps)` has no checksum parameter and no column stores one. **The integrity check the contract promises does not exist**, on the resumable audio path. **BE-W16 depends on this** |
+| **BE-W59** | Forbid two consent notices in force for one language at the same instant | migration | — | — | 2 | FIX-02 made resolution deterministic with `id desc`, which is arbitrary as a business rule. An exclusion constraint makes the undefined state impossible instead. Insert two overlapping in-force rows for one language → rejected |
+| **FE-W21** | The MR must see SQLSTATE `45001` as an actionable message | `apps/field` error mapping | BE-W48 | — | 2 | **No client code maps SQLSTATE today** — `grep -rn "sqlstate\|45001\|errcode" apps/field/src apps/console/src packages/core/src` returns nothing. The stale-notice refusal must read "the notice changed, re-read it and ask again", never a generic failure |
+
+### Not a task — `runPurge` concurrency is test-only
+
+Investigated under FIX-03 Part C and **production is not exposed**. `claim_expired_audio`
+claims with `for update skip locked`, a `purge_state='claimed'` ownership column,
+`claimed_by_run_id`, and a 15-minute stale-claim lease, so two instances partition the
+work rather than colliding. `retention.yml` additionally sets
+`concurrency: group: audio-retention, cancel-in-progress: false`, so a slow run queues the
+next instead of overlapping, and `retention-watchdog.yml` runs `check:purge-health` — not
+the purge worker — under its own separate group. The intermittent suite failure is two
+**spec files** sharing one global worker, recorded in `docs/gotchas.md`.
