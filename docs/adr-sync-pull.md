@@ -333,3 +333,51 @@ A pull cannot see rows written by the **caller's own uncommitted transaction**. 
 not committed, and the snapshot says so. In production every pull is its own transaction
 and never wrote anything, so the case does not arise; in tests it means a fixture has to
 really commit, which is why `sync-pull.spec.ts` uses a second connection.
+
+---
+
+## 8. Correction to §6 Q1 — "payload-free" is narrower than "nothing personal"
+
+**Date: 8 September 2026.** §6 is left as written; this qualifies one sentence in it.
+
+Q1's answer said a tombstone carrying "an id, a type and a reason class" holds **"nothing
+personal in it"**, and concluded that the retention-window question therefore does not
+arise. The implementation in `20260908000300_sync_pull_phase2.sql` needed one thing more,
+and the stronger claim is no longer strictly true.
+
+**A tombstone also carries the scope the record HAD** — exactly one of:
+
+```
+former_mr_id         -- who owned the visit or beat plan
+former_territory_id  -- which territory the doctor was in
+```
+
+It has to. A tombstone is an existence claim, and it cannot be filtered at read time
+because the row is gone and there is nothing left for a policy to evaluate. Without the
+former scope stored on the event, either every tombstone reaches every caller — telling an
+MR in another region that a record they were never entitled to see has been deleted — or
+none reaches anybody and the feature does not exist.
+
+**So `payload-free` means: no payload ABOUT THE DELETED THING.** No name, no date, no
+outcome, no text, no clinical or commercial content of any kind. What remains is an id, a
+type, a reason class, and an employee identifier.
+
+**Why that is still the conservative choice.**
+
+- `former_mr_id` identifies an **employee**, not a patient or a doctor. It is the same
+  identifier already on every row in `visits`, `beat_plans`, `check_ins` and the audit log.
+- What a visit tombstone discloses about that employee is that they once had a visit with
+  a given id — which the visit row itself said, more fully, until it was deleted.
+- It is the minimum that makes the disclosure control possible at all, and the control it
+  enables is stricter than having no tombstones.
+
+**Where the distinction would start to matter, and it is worth stating now rather than
+being surprised by it later:** if consent records ever entered the pull. A consent
+tombstone would carry `former_mr_id` and a consent record's id, and *"MR X captured a
+consent that has since been destroyed"* is a claim about a withdrawal event, which is the
+thing Q1 was asking about in the first place. **Q4 keeps consent out of the pull**, so the
+case does not arise today — but if Q4 is ever revisited, this paragraph is the reason Q1's
+answer cannot simply be carried over.
+
+Nothing here changes phase 2. It records that a future reader must not lean on the phrase
+"nothing personal" when deciding what else may be tombstoned.

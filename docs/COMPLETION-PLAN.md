@@ -796,3 +796,30 @@ this repository's code and it will look identical if it returns.
   `error-contract.spec.ts` derives every SQLSTATE the live database raises and fails the
   build in **both** directions. Nothing beyond `45004` was found, and `45004` was already
   fixed in FIX-12.
+
+### Added by FIX-14
+
+| ID | Title | Changes | Deps | Blocker | Est | Verification |
+|---|---|---|---|---|---|---|
+| **BE-W71** | `sync_pull` ships whole rows, so a new column reaches every handset by default | `sync_pull` | BE-W61 | — | 2 | `to_jsonb(row)` is an implicit `select *`. Today that means every handset receives `doctors.organisation_id`, which the contract never modelled and no screen uses — harmless in itself, and the mechanism is not: **a column added to `visits`, `beat_plans` or `doctors` reaches every device the day it is created, without anyone deciding it should.** The next column could carry something that should not leave the server. Verification: the payload is built from a named projection rather than `to_jsonb(row)`, and `sync-pull-contract.spec.ts`'s key-set assertion fails when a column is added, forcing the decision |
+| **FE-W23** | No screen consumes the pull | `apps/field/src/today/` | FE-W22 | — | 3 | `pull.ts` is a mapper and a state machine, exercised end to end against a real response; nothing renders it. Verification: a manager's change to tomorrow's visits appears on the Today screen, and `noticeFor`'s full-re-sync notice is displayed — ADR §6 Q3 makes the second half a condition of the first, not a nicety |
+| **FE-W24** | A pull consumer needs the aggregates the pull cannot carry | `apps/field` | FE-W22 | — | 2 | `DoctorRecord` has no `clinicAddresses` and `BeatPlanRecord` no `entries`, because neither is a column (FIX-14 C4 #2 and #3). A screen showing a doctor's clinic needs a second read. Verification: the doctor detail screen renders addresses after a pull-only sync, with no `undefined` reaching a component |
+
+**Declined by FIX-14: BE-W69 (`pg_cron`).** The keep-warm scheduler was a workaround for
+the Supabase free tier, and the reviewer's answer is that the honest fix is to pay for the
+tier. **B14 leaves the engineering backlog and becomes an operator cost decision** —
+~$25/month against an auto-pause that has already cost two weeks of unnoticed silence.
+There is no task here, no extension to install and no design to review.
+
+**Closed by FIX-14.**
+
+- **The Supabase-default-privileges root cause, seventh instance.**
+  `privilege-posture.spec.ts` replaces three narrower guards' coverage with one that
+  enumerates every object in `public` from the catalogue and asks `has_*_privilege('anon',
+  …)`. It found three sequences carrying `UPDATE` to `anon` — the privilege behind
+  `setval()`, on the audit log's identity counter — which neither previous guard could see.
+  Revoked in `20260908000400`.
+- **FE-W22, the pull consumer** — `apps/field/src/sync/pull.ts`, against the real RPC, with
+  the cursor persisted per user, `45006` recovering into a full re-sync rather than
+  surfacing, and the completeness field surfaced in words when it says something and silent
+  when it does not.

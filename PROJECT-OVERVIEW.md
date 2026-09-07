@@ -7615,3 +7615,252 @@ C8 forbade wiring one.
   message was not removed.
 
 ---
+
+---
+
+### FIX-14 — the first client against a real response (8 September 2026)
+
+**Not done, and stated first: the consent client path was NOT converted, the console was
+not wired, no card was removed, samples were not converted, the samples screen's message
+was not removed, `pg_cron` was NOT added, and no dependency was added.**
+
+#### CI and counts, split by workspace and runner
+
+FIX-13's two commits pushed as `aea2fdc..5e14cf0`. Run **`34157491347`: success**, both
+jobs.
+
+| workspace | runner | before | after FIX-14 |
+| --- | --- | ---: | ---: |
+| `@fieldforce/api` | vitest, live database | 474 / 19 files | **490 passed / 21 files** |
+| `@fieldforce/field` | vitest, logic | 341 / 23 files | **355 passed / 24 files** |
+| `@fieldforce/field` | **jest, jest-expo render** | 72 / 12 suites | **72 passed / 12 suites** |
+| `@fieldforce/ui-tokens` | vitest | 54 / 3 | 54 / 3 |
+| `@fieldforce/mock` | vitest | 40 / 1 | 40 / 1 |
+| `@fieldforce/core` | vitest | 21 / 3 | 21 / 3 |
+| `@fieldforce/ui` | vitest | 4 / 1 | 4 / 1 |
+
+**api +16**: 6 privilege posture, 10 round-trip contract. **field +14**: the pull consumer.
+No skips — every summary line reads `N passed (N)`. `verify:rollbacks`: schema empty,
+**33 migrations, 33 rollback files**. `turbo run typecheck lint`: **16 successful, 16
+total**.
+
+#### A2 — BE-W69 declined, and B14 is a cost decision
+
+`pg_cron` is **not** added. The reviewer's reasoning is recorded rather than summarised
+because it is the general principle, not a verdict on one extension:
+
+> The keep-warm idea is a workaround for not paying for Supabase. A pilot handling real
+> consent records cannot run on a tier that switches itself off when the crons go quiet,
+> and that has already happened once. Adding a scheduler and a dependency to avoid ~$25 a
+> month is the wrong trade, and it puts a second cron in a second place for a reason that
+> is really a budget line.
+
+**B14 moves from the engineering backlog to the operator's cost line.** There is no task
+here to schedule, no extension to install, and no design to review — there is an invoice to
+approve. The auto-pause has already cost this project two weeks of unnoticed silence, which
+is the number that should be set against the monthly one.
+
+#### A3 — the ADR correction
+
+`docs/adr-sync-pull.md` §8. Q1's answer said a tombstone holds *"nothing personal in it"*.
+Implementation needed one thing more: **the scope the record HAD**, exactly one of
+`former_mr_id` or `former_territory_id`. It has to — a tombstone is an existence claim and
+cannot be filtered at read time, so without the stored former scope either every tombstone
+reaches everybody or none reaches anybody.
+
+So **payload-free means no payload about the deleted thing** — no name, date, outcome or
+text — and what remains is an id, a type, a reason class, and an **employee** identifier
+already present on every row in `visits`, `beat_plans` and the audit log. Justified, and
+narrower than the phrase Q1 used. §8 states where it would start to matter: a *consent*
+tombstone would be a claim about a withdrawal event, which is what Q1 was asking about.
+Q4 keeps consent out of the pull, so it does not arise — and the paragraph exists so that
+nobody carries Q1's wording across if Q4 is ever revisited.
+
+---
+
+#### B — one guard, and a seventh instance
+
+**B4: yes, it found something neither previous guard covered.** Three sequences:
+
+```
+audit_log_id_seq                       | {postgres=rwU/postgres,anon=w/postgres,...}
+audio_destruction_log_id_seq           | {...,anon=w/postgres,...}
+restore_reconciliation_findings_id_seq | {...,anon=w/postgres,...}
+```
+
+They are the only three sequences in `public` — every other table keys on a uuid; these use
+`generated always as identity`. `foundations.spec.ts` and `rls.spec.ts` read
+`information_schema.role_table_grants`, which lists tables and views and **not** sequences;
+the FIX-06 guard reads `pg_proc`. A sequence is in neither place, so the grant has been
+there since the migration that created each one.
+
+**What `w` on a sequence permits** is `nextval()`, `setval()` and `currval()` — so `anon`
+could reset the identity counter of the **audit log**, and rewinding it produces
+duplicate-key failures on every subsequent audit write. That is a denial of service against
+the one table this product uses to prove what happened.
+
+**UNVERIFIED: whether there is a reachable path to exploit it.** PostgREST does not expose
+`setval` and no function in `public` calls it, so as far as this repository can see the
+grant is unreachable in practice. Revoked anyway, in `20260908000400`: reachability changes
+the day somebody adds a function, and the grant would already be in place.
+
+**The guard itself was wrong first, in the same direction as the defect it catches.** It
+was written against the ACL columns — `relacl`, `proacl`, `typacl`, `nspacl` — and a
+freshly created function has `proacl = null`, meaning *the defaults apply*.
+`aclexplode(null)` yields nothing, so the guard reported a clean posture for exactly the
+object class FIX-05 found 65 of. **The positive control caught it**, which is what a
+positive control is for, and it is rewritten onto `has_*_privilege`, which evaluates
+explicit grants, `PUBLIC` inheritance and defaults alike.
+
+**B2, the allowlist**: one entry, `schema public → USAGE`, with its reason — PostgREST
+resolves every request through `anon` before the JWT is applied, so revoking it replaces
+every refusal with a 404 and breaks sign-in. An entry without a reason is a **review**
+failure, not a build failure: a test that demanded prose would only produce prose. What the
+build does check is that no allowlist entry has gone stale, because a licence nobody is
+using teaches the next reader to treat the whole list as approximate.
+
+**B3, both mutations:**
+
+| mutation | result |
+| --- | --- |
+| `grant update on sequence public.audit_log_id_seq to anon` | **B1 fails**: `expected [ 'sequence\|audit_log_id_seq\|UPDATE' ] to deeply equal []` |
+| the `fn` union removed from the derivation | **2 fail**: the function positive control *and* the coverage control — `expected [ 'schema', 'sequence', 'table' ] to include 'function'` |
+
+The older guards are left in place. Deleting a working control to celebrate a broader one
+is how the broader one ends up being the only thing standing when it has a gap of its own —
+which this one already demonstrated it can have.
+
+---
+
+#### C — the first client to receive a real response
+
+**How it was exercised, since an empty divergence list from a mocked round trip would not
+be a test.** `services/api/tests/sync-pull-contract.spec.ts` calls `sync_pull` with a real
+signed JWT, over HTTP, through **Kong and PostgREST** — the faithful path, not the direct
+Postgres connection the rest of the api suite uses, because PostgREST is exactly the layer
+where a shape divergence hides. It parses the result with the contract's own
+`SyncPullResponseSchema`, runs each payload through the row mappers, and pins the payload
+key sets. **The fixtures in `apps/field/src/sync/pull.test.ts` are the rows that round trip
+returned**, copied verbatim, and the key-set assertion is what stops them going stale in a
+workspace that has no database.
+
+#### C4 — every divergence, with its verdict
+
+| # | divergence | verdict | disposition |
+| --- | --- | --- | --- |
+| 1 | **Every payload key is `snake_case`.** `mr_id`, `full_name`, `plan_date` — the contract is camelCase throughout | **Both right, about different things.** The contract describes the app; `to_jsonb(row)` describes the table | Mapper. `fromVisitRow` already existed from FIX-07; `fromDoctorRow` and `fromBeatPlanRow` added. **No migration changed** |
+| 2 | **`DoctorSchema` requires `clinicAddresses`**, which is not a column and cannot be in a payload | **Contract right about a doctor screen; pull right that it carries rows** | `DoctorRecordSchema = DoctorSchema.omit({ clinicAddresses })`. A consumer needing the aggregate reads the children separately. Joining them in would cross a second table's RLS and change what the payload means |
+| 3 | **`BeatPlanSchema` requires `entries`**, likewise | Same | `BeatPlanRecordSchema`. Also avoids re-sending a whole entry list on every beat-plan change |
+| 4 | **`organisation_id` arrives and the contract never declared it** | **Database right** — it is a real column | Parsed and dropped by the mapper. The general problem is registered as **BE-W71**: `to_jsonb(row)` is an implicit `select *`, so **any column added to a synced table reaches every handset the day it is created**, without anyone deciding it should |
+| 5 | `serverTime` and every timestamp arrive as `+00:00` with **microsecond** precision — `2026-09-07T20:02:29.754702+00:00` | **Both right.** `IsoDateTimeSchema` accepts it | None. Asserted rather than assumed, because a client that formats by string slicing would break on six fractional digits |
+| 6 | The **cursor survives a PostgREST round trip** — it is JSON-in-a-string containing colons, braces and quotes | **Both right** | None, and asserted: the second call sends the first call's `nextCursor` and gets `omits: []` back |
+| 7 | A refusal arrives as **`{"code":"45005", …}` with a 4xx**, not a generic 500 | **Both right** | None, and asserted — the client's whole error path depends on `code` surviving PostgREST |
+
+**Not an empty list, and not a long one either.** The two that matter are #2 and #3:
+**the contract's entity schemas cannot be satisfied by a pull payload at all**, and no
+amount of casing work would have revealed that. `sync-pull-contract.spec.ts` asserts the
+*failure* — `DoctorSchema.safeParse(fromDoctorRow(payload)).success === false` — so that if
+somebody later makes the pull join the children in, the test fails and they have to say why.
+
+**Nothing was changed in a migration to match the contract.** Items 2 and 3 were resolved by
+naming the row shapes, which is the pattern `VisitRowSchema` established in FIX-07.
+
+#### C1/C2 — the consumer, and the notice
+
+`apps/field/src/sync/pull.ts` and `pull-cursor.ts`, against the real Supabase RPC.
+
+**The cursor** is stored as an opaque string, **keyed per user**. A shared handset that
+switched MRs and kept the cursor would hand the second MR a sweep starting from the first
+MR's position, and every row between the two would never arrive — the silent-loss failure
+the whole snapshot design exists to prevent, reintroduced on the client side. Losing the
+cursor is safe and expensive, not unsafe: it means a full re-sync.
+
+**C2, and the silence is the feature.** `noticeFor` returns `null` when
+`completeness.omits` is empty, and a notice only when the server actually declares an
+omission — which today means a full re-sync:
+
+> **Your list has been rebuilt.** This was a full refresh, so anything that was removed
+> since you last synced has simply gone rather than being marked as removed. Everything
+> below is what the server has for you right now.
+
+No SQLSTATE, no field name, no "omits" — asserted, because a notice written in the
+server's vocabulary is not a notice. And a notice that appeared on every pull would train
+people to dismiss it, and then it would not be there on the pull where it mattered.
+
+#### C3 — "no longer yours", never "deleted"
+
+`removalWording('out_of_scope')` cannot contain the word, and the test asserts the absence
+rather than the presence. The `reason` survives mapping, so a screen switches on it instead
+of inferring it. Both reasons remove the row from the local store — a record that is no
+longer yours must not stay on the handset any more than a deleted one, which is the privacy
+half of ADR §6 Q2.
+
+#### C5 — `45006` has a client path
+
+A too-old cursor is not a failure to show anybody. `pullOnce` reads the refusal through the
+FIX-06 error contract, and on `sync_cursor_expired` **or** `sync_cursor_unrecognised` clears
+the stored cursor and re-pulls from scratch, returning `resynced: true`. The full re-sync
+then declares its omission, so the user is told what happened in the same breath.
+
+Surfacing it would have been the shift-window defect in a new place: a specific, actionable
+server answer rendered as "something went wrong". A refusal that is **not** about the cursor
+— `42501`, say — is surfaced and **not** retried, and that is asserted too: retrying an
+honest refusal turns one answer into two requests and the same answer.
+
+#### C6 — results
+
+| what | result |
+| --- | --- |
+| the cursor persists and is sent on the next pull | yes — asserted on the second RPC call's arguments |
+| cursors are kept apart per user | yes — a second user's first pull sends `null` |
+| a tombstone removes the local row | yes |
+| an `out_of_scope` event removes it, with different wording | yes |
+| the word "deleted" never appears for `out_of_scope` | asserted as an absence |
+| a too-old cursor triggers a full re-sync | yes, `resynced: true`, two RPC calls |
+| an unrecognised cursor recovers the same way | yes |
+| a non-cursor refusal is surfaced, not retried | yes, one call |
+| the completeness field speaks on a full re-sync | yes, in words |
+| ...and is silent when it omits nothing | yes |
+| the response is parsed, not cast | asserted — a malformed body rejects |
+| `organisation_id` does not reach the app | asserted |
+| an upsert with no payload throws rather than inventing a record | asserted |
+
+#### apps/field — real versus fixture, updated
+
+| path | goes to | status |
+| --- | --- | --- |
+| `record_check_in` / `record_check_out` | Supabase RPC | **real** |
+| create visit / update visit | Supabase table + RLS | **real** |
+| mileage (`daily_mileage`) | Supabase RPC | **real** |
+| **`sync_pull` — pull consumer** | **Supabase RPC** | **real, and the first path whose RESPONSE has been exercised end to end** |
+| `sync_push` outbox | Supabase RPC | real (BE-W5) |
+| consent | `services/mock` | fixture — server side ready since FIX-12, client conversion is its own review |
+| samples | `services/mock` | fixture — blocked on the UCPMP cap value |
+| doctors, beat plans, visit *lists*, analyses | `services/mock` | fixtures |
+
+**No screen consumes the pull yet.** `pull.ts` is a state machine and a mapper; wiring it
+into `today/` is the next increment and was out of scope here. So the *response shape* is
+now exercised, and the *rendering* of it is not.
+
+#### On the prediction
+
+The record said the next defect would be in unexercised code that looks exercised, and
+named every response shape in the contract as the place. **It was right, and less
+dramatically than expected:** two of the contract's entity schemas cannot be satisfied by
+the payload that carries them, which nobody would have found by reading either side. The
+casing divergence was already half-solved by FIX-07's mapper, which is what happens when a
+previous session did the same exercise on a different path.
+
+The seventh instance of the Supabase-default-privileges root cause was found the same way —
+by writing a query that looks at everything rather than at the object classes somebody
+remembered.
+
+#### What FIX-14 did not do
+
+- **The consent client path was not converted.** One client conversion, one review.
+- **No screen was wired to the pull.**
+- **`pg_cron` was not added**, and BE-W69 is declined rather than deferred.
+- The console was not wired, no card was removed, samples were not converted, and the
+  samples screen's message was not removed.
+
+---
