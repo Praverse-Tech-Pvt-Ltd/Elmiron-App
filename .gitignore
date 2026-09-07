@@ -85,3 +85,7 @@ apps/field/.gitignore
 # the repository it backs up is circular and would double its size on every refresh.
 *.bundle
 
+# JetBrains IDE config. Machine-local, not part of the project; committed by accident
+# in e2fb1fe alongside an unrelated change and removed the same session.
+.idea/
+
