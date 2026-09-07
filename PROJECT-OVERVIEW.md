@@ -6931,3 +6931,340 @@ most of the consent-in-sync design disappears rather than being decided.
 - **No index was dropped.** The three prefix redundancies are BE-W67.
 
 ---
+
+---
+
+### FIX-12 — offline consent, and the August failures (8 September 2026)
+
+**Not done, and stated first: the client consent write path was NOT converted, the client
+was not wired to `sync_pull`, the console was not wired, no card was removed, samples were
+not converted, the samples screen's message was not removed, and no dependency was added.**
+
+#### CI and counts
+
+FIX-11's two commits pushed as `52b55e9..0ba7e6d`. Run **`34153100125`: success**, both
+jobs — `typecheck · lint · format · unit tests` and `migrations · Gate 0 RLS suite ·
+rollbacks`. api **443 passed / 18 files** on that run.
+
+| package | at 0ba7e6d (CI) | after FIX-12, locally |
+| --- | ---: | ---: |
+| `@fieldforce/api` | 443 / 18 | **459 passed / 18 files** |
+| `@fieldforce/field` | 341 / 23 | unchanged |
+| `@fieldforce/ui-tokens` | 54 / 3 | unchanged |
+| `@fieldforce/mock` | 40 / 1 | unchanged |
+| `@fieldforce/core` | 21 / 3 | unchanged |
+| `@fieldforce/ui` | 4 / 1 | unchanged |
+
+**+16**: 5 cursor bounds, 9 offline consent, 2 CI-ordering guards. No skips — every summary
+line reads `N passed (N)`. `verify:rollbacks`: *"All rollbacks applied in reverse order;
+public schema is empty"* — **31 migrations, 31 rollback files**. `turbo run typecheck lint`:
+**16 successful, 16 total**.
+
+---
+
+#### A2 — what actually happened on 21–23 August
+
+**Nothing in this repository failed. Nothing in this repository ran.**
+
+`gh run view --log-failed` returns `log not found` for every failure in the window, which
+is the first clue: there is no log because there was no run. The run listing shows exactly
+one transition and no flapping:
+
+```
+runs in 20-24 Aug: 100
+  ('Audio retention',          'schedule', 'failure') -> 33
+  ('Audio retention',          'schedule', 'success') -> 17
+  ('Audio retention watchdog', 'schedule', 'failure') -> 32
+  ('Audio retention watchdog', 'schedule', 'success') -> 17
+  ('CI',                       'push',     'failure') ->  1
+
+TRANSITION success -> failure at 2026-08-21T22:11:01Z   (run 32531877892)
+runs after the transition: 65
+any success after it: 0
+workflows affected: ['Audio retention', 'Audio retention watchdog', 'CI']
+```
+
+The job objects settle it:
+
+```
+last success  21 Aug 21:12 -> runner_id 1000000703, runner_name 'GitHub Actions 1000000703', steps: 12, 23s
+first failure 21 Aug 22:11 -> runner_id 0,          runner_name '',                          steps:  0,  3s
+23 Aug CI push, both jobs  -> runner_id 0,          runner_name '',                          steps:  0,  2s
+```
+
+**No runner was assigned and no step ever executed** — and the same is true of CI on a
+push, so it was never a retention problem. A job created but never dispatched, with
+`conclusion: failure` rather than `startup_failure` (so the workflow parsed and the job
+existed), across every workflow in the repository, is the shape GitHub produces when a
+hosted runner cannot be allocated. The ordinary cause is Actions minutes or a spending
+limit exhausted at the account level.
+
+**UNVERIFIED: the specific account-level cause**, which is on a billing page this machine
+cannot read. **Verified:** it was infrastructure-level and repository-wide, not workflow-
+or code-level.
+
+**Is it still present? No.** The 7 September scheduled runs got real runners and ran every
+step (`purge …: destroyed 0, failed 0` · `"stalled": false` · `Audio retention is
+healthy.`). **UNVERIFIED: what changed** — nothing in the repository explains it, and a
+billing-cycle reset between 21 August and 7 September is consistent with the evidence
+without being evidence.
+
+**What to watch for:** the signature is `runner_id: 0`, zero steps, a few seconds, and it
+appears on CI at the same time as on retention. That is the quickest way to tell an
+account-level outage from a code failure, and it is now written into `handoff.md`.
+
+#### A3 — the handoff correction
+
+New dated section appended to `handoff.md`; the existing §5 text is untouched, per the
+section-freezing rule. It replaces *"this was not a response to a failure, and no reason
+was given."*
+
+**The reviewer's proposed sequence is right about the order and wrong about the middle.**
+They were not disabled *rather than fixed*: nothing in this repository could have fixed
+them, because nothing in this repository was executing. Disabling a workflow that fails
+every hour without running a line is a reasonable response to noise. **The consequence
+stands exactly**: no runs → no traffic → the free-tier project auto-paused → unnoticed for
+two weeks. And "no reason was given" is explained if not excused — there was a reason, it
+was 34 hours of red builds, and nobody wrote it down.
+
+#### A4 — nothing else runs after `verify:rollbacks`, and now a test says so
+
+**The finding: only `Stop Supabase` follows it**, which carries `if: always()`, touches
+containers rather than the schema, and must run even when an earlier step failed. Neither
+retention workflow has a destructive schema step, so the class does not arise there.
+
+**The class deserved a control rather than a comment.** This was the second CI defect in
+three sessions where a correct check sat in the wrong place in a mutating environment —
+FIX-08's was the dependency graph, FIX-10's was schema state — and the dangerous version is
+not the one that failed. A step that reads an empty schema and **passes** (a count that is
+legitimately zero, a "nothing to do") proves nothing and reports green.
+
+Two assertions in `scripts-convention.spec.ts`: the ordering itself, so a step added at the
+bottom of the job fails here rather than in six months, and the specific instance that has
+already gone wrong once. **Mutation:** moving the decision step back after
+`verify:rollbacks` fails **2 of 3**, count unchanged.
+
+---
+
+#### B1 — frozen rows: the hazard is real, the bound is a proof
+
+`pg_visible_in_snapshot` is a pure function of its two arguments and never consults the
+heap, and measured on this Postgres 17 the everyday paths do not rewrite `xmin`:
+
+```
+insert                -> xmin 1293
+vacuum freeze         -> xmin 1293    (freezing sets HEAP_XMIN_FROZEN hint bits)
+vacuum full (rewrite) -> xmin 1293
+```
+
+**The hazard is real anyway.** There are paths where a genuinely frozen tuple reads as
+`xmin = 2`, and `FrozenTransactionId` is visible in **every** snapshot — so such a row reads
+as "already seen in `since`" and is dropped **silently**: a well-formed, incomplete answer
+with no way for the client to tell. Verifying that case directly needs 50,000,000
+transactions to elapse and is **UNVERIFIED here**.
+
+**The bound does not depend on which way that goes.** A row still owed to a client changed
+*after* the cursor was issued, so `age(row.xmin) < age(cursor.xmin)`; a tuple cannot be
+frozen until `age(xmin) >= vacuum_freeze_min_age`. Below that, nothing owed can have been
+frozen. Past **half of `vacuum_freeze_min_age`** — read from the server's own setting so it
+cannot drift from what it is derived from — the cursor is refused with **SQLSTATE 45006**
+and the client is told to re-sync. `completeness.maxCursorAgeTransactions` reports the
+limit before it bites.
+
+`45006` was reserved in FIX-11 and deliberately not minted until it could be raised. It is
+distinct from `45005` because the two read the same to a machine and not to a person:
+45005 means the cursor is wrong, 45006 means it was right and is now too old — the
+difference between a bug and a handset in a drawer.
+
+Tested through the real code path by lowering `vacuum_freeze_min_age`, which is `USERSET`
+— on a committed connection, because a cursor cannot age inside the transaction that issued
+it. Plus the negative, so a function that refuses *every* cursor cannot pass.
+
+#### B2 — cursor size is bounded by `max_connections`
+
+The cursor carries two `pg_snapshot`s as text, `xmin:xmax:xip_list`. Only `xip_list` grows,
+one xid per in-flight transaction, which cannot exceed `max_connections` (100 here):
+
+```
+per snapshot <= 2*10 digits + 2 colons + max_connections * 11 bytes  ~= 1,122 B
+whole cursor <= two of those + a uuid + a timestamp + JSON keys      ~= 2,400 B
+```
+
+**Cap 8,192 bytes, checked before anything parses it, and refused rather than truncated.**
+Truncation is the dangerous option, not the safe one: `xmin:xmax:` with a shortened
+`xip_list` is still a syntactically valid snapshot describing a *different* set of
+in-flight transactions, so it would parse and answer a different question.
+
+#### B3 — wraparound: assumption stated, no work
+
+`xmin` is a 32-bit `xid` and the cast to `xid8` cannot recover the epoch. At 100 MRs
+writing a few thousand rows a day, 2^32 transactions is years away, and **the freeze bound
+fires first in every realistic ordering** — `age()` is itself wraparound-aware, so a cursor
+old enough to matter is refused as expired long before its raw value becomes ambiguous.
+BE-W68 stands.
+
+#### B4 — all three are in `docs/adr-sync-pull.md` §7
+
+Beside the mechanism, with a fourth entry: a pull cannot see rows written by the caller's
+own uncommitted transaction. Correct — they are not committed — and it is why
+`sync-pull.spec.ts` stages fixtures on a second connection.
+
+---
+
+#### C — consent capture works offline, on a bounded and auditable trust
+
+**The defect being removed.** FIX-01 found that `capture_consent` recorded a consent
+version the doctor never saw. FIX-02 fixed it by requiring the displayed version and
+refusing it unless it was the version active `now()` — at the moment the write landed on
+the *server*. Right for the defect in front of it, and it made offline capture impossible:
+
+```
+09:40  an MR captures consent in a clinic with no signal
+14:00  the notice is superseded by somebody in an office
+18:00  the handset syncs
+       -> 45001, "the notice changed since it was displayed"
+```
+
+The notice did not change since it was **displayed**. It changed since it was **received**.
+A content update on a Tuesday afternoon would refuse a whole day of field work with the
+doctors already gone, and the MR's prescribed remedy — re-read the notice and ask again —
+would be impossible to carry out.
+
+**The trust model, stated rather than implied.** You cannot cryptographically establish
+when a doctor read something on a device you do not control. A server-issued token was
+considered and does not work: it would be issued when the app *fetched* the notice, not
+when the doctor *read* it, so an app carrying a notice cached twenty days ago would present
+a token whose issue time predates the supersession anyway — more machinery, the same trust
+boundary. This design bounds the trust and makes it auditable instead of pretending to
+eliminate it.
+
+**C1.** `capture_consent` now validates against **`p_captured_at`**, not `now()`. The
+mechanism is a new `active_consent_text_at(language, at)`, and `active_consent_text(l)` is
+**redefined to call it with `now()`**, so there is one rule and not two that can drift.
+
+**C2 — three bounds, three SQLSTATEs, because the MR's remedy differs in each:**
+
+| bound | code | what the MR is told |
+| --- | --- | --- |
+| `captured_at` may not be in the future | **45007** | the device clock is ahead; fix it and sync — **do not re-ask the doctor** |
+| `received_at - captured_at <= consent_max_sync_lag_hours` | **45008** | sync sooner; this capture arrived too late to accept on the device's word |
+| the version must have been the active one **at `captured_at`** | **45001** | re-read the current notice and ask again — and now this is a remedy that can actually be carried out |
+
+A client that cannot tell these apart tells the MR the wrong thing. Telling somebody to
+repeat a consent conversation because their phone thinks it is Thursday is both useless and
+slightly insulting.
+
+**C3 — both timestamps, and the gap, on the row.** `captured_at` (the handset's claim) and
+`received_at` (the server clock, defaulted to `clock_timestamp()`, with **no parameter a
+caller could supply** — asserted) were already stored. Added:
+
+```sql
+alter table public.consent_records
+  add column capture_lag interval
+  generated always as (received_at - captured_at) stored;
+```
+
+Stored rather than computed on read, because a bounded trust that is only auditable if
+somebody remembers to write the right expression is not auditable. *"Which MR's captures
+consistently arrive hours late"* is now a query. `captured_at <= now()` and
+`received_at = clock_timestamp() >= now()` together mean `capture_lag` can never be
+negative — asserted.
+
+**C4 — the maximum lag is configurable, defaulted, and UNVERIFIED.**
+`consent_max_sync_lag_hours = 72`, in `app_thresholds`.
+
+**Deliberately not null, unlike `ucpmp_sample_cap_quantity`.** Null there meant "accepted,
+uncounted, and the app says so". Null here would mean **unbounded trust in a device clock**,
+which is the thing being bounded — so the permissive branch is not available and there has
+to be a number.
+
+Why 72: FE-G2 promises a full offline day, and the failure mode of a value that is too
+**small** is destroying legitimate field work with the doctors already gone — the exact
+failure this migration exists to remove. 72 hours covers a weekend plus a day, so the
+promised case can never be refused by this bound. The failure mode of too **large** is a
+wider window in which a wrong device clock is accepted, which is visible in `capture_lag`
+rather than silent. **How long a consent may sit on a handset before it stops being
+acceptable is a compliance decision, not an engineering one.** Added to the escalation list.
+
+**C5 — no consent test was deleted, and that claim is checked rather than asserted.**
+
+The FIX-02 suite passes **unchanged**: `consent-audio.spec.ts` was 40 passed before this
+migration and 40 of the 49 after it are the same cases.
+
+They can pass, because **this is not a change of rule**. FIX-02's rule was "the supplied
+version must be the active one"; this is the same rule asked about a different instant.
+When a capture happens now, the two are the same question, and FIX-02's assertions — that a
+version superseded *before* the capture is refused, that a version that does not exist is
+refused, that a capture with no version at all is refused — are all still true and all
+still enforced.
+
+**This is the second time a consent test has been in question in this project, so it is
+stated plainly rather than left to inference: nothing was removed, weakened, or
+re-scoped.** What was added is the case FIX-02 could not express — a notice superseded
+*after* the doctor was asked and *before* the handset could sync — plus its mirror, that an
+app still cannot claim the doctor read a notice which did not exist yet.
+
+**9 new tests:** the offline acceptance, both refusal directions, the three bounds each with
+a positive control, the threshold being read from `app_thresholds` rather than hard-coded,
+`capture_lag` matching `received_at - captured_at` and never negative, and `received_at`
+having no caller-supplied parameter.
+
+**C6 — mutations. Count unchanged at 49 each.**
+
+| mutation | what it removes | result |
+| --- | --- | --- |
+| a scoped `BEFORE INSERT` trigger returning `NULL` on `consent_records` | **the write** | **7 failed / 42 passed** — every persistence assertion, FIX-02's three "records X against the version the client displayed" and the idempotency case included, plus all three FIX-12 acceptance cases |
+| validate against `now()` again instead of `captured_at` | **the C1 change** | **2 failed / 47 passed** — exactly the offline acceptance and its mirror. This is the FIX-02 behaviour, and the suite tells the two apart on precisely the cases that distinguish them |
+| the `45008` lag bound made unreachable | **a refusal** | **2 failed / 47 passed** — the lag refusal and the configurability test; every persistence case stayed green |
+
+Neither side alone proves the path: the first shows the write is real, the others show the
+refusals are. None dropped the case count, so none was a no-op.
+
+**C7 — the client consent write path was NOT converted.** Server and contract only.
+
+#### The error contract, and a gap it had
+
+`packages/core/src/shared/refusals.ts` gains `45004`–`45008`.
+
+**`45004` was minted in FIX-09 and never reached the contract.** A server-side code with no
+client-side mapping renders as `unrecognised`, which is honest and useless: the MR is told
+the app does not know why, when the server said something specific and actionable. The
+lesson is that minting a SQLSTATE is half the work, and it is recorded next to the table.
+
+Actionability is set per code rather than by default: `45004` is **not** actionable (the
+remedy is somebody else's decision), while `45005`, `45006`, `45007` and `45008` all are —
+and each is a different action.
+
+#### D — the reviewer's answers, recorded
+
+`docs/adr-sync-pull.md` §6, dated, superseding §5's *status* and not its text:
+
+- **Q1 tombstones — payload-free**: an id, a type and a reason class is not a record *of*
+  the deleted thing, so the retention conflict does not arise. Conservative under either
+  legal answer, so phase 2 need not wait for one. Supersedes §2.3(a).
+- **Q2 leave-scope — the app must never say "deleted."** False, and for a consent record
+  dangerously so. "No longer yours." Settles §2.5 in favour of a distinct `reason` and
+  rules out option (a). A reassigned MR losing the old list is a **privacy requirement**;
+  how gracefully is a product choice, **still open**.
+- **Q3 updates-only pull — ships on the server, does not reach an MR** until a client
+  surface displays the incompleteness field. The server says it is incomplete; nothing
+  renders that yet.
+- **Q4 consent and analyses — both out.** Analyses are moot under both live scope options.
+  Consent's audit cost is ~3,000 rows/day/entity and its value is reinstall-only, which
+  belongs in an explicit one-time restore that audits once. This is also what keeps
+  `sync_pull` `security invoker`.
+- **Q5 offline consent — shape (b) with bounds**, implemented above. **It accepts a bounded
+  client-clock trust deliberately, and that acceptance needs client ratification.**
+
+#### What FIX-12 did not do
+
+- **The client consent write path was not converted**, and no client was wired to
+  `sync_pull`. Both are separate reviews.
+- **The console was not wired, no card was removed, samples were not converted, and the
+  samples screen's message was not removed.**
+- **No dependency was added.**
+- **The 72-hour maximum sync lag is a default, not an answer.** It is live, so unlike the
+  UCPMP cap the control is not inert — the risk here is a wrong value rather than an absent
+  one, which is why it carries no deadline mechanism and does carry an escalation.
+
+---

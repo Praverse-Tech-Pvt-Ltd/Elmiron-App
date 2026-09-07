@@ -192,3 +192,144 @@ work rather than one line.
 5. **The offline consent question from FIX-02 §3 is upstream of all of this.** If consent
    capture cannot be queued offline, a pull that carries consent records is solving a
    problem the product does not have yet.
+
+---
+
+## 6. The five questions, answered — 8 September 2026
+
+**Answered by the reviewer in FIX-12.** §5 above is left exactly as written; this section
+supersedes its *status*, not its text. Nothing here was decided by engineering.
+
+### Q5 — offline consent capture. **Shape (b), with three bounds. Implemented.**
+
+Taken first because it is upstream of Q1 and Q4.
+
+**A server-issued token — shape (c) — was considered and does not work.** The token would
+be issued when the app *fetched* the notice, not when the doctor *read* it, so an app
+carrying a notice cached twenty days ago would present a token whose issue time predates
+the supersession by seventeen. The server would have to accept it, or destroy the offline
+case anyway. More machinery, the same trust boundary.
+
+**The honest statement: you cannot cryptographically establish when a doctor read
+something on a device you do not control.** Any offline consent capture trusts the handset
+for the moment of consent. This design does not pretend otherwise — it **bounds** that
+trust and makes it **auditable**:
+
+1. `captured_at <= received_at` — no future captures (**SQLSTATE 45007**);
+2. `received_at - captured_at <= consent_max_sync_lag_hours` (**45008**, distinct from
+   45001 because the remedy is *sync*, not *re-ask*);
+3. the supplied version must have been **active at `captured_at`** (**45001**, which now
+   means what it always claimed to);
+4. both timestamps stored, and their difference stored as `consent_records.capture_lag`,
+   so a backdating pattern is a query rather than an inference.
+
+**This accepts a bounded client-clock trust deliberately, and that acceptance needs client
+ratification.** So does the value of the maximum lag: 72 hours is a default chosen so the
+full offline day FE-G2 promises can never be refused by the bound, and it is **UNVERIFIED**
+as a compliance answer. Implemented in `20260908000200_offline_consent_capture.sql`.
+
+### Q1 — the tombstone window. **Payload-free tombstones. The conflict dissolves.**
+
+A tombstone carrying only an id, a type and a reason class **is not a record of the deleted
+thing** — there is nothing personal in it. "How long may we keep a record of a deleted
+thing" then stops being the question, and the answer becomes "as long as the sync window
+needs, because it is not a record of anything."
+
+**Build them payload-free.** That is the conservative choice under *either* legal answer,
+so phase 2 does not have to wait for one. This supersedes §2.3, whose option (a) assumed a
+tombstone would carry enough to be a retention problem.
+
+### Q2 — what an MR keeps when they lose a territory. **Two parts; one is not a choice.**
+
+- **The app must never say "deleted."** It is false, and for a consent record dangerously
+  so. "No longer yours" is the honest phrasing. That settles §2.5 in favour of option (c),
+  a distinct `reason`, and rules out option (a).
+- **A reassigned MR losing access to the old doctor list is a privacy requirement, not a
+  preference.** They stop seeing it. **Still open:** how gracefully — a notice, a grace
+  period, or silent removal — which is a product choice.
+
+### Q3 — may an updates-only pull ship. **Yes on the server. Not to an MR yet.**
+
+Shipping the server half is free and correct, and it is done (BE-W61 phase 1). **It does
+not reach a handset until a client surface displays the `completeness` field.** The server
+says it is incomplete; nothing renders that yet, and shipping it to a device without the UI
+is precisely the failure §4 of this document warns about.
+
+### Q4 — consent and analyses in the pull. **Both out.**
+
+- **Analyses are moot** under both live scope options.
+- **Consent stays out.** ~3,000 audit rows per day per entity would make the pull the
+  system's largest audit writer, and the value is low: the MR captured those consents, so a
+  pull only serves reinstall and cross-device. That belongs in an **explicit one-time
+  restore that audits once**, not a quarter-hourly stream that audits forever.
+
+This also keeps `sync_pull` `security invoker`, which is where phase 1 put it. Had consent
+entered the pull it would have had to become `security definer` to write the audit row,
+because Postgres has no SELECT trigger.
+
+### What is still open after this section
+
+| | |
+| --- | --- |
+| Q2's grace behaviour | notice, grace period, or silent removal — product |
+| The maximum sync lag value | 72h is a default, not an answer — compliance |
+| Ratification of the bounded client-clock trust | reviewer **and** client, not engineering |
+
+---
+
+## 7. Limits of the snapshot cursor — 8 September 2026
+
+Recorded beside the mechanism, so the next reader finds them together.
+
+### 7.1 Frozen rows — bounded, and the bound is enforced
+
+`VACUUM` can replace a tuple's `xmin` with `FrozenTransactionId`, and a frozen xid is
+visible in **every** snapshot — so such a row reads as "already seen in `since`" and is
+**silently** excluded. A well-formed, incomplete answer with no way for the client to tell.
+
+Measured on this schema's Postgres 17, the everyday paths do **not** rewrite `xmin`:
+`insert` → 1293, `vacuum freeze` → 1293, `vacuum full` → 1293. And
+`pg_visible_in_snapshot` is a pure function of its two arguments that never consults the
+heap. Verifying the *genuinely frozen* case needs 50,000,000 transactions to elapse and is
+therefore **UNVERIFIED here**.
+
+The bound does not depend on which way that goes, because it is a proof rather than a
+margin: a row still owed to a client changed *after* the cursor was issued, so
+`age(row.xmin) < age(cursor.xmin)`, and a tuple cannot be frozen until
+`age(xmin) >= vacuum_freeze_min_age`. While `age(cursor_since_xmin)` is below that, nothing
+owed can have been frozen.
+
+**Enforced:** past half of `vacuum_freeze_min_age` — read from the server's own setting, so
+it cannot drift — the cursor is refused with **45006** and the client is told to re-sync.
+`completeness.maxCursorAgeTransactions` reports the limit before it bites.
+
+### 7.2 Cursor size — bounded by `max_connections`
+
+The cursor carries two `pg_snapshot`s as text (`xmin:xmax:xip_list`). Only `xip_list`
+grows, one xid per transaction in flight, which cannot exceed `max_connections` (100 here):
+
+```
+per snapshot <= 2*10 digits + 2 colons + max_connections * 11 bytes  ~= 1,122 B
+whole cursor <= two of those + a uuid + a timestamp + JSON keys      ~= 2,400 B
+```
+
+**Cap: 8,192 bytes, refused rather than truncated.** Truncation is the dangerous option:
+`xmin:xmax:` with a shortened `xip_list` is still a syntactically valid snapshot describing
+a *different* set of in-flight transactions, so it would parse and answer a different
+question.
+
+### 7.3 Transaction ID wraparound — assumption stated, no work needed
+
+`xmin` is a 32-bit `xid` and the cast to `xid8` cannot recover the epoch, so comparisons
+hold only while the database has not wrapped 2^32 transactions since the cursor was issued.
+At 100 MRs writing a few thousand rows a day that is years. **The freeze bound in §7.1
+fires first in every realistic ordering** — `age()` is itself wraparound-aware, so a cursor
+old enough to matter is refused as expired long before its raw value becomes ambiguous.
+Registered as BE-W68; no work at pilot volume.
+
+### 7.4 A property, not a limit
+
+A pull cannot see rows written by the **caller's own uncommitted transaction**. They are
+not committed, and the snapshot says so. In production every pull is its own transaction
+and never wrote anything, so the case does not arise; in tests it means a fixture has to
+really commit, which is why `sync-pull.spec.ts` uses a second connection.
