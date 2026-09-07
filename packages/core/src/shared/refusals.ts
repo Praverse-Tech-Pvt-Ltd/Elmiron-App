@@ -27,8 +27,19 @@ import { z } from 'zod';
  * | `23001`  |      2 | append-only violation |
  * | `23505`  |      1 | unique violation |
  * | `45001`  |      1 | consent notice superseded |
- * | `45002`  |    new | no shift window configured |
- * | `45003`  |    new | outside the shift window |
+ * | `45002`  |      1 | no shift window configured |
+ * | `45003`  |      1 | outside the shift window |
+ * | `45004`  |      1 | UCPMP sample cap exceeded (BE-W21) |
+ * | `45005`  |      1 | sync cursor not recognised (BE-W61) |
+ * | `45006`  |      1 | sync cursor too old, re-sync (BE-W61) |
+ * | `45007`  |      1 | consent captured in the future (FIX-12) |
+ * | `45008`  |      1 | consent older than the maximum sync lag (FIX-12) |
+ *
+ * **`45004` was minted in FIX-09 and never reached this table.** A server-side code with
+ * no client-side mapping renders as `unrecognised`, which is honest and useless: the MR is
+ * told the app does not know why, when the server said something specific and actionable.
+ * Added here with the five that follow it, and the lesson is that minting a SQLSTATE is
+ * half the work.
  *
  * **`22023` deliberately carries no specific meaning.** It is raised sixty-four times for
  * unrelated reasons, so any specific message attached to it would be a guess dressed as a
@@ -42,6 +53,11 @@ export const RefusalCodeSchema = z.enum([
   'consent_notice_superseded',
   'shift_window_not_configured',
   'outside_shift_window',
+  'ucpmp_sample_cap_exceeded',
+  'sync_cursor_unrecognised',
+  'sync_cursor_expired',
+  'consent_captured_in_future',
+  'consent_too_old_to_accept',
   'append_only',
   'invalid_for_this_record',
   'references_missing_record',
@@ -73,6 +89,23 @@ const BY_SQLSTATE: Readonly<Record<string, { code: RefusalCode; actionable: bool
   '45001': { code: 'consent_notice_superseded', actionable: true },
   '45002': { code: 'shift_window_not_configured', actionable: false },
   '45003': { code: 'outside_shift_window', actionable: true },
+  // Not actionable by the MR: the remedy is to stop and speak to a manager, which is
+  // somebody else's decision, not a next step the app can offer.
+  '45004': { code: 'ucpmp_sample_cap_exceeded', actionable: false },
+  // Both sync-cursor codes are actionable, and this is the reason they are two codes
+  // rather than one. `45005` means the cursor is wrong and the client must start again
+  // with a null one; `45006` means it was right and is now too old for the server to
+  // vouch for, and the client must do the same thing for a different reason. A client
+  // that logs them together loses the difference between a bug and a handset in a drawer.
+  '45005': { code: 'sync_cursor_unrecognised', actionable: true },
+  '45006': { code: 'sync_cursor_expired', actionable: true },
+  // The device clock is ahead of the server. Actionable, and NOT by re-asking the doctor
+  // -- telling an MR to repeat a consent conversation because their phone thinks it is
+  // Thursday would be both useless and slightly insulting.
+  '45007': { code: 'consent_captured_in_future', actionable: true },
+  // Sync sooner. Distinct from `45001` precisely because the remedy differs: this consent
+  // was valid when it was taken and arrived too late to be accepted on the device's word.
+  '45008': { code: 'consent_too_old_to_accept', actionable: true },
   '23001': { code: 'append_only', actionable: false },
   '23514': { code: 'invalid_for_this_record', actionable: false },
   '23503': { code: 'references_missing_record', actionable: false },

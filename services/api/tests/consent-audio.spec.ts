@@ -1047,3 +1047,326 @@ describe.skipIf(!reachable)('the 90-day purge', () => {
     });
   });
 });
+
+// =============================================================================
+// FIX-12 — consent captured offline, on a bounded and auditable trust
+// =============================================================================
+
+/**
+ * **Nothing in the FIX-02 suite above was deleted or weakened, and that is a claim worth
+ * checking rather than taking.** All 40 of its cases pass unchanged against this
+ * migration.
+ *
+ * They can, because the change is not a change of rule. FIX-02's rule was "the supplied
+ * version must be the active one"; this is the same rule asked about a different instant —
+ * `captured_at` instead of `now()`. When a capture happens now, the two are the same
+ * question and every FIX-02 assertion still holds. The tests that would have needed
+ * replacing are the ones that assert a version superseded BEFORE the capture is refused,
+ * and those are still correct.
+ *
+ * What FIX-02 could not express is the case below: a notice superseded AFTER the doctor
+ * was asked and BEFORE the handset could sync. That was refused, and the MR's prescribed
+ * remedy — re-read the notice and ask again — was impossible to carry out, because the
+ * doctor had gone home.
+ */
+
+const captureOffline = async (
+  client: Client,
+  args: {
+    id: string;
+    visitId: string;
+    language: string;
+    versionId: string;
+    capturedAt: string | null;
+    outcome?: string;
+  },
+): Promise<{ id: string; consent_text_version_id: string; captured_at: string }> => {
+  const result = await client.query<{
+    id: string;
+    consent_text_version_id: string;
+    captured_at: string;
+  }>(
+    `select c.id, c.consent_text_version_id, c.captured_at
+       from public.capture_consent($1, $2, $3, $4, $5, null, $6) c`,
+    [
+      args.id,
+      args.visitId,
+      args.outcome ?? 'consented',
+      args.language,
+      args.versionId,
+      args.capturedAt,
+    ],
+  );
+  const row = result.rows[0];
+  if (row === undefined) throw new Error('capture_consent returned nothing');
+  return row;
+};
+
+/** A language nobody else is using, with a notice active from `fromAgo` ago. */
+const noticeSupersededAfterCapture = async (
+  client: Client,
+): Promise<{ language: string; displayed: string; newer: string }> => {
+  const language = `zz-${randomUUID().slice(0, 8)}`;
+  const displayed = randomUUID();
+  const newer = randomUUID();
+  await client.query(
+    `insert into public.consent_text_versions
+       (id, version_label, language, full_text, effective_from)
+     values ($1, $2, $3, 'The notice the doctor actually read.', now() - interval '4 hours')`,
+    [displayed, `fix12-displayed-${randomUUID().slice(0, 8)}`, language],
+  );
+  // Superseded an hour ago -- after the capture below, before the sync.
+  await client.query(
+    `insert into public.consent_text_versions
+       (id, version_label, language, full_text, effective_from)
+     values ($1, $2, $3, 'A notice nobody in the clinic saw.', now() - interval '1 hour')`,
+    [newer, `fix12-newer-${randomUUID().slice(0, 8)}`, language],
+  );
+  return { language, displayed, newer };
+};
+
+describe.skipIf(!reachable)('consent captured offline before the notice changed', () => {
+  it('ACCEPTS a capture made while the displayed notice was still current', async () => {
+    // The property this whole migration exists for. Captured at 09:40 with the notice
+    // that was on the screen; superseded at 14:00 by somebody in an office; synced at
+    // 18:00. Under FIX-02 this was 45001 and a day of field work was lost.
+    await inRolledBackTransaction(async (client) => {
+      const { language, displayed } = await noticeSupersededAfterCapture(client);
+      await asUser(client, world.users.puneMr);
+      const id = randomUUID();
+      const row = await captureOffline(client, {
+        id,
+        visitId: world.visits.pune,
+        language,
+        versionId: displayed,
+        // Two hours ago: after the displayed notice took effect, before it was superseded.
+        capturedAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+      });
+      // The version stored is the one the doctor saw, not the one that is current now.
+      expect(row.consent_text_version_id).toBe(displayed);
+    });
+  });
+
+  it('still REFUSES the newer notice for a capture that predates it', async () => {
+    // The other direction, and the one that keeps FIX-01's finding fixed: an app cannot
+    // claim the doctor read a notice that did not exist yet.
+    await inRolledBackTransaction(async (client) => {
+      const { language, newer } = await noticeSupersededAfterCapture(client);
+      await asUser(client, world.users.puneMr);
+      await expect(
+        captureOffline(client, {
+          id: randomUUID(),
+          visitId: world.visits.pune,
+          language,
+          versionId: newer,
+          capturedAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+        }),
+      ).rejects.toMatchObject({ code: '45001' });
+    });
+  });
+
+  it('refuses a version that was superseded BEFORE the capture', async () => {
+    // FIX-02's property, restated against the new rule: at the moment of capture the
+    // displayed notice was already stale, so "re-read and ask again" is a remedy the MR
+    // can actually carry out.
+    await inRolledBackTransaction(async (client) => {
+      const { language, displayed } = await noticeSupersededAfterCapture(client);
+      await asUser(client, world.users.puneMr);
+      await expect(
+        captureOffline(client, {
+          id: randomUUID(),
+          visitId: world.visits.pune,
+          language,
+          versionId: displayed,
+          // Ten minutes ago: an hour after the supersession.
+          capturedAt: new Date(Date.now() - 600_000).toISOString(),
+        }),
+      ).rejects.toMatchObject({ code: '45001' });
+    });
+  });
+});
+
+describe.skipIf(!reachable)('the trust in the device clock is bounded', () => {
+  it('refuses a capture dated in the future with 45007, and writes nothing', async () => {
+    await inRolledBackTransaction(async (client) => {
+      const { language, newer } = await noticeSupersededAfterCapture(client);
+      await asUser(client, world.users.puneMr);
+      const id = randomUUID();
+      await client.query('savepoint fix12future');
+      await expect(
+        captureOffline(client, {
+          id,
+          visitId: world.visits.pune,
+          language,
+          versionId: newer,
+          capturedAt: new Date(Date.now() + 3_600_000).toISOString(),
+        }),
+      ).rejects.toMatchObject({ code: '45007' });
+      await client.query('rollback to savepoint fix12future');
+
+      // Checked as the owner, so RLS cannot make an empty result look like proof.
+      await client.query('set local role postgres');
+      const written = await client.query('select 1 from public.consent_records where id = $1', [
+        id,
+      ]);
+      expect(written.rowCount).toBe(0);
+    });
+  });
+
+  it('refuses a capture older than the maximum sync lag with 45008, not 45001', async () => {
+    // A different code because the MR's remedy is different: sync sooner. Telling them to
+    // go back and re-ask a doctor they saw four days ago is the wrong instruction.
+    await inRolledBackTransaction(async (client) => {
+      const language = `zz-${randomUUID().slice(0, 8)}`;
+      const version = randomUUID();
+      await client.query(
+        `insert into public.consent_text_versions
+           (id, version_label, language, full_text, effective_from)
+         values ($1, $2, $3, 'A notice from last week.', now() - interval '30 days')`,
+        [version, `fix12-old-${randomUUID().slice(0, 8)}`, language],
+      );
+      await asUser(client, world.users.puneMr);
+      const id = randomUUID();
+      await client.query('savepoint fix12lag');
+      await expect(
+        captureOffline(client, {
+          id,
+          visitId: world.visits.pune,
+          language,
+          versionId: version,
+          // Five days: past the 72-hour default.
+          capturedAt: new Date(Date.now() - 5 * 86_400_000).toISOString(),
+        }),
+      ).rejects.toMatchObject({ code: '45008' });
+      await client.query('rollback to savepoint fix12lag');
+
+      await client.query('set local role postgres');
+      const written = await client.query('select 1 from public.consent_records where id = $1', [
+        id,
+      ]);
+      expect(written.rowCount).toBe(0);
+    });
+  });
+
+  it('accepts a capture inside the maximum sync lag', async () => {
+    // Without this, the test above would pass against a function that refuses every
+    // backdated capture, which is FIX-02's behaviour wearing a new SQLSTATE.
+    await inRolledBackTransaction(async (client) => {
+      const language = `zz-${randomUUID().slice(0, 8)}`;
+      const version = randomUUID();
+      await client.query(
+        `insert into public.consent_text_versions
+           (id, version_label, language, full_text, effective_from)
+         values ($1, $2, $3, 'A notice from last week.', now() - interval '30 days')`,
+        [version, `fix12-ok-${randomUUID().slice(0, 8)}`, language],
+      );
+      await asUser(client, world.users.puneMr);
+      const row = await captureOffline(client, {
+        id: randomUUID(),
+        visitId: world.visits.pune,
+        language,
+        versionId: version,
+        capturedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+      });
+      expect(row.consent_text_version_id).toBe(version);
+    });
+  });
+
+  it('takes the maximum from app_thresholds rather than from a number in the body', async () => {
+    // The bound is configurable, and 72 hours is UNVERIFIED. Proving it is read rather
+    // than hard-coded is what makes "set it from an authoritative source" a real option.
+    await inRolledBackTransaction(async (client) => {
+      const language = `zz-${randomUUID().slice(0, 8)}`;
+      const version = randomUUID();
+      await client.query(
+        `insert into public.consent_text_versions
+           (id, version_label, language, full_text, effective_from)
+         values ($1, $2, $3, 'A notice from last week.', now() - interval '30 days')`,
+        [version, `fix12-cfg-${randomUUID().slice(0, 8)}`, language],
+      );
+      // One hour. app_thresholds is append-only, so this is a later row.
+      await client.query(
+        `insert into public.app_thresholds (key, value, unit, scope, effective_from, note)
+         values ('consent_max_sync_lag_hours', '1'::jsonb, 'hours', 'global',
+                 now() - make_interval(secs => 1), 'FIX-12 test fixture')`,
+      );
+      await asUser(client, world.users.puneMr);
+      await expect(
+        captureOffline(client, {
+          id: randomUUID(),
+          visitId: world.visits.pune,
+          language,
+          versionId: version,
+          // Two hours: fine under the 72-hour default, refused under this one.
+          capturedAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+        }),
+      ).rejects.toMatchObject({ code: '45008' });
+    });
+  });
+});
+
+describe.skipIf(!reachable)('the bounded trust is auditable, not merely bounded', () => {
+  it('stores both timestamps and their difference on the row', async () => {
+    // Without the gap in the row, "we bound the trust" collapses into "we trust the
+    // client", because nobody can tell after the fact which captures arrived late.
+    await inRolledBackTransaction(async (client) => {
+      const language = `zz-${randomUUID().slice(0, 8)}`;
+      const version = randomUUID();
+      await client.query(
+        `insert into public.consent_text_versions
+           (id, version_label, language, full_text, effective_from)
+         values ($1, $2, $3, 'A notice.', now() - interval '30 days')`,
+        [version, `fix12-lag-${randomUUID().slice(0, 8)}`, language],
+      );
+      await asUser(client, world.users.puneMr);
+      const id = randomUUID();
+      await captureOffline(client, {
+        id,
+        visitId: world.visits.pune,
+        language,
+        versionId: version,
+        capturedAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+      });
+
+      // consent_records has RLS forced and zero policies -- it is read through
+      // SECURITY DEFINER functions, never directly -- so this reads as the owner.
+      await client.query('set local role postgres');
+      const row = await client.query<{
+        lag_seconds: string;
+        matches: boolean;
+        received_after: boolean;
+      }>(
+        `select extract(epoch from capture_lag)::text as lag_seconds,
+                capture_lag = received_at - captured_at as matches,
+                received_at >= captured_at as received_after
+           from public.consent_records where id = $1`,
+        [id],
+      );
+      expect(row.rows[0]?.matches).toBe(true);
+      expect(row.rows[0]?.received_after).toBe(true);
+      // Roughly two hours, and never negative.
+      expect(Number(row.rows[0]?.lag_seconds)).toBeGreaterThan(7_000);
+    });
+  });
+
+  it('received_at is the server clock, with no parameter a caller could supply', async () => {
+    // The whole shape depends on exactly one of the two timestamps being untrusted. If a
+    // client could set received_at, capture_lag would be whatever it wanted.
+    await inRolledBackTransaction(async (client) => {
+      const args = await client.query<{ args: string }>(
+        `select pg_get_function_arguments(p.oid) as args
+           from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.proname = 'capture_consent'`,
+      );
+      expect(args.rows).toHaveLength(1);
+      expect(args.rows[0]?.args).not.toMatch(/received/i);
+      expect(args.rows[0]?.args).toMatch(/p_captured_at/);
+
+      const col = await client.query<{ default: string | null }>(
+        `select column_default as default from information_schema.columns
+          where table_name = 'consent_records' and column_name = 'received_at'`,
+      );
+      expect(col.rows[0]?.default).toMatch(/clock_timestamp/);
+    });
+  });
+});
