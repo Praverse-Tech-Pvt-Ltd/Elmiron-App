@@ -660,11 +660,34 @@ const routes: Route[] = [
       // Deterministic mix, so the client's partial-success, duplicate, rejection and
       // dead-letter paths all get exercised rather than only the happy one.
       const verdicts = [
-        { status: 'accepted', rejectionCode: null, warnings: [] as string[] },
-        { status: 'duplicate', rejectionCode: null, warnings: [] as string[] },
-        { status: 'rejected', rejectionCode: 'outside_shift_window', warnings: [] as string[] },
-        { status: 'accepted', rejectionCode: null, warnings: ['stale_beat_plan'] },
-        { status: 'dead_lettered', rejectionCode: 'validation_failed', warnings: [] as string[] },
+        // BE-W75. `sqlState` beside `rejectionCode`, kept in step with the server: null
+        // where the item was accepted or duplicated, and a real code where it was not.
+        // The `45003` on the shift-window row is the point of the change -- that verdict
+        // used to be produced by string-matching a message, and now carries the code that
+        // FIX-06 minted to replace the string.
+        { status: 'accepted', rejectionCode: null, sqlState: null, warnings: [] as string[] },
+        { status: 'duplicate', rejectionCode: null, sqlState: null, warnings: [] as string[] },
+        {
+          status: 'rejected',
+          rejectionCode: 'outside_shift_window',
+          sqlState: '45003',
+          warnings: [] as string[],
+        },
+        {
+          status: 'accepted',
+          rejectionCode: null,
+          sqlState: null,
+          warnings: ['stale_beat_plan'],
+        },
+        {
+          status: 'dead_lettered',
+          rejectionCode: 'validation_failed',
+          // Null on a dead-letter replay: the code is read back from sync_items, which
+          // never stored the original SQLSTATE. The fixture says so rather than inventing
+          // one, because an invented code here is the FIX-14 `sizeBytes: 1` shape.
+          sqlState: null,
+          warnings: [] as string[],
+        },
       ] as const;
       return {
         body: {
@@ -675,6 +698,7 @@ const routes: Route[] = [
               id: asString(asRecord(item)['id'], fx.IDS.queuedVisit),
               status: verdict.status,
               rejectionCode: verdict.rejectionCode,
+              sqlState: verdict.sqlState,
               rejectionDetail:
                 verdict.rejectionCode === null
                   ? null

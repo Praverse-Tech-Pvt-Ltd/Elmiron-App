@@ -387,6 +387,22 @@ export const SyncPushResultSchema = z.object({
   status: ServerSyncStatusSchema,
   /** Machine-readable. Null unless the status is `rejected` or `dead_lettered`. */
   rejectionCode: SyncRejectionCodeSchema.nullable(),
+  /**
+   * BE-W75 — the raw SQLSTATE, beside `rejectionCode` rather than instead of it.
+   *
+   * `SyncRejectionCodeSchema` is a **coarse category** — "not yours", "malformed",
+   * "missing reference" — and has no member meaning *the notice changed*, *the UCPMP cap*,
+   * *your clock is wrong* or *sync sooner*. So `45001`, `45004`, `45007` and `45008` all
+   * arrive as `internal_error`, and five sessions of error-contract work were reachable
+   * only on a path nothing used.
+   *
+   * **Prefer this over `rejectionCode` when it is present**, and pass it to
+   * `refusalForSqlState`, which is the one derivation `error-contract.spec.ts` guards in
+   * both directions. `null` on an accepted item — so absence means success — and `null` on
+   * a dead-letter replay, where the code is read back from `sync_items` and the original
+   * SQLSTATE was never stored.
+   */
+  sqlState: z.string().nullable(),
   /** Human-readable detail for support. Not for display to the MR unmodified. */
   rejectionDetail: z.string().nullable(),
   /** Accepted, but with something the MR should know — e.g. `stale_beat_plan`. */

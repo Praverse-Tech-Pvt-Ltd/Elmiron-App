@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
+import { refusalForSqlState } from '@fieldforce/core';
 import { asUser } from './auth.js';
 import { seedFixtures } from './fixtures.js';
 import type { FixtureWorld } from './fixtures.js';
@@ -46,6 +47,7 @@ interface PushVerdict {
   id: string;
   status: string;
   rejectionCode: string | null;
+  sqlState: string | null;
   rejectionDetail: string | null;
 }
 
@@ -136,7 +138,75 @@ describe.skipIf(!reachable)('what the verdict loses on the way out', () => {
     });
   });
 
-  it('the SQLSTATE-to-code map covers no 450xx code', async () => {
+  it('BE-W75: a 45001 arrives with its SQLSTATE, not only as internal_error', async () => {
+    // **The assertion this whole part exists for.** `rejectionCode` is a coarse category
+    // and has no member meaning "the notice changed", so it still reads `internal_error`.
+    // `sqlState` carries the answer, and the client's existing map turns it into the
+    // remedy -- one derivation, guarded in both directions by `error-contract.spec.ts`.
+    await inRolledBackTransaction(async (client) => {
+      const { language, displayed } = await supersededNotice(client);
+      await asUser(client, world.users.puneMr);
+      const id = randomUUID();
+      const results = await push(client, [
+        {
+          id,
+          entity: 'consent_record',
+          entityId: id,
+          payload: {
+            visitId: world.visits.pune,
+            doctorId: world.doctors.pune,
+            outcome: 'consented',
+            consentTextVersionId: displayed,
+            displayedLanguage: language,
+            // A minute ago, not `new Date()`. `capture_consent` compares against
+            // `now()`, which is TRANSACTION START time, so a timestamp taken after the
+            // test transaction opened is in the future and trips 45007 before the
+            // notice check is ever reached. A first pass at this test did exactly that
+            // and returned 45007 -- which proved sqlState works, for the wrong branch.
+            capturedAt: new Date(Date.now() - 60_000).toISOString(),
+          },
+        },
+      ]);
+      expect(results[0]?.status).toBe('rejected');
+      expect(results[0]?.sqlState).toBe('45001');
+      expect(refusalForSqlState(results[0]?.sqlState).code).toBe('consent_notice_superseded');
+      // Actionable, so the app offers "re-read the notice and ask again" rather than a wall.
+      expect(refusalForSqlState(results[0]?.sqlState).actionable).toBe(true);
+    });
+  });
+
+  it('BE-W75: an accepted item carries no sqlState, so absence means success', async () => {
+    // A positive control on the field itself: if it were always populated, the assertion
+    // above would pass against a verdict that says nothing.
+    await inRolledBackTransaction(async (client) => {
+      await asUser(client, world.users.puneMr);
+      const id = randomUUID();
+      const results = await push(client, [
+        { id, entity: 'visit', entityId: id, payload: { doctorId: world.doctors.pune } },
+      ]);
+      expect(results[0]?.status).toBe('accepted');
+      expect(results[0]?.sqlState).toBeNull();
+    });
+  });
+
+  it('BE-W75: the shift-window ILIKE is gone, replaced by the codes', async () => {
+    // Message text is not a contract. 45002 and 45003 were minted in FIX-06 precisely
+    // because 22023 is raised 64 times for unrelated reasons, and the fallback was still
+    // matching the sentence they replaced.
+    await inRolledBackTransaction(async (client) => {
+      const src = await client.query<{ prosrc: string }>(
+        `select prosrc from pg_proc where proname = 'sync_push'`,
+      );
+      const body = src.rows[0]?.prosrc ?? '';
+      expect(body).not.toMatch(/ilike '%shift window%'/i);
+      expect(body).toMatch(/v_sqlstate in \('45002', '45003'\)/);
+      // The two that legitimately remain, each without a SQLSTATE of its own.
+      expect(body).toMatch(/consent has been withdrawn/);
+      expect(body).toMatch(/upload grant/);
+    });
+  });
+
+  it('the SQLSTATE-to-code ENUM map still covers no 450xx, which is why sqlState exists', async () => {
     await inRolledBackTransaction(async (client) => {
       const src = await client.query<{ prosrc: string }>(
         `select prosrc from pg_proc where proname = 'sync_push'`,
@@ -144,9 +214,10 @@ describe.skipIf(!reachable)('what the verdict loses on the way out', () => {
       const body = src.rows[0]?.prosrc ?? '';
       // A positive control on the read: the map does exist and does cover 42501.
       expect(body).toMatch(/v_sqlstate = '42501'/);
-      // And covers nothing this project minted.
-      for (const code of ['45001', '45002', '45003', '45004', '45007', '45008']) {
-        expect(body, `sync_push maps ${code}`).not.toContain(code);
+      // 45002 and 45003 now map to a real enum member. The other four have no member
+      // that means them, which is the gap `sqlState` closes rather than papers over.
+      for (const code of ['45001', '45004', '45007', '45008']) {
+        expect(body, `sync_push maps ${code} to an enum member`).not.toContain(`'${code}'  `);
       }
     });
   });
@@ -171,11 +242,12 @@ describe.skipIf(!reachable)('THE FINDING: consent through sync_push skips captur
     });
   });
 
-  it('sync_push ACCEPTS the identical capture, unvalidated', async () => {
-    // `apply_sync_item` inserts straight into `consent_records`. So every bound FIX-12
-    // built -- the version active AT captured_at (45001), no future capture (45007), the
-    // maximum sync lag (45008) -- is absent on the offline path, which is the one path
-    // where captured_at and received_at differ at all.
+  it('BE-W74: sync_push now REFUSES the identical capture', async () => {
+    // **This test asserted the opposite until BE-W74, and the inversion is the fix.**
+    // `apply_sync_item` used to insert straight into `consent_records`, so every bound
+    // FIX-02 and FIX-12 built was absent on the offline path -- the one path where
+    // captured_at and received_at differ at all. It now routes a capture through
+    // `capture_consent`, so the same rule applies whichever way the capture arrives.
     await inRolledBackTransaction(async (client) => {
       const { language, displayed } = await supersededNotice(client);
       await asUser(client, world.users.puneMr);
@@ -197,20 +269,17 @@ describe.skipIf(!reachable)('THE FINDING: consent through sync_push skips captur
         },
       ]);
 
-      expect(results[0]?.status).toBe('accepted');
+      expect(results[0]?.status).toBe('rejected');
 
-      // And the row is really there, with the superseded version recorded as displayed.
+      // And NO row was written. A refusal that still leaves the record behind would be
+      // the FIX-02 silent-substitution defect wearing a verdict.
       await client.query('set local role postgres');
-      const row = await client.query<{ consent_text_version_id: string }>(
-        'select consent_text_version_id from public.consent_records where id = $1',
-        [id],
-      );
-      expect(row.rows).toHaveLength(1);
-      expect(row.rows[0]?.consent_text_version_id).toBe(displayed);
+      const row = await client.query('select 1 from public.consent_records where id = $1', [id]);
+      expect(row.rowCount).toBe(0);
     });
   });
 
-  it('a future-dated capture is accepted too, which 45007 exists to refuse', async () => {
+  it('BE-W74: a future-dated capture is refused, which is what 45007 is for', async () => {
     await inRolledBackTransaction(async (client) => {
       const { language, displayed } = await supersededNotice(client);
       await asUser(client, world.users.puneMr);
@@ -231,11 +300,63 @@ describe.skipIf(!reachable)('THE FINDING: consent through sync_push skips captur
           },
         },
       ]);
-      expect(results[0]?.status).toBe('accepted');
+      expect(results[0]?.status).toBe('rejected');
     });
   });
 
-  it('check_in, by contrast, DOES go through its RPC', async () => {
+  it('BE-W74: a VALID offline capture, synced later, is accepted and keeps captured_at', async () => {
+    // The other direction, and the one that makes the two above a fix rather than a
+    // blanket refusal. A capture taken two hours ago against the notice that was current
+    // two hours ago is exactly what FIX-12 exists to allow.
+    await inRolledBackTransaction(async (client) => {
+      const language = `zz-${randomUUID().slice(0, 8)}`;
+      const version = randomUUID();
+      await client.query(
+        `insert into public.consent_text_versions
+           (id, version_label, language, full_text, effective_from)
+         values ($1, $2, $3, 'The notice, still current.', now() - interval '30 days')`,
+        [version, `mr04-ok-${randomUUID().slice(0, 8)}`, language],
+      );
+      await asUser(client, world.users.puneMr);
+
+      const id = randomUUID();
+      const capturedAt = new Date(Date.now() - 2 * 3_600_000).toISOString();
+      const results = await push(client, [
+        {
+          id,
+          entity: 'consent_record',
+          entityId: id,
+          payload: {
+            visitId: world.visits.pune,
+            doctorId: world.doctors.pune,
+            outcome: 'consented',
+            consentTextVersionId: version,
+            displayedLanguage: language,
+            capturedAt,
+          },
+        },
+      ]);
+      expect(results[0]?.status).toBe('accepted');
+
+      await client.query('set local role postgres');
+      // Compared as an ISO string from the database itself. `String(aDate)` on the
+      // driver's Date drops milliseconds, which is a difference between the two
+      // timestamps that has nothing to do with what was stored -- a first pass at this
+      // assertion failed on exactly that.
+      const row = await client.query<{ captured_at: string; lag_positive: boolean }>(
+        `select to_char(captured_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+                  as captured_at,
+                capture_lag > interval '0' as lag_positive
+           from public.consent_records where id = $1`,
+        [id],
+      );
+      // The moment of capture, not the moment of sync -- the whole point of FIX-12.
+      expect(row.rows[0]?.captured_at).toBe(capturedAt);
+      expect(row.rows[0]?.lag_positive).toBe(true);
+    });
+  });
+
+  it('every enforced entity goes through its RPC, consent included', async () => {
     // The contrast is what makes the consent finding a gap rather than a design. The same
     // function routes check_in through `record_check_in`, so geofence, shift window and
     // the server clock are all enforced on the offline path.
@@ -247,8 +368,8 @@ describe.skipIf(!reachable)('THE FINDING: consent through sync_push skips captur
       expect(body).toMatch(/perform public\.record_check_in/);
       expect(body).toMatch(/perform public\.record_check_out/);
       expect(body).toMatch(/perform public\.complete_upload/);
-      // And consent does not.
-      expect(body).not.toMatch(/public\.capture_consent/);
+      // And consent does now too, which is BE-W74.
+      expect(body).toMatch(/public\.capture_consent/);
     });
   });
 });
