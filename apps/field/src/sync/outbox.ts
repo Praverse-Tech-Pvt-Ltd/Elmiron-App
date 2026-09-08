@@ -106,7 +106,7 @@ const captureQueueItem = (
     entity,
     operation,
     entityId: body.visitId,
-    payload: { ...body },
+    payload: { ...body, __queueEntity: entity },
     status: 'queued',
     attemptCount: 1,
     lastError: null,
@@ -136,7 +136,7 @@ export const sampleQueueItem = (
     entity: 'sample_and_input',
     operation,
     entityId: body.visitId,
-    payload: { ...body },
+    payload: { ...body, __queueEntity: 'sample_and_input' },
     status: 'queued',
     attemptCount: 1,
     lastError: null,
@@ -165,7 +165,7 @@ export const consentQueueItem = (
     entity: 'consent_record',
     operation,
     entityId: body.visitId,
-    payload: { ...body },
+    payload: { ...body, __queueEntity: 'consent_record' },
     status: 'queued',
     attemptCount: 1,
     lastError: null,
@@ -246,11 +246,27 @@ export const flushOutbox = async (
   let sent = 0;
   for (const item of queued) {
     try {
-      const send = sendFor(client, item);
-      // An unreadable or unknown row is left where it is rather than dropped: it
-      // is work the MR did, and the queue screen already shows it waiting.
-      if (send === null) continue;
-      const response = await send();
+      const plan = sendFor(client, item);
+      if ('blocked' in plan) {
+        // **Recorded as a failed attempt, not skipped.** `continue` left the row in
+        // `in_flight` -- the status `batch_started` had just given it -- and every later
+        // flush selects only `queued`, so the row was stranded: never retried, never
+        // shown as needing attention, and never reported. The comment said it was "left
+        // where it is"; it was left where nothing would ever look again.
+        //
+        // `attempt_failed` returns it to `queued` with a visible reason, which is the
+        // path that eventually dead-letters it to a person.
+        state = syncQueueReducer(state, {
+          type: 'attempt_failed',
+          ids: [item.id],
+          error:
+            plan.blocked === 'unreadable_payload'
+              ? 'This item was written by a different version of the app and cannot be read.'
+              : 'This app cannot send this kind of item yet.',
+        });
+        continue;
+      }
+      const response = await plan.send();
       state = syncQueueReducer(state, {
         type: 'verdict_received',
         verdict: {
@@ -298,28 +314,115 @@ export const flushOutbox = async (
  * belongs to a newer build, and sending it down the wrong endpoint would be worse
  * than leaving it queued.
  */
-const sendFor = (client: ApiClient, item: SyncQueueItem): (() => Promise<unknown>) | null => {
-  if (item.entity === 'check_in') {
-    const body = CreateCheckInRequestFrom(item);
-    return body === null ? null : () => client.createCheckIn(body);
+/**
+ * Why a row could not be sent, when it could not.
+ *
+ * Two reasons, and they are different problems. `unreadable_payload` is a row this build
+ * understands the KIND of and cannot parse — an older or newer shape. `not_convertible`
+ * is an entity this build has no endpoint for at all, which today means the two audio
+ * kinds waiting on the upload session client (FE-W29).
+ */
+export type SendBlocked = { readonly blocked: 'unreadable_payload' | 'not_convertible' };
+
+type SendPlan = { readonly send: () => Promise<unknown> } | SendBlocked;
+
+/**
+ * The call that retries one queued row, chosen by its entity.
+ *
+ * **A `switch` with a `never` default, and that is the point of the whole file.** A queued
+ * check-out was replayed as a check-in because this dispatch was a chain of `if`s ending
+ * in `return null`: `check_out` simply had no branch, so it fell off the end and — because
+ * `CreateCheckOutRequestSchema` IS `CreateCheckInRequestSchema` — nothing downstream could
+ * tell. `sampleQueueItem`'s comment warns about exactly this two functions above, and
+ * check-out was already the second entity when that warning was written.
+ *
+ * **A comment is not a guard.** With the switch below, adding a member to
+ * `SyncEntitySchema` without adding a branch here assigns that member to `never` and the
+ * build fails. The author is caught at compile time rather than the MR at the clinic door.
+ *
+ * `not_convertible` is returned explicitly for the entities that genuinely have no
+ * endpoint yet, so "we cannot send this" is a decision written down once rather than the
+ * absence of a branch.
+ */
+const sendFor = (client: ApiClient, item: SyncQueueItem): SendPlan => {
+  const blocked = (reason: SendBlocked['blocked']): SendBlocked => ({ blocked: reason });
+  const plan = <T>(body: T | null, call: (body: T) => Promise<unknown>): SendPlan =>
+    body === null ? blocked('unreadable_payload') : { send: () => call(body) };
+
+  switch (item.entity) {
+    case 'check_in':
+      return plan(CreateCheckInRequestFrom(item), (body) => client.createCheckIn(body));
+
+    // A departure replays as a departure. Its absence is what made every queued check-out
+    // arrive as an arrival.
+    case 'check_out':
+      return plan(CreateCheckOutRequestFrom(item), (body) => client.createCheckOut(body));
+
+    case 'sample_and_input':
+      return plan(CreateSampleAndInputRequestFrom(item), (body) =>
+        client.createSampleAndInput(body),
+      );
+
+    case 'consent_record':
+      return plan(CreateConsentRecordRequestFrom(item), (body) => client.createConsentRecord(body));
+
+    // Nothing enqueues these today, and each is a deliberate gap rather than an oversight:
+    //   `visit`        -- written straight to the table, no RPC in the way (FIX-07).
+    //   `call_report`  -- written directly and NOT queued at all; MR-09 Part D converts it.
+    //   `recording`    -- needs an uploadGrantId only an upload session can mint (FE-W29).
+    //   `voice_note`   -- the same.
+    // Listed rather than defaulted, so that converting one is a change to this line and
+    // not a change to nothing.
+    case 'visit':
+    case 'call_report':
+    case 'recording':
+    case 'voice_note':
+      return blocked('not_convertible');
   }
-  // A departure replays as a departure. Its absence is what made every queued check-out
-  // arrive as a check-in; the request bodies are identical -- `CreateCheckOutRequestSchema`
-  // IS `CreateCheckInRequestSchema` -- so nothing downstream could have noticed.
-  if (item.entity === 'check_out') {
-    const body = CreateCheckInRequestFrom(item);
-    return body === null ? null : () => client.createCheckOut(body);
-  }
-  if (item.entity === 'sample_and_input') {
-    const body = CreateSampleAndInputRequestFrom(item);
-    return body === null ? null : () => client.createSampleAndInput(body);
-  }
-  if (item.entity === 'consent_record') {
-    const body = CreateConsentRecordRequestFrom(item);
-    return body === null ? null : () => client.createConsentRecord(body);
-  }
-  return null;
+
+  // Unreachable while every member is handled above. If a member is added to
+  // `SyncEntitySchema` and not to this switch, `item.entity` is not `never` here and the
+  // assignment below fails to compile -- which is the whole guard.
+  const unhandled: never = item.entity;
+  return blocked(unhandled);
 };
+
+/**
+ * Does this stored payload say it is what the row claims it is?
+ *
+ * **The field is `__queueEntity`, and the name matters.** The first attempt called it
+ * `kind` and silently overwrote `CreateSampleAndInputRequest.kind`, which is a business
+ * field whose values are `'sample' | 'input'` — so every queued handover would have gone
+ * out declaring a kind that is not in the enum. It fails closed (`safeParse` rejects it,
+ * the row never sends) rather than open, but it is the same family as the defect being
+ * fixed: a device-local marker written into a namespace the contract already owns.
+ * The prefix says this belongs to the queue and never to a request body.
+ *
+ * **B2, and it is not redundant with the exhaustive switch above.** They catch different
+ * actors at different times:
+ *
+ *   * The `never` default catches the AUTHOR, at compile time, adding an entity without a
+ *     branch. It cannot say anything about a row already on disk.
+ *   * This catches the PAYLOAD, at replay time. The check-out defect wrote rows whose
+ *     `entity` said `check_in` and whose body was a departure — and because
+ *     `CreateCheckOutRequestSchema` **is** `CreateCheckInRequestSchema`, every shape check
+ *     in the system agreed the row was fine. Two distinct events with one shape are
+ *     indistinguishable to a type system by construction; only a value can separate them.
+ *
+ * The discriminant lives in the STORED payload, not on the wire. Nothing about the request
+ * body sent to the server changes — the contract schemas are untouched and PostgREST never
+ * sees this field — because the confusion being prevented is a device-local one, between
+ * a row and the queue slot it sits in.
+ *
+ * **A payload with no `kind` is refused rather than trusted.** It can only come from a
+ * build older than this one, which is exactly the build that wrote departures labelled as
+ * arrivals, and replaying one on its own word is the defect. It surfaces as an unreadable
+ * row — visible, retried, and eventually a person's problem — rather than as a wrong event
+ * recorded silently. Nothing has shipped (G-WRITE is unmet, no device holds a queue), so
+ * this strands nothing real.
+ */
+const payloadIs = (item: SyncQueueItem, expected: SyncQueueItem['entity']): boolean =>
+  (item.payload as { __queueEntity?: unknown }).__queueEntity === expected;
 
 /**
  * The stored payload, back as a request.
@@ -327,7 +430,13 @@ const sendFor = (client: ApiClient, item: SyncQueueItem): (() => Promise<unknown
  * Returns null rather than throwing when the payload does not fit the contract: a
  * single unreadable row must not stop the rest of the day's work from going.
  */
-const CreateCheckInRequestFrom = (item: SyncQueueItem): CreateCheckInRequest | null => {
+const captureRequestFrom = (
+  item: SyncQueueItem,
+  expected: 'check_in' | 'check_out',
+): CreateCheckInRequest | null => {
+  // The discriminant first. A departure whose row says `check_in` stops here rather than
+  // being posted as an arrival.
+  if (!payloadIs(item, expected)) return null;
   const payload = item.payload as Partial<CreateCheckInRequest>;
   if (
     typeof payload.id !== 'string' ||
@@ -346,6 +455,12 @@ const CreateCheckInRequestFrom = (item: SyncQueueItem): CreateCheckInRequest | n
   };
 };
 
+const CreateCheckInRequestFrom = (item: SyncQueueItem): CreateCheckInRequest | null =>
+  captureRequestFrom(item, 'check_in');
+
+const CreateCheckOutRequestFrom = (item: SyncQueueItem): CreateCheckOutRequest | null =>
+  captureRequestFrom(item, 'check_out');
+
 /**
  * The same, for a handover.
  *
@@ -356,6 +471,7 @@ const CreateCheckInRequestFrom = (item: SyncQueueItem): CreateCheckInRequest | n
 const CreateSampleAndInputRequestFrom = (
   item: SyncQueueItem,
 ): CreateSampleAndInputRequest | null => {
+  if (!payloadIs(item, 'sample_and_input')) return null;
   const parsed = CreateSampleAndInputRequestSchema.safeParse(item.payload);
   return parsed.success ? parsed.data : null;
 };
@@ -369,6 +485,7 @@ const CreateSampleAndInputRequestFrom = (
  * an unprovable consent is worse than a missing one — so it stays queued instead.
  */
 const CreateConsentRecordRequestFrom = (item: SyncQueueItem): CreateConsentRecordRequest | null => {
+  if (!payloadIs(item, 'consent_record')) return null;
   const parsed = CreateConsentRecordRequestSchema.safeParse(item.payload);
   return parsed.success ? parsed.data : null;
 };

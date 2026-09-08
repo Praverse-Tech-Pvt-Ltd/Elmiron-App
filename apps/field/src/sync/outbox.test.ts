@@ -407,3 +407,97 @@ describe('MR-08 C: a departure is not an arrival, and the clock is the server’
     expect(store.current().items[0]?.syncedAt).toBeNull();
   });
 });
+
+describe('MR-09 B: the misroute class, not just the one instance', () => {
+  it('B2: a payload labelled check_in in a check_out row is REFUSED, not sent as the other kind', async () => {
+    // The exact corruption, reconstructed. This is what the buggy build wrote: a row whose
+    // `entity` says one event and whose body is the other. Before the discriminant, every
+    // shape check in the system agreed the row was fine — `CreateCheckOutRequestSchema`
+    // **is** `CreateCheckInRequestSchema`, so two distinct events had one shape and a type
+    // system cannot separate those by construction.
+    const store = inMemory();
+    await sendOrQueue(
+      () => Promise.reject(new Error('Network request failed')),
+      { ...checkOutQueueItem(body), payload: { ...body, __queueEntity: 'check_in' } },
+      store,
+    );
+
+    const createCheckIn = vi.fn(() => Promise.resolve({}));
+    const createCheckOut = vi.fn(() => Promise.resolve({}));
+    await flushOutbox({ createCheckIn, createCheckOut } as unknown as ApiClient, store);
+
+    // Neither. Not sent as the wrong event, and not sent as the right one either — the
+    // row contradicts itself and nothing here is entitled to guess which half is true.
+    expect(createCheckIn).not.toHaveBeenCalled();
+    expect(createCheckOut).not.toHaveBeenCalled();
+
+    // And it is VISIBLE: back to queued with a reason, on its way to a person.
+    const item = store.current().items[0];
+    expect(item?.status).toBe('queued');
+    expect(item?.lastError).toMatch(/different version of the app/i);
+  });
+
+  it('B2: a payload with no discriminant at all is refused rather than trusted', async () => {
+    // A row from a build older than this one — which is exactly the build that wrote
+    // departures labelled as arrivals. Replaying one on its own word is the defect.
+    const store = inMemory();
+    const legacyPayload: Record<string, unknown> = { ...body };
+    await sendOrQueue(
+      () => Promise.reject(new Error('Network request failed')),
+      { ...checkOutQueueItem(body), payload: legacyPayload },
+      store,
+    );
+
+    const createCheckOut = vi.fn(() => Promise.resolve({}));
+    await flushOutbox({ createCheckOut } as unknown as ApiClient, store);
+
+    expect(createCheckOut).not.toHaveBeenCalled();
+    expect(store.current().items[0]?.status).toBe('queued');
+  });
+
+  it('B4: an entity with no endpoint is returned to the queue, not STRANDED in flight', async () => {
+    // The second defect in the same dispatch. `batch_started` marks every selected row
+    // `in_flight`; the old code then did `if (send === null) continue`, recording no
+    // verdict at all — and every later flush selects only `queued`. The row was stranded:
+    // never retried, never shown as needing attention, never reported. The comment said it
+    // was "left where it is"; it was left where nothing would ever look again.
+    const store = inMemory();
+    await sendOrQueue(
+      () => Promise.reject(new Error('Network request failed')),
+      {
+        ...checkInQueueItem(body),
+        entity: 'recording',
+        payload: { ...body, __queueEntity: 'recording' },
+      },
+      store,
+    );
+
+    const createCheckIn = vi.fn(() => Promise.resolve({}));
+    await flushOutbox({ createCheckIn } as unknown as ApiClient, store);
+
+    expect(createCheckIn).not.toHaveBeenCalled();
+    const item = store.current().items[0];
+    expect(item?.status, 'a row nothing can send must not sit in_flight forever').toBe('queued');
+    expect(item?.lastError).toMatch(/cannot send this kind of item yet/i);
+    expect(item?.attemptCount).toBeGreaterThan(1);
+  });
+
+  it('THE POSITIVE CONTROL: a correctly labelled row still sends', async () => {
+    // Without this, every assertion above is satisfied by an outbox that refuses
+    // everything — which would "fix" the misroute by never sending anything again.
+    const store = inMemory();
+    await sendOrQueue(
+      () => Promise.reject(new Error('Network request failed')),
+      checkOutQueueItem(body),
+      store,
+    );
+
+    const createCheckOut = vi.fn(() => Promise.resolve({ receivedAt: '2026-09-08T00:00:00.000Z' }));
+    await flushOutbox({ createCheckOut } as unknown as ApiClient, store);
+
+    expect(createCheckOut).toHaveBeenCalledTimes(1);
+    // And the body that goes out is the contract's, with no device-local marker on it.
+    expect(createCheckOut).toHaveBeenCalledWith(body);
+    expect(store.current().items[0]?.status).toBe('synced');
+  });
+});
