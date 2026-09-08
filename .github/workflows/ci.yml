@@ -78,6 +78,13 @@ jobs:
       # asserts the two globs cannot overlap. Neither needs a device or a native
       # build; if this step ever starts wanting one, the approach is wrong.
       - run: pnpm turbo run test --filter @fieldforce/field
+      # MR-08 A2. This workspace has had a `test` script and ten passing cases for
+      # several sessions and **no step here at all**, so they had never run in CI and
+      # appeared in no session's counts. Found by `scripts/test-counts.mjs`, which was
+      # written to catch a workspace contributing zero and caught a workspace
+      # contributing nothing instead. `ci-covers-every-suite.spec.ts` now derives this
+      # list from the workspaces rather than trusting it to be kept up to date.
+      - run: pnpm turbo run test --filter @fieldforce/console
 
   database:
     name: migrations · Gate 0 RLS suite · rollbacks
