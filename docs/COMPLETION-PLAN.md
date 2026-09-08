@@ -972,3 +972,31 @@ select relname, n_live_tup from pg_stat_user_tables
 Anything with one row on the owning side of a boundary is a boundary nobody has tested —
 the test cannot fail, so it proves nothing and it looks green. That is how BE-W76 survived
 twenty sessions, and it is recorded in `docs/gotchas.md`.
+
+### Added by MR-07
+
+**BE-W78 and BE-W79 are CLOSED.** BE-W78: the direct `INSERT` grant on `consent_records`
+is revoked, `consent_records_insert_own` is dropped, and the three capture bounds
+(`45001`, `45007`, `45008`) are in a `BEFORE INSERT` trigger so they hold whichever door a
+row arrives through. BE-W79: `consent_text_versions` gained `organisation_id`,
+`active_consent_text_at` takes a required tenant, `active_consent_text` resolves the
+caller's own, the select policy is scoped, and `UNIQUE (version_label, language)` became
+tenant-scoped. **The tenant boundary is also now RESTRICTIVE on seven tables**, so it
+cannot be widened by a permissive policy added later.
+
+| ID | Title | Changes | Deps | Blocker | Est | Verification |
+|---|---|---|---|---|---|---|
+| **BE-W83** | Restrictive tenant policies for the `visible_user_ids()` tables | ~30 policies, `visits`, `check_ins`, `consent_records`, `call_reports`, `samples_and_inputs`, `recordings`, `voice_notes`, `beat_plans`, `analyses`, the `sync_*` and `visit_audio_quarantine*` tables | MR-07 D | **a measurement, not a decision** | 3 | MR-07 D made the tenant boundary restrictive on the seven tables that carry a tenant or reach one in a single hop. These thirty carry no tenant column, so a restrictive policy must reach one through `mr_id -> user_profiles.organisation_id` or `doctor_id -> doctors.organisation_id` — a correlated subquery per row, **on top of** the `visible_user_ids()` subquery the permissive policy already runs. Whether the planner collapses the two or doubles them decides whether this is free or a pilot-scale regression, and this repo has already been bitten once by a predicate that looked free and disabled an index (the LEAKPROOF finding). Verification: `explain (analyze, buffers)` on the `team_activity` and `coverage` paths against `seed:synthetic --mrs 100 --history 1y` (3,520 doctors, 208,800 visits) before and after, then the same D2 proof pair — an over-broad permissive policy must fail to widen, and must widen the moment the restrictive one is dropped |
+| **BE-W84** | `visits` has a direct write grant and no validation trigger | `visits`, `apply_sync_item` | — | — | 2 | The last of MR-07 B4's four tables where `authenticated` writes directly past a `SECURITY DEFINER` path. `samples_and_inputs` and `call_reports` are safe because their guards are TRIGGERS (`samples_and_inputs_ucpmp_cap`, `call_reports_validate_version`) and fire on a direct insert; `consent_records` was fixed in MR-07 B. **`visits` has no validation trigger at all** — `visits_audit`, `visits_set_updated_at`, `visits_stamp_received_at` and `visits_sync_events` are bookkeeping, not validation. Ownership and territory are constrained by `visits_insert_own` / `visits_update_own` and nothing else is. What `apply_sync_item`'s visit branch enforces beyond that is the thing to establish first, and whether any of it should be a trigger. Sharpened by MR-07 Part F, which converts the app's writes onto this table |
+| **BE-W85** | `seed-one-mr`'s "fresh address" test is flaky under load | `services/api/tests/seed-one-mr.spec.ts` | — | — | 1 | Failed once in six consecutive full runs and passes three times in isolation. It creates two auth users concurrently via `Promise.all`, so it is the same family as the E1 connection exhaustion that `maxWorkers: 6` closed — but **the error was not captured, so no mechanism is being claimed**. Verification: run the api suite twenty times and record the failure rate and the actual error before changing anything |
+
+**Two reporting practices this session changed, both from being caught out:**
+
+- **A CI claim carries the commit SHA, not only the run id.** MR-05 reported a green run
+  that belonged to an earlier head and four commits went through no CI at all. While
+  checking this in MR-07, the run list showed a *success* on the same failing head — the
+  *Audio retention watchdog* on a schedule, not CI.
+- **`@fieldforce/ui` and `@fieldforce/field` each have TWO runners.** `test` is
+  `vitest run && jest`. MR-06 reported `@fieldforce/ui` as 4 tests; it is 4 vitest and
+  **221 jest**. The jest cases ran — the summary line jest prints is `Tests:` and does not
+  match the `  Tests ` pattern that was being read.

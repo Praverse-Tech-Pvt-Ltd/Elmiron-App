@@ -9390,3 +9390,349 @@ could be measured.
    recommendation; otherwise the reads stay unconverted, because the done counter reads a
    field nothing writes.
 
+
+---
+
+### MR-07 — closing the bypasses (8 September 2026)
+
+**Parts A, B, C, D and E are done. Part F — the conversion — was not started**, per its
+own instruction: B, C and D used the session.
+
+**Both bypasses are closed.** BE-W78 made every consent bound optional; BE-W79 turned out
+to be a disclosure rather than only a denial of service. The tenant boundary is now
+`RESTRICTIVE` and cannot be widened by anything added later.
+
+#### A1–A3 — the push, with the SHA this time
+
+Six commits pushed as `fd5d3aa..9bf7e7f`.
+
+**CI run `34221153239`, commit `9bf7e7f99117cb9534bae4a40362906b93149495`, SUCCESS —
+and that SHA is the HEAD those six commits produced.** Both jobs green.
+
+The SHA is beside the run id because MR-05 reported a green run that belonged to an
+earlier head, and four commits went through no CI at all as a result. Worth noting how
+easily it recurs: while checking this, the run list showed a **success on `fd5d3aa`** —
+which is `34219478450`, the *Audio retention watchdog* on a schedule, not CI. The only CI
+run on `fd5d3aa` is `34215855380`, and it failed. A run id proves a run happened; it does
+not say which workflow, or on what.
+
+**A3 — the matrix runs IN CI, not only locally.** From `34221153239`'s log, on the
+runner:
+
+```
+another ORG      | anon               | postgrest | REFUSAL
+...
+another ORG      | admin              | postgrest | ABSENCE
+another ORG      | admin              | raw sql   | ABSENCE
+another ORG      | admin              | join      | ABSENCE
+another ORG      | admin              | function  | ABSENCE
+another ORG      | admin              | view      | ABSENCE
+another ORG      | CONTROL their admin | postgrest | DATA
+...
+ ✓ tests/g-rls-c.spec.ts (5 tests) 2396ms
+```
+
+All 55 cells, all five cross-ORG admin cells ABSENCE, all fifteen controls DATA.
+
+**Counts, split by workspace and runner, all re-run locally after MR-07:**
+
+| workspace | runner | before | after MR-07 |
+| --- | --- | ---: | ---: |
+| `@fieldforce/api` | vitest, live database | 538 / 26 | **551 passed / 28 files** |
+| `@fieldforce/field` | vitest, logic | 359 / 25 | 359 / 25 |
+| `@fieldforce/field` | jest, jest-expo | 72 / 12 | 72 / 12 |
+| `@fieldforce/ui` | vitest | 4 / 1 | 4 / 1 |
+| `@fieldforce/ui` | **jest, jest-expo** | **221 / 20** | **221 / 20** |
+| `@fieldforce/ui-tokens` | vitest | 54 / 3 | 54 / 3 |
+| `@fieldforce/core` | vitest | 21 / 3 | 21 / 3 |
+| `@fieldforce/mock` | vitest | 40 / 1 | 40 / 1 |
+
+**A correction to MR-06's counts.** `@fieldforce/ui` has TWO runners, `vitest run && jest`,
+and MR-06 reported only the vitest four. The 221 jest cases ran — CI's log has them — but
+the summary line jest prints (`Tests:`) does not match the pattern that was being read
+(`  Tests `), so they were absent from the record rather than from the run. A reporting
+gap, not a test gap, and it is the second time this session that reading an artefact
+carelessly produced a confident wrong number.
+
+No skips. `verify:rollbacks`: schema empty, **42 migrations, 42 rollbacks**.
+`turbo run typecheck lint --force`: 16 of 16. `format:check` clean apart from the known
+gitignored `apps/console/next-env.d.ts`.
+
+---
+
+#### B — BE-W78. **The consent bounds stop being optional.**
+
+FIX-02 established consent integrity, FIX-12 added three offline bounds, BE-W74 routed
+the sync path through them — and all of it was skippable, because `authenticated` held a
+direct `INSERT` grant on `consent_records` and every bound lives in a function body.
+
+**B3, the replayed attack.** The exact MR-06 insert, a consent dated a year in the future
+as an ordinary MR over REST:
+
+| | before | after |
+| --- | --- | --- |
+| as `authenticated`, over REST | **`INSERT 0 1`** | **`42501`**, refused by the grant before the row is considered |
+| as `postgres` — `BYPASSRLS`, every grant, and what every fixture and SECURITY DEFINER function runs as | `INSERT 0 1` | **`45007`**, refused by the row |
+| the remedy | — | hint says *"do not re-ask the doctor"* explicitly |
+| an ordinary capture through `capture_consent` | works | **still works** — the positive control |
+
+**Both halves, because either alone leaves a door.** The revoke closes today's door and
+says nothing to the next migration that re-grants INSERT for a good reason, to a future
+`service_role` path, or to anything with `BYPASSRLS`. The trigger holds the rule and would
+have left a writable table whose policy says an MR may insert consent records directly —
+an invitation the next reader would reasonably accept. So: revoke, **drop
+`consent_records_insert_own`**, and put the three bounds in a `BEFORE INSERT` trigger. The
+policy is dropped rather than left inert because with no policy and RLS FORCED, a restored
+grant still writes nothing.
+
+Same thresholds, same SQLSTATEs, same resolver — not a second set. Two definitions of a
+valid capture would drift, and the drift would appear as a row accepted by one door and
+refused by the other.
+
+**Two fixtures turned out to be fabricated data, which is how the trigger was felt.**
+`seedFixtures()` created its notice with `effective_from` defaulting to `now()` while
+stamping consent records two hours earlier — asserting a doctor was shown a notice two
+hours before it existed. Sixteen suites failed at once. `manager.spec` seeded consents at
+the literal `'2026-08-12T11:00:00+05:30'`, 27 days back and nearly ten times
+`consent_max_sync_lag_hours`. Both are the `sizeBytes: 1` shape: a value that satisfied
+every constraint and described something that had not happened.
+
+#### B4 — **every table where `authenticated` writes past a SECURITY DEFINER path**
+
+Derived from the catalog, not listed. `authenticated` holds direct write grants on twelve
+tables:
+
+```
+beat_plan_entries  DELETE,INSERT,UPDATE     organisations           DELETE,INSERT,UPDATE
+beat_plans         INSERT,UPDATE            samples_and_inputs      INSERT
+call_reports       INSERT                   territories             DELETE,INSERT,UPDATE
+clinic_addresses   DELETE,INSERT,UPDATE     territory_shift_windows DELETE,INSERT,UPDATE
+consent_records    INSERT                   user_profiles           DELETE,INSERT,UPDATE
+doctors            DELETE,INSERT,UPDATE     visits                  INSERT,UPDATE
+```
+
+Of those, **four have a `SECURITY DEFINER` function as the intended path**:
+
+| table | intended path | is the bypass live? |
+| --- | --- | --- |
+| **`consent_records`** | `capture_consent`, `apply_sync_item` | **WAS. The bounds were in the function. Fixed here** |
+| `samples_and_inputs` | `apply_sync_item` | **No** — the UCPMP cap is `samples_and_inputs_ucpmp_cap`, a TRIGGER, so `45004` fires on a direct insert too |
+| `call_reports` | `revise_call_report`, `apply_sync_item` | **No** — supersession is `call_reports_validate_version`, a TRIGGER |
+| `visits` | `apply_sync_item` | **Partly.** No validation trigger at all; `visits_insert_own` and `visits_update_own` constrain ownership and territory, and nothing else. Registered as **BE-W84** |
+
+The other eight are the reference tables an admin legitimately edits directly, with no
+function path to bypass — and since MR-06 they are tenant-scoped, and since Part D
+restrictively so.
+
+**The conclusion is the pattern, not the list.** Three of the four already had their
+guard in a trigger and were never bypassable. `consent_records` was the one place a guard
+was put in a function instead, and that is exactly the distinction this repo wrote down
+after FIX-05: *a guard which is not a trigger, a policy or a revoked grant is not a
+guard.*
+
+#### B5 — mutations
+
+| mutation | result |
+| --- | --- |
+| the grant restored | the outer-lock test fails — **and the trigger still refuses**, which is the defence in depth working |
+| the trigger dropped | the inner-lock and remedy tests fail |
+| **both removed** | all three fail; the original BE-W78 attack succeeds again |
+
+---
+
+#### C — BE-W79. **C1's verdict: DISCLOSURE, not only denial of service.**
+
+Confirmed three ways against the live database, as an ordinary MR of tenant A, with
+tenant B holding a later notice in the same language:
+
+```
+>>> C1(a) THE LIST
+ A v1 | TENANT A NOTICE
+ B v1 | TENANT B CONFIDENTIAL NOTICE          <-- tenant A reads tenant B's text, in full
+
+>>> C1(b) THE RESOLVER — active_consent_text(), the call behind the consent screen
+ b0000000-... | B v1 | TENANT B CONFIDENTIAL NOTICE   <-- returned to TENANT A's MR
+
+>>> C1(c) THE CAPTURE against tenant B's notice
+ (a0000000-...,...)                            <-- SUCCEEDED
+>>> the consent record that was written
+ notice_stored: B v1 | TENANT B CONFIDENTIAL NOTICE
+```
+
+**So the app would have displayed another company's legal document to a doctor, and the
+capture against it would have been accepted** — leaving tenant A holding a consent record
+attesting a doctor agreed to a document tenant A never wrote, and tenant B named in a
+consent it never issued.
+
+Which branch fires is an accident of ordering. If the client shows the globally-active
+notice it is (c), a corrupt consent record; if it shows its own it is the MR-06 denial of
+service, `45001` on every capture. **The DoS half fails closed and is the better of the
+two**, and it fails closed because of FIX-02 — the re-deriving version this replaced would
+have stored tenant B's notice as what tenant A's doctor saw, silently.
+
+**And it needs no privilege at all.** BE-W76 needed an admin. This needs an ordinary
+tenant publishing an ordinary notice.
+
+**C2 — the fix is the BE-W76 pattern, third time of asking.** A tenant column on
+`consent_text_versions`, `active_consent_text_at` given a required `organisation_id`, and
+`active_consent_text(language)` resolving the caller's tenant itself so there is no
+parameter to abuse. The two-argument resolver is **replaced, not kept beside the new one**:
+an overload that still answers "the active notice across everybody" is the defect with a
+longer name.
+
+**The tenant is derived from the ROW wherever a row exists.** `validate_consent_capture`
+runs for `postgres` as well as `authenticated` and has no `auth.uid()` to consult, so it
+resolves through `new.doctor_id`. That is also the honest question — the notice that
+matters belongs to the company whose doctor was asked, not to whoever is connected.
+
+**C3 — existing rows.** On every environment this repository can reach,
+`consent_text_versions` is populated only by the fixtures and by `seed:reference`, which
+refuses to invent content; there is no production deployment. **The count is zero and the
+backfill is a no-op.** Where it is not zero, the migration resolves it against a single
+organisation or **stops with an exception naming the rows** — attributing one company's
+consent notice to another is the defect performed by the fix, so that decision is left to
+a human. **No owner is guessed.**
+
+**And the unique constraint was cross-tenant too.** `UNIQUE (version_label, language)`
+meant tenant B could not publish a notice labelled `v1` in `en-IN` because tenant A
+already had one — a quieter coupling on the same table that would have surfaced as an
+inexplicable `23505` on a customer's first day. Now `UNIQUE (organisation_id,
+version_label, language)`.
+
+**C4/C5 — the proof and the mutations.** The fixture that demonstrated the defect is
+replayed and the "after" line is now indistinguishable from the "before" line. Every
+assertion carries its mirror, because *"tenant B's notice has no effect on tenant A"* is
+also what a database that resolves no notice at all produces.
+
+| mutation | result |
+| --- | --- |
+| the resolver unscoped again | the capture and consent-screen tests fail; **the LIST test still passes** |
+| the policy widened back to `using (true)` | **only** the LIST test fails |
+
+Two mechanisms, two mutations, neither covering for the other — the same complementary
+finding as MR-06 B6.
+
+---
+
+#### D — the tenant boundary is RESTRICTIVE
+
+**D1: I agree, and the mechanism is exact.** Postgres evaluates a row as
+`(OR of every permissive) AND (AND of every restrictive)`, so a permissive policy can only
+ever ADD access. MR-06's tenant predicates are permissive, so any future permissive policy
+on the same table widens past them — and G-RLS-C would stay green, because it covers the
+tables that exist today. The failure would arrive with a change that looked unrelated.
+
+It also survives the failure mode MR-06 B6 *actually demonstrated*: one placement silently
+covering for another. **A restrictive policy cannot be covered for.** It is the one
+construction in this schema where "somebody else's policy already allows it" is not a
+possible sentence.
+
+**In scope: the seven tables that carry a tenant or reach one in a single hop** —
+`organisations`, `doctors`, `territories`, `user_profiles`, `consent_text_versions`
+directly; `clinic_addresses` through its doctor, `territory_shift_windows` through its
+territory. Indexed equality on a column already present.
+
+**Out of scope, registered as BE-W83 rather than guessed: the ~30 tables scoped through
+`visible_user_ids()`.** They carry no tenant column, so a restrictive policy must reach one
+through a correlated subquery per row, on top of the subquery the permissive policy already
+runs. Whether the planner collapses those or doubles them is a measurement against the
+208,800-visit synthetic seed. This repo has already been bitten once by a predicate that
+looked free and turned out to disable an index; the honest move is to close the half that
+is exactly and cheaply expressible and put a number on the other half first.
+
+**Two details that would otherwise have broken things.** `to authenticated`, never
+`public` — naming `public` would bind `supabase_auth_admin`, and
+`user_profiles_select_auth_admin` is how GoTrue reads a profile during sign-in for a role
+with no organisation of its own. And `current_user_organisation_id()` reads
+`user_profiles`, one of the restricted tables: it is `SECURITY DEFINER` owned by
+`postgres`, which has `BYPASSRLS`, so it does not re-enter the policy calling it. Were it
+ever made `SECURITY INVOKER` this would recurse rather than deny, so the dependency is
+written into the migration.
+
+**D2 — the proof pair, and a defect I wrote on the way to it.**
+
+| | result |
+| --- | --- |
+| an over-broad `using (true)` permissive policy added | **cross-tenant row still refused**, own-tenant row still returned |
+| the restrictive policy dropped, same over-broad policy | **cross-tenant row returned immediately** |
+
+**The pair runs on a mirror table, and that is a divergence worth stating.** The first
+version added `create policy ... on public.doctors using (true)` inside a rolled-back
+transaction. It passed alone and **deadlocked in a full run** — `create policy` takes
+ACCESS EXCLUSIVE and a dozen suites read `doctors` concurrently. `deadlock detected`, in
+the file whose whole purpose is to prove a safety property. A test that makes the rest of
+the suite flaky is not a control; it is a second defect, and the same family as
+`audit-atomicity` sabotaging a shared trigger.
+
+So the behavioural pair builds a table mirroring the migration exactly — tenant column,
+RLS enabled and FORCED, one permissive policy, one restrictive policy copied verbatim —
+inside its own transaction. **That proves the semantics, not the deployment**, so the
+deployment half is a catalog test asserting the seven real tables carry restrictive
+policies, derived rather than listed, and the real tables' behaviour remains the forty deny
+cells of `g-rls-c.spec.ts`.
+
+**D4 — what the patient track inherits.** The pattern is now three things and it has held
+three times: a tenant column on the row, one helper expressing the caller's tenant, and the
+scope resolved where the lookup happens rather than restated per call site — plus a
+restrictive policy so it cannot be widened. `consent_text_versions` inherited it this
+session. The clinical tables get it from the start, and the restrictive half matters most
+there: a widening mistake on a commercial table is a competitor reading a doctor list, and
+on a clinical table it is something else.
+
+---
+
+#### E — the races
+
+**E1, FIXED, because the fix was smaller than the registration.** Every spec's
+`beforeAll` seeds eight auth users through GoTrue; with no cap vitest runs one worker per
+core and they all seed at once, so GoTrue cannot get a connection out of `max_connections
+= 100` and returns a 500 that surfaces as **"Database error creating new user"** — an
+error naming neither connections nor concurrency. MR-06 serialised the eight creations
+inside one fixture; that held until MR-07 added two spec files, **which is the shape of the
+problem**: the burst scales with the number of SUITES, so the cap belongs in the config.
+`maxWorkers: 6`. Reproduce by removing that line and running the api suite on a machine
+with more than six cores.
+
+**E2** was fixed in MR-06 — the global `count(*)` in `seed-reference-data`'s dry-run test —
+and is recorded there.
+
+**E3, new this session and closed: `audit-atomicity`'s deadlock.** It installs a sabotage
+trigger on `audit_log`, which every parallel suite writes to. Taking ACCESS EXCLUSIVE
+first, before anything else in the transaction, made the lock ordering consistent and cut
+the failure rate from about **one run in three to one in five**. The remainder is a genuine
+two-transaction cycle no ordering inside one transaction can prevent, so it retries —
+which is what Postgres documents `40P01` as calling for. **Bounded to four attempts and
+scoped to that test, not to `inRolledBackTransaction`**, because a deadlock anywhere else
+in this suite is a finding rather than noise, and a blanket retry is how a real
+lock-ordering bug hides for a year. Six consecutive full runs clean afterwards.
+
+**E4, registered, not diagnosed.** `seed-one-mr`'s *"mints a fresh address every run"*
+failed once in six full runs and passes in isolation three times. It creates two users
+concurrently, so it is the same family as E1. **I did not capture its error and will not
+claim a mechanism I did not observe.**
+
+---
+
+#### Where this stopped
+
+**Part F — the four-write conversion — was not started**, which is Part F's own
+instruction when B, C and D have used the session. They have: two migrations with a
+trigger and a resolver replacement, a schema change to an append-only table, seven
+restrictive policies, five new or rewritten spec files, seven mutations, and three
+concurrency races that had to be closed before anything could be measured twice.
+
+**Nothing in F is blocked by A, B, C, D or E.**
+
+**Order for the next session:**
+
+1. **Push.** Five commits are local; `9bf7e7f` is green and is what main is on.
+2. **Part F**, the four-write conversion, with the `flushOutbox:220` /
+   `QueueScreen.tsx:275` device-clock fix in the same session because F is what makes that
+   branch reachable.
+3. **BE-W84** — `visits` has no validation trigger and a direct INSERT/UPDATE grant. It is
+   the last of the four B4 tables whose guard is not in a trigger, and F writes to it.
+4. **BE-W83** — restrictive policies for the `visible_user_ids()` tables, once the subquery
+   cost is measured against the synthetic seed.
+5. **Part F's visit-status half** only if the operator has confirmed the `not_met`
+   recommendation.
+
