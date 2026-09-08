@@ -1542,3 +1542,53 @@ change the retention code. Check the three things above, then look at the org's 
 settings and githubstatus.com. And **write down that you disabled something and why** — the
 August disable had a perfectly good reason (34 hours of red builds) that nobody recorded,
 which is how `handoff.md` came to say "this was not a response to a failure" for a month.
+
+---
+
+## 8 September 2026 — a search shaped like the answer you expect cannot find the answer you do not
+
+Two of this project's findings were delayed by a search that could only confirm. They are
+different tools and the same mistake, so they belong beside each other.
+
+**Worked example 1 — grepping for `sendOrQueue` to find writes that bypass `sendOrQueue`.**
+
+MR-01 asked which screen writes go through the outbox. The search was:
+
+```bash
+grep -rn "sendOrQueue" apps/field/app apps/field/src --include=*.tsx
+```
+
+It returned three call sites, and the answer reported was *"exactly three writes from
+screens"*. **There are six.** The three it missed — `createCallReport`, `createRecording`,
+`createVoiceNote` — are bare `createClientForScenario().create…()` calls, and they were
+missed **by construction**: a search for the mechanism can only find code that uses the
+mechanism. The question was "what bypasses this?" and the query was "what uses this?".
+
+The search that answers it looks for the thing itself, not for the wrapper:
+
+```bash
+grep -rnoE "\.(create|update|delete)[A-Za-z]+\(" apps/field/app --include=*.tsx
+```
+
+**Worked example 2 — testing an index as `postgres`, with `enable_seqscan = off`.**
+
+A test called *"uses the trigram index rather than a sequential scan"* ran green from BE-W3
+to FIX-10 while `search_doctors` seq-scanned every row on every call, 2,190 ms over 99,968
+doctors. It ran a **bare table query**, as **`postgres`** (which holds `BYPASSRLS`), with
+**`enable_seqscan = off`** — three departures from the thing it named, each of which
+independently hides the defect. Every one of them made the index *more* likely to be chosen.
+It could only ever confirm.
+
+### The rule
+
+**Ask what result would disprove the claim, and make sure the query can produce it.**
+
+- A search for a mechanism finds users of the mechanism, never bypassers. To find bypassers,
+  search for the underlying operation.
+- A test that removes the obstacle — a different role, a disabled planner option, a
+  permissive setting — is testing a world the code does not run in.
+- Every guard needs a **positive control**: something that must fail. A green result from a
+  query that cannot go red is not evidence.
+
+Both examples were eventually caught the same way — by asking *what would this look like if
+it were false*, and finding the query could not tell.

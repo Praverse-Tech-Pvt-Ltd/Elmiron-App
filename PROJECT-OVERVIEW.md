@@ -8249,3 +8249,226 @@ exhaustive. The list of screen writes is six, not three, and the three I missed 
 three that are not offline-safe.
 
 ---
+
+---
+
+### MR-03 — six writes, one path (8 September 2026)
+
+**STOPPED AFTER PART A, and this time with a recommendation NOT to proceed as written.**
+Part A found that routing the six writes through `sync_push` today would **remove consent
+validation from the consent path**. Doing Part B as specified would make the compliance
+posture worse than the mock it replaces. Details in A2.
+
+**Not done: no screen was converted, no write path was changed, the console was not wired,
+no card was removed, the samples screen's message was not removed, and no dependency was
+added.**
+
+#### A1 — CI and counts
+
+MR-02's two record commits pushed as `5a358eb..e6195b3`. Run **`34197164480`: success**,
+both jobs.
+
+| workspace | runner | count |
+| --- | --- | ---: |
+| `@fieldforce/api` | vitest, live database | **508 passed / 24 files** |
+| `@fieldforce/field` | vitest, logic | 359 passed / 25 files |
+| `@fieldforce/field` | jest, jest-expo render | 72 passed / 12 suites |
+| `@fieldforce/ui-tokens` | vitest | 54 passed / 3 |
+| `@fieldforce/mock` | vitest | 40 passed / 1 |
+| `@fieldforce/core` | vitest | 21 passed / 3 |
+| `@fieldforce/ui` | vitest | 4 passed / 1 |
+
+**api +8** (sync_push enforcement). No skips. `verify:rollbacks`: schema empty, 33/33.
+`turbo run typecheck lint`: 16 successful, 16 total.
+
+---
+
+#### A2 — the conversion target: **`sync_push`, but not until two things are fixed**
+
+**Does it return per-item verdicts? Yes.** Each item gets
+`{id, status, rejectionCode, rejectionDetail, warnings}`, `status ∈ {accepted, rejected,
+duplicate, dead_lettered}`, and **a batch does not collapse** — asserted: one item fails
+beside one that succeeds. That is the right shape, and it is why `sync_push` is still the
+right target.
+
+**Does the verdict carry the SQLSTATE? No.** `rejectionCode` is a
+`public.sync_rejection_code` enum with ten members:
+
+```
+outside_shift_window, outside_geofence, not_your_record, missing_reference,
+validation_failed, unsupported_entity, malformed_item, internal_error,
+consent_withdrawn, upload_expired
+```
+
+and the `case` that produces it maps `42501`, `0A000`, `23503`, `23502`, `23514`, `23505`,
+`22023`, `22P02` — **and no `450xx` code at all.** So:
+
+| refusal | what an MR would be told through `sync_push` |
+| --- | --- |
+| `45001` the notice changed — re-read and ask again | `internal_error` |
+| `45004` UCPMP cap, with month-to-date | `internal_error` |
+| `45007` your device clock is wrong | `internal_error` |
+| `45008` sync sooner | `internal_error` |
+
+`outside_shift_window` survives only by `ILIKE '%shift window%'` on the message text —
+matched on the string that `45002` and `45003` were minted in FIX-06 to replace.
+
+**And then the finding that decides the session.** `apply_sync_item` does not route every
+entity through its RPC. From the live function body, not the migration:
+
+| entity | what `apply_sync_item` does | enforcement on the offline path |
+| --- | --- | --- |
+| `visit` | direct INSERT | RLS only |
+| `check_in` | `perform record_check_in(…)` | **full** — geofence, shift window, server clock |
+| `check_out` | `perform record_check_out(…)` | **full** |
+| `call_report` | `revise_call_report(…)` or direct INSERT | partial |
+| **`consent_record`** | **direct INSERT** | **none — `capture_consent` is not called** |
+| `sample_and_input` | direct INSERT | the UCPMP trigger still fires; it is a table trigger |
+| `recording` | `perform complete_upload(…)` | **full** |
+
+**So every bound FIX-12 built is absent on the offline path** — the version active *at*
+`captured_at` (45001), no future capture (45007), the maximum sync lag (45008). The one path
+where `captured_at` and `received_at` differ at all is the one path that validates neither.
+
+**Proved rather than read, in one fixture, both directions:**
+
+```
+capture_consent, notice superseded before the capture  ->  rejects, code 45001
+sync_push,       the identical capture                 ->  status "accepted"
+                 and consent_records stores the SUPERSEDED version as displayed
+sync_push,       captured_at one day in the FUTURE     ->  status "accepted"
+```
+
+**Recommendation: `sync_push`, after two additive fixes, and not before.**
+
+1. **Route `consent_record` through `capture_consent`**, as `check_in` already routes through
+   `record_check_in`. This is the fix that must land first: **converting the consent screen to
+   `sync_push` today would strip validation the mock path does not have either — but the
+   server-side enforcement exists and would simply stop being reached.**
+2. **Carry the raw SQLSTATE in the per-item verdict**, beside `rejectionCode` rather than
+   instead of it. Additive, so no enum change and no `alter type … add value` inside a
+   migration transaction; `sync_rejection_code` stays the coarse category, and the client
+   already has a complete SQLSTATE→refusal map that `error-contract.spec.ts` guards in both
+   directions. Extending the enum instead would mean re-deriving in two places what the error
+   contract already derives in one.
+
+Why still `sync_push` rather than six adapters: one code path instead of six; the three
+unqueued writes become queued **by construction** rather than by being individually
+remembered; batching; and the per-item verdict shape is already right. The two fixes are
+smaller than the six adapters and they fix a live defect rather than routing around it.
+
+#### A3 — the done counter reads a field nothing writes
+
+`apps/field/src/today/plan.ts:89`:
+
+```ts
+done: counted.filter((visit) => visit.status === 'completed').length,
+```
+
+with the comment on line 38 reading *"Visits the server has marked completed."* **The server
+has never marked one.** `visits.status` defaults to `'planned'`, is `NOT NULL`, and
+`grep "update public.visits"` across all 33 migrations returns nothing.
+
+**What the screen has actually been displaying:** the number of visits the **mock fixture**
+hard-codes as `'completed'` — `services/mock/src/fixtures.ts` contains three. Against
+Supabase the counter reads **0, permanently**, because every visit inserted by `sync_push` or
+anything else keeps the default.
+
+**This blocks Part C directly.** The moment Today reads from the pull instead of the mock,
+the done counter goes to zero and stays there. It is a third piece of code that looks
+exercised and is not — this one visible on the screen an MR uses most.
+
+**Recommendation: write the status, do not remove the column.** The counter reads it, §5's
+Tier 1 missed-visit nudge needs it, and coverage-versus-beat-plan is a manager feature built
+on it. Deriving "done" from check-outs instead would substitute a different fact — a
+check-out is a departure, a completed visit is a business state — and would leave
+`VisitStatusSchema`'s four states with no producer at all. The natural place is
+`record_check_in` → `'in_progress'` and `record_check_out` → `'completed'`: both already
+exist, both are the enforced RPCs, and `apply_sync_item` already routes through them, so the
+offline path would get it for free. **Registered as BE-W73, not built** — the prompt says
+establish which it is, not build it.
+
+#### What "recording" and "voice note" actually write
+
+Audio capture is built — `expo-audio` is wired into both screens and produces a real
+recording — but **no audio bytes ever leave the device.** `createRecording` and
+`createVoiceNote` post **metadata rows only**: duration, bitrate, a consent reference and a
+`sizeBytes` the screen cannot measure. The comment in `visit/[id].tsx` says so plainly —
+*"Real bytes arrive with the upload, which is BE-W7 and has no client here"* — and passes
+`sizeBytes: 1` because the contract needs a positive integer.
+
+So "recording writes exist" must not be read as "recording exists". The row is an intent to
+upload; the upload path (`complete_upload`, the resumable grant machinery, BE-W7) has no
+client. Recorded here because two of the three unqueued writes are these, and their severity
+depends on knowing that what is being lost offline is a metadata row rather than a
+consultation.
+
+---
+
+#### Where this stopped, and why it is a recommendation rather than a pause
+
+**Stopped after Part A.** Parts B, C, D and E were not started, except E2 and E3 which
+follow directly from A and are done.
+
+**Part B should not be executed as written.** B1 routes all six writes through the target A2
+chose. If that target is `sync_push` — and it should be — then doing it today moves the
+consent write onto a path that **does not call `capture_consent`**, and the FIX-12 bounds
+stop being reached. The mock path does not enforce them either, so nothing regresses on the
+day; what regresses is the plan, because the server-side enforcement would exist, be tested,
+and be bypassed. That is the shape this project has now found eleven times, and it would be
+the first one introduced deliberately.
+
+**Order for the next session:**
+
+1. **Route `consent_record` through `capture_consent` in `apply_sync_item`**, and carry the
+   SQLSTATE in the per-item verdict. Both are server-side, both are small, and both are
+   prerequisites rather than improvements.
+2. **Then** Part B's conversion, all six writes, with B5's device-clock fix in the same
+   session because Part B is what makes that branch reachable.
+3. **Part D (G-RLS-C)** is independent of all of the above, needs no device, and has never
+   been run whole. If the next session has room for only one thing, this is the one nothing
+   blocks.
+4. `visits.status` (BE-W73) before Part C, or Part C ships a counter that reads zero.
+
+**Two corrections carried into this record**, per E1, are in the section below.
+
+---
+
+### E1 — two corrections, dated 8 September 2026
+
+Both replace claims that appear in earlier sections of this file and in the reviewer's state
+tables. **The earlier sections are left exactly as written**, per the section-freezing rule;
+this is what supersedes them.
+
+**Correction 1 — "offline-first is intact" is false.** It appears in MR-02's state table as a
+*corrected* fact, written one session after correcting a different fact.
+
+The truth: **three of six screen write paths queue; three do not.** Check-in/check-out,
+consent and samples go through `sendOrQueue`. Call report, recording and voice note are bare
+`createClientForScenario().create…()` calls with no outbox, no queue and no retry. The
+call-report screen's own error copy is the evidence — *"Your words are still on this screen —
+try again when you have signal"* — which asks an MR to retype a visit summary the app
+declined to keep.
+
+**How the wrong claim was reached**, because the method is the reusable part: MR-01 searched
+`grep -rn "sendOrQueue"` to find which writes go through the outbox. A search for a mechanism
+returns users of the mechanism and never bypassers. Written up in `docs/gotchas.md` beside
+the FIX-10 index test, which is the same mistake with a different tool.
+
+**Correction 2 — G-WRITE was UNMET, not "part met", from FIX-07 until now.** From FIX-07
+onward this record and the reviewer's state tables described check-in, visits and mileage as
+**"real"**. They were real **in the module** and **mock-bound at the screen**:
+`recordCheckIn`, `createVisit`, `updateVisit` and `listMileage` are referenced by their own
+test files and by nothing else, and `createVisit`/`updateVisit` are not called from a screen
+at all — not even through the mock.
+
+**No write from a screen has ever reached Supabase.** The gate stands where it stood in July.
+FIX-14's real-versus-fixture table is the specific artefact that hid it, because it had one
+column where it needed two: a module that talks to Supabase while the screen talks to the
+mock reads as "real" in a one-column table. Any future version of that table carries **module**
+and **screen** separately.
+
+**A third claim, corrected here rather than left to be found:** MR-02's Part B listed mileage
+as one of five writes to convert. **Mileage has no write anywhere.** `mileage.tsx:41` and
+`day-end.tsx:68` both read, and the figures are derived server-side by `daily_mileage()` from
+check-in coordinates. There is nothing to convert and nothing should be added.

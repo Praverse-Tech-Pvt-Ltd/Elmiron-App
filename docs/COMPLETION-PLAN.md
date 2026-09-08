@@ -847,3 +847,34 @@ entities, `SyncEntitySchema` enumerates exactly those, and `client.ts:454` alrea
 `sendFor(client, item)` as individual REST calls. Pointing the flush at `sync_push` is
 plausibly the whole conversion, and is a materially smaller and different piece of work from
 five per-entity adapters. It needs a review, not a mid-flight decision.
+
+### Added by MR-03
+
+| ID | Title | Changes | Deps | Blocker | Est | Verification |
+|---|---|---|---|---|---|---|
+| **BE-W74** | `apply_sync_item` inserts consent directly, bypassing `capture_consent` | `apply_sync_item`, new migration | — | — | 2 | **Prerequisite for the whole conversion.** `check_in` routes through `record_check_in` and `recording` through `complete_upload`; `consent_record` does a direct INSERT, so the version-active-at-`captured_at` check (45001), the future-capture bound (45007) and the maximum sync lag (45008) are all absent on the offline path — the one path where `captured_at` and `received_at` differ at all. Proved in `sync-push-enforcement.spec.ts`: `capture_consent` refuses a superseded notice with 45001 and `sync_push` accepts the identical capture. Verification: the same fixture makes `sync_push` return `rejected`, and the two-sided mutation shows the refusal is the routing rather than a coincidence |
+| **BE-W75** | A `sync_push` verdict cannot carry a `450xx` refusal | `sync_push`, new migration | — | — | 2 | `sync_rejection_code` has ten members and none is a project-defined meaning; the `case` maps `42501`, `0A000`, `23503`, `23502`, `23514`, `23505`, `22023`, `22P02` and nothing else, so 45001, 45004, 45007 and 45008 all land on `internal_error`. `outside_shift_window` survives only by `ILIKE` on the message text — matching the string 45002/45003 were minted to replace. **Add the raw SQLSTATE to the per-item result** rather than extending the enum: additive, no `alter type … add value` inside a migration transaction, and the client already has a complete SQLSTATE→refusal map that `error-contract.spec.ts` guards both ways. Verification: a 45001 through `sync_push` reaches the client as `consent_notice_superseded`, not `internal_error` |
+
+**BE-W73 restated with its evidence** (registered in MR-02, now measured). `visits.status`
+defaults to `'planned'`, is `NOT NULL`, and nothing across 33 migrations writes it — while
+`apps/field/src/today/plan.ts:89` counts `status === 'completed'` under a comment reading
+*"Visits the server has marked completed."* The counter has been displaying the three visits
+`services/mock/src/fixtures.ts` hard-codes as completed. **Against Supabase it reads 0,
+permanently**, so it blocks Part C: the moment Today reads from the pull, the counter goes to
+zero. Recommendation: **write it, do not remove it** — `record_check_in` → `'in_progress'`,
+`record_check_out` → `'completed'`. Both are already the enforced RPCs and `apply_sync_item`
+already routes through them, so the offline path gets it free. Deriving "done" from
+check-outs instead substitutes a departure for a business state and leaves
+`VisitStatusSchema`'s four values with no producer.
+
+**BE-W72 extended** (MR-03 E3). `current_client_ip()` uses
+`split_part(headers ->> 'x-forwarded-for', ',', 1)` — the **first** entry — and a proxy
+**appends**, so the first entry is the caller's claim and the last is the observed hop. The
+column is named `ip_address` and a reader will believe it is observed. **Either take the last
+entry, or rename the column so it reads as claimed.** An audit artefact that records an
+attacker-chosen value in a field named like an observation is worse than one that records
+nothing: it does not merely fail to help an investigation, it misdirects one.
+
+**Not a task, recorded so nobody looks for it:** MR-02 and MR-03 both listed a mileage write
+to convert. There is none. `mileage.tsx:41` and `day-end.tsx:68` read; the figures come from
+`daily_mileage()` server-side.
