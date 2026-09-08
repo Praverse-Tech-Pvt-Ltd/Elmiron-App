@@ -73,33 +73,80 @@ const insertWithdrawal = async (
   );
 };
 
-describe.skipIf(!reachable)('C1 — can a withdrawal be backdated?', () => {
-  it('YES, arbitrarily. Nothing bounds a withdrawal timestamp in either direction', async () => {
-    // **The finding.** `validate_consent_withdrawal` checks the original's existence, its
-    // outcome, its doctor and that it is not itself a withdrawal -- and never looks at
-    // `captured_at`. `consent_records.captured_at` is NOT NULL with no default and no
-    // check constraint. So a withdrawal can be stamped at any moment its author chooses.
-    //
-    // For a capture that is now bounded three ways (45001, 45007, 45008). For the record
-    // that decides whether everything processed since the original consent was lawful,
-    // it is bounded not at all.
+describe.skipIf(!reachable)('C1 — a withdrawal is bounded in BOTH directions', () => {
+  // **The tests below asserted the defect until MR-06, and the inversion is the fix.**
+  // MR-05 recorded, correctly, that `validate_consent_withdrawal` never looked at
+  // `captured_at` and that five years back and a year forward were both accepted. That
+  // is BE-W77, and it is now closed in the TRIGGER rather than in `capture_consent` --
+  // see the C1c case below for why that distinction is load-bearing.
+
+  it('refuses a withdrawal dated beyond the future tolerance, with 45007', async () => {
     await inRolledBackTransaction(async (client) => {
       const { id, language } = await grantedConsent(client);
       await client.query('set local role postgres');
 
-      // Five years before the consent it supersedes.
+      await expect(
+        insertWithdrawal(client, {
+          supersedes: id,
+          language,
+          doctorId: world.doctors.pune,
+          capturedAt: '2027-09-08T00:00:00Z',
+        }),
+      ).rejects.toMatchObject({ code: '45007' });
+    });
+  });
+
+  it('refuses a withdrawal older than the maximum sync lag, with 45008', async () => {
+    await inRolledBackTransaction(async (client) => {
+      const { id, language } = await grantedConsent(client);
+      await client.query('set local role postgres');
+
+      // Five years before the consent it supersedes -- the case MR-05 showed accepted.
+      await expect(
+        insertWithdrawal(client, {
+          supersedes: id,
+          language,
+          doctorId: world.doctors.pune,
+          capturedAt: '2021-01-01T00:00:00Z',
+        }),
+      ).rejects.toMatchObject({ code: '45008' });
+    });
+  });
+
+  it('refuses a withdrawal that predates the consent it supersedes, with 23514', async () => {
+    // The bound with no counterpart on the capture side, and the sync lag does NOT cover
+    // it: an hour-old consent withdrawn "two hours ago" is well inside 72 hours and still
+    // describes a withdrawal that happened before there was anything to withdraw. It is
+    // the cheapest form of the backdating attack.
+    await inRolledBackTransaction(async (client) => {
+      const { id, language } = await grantedConsent(client);
+      await client.query('set local role postgres');
+
+      const before = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      await expect(
+        insertWithdrawal(client, {
+          supersedes: id,
+          language,
+          doctorId: world.doctors.pune,
+          capturedAt: before,
+        }),
+      ).rejects.toMatchObject({ code: '23514' });
+    });
+  });
+
+  it('THE POSITIVE CONTROL: an ordinary withdrawal is still accepted', async () => {
+    // Without this, the three refusals above would also be produced by a trigger that
+    // refuses EVERY withdrawal -- a worse defect than the one being fixed, because a
+    // doctor unable to withdraw consent at all is the DPDP s.6(4) violation itself.
+    await inRolledBackTransaction(async (client) => {
+      const { id, language } = await grantedConsent(client);
+      await client.query('set local role postgres');
+
       await insertWithdrawal(client, {
         supersedes: id,
         language,
         doctorId: world.doctors.pune,
-        capturedAt: '2021-01-01T00:00:00Z',
-      });
-      // And a year into the future.
-      await insertWithdrawal(client, {
-        supersedes: id,
-        language,
-        doctorId: world.doctors.pune,
-        capturedAt: '2027-09-08T00:00:00Z',
+        capturedAt: new Date().toISOString(),
       });
 
       const rows = await client.query<{ n: string }>(
@@ -107,7 +154,112 @@ describe.skipIf(!reachable)('C1 — can a withdrawal be backdated?', () => {
           where supersedes_consent_record_id = $1`,
         [id],
       );
-      expect(Number(rows.rows[0]?.n)).toBe(2);
+      expect(Number(rows.rows[0]?.n)).toBe(1);
+    });
+  });
+
+  it('a device a little fast is still accepted — the same tolerance a capture gets', async () => {
+    // The same threshold, deliberately: two numbers for one question is two numbers to
+    // keep in step, and they would drift. `consent_future_tolerance_seconds` is 120, so
+    // two seconds ahead is a phone, not an attack.
+    await inRolledBackTransaction(async (client) => {
+      const { id, language } = await grantedConsent(client);
+      await client.query('set local role postgres');
+
+      await insertWithdrawal(client, {
+        supersedes: id,
+        language,
+        doctorId: world.doctors.pune,
+        capturedAt: new Date(Date.now() + 2_000).toISOString(),
+      });
+
+      const rows = await client.query<{ n: string }>(
+        `select count(*) as n from public.consent_records
+          where supersedes_consent_record_id = $1`,
+        [id],
+      );
+      expect(Number(rows.rows[0]?.n)).toBe(1);
+    });
+  });
+
+  it('C1c: a client cannot insert a withdrawal at all — and a GRANT is what stops it', async () => {
+    // The first draft of this test asserted `45007` here and was wrong, which is worth
+    // keeping because the real answer is better. `authenticated` never reaches the bound:
+    // it is refused with `permission denied for table consent_records` before the
+    // timestamp is looked at.
+    //
+    // The mechanism is not the one you would guess. `validate_consent_withdrawal` is a
+    // plain trigger function -- NOT `SECURITY DEFINER` -- so it runs as the caller, and
+    // its `select * from consent_records where id = supersedes...` needs a SELECT grant
+    // the `authenticated` role does not have. The withdrawal path is closed to a REST
+    // client by a missing grant, as a side effect of the validator reading the table.
+    //
+    // Recorded rather than relied upon. A guard that holds because of where a SELECT
+    // happens to sit is a guard that moves the day somebody adds `security definer` to
+    // make the validator work for a new caller. The timestamp bounds above are the
+    // durable control; this is the reason nothing exercises them over REST today.
+    await inRolledBackTransaction(async (client) => {
+      const { id, language } = await grantedConsent(client);
+      // NOT postgres: the ordinary authenticated role, on the ordinary REST path.
+      await asUser(client, world.users.puneMr);
+
+      await expect(
+        insertWithdrawal(client, {
+          supersedes: id,
+          language,
+          doctorId: world.doctors.pune,
+          capturedAt: '2027-09-08T00:00:00Z',
+        }),
+      ).rejects.toMatchObject({ code: '42501' });
+    });
+  });
+
+  it('BE-W78: but a plain CAPTURE over the same path is unbounded, and is accepted', async () => {
+    // **The defect this file found and did not fix.** A capture needs to read nothing, so
+    // the grant that closes the withdrawal path does not close this one:
+    //
+    //   * `authenticated` holds a direct INSERT grant on `public.consent_records`;
+    //   * `consent_records_insert_own` permits the row when the MR owns the visit;
+    //   * so an insert over PostgREST never calls `capture_consent`;
+    //   * and every bound that function carries -- 45001 notice-superseded, 45007 future,
+    //     45008 sync lag -- is skipped with it.
+    //
+    // BE-W74 routed the SYNC path through `capture_consent`. The REST path was never
+    // routed anywhere. A consent dated a YEAR IN THE FUTURE is accepted below, by an
+    // ordinary MR, on the ordinary path the app is being converted to use.
+    //
+    // Not fixed here: the remedies are to move the bounds into a trigger or to revoke the
+    // INSERT grant so `capture_consent` is the only door, and either has a blast radius
+    // that deserves its own session rather than being bolted onto this one.
+    await inRolledBackTransaction(async (client) => {
+      await asUser(client, world.users.puneMr);
+
+      await client.query(
+        `insert into public.consent_records
+           (id, visit_id, doctor_id, captured_by_mr_id, outcome, consent_text_version_id,
+            displayed_language, captured_at)
+         values ($1, $2, $3, $4, 'consented', $5, 'en-IN', now() + interval '1 year')`,
+        [
+          randomUUID(),
+          world.visits.pune,
+          world.doctors.pune,
+          world.users.puneMr.id,
+          world.consentTextVersionId,
+        ],
+      );
+
+      // `authenticated` has INSERT but no SELECT, so the row is counted as the owner.
+      // That asymmetry is itself the shape of the hole: a client may write a record it
+      // cannot read back, so nothing it does will ever show it the row it just forged.
+      await client.query('set local role postgres');
+      const rows = await client.query<{ n: string }>(
+        `select count(*) as n from public.consent_records
+          where captured_at > now() + interval '300 days'`,
+      );
+      expect(
+        Number(rows.rows[0]?.n),
+        'BE-W78 still open: a future-dated consent was written over REST',
+      ).toBe(1);
     });
   });
 
