@@ -23,6 +23,33 @@ import { seedFixtures } from './fixtures.js';
 
 const reachable = await requireDatabase();
 
+/**
+ * Retries a transaction that lost a deadlock, which is what Postgres expects a caller to
+ * do — `40P01` is documented as a transient condition, not a defect in the statement that
+ * hit it.
+ *
+ * **MR-07 E3, and it is a mitigation rather than a cure.** The test below needs
+ * ACCESS EXCLUSIVE on `audit_log` to install its sabotage trigger, and every other suite
+ * in a parallel run writes audit rows. Taking that lock first made the ordering
+ * consistent and cut the failure rate from roughly one run in three to one in five;
+ * retrying closes the rest, because the remaining case is a genuine two-transaction cycle
+ * that no lock ordering inside THIS transaction can prevent.
+ *
+ * Bounded and narrow on purpose. It is not in `inRolledBackTransaction`, because a
+ * deadlock anywhere else in this suite would be a finding rather than noise, and a
+ * blanket retry is how a real lock-ordering bug gets hidden for a year.
+ */
+const retryOnDeadlock = async <T>(fn: () => Promise<T>, attempts = 4): Promise<T> => {
+  for (let i = 1; ; i += 1) {
+    try {
+      return await fn();
+    } catch (error: unknown) {
+      const code = (error as { code?: string }).code;
+      if (code !== '40P01' || i >= attempts) throw error;
+    }
+  }
+};
+
 describe.skipIf(!reachable)('a business write cannot succeed unaudited', () => {
   it('the audit trigger is AFTER, FOR EACH ROW, and in the same transaction', async () => {
     // Structural, and it is the part that decides the answer: an asynchronous or deferred
@@ -107,36 +134,52 @@ describe.skipIf(!reachable)('a business write cannot succeed unaudited', () => {
 
   it('THE PROOF: with the audit write broken, the business row does not survive', async () => {
     const world = await seedFixtures();
-    await inRolledBackTransaction(async (client) => {
-      // Break the audit write. A BEFORE INSERT trigger on audit_log is the narrowest
-      // sabotage available: it leaves every other path alone and fails exactly the insert
-      // `write_audit_row` performs.
-      await client.query(
-        `create function pg_temp.break_audit() returns trigger language plpgsql as $$
+    await retryOnDeadlock(() =>
+      inRolledBackTransaction(async (client) => {
+        // MR-07 E3. Take the strong lock FIRST, before anything else in this transaction.
+        //
+        // `create trigger` needs ACCESS EXCLUSIVE on `audit_log`, and every other suite
+        // running in parallel writes audit rows. Acquiring it here rather than four
+        // statements in makes this transaction's lock order consistent with everyone
+        // else's, so it waits instead of deadlocking. Without it this test failed roughly
+        // one run in three with `deadlock detected` -- on the file whose whole purpose is
+        // to prove that a business write cannot succeed unaudited.
+        //
+        // Same defect as the first draft of `tenant-boundary-restrictive.spec.ts`, which
+        // did DDL on `doctors`: a test that makes the rest of the suite flaky is not a
+        // control, it is a second defect.
+        await client.query('lock table public.audit_log in access exclusive mode');
+
+        // Break the audit write. A BEFORE INSERT trigger on audit_log is the narrowest
+        // sabotage available: it leaves every other path alone and fails exactly the insert
+        // `write_audit_row` performs.
+        await client.query(
+          `create function pg_temp.break_audit() returns trigger language plpgsql as $$
            begin raise exception 'audit storage is unavailable' using errcode = '58030'; end $$`,
-      );
-      await client.query(
-        `create trigger zzz_break_audit before insert on public.audit_log
+        );
+        await client.query(
+          `create trigger zzz_break_audit before insert on public.audit_log
            for each row execute function pg_temp.break_audit()`,
-      );
+        );
 
-      await client.query('savepoint before_write');
-      await expect(
-        client.query(`update public.doctors set specialty = 'Sabotage' where id = $1`, [
-          world.doctors.pune,
-        ]),
-      ).rejects.toMatchObject({ code: '58030' });
-      await client.query('rollback to savepoint before_write');
+        await client.query('savepoint before_write');
+        await expect(
+          client.query(`update public.doctors set specialty = 'Sabotage' where id = $1`, [
+            world.doctors.pune,
+          ]),
+        ).rejects.toMatchObject({ code: '58030' });
+        await client.query('rollback to savepoint before_write');
 
-      await client.query('drop trigger zzz_break_audit on public.audit_log');
+        await client.query('drop trigger zzz_break_audit on public.audit_log');
 
-      // The business row is unchanged. Not "an error was raised" -- the row itself.
-      const after = await client.query<{ specialty: string | null }>(
-        'select specialty from public.doctors where id = $1',
-        [world.doctors.pune],
-      );
-      expect(after.rows[0]?.specialty).not.toBe('Sabotage');
-    });
+        // The business row is unchanged. Not "an error was raised" -- the row itself.
+        const after = await client.query<{ specialty: string | null }>(
+          'select specialty from public.doctors where id = $1',
+          [world.doctors.pune],
+        );
+        expect(after.rows[0]?.specialty).not.toBe('Sabotage');
+      }),
+    );
   });
 
   it('the control is not vacuous: the same write succeeds AND audits when unbroken', async () => {
