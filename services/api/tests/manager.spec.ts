@@ -328,7 +328,26 @@ describe.skipIf(!reachable)('team exceptions', () => {
     });
   });
 
-  /** puneMr declines everything, nagpurMr consents to everything. Both deviate. */
+  /**
+   * puneMr declines everything, nagpurMr consents to everything. Both deviate.
+   *
+   * **MR-07: `captured_at` is relative, and it has to be.** It was the literal
+   * `'2026-08-12T11:00:00+05:30'` -- 27 days before the day BE-W78 put the capture bounds
+   * in a trigger, and so nearly ten times the 72-hour `consent_max_sync_lag_hours`. The
+   * fixture was seeding consents the product would refuse to accept, and nothing said so
+   * while the bound lived in a function this insert never called.
+   *
+   * A relative timestamp is also the more robust fixture: a hard-coded date silently
+   * drifts out of whatever rolling window the anomaly query uses, and the test would have
+   * started failing one day for a reason unconnected to the code.
+   *
+   * The callers below moved with it, from `team_exceptions('2026-08-12')` to the day the
+   * fixture actually writes into. `team_exceptions` buckets by
+   * `(captured_at at time zone 'Asia/Kolkata')::date`, so the test asks for the same day
+   * in the same zone rather than a literal that had to agree with another literal. The
+   * sync-rejection test above keeps its date: it is seeded from `sync_items`, not from
+   * here, and nothing about it changed.
+   */
   const seedDivergentConsents = async (client: Client): Promise<void> => {
     const seed = async (
       mrId: string,
@@ -340,7 +359,7 @@ describe.skipIf(!reachable)('team exceptions', () => {
           `insert into public.consent_records
              (id, visit_id, doctor_id, captured_by_mr_id, outcome, consent_text_version_id,
               displayed_language, captured_at)
-           values (gen_random_uuid(), $1, $2, $3, $4, $5, 'en-IN', '2026-08-12T11:00:00+05:30')`,
+           values (gen_random_uuid(), $1, $2, $3, $4, $5, 'en-IN', now() - interval '1 hour')`,
           [visitId, world.doctors.pune, mrId, outcome, world.consentTextVersionId],
         );
       }
@@ -363,7 +382,7 @@ describe.skipIf(!reachable)('team exceptions', () => {
       await seedDivergentConsents(client);
       await asUser(client, world.users.westManager);
       const rows = await client.query(
-        `select mr_id from public.team_exceptions('2026-08-12')
+        `select mr_id from public.team_exceptions((now() at time zone 'Asia/Kolkata')::date)
           where exception_kind = 'consent_rate_anomaly'`,
       );
       expect(rows.rows).toEqual([]);
@@ -381,7 +400,7 @@ describe.skipIf(!reachable)('team exceptions', () => {
       );
       await asUser(client, world.users.westManager);
       const rows = await client.query<{ mr_id: string; detail: Record<string, unknown> }>(
-        `select mr_id, detail from public.team_exceptions('2026-08-12')
+        `select mr_id, detail from public.team_exceptions((now() at time zone 'Asia/Kolkata')::date)
           where exception_kind = 'consent_rate_anomaly'`,
       );
 

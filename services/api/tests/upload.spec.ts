@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
 import { DB_URL, inRolledBackTransaction, requireDatabase, withClient } from './db.js';
-import { API_URL, SERVICE_ROLE_KEY, asUser, mintAccessToken } from './auth.js';
+import { API_URL, SERVICE_ROLE_KEY, asOwner, asUser, mintAccessToken } from './auth.js';
 import { seedFixtures } from './fixtures.js';
 import type { FixtureUser, FixtureWorld } from './fixtures.js';
 import { runPurge } from '../scripts/purge-expired-audio.mjs';
@@ -127,12 +127,14 @@ const committedConsentedVisit = async (): Promise<{ visitId: string; consentId: 
       `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
       [visitId, world.users.puneMr.id, world.doctors.pune],
     );
-    await client.query(
-      `insert into public.consent_records
-         (id, visit_id, doctor_id, captured_by_mr_id, outcome, consent_text_version_id,
-          displayed_language, captured_at)
-       values ($1, $2, $3, $4, 'consented', $5, 'en-IN', now())`,
-      [consentId, visitId, world.doctors.pune, world.users.puneMr.id, world.consentTextVersionId],
+    await asOwner(client, () =>
+      client.query(
+        `insert into public.consent_records
+           (id, visit_id, doctor_id, captured_by_mr_id, outcome, consent_text_version_id,
+            displayed_language, captured_at)
+         values ($1, $2, $3, $4, 'consented', $5, 'en-IN', now())`,
+        [consentId, visitId, world.doctors.pune, world.users.puneMr.id, world.consentTextVersionId],
+      ),
     );
     return { visitId, consentId };
   });
@@ -145,31 +147,35 @@ const consentedVisit = async (client: Client): Promise<{ visitId: string; consen
     `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
     [visitId, world.users.puneMr.id, world.doctors.pune],
   );
-  await client.query(
-    `insert into public.consent_records
-       (id, visit_id, doctor_id, captured_by_mr_id, outcome, consent_text_version_id,
-        displayed_language, captured_at)
-     values ($1, $2, $3, $4, 'consented', $5, 'en-IN', now())`,
-    [consentId, visitId, world.doctors.pune, world.users.puneMr.id, world.consentTextVersionId],
+  await asOwner(client, () =>
+    client.query(
+      `insert into public.consent_records
+         (id, visit_id, doctor_id, captured_by_mr_id, outcome, consent_text_version_id,
+          displayed_language, captured_at)
+       values ($1, $2, $3, $4, 'consented', $5, 'en-IN', now())`,
+      [consentId, visitId, world.doctors.pune, world.users.puneMr.id, world.consentTextVersionId],
+    ),
   );
   return { visitId, consentId };
 };
 
 /** A withdrawal row: `declined`, superseding the standing consent. */
 const withdraw = async (client: Client, visitId: string, consentId: string): Promise<void> => {
-  await client.query(
-    `insert into public.consent_records
-       (id, visit_id, doctor_id, captured_by_mr_id, outcome, consent_text_version_id,
-        displayed_language, supersedes_consent_record_id, is_withdrawal, captured_at)
-     values ($1, $2, $3, $4, 'declined', $5, 'en-IN', $6, true, now())`,
-    [
-      randomUUID(),
-      visitId,
-      world.doctors.pune,
-      world.users.puneMr.id,
-      world.consentTextVersionId,
-      consentId,
-    ],
+  await asOwner(client, () =>
+    client.query(
+      `insert into public.consent_records
+         (id, visit_id, doctor_id, captured_by_mr_id, outcome, consent_text_version_id,
+          displayed_language, supersedes_consent_record_id, is_withdrawal, captured_at)
+       values ($1, $2, $3, $4, 'declined', $5, 'en-IN', $6, true, now())`,
+      [
+        randomUUID(),
+        visitId,
+        world.doctors.pune,
+        world.users.puneMr.id,
+        world.consentTextVersionId,
+        consentId,
+      ],
+    ),
   );
 };
 

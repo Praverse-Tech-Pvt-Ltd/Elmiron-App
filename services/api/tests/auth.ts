@@ -209,3 +209,34 @@ export const createAuthUser = async (email: string, password: string): Promise<s
   }
   return payload.id;
 };
+
+/**
+ * Runs `fn` with the table owner's rights, then puts the previous role back.
+ *
+ * **MR-07 / BE-W78.** `authenticated` no longer holds an `INSERT` grant on
+ * `consent_records` — the whole point of that change is that a client cannot write a
+ * consent record without going through `capture_consent`. Test fixtures that need a
+ * standing consent to exist are not clients, though: they are setting up a world, and
+ * they run inside a transaction that has already switched to `authenticated` for the
+ * assertion that follows.
+ *
+ * So they elevate explicitly, here, in one place with a name that says what it is —
+ * rather than each spec quietly inserting as whatever role it happened to be holding.
+ * The role is read back rather than assumed, because these helpers are called from
+ * transactions running as several different users and restoring the wrong one would
+ * silently change what the test afterwards proves.
+ *
+ * `request.jwt.claims` is untouched: `set local role` and the claims setting are
+ * independent, so the identity the policies see is the same on the way out as on the
+ * way in.
+ */
+export const asOwner = async <T>(client: Client, fn: () => Promise<T>): Promise<T> => {
+  const before = await client.query<{ role: string }>('select current_user as role');
+  const previous = before.rows[0]?.role ?? 'postgres';
+  await client.query('set local role postgres');
+  try {
+    return await fn();
+  } finally {
+    await client.query(`set local role ${previous}`);
+  }
+};
