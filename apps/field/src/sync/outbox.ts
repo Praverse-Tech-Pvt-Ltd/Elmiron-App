@@ -6,6 +6,8 @@ import {
 } from '@fieldforce/core';
 import type {
   ApiClient,
+  ApiErrorCode,
+  SyncRejectionCode,
   CreateCheckInRequest,
   CreateCheckOutRequest,
   CreateConsentRecordRequest,
@@ -217,6 +219,51 @@ const serverReceivedAt = (response: unknown): string | null => {
   return typeof value === 'string' ? value : null;
 };
 
+/**
+ * A server refusal, as a rejection code.
+ *
+ * **MR-10 C1/C3. The whole rejection path was unreachable from a flush.**
+ *
+ * `sendOrQueue` has always told a refusal from a silence: an `ApiRequestError` means the
+ * server answered, so the item is NOT queued, because *"queueing it would mean re-sending
+ * something already refused, on every flush, forever."* `flushOutbox` did not make that
+ * distinction. Its `catch` recorded `attempt_failed` for everything, which returns the row
+ * to `queued` — so a refusal arriving during a flush was treated as no answer at all.
+ *
+ * Nothing produced `rejected` or `dead_lettered`, so `RejectionRecord`, the queue screen's
+ * whole rejection block, `deadLettered`, `attemptsRemaining` and the server-clock line were
+ * all unreachable. **What an MR would see once Part D schedules it:** a consent refused
+ * `45001` sitting in the queue as "waiting to send", retried on every flush forever, never
+ * explained and never surfaced to anybody — while they believe it is on its way.
+ *
+ * `dead_lettered` rather than `rejected`, and the reason is the payload: a queued row is
+ * replayed byte-identical, so a refusal of it is permanent by construction. The same
+ * `occurredAt` is outside the same shift window on every attempt. That is the definition
+ * of *needs a person, not another retry*, and it is the rule `sendOrQueue` already applies
+ * one function up.
+ *
+ * The mapping is coarse on purpose. `ApiErrorCode` is a transport category and
+ * `SyncRejectionCode` is a queue category; neither is the SQLSTATE contract, which is what
+ * actually carries the remedy (BE-W75 put `sqlState` on the verdict for exactly this
+ * reason). `internal_error` is the honest default rather than a guess that reads as
+ * precision.
+ */
+const rejectionCodeFor = (code: ApiErrorCode): SyncRejectionCode => {
+  switch (code) {
+    case 'permission_denied':
+    case 'unauthenticated':
+      return 'not_your_record';
+    case 'not_found':
+      return 'missing_reference';
+    case 'validation_failed':
+      return 'validation_failed';
+    case 'conflict':
+    case 'rate_limited':
+    case 'internal_error':
+      return 'internal_error';
+  }
+};
+
 export interface FlushResult {
   readonly attempted: number;
   readonly sent: number;
@@ -289,6 +336,29 @@ export const flushOutbox = async (
       });
       sent += 1;
     } catch (error: unknown) {
+      // **A refusal is not a silence.** `sendOrQueue` has always drawn this line; the
+      // flush did not, and treated a server "no" as "no answer" — retrying a permanently
+      // refused row forever and never showing anybody why.
+      if (error instanceof ApiRequestError) {
+        state = syncQueueReducer(state, {
+          type: 'verdict_received',
+          verdict: {
+            id: item.id,
+            status: 'dead_lettered',
+            rejectionCode: rejectionCodeFor(error.code),
+            // The server's sentence, verbatim. Never reworded — the queue screen renders
+            // exactly this.
+            explanation: error.message,
+            warnings: [],
+            attemptsRemaining: 0,
+            // No server clock in an error body. Null rather than the device's, which is
+            // the MR-08 C5 rule: carry the server's value or carry none.
+            receivedAt: null,
+          },
+        });
+        continue;
+      }
+
       state = syncQueueReducer(state, {
         type: 'attempt_failed',
         ids: [item.id],

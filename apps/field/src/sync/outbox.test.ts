@@ -501,3 +501,78 @@ describe('MR-09 B: the misroute class, not just the one instance', () => {
     expect(store.current().items[0]?.status).toBe('synced');
   });
 });
+
+describe('MR-10 C: a refusal during a flush is not a silence', () => {
+  const refusal = () =>
+    new ApiRequestError(403, {
+      code: 'permission_denied',
+      message: 'The consent notice changed since it was displayed.',
+      requestId: 'req-1',
+      fieldErrors: null,
+    });
+
+  it('dead-letters a refused row instead of retrying it forever', async () => {
+    // **The scheduled defect.** `sendOrQueue` has always told a refusal from a silence —
+    // an ApiRequestError means the server answered, so the item is not queued. The FLUSH
+    // did not: its catch recorded `attempt_failed` for everything, which returns the row
+    // to `queued`.
+    //
+    // So nothing in the app ever produced `rejected` or `dead_lettered`, and the entire
+    // rejection path was unreachable: RejectionRecord, the queue screen's rejection block,
+    // deadLettered, attemptsRemaining, the server-clock line. A consent refused 45001
+    // would have sat in the queue as "waiting to send", retried on every flush forever,
+    // never explained — while the MR believed it was on its way.
+    const store = inMemory();
+    await sendOrQueue(
+      () => Promise.reject(new Error('Network request failed')),
+      checkInQueueItem(body),
+      store,
+    );
+
+    const createCheckIn = vi.fn(() => Promise.reject(refusal()));
+    await flushOutbox({ createCheckIn } as unknown as ApiClient, store);
+
+    const item = store.current().items[0];
+    expect(item?.status, 'a refused row must not go back to queued').toBe('failed');
+
+    const rejection = store.current().rejections[body.id];
+    expect(rejection).toBeDefined();
+    expect(rejection?.deadLettered, 'a replayed payload is refused identically forever').toBe(true);
+    // The server's sentence, verbatim.
+    expect(rejection?.explanation).toBe('The consent notice changed since it was displayed.');
+    // No server clock in an error body — carry none rather than the device's (MR-08 C5).
+    expect(rejection?.receivedAt).toBeNull();
+  });
+
+  it('and a genuine silence still returns the row to the queue', async () => {
+    // The other side, and the distinction the whole fix turns on. A network failure means
+    // the server decided nothing, so the work is still the MR's to deliver.
+    const store = inMemory();
+    await sendOrQueue(
+      () => Promise.reject(new Error('Network request failed')),
+      checkInQueueItem(body),
+      store,
+    );
+
+    const createCheckIn = vi.fn(() => Promise.reject(new Error('Network request failed')));
+    await flushOutbox({ createCheckIn } as unknown as ApiClient, store);
+
+    const item = store.current().items[0];
+    expect(item?.status).toBe('queued');
+    expect(item?.attemptCount).toBeGreaterThan(1);
+    expect(store.current().rejections[body.id]).toBeUndefined();
+  });
+
+  it('THE POSITIVE CONTROL: an accepted row is still accepted', async () => {
+    // Without this, both assertions above are satisfied by a flush that fails everything.
+    const store = inMemory();
+    await sendOrQueue(
+      () => Promise.reject(new Error('Network request failed')),
+      checkInQueueItem(body),
+      store,
+    );
+    const createCheckIn = vi.fn(() => Promise.resolve({ receivedAt: '2026-09-08T00:00:00.000Z' }));
+    await flushOutbox({ createCheckIn } as unknown as ApiClient, store);
+    expect(store.current().items[0]?.status).toBe('synced');
+  });
+});

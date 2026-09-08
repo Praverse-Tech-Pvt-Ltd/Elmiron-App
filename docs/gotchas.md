@@ -1892,3 +1892,60 @@ Two signs you are about to do this:
 
 And the general form, beyond triggers: **a guard added in front of an existing one inherits
 its cases and must inherit its answers.**
+
+## 8 September 2026 — a branch unreachable only because of today's data is scheduled code, not dead code
+
+**Audit for it before the work that schedules it, not after.**
+
+Four defects in six sessions were each unreachable at the moment they were written, each
+about to be made reachable by the very next task, and each would have shipped as a silent
+wrong answer rather than an error:
+
+1. **The device clock rendered as "Server recorded this at…".** `flushOutbox` stamped
+   `receivedAt: nowIso()`; nothing rendered it until the queue screen gained a rejection
+   block. Scheduled by: showing a refusal to an MR.
+2. **The `45xxx` codes collapsing to `internal_error`.** The verdict carried a coarse
+   category and no SQLSTATE, so every consent refusal would have read the same. Scheduled
+   by: routing consent through `sync_push`.
+3. **A row nothing can send stranded `in_flight` for ever.** `batch_started` marks a row
+   in flight and the dispatch `continue`d without a verdict; later flushes select only
+   `queued`. Unreachable while all four queueing entities had a branch. Scheduled by:
+   queueing a fifth.
+4. **A server refusal treated as a silence.** `flushOutbox`'s `catch` recorded
+   `attempt_failed` for everything, so a refused row went back to `queued` and was retried
+   for ever — and nothing in the app ever produced `rejected` or `dead_lettered`, leaving
+   the whole rejection path unreachable. Scheduled by: converting the writes, so that
+   refusals start arriving during flushes.
+
+In each case the code was correct for the data that existed and wrong for the data that was
+one task away. **None of them would have failed loudly.** Every one produces a plausible
+screen: a timestamp, a generic message, a row that says "waiting to send".
+
+### Why this is not the same as dead code
+
+Dead code is unreachable because nothing calls it, and deleting it is safe. **Scheduled
+code is unreachable because of the current shape of the *data*, and it is about to run.**
+Coverage tools cannot tell them apart — both show as uncovered lines — and the usual advice
+for an uncovered branch, *delete it or test it*, gives the wrong answer for the first and
+the right answer for the second.
+
+### The rule
+
+**Before a task that changes what data exists, list the branches that could not previously
+execute and ask what each would do if it ran.** The question is not *"is this covered"* but
+*"what makes this unreachable, and is that about to change?"*
+
+Three questions that find them:
+
+- Which `switch` arms and `if` branches have no producer? Grep for who *emits* the value,
+  not who *handles* it — all four above were fully handled and never emitted.
+- Which modules are exported and called by nothing? `apps/field/src/sync/pull.ts` is a
+  complete, tested module that **no screen calls**, and `recordCheckIn`/`recordCheckOut`
+  are finished implementations against the live RPC with no caller.
+- Which states can the reducer produce that no caller ever constructs? `duplicate`,
+  `rejected` and `reinstated` were all handled and none was ever emitted.
+
+**And the tell is a comment describing the hazard.** `sampleQueueItem`'s docstring warned
+that a second entity would make a misroute "a silent corruption rather than a
+simplification" — and check-out was already the second entity when it was written. A
+comment about a branch is evidence that somebody saw it and could not reach it.
