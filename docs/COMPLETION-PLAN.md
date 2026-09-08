@@ -939,3 +939,36 @@ nothing to separate has not been met, and it should not appear as green anywhere
 pnpm --filter @fieldforce/api seed:synthetic --mrs 100 --history 1y
 pnpm --filter @fieldforce/api test -- g-rls-c
 ```
+
+### Added by MR-06
+
+**BE-W76 and BE-W77 are CLOSED by MR-06.** BE-W76: `user_profiles` gained an
+`organisation_id` derived by trigger, `visible_user_ids()` and `visible_territory_ids()`
+stopped meaning "everything" for an admin, the six `*_admin_all` policies gained an
+explicit tenant predicate, `search_doctors` lost its hand-transcribed copy of the admin
+rule, and `organisations` stopped being world-readable. Policies mentioning
+`organisation_id`: **0 -> 7**, with ~30 more scoped through the two functions. The five
+quarantined `g-rls-c.spec.ts` cells are **deleted** and the suite passes — that deletion
+was the acceptance test. BE-W77: three bounds in `validate_consent_withdrawal`, reusing
+`consent_future_tolerance_seconds`, `consent_max_sync_lag_hours` and the `45007`/`45008`
+SQLSTATEs, plus `23514` for a withdrawal that predates its consent.
+
+| ID | Title | Changes | Deps | Blocker | Est | Verification |
+|---|---|---|---|---|---|---|
+| **BE-W79** | **A tenant can break every other tenant's consent capture** | `consent_text_versions`, `active_consent_text_at`, `consent_text_versions_select_authenticated` | — | — | 5 | `consent_text_versions` has **no `organisation_id`**, and `active_consent_text_at(language, at)` returns the newest version for a language across **every** tenant. `capture_consent` compares the version the MR displayed against that and raises `45001`. Proven against the live database: tenant B inserting an `en-IN` notice — touching nothing of tenant A's — makes A's active version become B's, and A's next capture against A's own displayed notice is refused *"the consent notice changed since it was displayed; re-read the current notice and ask again"*. **No admin, no privilege, no cross-tenant access: an ordinary tenant doing an ordinary thing stops another tenant capturing consent, which is the gate on recording.** The disclosure half is smaller and also wrong: the select policy is `using (true)`, so every company reads every other company's legal drafting. Fix is the BE-W76 pattern — a tenant column, and the resolver scoped to `current_user_organisation_id()`. Verification: a second organisation publishes a notice in the same language and the first organisation's capture still succeeds, with a positive control that its own superseded notice is still refused `45001` |
+| **BE-W78** | The consent bounds live in a function callers can skip | `consent_records` grants, or `capture_consent`'s bounds moved to a trigger | — | — | 3 | `authenticated` holds a direct `INSERT` grant on `public.consent_records` and `consent_records_insert_own` permits the row, so a client can insert one over PostgREST **without calling `capture_consent`** — and `45001`, `45007` and `45008` are skipped with it. Proven as an ordinary MR: a consent dated a **year in the future** is accepted (`insert 0 1`), asserted in `consent-withdrawal-bounds.spec.ts`. BE-W74 routed the sync path; the REST path was never routed anywhere. Two candidate remedies with different blast radii: revoke the INSERT grant so `capture_consent` is the only door, or move the three bounds into a `BEFORE INSERT` trigger the way MR-06 did for the withdrawal. **Note the asymmetry it creates today:** a withdrawal is bounded on every path and the capture it supersedes is not |
+| **BE-W80** | No isolation coverage for `samples_and_inputs` | `services/api/tests/` | — | — | 1 | `seedFixtures()` creates exactly ONE sample row, owned by one MR, so no test can check that another MR's samples are invisible. The control itself is sound — `samples_and_inputs_select_own_or_team` is `mr_id in (select visible_user_ids())`, now tenant-scoped, and the UCPMP cap aggregates by `doctor_id`, which belongs to exactly one tenant. **Coverage debt, not a schema gap.** Verification: a second sample under a different MR, and the cap asserted to aggregate within a tenant with a positive control that it still fires within one |
+| **BE-W81** | No isolation coverage for `check_outs` | `services/api/tests/` | — | — | 1 | One row, one owner. The asymmetry is the point: `check_ins` has two rows under two MRs and is tested; `check_outs` has one and is not, though the policies are the same shape. Coverage debt |
+| **BE-W82** | No isolation coverage for `beat_plans` | `services/api/tests/` | — | — | 1 | One row, one owner. Same policy shape as `visits`, which is tested. Coverage debt |
+
+**The sweep that produced BE-W80 to BE-W82 is worth repeating rather than trusting.** After
+a single `seedFixtures()` call against a freshly reset database:
+
+```sql
+select relname, n_live_tup from pg_stat_user_tables
+ where schemaname = 'public' and n_live_tup > 0 order by n_live_tup;
+```
+
+Anything with one row on the owning side of a boundary is a boundary nobody has tested —
+the test cannot fail, so it proves nothing and it looks green. That is how BE-W76 survived
+twenty sessions, and it is recorded in `docs/gotchas.md`.

@@ -190,15 +190,12 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
   await withClient(async (client: Client) => {
     await client.query('begin');
 
-    await client.query(
-      `insert into public.organisations (id, name) values ($1, $2), ($3, $4)`,
-      [
-        organisationId,
-        `Gate0 Pharma ${runId}`,
-        rivalOrganisationId,
-        `Rival Pharma ${runId}`,
-      ],
-    );
+    await client.query(`insert into public.organisations (id, name) values ($1, $2), ($3, $4)`, [
+      organisationId,
+      `Gate0 Pharma ${runId}`,
+      rivalOrganisationId,
+      `Rival Pharma ${runId}`,
+    ]);
 
     await client.query(
       `insert into public.territories (id, name, code, parent_id, organisation_id) values

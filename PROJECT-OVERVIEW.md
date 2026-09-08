@@ -8906,3 +8906,487 @@ compressing it.
    the `consent_future_tolerance_seconds` question, since both are the same kind of decision.
 
 ---
+
+---
+
+### MR-06 — the tenant boundary (8 September 2026)
+
+**Parts A, B, C and D are done. Part E — the conversion — was not started**, per its own
+instruction: B, C and D used the session and nothing in E is blocked by any of them.
+
+**G-RLS-C now PASSES.** Forty deny cells and fifteen positive controls, no quarantine.
+**G-RLS-X remains ABSENT rather than passing** — there is no clinical schema and no
+clinical role, and a gate with nothing to separate has not been met.
+
+**Three new findings, one of them at least as serious as BE-W76.** BE-W79 is first below
+because D3 says not to bury it in a list.
+
+#### A1 — the push, and a correction
+
+MR-05's four commits pushed as `ff0429b..fd5d3aa`. Run **`34215855380`: FAILURE.**
+
+**MR-05's A1 was wrong and this is the correction.** It reported run `34211758329` as
+green — that run was `ff0429b`, the MR-04 head. **The four MR-05 commits had never been
+through CI at all.** When they were, they failed.
+
+The cause is the theme of this whole prompt. `g-rls-c.spec.ts` drew its cross-org target
+from `seed:synthetic`, **which CI does not run** — so the suite aborted with
+`seed:synthetic has not been run — the cross-ORG half of this matrix cannot execute`.
+That refusal was the right design and it worked: the suite said loudly that it could not
+test the thing it existed to test, rather than skipping quietly. But it means the
+cross-ORG half of MR-05's matrix had executed on exactly one laptop and nowhere else.
+
+Fixed by making the second organisation a **fixture** rather than a seed, which is Part
+D's lesson applied to Part A's blocker.
+
+**Local counts after the whole session:**
+
+| workspace | runner | before | after MR-06 |
+| --- | --- | ---: | ---: |
+| `@fieldforce/api` | vitest, live database | 531 / 26 | **538 passed / 26 files** |
+| `@fieldforce/field` | vitest, logic | 359 / 25 | 359 / 25 |
+| `@fieldforce/field` | jest, jest-expo render | 72 / 12 | 72 / 12 |
+| `@fieldforce/mock` | vitest | 40 / 1 | 40 / 1 |
+| `@fieldforce/ui-tokens` · `@fieldforce/core` · `@fieldforce/ui` | vitest | 54 / 21 / 4 | unchanged |
+
+No skips, run three times. `verify:rollbacks`: schema empty, **39 migrations, 39
+rollbacks**. `turbo run typecheck lint --force`: 16 of 16.
+
+**The Part B, C and D commits are NOT pushed**, per the standing rule. So CI is red at
+`fd5d3aa` and the fix is in six unpushed commits — which is the honest state and needs a
+decision, because Part A cannot go green without Part B.
+
+---
+
+#### BE-W79 — **a tenant can break every other tenant's consent capture**
+
+Found by the D1 sweep, proven against the live database, **not fixed.** It is as serious
+as BE-W76 and needs less than BE-W76 did: no admin, no privilege, no cross-tenant access.
+
+`consent_text_versions` has **no `organisation_id`**, and the resolver ignores tenancy
+entirely:
+
+```sql
+active_consent_text_at(p_language, p_at) ->
+  select v.* from public.consent_text_versions v
+   where v.language = p_language and v.effective_from <= p_at ...
+   order by v.effective_from desc limit 1
+```
+
+So the "currently active notice for `en-IN`" is **the newest one anybody published**.
+`capture_consent` compares the version the MR displayed against that, and raises `45001`
+if they differ. Proven end to end:
+
+```
+>>> BEFORE: active for probe-lang        -> A v1   (tenant A's own notice)
+>>> A captures against its own notice    -> accepted
+--- tenant B inserts a notice in the SAME language, touching nothing of A's ---
+>>> AFTER: active for probe-lang         -> B v1   (tenant B's notice)
+>>> A captures against its own notice    -> ERROR: the consent notice changed since it
+                                            was displayed; re-read the current notice
+                                            and ask again
+```
+
+**Tenant B publishing a consent notice stops tenant A capturing consent.** Consent is the
+gate on recording, and recording is the product. It is a cross-tenant denial of service
+performed by an ordinary tenant doing an ordinary thing, and the MR is told to re-ask a
+doctor who already answered.
+
+The disclosure half is smaller and still wrong: `consent_text_versions_select_authenticated`
+is `using (true)`, so every company reads every other company's legal drafting.
+
+**The fix is the same shape as BE-W76** — a tenant column, and the resolver scoped to
+`current_user_organisation_id()`. It is not done here because MR-06 asked for the
+organisation boundary on the commercial tables and this is the consent ledger, with a
+migration over an append-only table and a client contract behind it.
+
+---
+
+#### B1 — the blast radius, before anything changed
+
+**45 policies, 0 mentioning `organisation_id`.** The six granting on `is_admin()` were
+`clinic_addresses`, `doctors`, `organisations`, `territories`,
+`territory_shift_windows`, `user_profiles` — all `for all to authenticated`, all
+`using (is_admin())` with no scope in them.
+
+But the six were the small half. **`visible_user_ids()` is called by eighteen
+`SECURITY DEFINER` functions** — `team_activity`, `coverage`, `mr_activity_detail`,
+`approvable_call_reports`, `approve_call_report`, `list_consent_records`,
+`read_consent_record`, `daily_mileage`, `team_exceptions`, `list_analyses`,
+`list_analysis_overrides`, `read_analysis`, `create_analysis_override`,
+`overdue_call_reports`, `my_upload_queue`, `sync_queue_status`, `list_sync_rejections`,
+`reinstate_sync_item` — and by roughly thirty policies as `mr_id in (select
+visible_user_ids())`. Its admin branch was one line:
+
+```sql
+if v_role = 'admin' then
+  return query select p.id from public.user_profiles p;   -- every user, every tenant
+```
+
+**Does the console break when admin is scoped? It cannot: the console makes no data calls
+at all.** `apps/console/src` contains no `fetch`, no Supabase client, no RPC. Every
+coaching screen is unwired. That is the honest answer to B1's question, and it is not
+reassurance — it means the console has never exercised any of this.
+
+#### B2 — where the scoping went, and why
+
+**Not in `is_admin()`.** That answers "is this caller an administrator", a question about
+role. Folding a tenant test in makes one predicate answer two questions and the next
+reader cannot tell which a call site meant.
+
+**In the two scoping functions, for everything that already delegates to them.** Thirty
+policies and eighteen functions closed by changing two `if v_role = 'admin'` branches. A
+predicate per policy would have been a hand-maintained list of forty-eight things, and
+this repo's rule is that such a list will eventually be left off. Deriving from the two
+functions everything already calls *is* deriving from the catalog.
+
+**In the policies directly, for the six that bypass those functions**, because no change
+to a scoping function can reach `using (is_admin())`.
+
+**Both placements are load-bearing, on different paths** — B6 proved it and it was not
+what I expected. See below.
+
+**The prerequisite nobody had noticed: `user_profiles` had no organisation column.** Only
+`doctors` and `territories` carried one; a user's sole link to a tenant was
+`territory_id -> territories.organisation_id`; and
+`user_profiles_field_roles_require_territory` is `CHECK (role = 'admin' OR territory_id
+IS NOT NULL)` — **the schema explicitly exempts an admin from having a territory**, and
+`seedFixtures()` duly created one with `territory_id = null`. So an administrator had no
+data path to a tenant at all, and no predicate could have been written however carefully.
+**BE-W76 was a migration, not a policy edit.**
+
+The column is NOT NULL and **derived by trigger** rather than supplied: a user in a
+territory belongs to that territory's organisation and to no other, so a caller that
+could pass a value could pass a wrong one, and a user labelled org X standing in a
+territory of org Y is a tenancy hole wearing the fix as a disguise. The only actor a
+human must decide for is the admin, whose organisation was genuinely undefined.
+
+**Two holes closed at the same time, because a boundary that can be stepped over is a
+boundary that looks fixed and is not:**
+
+- **`territories.parent_id` had no same-organisation constraint.** A territory in org A
+  could be parented to one in org B, and `visible_territory_ids()` walks `parent_id` — so
+  a manager's scope could leave their tenant through the tree, with every policy behaving
+  correctly.
+- **`doctors.organisation_id` could disagree with its territory's.** Both NOT NULL,
+  nothing tying them together. A doctor labelled org A sitting in a territory of org B is
+  readable by org B through `doctors_select_in_territory` no matter what the org-based
+  admin predicate says — the org column would have been decorative on exactly the table
+  the matrix probes.
+
+**And `organisations_select_authenticated` was `using (true)`**: every authenticated user
+could enumerate every client on the platform. The client list is the most commercially
+sensitive thing a multi-tenant vendor holds, and `true` is not a scope. Now scoped to the
+caller's own tenant.
+
+**`search_doctors` stops transcribing the policy by hand.** Its body carried
+`if public.is_admin() then select array_agg(t.id) from public.territories t` with the
+comment *"for an admin the equivalent scope is every territory"* — a true statement about
+the old policy and a false one about the new. That is exactly the failure the `function`
+cell exists to catch. The branch is **deleted, not corrected**: one expression of the
+rule, in `visible_territory_ids()`, so there is nothing left to fall out of step.
+
+#### B3 — the mechanism, and an honest note about the metric
+
+```
+select count(*) from pg_policy
+ where coalesce(pg_get_expr(polqual,polrelid),'')
+    || coalesce(pg_get_expr(polwithcheck,polrelid),'') like '%organisation_id%';
+   before: 0        after: 7        (of 45 policies, unchanged in number)
+```
+
+Covered by an explicit predicate: `organisations` (twice — `organisations_admin_all` and
+the new `organisations_select_own`), `doctors`, `territories`, `user_profiles`,
+`clinic_addresses` (through its doctor), `territory_shift_windows` (through its
+territory).
+
+**The other ~30 policies are NOT covered by this count and are covered in fact**, which is
+why the count is a poor metric on its own. They read `mr_id in (select
+visible_user_ids())`, and that function is now tenant-scoped — so `visits`, `check_ins`,
+`check_outs`, `call_reports`, `samples_and_inputs`, `recordings`, `voice_notes`,
+`beat_plans`, `consent_records`, `analyses`, the four `sync_*` tables and both
+`visit_audio_quarantine*` tables are all scoped without the string appearing anywhere in
+their definitions. **Counting the string would have understated the fix and would
+overstate the next one.** The behaviour is what the matrix measures.
+
+**Deliberately not covered, with reasons:**
+
+- `app_thresholds` and `consent_text_versions` — `using (true)` for `authenticated`.
+  Thresholds are operational configuration. Consent text is **BE-W79 above** and is a
+  real defect, not an accepted omission.
+- `user_profiles_select_auth_admin` — `using (true)`, but granted only to
+  `supabase_auth_admin`, which is GoTrue's own internal role and not reachable by any
+  client. Scoping it would break sign-in.
+- `objects` (the three `audio_*` policies) — scoped by `has_live_upload_grant(name)`, and
+  a grant belongs to an MR who belongs to a tenant. Reached through the grant, not the
+  tenant column.
+- `adverse_event_reports_select_own` and `upload_grants_select_own` — scoped to
+  `auth.uid()`, which is one user and therefore one tenant.
+
+#### B5 — the full matrix. **Fifty-five cells, and G-RLS-C passes.**
+
+```
+another ORG      | anon               | postgrest | REFUSAL
+another ORG      | anon               | raw sql   | REFUSAL
+another ORG      | anon               | join      | REFUSAL
+another ORG      | anon               | function  | REFUSAL
+another ORG      | anon               | view      | REFUSAL
+another ORG      | mr                 | postgrest | ABSENCE
+another ORG      | mr                 | raw sql   | ABSENCE
+another ORG      | mr                 | join      | ABSENCE
+another ORG      | mr                 | function  | ABSENCE
+another ORG      | mr                 | view      | ABSENCE
+another ORG      | field_manager      | postgrest | ABSENCE
+another ORG      | field_manager      | raw sql   | ABSENCE
+another ORG      | field_manager      | join      | ABSENCE
+another ORG      | field_manager      | function  | ABSENCE
+another ORG      | field_manager      | view      | ABSENCE
+another ORG      | admin              | postgrest | ABSENCE   <-- was DATA
+another ORG      | admin              | raw sql   | ABSENCE   <-- was DATA
+another ORG      | admin              | join      | ABSENCE   <-- was DATA
+another ORG      | admin              | function  | ABSENCE   <-- was DATA
+another ORG      | admin              | view      | ABSENCE   <-- was DATA
+another ORG      | CONTROL their mr   | postgrest | DATA
+another ORG      | CONTROL their mr   | raw sql   | DATA
+another ORG      | CONTROL their mr   | join      | DATA
+another ORG      | CONTROL their mr   | function  | DATA
+another ORG      | CONTROL their mr   | view      | DATA
+another ORG      | CONTROL their admin| postgrest | DATA
+another ORG      | CONTROL their admin| raw sql   | DATA
+another ORG      | CONTROL their admin| join      | DATA
+another ORG      | CONTROL their admin| function  | DATA
+another ORG      | CONTROL their admin| view      | DATA
+another SUBTREE  | anon               | postgrest | REFUSAL
+another SUBTREE  | anon               | raw sql   | REFUSAL
+another SUBTREE  | anon               | join      | REFUSAL
+another SUBTREE  | anon               | function  | REFUSAL
+another SUBTREE  | anon               | view      | REFUSAL
+another SUBTREE  | mr                 | postgrest | ABSENCE
+another SUBTREE  | mr                 | raw sql   | ABSENCE
+another SUBTREE  | mr                 | join      | ABSENCE
+another SUBTREE  | mr                 | function  | ABSENCE
+another SUBTREE  | mr                 | view      | ABSENCE
+another SUBTREE  | field_manager      | postgrest | ABSENCE
+another SUBTREE  | field_manager      | raw sql   | ABSENCE
+another SUBTREE  | field_manager      | join      | ABSENCE
+another SUBTREE  | field_manager      | function  | ABSENCE
+another SUBTREE  | field_manager      | view      | ABSENCE
+another SUBTREE  | admin              | postgrest | DATA      <-- by design
+another SUBTREE  | admin              | raw sql   | DATA      <-- by design
+another SUBTREE  | admin              | join      | DATA      <-- by design
+another SUBTREE  | admin              | function  | DATA      <-- by design
+another SUBTREE  | admin              | view      | DATA      <-- by design
+another SUBTREE  | CONTROL their mr   | postgrest | DATA
+another SUBTREE  | CONTROL their mr   | raw sql   | DATA
+another SUBTREE  | CONTROL their mr   | join      | DATA
+another SUBTREE  | CONTROL their mr   | function  | DATA
+another SUBTREE  | CONTROL their mr   | view      | DATA
+```
+
+**The fifteen CONTROL rows are the difference between this matrix and MR-05's.** Each
+boundary names the identities entitled to the row, and every path runs as them and must
+return DATA. An ABSENCE counts only because the identical query a few rows down came back
+with the row — otherwise a limit, a filter, a typo or an empty fixture is
+indistinguishable from a refusal. `CONTROL their admin` is the sharpest of them: without
+it, *"an admin cannot see the rival doctor"* cannot be told apart from *"no admin can see
+any doctor"*.
+
+The five by-design cells are **asserted present**, not merely tolerated, for the same
+reason in the other direction.
+
+**The quarantine is deleted, not relaxed.** MR-05 listed the five defect cells by name and
+asserted them still failing; there is no list now, so a regression fails here rather than
+being excused.
+
+#### B6 — the two mutations, and what they showed that I did not expect
+
+| mutation | result |
+| --- | --- |
+| **the organisation predicate removed** — the `000900` rollback file IS the mutation | **5 named cells return DATA**, suite red on `another ORG / admin / {postgrest, raw sql, join, function, view}`. Cases still 5, assertions failing |
+| **`current_user_organisation_id()` forced to null** | **nothing changed.** Every control still DATA, matrix still green |
+| **`visible_territory_ids()` admin branch emptied** | **the positive control fires**: `CONTROL their admin / function` -> ABSENCE, suite red on the control assertion |
+
+**The middle row is the finding.** Nulling the helper the six new policies call broke
+nothing, because `doctors` also has `doctors_select_in_territory`, which reaches the same
+rows through `current_user_visible_territory_ids()` — and permissive policies are OR'd.
+So for *reads on doctors* the policy predicate is not what carries the weight.
+
+Emptying the scoping function instead broke exactly one cell: the `function` path, because
+`search_doctors` is `SECURITY DEFINER` and RLS does not apply to it at all — only its own
+body's scope does.
+
+**The two placements are complementary rather than redundant, and neither alone is
+sufficient.** That is the empirical answer to B2's question, and it is better evidence than
+the argument I made for the design beforehand.
+
+#### B7
+
+**G-RLS-X remains ABSENT, not passing.** No clinical schema, no clinical roles; S6 and S7
+are cut under the default scope option.
+
+**The clinical tables inherit this pattern when they exist:** a tenant column on the row, a
+single helper expressing the caller's tenant, and the scope resolved inside
+`visible_*_ids()` rather than restated per policy. BE-W79 is the first proof the pattern
+generalises — `consent_text_versions` needs exactly the same three things.
+
+---
+
+#### C — BE-W77, and a bigger hole found underneath it
+
+**Three bounds, in the trigger:** `45007` forward beyond
+`consent_future_tolerance_seconds`; `45008` older than `consent_max_sync_lag_hours`;
+`23514` earlier than the consent it supersedes. Thresholds reused — two numbers for one
+question is two numbers to keep in step, and they would drift.
+
+**C2: the SQLSTATEs are reused, not minted**, because the remedy is what a code is for and
+the remedy is identical — a clock that is ahead is fixed the same way whether it stamped a
+consent or a withdrawal. `packages/core` maps both already and `error-contract.spec.ts`
+guards that map in both directions; `45009`/`45010` would have added two entries whose
+explanations were word for word the two that exist. **The messages differ where the
+situation differs:** re-asking a doctor to withdraw is worse than re-asking for consent,
+because it says the withdrawal did not register to the one person who has already
+exercised the right.
+
+The third bound gets `23514` and has no threshold, because there is no value of it that
+could be right. The sync lag does not cover it: an hour-old consent withdrawn *"two hours
+ago"* is well inside 72 hours and still describes a withdrawal that happened before there
+was anything to withdraw.
+
+**C3 — two-sided mutation, 18 cases both times, no no-op:**
+
+| mutation | result |
+| --- | --- |
+| the bounds removed (the rollback file) | **3 failed / 15 passed** — exactly the three refusals |
+| every withdrawal refused | **12 failed / 6 passed** — the positive controls, and every C3 append-only case, which each have to write a withdrawal first |
+
+**C4 confirmed:** the doctor stays pinned to the superseded record, and the withdrawal row
+stays append-only for `authenticated`, `anon`, `service_role` **and `postgres`** with
+`23001`, after the change.
+
+#### **BE-W78 — the bounds live in a function callers can skip**
+
+Found while deciding where to put the withdrawal bound, and it decided it. `authenticated`
+holds a **direct `INSERT` grant on `public.consent_records`**, and
+`consent_records_insert_own` permits the row — so a client can insert a consent record
+over PostgREST **without calling `capture_consent` at all**, and `45001`, `45007` and
+`45008` are skipped with it. Proven as an ordinary MR:
+
+```
+insert into public.consent_records (..., captured_at)
+values (..., now() + interval '1 year');   -- INSERT 0 1
+```
+
+A consent dated a year in the future, accepted, on the ordinary path the app is being
+converted to use. **BE-W74 routed the sync path through `capture_consent`; the REST path
+was never routed anywhere.** Registered, not fixed — the remedies are to move the bounds
+into a trigger or revoke the INSERT grant so `capture_consent` is the only door, and
+either has its own blast radius.
+
+So the **withdrawal is now bounded strictly better than the capture it supersedes**, which
+is the right way round for the record that governs lawfulness.
+
+**A first draft of the C1c test asserted `45007` for an authenticated caller and was
+wrong.** That role is refused `42501` first, because `validate_consent_withdrawal` is
+**not** `SECURITY DEFINER` and its read of `consent_records` needs a SELECT grant the role
+does not hold. Recorded rather than relied upon: a guard that holds because of where a
+`SELECT` happens to sit is a guard that moves the day somebody adds `security definer` to
+make the validator work for a new caller.
+
+---
+
+#### D — the single-fixture sweep
+
+**D1, derived rather than listed.** One `seedFixtures()` call against a freshly reset
+database, then `pg_stat_user_tables`:
+
+```
+beat_plans = 1              check_ins = 2            clinic_addresses = 3
+check_outs = 1              consent_records = 2      doctors = 3
+consent_text_versions = 1   analyses = 2             visits = 3
+samples_and_inputs = 1      call_reports = 2         territories = 6
+                            organisations = 2        user_profiles = 8
+                            territory_shift_windows = 2
+```
+
+**The criterion is not literally "one row" — it is one row on the owning side of the
+boundary.** `check_ins` has two rows belonging to two different MRs, so the boundary is
+instantiated. `samples_and_inputs` has one row, one owner, and no query that could ever
+come back with the wrong one.
+
+**D2 / D3, ranked by consequence:**
+
+| # | entity | what an isolation test WOULD check | enforced? | severity |
+| --- | --- | --- | --- | --- |
+| 1 | **`consent_text_versions`** | that another tenant's notice is neither readable nor **selectable as the active one** | **NO. No tenant column at all, and `active_consent_text_at` ignores tenancy** | **BE-W79. As serious as BE-W76** |
+| 2 | `samples_and_inputs` | that another MR's samples are invisible, and that the UCPMP cap aggregates within a tenant | Partly. The policy is `mr_id in (select visible_user_ids())` and is now tenant-scoped; the cap aggregates by `doctor_id`, and a doctor is in exactly one tenant, so **the cap is sound** | **BE-W80**, low. A gap in coverage, not in the schema |
+| 3 | `check_outs` | that another MR's check-out is invisible | Yes, same policy shape as `check_ins`, which has two rows and is tested | **BE-W81**, low. An asymmetry: check-in is testable and check-out is not |
+| 4 | `beat_plans` | that another MR's beat plan is invisible | Yes, same policy shape as `visits`, which is tested | **BE-W82**, low |
+
+**Only #1 is a defect.** #2–#4 are places where a real control exists and nothing exercises
+it on that particular table — the mechanism is proven elsewhere, so they are coverage debt
+and are registered as such rather than fixed. **#1 is not coverage debt: there is nothing
+to cover.**
+
+**D3's instruction is why BE-W79 is at the top of this record rather than in this table.**
+
+**D4** — two entries appended to `docs/gotchas.md`: *a boundary with one instance in the
+fixtures is untested by construction*, with the organisation boundary worked through and
+the derivation query; and *an ABSENCE in an isolation test needs a positive control*, with
+`search_doctors(null, null, 200)` at row 200 of 3,520 worked through, plus the direction
+that is easier to forget — the by-design cells need asserting present, or an over-broad fix
+looks exactly like a working one.
+
+---
+
+#### Two races the rival organisation exposed, both pre-existing
+
+Neither introduced by MR-06; both latent, and a second organisation made them likely
+enough to see.
+
+**Connection exhaustion.** `seedFixtures()` created its auth users in a `Promise.all` —
+six until the rival tenant made it eight — and vitest runs a dozen suites in parallel with
+no concurrency cap. Eighty-odd concurrent `POST /admin/users` exhausted Postgres
+(`max_connections` is 100); GoTrue could not get a connection and returned a 500 that
+surfaced as **"Database error creating new user"**, failing **eight suites** at their
+`beforeAll` with an error naming none of this. Creating the users sequentially cuts the
+peak by a factor of eight and costs a few hundred milliseconds per suite. Raising
+`max_connections` would have hidden the burst; capping vitest's concurrency would have
+slowed every suite to fix one.
+
+**A global count in a parallel suite.** `seed-reference-data`'s dry-run test bracketed the
+call with `select count(*) from public.organisations` and asserted the two were equal — a
+race it kept winning while `seedFixtures()` committed one organisation per call, and
+started losing at two. It now asserts the row *this* dry run would have written is absent
+before and after, which cannot be perturbed by another suite and is a strictly stronger
+claim than a count that happened to stay level.
+
+---
+
+#### Where this stopped
+
+**Part E — the four-write conversion — was not started.** Part E's own instruction says to
+stop if B, C and D have used the session, and they have: a schema migration with a
+derivation trigger, two integrity triggers, six rewritten policies, three rewritten
+functions, a rewritten matrix with fifteen controls, three withdrawal bounds, four
+mutations, the sweep, and two pre-existing races that had to be fixed before anything
+could be measured.
+
+**Nothing in E is blocked by A, B, C or D**, so the next session begins with it directly.
+
+**Order for the next session:**
+
+1. **Push.** Six commits are local and CI is red at `fd5d3aa` for a cause fixed in them.
+   Part A cannot go green without Part B, which is the one decision this record needs
+   taken before anything else.
+2. **BE-W79** — the consent notice boundary. It needs no product decision: the fix is the
+   pattern BE-W76 just established, and until it lands one client can stop another
+   capturing consent.
+3. **Part E**, the four-write conversion, with the `flushOutbox:220` /
+   `QueueScreen.tsx:275` device-clock fix in the same session because E is what makes that
+   branch reachable.
+4. **BE-W78** — the REST path that skips `capture_consent`. It belongs with whoever decides
+   whether the INSERT grant is revoked or the bounds move to a trigger.
+5. **Part E's visit-status half** only if the operator has confirmed the `not_met`
+   recommendation; otherwise the reads stay unconverted, because the done counter reads a
+   field nothing writes.
+

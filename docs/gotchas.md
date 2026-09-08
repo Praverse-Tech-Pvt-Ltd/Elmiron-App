@@ -1638,3 +1638,125 @@ clock has *something* in it, and `capture_consent`'s displayed-language once com
 the client payload so the column could be filled. In each case a value was manufactured to
 satisfy a shape, and in each case the honest fix was to change what the code does rather
 than what the shape allows.
+
+## 8 September 2026 — a boundary with one instance in the fixtures is untested by construction
+
+**The test cannot fail. So it proves nothing, and it looks green.**
+
+`seedFixtures()` built exactly ONE organisation for twenty sessions. Every isolation test
+ever written therefore compared two *subtrees* inside a single tenant, and not one of them
+compared two tenants — not because anybody decided the tenant boundary was less important,
+but because there was no second tenant to compare against. The tests that existed passed,
+honestly, against the only world the fixtures could describe.
+
+What that concealed is BE-W76: an administrator of one pharmaceutical company could read
+another's doctors, visits, consent records and MR performance, through PostgREST, raw SQL,
+a join, a `SECURITY DEFINER` function and a view. Five cells, every path, and the gate
+protecting them — G-RLS-C — had been claimed as met since BE-W2.
+
+The mechanism underneath is worth having on its own, because it is why the gap was
+invisible rather than merely unnoticed:
+
+- MR and field_manager isolation across tenants was **incidental**. They are excluded from
+  another company because that company's territories are not in their
+  `visible_territory_ids`, not because anything checked the company.
+- `is_admin()` skips territory scoping entirely, and the incidental protection left with
+  it.
+- **The boundary was never built. It was inherited from something else, and one role did
+  not inherit it.**
+
+And the deepest layer: `user_profiles` had no `organisation_id` column at all. Only
+`doctors` and `territories` carried one. A user's only link to a tenant was
+`territory_id -> territories.organisation_id`, and
+`user_profiles_field_roles_require_territory` explicitly exempts an admin from having a
+territory. **There was no data path from an administrator to a tenant**, so no predicate
+could have been written however carefully — there was nothing to write it against.
+
+### The rule
+
+**Before trusting an isolation test, count the instances of the thing it isolates. One is
+not a boundary; it is a placeholder.**
+
+Every entity where the fixtures contain exactly one row is a boundary nobody has tested.
+Derive the list rather than maintaining it:
+
+```sql
+-- after a single seedFixtures() call against a freshly reset database
+select relname, n_live_tup
+  from pg_stat_user_tables
+ where schemaname = 'public' and n_live_tup > 0
+ order by n_live_tup;
+```
+
+The criterion is not literally "one row" — it is **one row on the owning side of the
+boundary**. `check_ins` has two rows and they belong to two different MRs, so the boundary
+is instantiated and testable. `samples_and_inputs` has two-thirds of nothing: one row, one
+owner, and no query that could ever come back with the wrong one.
+
+### And this is the twelfth appearance of the same shape
+
+It sits with `enable_seqscan = off`, with grepping for `sendOrQueue` to find the writes
+that bypass `sendOrQueue`, and with `aclexplode(null)`. **The first eleven were code that
+looked exercised and was not. This one was data.** The control ran, on a world that could
+not contain the failure.
+
+---
+
+## 8 September 2026 — an ABSENCE in an isolation test needs a positive control
+
+A limit, a filter, a typo and an empty fixture all look exactly like a refusal. **A false
+negative in an isolation test is worse than no test at all, because it produces a green
+gate.**
+
+### The worked example, met while testing for it
+
+G-RLS-C's `function` cell asked whether a scope refused a doctor, like this:
+
+```ts
+// WRONG. The limit hides the answer; the scope never gets asked.
+const page = await client.query("select public.search_doctors(null, null, 200)");
+return page.items.some((d) => d.id === target) ? 'DATA' : 'ABSENCE';
+```
+
+Against the synthetic seed the target sorted past row 200 of 3,520, so the cell reported
+**ABSENCE** — and disagreed with the other four paths for no reason anybody could see. The
+scope was not refusing anything. The page simply ended before the row.
+
+```ts
+// RIGHT. Search for the target by its own name, so the only thing that can
+// exclude it is the scope.
+const found = await client.query(
+  `select exists(select 1 from jsonb_array_elements(
+     public.search_doctors($2, null, 200) -> 'items') e
+    where e ->> 'id' = $1) as found`,
+  [target.doctorId, target.doctorName],
+);
+```
+
+This is the same trap as *"a search shaped like the answer you expect cannot find the
+answer you do not"*, recorded two sessions earlier — met again in the act of testing for
+it, which is the honest reason it is written down twice.
+
+### The rule
+
+**Every deny cell needs an entitled twin: run the identical query as the person the row
+belongs to, and require the row back.**
+
+G-RLS-C now carries fifteen such controls beside its forty deny cells. Each boundary names
+the identities that *should* see the target, and every path runs as them and must return
+DATA. An ABSENCE counts only because the same query a few rows down came back with the
+row.
+
+The control has to be the *identical* query, not a convenient substitute. A control that
+counts rows as `postgres` proves the fixture exists; it does not prove the path works.
+
+### The other direction, which is easier to forget
+
+The by-design cells need asserting **present**, not merely tolerated. An over-broad fix —
+one that scoped an admin down to their own territory, or resolved every tenant to null —
+turns every cross-boundary cell into a clean ABSENCE and produces a perfect-looking matrix
+for a product nobody can use. Both MR-06 mutations were needed to show this: emptying the
+scoping function left the table paths green and broke only the `SECURITY DEFINER` cell.
+
+**A fix that breaks the product looks exactly like a fix that works, unless something
+asserts the thing that should still happen.**
