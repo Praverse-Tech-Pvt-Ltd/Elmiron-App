@@ -823,3 +823,27 @@ There is no task here, no extension to install and no design to review.
   the cursor persisted per user, `45006` recovering into a full re-sync rather than
   surfacing, and the completeness field surfaced in words when it says something and silent
   when it does not.
+
+### Added by MR-02
+
+| ID | Title | Changes | Deps | Blocker | Est | Verification |
+|---|---|---|---|---|---|---|
+| **BE-W72** | A caller writes their own `ip_address` and `request_id` into the audit log | `current_client_ip`, `audit_log` | — | — | 2 | `x-forwarded-for: 203.0.113.9` is recorded verbatim, proved in `audit-metadata.spec.ts`. `split_part(…, ',', 1)` takes the client-supplied entry because a proxy appends rather than prepends. **Bounded and low severity:** `actor_id`, `action` and `table_name` come from the verified JWT and from `tg_op`/`tg_table_name`, so WHO and WHAT are sound — WHERE FROM and WHICH SESSION are caller assertions recorded as observations. Verification: either the last (proxy-appended) entry is trusted instead of the first, or the column is split into an observed address and a claimed one so the schema shows which is which |
+| **FE-W25** | Three screen writes bypass the outbox entirely | `app/report`, `app/voice-note`, `app/visit` | — | — | 3 | `createCallReport`, `createVoiceNote` and `createRecording` are bare `createClientForScenario().create…()` calls with no `sendOrQueue`. The call-report screen's own error copy — *"Your words are still on this screen — try again when you have signal"* — asks the MR to retype a visit summary the app declined to keep. Verification: all six screen writes go through `sendOrQueue`, and a lint or test guard fails the build when a `.create*(` appears in `apps/field/app` outside it |
+| **FE-W26** | An accepted queue item is stamped with the DEVICE clock and presented as the server's | `apps/field/src/sync/outbox.ts` | — | — | 1 | `outbox.ts:220` sets `receivedAt: nowIso()` — `new Date().toISOString()` — under a comment reading *"this is the server's clock by definition"*. `reducer.ts:86` writes it to `syncedAt`; `sync/events.ts:23` documents the field as the server's clock; `QueueScreen.tsx:275` renders *"Server recorded this at …"*. Verification: `syncedAt` comes from the server response or is null, and a queued or locally-accepted item renders no time at all |
+| **FE-W27** | The rejection path in the queue UI is unreachable | `apps/field/src/sync` | FE-W25 | — | 1 | `flushOutbox` is the only dispatcher of `verdict_received` and always sends `status: 'accepted'`, `rejectionCode: null`. Every rejection branch in the reducer and in `QueueScreen` is therefore dead — including the copy that renders a server rejection verbatim, which a test already guards. Tenth appearance of the characteristic defect. Verification: a refused item reaches the queue screen with the server's own sentence |
+| **FE-W28** | No way to record an unplanned visit | `apps/field` | — | **Product** | 3 | `VisitSchema` says `beatPlanId` is *"null for an unplanned visit — unplanned visits are legitimate"*, `apply_sync_item` accepts a `visit` entity and `sync_push` already inserts one (`20260813000200_offline_sync.sql:181`). The client has neither a screen affordance nor a `visitQueueItem`. An MR who sees a doctor not on today's beat plan cannot record the visit. **A functional gap, not a wiring one** — needs a product decision before a screen |
+| **BE-W73** | Nothing advances `visits.status` | migrations | — | — | 2 | `grep "update public.visits"` across all 33 migrations returns nothing, and `record_check_in` does not touch it. `planned → in_progress → completed` is never advanced by the system; fixtures set it directly. Verification: a check-in moves a visit to `in_progress` and a check-out to `completed`, server-side, with the transition audited |
+
+**Not a task: mileage.** MR-02 Part B named a mileage write to convert. **There is no mileage
+write anywhere in the app** — `mileage.tsx:41` and `day-end.tsx:68` both read, and mileage is
+derived server-side by `daily_mileage()` from check-in coordinates. Nothing to convert, and
+recorded here so the next reader does not go looking for it.
+
+**A design decision the next session should take before writing code.** MR-02 B2 asks for
+*"one conversion pattern, not five"*. One already exists: **`sync_push`** accepts all seven
+entities, `SyncEntitySchema` enumerates exactly those, and `client.ts:454` already exposes
+`syncPush`. `flushOutbox` does not use it — it sends items one at a time through
+`sendFor(client, item)` as individual REST calls. Pointing the flush at `sync_push` is
+plausibly the whole conversion, and is a materially smaller and different piece of work from
+five per-entity adapters. It needs a review, not a mid-flight decision.

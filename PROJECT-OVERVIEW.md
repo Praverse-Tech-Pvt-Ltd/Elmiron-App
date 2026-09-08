@@ -8056,3 +8056,196 @@ this record already states — *check that anything you build is actually called
 something* — now with a ninth instance and the largest one yet.
 
 ---
+
+---
+
+### MR-02 — screens talk to the real server (8 September 2026)
+
+**STOPPED AFTER PART A.** Parts B–F were not started, and the reason is the same shape as
+last session's: **Part A found that Part B's scope list is wrong in two directions.**
+Details in *Where this stopped*.
+
+**Not done: no screen was converted, the console was not wired, no card was removed, the
+samples screen's message was not removed, and no dependency was added.**
+
+#### A1 — CI and counts
+
+The MR-01 record commit pushed as `a8d623c..5a358eb`. Run **`34192264457`: success**, both
+jobs.
+
+| workspace | runner | count |
+| --- | --- | ---: |
+| `@fieldforce/api` | vitest, live database | **500 passed / 23 files** |
+| `@fieldforce/field` | vitest, logic | 359 passed / 25 files |
+| `@fieldforce/field` | jest, jest-expo render | 72 passed / 12 suites |
+| `@fieldforce/ui-tokens` | vitest | 54 passed / 3 |
+| `@fieldforce/mock` | vitest | 40 passed / 1 |
+| `@fieldforce/core` | vitest | 21 passed / 3 |
+| `@fieldforce/ui` | vitest | 4 passed / 1 |
+
+**api +5** (audit metadata). No skips. `verify:rollbacks`: schema empty, 33/33.
+`turbo run typecheck lint`: 16 successful, 16 total.
+
+---
+
+#### A2 — and first, a correction to MR-01's own A2
+
+**MR-01 said "exactly three writes from screens". That was wrong. There are six**, and my
+grep missed three of them because it searched for `sendOrQueue` call sites rather than for
+mutating calls. Searching for the mutations directly:
+
+```
+$ grep -rnoE "\.(create|update|delete)[A-Za-z]+\(" apps/field/app --include=*.tsx
+app/visit/[id].tsx       :220  .createCheckIn(  /  .createCheckOut(
+app/visit/[id].tsx       :171  .createRecording(
+app/consent/[visitId].tsx:161  .createConsentRecord(
+app/samples/[visitId].tsx:136  .createSampleAndInput(
+app/report/[visitId].tsx :57   .createCallReport(
+app/voice-note/[visitId].tsx:124 .createVoiceNote(
+```
+
+| write | through the outbox? |
+| --- | --- |
+| check-in / check-out | **yes** — `sendOrQueue`, `visit/[id].tsx:219` |
+| consent | **yes** — `consent/[visitId].tsx:160` |
+| samples | **yes** — `samples/[visitId].tsx:135` |
+| **call report** | **NO** — a bare `createClientForScenario().createCallReport(...)` |
+| **recording** | **NO** |
+| **voice note** | **NO** |
+
+**So "offline-first is intact" is not true as stated.** It holds on three paths and fails on
+three. The call-report screen's own catch block says the quiet part: *"Your words are still
+on this screen — try again when you have signal."* The MR is asked to retype a visit summary
+because the app did not keep it. Recording and voice note are audio and out of scope for this
+batch by §1 — the finding is registered regardless, because it is the same defect.
+
+**Where visits come from.** No screen creates or updates one. Every screen reference is
+`client.listVisits()` — twelve of them, all reads. The server side is more interesting:
+
+- **`sync_push` already inserts visits** — `20260813000200_offline_sync.sql:181` — and
+  `apply_sync_item` accepts `visit`, `check_in`, `check_out`, `call_report`,
+  `consent_record`, `sample_and_input`, `recording`. **Seven entities, one RPC, through the
+  outbox by design.**
+- **Nothing anywhere updates `visits.status`.** `grep "update public.visits"` across all 33
+  migrations returns nothing, and `record_check_in` does not touch it. The lifecycle
+  `planned → in_progress → completed` is never advanced by the system; the fixtures set it
+  directly.
+
+**The verdict, both halves:**
+
+| question | verdict |
+| --- | --- |
+| **Call reporting** | **WIRING gap.** The screen exists — 105 lines, summary, objections, next step, a send button, a real `createCallReport`. An MR *can* record what happened on a visit. It needs converting and queueing, not building |
+| **Unplanned visit creation** | **FUNCTIONAL gap.** `VisitSchema` says `beatPlanId` is *"null for an unplanned visit — unplanned visits are legitimate"*, `sync_push` accepts a `visit` entity, and `createVisit` exists in `packages/core` and in `capture/visits.ts`. **There is no affordance anywhere in the app to create one**, and no `visitQueueItem` in the outbox. An MR who sees a doctor not on today's beat plan cannot record the visit at all |
+| **Visit status transitions** | **FUNCTIONAL gap, server-side.** Nothing advances `visits.status`, so a completed visit is only "completed" if something set it that way outside the app |
+
+**And a defect found on the way.** `flushOutbox` stamps an accepted item with
+`receivedAt: nowIso()` (`outbox.ts:220`), where `nowIso()` is `new Date().toISOString()` —
+**the device clock** — and the comment beside it says *"this is the server's clock by
+definition"*. `reducer.ts:86` then writes that into `syncedAt`, and `sync/events.ts:23`
+documents `receivedAt` as *"the server's clock… the only timestamp allowed to mark an"*
+item as landed. `QueueScreen.tsx:275` renders the string **"Server recorded this at …"**.
+
+That is exactly what B7 forbids: a client clock rendered as though the server knew. It is
+**reachable today on the accepted path**; the rendered string is on the rejection branch,
+which is currently **unreachable** because `flushOutbox` is the only dispatcher of
+`verdict_received` and always sends `rejectionCode: null`. A tenth instance of the
+characteristic defect, this one in the UI.
+
+#### A3 — the anti-forensics question: **spoofing, not nulling**
+
+Over real HTTP through Kong and PostgREST, because the header bag only exists on that path;
+the same test on the direct-Postgres connection would answer a different question and answer
+it reassuringly.
+
+| probe | result |
+| --- | --- |
+| no special headers | `actor_id` correct, `ip_address` non-null — the positive control |
+| `x-forwarded-for: not-an-ip-address-at-all` | **address NOT blanked.** The failed `::inet` cast is caught and `inet_client_addr()` is used, which is *stronger* evidence than the header |
+| **`x-forwarded-for: 203.0.113.9`** | **recorded verbatim as `203.0.113.9`** |
+| **`x-request-id: forged-…`** | **recorded verbatim** |
+| both spoofed at once | `actor_id`, `action`, `table_name` all still correct |
+
+**So the question as posed has a reassuring answer and the real vector is the other one.** A
+caller cannot *null* their metadata; they can *choose* it. `current_client_ip()` takes
+`split_part(…, ',', 1)` — the **first** entry, which is the one the client supplies, because
+a proxy appends rather than prepends.
+
+**Severity: low, and bounded — which is what makes it a task rather than an alarm.**
+`actor_id` comes from `auth.uid()` off the verified JWT, `action` from `tg_op`,
+`table_name` from `tg_table_name`. No header reaches any of them. **WHO and WHAT are sound;
+WHERE FROM and WHICH SESSION are caller assertions recorded as if they were observations.**
+For a product whose audit log is a compliance artefact, that distinction should be visible in
+the schema rather than only in a test. Registered as **BE-W72**, not fixed.
+
+#### A4 — `format:check` already covers every workspace. The gap was mine.
+
+```
+$ prettier --check .          # from the repo root, not per-workspace, not via turbo
+apps/field      111 ts/tsx files, 0 different
+apps/console     21               1 different   <- next-env.d.ts, gitignored
+packages/core    44               0
+packages/ui      67               0
+packages/ui-tokens 14             0
+services/api     28               0
+services/mock     8               0
+```
+
+All seven workspaces, 293 TypeScript files, one root invocation. **The tool would have
+caught FIX-14's failure. I did not run it.** In FIX-14 I ran
+`npx prettier --check PROJECT-OVERVIEW.md docs/COMPLETION-PLAN.md docs/adr-sync-pull.md` —
+three files — and then reported *"format clean apart from the known gitignored artefact"*, a
+repo-wide claim from a three-file check.
+
+So there is no coverage gap to close and no guard to add. The correction is to the habit: a
+repo-wide claim needs the repo-wide command, and `format:check` is a root script rather than
+a turbo task, which makes a narrower prettier invocation easy to run and easy to mistake for
+it.
+
+---
+
+#### Where this stopped, and what it changes
+
+**Stopped after Part A.** Parts B, C, D, E and F were not started.
+
+**Part B's scope list is wrong in two directions, and that is the finding.**
+
+*It names one path that does not exist:*
+**mileage.** There is no mileage write anywhere in the app. `mileage.tsx:41` calls
+`client.listMileage(...)` and `day-end.tsx:68` reads it too. Mileage is derived server-side
+by `daily_mileage()` from check-in coordinates. There is nothing to convert.
+
+*It omits three that do exist and are worse off than the ones it names:*
+**call report, recording and voice note** write directly, with no outbox at all. Converting
+the three queued paths while leaving three unqueued ones would produce an app that is
+offline-first on the writes somebody happened to list.
+
+**And A2 changes B2's answer before B2 is attempted.** B2 asks for *"one conversion pattern,
+not five"*. There already is one: **`sync_push`**. It accepts all seven entities, it is the
+outbox's natural partner, `SyncEntitySchema` already enumerates exactly those entities, and
+`packages/core/src/field/client.ts:454` already exposes `syncPush`. The current
+`flushOutbox` does **not** use it — it sends items one at a time through `sendFor(client,
+item)` as individual REST calls. So the conversion is plausibly *"point `flushOutbox` at
+`sync_push`"* rather than five per-entity adapters, which is a materially different and
+smaller piece of work than the prompt scopes — and it needs its own review before being
+built, not a decision taken mid-flight.
+
+**Part C is also affected.** C5 asks for a two-column module-versus-screen table. Building
+that table honestly requires the A2 inventory above, which now includes three unqueued
+writes the previous table did not mention at all.
+
+**What the next session should do, in order:**
+
+1. **Decide the conversion target** — `sync_push` for all entities, or per-entity RPCs. A2
+   makes the case for the first; it is a design decision, not an implementation detail.
+2. **Convert all six screen writes**, not five, and not the five named.
+3. **Part E (G-RLS-C)** is independent of every one of these, needs no device, and has never
+   been run whole. It is the highest-value item that nothing above blocks.
+4. **`visits.status` and unplanned visits** are a functional gap and a separate review, per
+   B1's own stop condition.
+
+**One correction to carry:** MR-01's A2 answer was incomplete, and I reported it as
+exhaustive. The list of screen writes is six, not three, and the three I missed are the
+three that are not offline-safe.
+
+---
