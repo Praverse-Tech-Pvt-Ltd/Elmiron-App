@@ -25,8 +25,13 @@ export interface RejectionRecord {
   readonly attemptsRemaining: number;
   /** True once no attempts remain — the item needs a person, not another retry. */
   readonly deadLettered: boolean;
-  /** Server clock. */
-  readonly receivedAt: string;
+  /**
+   * The SERVER's clock, or null when the server sent none.
+   *
+   * Nullable since MR-08 C5, and the nullability is the fix — see `ServerVerdict` in
+   * `events.ts`. Carry the server's value or carry none; never substitute the device's.
+   */
+  readonly receivedAt: string | null;
 }
 
 export interface ReinstatementRecord {

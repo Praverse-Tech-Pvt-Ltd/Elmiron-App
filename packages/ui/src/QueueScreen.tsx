@@ -26,8 +26,13 @@ export interface QueueScreenRejection {
   /** Backend's sentence. Rendered verbatim; `null` when the server sent none. */
   readonly explanation: string | null;
   readonly deadLettered: boolean;
-  /** Server clock. The only timestamp this screen is allowed to show. */
-  readonly receivedAt: string;
+  /**
+   * Server clock, or null when the server sent none. The only timestamp this screen is
+   * allowed to show — and since MR-08 C5 it is nullable, because the field used to be
+   * filled with the DEVICE clock and rendered behind the words "Server recorded this
+   * at". Nothing renders when it is null.
+   */
+  readonly receivedAt: string | null;
 }
 
 export interface QueueScreenItem {
@@ -271,8 +276,15 @@ const QueueRow = ({
         <>
           {/* Backend's sentence, verbatim. Never reworded, truncated or wrapped. */}
           {rejection.explanation === null ? null : <BodyText>{rejection.explanation}</BodyText>}
-          {/* The server's clock. No duration is computed anywhere on this screen. */}
-          <Label muted>{`Server recorded this at ${rejection.receivedAt}`}</Label>
+          {/*
+            The server's clock, and ONLY the server's. No duration is computed anywhere
+            on this screen, and nothing is rendered when the server sent no timestamp --
+            this line used to print the device's clock behind the words "Server recorded
+            this at", which is the app telling an MR something the server never said.
+          */}
+          {rejection.receivedAt === null ? null : (
+            <Label muted>{`Server recorded this at ${rejection.receivedAt}`}</Label>
+          )}
           {rejection.deadLettered ? (
             <Label muted>This can be sent again once someone reviews it.</Label>
           ) : null}

@@ -7,6 +7,7 @@ import {
 import type {
   ApiClient,
   CreateCheckInRequest,
+  CreateCheckOutRequest,
   CreateConsentRecordRequest,
   CreateSampleAndInputRequest,
   SyncQueueItem,
@@ -69,10 +70,40 @@ const nowIso = (): string => new Date().toISOString();
 export const checkInQueueItem = (
   body: CreateCheckInRequest,
   operation: 'create' = 'create',
+): SyncQueueItem => captureQueueItem(body, 'check_in', operation);
+
+/**
+ * The same, for a DEPARTURE — and the reason this function exists is a defect.
+ *
+ * **`visit/[id].tsx` queued both stages with `checkInQueueItem`.** A check-out taken with
+ * no signal was written to disk as `entity: 'check_in'`, and `sendFor` below then replayed
+ * it through `client.createCheckIn`. So an MR who lost signal at the clinic door had
+ * their DEPARTURE recorded as an ARRIVAL — a real geo-and-time record, against the right
+ * visit, describing the wrong event, with nothing anywhere reporting a problem.
+ *
+ * It is exactly the corruption `sampleQueueItem`'s comment warns about two functions
+ * below: *"a second entity makes that assumption a silent corruption — a handover
+ * replayed through `record_check_in` — rather than merely a simplification."* The warning
+ * was written, and check-out was already the second entity when it was written.
+ *
+ * `check_out` has been in `SyncEntitySchema` since the enum was created. Nothing used it.
+ *
+ * Two functions rather than one with a flag, so a call site has to say which event it is
+ * recording and cannot pick the wrong default.
+ */
+export const checkOutQueueItem = (
+  body: CreateCheckOutRequest,
+  operation: 'create' = 'create',
+): SyncQueueItem => captureQueueItem(body, 'check_out', operation);
+
+const captureQueueItem = (
+  body: CreateCheckInRequest | CreateCheckOutRequest,
+  entity: 'check_in' | 'check_out',
+  operation: 'create' | 'update',
 ): SyncQueueItem =>
   SyncQueueItemSchema.parse({
     id: body.id,
-    entity: 'check_in',
+    entity,
     operation,
     entityId: body.visitId,
     payload: { ...body },
@@ -172,6 +203,20 @@ export const sendOrQueue = async (
   }
 };
 
+/**
+ * The server's `receivedAt` out of a create response, or null.
+ *
+ * Null rather than a fallback, and rather than a throw. A response shape this build does
+ * not recognise is not a reason to invent a timestamp, and it is not a reason to lose a
+ * verdict that otherwise landed — the item is still accepted, it simply has no server
+ * clock to show, and `QueueScreen` renders nothing rather than something untrue.
+ */
+const serverReceivedAt = (response: unknown): string | null => {
+  if (typeof response !== 'object' || response === null) return null;
+  const value = (response as { receivedAt?: unknown }).receivedAt;
+  return typeof value === 'string' ? value : null;
+};
+
 export interface FlushResult {
   readonly attempted: number;
   readonly sent: number;
@@ -205,7 +250,7 @@ export const flushOutbox = async (
       // An unreadable or unknown row is left where it is rather than dropped: it
       // is work the MR did, and the queue screen already shows it waiting.
       if (send === null) continue;
-      await send();
+      const response = await send();
       state = syncQueueReducer(state, {
         type: 'verdict_received',
         verdict: {
@@ -215,9 +260,15 @@ export const flushOutbox = async (
           explanation: null,
           warnings: [],
           attemptsRemaining: 0,
-          // The server answered, so this is the server's clock by definition — the
-          // response is what tells us it landed.
-          receivedAt: nowIso(),
+          // **The server's, or none.** This read `nowIso()` under the comment "the
+          // server answered, so this is the server's clock by definition". It was the
+          // DEVICE's clock at the moment the response was parsed -- on a handset whose
+          // clock `capture_consent` refuses to trust past a two-minute tolerance -- and
+          // `QueueScreen` rendered it as "Server recorded this at ...".
+          //
+          // Every created entity carries `received_at`, stamped by the column default
+          // `clock_timestamp()`, so the real value was in the response all along.
+          receivedAt: serverReceivedAt(response),
         },
       });
       sent += 1;
@@ -251,6 +302,13 @@ const sendFor = (client: ApiClient, item: SyncQueueItem): (() => Promise<unknown
   if (item.entity === 'check_in') {
     const body = CreateCheckInRequestFrom(item);
     return body === null ? null : () => client.createCheckIn(body);
+  }
+  // A departure replays as a departure. Its absence is what made every queued check-out
+  // arrive as a check-in; the request bodies are identical -- `CreateCheckOutRequestSchema`
+  // IS `CreateCheckInRequestSchema` -- so nothing downstream could have noticed.
+  if (item.entity === 'check_out') {
+    const body = CreateCheckInRequestFrom(item);
+    return body === null ? null : () => client.createCheckOut(body);
   }
   if (item.entity === 'sample_and_input') {
     const body = CreateSampleAndInputRequestFrom(item);

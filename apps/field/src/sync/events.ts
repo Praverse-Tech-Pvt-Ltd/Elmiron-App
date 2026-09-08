@@ -23,6 +23,17 @@ import type {
  * `receivedAt` is the server's clock. It is the only timestamp allowed to mark an
  * item as landed; the device clock is not trusted for anything with a compliance
  * meaning, and "when did my work reach the server" is one of those.
+ *
+ * **That paragraph was true and the code did the opposite.** `flushOutbox` filled this
+ * field with `new Date().toISOString()` under the comment *"the server answered, so this
+ * is the server's clock by definition"*, and `QueueScreen` rendered it as "Server
+ * recorded this at …". The rule was written down, in this file, above the field it
+ * describes, and the one call site that populated it ignored it.
+ *
+ * It is **nullable** since MR-08 C5. A response that carries no `received_at` produces
+ * `null`, and nothing is rendered — because a field that is sometimes the server's clock
+ * and sometimes the device's, with no way to tell which, is worse than one that is
+ * sometimes absent.
  */
 export interface ServerVerdict {
   readonly id: string;
@@ -32,8 +43,8 @@ export interface ServerVerdict {
   readonly explanation: string | null;
   readonly warnings: readonly SyncWarning[];
   readonly attemptsRemaining: number;
-  /** Server clock. */
-  readonly receivedAt: string;
+  /** Server clock, or null when the response carried none. Never the device's. */
+  readonly receivedAt: string | null;
 }
 
 export type SyncEvent =

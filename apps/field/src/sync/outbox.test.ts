@@ -8,6 +8,7 @@ import type {
 } from '@fieldforce/core';
 import {
   checkInQueueItem,
+  checkOutQueueItem,
   consentQueueItem,
   flushOutbox,
   sampleQueueItem,
@@ -319,5 +320,90 @@ describe('a queued consent answer', () => {
 
     expect(createConsentRecord).toHaveBeenCalledTimes(2);
     expect(result.sent).toBe(2);
+  });
+});
+
+describe('MR-08 C: a departure is not an arrival, and the clock is the server’s', () => {
+  it('replays a queued CHECK-OUT as a check-out, never as a check-in', async () => {
+    // **The defect.** `visit/[id].tsx` queued both stages with `checkInQueueItem`, so a
+    // check-out taken with no signal was written to disk as `entity: 'check_in'` and
+    // replayed through `createCheckIn`. An MR who lost signal at the clinic door had
+    // their DEPARTURE recorded as an ARRIVAL: a real geo-and-time record, against the
+    // right visit, describing the wrong event, with nothing reporting a problem.
+    //
+    // `CreateCheckOutRequestSchema` IS `CreateCheckInRequestSchema`, so no shape check
+    // anywhere could have caught it, and `check_out` had been in `SyncEntitySchema` since
+    // the enum was written without a single caller.
+    const store = inMemory();
+    await sendOrQueue(
+      () => Promise.reject(new Error('Network request failed')),
+      checkOutQueueItem(body),
+      store,
+    );
+    expect(store.current().items[0]?.entity).toBe('check_out');
+
+    const createCheckIn = vi.fn(() => Promise.resolve({}));
+    const createCheckOut = vi.fn(() => Promise.resolve({}));
+    await flushOutbox({ createCheckIn, createCheckOut } as unknown as ApiClient, store);
+
+    expect(createCheckIn).not.toHaveBeenCalled();
+    expect(createCheckOut).toHaveBeenCalledTimes(1);
+    expect(createCheckOut).toHaveBeenCalledWith(body);
+  });
+
+  it('THE POSITIVE CONTROL: a queued check-IN still replays as a check-in', async () => {
+    // Without this, the assertion above is also satisfied by an outbox that sends every
+    // arrival as a departure — the same defect pointing the other way.
+    const store = inMemory();
+    await sendOrQueue(
+      () => Promise.reject(new Error('Network request failed')),
+      checkInQueueItem(body),
+      store,
+    );
+
+    const createCheckIn = vi.fn(() => Promise.resolve({}));
+    const createCheckOut = vi.fn(() => Promise.resolve({}));
+    await flushOutbox({ createCheckIn, createCheckOut } as unknown as ApiClient, store);
+
+    expect(createCheckOut).not.toHaveBeenCalled();
+    expect(createCheckIn).toHaveBeenCalledTimes(1);
+  });
+
+  it('carries the SERVER’s receivedAt out of the response', async () => {
+    // C5. This used to be `new Date().toISOString()` under the comment "the server
+    // answered, so this is the server's clock by definition". Every created entity
+    // carries `received_at`, stamped by `clock_timestamp()`, so the real value was in
+    // the response the whole time.
+    const store = inMemory();
+    await sendOrQueue(
+      () => Promise.reject(new Error('Network request failed')),
+      checkInQueueItem(body),
+      store,
+    );
+
+    const serverStamp = '2026-09-08T11:22:33.444Z';
+    const createCheckIn = vi.fn(() => Promise.resolve({ receivedAt: serverStamp }));
+    await flushOutbox({ createCheckIn } as unknown as ApiClient, store);
+
+    expect(store.current().items[0]?.syncedAt).toBe(serverStamp);
+  });
+
+  it('and carries NOTHING when the response has no server clock', async () => {
+    // The other state. A response shape this build does not recognise is not a reason to
+    // invent a timestamp: the item is still accepted, it simply has no server clock, and
+    // `QueueScreen` renders nothing rather than something untrue.
+    const store = inMemory();
+    await sendOrQueue(
+      () => Promise.reject(new Error('Network request failed')),
+      checkInQueueItem(body),
+      store,
+    );
+
+    const createCheckIn = vi.fn(() => Promise.resolve({}));
+    const result = await flushOutbox({ createCheckIn } as unknown as ApiClient, store);
+
+    expect(result.sent).toBe(1);
+    expect(store.current().items[0]?.status).toBe('synced');
+    expect(store.current().items[0]?.syncedAt).toBeNull();
   });
 });

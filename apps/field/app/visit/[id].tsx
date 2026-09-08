@@ -28,7 +28,7 @@ import {
   recordingLabel,
   recordingRequest,
 } from '../../src/capture/recording';
-import { checkInQueueItem, sendOrQueue } from '../../src/sync/outbox';
+import { checkInQueueItem, checkOutQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { clockFrom } from '../../src/today/plan';
 
 /**
@@ -216,9 +216,12 @@ export default function VisitRoute(): ReactNode {
         // The work goes to disk if it does not reach the server. Before this, an
         // MR who lost signal at a clinic door lost the check-in entirely — which is
         // the whole of FE-G2 and the reason the queue exists.
+        // The queue row follows the STAGE, like the call does. It did not: both stages
+        // queued through `checkInQueueItem`, so a check-out taken with no signal was
+        // stored as a check-in and replayed as one -- a departure recorded as an arrival.
         const sendResult = await sendOrQueue(
           () => (stage === 'before' ? client.createCheckIn(body) : client.createCheckOut(body)),
-          checkInQueueItem(body),
+          stage === 'before' ? checkInQueueItem(body) : checkOutQueueItem(body),
         );
 
         if (sendResult.kind === 'refused') {
