@@ -57,9 +57,28 @@ const FIXTURE: ReferenceData = {
 
 describe.skipIf(!reachable)('seedReferenceData', () => {
   it('changes nothing on a dry run', async () => {
+    // Scoped to THIS fixture's own organisation, not to a global `count(*)`.
+    //
+    // It was a global count until MR-06, and that was a race the suite kept winning. The
+    // two reads bracket a call that takes a connection and a transaction, and vitest runs
+    // these suites in parallel -- so any other suite committing an organisation between
+    // them failed this assertion with a message about a dry run, which is not what went
+    // wrong. `seedFixtures()` began committing TWO organisations rather than one when the
+    // rival tenant was added, and the race started being lost.
+    //
+    // The test's intent is "a dry run inserts nothing", and the honest expression of that
+    // is that the row this dry run would have written is absent. That cannot be perturbed
+    // by a suite seeding its own data, and it is a strictly stronger claim than a count
+    // that happened to stay level.
+    const orgName = FIXTURE.organisations[0]?.name;
+
     const before = await withClient((client) =>
-      client.query<{ n: number }>('select count(*)::int as n from public.organisations'),
+      client.query<{ n: number }>(
+        'select count(*)::int as n from public.organisations where name = $1',
+        [orgName],
+      ),
     );
+    expect(before.rows[0]?.n, 'the fixture organisation must not exist yet').toBe(0);
 
     const result = await seedReferenceData(FIXTURE, { apply: false, dbUrl: DB_URL });
     expect(result.applied).toBe(false);
@@ -69,9 +88,12 @@ describe.skipIf(!reachable)('seedReferenceData', () => {
     expect(result.counts.consentTextVersions).toBe(1);
 
     const after = await withClient((client) =>
-      client.query<{ n: number }>('select count(*)::int as n from public.organisations'),
+      client.query<{ n: number }>(
+        'select count(*)::int as n from public.organisations where name = $1',
+        [orgName],
+      ),
     );
-    expect(after.rows[0]?.n).toBe(before.rows[0]?.n);
+    expect(after.rows[0]?.n, 'a dry run wrote the organisation it only counted').toBe(0);
   });
 
   it('is idempotent: applying the same file twice inserts nothing the second time', async () => {

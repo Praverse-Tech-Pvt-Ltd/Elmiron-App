@@ -131,17 +131,42 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
   const rivalOrganisationId = randomUUID();
 
   // Auth users first: user_profiles has an FK onto auth.users.
+  //
+  // **Created SEQUENTIALLY, and that is not a style choice.** These were a `Promise.all`
+  // of six until MR-06 added the rival organisation, and eight concurrent `POST
+  // /admin/users` per suite -- across a dozen suites vitest runs in parallel, with no
+  // concurrency cap -- exhausted the local Postgres. GoTrue could not get a connection
+  // (`remaining connection slots are reserved for roles with the SUPERUSER attribute`,
+  // `sorry, too many clients already`) and returned a 500 that surfaced as
+  // "Database error creating new user", failing eight suites at the `beforeAll`.
+  //
+  // `max_connections` is 100. Raising it would hide the burst rather than remove it, and
+  // capping vitest's concurrency would slow every suite to fix one. Serialising here
+  // costs a few hundred milliseconds per suite and cuts the peak by a factor of eight.
+  const users: FixtureUser[] = [];
+  for (const [key, role, territoryId] of [
+    ['admin', 'admin', null],
+    ['west-manager', 'field_manager', territories.west],
+    ['south-manager', 'field_manager', territories.south],
+    ['pune-mr', 'mr', territories.pune],
+    ['nagpur-mr', 'mr', territories.nagpur],
+    ['south-mr', 'mr', territories.south],
+    ['rival-mr', 'mr', territories.rival],
+    ['rival-admin', 'admin', null],
+  ] as ReadonlyArray<readonly [string, AppRole, string | null]>) {
+    users.push(await makeUser(runId, key, role, territoryId));
+  }
   const [admin, westManager, southManager, puneMr, nagpurMr, southMr, rivalMr, rivalAdmin] =
-    await Promise.all([
-      makeUser(runId, 'admin', 'admin', null),
-      makeUser(runId, 'west-manager', 'field_manager', territories.west),
-      makeUser(runId, 'south-manager', 'field_manager', territories.south),
-      makeUser(runId, 'pune-mr', 'mr', territories.pune),
-      makeUser(runId, 'nagpur-mr', 'mr', territories.nagpur),
-      makeUser(runId, 'south-mr', 'mr', territories.south),
-      makeUser(runId, 'rival-mr', 'mr', territories.rival),
-      makeUser(runId, 'rival-admin', 'admin', null),
-    ]);
+    users as [
+      FixtureUser,
+      FixtureUser,
+      FixtureUser,
+      FixtureUser,
+      FixtureUser,
+      FixtureUser,
+      FixtureUser,
+      FixtureUser,
+    ];
 
   const world: FixtureWorld = {
     runId,
