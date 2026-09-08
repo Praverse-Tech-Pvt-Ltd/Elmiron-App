@@ -15,7 +15,8 @@
     "reconcile:restore": "node scripts/reconcile-after-restore.mjs",
     "seed:reference": "node scripts/seed-reference-data.mjs",
     "seed:mr": "node scripts/seed-one-mr.mjs",
-    "seed:synthetic": "node scripts/seed-synthetic.mjs"
+    "seed:synthetic": "node scripts/seed-synthetic.mjs",
+    "seed:day": "node scripts/seed-day.mjs"
   },
   "dependencies": {
     "@fieldforce/core": "workspace:*"
