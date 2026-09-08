@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
@@ -62,13 +63,15 @@ const seed = async (client: Client): Promise<void> => {
     );
   }
 
+  // MR-06: an admin has no territory, so it has no organisation to derive one from and
+  // must name its tenant. Every other row here derives it from its territory.
   await client.query(
-    `insert into public.user_profiles (id, full_name, role, territory_id, is_active) values
-       ($1, 'Admin User',    'admin',         null, true),
-       ($2, 'West Manager',  'field_manager', $6,   true),
-       ($3, 'Pune MR',       'mr',            $7,   true),
-       ($4, 'South MR',      'mr',            $8,   true),
-       ($5, 'Inactive MR',   'mr',            $7,   false)`,
+    `insert into public.user_profiles (id, full_name, role, territory_id, is_active, organisation_id) values
+       ($1, 'Admin User',    'admin',         null, true, $9),
+       ($2, 'West Manager',  'field_manager', $6,   true,  null),
+       ($3, 'Pune MR',       'mr',            $7,   true,  null),
+       ($4, 'South MR',      'mr',            $8,   true,  null),
+       ($5, 'Inactive MR',   'mr',            $7,   false, null)`,
     [
       USER_ADMIN,
       USER_WEST_MANAGER,
@@ -78,6 +81,7 @@ const seed = async (client: Client): Promise<void> => {
       TERRITORY_WEST,
       TERRITORY_PUNE,
       TERRITORY_SOUTH,
+      ORGANISATION,
     ],
   );
 };
@@ -191,18 +195,50 @@ describe.skipIf(!reachable)('visible_territory_ids', () => {
     });
   });
 
-  it('gives an admin every territory', async () => {
+  it('gives an admin every territory IN THEIR OWN ORGANISATION, and no other', async () => {
+    // **This test asserted the defect until MR-06, and the inversion is the fix.**
+    //
+    // It read `expect(visible).toHaveLength(count(*) from territories)` -- every territory
+    // in the database, which was true, was the intended behaviour of the day, and was
+    // BE-W76: an admin of one pharmaceutical company scoped to every other company's
+    // tree. The count was even compared against the live total rather than a literal,
+    // precisely so that territories committed by OTHER organisations would be included.
+    // A careful assertion, carefully wrong.
+    //
+    // An admin is a TENANT administrator (MR-06 section 3), so the right comparison is
+    // against their own organisation's territories, and the second half -- that another
+    // organisation's territory is NOT in the set -- is the half that could never have
+    // been written before, because no fixture had a second organisation to name.
     await inRolledBackTransaction(async (client) => {
       await seed(client);
-      // Compared against the live count, not a literal. rls.spec.ts commits its own
-      // fixture territories, and the two files run in parallel — a hardcoded 5 was
-      // a false failure waiting for the first day someone added a second spec.
-      const total = await client.query<{ count: string }>(
-        'select count(*) as count from public.territories',
+
+      const mine = await client.query<{ count: string }>(
+        'select count(*) as count from public.territories where organisation_id = $1',
+        [ORGANISATION],
       );
       const visible = await visibleTerritories(client, USER_ADMIN);
-      expect(visible).toHaveLength(Number(total.rows[0]?.count));
+      expect(visible).toHaveLength(Number(mine.rows[0]?.count));
       expect(visible.length).toBeGreaterThanOrEqual(5);
+
+      // The positive control on the negative: a territory that really exists, really
+      // belongs to somebody else, and really is absent. Without it this test would pass
+      // against a database with only one organisation in it -- which is exactly how the
+      // boundary went untested for twenty sessions.
+      const rivalOrg = randomUUID();
+      const rivalTerritory = randomUUID();
+      await client.query('insert into public.organisations (id, name) values ($1, $2)', [
+        rivalOrg,
+        `Rival ${rivalOrg.slice(0, 8)}`,
+      ]);
+      await client.query(
+        `insert into public.territories (id, name, code, parent_id, organisation_id)
+         values ($1, 'Rival', $2, null, $3)`,
+        [rivalTerritory, `RV-${rivalOrg.slice(0, 8)}`, rivalOrg],
+      );
+
+      const after = await visibleTerritories(client, USER_ADMIN);
+      expect(after).not.toContain(rivalTerritory);
+      expect(after).toHaveLength(Number(mine.rows[0]?.count));
     });
   });
 
