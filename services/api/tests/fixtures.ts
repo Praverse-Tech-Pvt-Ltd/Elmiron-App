@@ -28,6 +28,28 @@ import { withClient } from './db.js';
  *
  * puneMr and southMr are the adversarial pair: same schema, no shared scope.
  * westManager sees Pune and Nagpur and must not see South.
+ *
+ * And a SECOND, entirely separate organisation:
+ *
+ *   Rival Pharma
+ *   └── Rival territory   rivalMr (mr), rivalAdmin (admin)
+ *                         Dr Rival Fixture, one clinic, one visit
+ *
+ * **MR-06. This is the fixture that did not exist for twenty sessions.** Until it did,
+ * `seedFixtures()` built exactly ONE organisation, so every isolation test ever written
+ * compared two subtrees INSIDE a tenant and none compared two tenants. A boundary with
+ * one instance in the fixtures cannot fail a test: it proves nothing, and it looks green.
+ * BE-W76 -- an admin of one pharmaceutical company reading another's data through all
+ * five paths -- survived that long for no other reason.
+ *
+ * It is deliberately small: one territory, one MR, one admin, one doctor, one visit. It
+ * is not a second world to test against, it is the OTHER SIDE of a boundary, and every
+ * row in it exists so that some cell of G-RLS-C has something real to be refused.
+ *
+ * `rivalAdmin` earns its place separately. It is the positive control for the admin row
+ * of the matrix: without it, an admin being refused the rival doctor is indistinguishable
+ * from that doctor not being readable by anyone. With it, the same query by the tenant's
+ * OWN admin returns the row.
  */
 
 export interface FixtureUser extends ProfileLike {
@@ -39,12 +61,15 @@ export interface FixtureUser extends ProfileLike {
 export interface FixtureWorld {
   runId: string;
   organisationId: string;
+  /** The second tenant. Everything under `rival*` belongs to it and to nothing else. */
+  rivalOrganisationId: string;
   territories: {
     national: string;
     west: string;
     pune: string;
     nagpur: string;
     south: string;
+    rival: string;
   };
   users: {
     admin: FixtureUser;
@@ -53,10 +78,12 @@ export interface FixtureWorld {
     puneMr: FixtureUser;
     nagpurMr: FixtureUser;
     southMr: FixtureUser;
+    rivalMr: FixtureUser;
+    rivalAdmin: FixtureUser;
   };
-  doctors: { pune: string; south: string };
-  clinicAddresses: { pune: string; south: string };
-  visits: { pune: string; south: string };
+  doctors: { pune: string; south: string; rival: string };
+  clinicAddresses: { pune: string; south: string; rival: string };
+  visits: { pune: string; south: string; rival: string };
   checkIns: { pune: string; south: string };
   checkOuts: { pune: string };
   callReports: { pune: string; south: string };
@@ -97,28 +124,34 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
     pune: randomUUID(),
     nagpur: randomUUID(),
     south: randomUUID(),
+    rival: randomUUID(),
   };
 
   const organisationId = randomUUID();
+  const rivalOrganisationId = randomUUID();
 
   // Auth users first: user_profiles has an FK onto auth.users.
-  const [admin, westManager, southManager, puneMr, nagpurMr, southMr] = await Promise.all([
-    makeUser(runId, 'admin', 'admin', null),
-    makeUser(runId, 'west-manager', 'field_manager', territories.west),
-    makeUser(runId, 'south-manager', 'field_manager', territories.south),
-    makeUser(runId, 'pune-mr', 'mr', territories.pune),
-    makeUser(runId, 'nagpur-mr', 'mr', territories.nagpur),
-    makeUser(runId, 'south-mr', 'mr', territories.south),
-  ]);
+  const [admin, westManager, southManager, puneMr, nagpurMr, southMr, rivalMr, rivalAdmin] =
+    await Promise.all([
+      makeUser(runId, 'admin', 'admin', null),
+      makeUser(runId, 'west-manager', 'field_manager', territories.west),
+      makeUser(runId, 'south-manager', 'field_manager', territories.south),
+      makeUser(runId, 'pune-mr', 'mr', territories.pune),
+      makeUser(runId, 'nagpur-mr', 'mr', territories.nagpur),
+      makeUser(runId, 'south-mr', 'mr', territories.south),
+      makeUser(runId, 'rival-mr', 'mr', territories.rival),
+      makeUser(runId, 'rival-admin', 'admin', null),
+    ]);
 
   const world: FixtureWorld = {
     runId,
     organisationId,
+    rivalOrganisationId,
     territories,
-    users: { admin, westManager, southManager, puneMr, nagpurMr, southMr },
-    doctors: { pune: randomUUID(), south: randomUUID() },
-    clinicAddresses: { pune: randomUUID(), south: randomUUID() },
-    visits: { pune: randomUUID(), south: randomUUID() },
+    users: { admin, westManager, southManager, puneMr, nagpurMr, southMr, rivalMr, rivalAdmin },
+    doctors: { pune: randomUUID(), south: randomUUID(), rival: randomUUID() },
+    clinicAddresses: { pune: randomUUID(), south: randomUUID(), rival: randomUUID() },
+    visits: { pune: randomUUID(), south: randomUUID(), rival: randomUUID() },
     checkIns: { pune: randomUUID(), south: randomUUID() },
     checkOuts: { pune: randomUUID() },
     callReports: { pune: randomUUID(), south: randomUUID() },
@@ -132,10 +165,15 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
   await withClient(async (client: Client) => {
     await client.query('begin');
 
-    await client.query(`insert into public.organisations (id, name) values ($1, $2)`, [
-      organisationId,
-      `Gate0 Pharma ${runId}`,
-    ]);
+    await client.query(
+      `insert into public.organisations (id, name) values ($1, $2), ($3, $4)`,
+      [
+        organisationId,
+        `Gate0 Pharma ${runId}`,
+        rivalOrganisationId,
+        `Rival Pharma ${runId}`,
+      ],
+    );
 
     await client.query(
       `insert into public.territories (id, name, code, parent_id, organisation_id) values
@@ -143,7 +181,8 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
          ($2, 'West',     $7,  $1,   $11),
          ($3, 'Pune',     $8,  $2,   $11),
          ($4, 'Nagpur',   $9,  $2,   $11),
-         ($5, 'South',    $10, $1,   $11)`,
+         ($5, 'South',    $10, $1,   $11),
+         ($12, 'Rival',   $13, null, $14)`,
       [
         territories.national,
         territories.west,
@@ -156,11 +195,30 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
         `IN-W-NAG-${runId}`,
         `IN-S-${runId}`,
         organisationId,
+        territories.rival,
+        `RV-${runId}`,
+        rivalOrganisationId,
       ],
     );
 
     // Managers before their reports: validate_reporting_manager checks the target.
-    for (const user of [admin, westManager, southManager]) {
+    //
+    // MR-06: an admin has no territory -- `user_profiles_field_roles_require_territory`
+    // permits exactly that -- so it has no territory to derive an organisation from and
+    // must name one. That is the whole shape of BE-W76 in one argument: the role the
+    // schema exempted from territory scoping was the role with no tenant at all.
+    for (const [user, org] of [
+      [admin, organisationId],
+      [rivalAdmin, rivalOrganisationId],
+    ] as const) {
+      await client.query(
+        `insert into public.user_profiles (id, full_name, role, territory_id, organisation_id)
+         values ($1, $2, $3, null, $4)`,
+        [user.id, user.fullName, user.role, org],
+      );
+    }
+    // Field roles derive their organisation from their territory, so these are unchanged.
+    for (const user of [westManager, southManager]) {
       await client.query(
         `insert into public.user_profiles (id, full_name, role, territory_id) values ($1, $2, $3, $4)`,
         [user.id, user.fullName, user.role, user.territoryId],
@@ -177,12 +235,17 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
         [user.id, user.fullName, user.role, user.territoryId, manager.id],
       );
     }
+    await client.query(
+      `insert into public.user_profiles (id, full_name, role, territory_id) values ($1, $2, $3, $4)`,
+      [rivalMr.id, rivalMr.fullName, rivalMr.role, rivalMr.territoryId],
+    );
 
     await client.query(
       `insert into public.doctors (id, organisation_id, full_name, registration_number, specialty,
                                    qualification, territory_id, assigned_mr_id) values
          ($1, $3, 'Dr Pune Fixture',  'MH-1001', 'Urology',    'MBBS, MS', $4, $6),
-         ($2, $3, 'Dr South Fixture', 'KA-2002', 'Nephrology', 'MBBS, MD', $5, $7)`,
+         ($2, $3, 'Dr South Fixture', 'KA-2002', 'Nephrology', 'MBBS, MD', $5, $7),
+         ($8, $9, 'Dr Rival Fixture', 'DL-3003', 'Urology',    'MBBS, MS', $10, $11)`,
       [
         world.doctors.pune,
         world.doctors.south,
@@ -191,6 +254,10 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
         territories.south,
         puneMr.id,
         southMr.id,
+        world.doctors.rival,
+        rivalOrganisationId,
+        territories.rival,
+        rivalMr.id,
       ],
     );
 
@@ -198,12 +265,15 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
       `insert into public.clinic_addresses
          (id, doctor_id, label, line1, city, state, postal_code, latitude, longitude) values
          ($1, $3, 'Main clinic', '12 FC Road',   'Pune',      'Maharashtra', '411004', 18.5204, 73.8567),
-         ($2, $4, 'Main clinic', '9 MG Road',    'Bengaluru', 'Karnataka',   '560001', 12.9716, 77.5946)`,
+         ($2, $4, 'Main clinic', '9 MG Road',    'Bengaluru', 'Karnataka',   '560001', 12.9716, 77.5946),
+         ($5, $6, 'Main clinic', '3 Nehru Place','New Delhi', 'Delhi',       '110019', 28.5494, 77.2501)`,
       [
         world.clinicAddresses.pune,
         world.clinicAddresses.south,
         world.doctors.pune,
         world.doctors.south,
+        world.clinicAddresses.rival,
+        world.doctors.rival,
       ],
     );
 
@@ -226,7 +296,8 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
     await client.query(
       `insert into public.visits (id, mr_id, doctor_id, clinic_address_id, status, started_at, completed_at) values
          ($1, $3, $5, $7, 'completed', now() - interval '2 hours', now() - interval '1 hour'),
-         ($2, $4, $6, $8, 'completed', now() - interval '2 hours', now() - interval '1 hour')`,
+         ($2, $4, $6, $8, 'completed', now() - interval '2 hours', now() - interval '1 hour'),
+         ($9, $10, $11, $12, 'completed', now() - interval '2 hours', now() - interval '1 hour')`,
       [
         world.visits.pune,
         world.visits.south,
@@ -236,6 +307,10 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
         world.doctors.south,
         world.clinicAddresses.pune,
         world.clinicAddresses.south,
+        world.visits.rival,
+        rivalMr.id,
+        world.doctors.rival,
+        world.clinicAddresses.rival,
       ],
     );
 
