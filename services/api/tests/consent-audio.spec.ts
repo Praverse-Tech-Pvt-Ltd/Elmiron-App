@@ -1187,6 +1187,86 @@ describe.skipIf(!reachable)('consent captured offline before the notice changed'
 });
 
 describe.skipIf(!reachable)('the trust in the device clock is bounded', () => {
+  it('MR-05 B4: a capture two seconds in the future is ACCEPTED', async () => {
+    // 45007 had no tolerance, so an online capture from a handset whose clock is a few
+    // seconds fast tripped "your device clock is wrong" on the most ordinary capture the
+    // product has -- on exactly the devices whose power managers stop background time
+    // sync. The tolerance is forward-only and configurable.
+    await inRolledBackTransaction(async (client) => {
+      const { language, newer } = await noticeSupersededAfterCapture(client);
+      await asUser(client, world.users.puneMr);
+      const row = await captureOffline(client, {
+        id: randomUUID(),
+        visitId: world.visits.pune,
+        language,
+        versionId: newer,
+        capturedAt: new Date(Date.now() + 2_000).toISOString(),
+      });
+      expect(row.consent_text_version_id).toBe(newer);
+    });
+  });
+
+  it('MR-05 B3: a tolerated forward skew stores a NEGATIVE capture_lag', async () => {
+    // **This inverts a FIX-12 assertion, deliberately.** That test asserted `capture_lag`
+    // could never be negative, and it was right while the forward bound was absolute.
+    // The negative value IS the observed skew, in the row, which is where a device with a
+    // genuinely bad clock becomes a query rather than an MR complaint.
+    await inRolledBackTransaction(async (client) => {
+      const { language, newer } = await noticeSupersededAfterCapture(client);
+      await asUser(client, world.users.puneMr);
+      const id = randomUUID();
+      await captureOffline(client, {
+        id,
+        visitId: world.visits.pune,
+        language,
+        versionId: newer,
+        capturedAt: new Date(Date.now() + 5_000).toISOString(),
+      });
+      await client.query('set local role postgres');
+      const row = await client.query<{ negative: boolean }>(
+        `select capture_lag < interval '0' as negative
+           from public.consent_records where id = $1`,
+        [id],
+      );
+      expect(row.rows[0]?.negative).toBe(true);
+    });
+  });
+
+  it('MR-05 B4: beyond the tolerance it is still refused, and still says fix the clock', async () => {
+    await inRolledBackTransaction(async (client) => {
+      const { language, newer } = await noticeSupersededAfterCapture(client);
+      await asUser(client, world.users.puneMr);
+      await client.query('savepoint mr05tol');
+      try {
+        await client.query(
+          `select c.id from public.capture_consent($1, $2, $3, $4, $5, null, $6) c`,
+          [
+            randomUUID(),
+            world.visits.pune,
+            'consented',
+            language,
+            newer,
+            new Date(Date.now() + 10 * 60_000).toISOString(),
+          ],
+        );
+        throw new Error('a capture ten minutes in the future was accepted');
+      } catch (error: unknown) {
+        const detail =
+          typeof error === 'object' && error !== null && 'hint' in error ? String(error.hint) : '';
+        expect(
+          typeof error === 'object' && error !== null && 'code' in error ? error.code : '',
+        ).toBe('45007');
+        // The remedy must be the clock. The hint does mention re-asking -- to rule it
+        // OUT: "do not re-ask the doctor". That is stronger than the phrase being
+        // absent, so this asserts the exclusion rather than the absence. A first pass
+        // banned the substring and failed on the sentence that does the work.
+        expect(detail).toMatch(/clock/i);
+        expect(detail).toMatch(/do not re-?ask/i);
+      }
+      await client.query('rollback to savepoint mr05tol');
+    });
+  });
+
   it('refuses a capture dated in the future with 45007, and writes nothing', async () => {
     await inRolledBackTransaction(async (client) => {
       const { language, newer } = await noticeSupersededAfterCapture(client);
@@ -1343,6 +1423,9 @@ describe.skipIf(!reachable)('the bounded trust is auditable, not merely bounded'
         [id],
       );
       expect(row.rows[0]?.matches).toBe(true);
+      // Still true for a BACKDATED capture, which is this case. MR-05 added a forward
+      // tolerance, so `received_at >= captured_at` no longer holds universally -- see
+      // "a tolerated forward skew stores a NEGATIVE capture_lag" above.
       expect(row.rows[0]?.received_after).toBe(true);
       // Roughly two hours, and never negative.
       expect(Number(row.rows[0]?.lag_seconds)).toBeGreaterThan(7_000);
