@@ -8703,3 +8703,206 @@ whole. It remains the thing to reach for.
    at all.
 
 ---
+
+---
+
+### MR-05 — G-RLS-C, the clock tolerance, and four writes (8 September 2026)
+
+**Parts A, B and C are done. Part D — the conversion — was not started, and Part E was
+not reached.** Where and why is at the end.
+
+**G-RLS-C FAILS on the organisation boundary.** Reported, not fixed, per A5. It is the most
+serious finding of the twenty-odd sessions in this record, and it is first below.
+
+#### A1 — CI and counts
+
+MR-04's three commits pushed as `ef2da9b..ff0429b`. Run **`34211758329`: success**, both
+jobs.
+
+| workspace | runner | before | after MR-05 |
+| --- | --- | ---: | ---: |
+| `@fieldforce/api` | vitest, live database | 512 / 24 | **531 passed / 26 files** |
+| `@fieldforce/field` | vitest, logic | 359 / 25 | 359 / 25 |
+| `@fieldforce/field` | jest, jest-expo render | 72 / 12 | 72 / 12 |
+| `@fieldforce/mock` | vitest | 40 / 1 | 40 / 1 |
+| `@fieldforce/ui-tokens` · `@fieldforce/core` · `@fieldforce/ui` | vitest | 54 / 21 / 4 | unchanged |
+
+**api +19**: 4 the matrix, 12 the withdrawal bounds, 3 the tolerance. No skips.
+`verify:rollbacks`: schema empty, **36 migrations, 36 rollback files**.
+`turbo run typecheck lint`: 16 successful, 16 total, `--force`.
+
+---
+
+#### A4 — the full G-RLS-C matrix. **Forty cells, and five of them are a defect.**
+
+Seeded at pilot volume: `seed:synthetic --mrs 100 --history 1y` — 3,520 doctors, 208,800
+visits, 105 profiles, a three-level tree — **plus** `seedFixtures()`. The two seeds are two
+organisations, which is what made a cross-tenant test possible at all.
+
+```
+another ORG      | anon           | postgrest | REFUSAL
+another ORG      | anon           | raw sql   | REFUSAL
+another ORG      | anon           | join      | REFUSAL
+another ORG      | anon           | function  | REFUSAL
+another ORG      | anon           | view      | REFUSAL
+another ORG      | mr             | postgrest | ABSENCE
+another ORG      | mr             | raw sql   | ABSENCE
+another ORG      | mr             | join      | ABSENCE
+another ORG      | mr             | function  | ABSENCE
+another ORG      | mr             | view      | ABSENCE
+another ORG      | field_manager  | postgrest | ABSENCE
+another ORG      | field_manager  | raw sql   | ABSENCE
+another ORG      | field_manager  | join      | ABSENCE
+another ORG      | field_manager  | function  | ABSENCE
+another ORG      | field_manager  | view      | ABSENCE
+another ORG      | admin          | postgrest | DATA      <-- DEFECT
+another ORG      | admin          | raw sql   | DATA      <-- DEFECT
+another ORG      | admin          | join      | DATA      <-- DEFECT
+another ORG      | admin          | function  | DATA      <-- DEFECT
+another ORG      | admin          | view      | DATA      <-- DEFECT
+another SUBTREE  | anon           | postgrest | REFUSAL
+another SUBTREE  | anon           | raw sql   | REFUSAL
+another SUBTREE  | anon           | join      | REFUSAL
+another SUBTREE  | anon           | function  | REFUSAL
+another SUBTREE  | anon           | view      | REFUSAL
+another SUBTREE  | mr             | postgrest | ABSENCE
+another SUBTREE  | mr             | raw sql   | ABSENCE
+another SUBTREE  | mr             | join      | ABSENCE
+another SUBTREE  | mr             | function  | ABSENCE
+another SUBTREE  | mr             | view      | ABSENCE
+another SUBTREE  | field_manager  | postgrest | ABSENCE
+another SUBTREE  | field_manager  | raw sql   | ABSENCE
+another SUBTREE  | field_manager  | join      | ABSENCE
+another SUBTREE  | field_manager  | function  | ABSENCE
+another SUBTREE  | field_manager  | view      | ABSENCE
+another SUBTREE  | admin          | postgrest | DATA      <-- by design
+another SUBTREE  | admin          | raw sql   | DATA      <-- by design
+another SUBTREE  | admin          | join      | DATA      <-- by design
+another SUBTREE  | admin          | function  | DATA      <-- by design
+another SUBTREE  | admin          | view      | DATA      <-- by design
+```
+
+**`anon` is refused everywhere. `mr` and `field_manager` are absent everywhere — twenty
+cells, both boundaries, all five paths.** That half of the gate is genuinely met and had
+never been demonstrated.
+
+**A5 — the defect. An administrator of one pharmaceutical company can read another
+company's data, through every path.** The cause is structural, not a missing predicate:
+
+```sql
+-- is_admin()
+select coalesce(public.effective_role() = 'admin', false);
+-- effective_role() reads user_profiles.role. There is no organisation in it.
+
+select count(*) from pg_policy
+ where pg_get_expr(polqual, polrelid) like '%organisation_id%';
+ -> 0
+```
+
+**Not one policy in the schema mentions `organisation_id`.** The column exists on the
+tables and has never been an access-control dimension. Six policies grant on `is_admin()`,
+and every one of them is organisation-blind. **Registered as BE-W76. Not fixed**, per A5.
+
+Cross-**subtree** admin access is excluded as by design: an admin is scoped to an
+organisation, not to a territory. That is the only DATA that should be there.
+
+**Why this had never been found.** Before this session **no test in the repository created
+a second organisation**. `seedFixtures()` builds one org with a tree inside it, so every
+isolation test ever written checked a subtree boundary. The gate was claimed on twenty
+cells' worth of evidence and the other twenty had no fixture to run against.
+
+**One cell was wrong before it was right, and the correction is the method.** The function
+path first called `search_doctors(null, null, 200)` and looked for the target in the page —
+which reported ABSENCE whenever the target sorted past row 200 of 3,520. **The limit hiding
+the answer, not the scope refusing it.** It now searches by the target's own name. Exactly
+the "a search shaped like the answer you expect" trap recorded in `gotchas.md` two sessions
+ago, met again in the act of testing for it.
+
+**A6 — the command that re-runs it:**
+
+```bash
+pnpm --filter @fieldforce/api seed:synthetic --mrs 100 --history 1y
+pnpm --filter @fieldforce/api test -- g-rls-c
+```
+
+The suite **asserts the five defect cells are still failing**, so the quarantine cannot rot
+into a comment about something fixed years ago — deleting those five lines is the acceptance
+test for BE-W76's fix.
+
+**G-RLS-X — the commercial/clinical boundary — is ABSENT, not passing.** There is no
+clinical schema and there are no clinical roles; S6 and S7 are cut under the default scope
+option. A gate with nothing to separate has not been met.
+
+---
+
+#### B — the `45007` tolerance
+
+**The reviewer is right that it was not harmless.** There was no tolerance at all, and the
+client supplies `captured_at` from the **device** clock, so an online capture sent
+immediately arrives milliseconds old — and a handset a few seconds fast was told *"the
+device clock is ahead of the server"* for the most ordinary capture the product has. On
+exactly the handsets whose power managers stop the background sync that keeps a clock right.
+
+**`consent_future_tolerance_seconds` = 120, UNVERIFIED**, in `app_thresholds` beside
+`consent_max_sync_lag_hours`, registered like the UCPMP cap. **Zero restores the FIX-12
+behaviour exactly**, so the mechanism can be switched off without being removed.
+
+**Forward only. Backdating is untouched** and still governed by the sync lag — the two
+directions have different adversaries. And forward-dating buys nothing anyway: the notice
+check uses the same `captured_at`, so moving it forward makes a superseded version look
+worse rather than better.
+
+**B3 — `capture_lag` already stores the skew, and it now signs correctly.** It is
+`received_at - captured_at`, so a tolerated capture from a fast phone stores a **negative**
+lag — the observed skew, in the row, where a genuinely bad clock is a query rather than an
+MR complaint. **FIX-12 asserted `capture_lag` could never be negative**; that was true while
+the bound was absolute, and the assertion is narrowed rather than deleted, with its comment
+saying why.
+
+**B4:** two seconds ahead is accepted; ten minutes is refused `45007`; the skew is negative
+in the row. The refusal test asserts the hint **says "do not re-ask"** rather than that it
+never says "re-ask" — the sentence rules the wrong remedy out explicitly, which is stronger
+than the phrase being absent. A first pass banned the substring and failed on the sentence
+doing the work.
+
+#### C — the withdrawal path. **Two of three already sound; one is not.**
+
+| | verdict |
+| --- | --- |
+| **C1 — can a withdrawal be backdated?** | **YES, arbitrarily, in both directions.** `validate_consent_withdrawal` checks the original's existence, its outcome, its doctor and that it is not itself a withdrawal — and **never looks at `captured_at`**. The column is `NOT NULL` with no default and no check constraint. A withdrawal five years before the consent it supersedes and one a year in the future are both accepted, asserted. The same future instant is refused `45007` on a **capture**, which is the contrast that makes it a gap rather than a design. **BE-W77** |
+| **C2 — can a client forge one for a doctor it does not hold?** | **NO.** The trigger compares `new.doctor_id` against the superseded record's, so a withdrawal cannot be aimed elsewhere — the bound BE-W74 had to add by hand on the capture side already existed here. A withdrawal naming a record that does not exist is refused |
+| **C3 — is it append-only?** | **YES, including the case a policy would have missed.** `consent_records_reject_mutation` is **statement-level**, so UPDATE and DELETE are refused for `authenticated`, `anon`, `service_role` **and `postgres`**, the last with `23001`. A policy would have protected the row from everyone except the two roles most able to rewrite history |
+
+**C1 matters because of what a withdrawal is.** It is the record that decides whether
+everything processed between the original consent and the withdrawal was lawful. A capture
+is now bounded three ways; the record that governs lawfulness is bounded not at all.
+
+---
+
+#### Where this stopped
+
+**Parts A, B and C are complete. Part D — the four-write conversion — was not started, and
+Part E was not reached.**
+
+**Why:** Part A produced a compliance-boundary defect that A5 says to stop and report on,
+and Parts B and C each produced a registered finding. The conversion is a full session on
+its own — four write paths, the device-clock fix, the consent and samples refusal matrices,
+and an emulator offline proof — and starting it on the remaining budget would have meant
+compressing it.
+
+**Nothing in D is blocked by A, B or C**, so the next session can begin with it directly.
+
+**Order for the next session:**
+
+1. **BE-W76 needs a decision before it needs code.** Is an "admin" a tenant administrator
+   or a platform operator? The schema currently implements the second and the product
+   describes the first. That is one sentence to a human, and the fix differs completely
+   depending on the answer.
+2. **Part D**, the four-write conversion, with the device-clock fix in the same session
+   because D is what makes that branch reachable.
+3. **Part E** only if the operator has confirmed the visit-status recommendation; otherwise
+   the reads stay unconverted, because the done counter reads a field nothing writes.
+4. **BE-W77**, the withdrawal timestamp bound — small, and it belongs with whoever answers
+   the `consent_future_tolerance_seconds` question, since both are the same kind of decision.
+
+---

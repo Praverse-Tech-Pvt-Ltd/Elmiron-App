@@ -1592,3 +1592,49 @@ It could only ever confirm.
 
 Both examples were eventually caught the same way — by asking *what would this look like if
 it were false*, and finding the query could not tell.
+
+---
+
+## 8 September 2026 — relaxing a constraint to accommodate an invalid write legitimises the write
+
+**Worked example.** `apps/field`'s recording screen posts `sizeBytes: 1`. It is not a
+measurement: the file's real size is not known on that screen, and
+`CreateRecordingRequestSchema` declares `sizeBytes: z.number().int().positive()`, so `1` is
+the smallest value that satisfies the shape. The comment beside it says as much — *"Real
+bytes arrive with the upload, which is BE-W7 and has no client here."*
+
+The obvious remedy is to make the field nullable. **It is the wrong one**, and the reason
+generalises:
+
+> Making the field nullable would not make the write correct. It would make the fabricated
+> row **valid**.
+
+The row would then pass every schema check, sit in the database indistinguishable from a
+real one, and be counted by anything that counts recordings — while still describing an
+upload that never happened. The constraint was not the problem; it was the only thing
+saying so.
+
+**The actual finding, once the constraint is left alone:** the write should not happen yet.
+`apply_sync_item` refuses a recording item with no `uploadGrantId`, and
+`CreateRecordingRequestSchema` has no such field — so this write cannot succeed against the
+real server at all, and the fabricated value exists only because the mock accepts it.
+
+### The rule
+
+**When a value is invented to satisfy a constraint, the constraint is reporting a real
+problem. Fix the write or postpone it; do not widen the type.**
+
+Three signs you are about to do this:
+
+- A literal appears in a payload with a comment explaining why it is not real.
+- A field is made nullable, or a check loosened, and no caller starts supplying a better
+  value in the same change.
+- The justification is about the schema — *"the contract needs a positive integer"* —
+  rather than about the thing being recorded.
+
+The same shape has appeared here twice more, and it is worth seeing them together:
+`flushOutbox` stamping `receivedAt: nowIso()` so that a field documented as the server's
+clock has *something* in it, and `capture_consent`'s displayed-language once coming from
+the client payload so the column could be filled. In each case a value was manufactured to
+satisfy a shape, and in each case the honest fix was to change what the code does rather
+than what the shape allows.

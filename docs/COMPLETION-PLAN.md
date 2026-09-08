@@ -911,3 +911,31 @@ is no history to rewrite — which is the only reason the decision is still chea
   `45004`, `45007` and `45008` reach the client with their own remedy through the existing
   error contract instead of collapsing to `internal_error`. The `ILIKE '%shift window%'`
   fallback is deleted in the same change, replaced by `v_sqlstate in ('45002','45003')`.
+
+### Added by MR-05
+
+| ID | Title | Changes | Deps | Blocker | Est | Verification |
+|---|---|---|---|---|---|---|
+| **BE-W76** | **No tenancy boundary exists. An admin of one organisation reads another's data** | every policy granting on `is_admin()`, `is_admin()` itself | — | **Product decision first** | 5 | G-RLS-C returns DATA on all five paths across an ORG boundary for `admin` — PostgREST, raw SQL, a join from a commercial table, a `SECURITY DEFINER` function and a view. Structural, not a missing predicate: `is_admin()` is `effective_role() = 'admin'` with no organisation in it, and `select count(*) from pg_policy where pg_get_expr(polqual, polrelid) like '%organisation_id%'` returns **0**. The column exists on the tables and has never been an access-control dimension. **The decision comes first:** is an "admin" a TENANT administrator or a PLATFORM operator? The schema implements the second; the product describes the first, and the fix differs completely. Verification: the five quarantined cells in `g-rls-c.spec.ts` are deleted and the suite still passes — that deletion IS the acceptance test |
+| **BE-W77** | Nothing bounds a consent WITHDRAWAL's timestamp | `validate_consent_withdrawal` or `consent_records` | — | — | 2 | A withdrawal five years before the consent it supersedes, and one a year in the future, are both accepted — asserted in `consent-withdrawal-bounds.spec.ts`. The trigger checks existence, outcome, doctor and non-recursion and never looks at `captured_at`; the column is `NOT NULL` with no default and no check. The same future instant is refused `45007` on a capture. A withdrawal is DPDP s.6(4) — its effective moment decides whether everything processed since the original consent was lawful, so it is the timestamp that most needs a bound and the only one that has none. Belongs with whoever answers `consent_future_tolerance_seconds`: same kind of decision |
+
+**MR-05 B1 landed:** `consent_future_tolerance_seconds` = **120, UNVERIFIED**, forward
+bound only. Backdating remains governed by `consent_max_sync_lag_hours`. Zero restores the
+FIX-12 behaviour exactly. **Added to the escalation list** beside the UCPMP cap and the
+maximum sync lag: *how much forward clock skew may a device have before a consent capture
+is refused?*
+
+**G-RLS-C — the half that passes, stated so it is not lost in the defect.** `anon` is
+REFUSED on all ten cells; `mr` and `field_manager` are ABSENT on all twenty, across both
+boundaries and all five paths. That had never been demonstrated before this session, because
+**no test in the repository had ever created a second organisation**.
+
+**G-RLS-X remains ABSENT, not passing.** No clinical schema, no clinical roles. A gate with
+nothing to separate has not been met, and it should not appear as green anywhere.
+
+**Re-run command, recorded because a "has never fired" claim rots fastest:**
+
+```
+pnpm --filter @fieldforce/api seed:synthetic --mrs 100 --history 1y
+pnpm --filter @fieldforce/api test -- g-rls-c
+```
