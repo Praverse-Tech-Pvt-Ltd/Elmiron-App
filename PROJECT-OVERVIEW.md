@@ -9974,3 +9974,211 @@ the clock had to be right before a screen showed a server timestamp it had not b
 5. **BE-W83** — restrictive policies for the `visible_user_ids()` tables, once the subquery
    cost is measured.
 
+
+---
+
+### MR-09 — the misroute class, and the conversion (8 September 2026)
+
+**Parts A, B, C and E are done. Part D — the conversion — was NOT started**, and the
+survey found a hard dependency that makes it impossible to do a write at a time. That is
+the most useful thing in this section and it is at the end.
+
+#### A1 — the push
+
+Four commits pushed as `0c0f902..fb87e73`.
+
+**CI run `34246789699` · workflow `CI` · event `push` · commit
+`0c0f902765ef063d6d4208415ae85284199a2613`, SUCCESS**, both jobs — and that SHA is the
+HEAD those four commits produced.
+
+The scheduled-workflow trap is still live: the run list shows *successes* on `5c143a2` from
+**Audio retention watchdog** and **Audio retention**, both `schedule`. Checking the
+workflow name and the event is now part of the claim, not a courtesy.
+
+#### Counts, per workspace AND per runner, from `scripts/test-counts.mjs`
+
+```
+@fieldforce/core       vitest    21     3        @fieldforce/console   vitest    10     1
+@fieldforce/ui         vitest     4     1        @fieldforce/field     vitest   367    25
+@fieldforce/ui         jest     221    20        @fieldforce/field     jest      72    12
+@fieldforce/ui-tokens  vitest    54     3        @fieldforce/api       vitest   565    30
+@fieldforce/mock       vitest    40     1        TOTAL                         1354
+```
+
+No skips. **43 migrations, 43 rollbacks**, schema empty. `turbo run typecheck lint
+--force`: 16 of 16.
+
+---
+
+#### B — the misroute class, not the one instance
+
+**B1 — the author is caught at compile time.** `sendFor` is now a `switch` over the entity
+kind with a `never` default. Proven by adding a ninth entity to `SyncEntitySchema`:
+
+```
+src/sync/outbox.ts(388,9): error TS2322:
+  Type '"mileage_scratch"' is not assignable to type 'never'.
+```
+
+Removed again afterwards. Adding an entity without a branch can no longer compile.
+
+**B3 — the entity audit, which the compiler now enforces and the record should carry:**
+
+| entity | branch | what happens |
+| --- | --- | --- |
+| `check_in` | ✅ | `createCheckIn` |
+| `check_out` | ✅ | `createCheckOut` — **added MR-08 after the misroute** |
+| `consent_record` | ✅ | `createConsentRecord` |
+| `sample_and_input` | ✅ | `createSampleAndInput` |
+| `visit` | ❌ `not_convertible` | written straight to the table, no RPC in the way (FIX-07) |
+| `call_report` | ❌ `not_convertible` | written directly and **not queued at all**; Part D converts it |
+| `recording` | ❌ `not_convertible` | needs an `uploadGrantId` only an upload session can mint (FE-W29) |
+| `voice_note` | ❌ `not_convertible` | the same |
+
+Four of eight are sendable, and the other four are now **listed explicitly** rather than
+falling off the end of an `if` chain — so converting one is a change to that line and not a
+change to nothing.
+
+**B4 — a second defect in the same dispatch, and its corruption shape.** `batch_started`
+marks every selected row `in_flight`. The old code then did `if (send === null) continue`,
+recording **no verdict at all** — and every later flush selects only `queued`.
+
+**What the data would have looked like:** the row sits on the device marked as if in
+transit, forever. Never retried, never dead-lettered, never counted as failed. The queue
+screen shows it as in-flight, which reads as *"on its way"*. **Nothing would have reported
+it** — the MR is told their work is being sent, and it never will be. The comment claimed
+the row was *"left where it is rather than dropped"*; it was left where nothing would ever
+look again. It now records `attempt_failed`, which returns it to `queued` with a visible
+reason and eventually dead-letters it to a person.
+
+That defect was unreachable while all four queueing entities had branches. It becomes
+reachable the moment a fifth entity is queued — which is precisely what Part D does.
+
+**B2 — the payload is caught at replay time, and it is not redundant with B1.** They catch
+different actors: the `never` default catches an **author**, at compile time, and can say
+nothing about a row already on disk; the discriminant catches a **row** whose `entity` says
+one event and whose body is the other. That is what the buggy build wrote, and because
+`CreateCheckOutRequestSchema` **is** `CreateCheckInRequestSchema`, every shape check in the
+system agreed the row was fine. **Two distinct events with one shape are indistinguishable
+to a type system by construction; only a value can separate them.**
+
+The discriminant is device-local — stored payload only, never on the wire, no contract
+schema touched. A payload with **no** discriminant is refused rather than trusted, because
+it can only come from a build older than this one, which is exactly the build that wrote
+departures labelled as arrivals. Nothing has shipped, so this strands nothing real.
+
+**The field is `__queueEntity`, and the name is itself a finding.** The first attempt called
+it `kind` and silently overwrote `CreateSampleAndInputRequest.kind` — a business field whose
+values are `'sample' | 'input'`. Every queued handover would have gone out declaring a kind
+that is not in the enum. It fails closed rather than open, but it is the same family as the
+defect being fixed: **a device-local marker written into a namespace the contract already
+owns.**
+
+**B5 — four tests and two mutations.** Removing the discriminant check fails the two B2
+tests; restoring the `continue` fails all three. The positive control asserts a correctly
+labelled row still sends, with a body carrying no device-local marker.
+
+---
+
+#### C — **the environment came up.** Signed in, on the Today screen
+
+| step | result |
+| --- | --- |
+| **C1** JDK 17 | `C:\Program Files\Microsoft\jdk-17.0.20.101-hotspot`. No `java` on PATH at all, so `JAVA_HOME` is set per-command |
+| **C2** stack | ten Supabase containers healthy, Kong `200`. MR seeded: `seed-ed761153-mr@example.test`, sign-in verified against GoTrue by the seed script itself |
+| **C3** emulator | `Pixel_10` booted in ~30s. **A debug APK from 7 September already existed**, so no Gradle build was needed. `adb reverse` for 8081, 54321 **and** 4010 |
+| **C4** Metro | port 8081 was held by a stale `node` (PID 10180) from an earlier session; killed and restarted. `cd apps/field && node ../../node_modules/expo/bin/cli start --dev-client` |
+| **C5** sign-in | **reached the Today screen.** Screenshots captured at each step |
+
+**And the Today screen is the evidence for Part D.** It shows *"Dr Rohini Kulkarni,
+Sahyadri Clinic, Pune"* and *"2 of 3 visits done"* for an MR seeded four minutes earlier
+with no data at all:
+
+```
+Supabase:  user_profiles=1  doctors=0  visits=0  clinic_addresses=0
+the app:   visit 66666666-6666-4666-8666-666666666601
+           mr    22222222-2222-4222-8222-222222222202   <- mock fixture ids
+```
+
+**Auth goes to real Supabase; every read and write goes to the mock at `:4010`.** That
+split is now demonstrated on a device rather than asserted from the source.
+
+---
+
+#### D — not started, and the survey says it cannot be done a write at a time
+
+Two findings, and the second is the blocker.
+
+**1. Two of the four writes already have a complete Supabase path that nothing calls.**
+`apps/field/src/capture/check-in.ts` exports `recordCheckIn` and `recordCheckOut`: they call
+`rpc('record_check_in')` / `rpc('record_check_out')` through the live client, map failures
+with `refusalForSqlState(error.code)`, and parse the result rather than casting it. They are
+finished, correct, and **called from no screen** — `visit/[id].tsx` calls
+`createClientForScenario().createCheckIn(body)`, which is the mock.
+
+The characteristic defect again, thirteenth appearance: **code that looks exercised and is
+not.** `capture/visits.ts` has the same shape for `daily_mileage`.
+
+**Samples, consent and call report have no Supabase writer at all.** The only `rpc(` calls
+in `capture/` are the three above.
+
+**2. THE BLOCKER: a write cannot be converted before the read it depends on.**
+
+`record_check_in` takes a `visit_id` and its first act is *"the visit is yours"* —
+`select * from visits where id = p_visit_id and mr_id = v_uid`, else `42501`. The visit id
+the screen is holding is `66666666-…-601`, a **mock fixture id that exists nowhere in the
+database**. So converting check-in alone does not produce a partially-converted app; it
+produces an app whose first check-in fails `visit … is not yours`, every time.
+
+The same applies to all four: consent needs a real `visit_id` and a real `doctor_id`,
+samples need both, a call report needs a real visit. **The write conversion requires the
+read conversion**, and the read conversion requires real reference data for the signed-in MR
+— which `seed:mr` does not create (it produced `doctors=0`) and which `seed:reference`
+deliberately refuses to invent.
+
+**So Part D is not four independent conversions but one dependent chain**, and the first
+link is a seed that does not exist yet. That is a session's work before the first screen
+changes, and it is why nothing was converted here rather than something being half
+converted.
+
+**Nothing in D was started. No screen was changed, no mock path removed, no copy changed,
+and there is no D7 proof.** The environment that proof needs is now up and stays up.
+
+---
+
+#### E — one gotcha
+
+Appended: **a new guard must not change the code returned for a situation that has not
+changed**, with BE-W84's first draft worked through — it raised `23514` where the REST
+contract had always returned `42501`, because **a `BEFORE` trigger fires ahead of the
+policy's `WITH CHECK`** and therefore pre-empts existing refusals and takes over their
+codes. The general form: *a guard added in front of an existing one inherits its cases and
+must inherit its answers.*
+
+---
+
+#### Where this stopped
+
+**After Part C, before Part D**, on the evidence above rather than on budget.
+
+The reviewer's instruction was to bring the environment up first so the session would not
+end without its proof. It did the opposite of what was expected and that is the useful
+outcome: **the environment came up, and having it up is what revealed that the conversion
+cannot start.** The Today screen showing mock fixture ids for an MR with no data is a fact
+that no amount of source reading had produced in eight sessions.
+
+**Order for the next session:**
+
+1. **Push.** Three commits local; `0c0f902` is green and is what main is on.
+2. **A seed that gives the signed-in MR a real day** — organisation, territory, doctors,
+   clinic addresses, a beat plan and today's visits, in Supabase. Everything else waits on
+   it, and `seed:reference` will not invent the content.
+3. **Convert the READS first** — Today, doctor list, visit detail — so the ids on the screen
+   are ids the database has.
+4. **Then Part D's four writes**, starting with check-in/check-out, which need wiring rather
+   than writing.
+5. **D7 on the emulator**, naming check-out explicitly, since it is the event that was being
+   corrupted.
+
+The environment is left running: emulator booted, ports reversed, Metro serving, signed in.
+

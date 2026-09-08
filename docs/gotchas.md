@@ -1846,3 +1846,49 @@ world.
 And a corollary worth having: **a fixture is not exempt from the rules it is not subject
 to.** `postgres` bypassing RLS is a fact about the connection, not permission to write a
 row a client could never make.
+
+## 8 September 2026 — a new guard must not change the code returned for a situation that has not changed
+
+Adding a guard can silently alter the client contract for cases the guard was never about.
+
+### The worked example
+
+`visits` had no validation trigger, so BE-W84 added one. Among its rules: *the doctor must
+be in a territory the acting MR covers.* That rule already existed — `visits_insert_own`
+has always stated it — and `write-path.spec.ts` asserts what a client is told when it is
+broken:
+
+```ts
+expect(refusalForSqlState(body.code).code).toBe('not_permitted');   // 42501
+```
+
+The trigger's first draft raised `23514`, because the rule reads like a shape rule when you
+are writing a validation function. The row was still refused. What changed was **what the
+MR is told** — from `not_permitted` to `invalid_for_this_record` — for a situation nobody
+had touched.
+
+**The mechanism is the part to remember: a `BEFORE` trigger fires ahead of the policy's
+`WITH CHECK`.** So a new trigger does not merely add refusals; it *pre-empts* existing ones
+and takes over their codes. Every case the trigger happens to cover stops being answered by
+the policy that used to answer it.
+
+The test caught it, and only because a previous session had bothered to assert the refusal
+*code* rather than the fact of refusal.
+
+### The rule
+
+**When adding a guard, ask which existing refusals it now answers first — and give those
+the code they already had.** The SQLSTATE follows the remedy, not the layer that noticed:
+*"this doctor is not yours"* is a permission statement whether a policy or a trigger says
+it.
+
+Two signs you are about to do this:
+
+- The new guard restates a rule that already lives in a policy, a constraint or another
+  trigger, "so it holds on every path". That is usually right — and it means the new guard
+  will answer first.
+- You are choosing a SQLSTATE by asking *what kind of check is this* rather than *what
+  should the client do about it*.
+
+And the general form, beyond triggers: **a guard added in front of an existing one inherits
+its cases and must inherit its answers.**
