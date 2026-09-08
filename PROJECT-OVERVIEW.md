@@ -9736,3 +9736,241 @@ concurrency races that had to be closed before anything could be measured twice.
 5. **Part F's visit-status half** only if the operator has confirmed the `not_met`
    recommendation.
 
+
+---
+
+### MR-08 — guarding visits, and the conversion (8 September 2026)
+
+**Parts A, B and D are done. Part C — the conversion — is NOT done**, and two defects it
+would have carried into `sync_push` were found and fixed instead. Where and why is at the
+end.
+
+#### A1 — the push, with the SHA and the workflow name
+
+Six commits pushed as `9bf7e7f..5c143a2`.
+
+**CI run `34225979343` · workflow `CI` · event `push` · commit
+`5c143a21e7c526b22c64360b3d3edb65460dd432`, SUCCESS**, both jobs — and that SHA is the
+HEAD those six commits produced.
+
+The workflow name is checked because the trap has already caught this session once: the
+run list still shows a *success* on `fd5d3aa`, which is `34219478450`, the **Audio
+retention watchdog** on a schedule. The only CI run on that commit failed.
+
+#### A2 — **the counter, and the two things it found on its first run**
+
+`scripts/test-counts.mjs` reads each workspace's own `test` script to learn which runners
+it declares, runs each with its JSON reporter, and **exits 1 if a configured runner
+reports zero cases, or any skips.** It found:
+
+1. **`@fieldforce/console` has ten passing tests** and had appeared in no session's counts.
+2. **Worse: `ci.yml` has no step for it at all**, so those ten had never run in CI.
+   Seven workspaces have a `test` script. CI ran six.
+
+`ci.yml`'s own comments name this failure twice — `ui-tokens` was *"decorative in CI from
+the day it was written"* because the step did not exist, and `ui` was added *"in the same
+commit, because a workspace that gains a suite and not a CI line is how ui-tokens stayed
+decorative."* **The rule was known, written down, and applied by hand.**
+`ci-covers-every-suite.spec.ts` now derives it from the workspaces, and is mutation-proven:
+removing the console step fails the test naming `@fieldforce/console` exactly.
+
+**Counts, per workspace AND per runner, from the tool rather than from reading:**
+
+```
+@fieldforce/core       vitest    21     3        @fieldforce/console   vitest    10     1
+@fieldforce/ui         vitest     4     1        @fieldforce/field     vitest   363    25
+@fieldforce/ui         jest     221    20        @fieldforce/field     jest      72    12
+@fieldforce/ui-tokens  vitest    54     3        @fieldforce/api       vitest   565    30
+@fieldforce/mock       vitest    40     1        TOTAL                         1350
+```
+
+No skips. `verify:rollbacks`: schema empty, **43 migrations, 43 rollbacks**.
+`turbo run typecheck lint --force`: 16 of 16.
+
+Two details in the tool worth keeping. The runners are invoked as `node <entry>` rather
+than via `npx` or `node_modules/.bin`, because on Windows those are `.cmd` shims that
+`execFileSync` refuses without `shell: true` — and `shell: true` concatenates arguments
+instead of escaping them. And the file count comes from `testResults.length`, not
+`numTotalTestSuites`, which counts `describe` blocks in vitest and files in jest: reading
+it reported api as 139 "files" against 30 real ones. **A column whose meaning changes per
+row is the same defect, one column over.**
+
+---
+
+#### B — BE-W84. `visits` gets a validation trigger
+
+**The probe first: five incoherent visits, five accepted.** A cross-tenant doctor, another
+doctor's clinic address, another MR's beat plan, a `started_at` a year in the future and a
+`completed_at` a year in the future all inserted without complaint.
+
+**B1 — the rules, and why each was accepted or rejected**
+
+| candidate | verdict | reason |
+| --- | --- | --- |
+| **the doctor is visible to the acting MR** | **ACCEPTED** | `visits_insert_own` already requires exactly this over REST. `apply_sync_item` is `SECURITY DEFINER`, so RLS does not apply, and its visit branch takes `doctorId` straight from the payload. **The offline path was weaker than the online one for a rule the product had already stated.** Resolved through `visible_territory_ids(new.mr_id)` — the row's MR, not the session's — so it holds for `postgres` and for a fixture |
+| **organisation coherence** | **ACCEPTED** | Stated separately even though the rule above now implies it, since MR-06 made `visible_territory_ids` org-scoped. A cross-tenant visit deserves to be told it crossed a tenant, not that it picked the wrong territory. Two rules, two remedies |
+| **`started_at` / `completed_at` not in the future** | **ACCEPTED** | A visit that started tomorrow is incoherent and `received_at` is server-stamped, so the comparison is available |
+| **`scheduled_for` not in the future** | **REJECTED** | A beat plan schedules visits ahead. A bound here would break beat planning, and the acceptance is **asserted**, not assumed — a suite that only proves refusals would not have noticed |
+| **a sync-lag bound like `consent_max_sync_lag_hours`** | **REJECTED** | **The remedy differs, and the remedy is what a bound is for.** A consent too old to accept can be taken again; a visit too old to accept is work that already happened, and refusing it erases the only record of the call. `team_exceptions` already emits `no_recent_sync` for a stale sync. Bounding it here would delete data to report a problem that is already reported |
+| **`mr_id` server-derived** | **REJECTED — already true** | Column default `auth.uid()` (migration `20260907000600`), `visits_insert_own` requires `mr_id = auth.uid()`, `apply_sync_item` assigns `v_uid`, and `CreateVisitRequestSchema` has never declared the field. A fourth copy would be noise, and a trigger cannot know who a `postgres` caller "should" be — what it can check is coherence |
+| **status transitions** | **BLOCKED** | On the `not_met` question. Writing transition rules against a three-value enum that is about to gain a fourth would encode the wrong answer in a trigger. **BE-W73, still one sentence to a human** |
+| **`clinic_address_id` belongs to the doctor** | **ACCEPTED — found while probing** | `record_check_in` measures the geofence from it, so the wrong address measures the wrong building. The probe put a Delhi clinic on a Pune visit |
+| **`beat_plan_id` belongs to the MR** | **ACCEPTED — found while probing** | `apply_sync_item` checks the plan for staleness and never checks whose it is |
+
+**The SQLSTATE follows the remedy, not the layer that noticed.** Tenant and territory
+raise `42501` → `not_permitted`, and that was not a free choice: `write-path.spec.ts`
+asserts a client sees `not_permitted` for a doctor outside its territory, and **a BEFORE
+trigger fires ahead of the policy's WITH CHECK**. The first draft raised `23514` and
+silently changed what an MR is told about a situation that had not changed. Clinic address
+and beat plan are shape, so `23514`. The clock rules reuse `45007` with a visit-shaped
+hint, because *"do not re-ask the doctor"* is meaningless here.
+
+**B3 — the refusals, each proved twice**
+
+| rule | as `postgres` (BYPASSRLS, every grant) | over REST as an ordinary MR |
+| --- | --- | --- |
+| cross-tenant doctor | `42501` | — |
+| doctor outside the territory | `42501` | `not_permitted`, unchanged |
+| another doctor's clinic address | `23514` | — |
+| another MR's beat plan | `23514` | — |
+| `started_at` in the future | `45007`, hint names the visit and not the doctor | — |
+| `completed_at` in the future | `45007` | — |
+| an UPDATE repointing a valid visit | `42501` | — |
+| **a coherent visit** | **accepted** | — |
+| **`scheduled_for` + 3 days** | **accepted** | — |
+
+**B4 — what the fixtures encoded.** `manager.spec`'s consent-divergence seeder booked
+`nagpurMr` against the **Pune** doctor. `visits_insert_own` has always refused that over
+REST; the fixture writes as `postgres`, so nothing checked it. **Third fabricated fixture
+this project has found in two sessions**, after a doctor shown a notice two hours before
+it existed and consents seeded 27 days old. A sweep now asserts no committed fixture holds
+an incoherent visit.
+
+**B5 — three mutations**
+
+| mutation | result |
+| --- | --- |
+| the trigger dropped (the rollback file) | **8 of 12 fail.** The four survivors include the REST test — the policy still covers that path, which is the complementary-placement point again |
+| the trigger refuses every visit | **the whole suite cannot start**: `seedFixtures()` itself fails, 12 skipped, nothing green |
+| **the REJECTED candidate adopted** — bound `scheduled_for` too | 6 fail, including the assertion that a future `scheduled_for` is accepted |
+
+**Also fixed: `asOwner`, twice, both my own.** It had no savepoint, so a write that was
+*supposed* to fail aborted the transaction and the role restore then failed with `25P02` —
+**eight assertions reported that instead of the code they were testing.** The savepoint
+then broke eight upload tests with `25P01`, because the helper is also called from
+`withClient` in autocommit, where a failed statement aborts nothing and no savepoint is
+needed or legal.
+
+---
+
+#### C — **not converted.** Two defects found and fixed instead
+
+The survey came first, and it found two live defects in the outbox — both of which would
+have been carried straight into `sync_push` had the conversion gone ahead on top of them.
+
+**1. A queued CHECK-OUT was replayed as a CHECK-IN.**
+
+`visit/[id].tsx` queued both stages with `checkInQueueItem`, which hardcodes
+`entity: 'check_in'`. `flushOutbox`'s `sendFor` had **no `check_out` branch at all**, so
+a check-out taken with no signal was written to disk as a check-in and replayed through
+`client.createCheckIn`.
+
+**An MR who loses signal at the clinic door has their departure recorded as an arrival** —
+a real geo-and-time record, against the right visit, describing the wrong event, with
+nothing anywhere reporting a problem. `CreateCheckOutRequestSchema` **is**
+`CreateCheckInRequestSchema`, so no shape check could have caught it, and `check_out` has
+been in `SyncEntitySchema` since the enum was written, with no caller.
+
+It is precisely the corruption `sampleQueueItem`'s own comment warns about two functions
+below — *"a second entity makes that assumption a silent corruption — a handover replayed
+through `record_check_in` — rather than merely a simplification."* **Check-out was already
+the second entity when that warning was written.**
+
+**2. C5 — the device clock behind the words "Server recorded this at".**
+
+`flushOutbox` stamped `receivedAt: nowIso()` under the comment *"the server answered, so
+this is the server's clock by definition"*. It is the **device's** clock at the moment the
+response was parsed, on a handset whose clock `capture_consent` refuses to trust past a
+two-minute tolerance. `QueueScreen.tsx:275` rendered it as *"Server recorded this at …"*.
+
+`events.ts` says, in the docstring above the field, that `receivedAt` *"is the only
+timestamp allowed to mark an item as landed; the device clock is not trusted for anything
+with a compliance meaning"*. **The rule was written down, in the file that declares the
+field, and the one call site that populated it ignored it.**
+
+Every created entity carries `received_at`, stamped by the column default
+`clock_timestamp()`, so the server's value was in the response the whole time. The field is
+now **nullable** through `ServerVerdict`, `RejectionRecord` and `QueueScreenRejection`:
+carry the server's value or carry none, and render nothing when there is none. Both states
+are tested, and both mutations confirmed — removing the `check_out` branch fails the
+departure test; restoring `nowIso()` fails both clock tests.
+
+**What is NOT done, and it is most of Part C.** C1 (four writes through `sync_push`), C2
+(deleting the mock write path), C3 (the call-report copy), C4 (exactly-once), C6 (consent
+specifics), C7 (samples specifics), C8 (the offline proof), C9 (divergences) and C10 (the
+two-column table) are untouched. **No screen was converted, no mock path was removed, no
+copy was changed, and there is no emulator proof.**
+
+**C8 additionally needs something this environment does not have running.** An AVD
+(`Pixel_10`) exists and `adb` is installed, but no device is booted and the app is a dev
+client — so the proof needs a Gradle native build, an emulator boot, and the emulator
+reaching Supabase on `10.0.2.2`. That is a session's work before the first check-in is
+tapped. **The handset proof remains owed, and is now six weeks outstanding.**
+
+---
+
+#### D — two small things
+
+**D1** — two entries appended to `docs/gotchas.md`: *a consistency check between two values
+from the same unscoped source proves consistency, not correctness*, with FIX-02 worked
+through (it established provenance **in time** and said nothing about provenance **in
+tenancy**, and both sides of its comparison came from the same cross-tenant resolver); and
+*test fixtures are where impossible states get normalised*, with all three worked examples
+and the reason fixtures are where it happens — they write as `postgres`, which holds every
+grant and `BYPASSRLS`, so the policies that state these rules for a client say nothing to
+them.
+
+**D2, both answers verified in the code rather than asserted:**
+
+1. **Yes — the retry is at the caller, outside the aborted transaction.**
+   `retryOnDeadlock(() => inRolledBackTransaction(...))` wraps the whole call, and
+   `inRolledBackTransaction` opens its **own connection** and its own `begin` per attempt.
+   The losing attempt's transaction is rolled back and its connection closed in that
+   function's `finally` before the retry decides anything.
+2. **No duplicate audit row is possible: the whole transaction replays, and none of them
+   commit.** `inRolledBackTransaction` always `rollback`s in `finally` — it has no commit
+   path — so nothing from any attempt reaches `audit_log`. `seedFixtures()`, which *does*
+   commit, is called on the line above the retry and therefore runs exactly once however
+   many attempts follow.
+
+---
+
+#### Where this stopped
+
+**Before Part C's conversion**, after the survey that preceded it turned up two live
+defects worth more than a compressed conversion would have been.
+
+The reason is the standing stop rule rather than a budget: C1 through C10 is four write
+paths re-plumbed onto `sync_push`, a mock path deleted, copy changed, an exactly-once
+proof, two per-entity refusal matrices, a divergence audit and an emulator run that needs a
+native build first. **Doing it in the room left would have produced exactly the kind of
+half-converted write path this project keeps finding**, and it would have been built on an
+outbox that recorded departures as arrivals.
+
+**Both defects fixed are prerequisites for the conversion rather than substitutes for it.**
+The check-out entity had to be right before four writes were routed through one queue, and
+the clock had to be right before a screen showed a server timestamp it had not been given.
+
+**Order for the next session:**
+
+1. **Push.** Five commits local; `5c143a2` is green and is what main is on.
+2. **Part C in full**, starting from C1 — the outbox now has the correct entity per row and
+   an honest clock, which is the base it needed.
+3. **C8 first, not last**, since it is the part that needs an environment: boot the AVD and
+   get a dev client onto it before writing any conversion code, so the proof is not
+   discovered to be impossible at the end.
+4. **BE-W73** — the `not_met` decision, which still blocks both the read conversion and the
+   status half of BE-W84.
+5. **BE-W83** — restrictive policies for the `visible_user_ids()` tables, once the subquery
+   cost is measured.
+

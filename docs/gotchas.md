@@ -1760,3 +1760,89 @@ scoping function left the table paths green and broke only the `SECURITY DEFINER
 
 **A fix that breaks the product looks exactly like a fix that works, unless something
 asserts the thing that should still happen.**
+
+## 8 September 2026 — a consistency check between two values from the same unscoped source proves consistency, not correctness
+
+**The right control, on the wrong axis.**
+
+FIX-02 established the rule that a consent record must name the notice that was actually
+on the screen. It enforces it by comparing two things:
+
+```sql
+v_displayed   := the version the client says it displayed
+v_active_then := public.active_consent_text_at(p_language, v_captured_at)
+if p_consent_text_version_id <> v_active_then.id then raise 45001
+```
+
+That is a real control and it works. It establishes **provenance in time** — the version
+stored is the one that was in force at the moment the doctor was asked, not one that
+superseded it while the row sat in an outbox.
+
+It says nothing whatever about **provenance in tenancy**, and both sides of the comparison
+came out of the same resolver, which crossed tenants. So when tenant B published a notice
+in the same language, `active_consent_text_at` returned B's notice to tenant A — and the
+client, populating its screen from the same unscoped function, displayed B's notice too.
+The two values agreed. The check passed. Both were the wrong company's legal document, and
+the consent record that resulted named a document tenant A had never written.
+
+**The check was doing exactly what it was written to do.** Nobody wrote it wrongly. It was
+verifying an axis nobody had thought to question against an axis nobody had thought to
+add, and a passing comparison between two wrong values looks identical to a passing
+comparison between two right ones.
+
+### The rule
+
+**Before trusting a consistency check, ask where each side came from. If both sides come
+from the same source, the check validates the comparison and not the source.**
+
+Two signs you are looking at one:
+
+- The check compares a client-supplied value against a server-derived one, and the client
+  got its value from the same server function.
+- The invariant is stated as *"X must equal Y"* rather than as *"X must be true"*. Equality
+  is a relationship; it inherits every assumption both sides share.
+
+The remedy is not a better comparison. It is to scope the source — and then the same
+comparison becomes correct on both axes, which is what MR-07 did in one migration.
+
+---
+
+## 8 September 2026 — test fixtures are where impossible states get normalised
+
+**A fixture that fails a correct guard is a fabricated row, not a regression.**
+
+Three of them turned up in two sessions, each exposed by a new guard, each having sat in
+the suite for months:
+
+| the fixture said | the product's own rule |
+| --- | --- |
+| a doctor was shown a consent notice at `now() - 2 hours`, while the notice's `effective_from` defaulted to `now()` | a consent record names the notice that was in force when the doctor was asked (FIX-02) |
+| consents captured at the literal `'2026-08-12T11:00:00+05:30'`, 27 days before the day the guard landed | `consent_max_sync_lag_hours` is 72 |
+| `nagpurMr` visiting the **Pune** doctor | `visits_insert_own` — a doctor must be in a territory the MR covers |
+
+Sixteen suites failed at once on the first, and in every case the instinct is to reach for
+the guard, because the guard is the thing that just changed. **In every case the guard was
+right.**
+
+### Why fixtures are where this happens
+
+A fixture is written to make a test possible, not to be true. Nothing about `nagpurMr` and
+a Pune doctor mattered to the consent-rate anomaly the test measures — the wrong doctor was
+free, so nobody looked. And the fixtures write as `postgres`, which holds every grant and
+`BYPASSRLS`, so the RLS policies that state these rules for a client say nothing to them.
+
+**That makes the fixture the one place in the system where the product's rules do not
+apply, and therefore the one place an impossible state can be written down and read back
+as normal.** Every guard added since has found one.
+
+### The rule
+
+**When a new guard breaks a fixture, fix the fixture until you have shown the guard is
+wrong — not the other way round.** The question to ask is not *"what changed?"* but
+*"could a client have produced this row?"* If the answer is no, the fixture has been
+describing a world the product refuses, and every test built on it was measuring that
+world.
+
+And a corollary worth having: **a fixture is not exempt from the rules it is not subject
+to.** `postgres` bypassing RLS is a fact about the connection, not permission to write a
+row a client could never make.

@@ -1000,3 +1000,15 @@ cannot be widened by a permissive policy added later.
   `vitest run && jest`. MR-06 reported `@fieldforce/ui` as 4 tests; it is 4 vitest and
   **221 jest**. The jest cases ran — the summary line jest prints is `Tests:` and does not
   match the `  Tests ` pattern that was being read.
+
+### Added by MR-08
+
+**BE-W84 is CLOSED.** `visits` has a validation trigger enforcing tenant coherence,
+territory visibility, clinic-address ownership, beat-plan ownership and the two forward
+clock bounds — on every path, not only the RLS-bound one.
+
+| ID | Title | Changes | Deps | Blocker | Est | Verification |
+|---|---|---|---|---|---|---|
+| **FE-W30** | A queued check-out was replayed as a check-in — **fixed, and the shape is the task** | `apps/field/src/sync/outbox.ts`, `apps/field/app/visit/[id].tsx` | — | — | 0 | Closed in MR-08. Registered because the *class* is open: `sendFor` dispatches by `item.entity`, and an entity with no branch is silently skipped (`return null`) or, as here, handled by the wrong one. `SyncEntitySchema` has eight members; `sendFor` now handles four. `visit`, `voice_note`, `recording` and — until MR-08 — `check_out` return null and sit in the queue forever with no report. Verification: a test that asserts every `SyncEntitySchema` member is either handled by `sendFor` or named in an explicit "not convertible yet" list, derived from the enum rather than listed by hand |
+| **FE-W31** | `consent_future_tolerance_seconds` is now read by non-consent code | `app_thresholds`, `validate_visit`, `capture_consent`, `validate_consent_capture`, `validate_consent_withdrawal` | — | — | 1 | MR-08 B reuses this threshold for the `visits` forward clock bound, because the question it answers — how far ahead a DEVICE clock may run — is a property of the handset and not of consent. Minting a second number for the same physical question would guarantee the two drift. **The name is now wrong**, and `app_thresholds` is append-only, so renaming means a new key, a migration that reads both during the overlap, and retiring the old one. Verification: no caller reads the old key, and the two clock bounds still refuse at the same offset |
+| **BE-W86** | `record_check_in` and `record_check_out` do not bound `occurred_at` | `record_check_in`, `record_check_out` | — | — | 2 | Found while establishing MR-08 B1. Both take `p_occurred_at` from the caller and enforce the shift window (`45003`) and the geofence, and **neither checks the timestamp against the server clock at all** — so a check-in can be stamped a year in the future while the visit it belongs to now cannot. The asymmetry is the finding: MR-08 bounded the visit and left the arrival unbounded. The same reasoning applies as for `visits` — bound forward, do NOT bound backward, because refusing a late check-in erases work that happened |
