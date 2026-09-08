@@ -7864,3 +7864,195 @@ remembered.
   samples screen's message was not removed.
 
 ---
+
+---
+
+### MR-01 — offline-first writes, client surfaces, and G-RLS-C (8 September 2026)
+
+**STOPPED AFTER PART A.** Parts B–H were not started. The reasons are in *Where this
+stopped* at the end of this section, and the first of them is that **Part A's answer changes
+what Part B is.**
+
+**Not done, and stated first: no screen was converted, the console was not wired, no card
+was removed, consent and samples were not converted, the samples screen's message was not
+removed, and no dependency was added.**
+
+#### A1 — CI and counts, split by workspace and runner
+
+FIX-14's two commits pushed as `7446bdc..1aee73e`. **That run, `34189551176`, FAILED** —
+`prettier --check .` on `apps/field/src/sync/pull.test.ts`. My error: FIX-14 formatted
+`pull.ts` and `pull-cursor.ts` and not the test beside them, the api job passed, and the
+failure was in the workspace I was not watching. Fixed in `49917e2`.
+
+| workspace | runner | count |
+| --- | --- | ---: |
+| `@fieldforce/api` | vitest, live database | **495 passed / 22 files** |
+| `@fieldforce/field` | vitest, logic | **359 passed / 25 files** |
+| `@fieldforce/field` | jest, jest-expo render | **72 passed / 12 suites** |
+| `@fieldforce/ui-tokens` | vitest | 54 passed / 3 |
+| `@fieldforce/mock` | vitest | 40 passed / 1 |
+| `@fieldforce/core` | vitest | 21 passed / 3 |
+| `@fieldforce/ui` | vitest | 4 passed / 1 |
+
+**api +5** (audit atomicity), **field +4** (the offline branch). No skips — every summary
+line reads `N passed (N)`. `verify:rollbacks`: schema empty, **33 migrations, 33 rollback
+files**. `turbo run typecheck lint`: 16 successful, 16 total. `format:check` clean apart
+from the gitignored `apps/console/next-env.d.ts`.
+
+---
+
+#### A2 — **NEITHER.**
+
+The question offered two answers, outbox or direct. The true answer is a third one, and it
+is worse than either:
+
+> **The converted writes go through the OUTBOX — to the MOCK. The Supabase modules FIX-06
+> and FIX-07 built are called by nothing but their own tests.**
+
+**The call path, every hop:**
+
+| # | where | what |
+| --- | --- | --- |
+| 1 | `apps/field/app/visit/[id].tsx:219-221` | `sendOrQueue(() => stage === 'before' ? client.createCheckIn(body) : client.createCheckOut(body), checkInQueueItem(body))` |
+| 2 | `apps/field/src/api.ts:30` | `client` is `createClientForScenario()` → `createApiClient({ baseUrl: apiBaseUrl, … })` |
+| 3 | `apps/field/src/config.ts:39` | `apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:4010'` |
+| 4 | `apps/field/.env:19` | `EXPO_PUBLIC_API_BASE_URL=http://127.0.0.1:4010` — **`services/mock`** |
+| 5 | `apps/field/src/sync/outbox.ts:154-173` | `sendOrQueue`: a transport failure enqueues; an `ApiRequestError` is treated as answered and dropped |
+
+**And the other side.** `grep` for every reference to the Supabase write modules across
+`apps/field`:
+
+```
+apps/field/src/capture/check-in.ts:58   export const recordCheckIn   <- defined
+apps/field/src/capture/check-in.test.ts <- the ONLY caller
+apps/field/src/capture/visits.ts        createVisit / updateVisit / listMileage
+apps/field/src/capture/visits.test.ts   <- the ONLY caller
+```
+
+**No screen imports either module.** `createVisit` and `updateVisit` are not called from a
+screen at all — not even through the mock: `visit/[id].tsx` and `day-end.tsx` only *read*
+visits (`client.listVisits()`), and `mileage.tsx` only reads (`client.listMileage`).
+
+**Every write from a screen, exhaustively — there are three:**
+
+| screen | line | through | to |
+| --- | --- | --- | --- |
+| `app/visit/[id].tsx` | 219 | `sendOrQueue` | mock |
+| `app/consent/[visitId].tsx` | 160 | `sendOrQueue` | mock |
+| `app/samples/[visitId].tsx` | 135 | `sendOrQueue` | mock |
+
+**A correction to my own record.** FIX-14's real-versus-fixture table listed check-in,
+visit and mileage as **"real"**. That was true of the modules and **false at the screen**,
+and the table did not make the distinction. The modules are real, tested and orphaned. Any
+reader of that table would conclude the app writes to Supabase, and it does not.
+
+**This is the ninth appearance of the characteristic defect**, and the largest: two full
+sessions of conversion work that is correct, tested, and reaches no user.
+
+**What it means for Part B.** The premise — *"if those writes go direct rather than through
+the outbox, the app works online and fails offline"* — does not hold. There is no
+offline-first regression to repair: the outbox property is intact on the path screens
+actually use. Part B is therefore not a repair. It is **the conversion itself**, and it is
+the same conversion as Parts D and E, on three write paths rather than one. That is a
+different and larger piece of work than the prompt scoped, and saying so before starting it
+is the point of asking A2 first.
+
+#### A3 — an unreachable server **QUEUES**
+
+Empirical, not read: `apps/field/src/sync/offline-write.test.ts` drives the **real**
+`ApiClient` over the **real** `fetch` at `http://127.0.0.1:49517`, where nothing listens —
+which is what a handset with no signal produces at this layer.
+
+**Result: `{ kind: 'queued' }`.** The item is on disk with `id` intact (the idempotency key
+the server dedupes on), `entityId` the visit, `status: 'queued'`, `syncedAt: null`. Nothing
+throws to the screen, nothing claims success, nothing is lost.
+
+**Why that branch was worth running rather than reading.** `sendOrQueue` treats an
+`ApiRequestError` as *the server answered, so it has the work* and **deliberately drops the
+item** — queueing a refusal would re-send something already refused on every flush, for
+ever. Correct for a refusal, catastrophic for a connection error misclassified as one: an
+MR in a basement clinic would see a message and lose the visit. Which way a dead socket
+classifies is not visible in either file, and had never been exercised.
+
+With a positive control, because two assertions about queueing would also pass against a
+`sendOrQueue` that queues unconditionally — which would look identical offline and lose
+every refusal.
+
+**What it does not prove, stated in the file so nobody reads more into it:** no screen, no
+Android, no radio. **B4's device proof is still owed.** This proves the branch that decides
+whether that device proof can possibly pass.
+
+#### A4 — an **OUTAGE**, not an audit bypass
+
+`write_audit_row()` is an `AFTER … FOR EACH ROW` trigger performing a plain `insert` in the
+caller's transaction, **not deferrable**, with **no exception handler**. All three
+properties asserted from `pg_trigger` rather than read.
+
+**The proof.** A `BEFORE INSERT` trigger on `audit_log` raising `58030` — the narrowest
+sabotage available, failing exactly the insert the audit performs and leaving every other
+path alone. Then `update public.doctors set specialty = 'Sabotage'`:
+
+```
+rejects.toMatchObject({ code: '58030' })      <- the write is refused
+select specialty from public.doctors …        <- 'Urology', not 'Sabotage'
+```
+
+The business row does not survive. **A failed audit stops the work; it does not let the
+work through unrecorded.** With a positive control: unbroken, the same update succeeds
+*and* the `audit_log` count for that row increases — without which the test above would
+pass against a schema where the update was refused for some unrelated reason and no audit
+row was ever attempted.
+
+**A sub-finding, at its own severity.** The first version of that test asserted *"no
+exception handler anywhere on the audit path"* and **failed, correctly**.
+`current_request_id()` and `current_client_ip()` both catch `when others`. Both read the
+PostgREST header bag to populate a **column**, and both run *before* the insert rather than
+around it, so a malformed header bag degrades `request_id` to null and `ip_address` to the
+connection address **and the row is still written**.
+
+That is a **metadata degradation, not a bypass** — a deliberate trade, commented in the
+function as *"a malformed header bag must not break an audited read"*. The assertion is now
+the precise one, and the trade is asserted to stay bounded: neither helper can touch
+`actor_id`, `action`, `table_name` or `row_id`, so no swallow can produce an audit row that
+misidentifies who did what to which record.
+
+---
+
+#### Where this stopped, and why
+
+**Stopped after Part A.** Parts B, C, D, E, F, G and H were not started.
+
+**1. Part B cannot be completed in any session on this machine.** B4 is the proof the part
+is built around — *"disable connectivity, perform a check-in, a visit update and a mileage
+entry, restart the app, restore connectivity, and show all three arriving exactly once"*.
+That is a physical-handset procedure. **No physical device has ever run this app**, and
+buying one is the first item on the human list, dated *today*. A3 does as much of it as a
+workstation can and says so; the rest is not compressible, only fakeable.
+
+**2. Part A changed what Part B is.** It is a conversion of three write paths, not a repair
+of a regression, and it is the same conversion as Parts D and E. Starting it under the old
+framing would have produced work scoped to the wrong problem.
+
+**3. The remaining parts are each a session.** C is four screens; D and E are client
+conversions with their own refusal matrices; F is three drift items including a schema
+change; G is a full four-role, five-path isolation matrix at 100-MR volume, which is the
+gate the commercial compliance story rests on and has never been run whole; H is a restore
+drill against a scratch target plus a documentation restructure. Compressing any of them to
+fit is the thing the stop rule exists to prevent.
+
+**What the next session should do first**, in the order the dependencies actually run:
+
+1. **Decide Part B's real scope** now that A2 has answered it: converting check-in, consent
+   and samples from the mock to Supabase *through the existing outbox*, which is B, D and E
+   as one piece of work rather than three.
+2. **Part G** is independent of all of that and is the highest-value item that needs no
+   device — the isolation matrix can be run today against the synthetic seed.
+3. **Part B4 and everything device-shaped** waits on the handset.
+
+**One thing to carry forward.** The orphaned modules are not wasted: `recordCheckIn`,
+`createVisit` and `listMileage` are tested against a real database and are what the
+conversion will wire in. What is missing is only the last hop, and the lesson is the one
+this record already states — *check that anything you build is actually called by
+something* — now with a ninth instance and the largest one yet.
+
+---
