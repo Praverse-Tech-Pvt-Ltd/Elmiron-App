@@ -234,8 +234,35 @@ export const asOwner = async <T>(client: Client, fn: () => Promise<T>): Promise<
   const before = await client.query<{ role: string }>('select current_user as role');
   const previous = before.rows[0]?.role ?? 'postgres';
   await client.query('set local role postgres');
+
+  // **The savepoint is not decoration.** MR-08 used this helper to attempt writes that
+  // are SUPPOSED to fail, and a failed statement aborts the transaction — so the role
+  // restore below then failed with `25P02, current transaction is aborted`, and that is
+  // the error the test saw instead of the `42501` it was asserting. Eight assertions
+  // reported the wrong code for one missing savepoint.
+  //
+  // Rolling back to it leaves the transaction usable, so the caller's own error survives
+  // to be asserted and the previous role really is restored.
+  // ...and only where there IS a transaction to put one in. This helper is called both
+  // inside `inRolledBackTransaction` and from `withClient`, which runs in autocommit --
+  // where `savepoint` is `25P01, SAVEPOINT can only be used in transaction blocks` and
+  // took out eight upload tests on the first attempt. Autocommit needs no savepoint
+  // anyway: a failed statement there aborts nothing.
+  let savepoint = false;
   try {
-    return await fn();
+    await client.query('savepoint as_owner');
+    savepoint = true;
+  } catch {
+    savepoint = false;
+  }
+
+  try {
+    const result = await fn();
+    if (savepoint) await client.query('release savepoint as_owner');
+    return result;
+  } catch (error) {
+    if (savepoint) await client.query('rollback to savepoint as_owner');
+    throw error;
   } finally {
     await client.query(`set local role ${previous}`);
   }

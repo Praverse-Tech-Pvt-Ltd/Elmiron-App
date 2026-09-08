@@ -352,6 +352,7 @@ describe.skipIf(!reachable)('team exceptions', () => {
     const seed = async (
       mrId: string,
       visitId: string,
+      doctorId: string,
       outcome: 'consented' | 'declined',
     ): Promise<void> => {
       for (let i = 0; i < 4; i += 1) {
@@ -360,18 +361,44 @@ describe.skipIf(!reachable)('team exceptions', () => {
              (id, visit_id, doctor_id, captured_by_mr_id, outcome, consent_text_version_id,
               displayed_language, captured_at)
            values (gen_random_uuid(), $1, $2, $3, $4, $5, 'en-IN', now() - interval '1 hour')`,
-          [visitId, world.doctors.pune, mrId, outcome, world.consentTextVersionId],
+          [visitId, doctorId, mrId, outcome, world.consentTextVersionId],
         );
       }
     };
-    await seed(world.users.puneMr.id, world.visits.pune, 'declined');
+    await seed(world.users.puneMr.id, world.visits.pune, world.doctors.pune, 'declined');
+
+    // **MR-08 B4: nagpurMr's visit used to be booked against the PUNE doctor.**
+    //
+    // `visits_insert_own` has always refused that over REST — a doctor must be in a
+    // territory the MR covers — but this fixture writes as `postgres` and RLS does not
+    // apply, so it recorded an MR calling on a doctor in someone else's territory. The
+    // anomaly under test is a consent-rate divergence between two MRs, and nothing about
+    // it needed the wrong doctor; the row was simply never checked.
+    //
+    // Third fixture this project has found encoding a state the product refuses, after
+    // a doctor shown a notice before it existed and consents seeded 27 days old. A
+    // fixture that fails a correct guard is a fabricated row, not a regression.
+    const nagpurDoctor = randomUUID();
+    await client.query(
+      `insert into public.doctors
+         (id, organisation_id, full_name, registration_number, specialty, qualification,
+          territory_id, assigned_mr_id)
+       values ($1, $2, 'Dr Nagpur Fixture', $3, 'Urology', 'MBBS', $4, $5)`,
+      [
+        nagpurDoctor,
+        world.organisationId,
+        `MH-${randomUUID().slice(0, 8)}`,
+        world.territories.nagpur,
+        world.users.nagpurMr.id,
+      ],
+    );
 
     const nagpurVisit = randomUUID();
     await client.query(
       `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
-      [nagpurVisit, world.users.nagpurMr.id, world.doctors.pune],
+      [nagpurVisit, world.users.nagpurMr.id, nagpurDoctor],
     );
-    await seed(world.users.nagpurMr.id, nagpurVisit, 'consented');
+    await seed(world.users.nagpurMr.id, nagpurVisit, nagpurDoctor, 'consented');
   };
 
   it('emits nothing at all below the team-size floor', async () => {
