@@ -142,11 +142,19 @@ export const seedOneMr = async (options = {}) => {
       [territoryId, `Seed Territory ${runId}`, `SEED-${runId}`, organisationId],
     );
     await client.query(
-      `insert into public.user_profiles (id, full_name, role, territory_id)
-       values ($1, $2, $3, $4)`,
+      `insert into public.user_profiles (id, full_name, role, territory_id, organisation_id)
+       values ($1, $2, $3, $4, $5)`,
       // An admin legitimately has no territory; the check constraint requires one
-      // for every other role.
-      [userId, `Seed ${role} ${runId}`, role, role === 'admin' ? null : territoryId],
+      // for every other role. MR-06: which is exactly why an admin must name its
+      // ORGANISATION here -- with no territory there is nothing to derive one from,
+      // and a user with no tenant is what BE-W76 turned out to be.
+      [
+        userId,
+        `Seed ${role} ${runId}`,
+        role,
+        role === 'admin' ? null : territoryId,
+        role === 'admin' ? organisationId : null,
+      ],
     );
     await client.query('commit');
   } catch (error) {
