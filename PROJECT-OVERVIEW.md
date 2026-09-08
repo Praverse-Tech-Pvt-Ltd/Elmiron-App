@@ -10182,3 +10182,219 @@ that no amount of source reading had produced in eight sessions.
 
 The environment is left running: emulator booted, ports reversed, Metro serving, signed in.
 
+
+---
+
+### MR-10 — the seed, and the conversion (8 September 2026)
+
+**Parts A, B and C are done. Part D — the conversion — was NOT started**, and the reason is
+a second blocker that only became visible once the first was removed. It is precise, it is
+server-side, and it is at the end.
+
+#### A1 — the push
+
+Two commits pushed as `87f3712..ed3d5fc` (the record commit follows).
+
+**CI run `34255135572` · workflow `CI` · event `push` · commit
+`87f37125fd04a08d0d66b90378db0ca8cf65ced4`, SUCCESS**, both jobs — and that SHA is the HEAD
+those two commits produced.
+
+#### A2 — the environment
+
+**Came up, and had survived from MR-09:** emulator `emulator-5554` still booted, Metro still
+serving, ten Supabase containers healthy, all three `adb reverse` ports still mapped. The
+public schema was empty — `verify:rollbacks` had left it that way at the end of MR-09 — so
+migrations were re-applied before anything else.
+
+#### Counts, per workspace AND per runner
+
+```
+@fieldforce/core       vitest    21     3        @fieldforce/console   vitest    10     1
+@fieldforce/ui         vitest     4     1        @fieldforce/field     vitest   370    25
+@fieldforce/ui         jest     221    20        @fieldforce/api       vitest   570    31
+@fieldforce/ui-tokens  vitest    54     3        @fieldforce/mock      vitest    40     1
+                                                 TOTAL                         1362
+```
+
+No skips. **43 migrations, 43 rollbacks**, schema empty. `turbo run typecheck lint
+--force`: 16 of 16.
+
+---
+
+#### B — `seed:day`. The missing link, built
+
+```
+pnpm --filter @fieldforce/api seed:day
+pnpm --filter @fieldforce/api seed:day -- --another    # a SECOND tenant, on purpose
+```
+
+**A new script, not an extension of `seed:mr`**, and the reason is what each is for.
+`seed:mr` has one job and one output — a credential — and `seed-one-mr.spec.ts` asserts
+that shape. Growing it into a territory tree, doctors, clinic addresses, visits, a notice
+and two more roles would couple a credential helper to a demo dataset and make every test
+of the former depend on the latter. This is closer in kind to `seed-synthetic.mjs`: a
+dataset, obviously synthetic, safe to delete. It reuses `seed:mr`'s `createAuthUser`,
+because minting an identity by hand gets the password hashing and confirmation state wrong
+in ways that only surface as an unexplained *"Invalid login credentials"*.
+
+**Three things the obvious list misses, derived from what the screens and the server
+actually read:**
+
+- **Clinic addresses.** `Doctor.clinicAddresses` is required by the contract, the doctors
+  list renders `clinicAddresses[0].city`, `visit/[id].tsx` matches `visit.clinicAddressId`
+  against them, and `record_check_in` measures the geofence from one.
+- **Beat plan entries.** `BeatPlan` requires `entries`; a plan without them fails to parse.
+- **A consent notice for this organisation.** BE-W79 made notices tenant-scoped, so an MR
+  whose organisation has none **cannot capture consent at all** — `capture_consent` raises
+  `22023`. Without it the seed would unblock four screens and leave the fifth broken in a
+  way that reads as a new defect. `effective_from` is a month back, because a notice
+  effective *now* is not active for a capture stamped a moment earlier.
+
+Plus a **shift window covering the current time**, or `record_check_in` refuses `45003`
+before anything behind it is testable. And **deliberately no UCPMP cap**: the samples screen
+shows *"the app is not counting"* while the cap is null and that message is under test —
+setting one here would hide it and quietly change what the screen proves.
+
+**B3 — a second run refuses**, naming the existing demo organisation and offering
+`db:reset` or `--another`. It is not idempotent and cannot be: each run mints fresh
+identities and there is no "the demo MR" to converge on, so the choice was between
+accumulating silently and saying so. **The check runs before any identity is minted** — the
+first version connected after `createAuthUser`, so a refused run left three orphan auth
+users behind, and a refusal that costs something is not a clean refusal. Verified:
+`auth.users` is 6 before a refused run and 6 after.
+
+**B4 — verification, server-side**
+
+```
+doctors=3  visits=3 (today, 2 completed + 1 planned)  clinic_addresses=3
+beat_plan_entries=3   territory_shift_windows=1   consent_text_versions=1
+
+sync_pull, called AS THE SEEDED MR through RLS:
+  beat_plan | 1
+  doctor    | 3
+  visit     | 3
+```
+
+Row counts prove the inserts ran. **`sync_pull` proves the server will serve them to the
+person who signed in**, which is the part that matters and the part the tests assert.
+
+**What B4 could NOT show, and it is Part D's blocker rather than the seed's failure:** the
+Today screen still renders mock fixture ids, because no screen reads from Supabase yet. The
+seed removed the *data* blocker; the *path* blocker is below.
+
+---
+
+#### C — the scheduled-code sweep
+
+**C1 — every branch that cannot currently execute, what schedules it, and what an MR would
+see if it ran:**
+
+| branch | why unreachable | scheduled by | what the MR would see |
+| --- | --- | --- | --- |
+| **`rejected` / `dead_lettered` verdicts** — and with them `RejectionRecord`, the queue screen's whole rejection block, `deadLettered`, `attemptsRemaining`, the server-clock line | `flushOutbox`'s `catch` recorded `attempt_failed` for **everything**, so a refusal went back to `queued`. Nothing in the app ever emitted a rejection | **D4, the writes** — refusals start arriving during flushes | A consent refused `45001` sitting in the queue as *"waiting to send"*, retried on every flush **for ever**, never explained, while they believe it is on its way. **FIXED THIS SESSION** |
+| a row nothing can send stranded `in_flight` | `batch_started` marks it in flight, the dispatch `continue`d without a verdict, later flushes select only `queued` | D4 queues a fifth entity | *"on its way"*, for ever. **Fixed MR-09 B4** |
+| `duplicate` verdict | handled by the reducer, emitted by nothing — only `sync_push` produces it | **D6, exactly-once** | a replayed item counted as a fresh send. Benign today (the reducer treats it as `accepted`), registered |
+| **the entire `sync/pull.ts` module** — `applyPull`, `removalWording`, the completeness notice | **no screen calls `pull()`** | **D1, the reads** | — |
+| `out_of_scope` removal wording | inside `pull()` | D1 | *"deleted"* for a record that still exists. The module already guards it; nothing exercises the guard |
+| `reinstated` | no client path at all; needs a manager action | not scheduled | — |
+| `not_convertible` in `sendFor` | no unconvertible entity is queued | D4 queues a call report | now visible and dead-lettered, per MR-09 B1 |
+
+**C2/C3 — the one Part D would have scheduled, fixed.** `sendOrQueue` has always told a
+refusal from a silence: an `ApiRequestError` means the server answered, so the item is not
+queued, *"because queueing it would mean re-sending something already refused, on every
+flush, forever."* **`flushOutbox` did not draw that line.**
+
+It now dead-letters a refused row — `dead_lettered` rather than `rejected`, because a queued
+row replays byte-identical, so the same `occurredAt` is outside the same shift window on
+every attempt and a refusal of it is permanent by construction. That is the definition of
+*needs a person, not another retry*.
+
+The `ApiErrorCode → SyncRejectionCode` mapping is coarse **on purpose and says so**: one is
+a transport category, the other a queue category, and neither is the SQLSTATE contract that
+carries the actual remedy — BE-W75 put `sqlState` on the verdict for exactly this reason.
+`internal_error` is the honest default rather than a guess that reads as precision.
+
+Mutation: removing the refusal branch fails the dead-letter test; the silence test and the
+positive control hold it from the other side.
+
+**C4** — the gotcha, with four worked examples in six sessions and the three questions that
+find them: which `switch` arms have no **producer** (all four were fully *handled* and never
+*emitted*), which modules are exported and called by nothing, and which reducer states no
+caller ever constructs.
+
+---
+
+#### D — not started. The second blocker, and it is server-side
+
+The seed removed the data blocker. Bringing the app up against it exposed the next one, and
+it is small, precise and not a client change.
+
+**`sync_pull` returns three entities and no clinic addresses.** Measured, as the seeded MR:
+
+```
+distinct entity from sync_pull -> beat_plan, doctor, visit
+doctor payload contains clinic addresses? -> f
+```
+
+And every read screen renders them:
+
+```
+doctors/list.ts:50    doctor.clinicAddresses[0]?.city
+doctors/profile.ts:62 doctor.clinicAddresses[0]
+today/plan.ts:64      doctor.clinicAddresses.find(c => c.id === clinicAddressId)
+today/route.ts:58-59  the same, for the route card
+```
+
+`pull.ts` already records the shape of the problem in its own docstring — *"Rows, not
+aggregates. `Doctor` requires `clinicAddresses` and `BeatPlan` requires `entries`, and
+neither is a column, so neither aggregate can be built from a pull."* It states the
+difficulty and does not resolve it, and nothing has ever called the module, so nothing has
+ever had to.
+
+**So the chain is one link longer than it looked:**
+
+1. a seed that gives a signable MR a day — **done this session**;
+2. **`sync_pull` must carry clinic addresses** — a migration, a rollback, a client mapper
+   and their tests. Two designs, and the choice is not obvious: a fourth `clinic_address`
+   entity (changes `PullChange`, the mapper and the store, and models the row honestly), or
+   nesting the addresses in the doctor payload (no client type changes, but makes one pull
+   entity an aggregate and breaks the *"rows, not aggregates"* rule the module is built on);
+3. wire `pull()` into a store and move the screens onto records;
+4. then the writes.
+
+**Nothing in D was started. No screen changed, no mock path removed, no copy changed, and
+there is no D9 proof.** Starting step 3 without step 2 would produce doctors that fail to
+parse, which is the same class of half-conversion MR-09 declined to ship.
+
+**D2 — the done counter has not run and is still waiting.** `visits.status` is written by
+nothing on the client, and the `not_met` recommendation is now **five sessions** unanswered.
+The seed writes two `completed` visits and one `planned`, so the counter would read *2 of 3*
+honestly the moment the reads are converted — the data is there; the decision about what
+"done" means when a doctor was unavailable is not.
+
+---
+
+#### Where this stopped
+
+**After Part C, before Part D**, on the evidence above.
+
+The pattern is now two sessions old and worth naming: **each session removes one blocker and
+the removal makes the next one visible.** MR-09 brought the environment up and found there
+was no data; MR-10 built the data and found the read path cannot carry it. Neither was
+findable by reading source, and both took one measurement once the thing in front of it
+existed.
+
+**Order for the next session:**
+
+1. **Push.** Three commits local; `87f3712` is green and is what main is on.
+2. **Clinic addresses through `sync_pull`** — decide between the fourth entity and the
+   nested payload, in the record, before writing either.
+3. **Wire `pull()`**, move the read screens onto records, and delete nothing until they
+   render.
+4. **Then the writes**, starting with check-in/check-out, which need wiring rather than
+   writing (`recordCheckIn`/`recordCheckOut` are finished and called by nothing).
+5. **BE-W73** — the `not_met` decision, five sessions waiting.
+
+Environment left running: emulator booted, ports reversed, Metro serving, and the database
+holding one freshly seeded demo day.
+
