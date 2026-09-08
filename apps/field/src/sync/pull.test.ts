@@ -1,14 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SyncPullResponse } from '@fieldforce/core';
 import { memoryPullCursorStore } from './pull-cursor';
-import {
-  applyChanges,
-  emptyStore,
-  mapChanges,
-  noticeFor,
-  pullOnce,
-  removalWording,
-} from './pull';
+import { applyChanges, emptyStore, mapChanges, noticeFor, pullOnce, removalWording } from './pull';
 
 /**
  * FE-W22 — the pull consumer.
@@ -129,7 +122,9 @@ describe('mapping a real payload', () => {
     // `to_jsonb(d)` is an implicit `select *`, so the payload ships a column the contract
     // never modelled. Registered as BE-W71; this is the client half of not using it.
     const [mapped] = mapChanges(
-      response({ changes: [upsert('doctor', REAL_DOCTOR_ROW)] } as unknown as Partial<SyncPullResponse>),
+      response({
+        changes: [upsert('doctor', REAL_DOCTOR_ROW)],
+      } as unknown as Partial<SyncPullResponse>),
     );
     expect(mapped).toBeDefined();
     expect(Object.keys((mapped as { record: object }).record)).not.toContain('organisationId');
@@ -140,7 +135,15 @@ describe('mapping a real payload', () => {
     expect(() =>
       mapChanges(
         response({
-          changes: [{ entity: 'visit', entityId: REAL_VISIT_ROW.id, reason: 'upserted', payload: null, updatedAt: REAL_VISIT_ROW.updated_at }],
+          changes: [
+            {
+              entity: 'visit',
+              entityId: REAL_VISIT_ROW.id,
+              reason: 'upserted',
+              payload: null,
+              updatedAt: REAL_VISIT_ROW.updated_at,
+            },
+          ],
         } as unknown as Partial<SyncPullResponse>),
       ),
     ).toThrow(/no payload/);
@@ -149,29 +152,61 @@ describe('mapping a real payload', () => {
 
 describe('deletion and scope-loss are different things', () => {
   it('a tombstone removes the local row', () => {
-    const seeded = applyChanges(emptyStore(), mapChanges(
-      response({ changes: [upsert('visit', REAL_VISIT_ROW)] } as unknown as Partial<SyncPullResponse>),
-    ));
+    const seeded = applyChanges(
+      emptyStore(),
+      mapChanges(
+        response({
+          changes: [upsert('visit', REAL_VISIT_ROW)],
+        } as unknown as Partial<SyncPullResponse>),
+      ),
+    );
     expect(seeded.visit.size).toBe(1);
 
-    const after = applyChanges(seeded, mapChanges(
-      response({
-        changes: [{ entity: 'visit', entityId: REAL_VISIT_ROW.id, reason: 'deleted', payload: null, updatedAt: REAL_VISIT_ROW.updated_at }],
-      } as unknown as Partial<SyncPullResponse>),
-    ));
+    const after = applyChanges(
+      seeded,
+      mapChanges(
+        response({
+          changes: [
+            {
+              entity: 'visit',
+              entityId: REAL_VISIT_ROW.id,
+              reason: 'deleted',
+              payload: null,
+              updatedAt: REAL_VISIT_ROW.updated_at,
+            },
+          ],
+        } as unknown as Partial<SyncPullResponse>),
+      ),
+    );
     expect(after.visit.size).toBe(0);
   });
 
   it('an out_of_scope event removes it too — the handset must not keep it', () => {
     // The privacy half of ADR §6 Q2: a reassigned MR does not keep the old list.
-    const seeded = applyChanges(emptyStore(), mapChanges(
-      response({ changes: [upsert('doctor', REAL_DOCTOR_ROW)] } as unknown as Partial<SyncPullResponse>),
-    ));
-    const after = applyChanges(seeded, mapChanges(
-      response({
-        changes: [{ entity: 'doctor', entityId: REAL_DOCTOR_ROW.id, reason: 'out_of_scope', payload: null, updatedAt: REAL_DOCTOR_ROW.updated_at }],
-      } as unknown as Partial<SyncPullResponse>),
-    ));
+    const seeded = applyChanges(
+      emptyStore(),
+      mapChanges(
+        response({
+          changes: [upsert('doctor', REAL_DOCTOR_ROW)],
+        } as unknown as Partial<SyncPullResponse>),
+      ),
+    );
+    const after = applyChanges(
+      seeded,
+      mapChanges(
+        response({
+          changes: [
+            {
+              entity: 'doctor',
+              entityId: REAL_DOCTOR_ROW.id,
+              reason: 'out_of_scope',
+              payload: null,
+              updatedAt: REAL_DOCTOR_ROW.updated_at,
+            },
+          ],
+        } as unknown as Partial<SyncPullResponse>),
+      ),
+    );
     expect(after.doctor.size).toBe(0);
   });
 
@@ -183,7 +218,15 @@ describe('deletion and scope-loss are different things', () => {
     // And the reason survives mapping, so a screen can switch on it rather than infer it.
     const [mapped] = mapChanges(
       response({
-        changes: [{ entity: 'doctor', entityId: REAL_DOCTOR_ROW.id, reason: 'out_of_scope', payload: null, updatedAt: REAL_DOCTOR_ROW.updated_at }],
+        changes: [
+          {
+            entity: 'doctor',
+            entityId: REAL_DOCTOR_ROW.id,
+            reason: 'out_of_scope',
+            payload: null,
+            updatedAt: REAL_DOCTOR_ROW.updated_at,
+          },
+        ],
       } as unknown as Partial<SyncPullResponse>),
     );
     expect(mapped).toMatchObject({ kind: 'remove', reason: 'out_of_scope' });
@@ -202,12 +245,19 @@ describe('the completeness field is surfaced, and only when it says something', 
     expect(notice).not.toBeNull();
     expect(notice?.body).toMatch(/full refresh/i);
     // No SQLSTATE, no field name, no "omits".
-    expect(`${notice?.title ?? ''} ${notice?.body ?? ''}`).not.toMatch(/omit|45\d{3}|completeness/i);
+    expect(`${notice?.title ?? ''} ${notice?.body ?? ''}`).not.toMatch(
+      /omit|45\d{3}|completeness/i,
+    );
   });
 });
 
 describe('the pull loop', () => {
-  const rpc = (impl: (args: Record<string, unknown>) => { data: unknown; error: { code?: string | null; message: string } | null }) => ({
+  const rpc = (
+    impl: (args: Record<string, unknown>) => {
+      data: unknown;
+      error: { code?: string | null; message: string } | null;
+    },
+  ) => ({
     rpc: vi.fn((_fn: string, args: Record<string, unknown>) => Promise.resolve(impl(args))),
   });
 
@@ -244,7 +294,12 @@ describe('the pull loop', () => {
         return { data: null, error: { code: '45006', message: 'cursor too old' } };
       }
       expect(args['p_cursor']).toBeNull();
-      return { data: response({ completeness: FULL_RESYNC_COMPLETENESS } as unknown as Partial<SyncPullResponse>), error: null };
+      return {
+        data: response({
+          completeness: FULL_RESYNC_COMPLETENESS,
+        } as unknown as Partial<SyncPullResponse>),
+        error: null,
+      };
     });
 
     const outcome = await pullOnce({ userId: 'mr-1', cursors, client });
