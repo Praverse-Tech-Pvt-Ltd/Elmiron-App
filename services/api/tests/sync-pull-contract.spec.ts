@@ -135,7 +135,16 @@ describe.skipIf(!reachable)('C4 — what the payload actually contains', () => {
     // mapper and not a migration. This is the assertion that stops anybody "fixing" it
     // in the wrong direction.
     const payloads = await payloadsByEntity();
-    expect(Object.keys(payloads).sort()).toEqual(['beat_plan', 'doctor', 'visit']);
+    // `clinic_address` joined in MR-11 (BE-W87). This list is deliberately exact rather
+    // than a `toContain`: it is the set of entities the pull carries, and a new one
+    // arriving unannounced is exactly what this assertion is for. It caught the contract
+    // enum being left behind when the migration landed.
+    expect(Object.keys(payloads).sort()).toEqual([
+      'beat_plan',
+      'clinic_address',
+      'doctor',
+      'visit',
+    ]);
     for (const [entity, payload] of Object.entries(payloads)) {
       const camel = Object.keys(payload).filter((k) => /[A-Z]/.test(k));
       expect(camel, `${entity} keys`).toEqual([]);

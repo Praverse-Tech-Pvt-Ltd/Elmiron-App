@@ -1,12 +1,14 @@
 import {
   SyncPullResponseSchema,
   fromBeatPlanRow,
+  fromClinicAddressRow,
   fromDoctorRow,
   fromVisitRow,
   refusalForSqlState,
 } from '@fieldforce/core';
 import type {
   BeatPlanRecord,
+  ClinicAddress,
   DoctorRecord,
   Refusal,
   SyncCompleteness,
@@ -42,9 +44,18 @@ export type PullChange =
   | { readonly kind: 'upsert'; readonly entity: 'visit'; readonly record: Visit }
   | { readonly kind: 'upsert'; readonly entity: 'doctor'; readonly record: DoctorRecord }
   | { readonly kind: 'upsert'; readonly entity: 'beat_plan'; readonly record: BeatPlanRecord }
+  /**
+   * MR-11 / BE-W87. Its own entity, because a doctor payload is the row and nothing else.
+   * The aggregate `Doctor.clinicAddresses` is assembled from these on the client.
+   */
+  | {
+      readonly kind: 'upsert';
+      readonly entity: 'clinic_address';
+      readonly record: ClinicAddress;
+    }
   | {
       readonly kind: 'remove';
-      readonly entity: 'visit' | 'doctor' | 'beat_plan';
+      readonly entity: 'visit' | 'doctor' | 'beat_plan' | 'clinic_address';
       readonly id: string;
       /**
        * Why it is going. `deleted` means the record is gone; `out_of_scope` means it still
@@ -116,6 +127,12 @@ const mapChange = (change: SyncPullResponse['changes'][number]): PullChange => {
       return { kind: 'upsert', entity: 'doctor', record: fromDoctorRow(change.payload) };
     case 'beat_plan':
       return { kind: 'upsert', entity: 'beat_plan', record: fromBeatPlanRow(change.payload) };
+    case 'clinic_address':
+      return {
+        kind: 'upsert',
+        entity: 'clinic_address',
+        record: fromClinicAddressRow(change.payload),
+      };
   }
 };
 
@@ -195,12 +212,19 @@ export type LocalStore = {
   readonly visit: ReadonlyMap<string, Visit>;
   readonly doctor: ReadonlyMap<string, DoctorRecord>;
   readonly beat_plan: ReadonlyMap<string, BeatPlanRecord>;
+  /**
+   * MR-11 / BE-W87. Held separately and joined to a doctor on read, because that is how
+   * the server sends them and inventing an aggregate here would put back the coupling the
+   * separate entity exists to avoid.
+   */
+  readonly clinic_address: ReadonlyMap<string, ClinicAddress>;
 };
 
 export const emptyStore = (): LocalStore => ({
   visit: new Map(),
   doctor: new Map(),
   beat_plan: new Map(),
+  clinic_address: new Map(),
 });
 
 export const applyChanges = (store: LocalStore, changes: readonly PullChange[]): LocalStore => {
@@ -208,6 +232,7 @@ export const applyChanges = (store: LocalStore, changes: readonly PullChange[]):
     visit: new Map(store.visit),
     doctor: new Map(store.doctor),
     beat_plan: new Map(store.beat_plan),
+    clinic_address: new Map(store.clinic_address),
   };
   for (const change of changes) {
     if (change.kind === 'remove') {
@@ -215,15 +240,67 @@ export const applyChanges = (store: LocalStore, changes: readonly PullChange[]):
       // the store does -- a record that is no longer yours must not stay on the handset
       // any more than a deleted one, which is the privacy half of ADR §6 Q2.
       next[change.entity].delete(change.id);
-    } else if (change.entity === 'visit') {
-      next.visit.set(change.record.id, change.record);
-    } else if (change.entity === 'doctor') {
-      next.doctor.set(change.record.id, change.record);
-    } else {
-      next.beat_plan.set(change.record.id, change.record);
+      continue;
+    }
+
+    // **A switch with a `never` default, not an if/else chain.** The chain this replaces
+    // ended in a bare `else` that wrote to `beat_plan`, so adding a fourth entity without
+    // touching this line would have stored every clinic address as a beat plan -- the
+    // same misroute MR-08 found in `sendFor`, where a check-out was replayed as a
+    // check-in because the dispatch fell off the end. Here the compiler stops it.
+    switch (change.entity) {
+      case 'visit':
+        next.visit.set(change.record.id, change.record);
+        break;
+      case 'doctor':
+        next.doctor.set(change.record.id, change.record);
+        break;
+      case 'beat_plan':
+        next.beat_plan.set(change.record.id, change.record);
+        break;
+      case 'clinic_address':
+        next.clinic_address.set(change.record.id, change.record);
+        break;
+      default: {
+        const unhandled: never = change;
+        throw new Error(`unhandled pull entity: ${JSON.stringify(unhandled)}`);
+      }
     }
   }
   return next;
+};
+
+/**
+ * A doctor with their addresses, assembled from the two streams.
+ *
+ * **This is where the cost of the separate-entity design is paid, and where B4's honesty
+ * requirement lives.** A doctor can arrive before their addresses -- they are independent
+ * rows in one cursor-ordered stream -- so `clinicAddresses` may legitimately be empty for
+ * a while. That is reported as `addressesPending`, never as an address of `null` and never
+ * as a wrong one: the product's rule is that the app does not present what the server has
+ * not said.
+ *
+ * A caller that wants to render a clinic line checks `addressesPending` first. A caller
+ * that wants to geofence has no address, and `record_check_in` records
+ * `geofence_status = 'unavailable'` rather than refusing -- decided in MR-11 B3.
+ */
+export interface DoctorWithAddresses {
+  readonly doctor: DoctorRecord;
+  readonly clinicAddresses: readonly ClinicAddress[];
+  /** True while the doctor is known and no address for them has arrived yet. */
+  readonly addressesPending: boolean;
+}
+
+export const doctorWithAddresses = (
+  store: LocalStore,
+  doctorId: string,
+): DoctorWithAddresses | null => {
+  const doctor = store.doctor.get(doctorId);
+  if (doctor === undefined) return null;
+  const clinicAddresses = [...store.clinic_address.values()].filter(
+    (address) => address.doctorId === doctorId,
+  );
+  return { doctor, clinicAddresses, addressesPending: clinicAddresses.length === 0 };
 };
 
 /**

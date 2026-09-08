@@ -14,6 +14,7 @@ import {
   CaptureSourceSchema,
   CheckInSchema,
   CheckOutSchema,
+  ClinicAddressSchema,
   DoctorSchema,
   GeofenceStatusSchema,
   MileageDaySchema,
@@ -23,7 +24,7 @@ import {
   TerritoryShiftWindowSchema,
   VisitSchema,
 } from './entities.js';
-import type { CheckIn, CheckOut, MileageDay, Visit } from './entities.js';
+import type { CheckIn, CheckOut, ClinicAddress, MileageDay, Visit } from './entities.js';
 import { ConsentOutcomeSchema, ConsentRecordSchema, ConsentTextVersionSchema } from './consent.js';
 import { RecordingSchema, TranscriptSchema, VoiceNoteSchema } from './capture.js';
 import { UploadSessionStateSchema } from './upload.js';
@@ -431,7 +432,21 @@ export type SyncPushResponse = z.infer<typeof SyncPushResponseSchema>;
  * `beat_plan` and `doctor` to the list of things a device may claim to have created,
  * which is a widening of the write surface to buy a name for a read.
  */
-export const SyncPullEntitySchema = z.enum(['visit', 'beat_plan', 'doctor']);
+/**
+ * What `sync_pull` can carry.
+ *
+ * **`clinic_address` joined in MR-11 (BE-W87).** A doctor payload is `to_jsonb(d)` — the
+ * row and nothing else — so it has never carried addresses, while four read paths and the
+ * geofence need them. It is a separate entity rather than a nested field because the
+ * cursor is `(updated_at, id)`: a nested payload would only sync a clinic edit if
+ * something bumped the DOCTOR's `updated_at`, which is a trigger-maintained coupling that,
+ * if ever missed, means the edit never syncs and nothing reports it.
+ *
+ * This enum is the client half of that decision, and `sync-pull-contract.spec.ts` fails
+ * the build in both directions — it caught this file being left behind within a minute of
+ * the migration landing.
+ */
+export const SyncPullEntitySchema = z.enum(['visit', 'beat_plan', 'doctor', 'clinic_address']);
 export type SyncPullEntity = z.infer<typeof SyncPullEntitySchema>;
 
 /**
@@ -780,6 +795,66 @@ export const fromDoctorRow = (row: unknown): DoctorRecord => {
     isActive: parsed.is_active,
     createdAt: parsed.created_at,
     updatedAt: parsed.updated_at,
+  });
+};
+
+/**
+ * A `clinic_addresses` row as `to_jsonb(row)` returns it.
+ *
+ * **MR-11 / BE-W87.** The pull carries clinic addresses as their own entity, so the client
+ * assembles `Doctor.clinicAddresses` from two streams rather than receiving it built. That
+ * is the cost of the design and it is paid here: one more row schema and one more mapper.
+ *
+ * **`coordinates` maps to `null`, and that is a divergence rather than a shortcut.**
+ *
+ * `CoordinatesSchema` requires `accuracyMetres` and `capturedAt` — it models *a GPS fix
+ * somebody took*. A clinic address's latitude and longitude are a **geofence centre**,
+ * which nobody captured, at no particular moment, with no accuracy. The table has no such
+ * columns and should not: they would describe provenance that does not exist.
+ *
+ * Filling them in would be fabrication of the `sizeBytes: 1` kind — a value invented to
+ * satisfy a shape. So this carries `null` and loses nothing: **the client never reads a
+ * clinic address's coordinates.** The geofence is computed server-side inside
+ * `record_check_in`, which reads `clinic_addresses` directly; the only `.coordinates` the
+ * app consumes is the MR's own fix on a check-in.
+ *
+ * **Verdict: the CONTRACT is wrong**, and the fix is a geofence-centre type distinct from
+ * a captured fix. Registered rather than done here, because it touches the mock and the
+ * UI and this migration is about the pull. Until then a clinic arrives with a name, an
+ * address and no centre — which is exactly what the client uses.
+ */
+export const ClinicAddressRowSchema = z.object({
+  id: UuidSchema,
+  doctor_id: UuidSchema,
+  label: z.string().min(1),
+  line1: z.string().min(1),
+  line2: z.string().nullable(),
+  city: z.string().min(1),
+  state: z.string().min(1),
+  postal_code: z.string().min(1),
+  latitude: z.number().nullable(),
+  longitude: z.number().nullable(),
+  geofence_radius_metres: z.number().positive(),
+  created_at: IsoDateTimeSchema,
+  updated_at: IsoDateTimeSchema,
+});
+export type ClinicAddressRow = z.infer<typeof ClinicAddressRowSchema>;
+
+export const fromClinicAddressRow = (row: unknown): ClinicAddress => {
+  const parsed = ClinicAddressRowSchema.parse(row);
+  return ClinicAddressSchema.parse({
+    id: parsed.id,
+    doctorId: parsed.doctor_id,
+    label: parsed.label,
+    line1: parsed.line1,
+    line2: parsed.line2,
+    city: parsed.city,
+    state: parsed.state,
+    postalCode: parsed.postal_code,
+    // Null, always. See the note above: the pair exists in the table and the provenance
+    // the contract demands does not, and inventing it is worse than omitting it.
+    coordinates: null,
+    geofenceRadiusMetres: parsed.geofence_radius_metres,
   });
 };
 

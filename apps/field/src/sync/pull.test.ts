@@ -1,7 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SyncPullResponse } from '@fieldforce/core';
 import { memoryPullCursorStore } from './pull-cursor';
-import { applyChanges, emptyStore, mapChanges, noticeFor, pullOnce, removalWording } from './pull';
+import {
+  applyChanges,
+  doctorWithAddresses,
+  emptyStore,
+  mapChanges,
+  noticeFor,
+  pullOnce,
+  removalWording,
+} from './pull';
 
 /**
  * FE-W22 — the pull consumer.
@@ -337,5 +345,97 @@ describe('the pull loop', () => {
     // The only place that can notice the server changed shape.
     const client = rpc(() => ({ data: { changes: 'not an array' }, error: null }));
     await expect(pullOnce({ userId: 'mr-1', cursors, client })).rejects.toThrow();
+  });
+});
+
+describe('MR-11 B4 — a doctor whose addresses have not arrived says so', () => {
+  const doctorRecord = {
+    id: '33333333-3333-4333-8333-333333333301',
+    fullName: 'Dr Partial',
+    registrationNumber: null,
+    specialty: null,
+    qualification: null,
+    territoryId: '44444444-4444-4444-8444-444444444401',
+    assignedMrId: null,
+    isActive: true,
+    createdAt: '2026-09-08T00:00:00.000Z',
+    updatedAt: '2026-09-08T00:00:00.000Z',
+  };
+
+  const address = {
+    id: '55555555-5555-4555-8555-555555555501',
+    doctorId: doctorRecord.id,
+    label: 'Main clinic',
+    line1: '12 FC Road',
+    line2: null,
+    city: 'Pune',
+    state: 'Maharashtra',
+    postalCode: '411004',
+    // A geofence centre has no provenance, so the contract's Coordinates cannot describe
+    // one. See `fromClinicAddressRow`.
+    coordinates: null,
+    geofenceRadiusMetres: 150,
+  };
+
+  it('reports addressesPending rather than an empty address presented as fact', () => {
+    // The cost of the separate-entity design, paid honestly. A doctor and their addresses
+    // are independent rows in one cursor-ordered stream, so the doctor can legitimately
+    // arrive first — and the product's rule is that the app never presents what the server
+    // has not said. `addressesPending` is that state having a name.
+    const store = applyChanges(emptyStore(), [
+      { kind: 'upsert', entity: 'doctor', record: doctorRecord },
+    ]);
+
+    const view = doctorWithAddresses(store, doctorRecord.id);
+    expect(view?.addressesPending).toBe(true);
+    expect(view?.clinicAddresses).toEqual([]);
+    // The doctor is still known. "Addresses syncing" is a different statement from
+    // "no such doctor", and a screen must be able to tell them apart.
+    expect(view?.doctor.fullName).toBe('Dr Partial');
+  });
+
+  it('and stops saying it the moment an address arrives', () => {
+    // THE POSITIVE CONTROL. Without it, `addressesPending: true` for ever would satisfy
+    // the assertion above — a flag that never clears is as wrong as one that never sets.
+    const store = applyChanges(emptyStore(), [
+      { kind: 'upsert', entity: 'doctor', record: doctorRecord },
+      { kind: 'upsert', entity: 'clinic_address', record: address },
+    ]);
+
+    const view = doctorWithAddresses(store, doctorRecord.id);
+    expect(view?.addressesPending).toBe(false);
+    expect(view?.clinicAddresses).toHaveLength(1);
+    expect(view?.clinicAddresses[0]?.city).toBe('Pune');
+  });
+
+  it('an unknown doctor is null, not a doctor with no addresses', () => {
+    // The two are different facts and the caller must not have to guess which it holds.
+    expect(doctorWithAddresses(emptyStore(), doctorRecord.id)).toBeNull();
+  });
+
+  it('a removed clinic address leaves the store, and the doctor stays', () => {
+    const store = applyChanges(emptyStore(), [
+      { kind: 'upsert', entity: 'doctor', record: doctorRecord },
+      { kind: 'upsert', entity: 'clinic_address', record: address },
+    ]);
+    const after = applyChanges(store, [
+      { kind: 'remove', entity: 'clinic_address', id: address.id, reason: 'deleted' },
+    ]);
+
+    const view = doctorWithAddresses(after, doctorRecord.id);
+    expect(view?.clinicAddresses).toEqual([]);
+    expect(view?.addressesPending).toBe(true);
+    expect(after.doctor.size, 'the doctor was removed with their address').toBe(1);
+  });
+
+  it('a clinic address is NOT stored as a beat plan — the misroute the switch prevents', () => {
+    // The if/else chain this replaced ended in a bare `else` that wrote to `beat_plan`.
+    // Adding a fourth entity without touching that line would have stored every clinic
+    // address as a beat plan: the same shape as the check-out replayed as a check-in.
+    const store = applyChanges(emptyStore(), [
+      { kind: 'upsert', entity: 'clinic_address', record: address },
+    ]);
+    expect(store.clinic_address.size).toBe(1);
+    expect(store.beat_plan.size, 'a clinic address landed in beat_plan').toBe(0);
   });
 });
