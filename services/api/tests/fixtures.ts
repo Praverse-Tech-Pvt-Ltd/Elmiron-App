@@ -380,9 +380,25 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
     );
 
     await client.query(
-      `insert into public.consent_text_versions (id, version_label, language, full_text)
-       values ($1, $2, 'en-IN', 'I agree to this conversation being recorded for coaching purposes.')`,
-      [world.consentTextVersionId, `v1-${runId}`],
+      // MR-07: `effective_from` is explicit and in the PAST, and it has to be.
+      //
+      // It defaulted to `now()` while the consent records below are stamped
+      // `now() - interval '2 hours'` -- so this fixture asserted a doctor was shown a
+      // notice two hours before the notice existed. Nothing checked it until BE-W78 put
+      // the capture bounds in a trigger, and then sixteen suites failed at once with
+      // "no active consent text for language en-IN at <2 hours ago>".
+      //
+      // The trigger was right and the fixture was fabricated data. Same family as
+      // `sizeBytes: 1`: a value that satisfied every shape and described something that
+      // had not happened.
+      // MR-07 / BE-W79: a notice belongs to a tenant. Before that column existed every
+      // suite's `en-IN` version competed to be "the active one" globally, so whichever
+      // suite seeded last silently invalidated the others' consent records.
+      `insert into public.consent_text_versions
+         (id, version_label, language, full_text, effective_from, organisation_id)
+       values ($1, $2, 'en-IN', 'I agree to this conversation being recorded for coaching purposes.',
+               now() - interval '30 days', $3)`,
+      [world.consentTextVersionId, `v1-${runId}`, organisationId],
     );
 
     await client.query(

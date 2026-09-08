@@ -25,6 +25,8 @@ export interface ReferenceDoctor {
 
 export interface ReferenceConsentTextVersion {
   key: string;
+  /** MR-07 / BE-W79: a consent notice belongs to a tenant, like a doctor or a territory. */
+  organisationKey: string;
   versionLabel: string;
   language: string;
   fullText: string;

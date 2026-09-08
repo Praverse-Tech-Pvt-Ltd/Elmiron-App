@@ -48,6 +48,7 @@ const FIXTURE: ReferenceData = {
   consentTextVersions: [
     {
       key: `be-w8-test-consent-text-${runId}`,
+      organisationKey: `be-w8-test-org-${runId}`,
       versionLabel: `BE-W8 test fixture ${runId}`,
       language: 'en',
       fullText: 'OBSOLETE_TEST_FIXTURE consent text, used only by this suite.',

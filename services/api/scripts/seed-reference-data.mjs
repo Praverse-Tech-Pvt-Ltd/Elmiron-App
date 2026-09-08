@@ -135,11 +135,16 @@ export const seedReferenceData = async (data, overrides = {}) => {
 
     for (const version of data.consentTextVersions) {
       const id = deterministicId('consentTextVersions', version.key);
+      // MR-07 / BE-W79: resolved exactly as a doctor's or a territory's organisation is.
+      // A consent notice is a tenant's own legal document and was the last thing in this
+      // schema that belonged to nobody.
+      const organisationId = deterministicId('organisations', version.organisationKey);
       const result = await client.query(
-        `insert into public.consent_text_versions (id, version_label, language, full_text)
-         values ($1, $2, $3, $4)
+        `insert into public.consent_text_versions
+           (id, version_label, language, full_text, organisation_id)
+         values ($1, $2, $3, $4, $5)
          on conflict (id) do nothing`,
-        [id, version.versionLabel, version.language, version.fullText],
+        [id, version.versionLabel, version.language, version.fullText, organisationId],
       );
       counts.consentTextVersions += result.rowCount ?? 0;
     }
