@@ -10398,3 +10398,205 @@ existed.
 Environment left running: emulator booted, ports reversed, Metro serving, and the database
 holding one freshly seeded demo day.
 
+
+---
+
+### MR-11 — the aggregate, not_met, and the conversion (8 September 2026)
+
+**Parts A and B are done, and C5 — the decision record — is done. C1–C4, D and E were not
+started.** Where and why is at the end.
+
+#### A1 — the push, and **CI IS RED**
+
+Three commits pushed as `87f3712..5e2892c`.
+
+**CI run `34258625706` · workflow `CI` · event `push` · commit
+`5e2892c4e67f24052dea181f94170693afeff03c` — FAILURE.** That SHA was the HEAD those three
+commits produced. The first job passed; `migrations · Gate 0 RLS suite · rollbacks` failed:
+
+```
+FAIL tests/audit-metadata.spec.ts     Error: admin create user failed (500):
+FAIL tests/sync-pull-contract.spec.ts   "Database error creating new user"
+Tests  555 passed | 15 skipped (570)
+```
+
+**That is E1's connection exhaustion, and I reopened it in MR-10.** `seed-day.spec.ts`
+called `seedDay()` three times — once per test, for independence — and each call mints
+**three** GoTrue identities. Nine concurrent `POST /admin/users` on top of everything else
+the run is doing. It never failed locally; CI has less headroom, and `maxWorkers: 6` is not
+even binding on a four-core runner.
+
+**The MR-10 record had already named the shape** — *"the burst scales with the number of
+SUITES"* — and the next suite added was that one. Naming a pattern is not the same as
+remembering it, which is the honest finding here.
+
+Fixed by seeding once in `beforeAll` and sharing the tenant: nine identities become three,
+and the four assertions are about one dataset rather than four unrelated ones. Three
+consecutive clean local runs afterwards, and the full suite green three times.
+
+**The fix is local and unpushed**, along with Part B, because the standing rule is not to
+push past Part A without review. **Main is red and the repair is on this machine** — which
+is the state MR-07 §1 judged worse than either alternative. Pushing is the reviewer's call
+and the recommendation is to take it.
+
+#### A2 — the environment, as a precondition
+
+**Came up, and everything survived from MR-10**: emulator booted, Metro serving, ten
+Supabase containers healthy, all three `adb reverse` ports mapped. The public schema was
+empty again (`verify:rollbacks` leaves it so), re-applied and re-seeded.
+
+**Signed in as `demo-6ca14559-mr@example.test` and reached the Today screen**, through the
+onboarding flow after clearing app state. It renders *"Dr Rohini Kulkarni, Sahyadri Clinic,
+Pune"* — the mock — while the seeded day holds Asha Deshpande, Vikram Rao and Meera Iyer.
+**The blocker, on screen**, which is where Part D begins.
+
+#### Counts, per workspace AND per runner
+
+```
+@fieldforce/core       vitest    21     3        @fieldforce/console   vitest    10     1
+@fieldforce/ui         vitest     4     1        @fieldforce/field     vitest   375    25
+@fieldforce/ui         jest     221    20        @fieldforce/api       vitest   575    32
+@fieldforce/ui-tokens  vitest    54     3        @fieldforce/mock      vitest    40     1
+                                                 TOTAL                         1372
+```
+
+No skips. **44 migrations, 44 rollbacks**, schema empty. `turbo run typecheck lint
+--force`: 16 of 16.
+
+---
+
+#### B — BE-W87. Clinic addresses in the pull
+
+**B1 — a separate entity, and the three reasons were checked against the code rather than
+taken on trust.**
+
+1. **The cursor is `(updated_at, id)` over an `xmin` snapshot.** A nested payload only syncs
+   a clinic edit if the DOCTOR's `updated_at` moves when a child row changes — a
+   trigger-maintained coupling that, if ever missed, means the edit never syncs and
+   **nothing reports it**. The client would hold a stale address and believe it current.
+2. **`sync_pull` is SECURITY INVOKER, so RLS does the scoping** — verified, and it is why
+   the doctor arm carries no predicate at all. A separate arm inherits
+   `clinic_addresses_select_visible_doctor` for free. A nested aggregate would need the
+   scope hand-written inside it, which is the policy transcription MR-06 deleted from
+   `search_doctors` after it fell out of step.
+3. **Tombstones already work per entity.** Inside a nested payload a removed address is
+   *"the array got shorter"*, which is not a deletion signal.
+
+**B3 — the geofence, and the answer was to verify before deciding.** `record_check_in`
+already records `geofence_status = 'unavailable'` when a visit has no clinic address —
+**not refused, and not invented**: `unavailable` is one of exactly three values the enum
+permits. The decision is to keep it. Refusing would mean an MR standing in front of a
+doctor cannot record that they were there because of a sync-ordering accident on their own
+phone; waiting would be an unbounded spinner at a clinic door on a handset whose power
+manager may kill the sync. A check-in with no geofence is a smaller loss than a visit never
+recorded, and `geofence_status` makes the loss visible to a manager.
+
+**B4 — partial state has a name.** `doctorWithAddresses()` reports `addressesPending` rather
+than an empty address presented as fact, with a positive control that the flag clears, and
+an unknown doctor returning `null` rather than *"a doctor with no addresses"* — two
+different facts a screen must be able to tell apart.
+
+**Verified end to end:**
+
+```
+sync_pull as the seeded MR:  beat_plan 1 | clinic_address 3 | doctor 3 | visit 3
+completeness.entities:       ["visit","beat_plan","doctor","clinic_address"]
+```
+
+**B5/B6 — five server tests, five client tests, four mutations.** Removing the clinic arm
+fails all five server tests; dropping the tombstone trigger fails exactly the removal test;
+removing the client's `clinic_address` case fails three client tests including the explicit
+misroute one.
+
+#### Four things the work found on its way
+
+- **`sync_events.entity` is `text` with a CHECK constraint.** The type permitted a new value
+  and the constraint did not. Caught by the tombstone test writing a real deletion rather
+  than asserting the trigger exists.
+- **`emit_sync_event` dispatches on `tg_table_name` through an if/else whose ELSE reads
+  `old.mr_id`.** `clinic_addresses` has `doctor_id`, so a trigger added without a branch
+  would raise — loud rather than silent, but the same shape as the `sendFor` chain.
+- **`applyChanges` in `pull.ts` ended in a bare `else` that wrote to `beat_plan`.** A fourth
+  entity would have stored **every clinic address as a beat plan** — the same misroute as
+  the check-out replayed as a check-in. Now a `switch` with a `never` default, and a test
+  that names it.
+- **`packages/core`'s `SyncPullEntitySchema` had three members**, and
+  `sync-pull-contract.spec.ts` failed within a minute of the migration landing. That test
+  doing its job is the reason the contract did not silently diverge.
+
+#### A divergence, with a verdict
+
+**`ClinicAddress.coordinates` maps to `null`. Verdict: the CONTRACT is wrong.**
+`CoordinatesSchema` requires `accuracyMetres` and `capturedAt` — it models *a GPS fix
+somebody took*. A clinic's latitude and longitude are a **geofence centre**, which nobody
+captured, at no moment, with no accuracy. Filling those in would be fabrication of the
+`sizeBytes: 1` kind. Nothing is lost: **the client never reads a clinic's coordinates** —
+the geofence is computed server-side inside `record_check_in`. The fix is a geofence-centre
+type distinct from a captured fix; registered rather than done here, because it touches the
+mock and the UI.
+
+#### Two method failures, both caught by their own tests
+
+- **The first version of the migration rewrote `sync_pull` by hand** and dropped the
+  `from page p` its aggregate selects over, failing on the first call with `missing
+  FROM-clause entry for table "p"`. This is a `create or replace` chain, and this repo's
+  rule for those is to read the LIVE definition — **which applies to writing one as much as
+  to auditing one.** Rebuilt by patching `pg_get_functiondef` with two targeted edits.
+- **The first version of the tests declared `truncated` and `cursor`**, which `sync_pull`
+  does not return. Both came back `undefined`, so the drain stopped after one page and every
+  "cursor" passed to a second pull was null — making it a **full re-sync, which by design
+  carries no tombstones**. The deletion test then failed for a reason that had nothing to do
+  with deletions. A shape assumed rather than read;
+  `select jsonb_object_keys(public.sync_pull(null))` answers it in one line.
+
+---
+
+#### C5 — the `not_met` decision, recorded
+
+Appended to `.ai-collab/decisions.md` (which **is** tracked, as of BE-W8) as a **reviewer
+decision taken on the operator's behalf, dated, and reversible until real data exists**.
+
+`visit_status` gains `not_met` with a required reason, mirroring
+`consent_outcome.not_asked` — a shape the schema already models and already enforces with
+`consent_records_not_asked_has_reason`. Recorded with the terms it was taken on: the copy
+must claim **attendance** rather than success, and `not_met` is attributed to the territory
+or the doctor and **never scored against the MR**, because a metric that punishes an honest
+outcome manufactures dishonest ones.
+
+**Recorded, deliberately, without being implemented.** A decision taken in the operator's
+absence should be visible as a decision rather than absorbed into a diff — and the window
+in which it is reversible closes on the day the first real visit is recorded, not before.
+
+---
+
+#### Where this stopped
+
+**After Part B and C5.** C1–C4, D and E were not started.
+
+Part B turned out to be four changes rather than one — a migration, a constraint, a
+contract enum and a client store — because each layer had its own list of entities and each
+list had to grow. Three of the four were found by something failing rather than by reading:
+the CHECK constraint by a tombstone test, the contract enum by the conformance test, and the
+`beat_plan` fallback by TypeScript. That is the system working, and it is also why the part
+was not small.
+
+**C1–C4 is the next session's first task and is fully unblocked** — the decision is taken
+and recorded, and the enum change is a two-migration sequence (`alter type … add value`
+cannot be used in the same transaction that adds a constraint referring to it). Starting it
+here would have meant adding the enum member without the copy change, which is precisely the
+harm C3 exists to prevent: an app that says *"That's the day done"* to an MR who found three
+doctors unavailable.
+
+**Order for the next session:**
+
+1. **Push, first.** Three commits local, and **main is red at `5e2892c`** for a cause
+   repaired in one of them.
+2. **C1–C4**, in one session: the enum, the required reason, `record_check_out` writing the
+   status, the copy, and the assertion that no metric scores `not_met` against the MR.
+3. **D**, the reads — `pull()` is still called by no screen, and the store now has the shape
+   the screens need, including `doctorWithAddresses`.
+4. **E**, the writes and the emulator proof, naming check-out and the rejection case.
+
+Environment left running: emulator booted, ports reversed, Metro serving, database holding
+one freshly seeded demo day.
+

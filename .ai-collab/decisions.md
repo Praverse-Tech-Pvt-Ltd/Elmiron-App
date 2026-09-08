@@ -657,3 +657,61 @@ correction is made here, dated, saying what it replaced and where.
 - **Consequence:** the recurring task "fix the stale package id in the root app.json" is a
   no-op. It has been carried forward through at least three documents as though it were
   outstanding engineering work.
+
+## `visits.status` gains `not_met` with a required reason — a REVIEWER decision, 8 September 2026
+
+**Taken on the operator's behalf, after five sessions unanswered, and REVERSIBLE until real
+data exists.**
+
+### What was decided
+
+`visit_status` gains a fourth member, `not_met`, carrying a **required reason**, mirroring
+`consent_outcome.not_asked` — which is the same shape the product already models and
+already enforces with a check constraint (`consent_records_not_asked_has_reason`).
+
+### Why it was taken rather than waited for
+
+The question — *does "2 of 3 visits done" count a visit where the MR arrived and the doctor
+was unavailable?* — was first raised in MR-04 §B3 and asked in every session since. It has
+blocked the read conversion twice.
+
+**Waiting is now costlier than being wrong, and being wrong is still cheap.** Nothing but
+synthetic seed rows carry a `visits.status` today, and those are disposable. Once a pilot
+has written real ones, changing the meaning of `completed` means rewriting history, because
+every row already stored as `completed` becomes permanently ambiguous between *met* and
+*attended*. The window in which this is reversible is closing, and it closes on the day the
+first real visit is recorded.
+
+### The reasoning
+
+- **Two facts are conflated today: attendance and outcome.** The missed-visit nudge and
+  coverage-versus-beat-plan need the first. Consent rate and call reporting need the second.
+  A single `completed` cannot carry both.
+- **`check_outs` records position and time and nothing about whether the call happened** —
+  every column is `latitude`, `longitude`, `accuracy_metres`, `geofence_status`,
+  `distance_from_clinic_metres`, `source`, `occurred_at`. A check-out is a departure.
+- **So `check_out -> completed` makes the app tell an MR their day went to plan when a
+  doctor was unavailable**, and tells coverage-versus-beat-plan and §5's Tier 1 nudge that a
+  call took place that did not.
+- **The product already models this.** `consent_outcome.not_asked` carries a required
+  reason. "Attended, nothing happened" is a state this schema knows how to express; it is
+  simply not expressed on `visits`.
+
+### The terms it was taken on
+
+1. **The copy changes with it.** *"2 of 3 visits done"* and *"That's the day done"* claim
+   success. They must claim **attendance**. An MR who found three doctors unavailable must
+   not read a congratulation.
+2. **`not_met` is attributed to the territory or the doctor and NEVER scored against the
+   MR** — MR scope §3. A metric that punishes an honest outcome manufactures dishonest
+   ones, which is the same reason a declined consent is never a negative signal.
+3. **The operator may overturn this until real data exists.** If they disagree, the change
+   to make is a migration reversing the enum member and the copy, and it costs nothing while
+   only seed rows carry a status.
+
+### Status
+
+**Decided, NOT YET IMPLEMENTED.** MR-11 recorded the decision and stopped before building
+it; the implementation is MR-12 Part C. Recording it separately from building it is
+deliberate: a decision taken in the operator's absence should be visible as a decision
+rather than absorbed into a diff.
