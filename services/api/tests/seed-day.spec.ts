@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { DB_URL, requireDatabase, withClient } from './db.js';
 import { assertLocalhostOnly, seedDay, DEMO_MARKER } from '../scripts/seed-day.mjs';
 
@@ -18,6 +18,26 @@ import { assertLocalhostOnly, seedDay, DEMO_MARKER } from '../scripts/seed-day.m
  */
 
 const reachable = await requireDatabase();
+
+/**
+ * ONE seeded tenant, shared by every test below.
+ *
+ * **Each `seedDay()` call mints three GoTrue identities**, and the first version of this
+ * file called it three times — nine `POST /admin/users` on top of everything else the
+ * suite is doing. That was enough to bring back the connection exhaustion `maxWorkers: 6`
+ * had closed in MR-07: CI failed with *"Database error creating new user"*, two suites
+ * dead at their `beforeAll` and fifteen cases skipped.
+ *
+ * The MR-10 record had already named the shape — *the burst scales with the number of
+ * suites* — and this suite was the next one added. Seeding once and asserting against it
+ * is also the better test: the four assertions are about one dataset, not four.
+ */
+let seeded: Awaited<ReturnType<typeof seedDay>>;
+
+beforeAll(async () => {
+  if (!reachable) return;
+  seeded = await seedDay({ another: true, dbUrl: DB_URL });
+}, 60_000);
 
 describe('seed:day refuses what it must refuse', () => {
   it('refuses a non-localhost database before opening a connection', () => {
@@ -44,8 +64,6 @@ describe.skipIf(!reachable)('seed:day produces a day the server will actually se
     // `another: true` so this is independent of whatever else is in the database — the
     // script otherwise refuses a second run, which is its own guard and is tested by the
     // fact that every other suite would fail if it did not.
-    const seeded = await seedDay({ another: true, dbUrl: DB_URL });
-
     expect(seeded.email).toMatch(/^demo-.*-mr@example\.test$/);
 
     await withClient(async (client) => {
@@ -93,8 +111,6 @@ describe.skipIf(!reachable)('seed:day produces a day the server will actually se
     // The point of the whole part. Row counts prove the inserts ran; this proves the
     // server will serve them to the person who signed in, through RLS, on the path the
     // client actually uses.
-    const seeded = await seedDay({ another: true, dbUrl: DB_URL });
-
     await withClient(async (client) => {
       const mr = await client.query<{ id: string }>(
         `select id from public.user_profiles where organisation_id = $1 and role = 'mr'`,
@@ -130,7 +146,6 @@ describe.skipIf(!reachable)('seed:day produces a day the server will actually se
     // `seed-reference-data.mjs` exists precisely so that real organisations, doctors and
     // clinics are supplied rather than invented. This script invents all three, so every
     // row it writes says so in its own name.
-    const seeded = await seedDay({ another: true, dbUrl: DB_URL });
     await withClient(async (client) => {
       const rows = await client.query<{ name: string }>(
         `select o.name from public.organisations o where o.id = $1
