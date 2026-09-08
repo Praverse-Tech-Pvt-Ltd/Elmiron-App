@@ -69,15 +69,15 @@ const supersededNotice = async (
   const displayed = randomUUID();
   await client.query(
     `insert into public.consent_text_versions
-       (id, version_label, language, full_text, effective_from)
-     values ($1, $2, $3, 'The notice that was on the screen.', now() - interval '4 hours')`,
-    [displayed, `mr03-old-${randomUUID().slice(0, 8)}`, language],
+       (id, version_label, language, full_text, effective_from, organisation_id)
+     values ($1, $2, $3, 'The notice that was on the screen.', now() - interval '4 hours', $4)`,
+    [displayed, `mr03-old-${randomUUID().slice(0, 8)}`, language, world.organisationId],
   );
   await client.query(
     `insert into public.consent_text_versions
-       (id, version_label, language, full_text, effective_from)
-     values ($1, $2, $3, 'A newer notice.', now() - interval '1 hour')`,
-    [randomUUID(), `mr03-new-${randomUUID().slice(0, 8)}`, language],
+       (id, version_label, language, full_text, effective_from, organisation_id)
+     values ($1, $2, $3, 'A newer notice.', now() - interval '1 hour', $4)`,
+    [randomUUID(), `mr03-new-${randomUUID().slice(0, 8)}`, language, world.organisationId],
   );
   return { language, displayed };
 };
@@ -313,9 +313,9 @@ describe.skipIf(!reachable)('THE FINDING: consent through sync_push skips captur
       const version = randomUUID();
       await client.query(
         `insert into public.consent_text_versions
-           (id, version_label, language, full_text, effective_from)
-         values ($1, $2, $3, 'The notice, still current.', now() - interval '30 days')`,
-        [version, `mr04-ok-${randomUUID().slice(0, 8)}`, language],
+           (id, version_label, language, full_text, effective_from, organisation_id)
+         values ($1, $2, $3, 'The notice, still current.', now() - interval '30 days', $4)`,
+        [version, `mr04-ok-${randomUUID().slice(0, 8)}`, language, world.organisationId],
       );
       await asUser(client, world.users.puneMr);
 

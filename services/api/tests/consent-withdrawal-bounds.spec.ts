@@ -35,9 +35,9 @@ const grantedConsent = async (client: Client): Promise<{ id: string; language: s
   const version = randomUUID();
   await client.query(
     `insert into public.consent_text_versions
-       (id, version_label, language, full_text, effective_from)
-     values ($1, $2, $3, 'The notice.', now() - interval '30 days')`,
-    [version, `mr05-${randomUUID().slice(0, 8)}`, language],
+       (id, version_label, language, full_text, effective_from, organisation_id)
+     values ($1, $2, $3, 'The notice.', now() - interval '30 days', $4)`,
+    [version, `mr05-${randomUUID().slice(0, 8)}`, language, world.organisationId],
   );
   await asUser(client, world.users.puneMr);
   const id = randomUUID();
@@ -214,52 +214,114 @@ describe.skipIf(!reachable)('C1 — a withdrawal is bounded in BOTH directions',
     });
   });
 
-  it('BE-W78: but a plain CAPTURE over the same path is unbounded, and is accepted', async () => {
-    // **The defect this file found and did not fix.** A capture needs to read nothing, so
-    // the grant that closes the withdrawal path does not close this one:
+  it('B3 THE REPLAYED ATTACK: the same insert is now refused 45007', async () => {
+    // **This test asserted the defect until MR-07, and the inversion is the fix.**
     //
-    //   * `authenticated` holds a direct INSERT grant on `public.consent_records`;
-    //   * `consent_records_insert_own` permits the row when the MR owns the visit;
-    //   * so an insert over PostgREST never calls `capture_consent`;
-    //   * and every bound that function carries -- 45001 notice-superseded, 45007 future,
-    //     45008 sync lag -- is skipped with it.
+    // MR-06 proved BE-W78 here: `authenticated` held a direct INSERT grant on
+    // `consent_records`, `consent_records_insert_own` permitted the row, and so an
+    // ordinary MR could POST a consent dated a YEAR IN THE FUTURE straight to the table
+    // and never call `capture_consent`. `INSERT 0 1`. Every bound FIX-02, FIX-12 and
+    // BE-W74 established was optional, because all three live in a function body and a
+    // function is not a guard when the table is writable.
     //
-    // BE-W74 routed the SYNC path through `capture_consent`. The REST path was never
-    // routed anywhere. A consent dated a YEAR IN THE FUTURE is accepted below, by an
-    // ordinary MR, on the ordinary path the app is being converted to use.
-    //
-    // Not fixed here: the remedies are to move the bounds into a trigger or to revoke the
-    // INSERT grant so `capture_consent` is the only door, and either has a blast radius
-    // that deserves its own session rather than being bolted onto this one.
+    // MR-07 closed it with both halves, and this replays the exact attack. The refusal
+    // now comes from the GRANT -- `42501`, before any row is considered -- because the
+    // direct INSERT is gone. That is the outer of the two locks.
     await inRolledBackTransaction(async (client) => {
       await asUser(client, world.users.puneMr);
 
-      await client.query(
-        `insert into public.consent_records
-           (id, visit_id, doctor_id, captured_by_mr_id, outcome, consent_text_version_id,
-            displayed_language, captured_at)
-         values ($1, $2, $3, $4, 'consented', $5, 'en-IN', now() + interval '1 year')`,
-        [
-          randomUUID(),
-          world.visits.pune,
-          world.doctors.pune,
-          world.users.puneMr.id,
-          world.consentTextVersionId,
-        ],
-      );
+      await expect(
+        client.query(
+          `insert into public.consent_records
+             (id, visit_id, doctor_id, captured_by_mr_id, outcome, consent_text_version_id,
+              displayed_language, captured_at)
+           values ($1, $2, $3, $4, 'consented', $5, 'en-IN', now() + interval '1 year')`,
+          [
+            randomUUID(),
+            world.visits.pune,
+            world.doctors.pune,
+            world.users.puneMr.id,
+            world.consentTextVersionId,
+          ],
+        ),
+      ).rejects.toMatchObject({ code: '42501' });
+    });
+  });
 
-      // `authenticated` has INSERT but no SELECT, so the row is counted as the owner.
-      // That asymmetry is itself the shape of the hole: a client may write a record it
-      // cannot read back, so nothing it does will ever show it the row it just forged.
+  it('B3 THE INNER LOCK: the trigger refuses it even for a role the grant never governed', async () => {
+    // The half that matters more, and the reason the revoke alone was not enough.
+    //
+    // `postgres` has `rolbypassrls`, holds every grant, and is what `capture_consent`,
+    // `apply_sync_item` and every fixture in this repository run as. A revoke says
+    // nothing to it. The bound has to be a trigger, or the rule holds only for the one
+    // role it was written against -- and the next migration that re-grants INSERT, or the
+    // next service that connects as the owner, reopens BE-W78 without touching a line of
+    // the consent code.
+    //
+    // Same attack, same year in the future, refused by the row rather than by the door.
+    await inRolledBackTransaction(async (client) => {
+      await client.query('set local role postgres');
+
+      await expect(
+        client.query(
+          `insert into public.consent_records
+             (id, visit_id, doctor_id, captured_by_mr_id, outcome, consent_text_version_id,
+              displayed_language, captured_at)
+           values ($1, $2, $3, $4, 'consented', $5, 'en-IN', now() + interval '1 year')`,
+          [
+            randomUUID(),
+            world.visits.pune,
+            world.doctors.pune,
+            world.users.puneMr.id,
+            world.consentTextVersionId,
+          ],
+        ),
+      ).rejects.toMatchObject({ code: '45007' });
+    });
+  });
+
+  it('B3 THE REMEDY IS RIGHT: the refusal tells the MR not to re-ask the doctor', async () => {
+    // A refusal that carries the wrong remedy is its own defect. `45007` means the device
+    // clock is ahead, and the one thing an MR must NOT do is repeat a consent
+    // conversation because their phone thinks it is next year. The hint says so
+    // explicitly, which is stronger than merely not saying "ask again".
+    await inRolledBackTransaction(async (client) => {
+      await client.query('set local role postgres');
+      try {
+        await client.query(
+          `insert into public.consent_records
+             (id, visit_id, doctor_id, captured_by_mr_id, outcome, consent_text_version_id,
+              displayed_language, captured_at)
+           values ($1, $2, $3, $4, 'consented', $5, 'en-IN', now() + interval '1 year')`,
+          [
+            randomUUID(),
+            world.visits.pune,
+            world.doctors.pune,
+            world.users.puneMr.id,
+            world.consentTextVersionId,
+          ],
+        );
+        throw new Error('the future-dated capture was accepted');
+      } catch (error: unknown) {
+        const e = error as { code?: string; hint?: string };
+        expect(e.code).toBe('45007');
+        expect(e.hint).toMatch(/do not re-?ask the doctor/i);
+      }
+    });
+  });
+
+  it('B3 THE POSITIVE CONTROL: an ordinary capture through capture_consent still works', async () => {
+    // Without this, the three refusals above would also be produced by a table nothing
+    // can write to at all -- which would close BE-W78 by breaking consent capture, and
+    // would look identical in a pass/fail.
+    await inRolledBackTransaction(async (client) => {
+      const { id } = await grantedConsent(client);
       await client.query('set local role postgres');
       const rows = await client.query<{ n: string }>(
-        `select count(*) as n from public.consent_records
-          where captured_at > now() + interval '300 days'`,
+        'select count(*) as n from public.consent_records where id = $1',
+        [id],
       );
-      expect(
-        Number(rows.rows[0]?.n),
-        'BE-W78 still open: a future-dated consent was written over REST',
-      ).toBe(1);
+      expect(Number(rows.rows[0]?.n)).toBe(1);
     });
   });
 
@@ -271,9 +333,9 @@ describe.skipIf(!reachable)('C1 — a withdrawal is bounded in BOTH directions',
       const version = randomUUID();
       await client.query(
         `insert into public.consent_text_versions
-           (id, version_label, language, full_text, effective_from)
-         values ($1, $2, $3, 'The notice.', now() - interval '30 days')`,
-        [version, `mr05-c-${randomUUID().slice(0, 8)}`, language],
+           (id, version_label, language, full_text, effective_from, organisation_id)
+         values ($1, $2, $3, 'The notice.', now() - interval '30 days', $4)`,
+        [version, `mr05-c-${randomUUID().slice(0, 8)}`, language, world.organisationId],
       );
       await asUser(client, world.users.puneMr);
       await expect(

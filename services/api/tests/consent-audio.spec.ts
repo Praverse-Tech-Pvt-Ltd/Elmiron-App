@@ -146,9 +146,9 @@ describe.skipIf(!reachable)('consent capture', () => {
         const language = `zz-${randomUUID().slice(0, 8)}`;
         const displayed = randomUUID();
         await client.query(
-          `insert into public.consent_text_versions (id, version_label, language, full_text)
-           values ($1, $2, $3, 'The notice that was on the screen.')`,
-          [displayed, `fix02-each-${randomUUID().slice(0, 8)}`, language],
+          `insert into public.consent_text_versions (id, version_label, language, full_text, organisation_id)
+           values ($1, $2, $3, 'The notice that was on the screen.', $4)`,
+          [displayed, `fix02-each-${randomUUID().slice(0, 8)}`, language, world.organisationId],
         );
 
         await asUser(client, world.users.puneMr);
@@ -186,15 +186,15 @@ describe.skipIf(!reachable)('consent capture', () => {
       // The notice that was on the screen, dated a minute ago.
       await client.query(
         `insert into public.consent_text_versions
-           (id, version_label, language, full_text, effective_from)
-         values ($1, $2, $3, 'The notice the doctor read.', now() - interval '1 minute')`,
-        [stale, `fix02-stale-${randomUUID().slice(0, 8)}`, language],
+           (id, version_label, language, full_text, effective_from, organisation_id)
+         values ($1, $2, $3, 'The notice the doctor read.', now() - interval '1 minute', $4)`,
+        [stale, `fix02-stale-${randomUUID().slice(0, 8)}`, language, world.organisationId],
       );
       // Superseded before the capture landed. Strictly newer, and active.
       await client.query(
-        `insert into public.consent_text_versions (id, version_label, language, full_text)
-         values ($1, $2, $3, 'A newer notice than the one that was displayed.')`,
-        [randomUUID(), `fix02-newer-${randomUUID().slice(0, 8)}`, language],
+        `insert into public.consent_text_versions (id, version_label, language, full_text, organisation_id)
+         values ($1, $2, $3, 'A newer notice than the one that was displayed.', $4)`,
+        [randomUUID(), `fix02-newer-${randomUUID().slice(0, 8)}`, language, world.organisationId],
       );
 
       await asUser(client, world.users.puneMr);
@@ -260,17 +260,23 @@ describe.skipIf(!reachable)('consent capture', () => {
       const inForce = randomUUID();
       await client.query(
         `insert into public.consent_text_versions
-           (id, version_label, language, full_text, effective_from)
-         values ($1, $2, $3, 'In force.', now() - interval '1 minute')`,
-        [inForce, `fix02-inforce-${randomUUID().slice(0, 8)}`, language],
+           (id, version_label, language, full_text, effective_from, organisation_id)
+         values ($1, $2, $3, 'In force.', now() - interval '1 minute', $4)`,
+        [inForce, `fix02-inforce-${randomUUID().slice(0, 8)}`, language, world.organisationId],
       );
       await client.query(
         `insert into public.consent_text_versions
-           (id, version_label, language, full_text, effective_from)
-         values ($1, $2, $3, 'Not in force yet.', now() + interval '1 day')`,
-        [randomUUID(), `fix02-future-${randomUUID().slice(0, 8)}`, language],
+           (id, version_label, language, full_text, effective_from, organisation_id)
+         values ($1, $2, $3, 'Not in force yet.', now() + interval '1 day', $4)`,
+        [randomUUID(), `fix02-future-${randomUUID().slice(0, 8)}`, language, world.organisationId],
       );
 
+      // MR-07 / BE-W79: `active_consent_text` resolves the CALLER's tenant, so it has to
+      // be called as somebody who has one. Run as `postgres` it returns null -- correctly,
+      // because a connection with no profile belongs to no organisation and therefore has
+      // no notice. Asking as the MR is also the truer test: this is the call behind the
+      // consent screen.
+      await asUser(client, world.users.puneMr);
       const active = (
         await client.query<{ id: string }>(`select id from public.active_consent_text($1)`, [
           language,
@@ -291,9 +297,14 @@ describe.skipIf(!reachable)('consent capture', () => {
         // Both rows take `now()`, the transaction timestamp, so they tie on
         // effective_from AND created_at. Only the primary key separates them.
         await client.query(
-          `insert into public.consent_text_versions (id, version_label, language, full_text)
-           values ($1, $2, $3, 'Same instant as its sibling.')`,
-          [randomUUID(), `fix02-${label}-${randomUUID().slice(0, 8)}`, language],
+          `insert into public.consent_text_versions (id, version_label, language, full_text, organisation_id)
+           values ($1, $2, $3, 'Same instant as its sibling.', $4)`,
+          [
+            randomUUID(),
+            `fix02-${label}-${randomUUID().slice(0, 8)}`,
+            language,
+            world.organisationId,
+          ],
         );
       }
 
@@ -350,9 +361,9 @@ describe.skipIf(!reachable)('consent capture', () => {
       const active = randomUUID();
       await client.query('set local role postgres');
       await client.query(
-        `insert into public.consent_text_versions (id, version_label, language, full_text)
-         values ($1, $2, $3, 'The notice for this replay.')`,
-        [active, `fix02-idem-${randomUUID().slice(0, 8)}`, language],
+        `insert into public.consent_text_versions (id, version_label, language, full_text, organisation_id)
+         values ($1, $2, $3, 'The notice for this replay.', $4)`,
+        [active, `fix02-idem-${randomUUID().slice(0, 8)}`, language, world.organisationId],
       );
       await asUser(client, world.users.puneMr);
       await client.query('select public.capture_consent($1, $2, $3, $4, $5)', [
@@ -1111,16 +1122,16 @@ const noticeSupersededAfterCapture = async (
   const newer = randomUUID();
   await client.query(
     `insert into public.consent_text_versions
-       (id, version_label, language, full_text, effective_from)
-     values ($1, $2, $3, 'The notice the doctor actually read.', now() - interval '4 hours')`,
-    [displayed, `fix12-displayed-${randomUUID().slice(0, 8)}`, language],
+       (id, version_label, language, full_text, effective_from, organisation_id)
+     values ($1, $2, $3, 'The notice the doctor actually read.', now() - interval '4 hours', $4)`,
+    [displayed, `fix12-displayed-${randomUUID().slice(0, 8)}`, language, world.organisationId],
   );
   // Superseded an hour ago -- after the capture below, before the sync.
   await client.query(
     `insert into public.consent_text_versions
-       (id, version_label, language, full_text, effective_from)
-     values ($1, $2, $3, 'A notice nobody in the clinic saw.', now() - interval '1 hour')`,
-    [newer, `fix12-newer-${randomUUID().slice(0, 8)}`, language],
+       (id, version_label, language, full_text, effective_from, organisation_id)
+     values ($1, $2, $3, 'A notice nobody in the clinic saw.', now() - interval '1 hour', $4)`,
+    [newer, `fix12-newer-${randomUUID().slice(0, 8)}`, language, world.organisationId],
   );
   return { language, displayed, newer };
 };
@@ -1301,9 +1312,9 @@ describe.skipIf(!reachable)('the trust in the device clock is bounded', () => {
       const version = randomUUID();
       await client.query(
         `insert into public.consent_text_versions
-           (id, version_label, language, full_text, effective_from)
-         values ($1, $2, $3, 'A notice from last week.', now() - interval '30 days')`,
-        [version, `fix12-old-${randomUUID().slice(0, 8)}`, language],
+           (id, version_label, language, full_text, effective_from, organisation_id)
+         values ($1, $2, $3, 'A notice from last week.', now() - interval '30 days', $4)`,
+        [version, `fix12-old-${randomUUID().slice(0, 8)}`, language, world.organisationId],
       );
       await asUser(client, world.users.puneMr);
       const id = randomUUID();
@@ -1336,9 +1347,9 @@ describe.skipIf(!reachable)('the trust in the device clock is bounded', () => {
       const version = randomUUID();
       await client.query(
         `insert into public.consent_text_versions
-           (id, version_label, language, full_text, effective_from)
-         values ($1, $2, $3, 'A notice from last week.', now() - interval '30 days')`,
-        [version, `fix12-ok-${randomUUID().slice(0, 8)}`, language],
+           (id, version_label, language, full_text, effective_from, organisation_id)
+         values ($1, $2, $3, 'A notice from last week.', now() - interval '30 days', $4)`,
+        [version, `fix12-ok-${randomUUID().slice(0, 8)}`, language, world.organisationId],
       );
       await asUser(client, world.users.puneMr);
       const row = await captureOffline(client, {
@@ -1360,9 +1371,9 @@ describe.skipIf(!reachable)('the trust in the device clock is bounded', () => {
       const version = randomUUID();
       await client.query(
         `insert into public.consent_text_versions
-           (id, version_label, language, full_text, effective_from)
-         values ($1, $2, $3, 'A notice from last week.', now() - interval '30 days')`,
-        [version, `fix12-cfg-${randomUUID().slice(0, 8)}`, language],
+           (id, version_label, language, full_text, effective_from, organisation_id)
+         values ($1, $2, $3, 'A notice from last week.', now() - interval '30 days', $4)`,
+        [version, `fix12-cfg-${randomUUID().slice(0, 8)}`, language, world.organisationId],
       );
       // One hour. app_thresholds is append-only, so this is a later row.
       await client.query(
@@ -1394,9 +1405,9 @@ describe.skipIf(!reachable)('the bounded trust is auditable, not merely bounded'
       const version = randomUUID();
       await client.query(
         `insert into public.consent_text_versions
-           (id, version_label, language, full_text, effective_from)
-         values ($1, $2, $3, 'A notice.', now() - interval '30 days')`,
-        [version, `fix12-lag-${randomUUID().slice(0, 8)}`, language],
+           (id, version_label, language, full_text, effective_from, organisation_id)
+         values ($1, $2, $3, 'A notice.', now() - interval '30 days', $4)`,
+        [version, `fix12-lag-${randomUUID().slice(0, 8)}`, language, world.organisationId],
       );
       await asUser(client, world.users.puneMr);
       const id = randomUUID();
