@@ -878,3 +878,36 @@ nothing: it does not merely fail to help an investigation, it misdirects one.
 **Not a task, recorded so nobody looks for it:** MR-02 and MR-03 both listed a mileage write
 to convert. There is none. `mileage.tsx:41` and `day-end.tsx:68` read; the figures come from
 `daily_mileage()` server-side.
+
+### Added by MR-04
+
+| ID | Title | Changes | Deps | Blocker | Est | Verification |
+|---|---|---|---|---|---|---|
+| **FE-W29** | Recording and voice note cannot be converted to `sync_push` at all | `apps/field`, BE-W7 | BE-W7 | — | 0 (blocked) | `apply_sync_item` refuses a recording item without an `uploadGrantId` (`22023`), and `complete_upload` needs a grant that exists and belongs to the caller. **`CreateRecordingRequestSchema` has no `uploadGrantId` field**, so the REST contract describes a shape the sync path cannot apply, and the field can only come from an upload session that has no client. Verification: the upload client exists, a grant is issued before the write, and a recording item reaches `sync_push` with its grant id. **Until then these two writes stay unconverted, and `sizeBytes: 1` should NOT be made nullable** — the write cannot succeed against the real server, so relaxing the schema would only make a fabricated row valid |
+
+**BE-W73 updated — the decision is now a question for a human, not an engineering choice.**
+`check_outs` records position and time and nothing about whether the call happened; a
+check-out is a departure. `TodayScreen.tsx:166-167` renders `2 of 3` under **"visits done"**
+and line 144 says **"That's the day done"**. So `check_out → completed` would tell an MR
+their day went to plan when a doctor was unavailable, and tell coverage-versus-beat-plan and
+the Tier 1 missed-visit nudge that a call happened.
+
+The product already models the distinction elsewhere: `consent_outcome.not_asked` carries a
+**required** reason, enforced by `consent_records_not_asked_has_reason`.
+
+**The question:** *does "2 of 3 visits done" count a visit where the MR arrived and the
+doctor was unavailable?* Yes → `check_out → completed`, ten minutes. No → `visit_status`
+needs a fourth member, and **this cannot be deferred**: it is an enum, adding a value later
+is `alter type … add value`, and every row already written as `completed` would be
+permanently ambiguous between *met* and *attended*. Nothing has been written yet, so there
+is no history to rewrite — which is the only reason the decision is still cheap.
+
+**Closed by MR-04.**
+
+- **BE-W74** — `apply_sync_item` routes a consent capture through `capture_consent`, so the
+  FIX-02 and FIX-12 bounds apply whichever way a capture arrives. A withdrawal still inserts
+  directly and the migration says why. Two-sided mutation, 9 cases, count unchanged.
+- **BE-W75** — a per-item verdict carries `sqlState` beside `rejectionCode`, so `45001`,
+  `45004`, `45007` and `45008` reach the client with their own remedy through the existing
+  error contract instead of collapsing to `internal_error`. The `ILIKE '%shift window%'`
+  fallback is deleted in the same change, replaced by `v_sqlstate in ('45002','45003')`.

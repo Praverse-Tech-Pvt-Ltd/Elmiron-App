@@ -8472,3 +8472,234 @@ and **screen** separately.
 as one of five writes to convert. **Mileage has no write anywhere.** `mileage.tsx:41` and
 `day-end.tsx:68` both read, and the figures are derived server-side by `daily_mileage()` from
 check-in coordinates. There is nothing to convert and nothing should be added.
+
+---
+
+### MR-04 — prerequisites and the conversion (8 September 2026)
+
+**B1 and B2 landed. B3 stopped by its own instruction — a distinction IS needed. Parts C,
+D and E were not started.** Where and why is at the end.
+
+**Not done: no screen was converted, no client write path changed, the console was not
+wired, no card was removed, the samples screen's message was not removed, and no dependency
+was added.**
+
+#### A1 — CI and counts
+
+MR-03's two record commits pushed as `e6195b3..ef2da9b`. Run **`34197164480`: success**,
+both jobs.
+
+| workspace | runner | before | after MR-04 |
+| --- | --- | ---: | ---: |
+| `@fieldforce/api` | vitest, live database | 508 / 24 | **512 passed / 24 files** |
+| `@fieldforce/field` | vitest, logic | 359 / 25 | 359 passed / 25 |
+| `@fieldforce/field` | jest, jest-expo render | 72 / 12 | 72 passed / 12 |
+| `@fieldforce/mock` | vitest | 40 / 1 | 40 passed / 1 |
+| `@fieldforce/ui-tokens` | vitest | 54 / 3 | 54 / 3 |
+| `@fieldforce/core` | vitest | 21 / 3 | 21 / 3 |
+| `@fieldforce/ui` | vitest | 4 / 1 | 4 / 1 |
+
+No skips. `verify:rollbacks`: schema empty, **35 migrations, 35 rollback files**.
+`turbo run typecheck lint`: 16 successful, 16 total, `--force`.
+
+---
+
+#### A2 — phantom uploads: **there are none, and there cannot be, for two reasons**
+
+The premise was that the database holds completed audio uploads with no object behind them.
+It does not, and the reasons are worth having because both are load-bearing elsewhere.
+
+**Count, on a freshly reset database:**
+
+```
+recordings    | 0
+upload_grants | 0
+voice_notes   | 0
+```
+
+**Reason 1: the app has never written to Supabase at all.** G-WRITE is unmet — every screen
+write goes to `services/mock` at `:4010`. `createRecording`'s `sizeBytes: 1` lands in the
+mock's in-memory fixture store and has never reached Postgres.
+
+**Reason 2, and this is the durable one: `sync_push` would REFUSE the screen's payload.**
+`apply_sync_item`'s recording branch opens with
+
+```sql
+if nullif(p_payload ->> 'uploadGrantId', '') is null then
+  raise exception 'a % item must carry its uploadGrantId', p_entity using errcode = '22023';
+```
+
+and `complete_upload` then requires a grant that exists and belongs to the caller (`42501`
+otherwise) with `p_size_bytes > 0 and <= v_grant.max_bytes`. **`CreateRecordingRequestSchema`
+has no `uploadGrantId` field at all.** So the REST contract for a recording describes a
+shape the sync path cannot apply, and the guard already exists.
+
+**Does the purge walk them?** It cannot, because they cannot exist. `claim_expired_audio`
+selects from `recordings`, `voice_notes` and `upload_grants` where `purge_state <>
+'destroyed'`, returning `storage_key` — and a `recordings` row can only be created by
+`complete_upload`, which needs a real grant with a real key.
+
+**The 404-in-body branch is reached by the legitimate case, not a phantom one.** A grant
+issued whose bytes were never uploaded becomes an `upload_partial` claim — which is exactly
+what `close_stale_upload_sessions()` produces and what `storage.mjs` was rewritten for in
+BE-W7 after BE-W6 got it wrong. That branch is reachable by design; it is not fed by
+anything the app is doing.
+
+**Severity: none as a defect; one as a scope finding.** Recording and voice note **cannot be
+converted to `sync_push` at all** until the upload session has a client (BE-W7 has none).
+The payload is missing the one field the server requires, and that field can only come from
+an upload grant. Registered as **FE-W29**. This changes Part C: two of the six writes are
+not convertible this quarter.
+
+---
+
+#### B1 — BE-W74: consent through `capture_consent`. **Done.**
+
+`apply_sync_item` routed `check_in` → `record_check_in`, `check_out` → `record_check_out`
+and `recording` → `complete_upload`, and `consent_record` → a **direct INSERT**. Every
+FIX-02 and FIX-12 bound was absent on the offline path — the one path where they exist to
+matter, since offline capture is the entire reason FIX-12 validates against `captured_at`
+rather than `now()`.
+
+**Both directions, one fixture, before and after:**
+
+| | before | after |
+| --- | --- | --- |
+| notice superseded before the capture, via `capture_consent` | rejects `45001` | rejects `45001` |
+| **the identical capture via `sync_push`** | **"accepted"**, superseded version stored as displayed | **"rejected"**, and **no row written** |
+| **`captured_at` one day in the future via `sync_push`** | **"accepted"** | **"rejected"** |
+| a valid capture from two hours ago, synced now | — | **accepted**, `captured_at` preserved to the millisecond, `capture_lag` positive |
+
+Two improvements fall out rather than being designed: `doctor_id` now comes from the visit
+and `displayed_language` from the version actually active at `captured_at`, so **a client
+can no longer assert either**.
+
+**A withdrawal still inserts directly, deliberately.** `capture_consent` takes neither
+`supersedes_consent_record_id` nor `is_withdrawal`, and the table's constraints plus
+`validate_consent_withdrawal` guard that shape and fire on a direct insert. Growing
+`capture_consent` two parameters it has no other use for would make the common path carry
+the rare one.
+
+**Two-sided mutation, count unchanged at 9:**
+
+| mutation | result |
+| --- | --- |
+| the routing removed — **the rollback file is the mutation** | **3 failed / 6** — both refusals and the structural assertion |
+| the write removed, scoped to the fixture languages | **1 failed / 8** — exactly the persistence case |
+
+**Two tests were inverted rather than deleted**, and the inversion is recorded in the test
+comment: *"This test asserted the opposite until BE-W74, and the inversion is the fix."*
+
+#### B2 — BE-W75: the verdict carries the SQLSTATE, and the `ILIKE` is gone. **Done.**
+
+`sqlState` is added **beside** `rejectionCode`; the ten-member enum is untouched. Three
+reasons in order of weight: the client already has a complete SQLSTATE→refusal map that
+`error-contract.spec.ts` fails the build over **in both directions**, so extending the enum
+would derive the same meaning twice with only one copy guarded; `alter type … add value` has
+its own hazards inside a migration transaction; and `sync_rejection_code` is a useful
+**coarse category** that stays exactly that.
+
+So `rejectionCode` still reads `internal_error` for a `45001` and **`sqlState` reads
+`45001`** — asserted end to end:
+
+```
+sync_push -> { status: 'rejected', sqlState: '45001' }
+refusalForSqlState('45001') -> { code: 'consent_notice_superseded', actionable: true }
+```
+
+with the positive control that an **accepted** item carries `sqlState: null`, so absence
+means success — without which the first assertion would pass against a field that is always
+populated.
+
+**The `ILIKE '%shift window%'` fallback is deleted**, replaced by
+`v_sqlstate in ('45002', '45003')`. It was string-matching the message those two codes were
+minted in FIX-06 to replace — minted precisely because `22023` is raised 64 times for
+unrelated reasons and message text is not a contract.
+
+**The other two `ILIKE` branches stay, and the reason is now in the code.**
+`consent_withdrawn` and `upload_expired` have no SQLSTATE of their own: both are ordinary
+`42501` and `22023` conditions that already mean something else here, and each has its own
+test, so a reworded message breaks a build rather than degrading an explanation.
+
+**A sharp edge found while writing the fixture, worth carrying.** `capture_consent` compares
+`captured_at > now()`, and `now()` is **transaction start** time. A timestamp taken after
+the transaction opened is therefore "in the future" and trips `45007` before the notice
+check is reached. Harmless in production, where a request is its own short transaction; it
+cost one wrong test result here, and the first pass proved `sqlState` works for the wrong
+branch. Recorded in the test.
+
+`SyncPushResultSchema` gained the field, and **the mock's conformance test caught the change
+immediately**, which is what it is for.
+
+#### B3 — BE-W73: **a distinction IS needed. Stopped, per the instruction.**
+
+The prompt says to decide before implementing, and to stop if a distinction is needed
+because changing it after data exists means rewriting history. It is needed.
+
+**What check-out actually records** — every column of `check_outs`:
+
+```
+id · visit_id · mr_id · latitude · longitude · accuracy_metres
+geofence_status · distance_from_clinic_metres · source · occurred_at · created_at
+```
+
+**Position and time. Nothing about whether the call happened.** A check-out is a departure.
+
+**What the screen says.** `TodayScreen.tsx:166-167` renders the figure `2 of 3` under the
+label **"visits done"**, and line 144 reads **"That's the day done"**. So "done" means, to
+the person holding the phone, *the visit happened*.
+
+**Therefore `check_out → completed` would make the app tell an MR their day went to plan
+when a doctor was unavailable** — and would tell coverage-versus-beat-plan, and §5's Tier 1
+missed-visit nudge, that a call took place that did not.
+
+**The product already makes this distinction elsewhere.** `consent_outcome` carries
+`not_asked` with a **required** reason — `consent_records_not_asked_has_reason` is a check
+constraint. "Attended, nothing happened" is a state this product already models; it is just
+not modelled on `visits`.
+
+**The question for the product owner, in one line:** *does "2 of 3 visits done" count a
+visit where the MR arrived and the doctor was unavailable?* If yes, `check_out → completed`
+is right and B3 is ten minutes' work. If no, `visit_status` needs a fourth value, and
+**that decision cannot be deferred** — `visit_status` is an enum, adding a member later is
+`alter type … add value`, and every row already written as `completed` would be permanently
+ambiguous between *met* and *attended*.
+
+Registered against BE-W73. **Nothing was written to `visits.status`**, so no history exists
+to rewrite yet.
+
+---
+
+#### Where this stopped
+
+**B1 and B2 landed with migrations, rollbacks, tests, two-sided mutation and contract and
+mock updates in step. B3 stopped on its own condition. Parts C, D and E were not started.**
+
+**Part C cannot be done as written**, and A2 is why: **recording and voice note are not
+convertible.** `apply_sync_item` requires an `uploadGrantId` that
+`CreateRecordingRequestSchema` does not have and that only an upload grant can supply, and
+the upload path has no client (BE-W7). So C1's "all six" is four — check-in, check-out,
+consent, samples, plus the call report — with two that need the upload client first.
+
+**C8 answers itself given that.** `sizeBytes: 1` should not be made nullable: the write
+cannot succeed against the real server anyway, so relaxing the schema would only make a
+fabricated row valid. **Do not write the row yet** — which is what FE-W29 says.
+
+**Part D depends on B3.** D1 requires the done counter to move, and nothing writes the
+status it reads until the product question above is answered.
+
+**Part E is independent of every one of those**, needs no device, and has never been run
+whole. It remains the thing to reach for.
+
+**Order for the next session:**
+
+1. **Part E (G-RLS-C)** — nothing blocks it, and it is the gate the commercial compliance
+   story rests on.
+2. **The B3 product question**, which is one sentence to a human and ten minutes of work
+   after.
+3. **Part C for the four convertible writes**, with C5's device-clock fix in the same
+   session because C is what makes that branch reachable.
+4. **FE-W29 / BE-W7** — the upload client — before recording and voice note can be converted
+   at all.
+
+---
