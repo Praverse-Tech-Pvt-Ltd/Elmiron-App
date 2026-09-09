@@ -10,6 +10,7 @@
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "test": "turbo run test",
+    "ci:local": "node scripts/ci-local.mjs",
     "mock": "pnpm --filter @fieldforce/mock build && pnpm --filter @fieldforce/mock start",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
