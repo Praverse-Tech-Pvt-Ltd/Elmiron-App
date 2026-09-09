@@ -2016,3 +2016,47 @@ The four conversions MR-12 made, each replacing a sentence that had already been
 
 That last row is the argument in miniature. MR-11 fixed the per-test seeding it could see
 and wrote down what it had learned. The control found the copy nobody had looked at.
+
+---
+
+## 9 September 2026 — Node on this Windows machine honours `TZ=UTC` and SILENTLY IGNORES named zones
+
+Found while building a positive control for the seed's wall-clock defect (MR-12 A1). The
+control needed to run the seed under a timezone where `todayAt(9, 30)` is in the future, so
+that a defect which only bites before 10:15 local could be reproduced on demand.
+
+```sh
+TZ=UTC              node -e "console.log(new Date().toString())"   # 07:59  <- honoured
+TZ=America/Denver   node -e "console.log(new Date().toString())"   # 13:29  <- IST, ignored
+TZ=Pacific/Honolulu node -e "console.log(new Date().toString())"   # 13:29  <- IST, ignored
+TZ=Etc/GMT+7        node -e "console.log(new Date().toString())"   # 13:29  <- IST, ignored
+```
+
+**There is no error and no warning.** The process runs in the machine's own timezone and
+every assertion about local time silently measures IST instead of the zone you asked for.
+
+### Why it matters beyond the one test
+
+A test that sets `TZ` to a named zone and asserts on local-time behaviour **passes for the
+wrong reason** on this machine, and may genuinely pass or fail on a Linux runner where the
+zone database is present and `TZ` is honoured. That is a test whose result depends on which
+machine ran it, which is the worst kind: green locally, and a mystery in CI.
+
+### What to do instead
+
+- **`TZ=UTC` works**, and it is the one that matters most, because **CI runs in UTC**. If
+  the question is "would this fail on the runner", `TZ=UTC` answers it faithfully.
+- **Better: do not depend on the ambient timezone at all.** The seed defect was fixed by
+  deriving the value from `now` rather than from a calendar hour, and the assertion pins the
+  OFFSET rather than the wall-clock time — so it holds in every zone and at every hour, and
+  needs no `TZ` to test it.
+- If a named zone is genuinely required, assert that it took effect before relying on it:
+
+```js
+process.env.TZ = 'America/Denver';
+const applied = Intl.DateTimeFormat().resolvedOptions().timeZone;
+if (applied !== 'America/Denver') throw new Error(`TZ not honoured; got ${applied}`);
+```
+
+**Fail loudly rather than measure the wrong thing.** This is the same rule as everywhere
+else in this file: a control that cannot tell you it did not run is not a control.

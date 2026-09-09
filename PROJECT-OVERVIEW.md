@@ -10600,3 +10600,424 @@ doctors unavailable.
 Environment left running: emulator booted, ports reversed, Metro serving, database holding
 one freshly seeded demo day.
 
+
+---
+
+### MR-12 — every dispatch site, and the conversion (9 September 2026)
+
+**Parts A, B, C and D are done. Parts E and F were not started.** Where and why is at the
+end.
+
+The checkout guard passed first: `git rev-parse --git-dir`, `@fieldforce/core` in
+`packages/core/package.json`, remote `Praverse-Tech-Pvt-Ltd/Elmiron-App`, `f34ceef` an
+ancestor of HEAD — **exit 0**, toplevel `C:/Users/Admin/StudioProjects/Elmiron-App`.
+
+#### A1 — the push, and CI took three attempts to go green
+
+MR-11's three commits pushed as `5e2892c..2f12a4b`. **CI run `34326262244` · workflow `CI` ·
+event `push` · commit `2f12a4b…` — FAILURE**, and *not* for MR-11's cause. The identity fix
+worked; `"Database error creating new user"` is gone. It exposed the defect underneath:
+
+```
+error: a visit cannot have started in the future     code 45007
+detail: started_at 2026-09-09 09:30:00+00 is more than 120 seconds
+        after the server clock 2026-09-09 07:56:43+00
+seedDay  scripts/seed-day.mjs:331
+```
+
+**`seedDay` built its day at a fixed LOCAL wall-clock hour** — `todayAt(9, 30)` — for
+`started_at` and `completed_at`, both of which `validate_visit` bounds against the server
+clock. In the IST afternoon 09:30 is behind you and the seed passes. On a UTC runner at
+07:56 it is 94 minutes ahead.
+
+**The comment directly above the rows already stated the requirement**: *"`completed_at` is
+in the past for both finished visits, which the new `visits_validate` trigger requires."*
+It was written above the code that broke it.
+
+Both columns now derive from `now`. `scheduled_for` keeps its wall-clock hour, which the
+trigger permits by design — *"a beat plan schedules visits ahead of time, so a future value
+there is the feature rather than a defect."*
+
+**The assertion is deliberately not "in the past" alone**, because `todayAt(9, 30)`
+satisfies that every afternoon — which is exactly why the defect survived. It pins the
+offsets, so the old shape fails at almost any hour. Positive control **at 13:30 IST, an
+hour where the CI failure does not reproduce**: `expected 240.61 to be less than 160`.
+
+Then run `34326888642` failed on the **next** step:
+
+```
+check constraint "sync_events_entity_check" of relation "sync_events" is violated by some row
+applying 20260908001500_sync_pull_clinic_addresses.down.sql
+```
+
+MR-11's own rollback narrowed the constraint behind a deliberate no-op —
+`delete ... where entity = 'clinic_address' and false` — so it would FAIL while any
+clinic_address tombstone existed. The reasoning was sound and the placement was not:
+`ci.yml` runs `verify:rollbacks` **last**, after the whole api suite, against the database
+that suite just wrote to, and says so in a comment calling the ordering load-bearing. The
+refusal was conditional on nothing.
+
+**CI GREEN: run `34327705574` · workflow `CI` · event `push` · commit
+`d632c79f5f9c236d13859d8981ae751b0f58617f`.** That SHA was HEAD at the moment of the push
+that produced it.
+
+#### A2 — the environment
+
+**It was DOWN**, though MR-11 left it up: Docker not running, no emulator, no adb ports.
+Brought up — Docker 29.3.1, JDK 17, ten containers, all migrations applied, `seed:day` run,
+the emulator booted. **Sign-in and the Today screen were not re-confirmed this session** —
+that is E2's work and E was not started.
+
+---
+
+#### B — every dispatch site. The sweep found FIVE, not three, and TWO were unguarded
+
+**B1 — how the enumeration was done, so it was not shaped like its expected answer.**
+Searched by dispatch SHAPE rather than by the three names already known:
+
+1. every `switch (` in non-test TS/TSX → `outbox.ts:422`, `pull.ts:123`, `pull.ts:251`,
+   `reducer.ts:124`
+2. SQL `if`/`elsif`/`case` on `entity` or `tg_table_name` → `emit_sync_event`,
+   `apply_sync_item`
+3. every file mentioning an entity string literal, counted per file
+4. `Record<…Entity>` lookup tables, and `.entity ===` if/else chains
+
+Searches 3 and 4 exist because a `switch` grep cannot see a dispatcher written as a lookup
+table or an if/else chain. Search 4 later found one such table in the UI — `BeatPlanScreen`'s
+`STATUS` map — which Part D had to extend.
+
+**B2/B5 — the fourth dispatcher, and the record had it filed as SAFE.**
+`emit_sync_event`'s two `else` arms both read
+
+```sql
+case tg_table_name when 'visits' then 'visit' else 'beat_plan' end
+```
+
+MR-11 called this loud — *"its ELSE reads `old.mr_id`, so a trigger added without a branch
+would raise."* **That holds only for a table with no `mr_id`. Seventeen public tables have
+one**, including `call_reports`, `check_ins`, `check_outs`, `samples_and_inputs`,
+`recordings` and `voice_notes` — every plausible next candidate.
+
+Demonstrated on a scratch table **before** the fix:
+
+```
+delete from public.scratch_call_thing where id = '1111…';
+entity    | entity_id                            | reason
+beat_plan | 11111111-1111-1111-1111-111111111111 | deleted
+```
+
+No error. `sync_events_entity_check` permits `beat_plan`, so the constraint does not catch
+it. **What the corruption would have looked like:** the client's `applyChanges` receives
+`{entity:'beat_plan', reason:'deleted', id:<a call report's id>}` and deletes an id no beat
+plan has. The real deletion is never applied, the handset keeps a record the server
+destroyed, and **nothing anywhere reports it**, because every layer did exactly what it was
+told.
+
+**B3 — `apply_sync_item` was already guarded.** Its `case p_entity` ends in
+`else raise … using errcode = '0A000'` — verified against the **live** definition, not the
+migration files, and pinned by a test so a future `create or replace` in that seven-file
+chain cannot drop it. SQL's equivalent of a `never` default is an `else` that raises.
+
+**The fifth, and two that were only half-guarded.** `mapChange` (`pull.ts:123`) sits forty
+lines above the dispatcher MR-11 fixed and had no guard; `syncQueueReducer`
+(`reducer.ts:124`) likewise. Both **did** fail the build on a new member — as
+`TS2366: Function lacks ending return statement`. That names the wrong problem, invites a
+trailing `return` that removes the guard permanently, and evaporates silently if the return
+type is ever widened to include null.
+
+**B4 — positive controls, all two-sided:**
+
+| Guard | Refuses | Still admits |
+| --- | --- | --- |
+| `sync_entity_for_table` | scratch table → raises `0A000` | all four real tables resolve |
+| the same, mutated | guard removed from the live DB → **3 of 5 specs fail**, the key one with *"promise resolved `Result{ command: 'DELETE' }` instead of rejecting"* | restored → 5/5 |
+| `mapChange` / `syncQueueReducer` | scratch members → `Type '"scratch_entity"' is not assignable to type 'never'` | removed → typecheck 3/3 |
+
+---
+
+#### C — the identity burst removed rather than capped
+
+`maxWorkers: 6` was a constant tuned to the suite count, and the finding it fixes says the
+burst scales **with** the suite count. It was reopened three times: MR-06 serialised inside
+the fixture and two new suites reopened it; MR-07 added the cap; MR-10 added a suite; MR-11
+found CI red again.
+
+**C1 — the mechanism is a lock, not a number.** `createAuthUser` takes a Postgres advisory
+lock around `POST /admin/users`, so at most **one** identity creation is in flight across
+every worker process, regardless of how many suites, workers or cores exist. The lock lives
+in the database being protected, so it holds **across processes** — the property a worker
+cap cannot have, and the reason the cap had to be re-chosen every time the suite count
+moved. **There is no number left to re-tune.**
+
+**`maxWorkers: 6` is deleted.** Its removal is the proof: the comment it carried said
+*"Reproduce the failure by removing this line and running the api suite on a machine with
+more than six cores."*
+
+**C2 — the proof, under exactly that condition. 20 cores, no cap: 34 files, 585 passed,
+three consecutive runs.**
+
+A per-file identity budget backs it up. **It found a second instance of the pattern MR-11
+fixed by hand**: `audit-atomicity.spec.ts` called `seedFixtures()` once per test — two full
+worlds, sixteen identities, in a file with two tests. Nobody knew it was there. It failed on
+the budget's first run and is now one world shared in `beforeAll`.
+
+**C3 — `gotchas.md`: "a written lesson is not a control"**, with six worked examples, two of
+them found this session, and the three tests of whether you have a guard rather than prose:
+*can it fail; does it name the right problem; does it have a positive control?*
+
+---
+
+#### D — `not_met`, WITH the copy
+
+**D1.** `visit_status` gains `not_met`; `visits` gains `not_met_reason` with the **pair** of
+constraints `consent_records` already has for `not_asked` — required when it applies,
+forbidden otherwise. Two migrations, because `alter type … add value` cannot be used in the
+transaction that adds a constraint referring to it.
+
+**D2.** `record_check_out` writes the outcome. **Nothing wrote `visits.status` before this**
+— verified, not assumed: no function in `public` contained `update public.visits`, so a
+checked-out visit stayed `planned` for ever. This partly closes **BE-W73**;
+`planned → in_progress` is still advanced by nothing.
+
+`apply_sync_item` carries `notMetReason` too. It called `record_check_out` with seven
+arguments and the eighth has a default, so **nothing broke** — a queued not-met check-out
+simply arrived as `completed` with the reason dropped. Part B's class exactly: a write that
+succeeds as the wrong thing, invisible because the row does arrive.
+
+**D3 — the copy as written:**
+
+| Was | Is |
+| --- | --- |
+| `2 of 3` · "visits done" | `3 of 3` · **"visits attended"** |
+| "That's the day done" | **"That's everyone on the plan"** |
+| "Everything on the plan is complete." | **"You went to every visit on the plan."** / "… One doctor was not available." / "… 3 doctors were not available." |
+| day-end "all of them done" | **"you went to all of them"**, plus *"That is recorded against those visits, not against you."* |
+| beat-plan row | **"doctor not available"**, tone neutral |
+
+**The counter changed as much as the words.** `done` counted only `completed`, so an MR who
+attended three clinics and found three doctors in theatre read **"0 of 3" under a
+congratulation**. Attendance is `done + notMet`, and `notMet` stays separate so the screen
+can say how many doctors were not there. `finished` is now
+`done + notMet === counted.length`.
+
+**D4** is enforced structurally: no `not_met_by`, no fault column, no attribution to a
+person anywhere in the shape — asserted by a test, plus that no manager-facing view pairs
+`not_met` with fail/miss/penal/blame.
+
+**Four exhaustive switches broke on the new member and each was handled rather than
+defaulted.** `StopState` gains `not_met` rather than folding it into `done`, which would
+have been the copy defect in map form.
+
+#### Divergences, with verdicts
+
+| Divergence | Verdict |
+| --- | --- |
+| `visits.not_met_reason` reached the client fixtures the day its column existed | **The contract was behind.** `to_jsonb(row)` is an implicit `select *`. Caught by `sync-pull-contract.spec.ts`, which exists for this. Added to `VisitRowSchema`, `VisitSchema` and the mapper |
+| `ClinicAddress.coordinates` (MR-11) | **The CONTRACT is wrong**, unchanged this session. Mapped to null rather than fabricated. `BE-W88` open |
+| `record_check_out`'s old 7-argument signature | Dropped; the new one revoked from `public, anon` then granted to `authenticated`. Two existing guards caught it left executable |
+
+#### Four things this work found on its way
+
+- **A guard test that could pass while the guard was absent.** The `emit_sync_event` spec
+  seeded from `select … from user_profiles where role = 'mr' limit 1`; on a database no
+  other suite had seeded, that inserts no row, fires no trigger, and **passes**. It failed
+  exactly once, alongside another spec, which is the only reason it was noticed.
+- **`pnpm run lint` was never run this session** until CI failed on it. Typecheck, tests and
+  prettier were all green. MR-01's lesson, repeated: the failure was in the check nobody was
+  watching.
+- **Two rollback files were broken and both were found by executing them** — MR-11's
+  clinic-address refusal, and this session's own `not_met` down file, which ran two
+  `pg_get_functiondef` outputs together without a separating semicolon.
+- **`TZ` is honoured for `UTC` and silently ignored for named zones** by Node on this
+  Windows machine — `America/Denver` and `Pacific/Honolulu` both returned IST.
+
+#### Counts, per workspace AND per runner
+
+```
+@fieldforce/core       vitest    21     3        @fieldforce/console   vitest    10     1
+@fieldforce/ui         vitest     4     1        @fieldforce/field     vitest   378    25
+@fieldforce/ui         jest     226    20        @fieldforce/field     jest      72    12
+@fieldforce/ui-tokens  vitest    54     3        @fieldforce/api       vitest   597    34
+@fieldforce/mock       vitest    40     1        TOTAL                         1402
+```
+
+No skips. **47 migrations, 47 rollbacks**, schema empty after `verify:rollbacks`.
+`turbo run lint typecheck --force`: 16 of 16.
+
+#### Where this stopped
+
+**After Part D.** Parts E and F were not started.
+
+**E is the read conversion and F is the write conversion**, and neither had begun when the
+MR-13 handover prompt arrived and took priority. `pullOnce` still has no caller — verified,
+not assumed — and every screen still reads through `createClientForScenario()` to the mock
+on `127.0.0.1:4010`.
+
+**The one-line proof that ends Part E is unchanged and unmet:** the Today screen must render
+**Asha Deshpande** from Supabase, not **Dr Rohini Kulkarni** from the mock.
+
+Parts A–D took the session because three of the four turned out to be more than one change:
+A was three separate CI failures in sequence, B found five dispatchers where the prompt
+named three, and D touched a contract, two migrations, four switches, two screens, a lookup
+table and twelve test files. Every one of those extra changes was found by something failing
+rather than by reading, which is the system working and is also why the parts were not
+small.
+
+---
+
+### MR-13 — handover (9 September 2026)
+
+**Done.** Everything is pushed, nothing is local, and the handover is written from the
+repository rather than from any previous handover.
+
+The checkout guard passed first — namespace `@fieldforce/core`, remote
+`Praverse-Tech-Pvt-Ltd/Elmiron-App`, `f34ceef` an ancestor of HEAD. **Exit 0.**
+
+#### A correction to the brief, stated first
+
+**MR-13 §2 describes `PROMPT-MR-12.md` as unrun. That was true when the brief was written
+and was not true by the time it arrived.** MR-12 Parts A, B, C and D were completed and
+pushed in the same session; the handover says so in those words, and Parts **E and F** — the
+read conversion and the write conversion with the emulator proof — are the work that
+remains. The MR-12 section immediately above this one is the record.
+
+#### A1/A2/A3 — pushed, and CI took five runs to settle
+
+Every local commit is pushed. The failures are worth listing because each was a different
+cause and only the first was known:
+
+| Run | SHA | Result |
+| --- | --- | --- |
+| `34326262244` | `2f12a4b` | **FAIL** — `45007`, the seed's wall-clock hour (MR-12 A1) |
+| `34326888642` | `6ced440` | **FAIL** — `sync_events_entity_check` violated by the clinic-address rollback |
+| `34327705574` | `d632c79` | **SUCCESS** |
+| `34329771057` | `17c4119` | **FAIL** — `pnpm run lint`, never run this session |
+| `34330426185` | `b874ae4` | **SUCCESS** |
+
+**Last green on the CODE: CI run `34330426185` · workflow `CI` · event `push` · commit
+`b874ae45e21bd8ab79ccf979ef0c70d00b3da4a5` — SUCCESS.** That is the commit after which no
+source, migration, test or configuration file changed.
+
+**The commits that follow it are documentation only** — this section, the MR-12 section, the
+handover, the transcribed decisions and one `gotchas.md` entry. Each was pushed and its own
+CI run confirmed green, and the final SHA is HEAD with a clean tree and an empty
+`git log @{u}..HEAD`.
+
+A run id cannot be recorded inside the commit that produces it, so the last one is reported
+in the session output rather than here. Stating that plainly is better than a number written
+before the run it names — which is the shape of claim this whole document exists to avoid.
+
+The `lint` failure is the one worth keeping. Typecheck, tests and prettier were all green
+and run repeatedly; `lint` was never run at all until CI ran it. That is MR-01's finding
+verbatim — *the failure was in the workspace I was not watching* — and it is the fourth
+time a check that was not part of somebody's loop has been the one that failed.
+
+#### A4 — the final numbers, from the tool
+
+```
+@fieldforce/core       vitest    21     3        @fieldforce/console   vitest    10     1
+@fieldforce/ui         vitest     4     1        @fieldforce/field     vitest   378    25
+@fieldforce/ui         jest     226    20        @fieldforce/field     jest      72    12
+@fieldforce/ui-tokens  vitest    54     3        @fieldforce/api       vitest   597    34
+@fieldforce/mock       vitest    40     1        TOTAL                         1402
+```
+
+Seven workspaces, nine runner-workspace pairs (`@fieldforce/ui` and `@fieldforce/field`
+each run two). **No skips** — every summary line reads `N passed (N)`.
+
+**47 migrations, 47 rollbacks.** `verify:rollbacks`: *"All rollbacks applied in reverse
+order; public schema is empty."* `turbo run lint typecheck --force`: **16 of 16**.
+`prettier --check .`: clean apart from the gitignored `apps/console/next-env.d.ts`.
+
+#### B — `docs/HANDOVER-2026-09-08.md`
+
+Written from the tree. Every unverifiable claim is marked **UNVERIFIED** with the thing that
+would settle it, and it points at `PROJECT-OVERVIEW.md` and `docs/gotchas.md` rather than
+duplicating them — both are append-only and both outrank it. It says of itself that it will
+go stale.
+
+**The load-bearing part is §3, the two-column table.** A module can talk to Supabase, be
+fully tested, and be called by no screen while the screen beside it talks to the mock. One
+column reads as "done" for both halves, and that is how eight sessions concluded this app
+writes to Supabase when it does not. **All twelve screens still on fixtures are named.**
+
+Also carried: the known-bad checkout at `C:\Users\devp0\StudioProjects\Elmiron-App` and the
+namespace/remote/`f34ceef` test that distinguishes it from a legitimate clone at a new path;
+the run instructions **verified by running them today**; the nine gates with the command
+that re-checks each; the standing rules; the characteristic defect at fourteen-plus
+instances; and what is not in the repository and must be obtained.
+
+#### C1–C6 — transcribed, because they existed only in the review conversation
+
+Into `.ai-collab/decisions.md`, each marked a **REVIEWER** decision:
+
+- **C1 — `admin` is a TENANT administrator, not a platform operator.** Platform access is a
+  separate audited break-glass path, out of MR v1. Recorded where the next person will find
+  it **before** they relax the `RESTRICTIVE` tenant boundary to widen `admin`, which is the
+  tempting wrong change.
+- **C2 — `not_met`.** Confirmed present, and its Status corrected: it read *"Decided, NOT YET
+  IMPLEMENTED"* and named the wrong part. **Superseded in place rather than edited**, per
+  the append-only rule — implemented in MR-12 Part D, commit `ff76f13`, still reversible.
+- **C3 — audio is OUT of MR v1, and not for engineering reasons.** Scope §2.4 creates a
+  legal AE screening duty; §8.6 requires a named PV/DPDP signatory before the recording
+  feature ships, and there is no such person. **Tier 1 automations 1, 4, 5 and 6 all sit
+  downstream of the transcript and go with it.**
+- **C4 — coaching is OUT of MR v1.** §3.6 unrecorded, and no analyses exist to display.
+- **C5 — `BE-W69` / `pg_cron` DECLINED.** Keeping a database awake by poking it treats a
+  billing decision as an engineering problem and leaves a cron job whose real purpose is
+  invisible to whoever finds it next. The honest fix is paying for the plan.
+- **C6 — the eleven human items with owners**, in `docs/blocked-on-you.md`. Including that
+  the handset must be a **Xiaomi, Oppo, Vivo or Realme and NOT a Pixel** — those four ROMs
+  are the OEM battery killers the app has to survive and a Pixel proves nothing — and that
+  the **UCPMP cap has a build-failing deadline of 6 November already wired**, warning from
+  16 October.
+
+#### D — the next task
+
+`PROMPT-MR-12.md` **Parts E and F**, recorded in the handover §9 so nobody re-derives it.
+
+> **The one-line proof that ends the read conversion: the Today screen must render Asha
+> Deshpande from Supabase, not Dr Rohini Kulkarni from the mock.**
+
+**Where the project is, in three sentences** (handover §10): the backend is substantially
+complete and genuinely well-guarded — 47 migrations, RLS forced everywhere, enforcement in
+triggers and policies rather than application code, ~1,400 tests that caught several real
+defects today. The app is a finished-looking front end that **talks entirely to a mock
+server**, so `G-WRITE` is unmet and the largest gap between this repository and a pilot is
+wiring, not building. Nothing on the critical path is blocked on engineering: what has not
+moved in six weeks is a phone, a $25/month subscription, a licence decision and eight
+emails.
+
+#### E — leave nothing behind
+
+- **E1.** Everything pushed.
+- **E2.** A fresh bundle of all refs, `git bundle verify`-ed. **It is on the same disk as the
+  repository and must be copied off by a human** — see the note in the handover's UNVERIFIED
+  table, which is the only reason `G-CI` is *partly* met rather than met.
+- **E3.** `git status -sb` clean, `git log @{u}..HEAD` empty.
+- **E4 — things known to be true that did not make it into a tracked file: NONE.**
+
+  Two candidates came up during the session and both were written down rather than left
+  here. The `TZ` behaviour — Node on this Windows machine honours `TZ=UTC` and **silently
+  ignores named zones**, so a test that sets `TZ=America/Denver` and asserts on local time
+  passes for the wrong reason — is now a `docs/gotchas.md` entry, because it is a durable
+  machine failure and not a fact about this session. The state of the emulator (booted;
+  **sign-in and the Today screen not re-confirmed**, because that is E2's work in MR-12 and
+  MR-12 E was not started) is recorded in the MR-12 section above.
+
+#### One thing this session did to itself
+
+The `gotchas.md` entry written in MR-12 C3 — *a written lesson is not a control* — applied
+to this session's own output twice within the hour:
+
+- The `not_met` rollback ran two `pg_get_functiondef` outputs together with no separating
+  semicolon and **would not parse**. Found by `verify:rollbacks` executing it. *A rollback
+  file that has never been executed is a claim, not a rollback* — written in the same
+  session that then wrote one.
+- The `emit_sync_event` guard test seeded its scratch row from `select … from user_profiles
+  where role = 'mr' limit 1`. On a database no other suite had seeded, that inserts no row,
+  fires no trigger, and **the test passes without exercising the guard.** It failed exactly
+  once, alongside another spec, which is the only reason it was noticed. *A guard with no
+  positive control is not a guard* — and neither is one whose control can silently skip.
+
+Both are in the record because the pattern is the finding, not the two defects.
