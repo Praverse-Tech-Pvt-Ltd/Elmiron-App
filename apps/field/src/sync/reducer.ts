@@ -191,6 +191,15 @@ export const syncQueueReducer = (state: SyncQueueState, event: SyncEvent): SyncQ
         },
       };
     }
+
+    default: {
+      // The third dispatcher on this path to be given an explicit exhaustiveness guard,
+      // for the reason in `mapChange`: TS2366 alone names the wrong problem and invites
+      // the fix that removes it. A queue event with no branch must not be a silent no-op
+      // -- an unhandled `verdict_received` would leave an item in_flight for ever.
+      const unhandled: never = event;
+      throw new Error(`unhandled sync event: ${JSON.stringify(unhandled)}`);
+    }
   }
 };
 

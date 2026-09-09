@@ -133,6 +133,23 @@ const mapChange = (change: SyncPullResponse['changes'][number]): PullChange => {
         entity: 'clinic_address',
         record: fromClinicAddressRow(change.payload),
       };
+    default: {
+      // **The same guard `applyChanges` got in MR-11, on the dispatcher directly above
+      // it.** MR-11 fixed the bare `else` forty lines down and left this switch alone,
+      // which is the audit-scoped-to-the-defect-site habit MR-12 exists to break.
+      //
+      // Without this, a fifth `SyncPullEntity` still fails the build -- but as TS2366,
+      // "Function lacks ending return statement". That names the wrong problem, and the
+      // obvious fix for it (a trailing `return` or `throw`) removes the guard for good.
+      // It also disappears the moment the return type is widened to include null. A
+      // `never` assignment says which branch is missing and survives both.
+      // `change.entity`, not `change`. Unlike `PullChange` in `applyChanges`, the wire
+      // type is a single object whose `entity` field is a union rather than a
+      // discriminated union of objects, so narrowing the switch narrows the FIELD and
+      // `change` itself never becomes `never`.
+      const unhandled: never = change.entity;
+      throw new Error(`unhandled pull entity: ${String(unhandled)}`);
+    }
   }
 };
 

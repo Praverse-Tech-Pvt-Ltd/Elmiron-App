@@ -156,6 +156,39 @@ describe('mapping a real payload', () => {
       ),
     ).toThrow(/no payload/);
   });
+
+  /**
+   * MR-12 Part B. `mapChange` is the SECOND dispatcher in pull.ts, forty lines above the
+   * one MR-11 fixed, and it was left without an exhaustiveness guard because that audit
+   * was scoped to the site the defect had been found at.
+   *
+   * A fifth `SyncPullEntity` did already break the build there, but as TS2366 — "Function
+   * lacks ending return statement". That names the wrong problem, and the obvious fix for
+   * it, a trailing `return` or `throw`, removes the guard permanently. With the `never`
+   * default the compiler says `Type '"scratch_entity"' is not assignable to type 'never'`
+   * and names the member instead.
+   *
+   * This asserts the runtime half, which the compile-time half is supposed to make
+   * unreachable — an entity the server sends that this build has never heard of must fail
+   * loudly rather than be mapped to whichever branch happens to be last.
+   */
+  it('refuses an entity it has no branch for, rather than mapping it to the last one', () => {
+    expect(() =>
+      mapChanges(
+        response({
+          changes: [
+            {
+              entity: 'scratch_entity',
+              entityId: REAL_VISIT_ROW.id,
+              reason: 'upserted',
+              payload: REAL_VISIT_ROW,
+              updatedAt: REAL_VISIT_ROW.updated_at,
+            },
+          ],
+        } as unknown as Partial<SyncPullResponse>),
+      ),
+    ).toThrow(/unhandled pull entity/);
+  });
 });
 
 describe('deletion and scope-loss are different things', () => {
