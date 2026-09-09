@@ -107,6 +107,60 @@ describe.skipIf(!reachable)('seed:day produces a day the server will actually se
     });
   }, 60_000);
 
+  it('places every clock-bounded column in the past, at whatever hour it is run', async () => {
+    // **The defect this exists to stop.** `visitRows` used `todayAt(9, 30)` — today at a
+    // fixed LOCAL hour — for `started_at` and `completed_at`, both of which
+    // `validate_visit` bounds against `now()` plus the device-clock tolerance. In the IST
+    // afternoon 09:30 is behind you and the seed passes; on a UTC runner at 07:56 it is
+    // 94 minutes ahead and the seed dies with `45007`, taking two suites down at their
+    // `beforeAll`. CI run `34326262244`.
+    //
+    // The comment above `visitRows` had already stated the requirement — "`completed_at`
+    // is in the past for both finished visits, which the new `visits_validate` trigger
+    // requires". It was written directly above the code that broke it. This assertion is
+    // that sentence turned into something that can fail.
+    await withClient(async (client) => {
+      const rows = await client.query<{
+        id: string;
+        future_start: boolean;
+        future_done: boolean;
+        start_mins_ago: string | null;
+      }>(
+        `select v.id,
+                v.started_at   > now() as future_start,
+                v.completed_at > now() as future_done,
+                extract(epoch from (now() - v.started_at)) / 60 as start_mins_ago
+           from public.visits v
+           join public.doctors d on d.id = v.doctor_id
+          where d.organisation_id = $1
+          order by v.started_at nulls last`,
+        [seeded.organisationId],
+      );
+
+      expect(rows.rows.length).toBe(3);
+      for (const row of rows.rows) {
+        expect(row.future_start, `visit ${row.id} started in the future`).not.toBe(true);
+        expect(row.future_done, `visit ${row.id} completed in the future`).not.toBe(true);
+      }
+
+      // **And that they were derived from `now`, not from a wall clock.** "In the past" on
+      // its own is not a guard: `todayAt(9, 30)` satisfies it every afternoon, which is
+      // exactly why the defect survived to CI. Pinning the offsets makes the old shape fail
+      // at almost any hour rather than only before 10:15 — the assertion stops depending on
+      // when somebody happens to run it.
+      const startedAgo = rows.rows
+        .map((r) => (r.start_mins_ago === null ? null : Number(r.start_mins_ago)))
+        .filter((v): v is number => v !== null)
+        .sort((a, b) => b - a);
+
+      expect(startedAgo.length, 'two visits should be finished').toBe(2);
+      expect(startedAgo[0]).toBeGreaterThan(140);
+      expect(startedAgo[0]).toBeLessThan(160);
+      expect(startedAgo[1]).toBeGreaterThan(80);
+      expect(startedAgo[1]).toBeLessThan(100);
+    });
+  }, 60_000);
+
   it('and sync_pull hands that MR their own day — the read path, not the tables', async () => {
     // The point of the whole part. Row counts prove the inserts ran; this proves the
     // server will serve them to the person who signed in, through RLS, on the path the

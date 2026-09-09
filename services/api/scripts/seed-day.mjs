@@ -117,12 +117,34 @@ export const assertLocalhostOnly = (dbUrl) => {
   }
 };
 
-/** Today at a given local hour, as a timestamptz the server will accept. */
+/**
+ * Today at a given local hour. Safe for `scheduled_for` and NOTHING ELSE.
+ *
+ * `validate_visit` deliberately leaves `scheduled_for` unbounded -- "a beat plan schedules
+ * visits ahead of time, so a future value there is the feature rather than a defect".
+ */
 const todayAt = (hour, minute = 0) => {
   const d = new Date();
   d.setHours(hour, minute, 0, 0);
   return d.toISOString();
 };
+
+/**
+ * A moment in the past, measured from the clock rather than from the calendar.
+ *
+ * **`todayAt` must never be used for `started_at` or `completed_at`.** `validate_visit`
+ * bounds both against `now()` plus the device-clock tolerance, so a fixed local hour is in
+ * the FUTURE for every runner whose day has not reached it yet. It passed for weeks
+ * because it was only ever run in the IST afternoon, where 09:30 is behind you.
+ *
+ * The comment that used to sit above `visitRows` already said `completed_at` is in the
+ * past for both finished visits -- naming the requirement immediately above the code that
+ * broke it. CI run `34326262244` failed with `45007`, `started_at 2026-09-09 09:30:00+00
+ * is more than 120 seconds after the server clock 2026-09-09 07:56:43+00`. **A lesson in a
+ * comment is not a control.** Deriving the value from `now` is the control, because there
+ * is no longer an hour at which it can be wrong.
+ */
+const minutesAgo = (minutes) => new Date(Date.now() - minutes * 60_000).toISOString();
 
 const DOCTORS = [
   { name: 'Dr Asha Deshpande', spec: 'Urology', city: 'Pune', line1: '12 FC Road', pin: '411004' },
@@ -320,11 +342,14 @@ export const seedDay = async (options = {}) => {
     }
 
     // A mix the Today screen can actually render: two behind them, one still to do.
-    // `completed_at` is in the past for both finished visits, which the new `visits_validate`
-    // trigger requires -- a visit cannot have been completed in the future.
+    //
+    // Both finished visits are placed RELATIVE TO NOW, not at a wall-clock hour, because
+    // `visits_validate` bounds `started_at` and `completed_at` against the server clock.
+    // The ordering the screen renders -- first visit before second, each started before it
+    // completed -- is preserved by the offsets, and it holds at 03:00 as well as at 16:00.
     const visitRows = [
-      { status: 'completed', started: todayAt(9, 30), completed: todayAt(10, 15) },
-      { status: 'completed', started: todayAt(11, 0), completed: todayAt(11, 40) },
+      { status: 'completed', started: minutesAgo(150), completed: minutesAgo(105) },
+      { status: 'completed', started: minutesAgo(90), completed: minutesAgo(50) },
       { status: 'planned', started: null, completed: null },
     ];
     for (const [i, row] of visitRows.entries()) {
