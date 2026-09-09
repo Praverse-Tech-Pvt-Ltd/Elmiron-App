@@ -112,7 +112,7 @@ begin
 
   return v_row;
 end;
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.apply_sync_item(p_entity sync_entity_kind, p_entity_id uuid, p_payload jsonb)
  RETURNS text[]
@@ -280,7 +280,7 @@ begin
 
   return v_warnings;
 end;
-$function$
+$function$;
 
 grant execute on function public.record_check_out(
   uuid, uuid, double precision, double precision, timestamptz, double precision,
