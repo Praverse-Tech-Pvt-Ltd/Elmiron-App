@@ -1949,3 +1949,70 @@ Three questions that find them:
 that a second entity would make a misroute "a silent corruption rather than a
 simplification" — and check-out was already the second entity when it was written. A
 comment about a branch is evidence that somebody saw it and could not reach it.
+
+---
+
+## 9 September 2026 — a written lesson is not a control
+
+`docs/gotchas.md` holds around twenty entries and this project keeps re-committing
+documented mistakes. Not mistakes it had forgotten: mistakes **whose description was
+sitting in the file, or in a comment, adjacent to the recurrence.**
+
+### Six worked examples, all from this repository
+
+| # | The lesson, written down | Where it recurred |
+| --- | --- | --- |
+| 1 | `ci.yml`'s comments named the hand-maintained-list failure **twice** | It happened a **third** time |
+| 2 | `sampleQueueItem`'s docstring described the misroute — "a silent corruption rather than a simplification" | The misroute was **two functions below it**, and check-out was already the second entity when the warning was written |
+| 3 | `pull.ts`'s docstring named the aggregate problem | And left it |
+| 4 | MR-10's record: *"the burst scales with the number of SUITES"* | The **next suite added** reopened it, and CI went red |
+| 5 | `seed-day.mjs`: *"`completed_at` is in the past for both finished visits, which the new `visits_validate` trigger requires"* | The line **directly below** used `todayAt(9, 30)`, a fixed wall-clock hour. CI run `34326262244` died with `45007`, `started_at 09:30 is more than 120 seconds after the server clock 07:56` |
+| 6 | MR-11's record and the BE-W87 rollback header both said `emit_sync_event`'s ELSE "would raise — **loud rather than silent**" | True only for a table with no `mr_id`. **Seventeen** have one, and for all of them it filed rows under `beat_plan` silently. MR-12 demonstrated it on a scratch table |
+
+Numbers 5 and 6 were both found in the session that wrote this entry, which is the point.
+
+### Why the shape recurs
+
+A comment is read by somebody who is already looking at the line. It cannot be read by
+somebody who adds a **thirty-fourth suite**, a **fifth entity**, or a **new table with an
+`mr_id`** — and those are exactly the people the lesson was for. Worse, a comment
+describing a hazard is evidence that somebody saw the hazard **and did not have a way to
+stop it**, so it marks the most likely place for the next occurrence rather than the
+safest.
+
+The same applies to a constant. `maxWorkers: 6` was a written lesson wearing a config
+value: it encoded "seed fewer suites at once" as a number that the author of the next
+suite had to know to re-tune. It was reopened three times.
+
+### The rule
+
+> **Convert the lesson into a guard with a positive control, or expect to meet it again.**
+
+A guard is something that **fails a build or a request**, names the thing that is wrong,
+and is reached by somebody who was not thinking about it. Three tests of whether you have
+one:
+
+1. **Can it fail?** If nothing can make it red, it is prose. `delete ... where entity =
+   'clinic_address' and false` is prose with SQL syntax.
+2. **Does it name the right problem?** `mapChange` already failed the build on a fifth
+   entity — as `TS2366: Function lacks ending return statement`. That names the wrong
+   problem, and its obvious fix (a trailing `return`) removes the guard permanently. The
+   `never` default says `Type '"scratch_entity"' is not assignable to type 'never'`.
+3. **Does it have a positive control?** A guard that refuses everything passes its own
+   negative test. `sync_entity_for_table` raises on an unknown table **and** still resolves
+   all four real ones; the identity budget refuses a ninth identity **and** still admits a
+   full world of eight.
+
+### What this looks like in practice
+
+The four conversions MR-12 made, each replacing a sentence that had already been written:
+
+| Was a sentence | Is now a guard |
+| --- | --- |
+| "a trigger added without a branch would raise" | `sync_entity_for_table` raises `0A000`; scratch table proves it |
+| "`completed_at` is in the past for both finished visits" | The seed derives both from `now`, and a test pins the offsets so the old shape fails at **any** hour, not only before 10:15 |
+| "the burst scales with the number of suites" | A Postgres advisory lock serialises identity creation across workers; `maxWorkers` deleted, full suite green three times on 20 cores |
+| "seed once and share it rather than per test" | A per-file identity budget — which failed on `audit-atomicity.spec.ts` the first time it ran, finding a **second**, unknown instance of the very pattern MR-11 had fixed by hand |
+
+That last row is the argument in miniature. MR-11 fixed the per-test seeding it could see
+and wrote down what it had learned. The control found the copy nobody had looked at.

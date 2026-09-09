@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
 import { seedFixtures } from './fixtures.js';
 
@@ -49,6 +49,25 @@ const retryOnDeadlock = async <T>(fn: () => Promise<T>, attempts = 4): Promise<T
     }
   }
 };
+
+/**
+ * ONE seeded world, shared by both tests that need one.
+ *
+ * **This file called `seedFixtures()` once per test** -- two full worlds, sixteen GoTrue
+ * identities, for a file with two tests that need one. That is the same per-test seeding
+ * pattern MR-11 removed from `seed-day.spec` after it took CI down with nine, and nobody
+ * knew it existed in a second suite: MR-12's per-file identity budget failed on this file
+ * the first time it ran, which is the difference between a lesson and a control.
+ *
+ * Both tests run inside `inRolledBackTransaction`, so neither can see the other's writes
+ * and sharing the world costs them no isolation.
+ */
+let world: Awaited<ReturnType<typeof seedFixtures>>;
+
+beforeAll(async () => {
+  if (!reachable) return;
+  world = await seedFixtures();
+}, 60_000);
 
 describe.skipIf(!reachable)('a business write cannot succeed unaudited', () => {
   it('the audit trigger is AFTER, FOR EACH ROW, and in the same transaction', async () => {
@@ -133,7 +152,6 @@ describe.skipIf(!reachable)('a business write cannot succeed unaudited', () => {
   });
 
   it('THE PROOF: with the audit write broken, the business row does not survive', async () => {
-    const world = await seedFixtures();
     await retryOnDeadlock(() =>
       inRolledBackTransaction(async (client) => {
         // MR-07 E3. Take the strong lock FIRST, before anything else in this transaction.
@@ -185,7 +203,6 @@ describe.skipIf(!reachable)('a business write cannot succeed unaudited', () => {
   it('the control is not vacuous: the same write succeeds AND audits when unbroken', async () => {
     // Without this, the test above would pass against a schema where the update was
     // refused for some unrelated reason and no audit row was ever attempted.
-    const world = await seedFixtures();
     await inRolledBackTransaction(async (client) => {
       const before = await client.query<{ n: string }>(
         `select count(*) as n from public.audit_log

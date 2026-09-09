@@ -59,6 +59,11 @@ begin
 end;
 $function$;
 
+-- Caught by rls.spec.ts and privilege-posture.spec.ts on the first full run: a new
+-- function in `public` is executable by PUBLIC (and so by `anon`) unless revoked. This is
+-- trigger plumbing and no client has any business calling it.
+revoke execute on function public.sync_entity_for_table(text) from public, anon, authenticated;
+
 comment on function public.sync_entity_for_table(text) is
   'Resolves a table name to its sync_events.entity. Raises 0A000 rather than defaulting: '
   'MR-12 found both of emit_sync_event''s else arms filing unknown tables as beat_plan.';

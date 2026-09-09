@@ -8,27 +8,29 @@ export default defineConfig({
     testTimeout: 30_000,
     hookTimeout: 30_000,
 
-    // **MR-07 E1. A cap on how many suites seed at once, because Postgres has 100
-    // connections and this suite will ask for more.**
+    // **`maxWorkers: 6` was here, and MR-12 Part C removed it.**
     //
-    // Every spec's `beforeAll` calls `seedFixtures()`, which creates eight auth users
-    // through GoTrue. With no cap vitest starts one worker per core and they all seed
-    // simultaneously; GoTrue then cannot get a connection
-    // (`remaining connection slots are reserved for roles with the SUPERUSER attribute`,
-    // `sorry, too many clients already`) and returns a 500 that surfaces as
-    // **"Database error creating new user"** — an error naming neither connections nor
-    // concurrency, which fails whole suites at their `beforeAll`.
+    // It capped how many suites could seed at once, because every spec's `beforeAll`
+    // calls `seedFixtures()`, which creates eight auth users through GoTrue, and enough
+    // of those at once exhaust Postgres's 100 connections — surfacing as "Database error
+    // creating new user", an error naming neither connections nor concurrency.
     //
-    // MR-06 serialised the eight creations inside one fixture, which cut the peak
-    // eightfold and held until MR-07 added two more spec files. That is the shape of the
-    // problem: the burst scales with the number of SUITES, so the fix belongs here rather
-    // than in the fixture.
+    // The cap worked and kept reopening, because **it is a constant tuned to the suite
+    // count and the finding it fixes says the burst scales WITH the suite count.** MR-06
+    // serialised inside the fixture; MR-07 added two suites and reopened it, and added
+    // this line; MR-10 added one more; MR-11 cut `seed-day.spec` from nine identities to
+    // three after CI failed again. Each fix was correct and none of them survived the
+    // next suite. A number the author of the 34th suite has to know to re-tune is a
+    // hand-maintained list wearing a config value — the failure `ci.yml`'s own comments
+    // named twice before its third occurrence.
     //
-    // Six is chosen to leave headroom rather than to sit at the edge — GoTrue, PostgREST,
-    // Realtime and Storage hold pools of their own against the same 100. Reproduce the
-    // failure by removing this line and running the api suite on a machine with more than
-    // six cores.
-    maxWorkers: 6,
+    // The burst is now removed at its source rather than capped: `createAuthUser` takes a
+    // Postgres advisory lock, so at most ONE `POST /admin/users` is in flight across all
+    // workers regardless of how many suites, workers or cores exist. See
+    // `tests/auth.ts`. There is nothing here left to re-tune.
+    //
+    // A per-file identity budget backs it up, so a suite that mints more than one world's
+    // worth fails the build naming itself. `tests/identity-budget.spec.ts` proves both.
     minWorkers: 1,
   },
 });
