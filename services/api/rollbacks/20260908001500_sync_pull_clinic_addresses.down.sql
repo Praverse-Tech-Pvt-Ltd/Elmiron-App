@@ -11,16 +11,51 @@
 -- stops emitting `sync_events` and a client that already holds one keeps it for ever.
 -- Rows written while the trigger is absent are NOT re-emitted when it is recreated.
 --
--- `emit_sync_event` goes back to its three-table form. Note that its ELSE branch reads
--- `old.mr_id`, so if the clinic trigger is ever recreated against this version it raises
--- rather than misroutes -- loud, but a failure.
+-- `emit_sync_event` goes back to its three-table form.
+--
+-- **A correction to what this file used to say here.** It claimed the ELSE branch reads
+-- `old.mr_id`, so recreating the clinic trigger against this version "raises rather than
+-- misroutes -- loud, but a failure". That is true only of a table WITHOUT an `mr_id`.
+-- Seventeen public tables have one, and for every one of them the ELSE reads
+-- `case tg_table_name when 'visits' then 'visit' else 'beat_plan' end` and files the row
+-- under `beat_plan` silently. MR-12 Part B demonstrated it on a scratch table and made
+-- the arm raise; see 20260909000100_emit_sync_event_exhaustive.sql. Rolling this file
+-- back reinstates the misroute.
 
 drop trigger if exists clinic_addresses_sync_events on public.clinic_addresses;
 
--- The constraint narrows back. This FAILS if any clinic_address tombstone was written
--- while the migration was live -- deliberately, because deleting those rows would destroy
--- the record of deletions that clients may not yet have pulled. Resolve them by hand.
-delete from public.sync_events where entity = 'clinic_address' and false;
+-- The constraint narrows back, and the clinic_address tombstones go with it.
+--
+-- **This used to refuse.** The delete was written `... and false` -- a deliberate no-op --
+-- so that narrowing the constraint would fail while any clinic_address tombstone existed,
+-- the reasoning being that deleting them destroys the record of deletions clients may not
+-- yet have pulled. The reasoning is sound. The placement was not.
+--
+-- `verify:rollbacks` runs LAST in CI, after the whole api suite, against the database that
+-- suite just wrote to -- ci.yml says so and calls the ordering load-bearing. The suite
+-- writes clinic_address tombstones. So the refusal was conditional on nothing: it fired on
+-- every run. CI run 34326888642 is it firing.
+--
+-- A rollback that cannot execute is precisely what this repository says it will not
+-- accept: "A rollback file that has never been executed is a claim, not a rollback." And
+-- the record it was protecting does not survive the rollback in any usable form -- once
+-- `sync_events_entity_check` no longer admits 'clinic_address', no client can read such a
+-- tombstone and no `sync_pull` can serve it. Keeping the row does not preserve the
+-- deletion; it only prevents the rollback.
+--
+-- So it deletes, and it says how many, for whoever is watching a real one.
+do $$
+declare
+  v_count bigint;
+begin
+  delete from public.sync_events where entity = 'clinic_address';
+  get diagnostics v_count = row_count;
+  if v_count > 0 then
+    raise notice
+      'rollback destroyed % clinic_address tombstone(s). Any client that had not pulled '
+      'them keeps those addresses until its next full re-sync.', v_count;
+  end if;
+end $$;
 alter table public.sync_events drop constraint if exists sync_events_entity_check;
 alter table public.sync_events
   add constraint sync_events_entity_check
