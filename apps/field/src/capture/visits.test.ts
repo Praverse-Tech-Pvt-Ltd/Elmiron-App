@@ -14,6 +14,7 @@ const VISIT_ROW = {
   beat_plan_id: null,
   clinic_address_id: null,
   status: 'planned',
+  not_met_reason: null,
   scheduled_for: null,
   started_at: null,
   completed_at: null,

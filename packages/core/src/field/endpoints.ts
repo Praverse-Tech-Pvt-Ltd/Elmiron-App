@@ -729,6 +729,12 @@ export const VisitRowSchema = z.object({
   beat_plan_id: UuidSchema.nullable(),
   clinic_address_id: UuidSchema.nullable(),
   status: VisitStatusSchema,
+  /**
+   * `to_jsonb(row)` is an implicit `select *`, so this column reached every handset the
+   * day the migration created it. Declared here rather than left to be dropped silently
+   * -- `sync-pull-contract.spec.ts` failed on exactly that and is why it is here.
+   */
+  not_met_reason: z.string().nullable(),
   scheduled_for: IsoDateTimeSchema.nullable(),
   started_at: IsoDateTimeSchema.nullable(),
   completed_at: IsoDateTimeSchema.nullable(),
@@ -924,6 +930,7 @@ export const fromVisitRow = (row: unknown): Visit => {
     beatPlanId: parsed.beat_plan_id,
     clinicAddressId: parsed.clinic_address_id,
     status: parsed.status,
+    notMetReason: parsed.not_met_reason,
     scheduledFor: parsed.scheduled_for,
     startedAt: parsed.started_at,
     completedAt: parsed.completed_at,

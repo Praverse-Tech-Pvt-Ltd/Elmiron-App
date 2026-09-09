@@ -34,6 +34,7 @@ const visit = VisitSchema.parse({
   beatPlanId: null,
   clinicAddressId: null,
   status: 'in_progress',
+  notMetReason: null,
   scheduledFor: null,
   startedAt: '2026-08-14T11:58:00+05:30',
   completedAt: null,

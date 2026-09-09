@@ -73,7 +73,24 @@ export const BeatPlanSchema = z.object({
 });
 export type BeatPlan = z.infer<typeof BeatPlanSchema>;
 
-export const VisitStatusSchema = z.enum(['planned', 'in_progress', 'completed', 'cancelled']);
+/**
+ * MR-12 D1. `not_met` is a fourth OUTCOME, not a failure.
+ *
+ * The MR attended and the doctor was not available. Before this the schema could only say
+ * `completed` or `cancelled`: filing an attended-but-unavailable visit as `completed` makes
+ * the day's numbers a lie in the flattering direction, and as `cancelled` says the visit
+ * never happened. Mirrors `consent_outcome.not_asked`, which the schema already models with
+ * a required reason.
+ *
+ * Attributed to the territory or the doctor and NEVER scored against the MR.
+ */
+export const VisitStatusSchema = z.enum([
+  'planned',
+  'in_progress',
+  'completed',
+  'cancelled',
+  'not_met',
+]);
 export type VisitStatus = z.infer<typeof VisitStatusSchema>;
 
 export const VisitSchema = z.object({
@@ -84,6 +101,13 @@ export const VisitSchema = z.object({
   beatPlanId: UuidSchema.nullable(),
   clinicAddressId: UuidSchema.nullable(),
   status: VisitStatusSchema,
+  /**
+   * MR-12 D1. Why the doctor was not available. Non-null exactly when `status` is
+   * `not_met`, which the database enforces with a PAIR of check constraints -- required
+   * when it applies, forbidden otherwise -- so this field cannot outlive the status that
+   * explained it. Never rendered as the MR's shortfall.
+   */
+  notMetReason: z.string().nullable(),
   scheduledFor: IsoDateTimeSchema.nullable(),
   startedAt: IsoDateTimeSchema.nullable(),
   completedAt: IsoDateTimeSchema.nullable(),

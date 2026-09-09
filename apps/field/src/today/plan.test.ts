@@ -16,6 +16,7 @@ const visit = (over: Partial<Visit> = {}): Visit =>
     beatPlanId: '55555555-5555-4555-8555-555555555501',
     clinicAddressId: '44444444-4444-4444-8444-444444444401',
     status: 'planned',
+    notMetReason: null,
     scheduledFor: '2026-08-10T10:00:00+05:30',
     startedAt: null,
     completedAt: null,
@@ -54,6 +55,42 @@ const doctor = (over: Partial<Doctor> = {}): Doctor =>
     ...over,
   });
 
+describe('MR-12 D3 — a not-met visit is attended, not undone', () => {
+  it('counts not_met separately from completed, and neither as the other', () => {
+    const summary = summariseDay(
+      [
+        visit({ id: '66666666-6666-4666-8666-666666666601', status: 'completed' }),
+        visit({
+          id: '66666666-6666-4666-8666-666666666602',
+          status: 'not_met',
+          notMetReason: 'Doctor called into theatre',
+        }),
+        visit({ id: '66666666-6666-4666-8666-666666666603', status: 'planned' }),
+      ],
+      [doctor()],
+    );
+    expect(summary.planned).toBe(3);
+    expect(summary.done, 'a not-met visit was counted as completed').toBe(1);
+    expect(summary.notMet).toBe(1);
+  });
+
+  it('leaves a not-met visit out of what is still to walk to', () => {
+    // The MR has BEEN there. Offering it as the next stop would send them back to a
+    // clinic they have already left.
+    const summary = summariseDay(
+      [
+        visit({
+          id: '66666666-6666-4666-8666-666666666601',
+          status: 'not_met',
+          notMetReason: 'Doctor called into theatre',
+        }),
+      ],
+      [doctor()],
+    );
+    expect(summary.next).toBeNull();
+  });
+});
+
 describe('what the day counts', () => {
   it('counts completed against everything still on the plan', () => {
     const summary = summariseDay(
@@ -89,10 +126,12 @@ describe('which visit is next', () => {
       [
         visit({
           id: '66666666-6666-4666-8666-666666666601',
+          notMetReason: null,
           scheduledFor: '2026-08-10T15:00:00+05:30',
         }),
         visit({
           id: '66666666-6666-4666-8666-666666666602',
+          notMetReason: null,
           scheduledFor: '2026-08-10T09:30:00+05:30',
         }),
       ],
@@ -108,11 +147,13 @@ describe('which visit is next', () => {
       [
         visit({
           id: '66666666-6666-4666-8666-666666666601',
+          notMetReason: null,
           scheduledFor: '2026-08-10T09:00:00+05:30',
           status: 'planned',
         }),
         visit({
           id: '66666666-6666-4666-8666-666666666602',
+          notMetReason: null,
           scheduledFor: '2026-08-10T14:00:00+05:30',
           status: 'in_progress',
         }),
@@ -130,6 +171,7 @@ describe('which visit is next', () => {
         visit({ id: '66666666-6666-4666-8666-666666666601', scheduledFor: null }),
         visit({
           id: '66666666-6666-4666-8666-666666666602',
+          notMetReason: null,
           scheduledFor: '2026-08-10T09:30:00+05:30',
         }),
       ],

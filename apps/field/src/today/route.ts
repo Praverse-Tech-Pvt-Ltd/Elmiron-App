@@ -23,7 +23,14 @@ import type { BeatPlan, ConsentOutcome, ConsentRecord, Doctor, Visit } from '@fi
  * — a changed plan is a new row, not an edit — so the client's job is to render the
  * one the server approved, in the order it gave.
  */
-export type StopState = 'done' | 'current' | 'upcoming' | 'cancelled';
+/**
+ * MR-12 D3. `not_met` is its own state on the route, never folded into `done`.
+ *
+ * Folding it in is the copy defect in map form: a stop the MR walked to and found empty
+ * would render identically to one where the doctor was seen, and the route would agree
+ * with a screen that congratulated them.
+ */
+export type StopState = 'done' | 'current' | 'upcoming' | 'cancelled' | 'not_met';
 
 export interface RouteStop {
   readonly doctorId: string;
@@ -71,6 +78,15 @@ const stateOf = (visit: Visit | undefined): StopState => {
       return 'cancelled';
     case 'planned':
       return 'upcoming';
+    case 'not_met':
+      return 'not_met';
+    default: {
+      // MR-12 Part B. This switch already failed the build on a new member -- as TS2366,
+      // "Function lacks ending return statement", which names the wrong problem and whose
+      // obvious fix removes the guard. Now it names the member.
+      const unhandled: never = visit.status;
+      throw new Error(`unhandled visit status: ${String(unhandled)}`);
+    }
   }
 };
 

@@ -62,6 +62,21 @@ export interface DayEndScreenProps {
   readonly captureNote: string;
   readonly planned: number;
   readonly done: number;
+  /**
+   * **MR-12 D3. Visits attended where the doctor was not available.**
+   *
+   * The copy on this screen used to claim SUCCESS -- "2 of 3 visits done", "That's the
+   * day done", "Everything on the plan is complete." An MR who drove to three clinics and
+   * found three doctors in theatre did their whole job and got congratulated for a day
+   * they would describe as wasted. Worse, `done` counted only `completed`, so the same MR
+   * read "0 of 3" -- the app telling them they had achieved nothing.
+   *
+   * The screens now claim ATTENDANCE, which is the thing the MR controls and the thing
+   * the record actually proves. `not_met` is surfaced plainly and never as a shortfall:
+   * it is attributed to the territory or the doctor and never scored against the MR, which
+   * is the term the MR-11 C5 decision was taken on.
+   */
+  readonly notMet: number;
   /** "48.2 km" from the server's metres, or null when the day has none. */
   readonly distanceLabel: string | null;
   /** Why there is no rupee figure. Required — see the note above. */
@@ -89,6 +104,7 @@ export const DayEndScreen = ({
   lastCaptureLabel,
   captureNote,
   planned,
+  notMet,
   done,
   distanceLabel,
   rateNote,
@@ -142,9 +158,18 @@ export const DayEndScreen = ({
       <Card>
         <Label muted>Visits</Label>
         <View style={styles.figureRow}>
-          <Figure>{`${String(done)} of ${String(planned)}`}</Figure>
-          <Label muted>{done === planned ? 'all of them done' : 'visits done'}</Label>
+          <Figure>{`${String(done + notMet)} of ${String(planned)}`}</Figure>
+          <Label muted>
+            {done + notMet === planned ? 'you went to all of them' : 'visits attended'}
+          </Label>
         </View>
+        {notMet === 0 ? null : (
+          <Label muted>
+            {notMet === 1
+              ? 'One doctor was not available. That is recorded against the visit, not against you.'
+              : `${String(notMet)} doctors were not available. That is recorded against those visits, not against you.`}
+          </Label>
+        )}
       </Card>
 
       <Card>

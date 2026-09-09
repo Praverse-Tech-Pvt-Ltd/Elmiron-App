@@ -187,6 +187,7 @@ describe.skipIf(!reachable)('C4 — what the payload actually contains', () => {
       'doctor_id',
       'id',
       'mr_id',
+      'not_met_reason',
       'received_at',
       'scheduled_for',
       'started_at',

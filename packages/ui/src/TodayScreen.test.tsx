@@ -8,6 +8,7 @@ const props = (over: Partial<TodayScreenProps> = {}): TodayScreenProps => ({
   startedLabel: 'Started 08:55',
   planned: 9,
   done: 6,
+  notMet: 0,
   next: { doctorName: 'Dr S. Iyer', clinic: 'Sunrise Clinic, Prabhadevi', scheduledLabel: null },
   sync: { kind: 'idle', at: null },
   onOpenQueue: () => undefined,
@@ -39,7 +40,7 @@ describe('a finished day is not an empty one', () => {
     // The difference matters: "nothing here" reads as a broken app to someone who
     // has just walked nine clinics.
     await render(<TodayScreen {...props({ next: null, done: 9 })} />);
-    expect(screen.getByText("That's the day done")).toBeTruthy();
+    expect(screen.getByText("That's everyone on the plan")).toBeTruthy();
     expect(screen.queryByText(/^Start the visit/u)).toBeNull();
   });
 
@@ -119,5 +120,57 @@ describe('the transparency link', () => {
     // the app breaks.
     await render(<TodayScreen {...props()} />);
     expect(screen.queryByText('What this app records about me')).toBeNull();
+  });
+});
+
+/**
+ * MR-12 D3 — the copy claims ATTENDANCE, not success.
+ *
+ * The reviewer's sentence: "An MR who found three doctors unavailable must not read a
+ * congratulation." The old screen said "That's the day done", "Everything on the plan is
+ * complete." and counted only `completed` — so that MR read "0 of 3" under a
+ * congratulation, which is both a lie and an insult.
+ *
+ * These are the assertions the enum change was not allowed to ship without. C3 exists to
+ * prevent exactly the state where `not_met` is recorded and the copy still conflates it
+ * with success, so the data distinguishes what the screen does not.
+ */
+describe('D3 — attendance, not achievement', () => {
+  it('counts a not-met visit as attended, because the MR went', async () => {
+    // Two completed, one doctor unavailable, three planned. The MR attended all three.
+    await render(<TodayScreen {...props({ next: null, planned: 3, done: 2, notMet: 1 })} />);
+    expect(screen.getByText('3 of 3')).toBeTruthy();
+    expect(screen.getByText('visits attended')).toBeTruthy();
+  });
+
+  it('never labels the figure "visits done"', async () => {
+    await render(<TodayScreen {...props({ next: null, planned: 3, done: 2, notMet: 1 })} />);
+    expect(screen.queryByText('visits done')).toBeNull();
+  });
+
+  it('does not congratulate an MR whose doctors were all unavailable', async () => {
+    // The exact case from the review: three attended, three unavailable.
+    await render(<TodayScreen {...props({ next: null, planned: 3, done: 0, notMet: 3 })} />);
+    expect(screen.queryByText('Everything on the plan is complete.')).toBeNull();
+    expect(
+      screen.getByText('You went to every visit on the plan. 3 doctors were not available.'),
+    ).toBeTruthy();
+    // And it still credits the attendance rather than reading as a failed day.
+    expect(screen.getByText('3 of 3')).toBeTruthy();
+  });
+
+  it('says it in the singular for one', async () => {
+    await render(<TodayScreen {...props({ next: null, planned: 3, done: 2, notMet: 1 })} />);
+    expect(
+      screen.getByText('You went to every visit on the plan. One doctor was not available.'),
+    ).toBeTruthy();
+  });
+
+  it('and says nothing about availability when everyone was seen', async () => {
+    // The positive control. Copy that always mentions unavailability would pass the cases
+    // above and would be its own kind of wrong on an ordinary day.
+    await render(<TodayScreen {...props({ next: null, planned: 3, done: 3, notMet: 0 })} />);
+    expect(screen.getByText('You went to every visit on the plan.')).toBeTruthy();
+    expect(screen.queryByText(/not available/u)).toBeNull();
   });
 });

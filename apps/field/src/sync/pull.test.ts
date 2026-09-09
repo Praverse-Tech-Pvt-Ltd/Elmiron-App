@@ -37,6 +37,7 @@ const REAL_VISIT_ROW = {
   received_at: '2026-09-07T20:02:29.739645+00:00',
   beat_plan_id: null,
   completed_at: '2026-09-07T19:02:29.719617+00:00',
+  not_met_reason: null,
   scheduled_for: null,
   clinic_address_id: null,
 };

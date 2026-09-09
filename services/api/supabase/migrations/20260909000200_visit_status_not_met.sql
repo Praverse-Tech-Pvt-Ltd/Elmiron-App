@@ -1,0 +1,23 @@
+-- MR-12 Part D1, first of two. The enum member only.
+--
+-- `alter type ... add value` cannot be used in the same transaction that adds a constraint
+-- referring to it -- PostgreSQL will not let a new label be read by the statement that
+-- created it -- so the column and its two constraints land in 20260909000300.
+--
+-- **The product decision this implements was taken in MR-11 C5 and recorded in
+-- `.ai-collab/decisions.md` before any of it was built**, deliberately: a decision taken
+-- in the operator's absence should be visible as a decision rather than absorbed into a
+-- diff, and it stays reversible until the first real visit is recorded.
+--
+-- `not_met` means the MR attended and the doctor was not available. It is a fourth
+-- OUTCOME, not a failure: today the schema can only say `completed` or `cancelled`, and
+-- an MR who drove to a clinic and found the doctor in theatre has done their job. Filing
+-- that as `completed` makes the day's numbers a lie in the flattering direction, and
+-- filing it as `cancelled` says the visit never happened.
+--
+-- Mirrors `consent_outcome.not_asked`, which the schema already models and already
+-- enforces with a PAIR of constraints -- required when it applies, forbidden when it does
+-- not. The pair is the point: a reason that is optional is a reason nobody writes, and a
+-- reason that lingers after the status changes is a reason that lies.
+
+alter type public.visit_status add value if not exists 'not_met';

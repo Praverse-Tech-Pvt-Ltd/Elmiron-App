@@ -43,6 +43,7 @@ const completedVisit = (id: string, doctorId: string, completedAt: string): Visi
     beatPlanId: null,
     clinicAddressId: null,
     status: 'completed',
+    notMetReason: null,
     scheduledFor: null,
     startedAt: completedAt,
     completedAt,

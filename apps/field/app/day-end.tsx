@@ -95,6 +95,7 @@ export default function DayEnd(): ReactNode {
         dayLabel="Today"
         distanceLabel={distanceMetres === null ? null : KM(distanceMetres)}
         done={summary?.done ?? 0}
+        notMet={summary?.notMet ?? 0}
         failure={denial}
         firstCaptureLabel={
           summary?.firstCaptureAt == null

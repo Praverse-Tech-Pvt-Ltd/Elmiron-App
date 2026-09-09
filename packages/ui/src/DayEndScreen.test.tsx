@@ -12,6 +12,7 @@ const props = {
     'This app only ever reads your position at the moment you press check in or check out.',
   planned: 9,
   done: 9,
+  notMet: 0,
   distanceLabel: '48.2 km',
   rateNote: 'Distance only. Your rate per kilometre is set by your company.',
   sync: { kind: 'idle', at: null } as const,

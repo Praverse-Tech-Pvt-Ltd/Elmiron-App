@@ -55,6 +55,7 @@ const visit = (id: string, doctorId: string, over: Partial<Visit> = {}): Visit =
     beatPlanId: PLAN,
     clinicAddressId: null,
     status: 'completed',
+    notMetReason: null,
     scheduledFor: null,
     startedAt: '2026-08-10T09:20:00+05:30',
     completedAt: '2026-08-10T09:28:00+05:30',

@@ -90,6 +90,9 @@ export default function BeatPlanRoute(): ReactNode {
             consentLabel(stop.consent),
             stop.minutes === null ? null : `${String(stop.minutes)} min`,
             stop.state === 'cancelled' ? 'cancelled' : null,
+            // Attendance, stated plainly. "doctor not available" says what happened
+            // without saying whose fault it was, which is the whole of the C5 decision.
+            stop.state === 'not_met' ? 'doctor not available' : null,
           ]
             .filter((part): part is string => part !== null)
             .join(' · '),

@@ -31,9 +31,18 @@ export const stageOf = (visit: Visit | null): VisitStage => {
       return 'during';
     case 'completed':
       return 'after';
+    // The visit is OVER. An MR who attended and found the doctor unavailable has finished
+    // there, and putting them back at 'before' would invite a second check-in to a clinic
+    // they have already left.
+    case 'not_met':
+      return 'after';
     case 'planned':
     case 'cancelled':
       return 'before';
+    default: {
+      const unhandled: never = visit.status;
+      throw new Error(`unhandled visit status: ${String(unhandled)}`);
+    }
   }
 };
 

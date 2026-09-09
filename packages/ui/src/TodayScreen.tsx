@@ -47,6 +47,21 @@ export interface TodayScreenProps {
   readonly startedLabel: string | null;
   readonly planned: number;
   readonly done: number;
+  /**
+   * **MR-12 D3. Visits attended where the doctor was not available.**
+   *
+   * The copy on this screen used to claim SUCCESS -- "2 of 3 visits done", "That's the
+   * day done", "Everything on the plan is complete." An MR who drove to three clinics and
+   * found three doctors in theatre did their whole job and got congratulated for a day
+   * they would describe as wasted. Worse, `done` counted only `completed`, so the same MR
+   * read "0 of 3" -- the app telling them they had achieved nothing.
+   *
+   * The screens now claim ATTENDANCE, which is the thing the MR controls and the thing
+   * the record actually proves. `not_met` is surfaced plainly and never as a shortfall:
+   * it is attributed to the territory or the doctor and never scored against the MR, which
+   * is the term the MR-11 C5 decision was taken on.
+   */
+  readonly notMet: number;
   readonly next: TodayNextVisit | null;
   readonly sync: SyncQueueState;
   readonly onOpenQueue: () => void;
@@ -105,6 +120,7 @@ export const TodayScreen = ({
   dayLabel,
   startedLabel,
   planned,
+  notMet,
   done,
   next,
   sync,
@@ -141,11 +157,17 @@ export const TodayScreen = ({
         // through. S2's copy never says "ask your manager for a beat plan" — that
         // hands the MR's day to somebody else.
         <Card>
-          <BodyText>{planned === 0 ? 'Nothing planned for today' : "That's the day done"}</BodyText>
+          <BodyText>
+            {planned === 0 ? 'Nothing planned for today' : "That's everyone on the plan"}
+          </BodyText>
           <Label muted>
             {planned === 0
               ? "No beat plan came through. You can still visit anyone in your territory and it'll all be logged."
-              : 'Everything on the plan is complete.'}
+              : notMet === 0
+                ? 'You went to every visit on the plan.'
+                : notMet === 1
+                  ? 'You went to every visit on the plan. One doctor was not available.'
+                  : `You went to every visit on the plan. ${String(notMet)} doctors were not available.`}
           </Label>
         </Card>
       ) : (
@@ -163,8 +185,8 @@ export const TodayScreen = ({
         <Card>
           <Label muted>Today</Label>
           <View style={styles.progress}>
-            <Figure>{`${String(done)} of ${String(planned)}`}</Figure>
-            <Label muted>visits done</Label>
+            <Figure>{`${String(done + notMet)} of ${String(planned)}`}</Figure>
+            <Label muted>visits attended</Label>
           </View>
         </Card>
       )}

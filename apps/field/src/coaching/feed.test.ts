@@ -67,6 +67,7 @@ const visit = (id: string, status = 'completed'): Visit =>
     beatPlanId: null,
     clinicAddressId: null,
     status,
+    notMetReason: null,
     scheduledFor: null,
     startedAt: '2026-08-14T11:00:00+05:30',
     completedAt: '2026-08-14T11:30:00+05:30',

@@ -37,6 +37,14 @@ export interface DaySummary {
   readonly planned: number;
   /** Visits the server has marked completed. */
   readonly done: number;
+  /**
+   * Visits the MR ATTENDED where the doctor was not available.
+   *
+   * Kept separate from `done` rather than added to it, so the screen can count attendance
+   * (`done + notMet`) while still being able to say how many doctors were not there. A
+   * single merged number could not tell an MR why their day looks the way it does.
+   */
+  readonly notMet: number;
   /** The next visit to walk to, or null when the day has none left. */
   readonly next: NextVisit | null;
   /** The earliest `startedAt` the server stamped today, ISO. Null before the first. */
@@ -87,6 +95,7 @@ export const summariseDay = (visits: readonly Visit[], doctors: readonly Doctor[
   return {
     planned: counted.length,
     done: counted.filter((visit) => visit.status === 'completed').length,
+    notMet: counted.filter((visit) => visit.status === 'not_met').length,
     startedAt: startedTimes[0] ?? null,
     next:
       head === undefined

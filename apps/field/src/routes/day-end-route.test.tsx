@@ -25,6 +25,7 @@ const visit = (over: Record<string, unknown> = {}) =>
     beatPlanId: null,
     clinicAddressId: null,
     status: 'completed',
+    notMetReason: null,
     scheduledFor: null,
     startedAt: '2026-08-13T08:55:00+05:30',
     completedAt: '2026-08-13T18:22:00+05:30',

@@ -11,6 +11,8 @@ export interface DayEnd {
   /** Visits that counted toward the day, however they ended. */
   readonly planned: number;
   readonly done: number;
+  /** Visits the MR ATTENDED where the doctor was not available. See `plan.ts`. */
+  readonly notMet: number;
   /** The earliest `startedAt` the server stamped today, ISO. Null before the first. */
   readonly firstCaptureAt: string | null;
   /**
@@ -40,10 +42,12 @@ const latest = (values: readonly string[]): string | null =>
 export const summariseDayEnd = (visits: readonly Visit[]): DayEnd => {
   const counted = visits.filter(countsTowardTheDay);
   const done = counted.filter((visit) => visit.status === 'completed').length;
+  const notMet = counted.filter((visit) => visit.status === 'not_met').length;
 
   return {
     planned: counted.length,
     done,
+    notMet,
     firstCaptureAt: earliest(
       counted.map((visit) => visit.startedAt).filter((at): at is string => at !== null),
     ),
@@ -53,7 +57,11 @@ export const summariseDayEnd = (visits: readonly Visit[]): DayEnd => {
     // A day with nothing on it is not a finished day. An MR whose plan never
     // arrived has not worked through it, and telling them they have is the same
     // lie in the other direction that `plan.ts` guards against for B1's empty card.
-    finished: counted.length > 0 && done === counted.length,
+    // **Attendance, not achievement.** A day where the MR walked every stop and found
+    // three doctors in theatre IS finished -- there is nothing left for them to do. Judging
+    // it by `done` alone would leave the day permanently unfinished for a reason the MR
+    // does not control, which is the same harm as scoring `not_met` against them.
+    finished: counted.length > 0 && done + notMet === counted.length,
   };
 };
 

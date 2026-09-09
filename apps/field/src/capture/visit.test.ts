@@ -18,6 +18,7 @@ const visit = (over: Partial<Visit> = {}): Visit =>
     beatPlanId: null,
     clinicAddressId: null,
     status: 'planned',
+    notMetReason: null,
     scheduledFor: null,
     startedAt: null,
     completedAt: null,

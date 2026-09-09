@@ -106,6 +106,7 @@ const MrToday = (): ReactNode => {
       startedLabel={startedAt === null ? null : `Started ${clockFrom(startedAt)}`}
       planned={summary?.planned ?? 0}
       done={summary?.done ?? 0}
+      notMet={summary?.notMet ?? 0}
       next={
         next === null
           ? null

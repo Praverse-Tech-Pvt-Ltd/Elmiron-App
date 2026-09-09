@@ -24,7 +24,7 @@ export interface BeatPlanStop {
   readonly id: string;
   readonly doctorName: string;
   readonly clinic: string | null;
-  readonly state: 'done' | 'current' | 'upcoming' | 'cancelled';
+  readonly state: 'done' | 'current' | 'upcoming' | 'cancelled' | 'not_met';
   /** "09:20 · consented · 8 min" — assembled by the caller. */
   readonly detail: string;
 }
@@ -53,6 +53,18 @@ const STATUS = {
   current: 'info',
   upcoming: 'offline',
   cancelled: 'offline',
+  /**
+   * MR-12 D3. **Not `success` and not `critical`.**
+   *
+   * `success` would render a stop where the doctor was absent identically to one where
+   * they were seen -- the congratulation defect, in glyph form. `critical` would dress an
+   * ordinary event as an error and, worse, would read as the MR's error: §02 forbids the
+   * first and the MR-11 C5 decision forbids the second.
+   *
+   * Neutral, with the reason carried in the row's detail text, which is where a manager
+   * reading the plan actually learns what happened.
+   */
+  not_met: 'offline',
 } as const;
 
 export const BeatPlanScreen = ({
