@@ -30,7 +30,6 @@ beforeAll(async () => {
 
 const CLINIC_LAT = 18.5204;
 const CLINIC_LON = 73.8567;
-const WED_1000_IST = '2026-08-12T10:00:00+05:30';
 const WED_1025_IST = '2026-08-12T10:25:00+05:30';
 
 const asUserTx = async <T>(user: FixtureUser, fn: (client: Client) => Promise<T>): Promise<T> =>
@@ -50,18 +49,15 @@ const aVisit = async (client: Client): Promise<string> => {
 };
 
 const checkOut = async (client: Client, visitId: string, reason?: string): Promise<void> => {
-  await client.query(
-    'select * from public.record_check_out($1, $2, $3, $4, $5, null, $6, $7)',
-    [
-      randomUUID(),
-      visitId,
-      CLINIC_LAT,
-      CLINIC_LON,
-      WED_1025_IST,
-      'automatic',
-      reason ?? null,
-    ],
-  );
+  await client.query('select * from public.record_check_out($1, $2, $3, $4, $5, null, $6, $7)', [
+    randomUUID(),
+    visitId,
+    CLINIC_LAT,
+    CLINIC_LON,
+    WED_1025_IST,
+    'automatic',
+    reason ?? null,
+  ]);
 };
 
 const visitRow = async (
@@ -314,7 +310,8 @@ describe.skipIf(!reachable)('D4: not_met is never scored against the MR', () => 
         `select viewname, definition from pg_views where schemaname = 'public'`,
       );
       for (const view of views.rows) {
-        const scored = /not_met/i.test(view.definition) && /fail|miss|penal|blame/i.test(view.definition);
+        const scored =
+          /not_met/i.test(view.definition) && /fail|miss|penal|blame/i.test(view.definition);
         expect(scored, `view ${view.viewname} scores not_met as a failure`).toBe(false);
       }
     });

@@ -43,23 +43,43 @@ describe.skipIf(!reachable)('emit_sync_event refuses a table it has no branch fo
            after update or delete on public.scratch_dispatch_thing
            for each row execute function public.emit_sync_event()`,
       );
-      await client.query(
+      // **A literal mr_id, not one selected from `user_profiles`.**
+      //
+      // The first version of this test seeded from `select p.id from public.user_profiles
+      // where p.role = 'mr' limit 1`. On a database no other suite had seeded yet that
+      // selects nothing, the insert writes NO row, the delete then fires no trigger, and
+      // the test PASSES without ever exercising the guard — a false green that depended on
+      // which file vitest happened to run first. It failed exactly once, alongside another
+      // spec, which is the only reason it was noticed.
+      //
+      // `sync_entity_for_table` raises while the sync_events row is still being formed, so
+      // this never reaches an FK check on `former_mr_id`. The value only has to exist.
+      const seeded = await client.query(
         `insert into public.scratch_dispatch_thing (id, mr_id)
-         select '11111111-1111-1111-1111-111111111111', p.id
-           from public.user_profiles p where p.role = 'mr' limit 1`,
+         values ('11111111-1111-1111-1111-111111111111',
+                 '99999999-9999-4999-8999-999999999999')`,
       );
+      expect(seeded.rowCount, 'nothing was inserted, so the trigger cannot fire').toBe(1);
 
-      await expect(
-        client.query(
+      // Caught rather than matched with `expect.stringContaining`, which returns `any` and
+      // trips `no-unsafe-assignment` — the repo lints test files at the same strictness as
+      // source, deliberately.
+      let caught: unknown;
+      try {
+        await client.query(
           `delete from public.scratch_dispatch_thing
             where id = '11111111-1111-1111-1111-111111111111'`,
-        ),
-      ).rejects.toMatchObject({
-        // 0A000 is the code `apply_sync_item` already raises for an entity it does not
-        // accept, and the code `sync_push` maps to `unsupported_entity`. One vocabulary.
-        code: '0A000',
-        message: expect.stringContaining('no sync entity for table'),
-      });
+        );
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught, 'the delete succeeded — the misroute is back').toBeDefined();
+      const failure = caught as { code?: string; message?: string };
+      // 0A000 is the code `apply_sync_item` already raises for an entity it does not
+      // accept, and the code `sync_push` maps to `unsupported_entity`. One vocabulary.
+      expect(failure.code).toBe('0A000');
+      expect(failure.message).toMatch(/no sync entity for table/);
     });
   });
 
@@ -123,7 +143,7 @@ describe.skipIf(!reachable)('apply_sync_item refuses an entity it has no branch 
                     '22222222-2222-2222-2222-222222222222'::uuid,
                     '{}'::jsonb)`,
         ),
-      ).rejects.toMatchObject({ message: expect.stringContaining('uploadGrantId') });
+      ).rejects.toThrow(/uploadGrantId/);
     });
   });
 
