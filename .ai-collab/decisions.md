@@ -715,3 +715,86 @@ first real visit is recorded.
 it; the implementation is MR-12 Part C. Recording it separately from building it is
 deliberate: a decision taken in the operator's absence should be visible as a decision
 rather than absorbed into a diff.
+
+> **Superseded 9 September 2026 — IMPLEMENTED in MR-12 Part D**, commit `ff76f13`. The
+> paragraph above is left as written, per the append-only rule; it named the part wrongly
+> (D, not C) and its status is no longer current.
+>
+> All three terms were met in one commit: `not_met` with a REQUIRED reason enforced by the
+> same constraint PAIR `consent_records` uses for `not_asked`; the copy changed from
+> *"visits done"* to *"visits attended"* and from *"That's the day done"* to *"That's
+> everyone on the plan"*; and no column anywhere attributes the outcome to a person, which
+> is asserted by a test rather than promised in prose.
+>
+> **Still reversible.** Only seed rows carry the status. The reversal is
+> `services/api/rollbacks/20260909000300_visits_not_met_reason.down.sql`, which rewrites
+> any `not_met` visit to `cancelled` and says how many — the less flattering of the two
+> available lies, chosen deliberately.
+
+---
+
+## Reviewer decisions transcribed from the review conversation — 9 September 2026
+
+**These existed only in the review conversation.** MR-13 §2 required them written into the
+repository before that conversation ended, because nothing else records them and Claude
+Code cannot derive them from the code. Each is a **REVIEWER** decision, taken on the
+operator's behalf, and each is reversible by the operator.
+
+### C1 — `admin` is a TENANT administrator, not a platform operator
+
+**Decided.** The `admin` role administers **one organisation**. It is not a platform
+operator and must never be treated as one.
+
+Platform access — the ability to act across tenants — is a **separate, audited break-glass
+path** and is **out of MR v1 scope**. It is not a bigger `admin`; it is a different thing
+with its own audit trail.
+
+**Why it matters now:** the tenant boundary is `RESTRICTIVE` as of MR-06, so it cannot be
+widened by adding a permissive policy. Anyone who later needs cross-tenant access will be
+tempted to relax that boundary for `admin`. That is the wrong change, and this entry exists
+so the next person finds the decision before they make it.
+
+### C2 — `not_met` on `visit_status`
+
+Recorded in full above (*"`visits.status` gains `not_met` with a required reason"*,
+8 September 2026). **Confirmed present and complete**, and its Status section is corrected
+below: it is now IMPLEMENTED, in MR-12 Part D, with its copy change in the same commit.
+
+### C3 — Audio is OUT of MR v1, and NOT for engineering reasons
+
+**Decided.** The recording feature does not ship in MR v1.
+
+This is a **legal and compliance** decision, not a capability one. The mechanism is built.
+Two things block it:
+
+- **MR scope §2.4** creates a **legal adverse-event screening duty** over recorded content.
+- **MR scope §8.6** requires a **named PV/DPDP signatory before the recording feature
+  ships.** There is no such person named.
+
+**The consequence, stated so nobody rediscovers it:** Tier 1 automations **1, 4, 5 and 6**
+all sit downstream of the transcript. They go with it. Anyone planning those should treat
+them as blocked on a signature, not on a sprint.
+
+### C4 — Coaching is OUT of MR v1
+
+**Decided.** Two independent reasons, either sufficient:
+
+- **§3.6 is unrecorded** — the decision it depends on has never been written down with a
+  named human.
+- **There are no analyses to display**, because there is no AI layer, because there is no
+  transcript, because of C3.
+
+### C5 — `BE-W69` / `pg_cron` DECLINED
+
+**Declined.** The keep-warm idea is a workaround for the Supabase **free tier** pausing the
+project. Scheduling a job to poke the database so it does not sleep treats a billing
+decision as an engineering problem, and leaves a cron job in the schema whose real purpose
+is invisible to whoever finds it next.
+
+**The honest fix is paying for the plan** — see `docs/blocked-on-you.md`, ~$25/month, open.
+
+### C6 — the open human items
+
+Transcribed into `docs/blocked-on-you.md` under *"Transcribed from the review conversation"*
+with owners. They are **not engineering items** and none of them is blocked on this
+codebase.
