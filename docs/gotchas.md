@@ -2060,3 +2060,86 @@ if (applied !== 'America/Denver') throw new Error(`TZ not honoured; got ${applie
 
 **Fail loudly rather than measure the wrong thing.** This is the same rule as everywhere
 else in this file: a control that cannot tell you it did not run is not a control.
+
+---
+
+## 10 September 2026 — a fixture holding one VALUE of a dimension cannot test a predicate on that dimension
+
+The 8 September entry above says *a boundary with one instance in the fixtures is untested
+by construction*, about **entities**: one sample row owned by one MR cannot prove another
+MR's samples are invisible.
+
+**The same thing is true of dimensions, and it is easier to miss**, because the fixture does
+not look thin. It has plenty of rows. They just all say the same thing in one column.
+
+> A predicate can only be falsified by data that varies in the column it reads.
+> `where x = $1` against a table where every `x` is identical is indistinguishable from
+> `where true`.
+
+### Worked example 1 — one organisation hid the tenant boundary
+
+`seedFixtures()` built exactly one organisation. Every isolation test ever written against
+it was asserting that an MR could not see rows that **did not exist**. The suite was green
+for twenty sessions and proved nothing about tenancy. MR-06 added the rival organisation and
+the assertions became real.
+
+The comment in `services/api/tests/fixtures.ts` records it: *"`seedFixtures()` built exactly
+ONE organisation, so every isolation test ever written…"*
+
+### Worked example 2 — one day hid the date filter, permanently
+
+Nothing in the field app filtered visits by date — not `sync_pull`, not `summariseDay`. It
+could not be caught, because:
+
+* `services/mock` served a single day of fixtures, so every visit the client held was
+  today's by construction; and
+* **`seed:day`, written specifically to unblock the read conversion, seeded only today
+  too.** The seed built to make the real data visible shared the blind spot of the mock it
+  was replacing.
+
+It surfaced by running the app on a second day: the Today screen counted yesterday's visits
+as today's and offered to send the MR to a clinic for one of them. No test could have failed,
+on either fixture.
+
+### Worked example 3 — one language makes a consent predicate unfalsifiable
+
+`active_consent_text_at(p_language, p_at, p_org)` selects the notice a doctor was shown:
+
+```sql
+where v.organisation_id = p_organisation_id
+  and v.language = p_language          -- the predicate
+  and v.effective_from <= p_at
+```
+
+Every fixture and `seed:day` insert `en-IN` and nothing else. **Measured, not argued:**
+deleting `and v.language = p_language` from the live function and re-running the consent
+suites — `consent-notice-tenancy`, `consent-withdrawal-bounds`, `error-contract` — gave
+**30 passed, 0 failed**. The clause that decides which consent notice a record claims a
+doctor read is currently unfalsifiable.
+
+### How to look for these
+
+Count distinct values per candidate column in the fixtures and the seed, and compare against
+the predicates that read them:
+
+```sh
+docker exec supabase_db_<project> psql -U postgres -d postgres -c "
+  select 'role' d, count(distinct role::text)::text v from public.user_profiles
+  union all select 'shift timezone', count(distinct timezone)::text from public.territory_shift_windows
+  union all select 'consent language', count(distinct language)::text from public.consent_text_versions
+  union all select 'visit day', count(distinct (scheduled_for at time zone 'Asia/Kolkata')::date)::text from public.visits
+  order by 1"
+```
+
+Anything reading `1` is a dimension no test can currently exercise. Then find the predicate:
+`grep` the migrations for that column name in a `where`, a `case`, or a join condition.
+
+**A count of `1` is not automatically a defect** — one shift window is correct for a
+single-territory demo. It is a statement that *every predicate on that column is currently
+unfalsifiable*, which is a fact worth knowing before trusting a green suite.
+
+### The rule
+
+**Vary the dimension in the fixture, or state in writing that the predicate on it is
+untested.** Silence reads as coverage, and a green suite over a single-valued column is the
+most confident-looking way this repository has of proving nothing.

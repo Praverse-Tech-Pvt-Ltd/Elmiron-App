@@ -118,13 +118,31 @@ export const assertLocalhostOnly = (dbUrl) => {
 };
 
 /**
- * Today at a given local hour. Safe for `scheduled_for` and NOTHING ELSE.
+ * A given local hour on a day, for `scheduled_for` and NOTHING ELSE.
  *
  * `validate_visit` deliberately leaves `scheduled_for` unbounded -- "a beat plan schedules
  * visits ahead of time, so a future value there is the feature rather than a defect".
+ *
+ * (`todayAt(hour)` stood here and is gone: with every row now naming its own day offset,
+ * a today-only helper had no callers, and an unused helper is the thing this repository
+ * keeps finding.)
  */
-const todayAt = (hour, minute = 0) => {
+/**
+ * A given local hour on a day OFFSET from today — MR-15 B3.
+ *
+ * **This exists because `seed:day` had the same blind spot as the mock it replaced.**
+ * Every visit it created was today's, so the fixture held exactly ONE value of the date
+ * dimension — and a fixture holding one value of a dimension cannot test any predicate on
+ * that dimension. Nothing filtered visits by date anywhere in the app, and neither the
+ * mock nor this seed could reveal it; it took running the app on a second day. The seed
+ * written to unblock the read conversion could not surface the defect that conversion
+ * exposed.
+ *
+ * `setDate` handles month and year ends: `new Date(2026, 0, 1).setDate(0)` is 31 December.
+ */
+const dayAt = (dayOffset, hour, minute = 0) => {
   const d = new Date();
+  d.setDate(d.getDate() + dayOffset);
   d.setHours(hour, minute, 0, 0);
   return d.toISOString();
 };
@@ -132,7 +150,7 @@ const todayAt = (hour, minute = 0) => {
 /**
  * A moment in the past, measured from the clock rather than from the calendar.
  *
- * **`todayAt` must never be used for `started_at` or `completed_at`.** `validate_visit`
+ * **`dayAt` must never be used for `started_at` or `completed_at`.** `validate_visit`
  * bounds both against `now()` plus the device-clock tolerance, so a fixed local hour is in
  * the FUTURE for every runner whose day has not reached it yet. It passed for weeks
  * because it was only ever run in the IST afternoon, where 09:30 is behind you.
@@ -229,7 +247,7 @@ export const seedDay = async (options = {}) => {
     consentTextVersion: randomUUID(),
     doctors: DOCTORS.map(() => randomUUID()),
     clinics: DOCTORS.map(() => randomUUID()),
-    visits: DOCTORS.map(() => randomUUID()),
+    visits: Array.from({ length: 5 }, () => randomUUID()),
   };
 
   const client = new Client({ connectionString: dbUrl });
@@ -341,16 +359,56 @@ export const seedDay = async (options = {}) => {
       );
     }
 
-    // A mix the Today screen can actually render: two behind them, one still to do.
+    // THREE DAYS, NOT ONE -- MR-15 B3.
     //
-    // Both finished visits are placed RELATIVE TO NOW, not at a wall-clock hour, because
-    // `visits_validate` bounds `started_at` and `completed_at` against the server clock.
-    // The ordering the screen renders -- first visit before second, each started before it
-    // completed -- is preserved by the offsets, and it holds at 03:00 as well as at 16:00.
+    // Today is still what the screen is about: two visits behind the MR, one still to do.
+    // Yesterday and tomorrow exist so that a missing or wrong date filter is VISIBLE ON
+    // SCREEN rather than only in a test:
+    //
+    //   * yesterday's COMPLETED visit inflates "done" and makes the doctor list claim the
+    //     MR saw that doctor today;
+    //   * tomorrow's PLANNED visit becomes "Next visit" and puts a clinic a day early
+    //     behind the screen's single primary action.
+    //
+    // Both are the failure MR-14 shipped and MR-15 fixed, and neither could be produced by
+    // a seed that only ever wrote today.
+    //
+    // Every clock-bounded column is still placed RELATIVE TO NOW, not at a wall-clock
+    // hour, because `visits_validate` bounds `started_at` and `completed_at` against the
+    // server clock -- the defect that failed CI run 34326262244. `scheduled_for` is the
+    // only column that carries the calendar day, and it is deliberately unbounded: "a beat
+    // plan schedules visits ahead of time, so a future value there is the feature".
+    //
+    // Only today's visits carry the beat plan. Yesterday's and tomorrow's take null,
+    // because today's approved plan is not a claim about either.
+    const MINUTES_PER_DAY = 24 * 60;
     const visitRows = [
-      { status: 'completed', started: minutesAgo(150), completed: minutesAgo(105) },
-      { status: 'completed', started: minutesAgo(90), completed: minutesAgo(50) },
-      { status: 'planned', started: null, completed: null },
+      {
+        day: -1,
+        hour: 11,
+        onPlan: false,
+        status: 'completed',
+        started: minutesAgo(MINUTES_PER_DAY + 150),
+        completed: minutesAgo(MINUTES_PER_DAY + 105),
+      },
+      {
+        day: 0,
+        hour: 9,
+        onPlan: true,
+        status: 'completed',
+        started: minutesAgo(150),
+        completed: minutesAgo(105),
+      },
+      {
+        day: 0,
+        hour: 11,
+        onPlan: true,
+        status: 'completed',
+        started: minutesAgo(90),
+        completed: minutesAgo(50),
+      },
+      { day: 0, hour: 13, onPlan: true, status: 'planned', started: null, completed: null },
+      { day: 1, hour: 10, onPlan: false, status: 'planned', started: null, completed: null },
     ];
     for (const [i, row] of visitRows.entries()) {
       await client.query(
@@ -361,11 +419,11 @@ export const seedDay = async (options = {}) => {
         [
           ids.visits[i],
           mrId,
-          ids.doctors[i],
-          ids.beatPlan,
-          ids.clinics[i],
+          ids.doctors[i % DOCTORS.length],
+          row.onPlan ? ids.beatPlan : null,
+          ids.clinics[i % DOCTORS.length],
           row.status,
-          todayAt(9 + i * 2),
+          dayAt(row.day, row.hour),
           row.started,
           row.completed,
         ],
@@ -420,7 +478,9 @@ if (isMain) {
           `  Manager:  ${result.managerEmail}\n` +
           `  Admin:    ${result.adminEmail}\n\n` +
           `  Organisation ${result.organisationId}\n` +
-          `  ${String(result.doctorIds.length)} doctors, ${String(result.visitIds.length)} visits today, one consent notice.\n\n` +
+          `  ${String(result.doctorIds.length)} doctors, ${String(result.visitIds.length)} visits across THREE days -- 1 yesterday, 3 today, 1 tomorrow.
+` +
+          `  One consent notice.\n\n` +
           `  Every run mints fresh accounts and a fresh organisation; nothing is torn\n` +
           `  down, because consent_records and audit_log are append-only by trigger.\n` +
           `  \`pnpm db:reset\` clears the accumulation.\n\n`,

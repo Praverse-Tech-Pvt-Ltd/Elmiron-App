@@ -91,11 +91,15 @@ describe.skipIf(!reachable)('seed:day produces a day the server will actually se
       const row = counts.rows[0];
 
       expect(Number(row?.doctors)).toBe(3);
-      expect(Number(row?.visits)).toBe(3);
+      // MR-15 B3. FIVE visits across THREE days, not three on one. See the dimension
+      // assertion below for why the count alone is not the point.
+      expect(Number(row?.visits)).toBe(5);
       // `Doctor.clinicAddresses` is required by the contract and the doctors list renders
       // `clinicAddresses[0].city`. A doctor without one renders a blank card.
       expect(Number(row?.clinics)).toBe(3);
-      // `BeatPlan` requires `entries`; a plan without them fails to parse.
+      // `BeatPlan` requires `entries`; a plan without them fails to parse. Still three:
+      // yesterday's and tomorrow's visits carry no beat plan, because today's approved
+      // plan is not a claim about either.
       expect(Number(row?.entries)).toBe(3);
       // Without a window covering now, `record_check_in` refuses 45003 before anything
       // else behind it can be tested.
@@ -137,7 +141,7 @@ describe.skipIf(!reachable)('seed:day produces a day the server will actually se
         [seeded.organisationId],
       );
 
-      expect(rows.rows.length).toBe(3);
+      expect(rows.rows.length).toBe(5);
       for (const row of rows.rows) {
         expect(row.future_start, `visit ${row.id} started in the future`).not.toBe(true);
         expect(row.future_done, `visit ${row.id} completed in the future`).not.toBe(true);
@@ -153,11 +157,74 @@ describe.skipIf(!reachable)('seed:day produces a day the server will actually se
         .filter((v): v is number => v !== null)
         .sort((a, b) => b - a);
 
-      expect(startedAgo.length, 'two visits should be finished').toBe(2);
-      expect(startedAgo[0]).toBeGreaterThan(140);
-      expect(startedAgo[0]).toBeLessThan(160);
-      expect(startedAgo[1]).toBeGreaterThan(80);
-      expect(startedAgo[1]).toBeLessThan(100);
+      // Three finished now: yesterday's, plus today's two. Sorted longest-ago first, so
+      // [0] is yesterday's and [1], [2] are today's.
+      expect(startedAgo.length, 'three visits should be finished').toBe(3);
+      expect(startedAgo[0], "yesterday's visit should be over a day ago").toBeGreaterThan(
+        24 * 60 + 140,
+      );
+      expect(startedAgo[0]).toBeLessThan(24 * 60 + 160);
+      expect(startedAgo[1]).toBeGreaterThan(140);
+      expect(startedAgo[1]).toBeLessThan(160);
+      expect(startedAgo[2]).toBeGreaterThan(80);
+      expect(startedAgo[2]).toBeLessThan(100);
+    });
+  }, 60_000);
+
+  /**
+   * MR-15 B3 — the DIMENSION, not the row count.
+   *
+   * A fixture holding a single value of a dimension cannot test any predicate on that
+   * dimension. `seed:day` seeded exactly one day, so it shared the mock's blind spot: the
+   * app filtered visits by date nowhere at all, and neither fixture could reveal it. It
+   * took running the app on a second day, where the Today screen counted yesterday's
+   * visits and offered to send the MR to a clinic for one of them.
+   *
+   * This asserts the dimension is varied, not that five rows exist -- a future change
+   * that moved all five onto one day would keep every count above passing and quietly
+   * restore the blind spot.
+   */
+  it('spans THREE days, so a missing date filter has something to get wrong', async () => {
+    await withClient(async (client) => {
+      const rows = await client.query<{ ist_day: string; status: string }>(
+        // The zone is read from the organisation's configured window rather than joined
+        // to the MR's own territory: `resolve_shift_window()` walks UP the hierarchy, so
+        // a window can legitimately sit on a parent and a direct join finds nothing. The
+        // first draft of this test did exactly that and returned zero rows -- which would
+        // have read as "the dimension is single-valued" when the real answer was "the
+        // query is wrong". A count of zero is asserted against below for that reason.
+        `select (v.scheduled_for at time zone (
+                  select w.timezone from public.territory_shift_windows w
+                    join public.territories t on t.id = w.territory_id
+                   where t.organisation_id = $1 limit 1
+                ))::date::text as ist_day,
+                v.status::text
+           from public.visits v
+           join public.doctors d on d.id = v.doctor_id
+          where d.organisation_id = $1`,
+        [seeded.organisationId],
+      );
+
+      // Read in the TERRITORY's zone, which is the boundary MR-15 A2 settled on -- not
+      // the runner's, and not UTC. A UTC day would cut an Indian working day at 05:30.
+      // A positive control on the QUERY before the assertion about the DATA. An empty
+      // result would otherwise satisfy "not single-valued" reasoning by accident and
+      // report a broken join as a finding about the seed.
+      expect(rows.rows.length, 'the query found no visits at all').toBe(5);
+
+      const days = new Set(rows.rows.map((r) => r.ist_day));
+      expect(days.size, 'the date dimension is single-valued again').toBe(3);
+
+      // And the STATES are what make a wrong filter visible on screen rather than only in
+      // a test: yesterday's completed visit inflates "done", and tomorrow's planned one
+      // becomes "Next visit" and sends the MR to a clinic a day early.
+      const sorted = [...days].sort();
+      const byDay = (day: string): string[] =>
+        rows.rows.filter((r) => r.ist_day === day).map((r) => r.status);
+      expect(byDay(sorted[0] ?? ''), 'yesterday must hold a COMPLETED visit').toContain(
+        'completed',
+      );
+      expect(byDay(sorted[2] ?? ''), 'tomorrow must hold a PLANNED visit').toContain('planned');
     });
   }, 60_000);
 
@@ -188,7 +255,7 @@ describe.skipIf(!reachable)('seed:day produces a day the server will actually se
         const byEntity = Object.fromEntries(pulled.rows.map((r) => [r.entity, Number(r.n)]));
 
         expect(byEntity['doctor'], 'sync_pull returned no doctors').toBe(3);
-        expect(byEntity['visit'], 'sync_pull returned no visits').toBe(3);
+        expect(byEntity['visit'], 'sync_pull returned no visits').toBe(5);
         expect(byEntity['beat_plan']).toBe(1);
       } finally {
         await client.query('rollback');
