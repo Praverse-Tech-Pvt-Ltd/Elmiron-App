@@ -353,6 +353,28 @@ describe('the pull loop', () => {
     expect(client.rpc).toHaveBeenCalledTimes(2);
   });
 
+  it('FORGETS the expired cursor, even when the re-sync itself then fails', async () => {
+    // MR-14 B7. Found by mutation: deleting `cursors.clear()` passed all twenty cases,
+    // because every one of them let the retry SUCCEED -- and a successful pull saves a
+    // fresh cursor over the dead one, hiding whether it was ever cleared.
+    //
+    // The difference only shows when the retry also fails. Without the clear, the expired
+    // cursor is still on disk at the next launch, which sends it again, gets 45006 again,
+    // and does so on every launch after that: a handset that hit an expired cursor while
+    // losing signal would never sync again. With it, the next launch is a full sweep.
+    await cursors.save('mr-1', 'an old cursor');
+    const client = rpc(() => ({ data: null, error: { code: '45006', message: 'cursor too old' } }));
+
+    const outcome = await pullOnce({ userId: 'mr-1', cursors, client });
+
+    // The second attempt was made and also refused, so this is reported rather than
+    // silently swallowed...
+    expect(outcome.kind).toBe('refused');
+    expect(client.rpc).toHaveBeenCalledTimes(2);
+    // ...and the dead cursor is gone, so the next launch starts clean.
+    expect(await cursors.load('mr-1')).toBeNull();
+  });
+
   it('an unrecognised cursor recovers the same way', async () => {
     await cursors.save('mr-1', 'from another server');
     let call = 0;
