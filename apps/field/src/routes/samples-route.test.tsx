@@ -2,15 +2,16 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { ApiRequestError, DoctorSchema, VisitSchema } from '@fieldforce/core';
 
-const mockListVisits = jest.fn<() => Promise<unknown>>();
-const mockListDoctors = jest.fn<() => Promise<unknown>>();
 const mockCreateSampleAndInput = jest.fn<(body: unknown) => Promise<unknown>>();
-jest.mock('../api', () => ({
-  createClientForScenario: () => ({
-    listVisits: mockListVisits,
-    listDoctors: mockListDoctors,
-  }),
-}));
+/**
+ * MR-21 B1. The READ boundary moved too: this screen now takes its visit and doctor from
+ * the store the pull maintains, not from `createClientForScenario()`. Mocked rather than
+ * wrapped in a real provider because `pulled-store.tsx` imports `../session` -> `../supabase`
+ * -> `../config`, whose `loadAppConfig` throws at module load with no `.env`. The provider
+ * itself is exercised for real in `src/sync/pulled-store.test.tsx`.
+ */
+const mockStore = jest.fn();
+jest.mock('../sync/pulled-store', () => ({ usePulledStore: () => mockStore() }));
 // MR-18 B1. The WRITE boundary moved from the mock REST client to `sync_push`, so the
 // mock moved with it. The reads on these screens are still `createClientForScenario`, and
 // both are mocked here because the screen uses both -- which is exactly the two-column
@@ -55,9 +56,26 @@ const doctor = DoctorSchema.parse({
   updatedAt: '2026-08-01T08:00:00+05:30',
 });
 
+/** A settled store holding whichever rows a case needs. */
+const pulled = (visits: unknown[], doctors: unknown[]) => ({
+  store: {
+    visit: new Map(visits.map((v) => [(v as { id: string }).id, v])),
+    doctor: new Map(doctors.map((d) => [(d as { id: string }).id, d])),
+    beat_plan: new Map(),
+    clinic_address: new Map(),
+  },
+  status: 'ready',
+  notice: null,
+  failure: null,
+  resynced: false,
+  removals: [],
+  zone: { timeZone: 'Asia/Kolkata', source: 'territory' },
+  today: '2026-08-14',
+  refresh: jest.fn(),
+});
+
 const loaded = () => {
-  mockListVisits.mockResolvedValue({ items: [visit] });
-  mockListDoctors.mockResolvedValue({ items: [doctor] });
+  mockStore.mockReturnValue(pulled([visit], [doctor]));
 };
 
 describe('app/samples/[visitId].tsx — C5', () => {
@@ -151,8 +169,8 @@ describe('MR-20 B3 — a tap on an unusable screen is never silent', () => {
   it('says the visit is not on this phone rather than doing nothing', async () => {
     // The server holds no visit with this id, which is precisely the MR-19 state: the
     // screen was opened for an id its data source does not have.
-    mockListVisits.mockResolvedValue({ items: [], nextCursor: null });
-    mockListDoctors.mockResolvedValue({ items: [doctor], nextCursor: null });
+    // The store holds no visit with this id -- precisely the MR-19 state.
+    mockStore.mockReturnValue(pulled([], [doctor]));
     mockCreateSampleAndInput.mockClear();
 
     await render(<SamplesRoute />);

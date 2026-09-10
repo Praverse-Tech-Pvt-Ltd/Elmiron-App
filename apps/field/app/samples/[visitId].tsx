@@ -1,17 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 // Device-generated, for the reason the visit route gives: the contract calls `id`
 // the server-side idempotency key, so a handover sent twice from a doorway with
 // one bar is one handover.
 import uuid from 'expo-modules-core/src/uuid';
-import { ApiRequestError } from '@fieldforce/core';
-import type { Doctor, Visit } from '@fieldforce/core';
 import { SamplesScreen, Screen } from '@fieldforce/ui';
 import type { SampleLine, SampleLinePatch } from '@fieldforce/ui';
-import { createClientForScenario } from '../../src/api';
 import { createPushClient } from '../../src/sync/push-client';
 import { unavailableReason } from '../../src/capture/preconditions';
+import { usePulledStore } from '../../src/sync/pulled-store';
+import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { blankLine, CAP_NOTE, errorsFor, sampleRequest } from '../../src/capture/samples';
 import { sampleQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { dayMonthFrom } from '../../src/doctors/profile';
@@ -35,54 +34,36 @@ import { dayMonthFrom } from '../../src/doctors/profile';
  */
 export default function SamplesRoute(): ReactNode {
   const { visitId } = useLocalSearchParams<{ visitId: string }>();
-  const [visit, setVisit] = useState<Visit | null>(null);
-  const [doctor, setDoctor] = useState<Doctor | null>(null);
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const [lines, setLines] = useState<readonly SampleLine[]>([blankLine('line-1')]);
   const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
 
-  const load = useCallback(async () => {
-    const client = createClientForScenario();
-    const [visits, doctors] = await Promise.all([client.listVisits(), client.listDoctors()]);
-    const found = visits.items.find((candidate) => candidate.id === visitId) ?? null;
-    setVisit(found);
-    setDoctor(
-      found === null
-        ? null
-        : (doctors.items.find((candidate) => candidate.id === found.doctorId) ?? null),
-    );
-  }, [visitId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void load()
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        setFailure(
-          error instanceof ApiRequestError && error.code === 'permission_denied'
-            ? { title: 'You do not have access to this visit', detail: error.message }
-            : {
-                title: 'Could not load this visit',
-                detail: error instanceof Error ? error.message : 'Unknown failure',
-              },
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
+  /**
+   * MR-21 B1. The visit and the doctor come from the store the pull maintains.
+   *
+   * **This screen read `createClientForScenario()` and looked up a SUPABASE id the mock
+   * does not hold**, so `visit` was always null against real data and `record()` returned
+   * on its first line — MR-19's silent tap. Converting the write without the read left a
+   * screen that could not write at all.
+   *
+   * No `loading` state of its own any more: the provider owns it, and a second one here
+   * could disagree with it.
+   */
+  const { store, status, failure: pullFailure } = usePulledStore();
+  const visit = visitsFromStore(store).find((candidate) => candidate.id === visitId) ?? null;
+  const doctor =
+    visit === null
+      ? null
+      : (doctorsFromStore(store).find((candidate) => candidate.id === visit.doctorId) ?? null);
+  const loading = status === 'loading';
 
   const changeLine = (id: string, patch: SampleLinePatch): void => {
     setLines((current) =>
       current.map((line) => {
         if (line.id !== id) return line;
         // Rebuilt field by field rather than spread, so the stale `error` is simply
-        // absent from the result — leaving it would leave the field red under a
+        // absent from the result â€” leaving it would leave the field red under a
         // value the MR has just corrected. It cannot be spread-then-cleared:
         // `exactOptionalPropertyTypes` makes an explicit undefined a different
         // thing from an absent property.
@@ -100,6 +81,22 @@ export default function SamplesRoute(): ReactNode {
       }),
     );
   };
+
+  // A sync that was refused or unreachable is its own state. Reported through the same
+  // channel as a write failure, because to the MR both mean "the screen is not current".
+  const shownFailure =
+    failure ??
+    (pullFailure === null
+      ? null
+      : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
+        ? {
+            title: 'You do not have access to this visit',
+            detail: 'The server refused this request for your account.',
+          }
+        : {
+            title: 'Could not load this visit',
+            detail: 'The app could not reach the server. It will try again.',
+          });
 
   const record = (): void => {
     // MR-20 B2. See `preconditions.ts`: `busy` is silent on purpose, a missing visit or
@@ -182,7 +179,7 @@ export default function SamplesRoute(): ReactNode {
         capNote={CAP_NOTE}
         dateLabel={visit === null ? 'today' : dayMonthFrom(visit.receivedAt)}
         doctorName={doctor?.fullName ?? 'This visit'}
-        failure={failure}
+        failure={shownFailure}
         lines={lines}
         loading={loading}
         onAddLine={() => {

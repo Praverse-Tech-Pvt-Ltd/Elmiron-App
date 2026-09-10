@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import type { ConsentRecord } from '@fieldforce/core';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 // The idempotency key for the request, generated on the device because the
 // contract says so: `id` "doubles as the server-side idempotency key", so a
@@ -15,7 +16,6 @@ import {
   useAudioRecorderState,
 } from 'expo-audio';
 import { ApiRequestError } from '@fieldforce/core';
-import type { ConsentRecord, Doctor, Visit } from '@fieldforce/core';
 import { Screen, VisitScreen } from '@fieldforce/ui';
 import { createClientForScenario } from '../../src/api';
 import { createPushClient } from '../../src/sync/push-client';
@@ -31,6 +31,8 @@ import {
 } from '../../src/capture/recording';
 import { checkInQueueItem, checkOutQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { unavailableReason } from '../../src/capture/preconditions';
+import { usePulledStore } from '../../src/sync/pulled-store';
+import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { clockFrom } from '../../src/today/plan';
 
 /**
@@ -44,67 +46,50 @@ import { clockFrom } from '../../src/today/plan';
 export default function VisitRoute(): ReactNode {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const [visit, setVisit] = useState<Visit | null>(null);
-  const [doctor, setDoctor] = useState<Doctor | null>(null);
-  const [consent, setConsent] = useState<ConsentRecord | null>(null);
-  const [consents, setConsents] = useState<readonly ConsentRecord[]>([]);
+  /**
+   * MR-21 B1. The visit and the doctor come from the store the pull maintains.
+   *
+   * **This screen read `createClientForScenario()` and looked up a SUPABASE id the mock
+   * does not hold**, so `visit` was always null against real data and `advance()` returned
+   * on its first line — MR-19's silent check-in, the defect that made G-WRITE a gate about
+   * the app rather than the module.
+   */
+  const { store, status, failure: pullFailure } = usePulledStore();
+  const visit = visitsFromStore(store).find((candidate) => candidate.id === id) ?? null;
+  const doctor =
+    visit === null
+      ? null
+      : (doctorsFromStore(store).find((candidate) => candidate.id === visit.doctorId) ?? null);
+
+  /**
+   * **Consent records are NOT in the pull, and this is a divergence rather than an
+   * oversight** — MR-21 B6.
+   *
+   * `sync_pull`'s own `completeness.omittedEntities` lists `consent_record` alongside the
+   * other capture entities: a declared phase-2 scope. So the client cannot know this
+   * doctor's consent state and this list is empty.
+   *
+   * What that produces is honest rather than merely convenient. `recordingBlock([])`
+   * returns `never_asked`, whose wording is *"Nothing can be recorded until they have
+   * answered ON THIS PHONE"* — which is exactly true of a client holding no consent record.
+   * It does not claim the doctor was never asked, only that this phone has no answer.
+   *
+   * Recording is out of v1, needs an `uploadGrantId` only an upload session can mint
+   * (FE-W29), and cannot run on Expo Go at all, so nothing reachable is lost. Registered so
+   * that adding `consent_record` to the pull is a change to this comment rather than a
+   * change to nothing.
+   */
+  const consents: readonly ConsentRecord[] = [];
   const [micGranted, setMicGranted] = useState(false);
   const [recordingStartedAt, setRecordingStartedAt] = useState<string | null>(null);
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
-  const [loading, setLoading] = useState(true);
+  // The provider owns loading; a second flag here could disagree with it.
+  const loading = status === 'loading';
   const [busy, setBusy] = useState(false);
   const [blocked, setBlocked] = useState<string | null>(null);
   const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
-
-  const load = useCallback(async () => {
-    const client = createClientForScenario();
-    const [visits, doctors, consents] = await Promise.all([
-      client.listVisits(),
-      client.listDoctors(),
-      // Settled separately: the consent ledger being unreachable must not take the
-      // visit down with it. A visit whose consent state is unknown is still a visit
-      // the MR has to be able to check into.
-      client.listConsentRecords({ visitId: id }).catch(() => null),
-    ]);
-    const found = visits.items.find((candidate) => candidate.id === id) ?? null;
-    setVisit(found);
-    setDoctor(
-      found === null
-        ? null
-        : (doctors.items.find((candidate) => candidate.id === found.doctorId) ?? null),
-    );
-    // The latest row wins, and a withdrawal is a row. `supersedesConsentRecordId`
-    // means the ledger is append-only, so "what stands now" is the last thing
-    // captured rather than the first — reading the earliest would show a doctor's
-    // withdrawn consent as though it still held.
-    setConsents(consents?.items ?? []);
-    setConsent(
-      (consents?.items ?? [])
-        .filter((record) => record.visitId === id)
-        .sort((a, b) => a.capturedAt.localeCompare(b.capturedAt))
-        .at(-1) ?? null,
-    );
-  }, [id]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void load()
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        setFailure({
-          title: 'Could not load this visit',
-          detail: error instanceof Error ? error.message : 'Unknown failure',
-        });
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
 
   useEffect(() => {
     let cancelled = false;
@@ -169,7 +154,30 @@ export default function VisitRoute(): ReactNode {
     void recorder
       .stop()
       .then(async () => {
-        if (!keep || visit === null || authorising === null || startedAt === null) return;
+        // **`!keep` is deliberate silence and stays silent.** The doctor changing their
+        // mind means the audio should not exist, no row is written, and there is nothing
+        // to report -- see the header above.
+        if (!keep) return;
+
+        // MR-21 A3. **The other three were merged into that guard and they are not the
+        // same thing.** With `keep` true the MR has affirmatively chosen to preserve the
+        // recording; returning here discarded it and said NOTHING. That is worse than the
+        // null-precondition taps MR-20 fixed: those swallow an action, this swallows a
+        // decision to keep something, and the MR has no reason to think anything went
+        // wrong and nothing to re-do.
+        //
+        // Still not FILED -- a recording with no visit, no authorising consent or no start
+        // time cannot be written honestly, and `recordingRequest` would refuse it anyway.
+        // What changes is that the MR is told, through the same channel the `.catch` below
+        // already uses for exactly this outcome.
+        if (visit === null || authorising === null || startedAt === null) {
+          setFailure({
+            title: 'The recording was not filed',
+            detail:
+              'The visit or the consent it belongs to is not on this phone, so there is nothing to file it against. The audio has been discarded. Sync and record again if the doctor is still willing.',
+          });
+          return;
+        }
         await createClientForScenario().createRecording(
           recordingRequest({
             id: uuid.v4(),
@@ -249,7 +257,6 @@ export default function VisitRoute(): ReactNode {
           );
           return;
         }
-        await load();
       } catch (error: unknown) {
         if (error instanceof ApiRequestError && error.code === 'permission_denied') {
           setFailure({ title: 'That was refused', detail: error.message });
@@ -278,19 +285,34 @@ export default function VisitRoute(): ReactNode {
         busy={busy}
         clinic={clinic === undefined ? null : `${clinic.label}, ${clinic.city}`}
         doctorName={doctor?.fullName ?? 'This visit'}
-        failure={failure}
+        failure={
+          failure ??
+          (pullFailure === null
+            ? null
+            : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
+              ? {
+                  title: 'You do not have access to this visit',
+                  detail: 'The server refused this request for your account.',
+                }
+              : {
+                  title: 'Could not load this visit',
+                  detail: 'The app could not reach the server. It will try again.',
+                })
+        }
         loading={loading}
         onAction={advance}
         consent={{
-          outcome:
-            consent === null || consent.isWithdrawal
-              ? 'unasked'
-              : consent.outcome === 'consented'
-                ? 'consented'
-                : consent.outcome === 'declined'
-                  ? 'declined'
-                  : 'unasked',
-          answeredLabel: consent === null ? null : `Answered ${clockFrom(consent.capturedAt)}`,
+          /*
+            MR-21 B6. `unasked` because the client HOLDS no consent record, not because it
+            knows the doctor was never asked -- `sync_pull` omits `consent_record` by its
+            own declaration. The three-branch mapping that stood here is gone rather than
+            left unreachable: TypeScript narrowed `consent` to `never` the moment the list
+            became empty, which is the compiler saying the branches cannot run. Restoring
+            them is part of adding the entity to the pull, not something to keep warm.
+          */
+          outcome: 'unasked',
+          // No answer on this phone, so no time to show. Never the device's clock.
+          answeredLabel: null,
           onAsk: () => {
             router.push(`/consent/${visit?.id ?? id}`);
           },
