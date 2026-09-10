@@ -69,6 +69,47 @@ export interface DaySummary {
 const countsTowardTheDay = (visit: Visit): boolean => visit.status !== 'cancelled';
 
 /**
+ * MR-14 B5 — is this visit ON the day being summarised?
+ *
+ * **Nothing filtered by date before this, and with the mock nothing had to.** The fixture
+ * was a single day, so every visit the client held was today's by construction. The pull
+ * is not: `sync_pull` carries no date filter, the local store accumulates every visit the
+ * MR has ever been sent, and the screen is titled "Today".
+ *
+ * Measured on the emulator on 10 September against a store seeded on the 9th: the screen
+ * read **"Today · 2 of 3 visits attended"** and offered **"Start the visit to Dr Meera
+ * Iyer · Scheduled 07:30"** for a visit scheduled the previous day. The MR had nothing at
+ * all that day and the app was sending them to a clinic.
+ *
+ * **The date is compared as the SERVER wrote it.** `scheduledFor` is contract ISO-8601
+ * with an offset, and that offset is the territory's rather than the handset's — the same
+ * reason `clockFrom` slices characters instead of parsing a `Date`. Parsing here would
+ * re-express the instant in the phone's timezone and move visits across midnight for an MR
+ * whose phone is set wrong, which is exactly the failure this is fixing, in a new place.
+ *
+ * **A visit with no date is not claimed for today.** An unscheduled visit falls back to
+ * `startedAt`, which is server-stamped; with neither, nothing says it belongs to this day,
+ * and asserting that it does would be presenting an absence as a fact. It is not lost —
+ * it is simply not part of today's count.
+ */
+const onDay = (visit: Visit, day: string): boolean => {
+  const stamp = visit.scheduledFor ?? visit.startedAt;
+  return stamp !== null && stamp.slice(0, 10) === day;
+};
+
+/**
+ * The device's own date as `YYYY-MM-DD`, built from local parts.
+ *
+ * `toISOString()` would convert to UTC first and hand back yesterday's date for anyone
+ * east of Greenwich for the first hours of their morning — an MR in Pune opening the app
+ * at 05:00 IST would be shown the previous day's plan.
+ */
+export const deviceDay = (now: Date = new Date()): string => {
+  const pad = (value: number): string => String(value).padStart(2, '0');
+  return `${String(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+};
+
+/**
  * Ordered the way the MR walks the day: by the time the server scheduled, with
  * unscheduled visits last. `localeCompare` on the ISO strings rather than `Date`
  * parsing — these are contract-validated ISO-8601 with an offset, and comparing
@@ -122,8 +163,17 @@ const nextVisitFrom = (visit: Visit, doctor: Doctor | undefined): NextVisit => {
   };
 };
 
-export const summariseDay = (visits: readonly Visit[], doctors: readonly Doctor[]): DaySummary => {
-  const counted = visits.filter(countsTowardTheDay);
+/**
+ * `day` is passed in rather than read here, so the device clock enters this module at
+ * exactly one place and every case below is testable without mocking time — the same
+ * shape as `buildDoctorRows` taking `now`.
+ */
+export const summariseDay = (
+  visits: readonly Visit[],
+  doctors: readonly Doctor[],
+  day: string = deviceDay(),
+): DaySummary => {
+  const counted = visits.filter((visit) => countsTowardTheDay(visit) && onDay(visit, day));
   const byId = new Map(doctors.map((doctor) => [doctor.id, doctor]));
 
   // `in_progress` comes before `planned`: a visit the MR is standing inside is the
