@@ -2,20 +2,24 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { ConsentTextVersionSchema, DoctorSchema, VisitSchema } from '@fieldforce/core';
 
-const mockListVisits = jest.fn<() => Promise<unknown>>();
-const mockListDoctors = jest.fn<() => Promise<unknown>>();
-const mockGetMe = jest.fn<() => Promise<unknown>>();
-const mockListConsentTextVersions = jest.fn<() => Promise<unknown>>();
-const mockGetActiveConsentText = jest.fn<() => Promise<unknown>>();
 const mockCreateConsentRecord = jest.fn<(body: unknown) => Promise<unknown>>();
-jest.mock('../api', () => ({
-  createClientForScenario: () => ({
-    listVisits: mockListVisits,
-    listDoctors: mockListDoctors,
-    getMe: mockGetMe,
-    listConsentTextVersions: mockListConsentTextVersions,
-    getActiveConsentText: mockGetActiveConsentText,
-  }),
+/**
+ * MR-23 B1. The last gating read moved off the mock. The visit and doctor now come from
+ * the pulled store; the notices come from Supabase under RLS through
+ * `src/consent/notices.ts`.
+ *
+ * Mocked rather than wrapped in real providers because `pulled-store.tsx` imports
+ * `../session` -> `../supabase` -> `../config`, whose `loadAppConfig` throws at module load
+ * with no `.env`. `notices.ts` reaches the same client. The provider itself is exercised
+ * for real in `src/sync/pulled-store.test.tsx`.
+ */
+const mockStore = jest.fn();
+jest.mock('../sync/pulled-store', () => ({ usePulledStore: () => mockStore() }));
+const mockFetchNotices = jest.fn<() => Promise<unknown>>();
+const mockFetchActive = jest.fn<(language: string) => Promise<unknown>>();
+jest.mock('../consent/notices', () => ({
+  fetchConsentNotices: () => mockFetchNotices(),
+  fetchActiveNotice: (language: string) => mockFetchActive(language),
 }));
 // MR-18 B1. The WRITE boundary moved from the mock REST client to `sync_push`, so the
 // mock moved with it. The reads on these screens are still `createClientForScenario`, and
@@ -74,27 +78,32 @@ const notice = ConsentTextVersionSchema.parse({
   createdAt: '2026-07-01T00:00:00+05:30',
 });
 
-const me = {
-  profile: {
-    id: '44444444-4444-4444-8444-4444444444aa',
-    fullName: 'Rahul More',
-    email: 'rahul@example.in',
-    role: 'mr',
-    territoryId: '44444444-4444-4444-8444-4444444444cc',
-    reportingManagerId: null,
-    isActive: true,
-    createdAt: '2026-08-01T08:00:00+05:30',
-    updatedAt: '2026-08-01T08:00:00+05:30',
+// `const me = { profile: { fullName: 'Rahul More' }, ... }` stood here and is gone with
+// `getMe()`. It was the source of the fixture name the DPDP fiduciary line showed a
+// doctor -- see "does NOT name the rep" below.
+
+/** A settled store holding the visit and doctor this screen is about. */
+const pulled = (visits: unknown[], doctors: unknown[]) => ({
+  store: {
+    visit: new Map(visits.map((v) => [(v as { id: string }).id, v])),
+    doctor: new Map(doctors.map((d) => [(d as { id: string }).id, d])),
+    beat_plan: new Map(),
+    clinic_address: new Map(),
   },
-  visibleTerritoryIds: [],
-};
+  status: 'ready',
+  notice: null,
+  failure: null,
+  resynced: false,
+  removals: [],
+  zone: { timeZone: 'Asia/Kolkata', source: 'territory' },
+  today: '2026-08-14',
+  refresh: jest.fn(),
+});
 
 const loaded = (): void => {
-  mockListVisits.mockResolvedValue({ items: [visit] });
-  mockListDoctors.mockResolvedValue({ items: [doctor] });
-  mockGetMe.mockResolvedValue(me);
-  mockListConsentTextVersions.mockResolvedValue({ items: [notice] });
-  mockGetActiveConsentText.mockResolvedValue(notice);
+  mockStore.mockReturnValue(pulled([visit], [doctor]));
+  mockFetchNotices.mockResolvedValue([notice]);
+  mockFetchActive.mockResolvedValue(notice);
   mockCreateConsentRecord.mockClear();
   mockReplace.mockClear();
   mockBack.mockClear();
@@ -108,10 +117,21 @@ describe('app/consent/[visitId].tsx — the handoff', () => {
     expect(screen.getByText('Notice v1.2 · English · a1b2c3d4')).toBeTruthy();
   });
 
-  it('names the rep from the token', async () => {
+  it('does NOT name the rep, because the token does not carry a name', async () => {
+    // **This test asserted the opposite and passed, which is why it is worth keeping.**
+    // It was named "names the rep from the token" and the screen's own comment claimed
+    // the same. Measured against a real token, the claims are `app_role`,
+    // `app_territory_id`, `app_is_active` and `email` -- no name and no company. The name
+    // was coming from `getMe()` against the MOCK, so the DPDP fiduciary line named a
+    // FIXTURE rep to a real doctor.
+    //
+    // `fiduciaryNote(null, ...)` and `askedBy` already had honest fallbacks. This asserts
+    // the fallback rather than the fiction, and it will fail the day a name genuinely
+    // reaches the client -- which is the point at which the copy should change.
     loaded();
     await render(<ConsentRoute />);
-    expect(await screen.findByText('Rahul More')).toBeTruthy();
+    expect(screen.queryByText('Rahul More')).toBeNull();
+    expect(await screen.findByText(/Your rep/u)).toBeTruthy();
   });
 
   it('records a decline against the version that was on the screen', async () => {
@@ -165,7 +185,7 @@ describe('app/consent/[visitId].tsx — the handoff', () => {
 
   it('shows no answers when the notice cannot be fetched', async () => {
     loaded();
-    mockGetActiveConsentText.mockRejectedValue(new Error('Network request failed'));
+    mockFetchActive.mockRejectedValue(new Error('Network request failed'));
     await render(<ConsentRoute />);
 
     expect(await screen.findByText('The consent notice could not be loaded')).toBeTruthy();
@@ -187,7 +207,7 @@ describe('app/consent/[visitId].tsx — the handoff', () => {
       effectiveUntil: '2026-08-01T00:00:00+05:30',
     });
     loaded();
-    mockListConsentTextVersions.mockResolvedValue({ items: [notice, hindi, retired] });
+    mockFetchNotices.mockResolvedValue([notice, hindi, retired]);
 
     await render(<ConsentRoute />);
     await screen.findByText(notice.fullText);

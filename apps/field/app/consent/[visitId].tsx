@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import type { ConsentTextVersion } from '@fieldforce/core';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import uuid from 'expo-modules-core/src/uuid';
-import type { ConsentTextVersion, Doctor, Visit } from '@fieldforce/core';
 import { ConsentDetailsScreen, ConsentScreen, Screen } from '@fieldforce/ui';
 import type { ConsentAnswer } from '@fieldforce/ui';
-import { createClientForScenario } from '../../src/api';
 import { createPushClient } from '../../src/sync/push-client';
 import { unavailableReason } from '../../src/capture/preconditions';
+import { fetchActiveNotice, fetchConsentNotices } from '../../src/consent/notices';
+import { usePulledStore } from '../../src/sync/pulled-store';
+import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import type { PreconditionMessage } from '../../src/capture/preconditions';
 import {
   CONSENT_VARIANT,
@@ -52,10 +54,20 @@ export default function ConsentRoute(): ReactNode {
   const { visitId } = useLocalSearchParams<{ visitId: string }>();
   const router = useRouter();
 
-  const [visit, setVisit] = useState<Visit | null>(null);
-  const [doctor, setDoctor] = useState<Doctor | null>(null);
-  const [mrName, setMrName] = useState<string | null>(null);
-  const [organisation, setOrganisation] = useState<string | null>(null);
+  /**
+   * MR-23 B1. **Neither of these is known, and the screen already says so honestly.**
+   *
+   * The comment that stood here claimed *"the MR's own name and their organisation come
+   * from the token"*. They do not: the JWT carries `app_role`, `app_territory_id`,
+   * `app_is_active` and `email` — no name and no company. The name was coming from
+   * `getMe()` against the MOCK, so the fiduciary line named a FIXTURE rep to a real doctor.
+   *
+   * `fiduciaryNote(null, firstName)` already falls back to *"your rep's employer is the
+   * Data Fiduciary"*, and `askedBy` to *"Your rep"* — both true. Registered rather than
+   * papered over: a DPDP fiduciary line that can name neither the company nor the person
+   * is a copy gap somebody has to answer.
+   */
+  const organisation: string | null = null;
   const [versions, setVersions] = useState<readonly ConsentTextVersion[]>([]);
   const [language, setLanguage] = useState<string | null>(null);
   const [notice, setNotice] = useState<ConsentTextVersion | null>(null);
@@ -70,32 +82,34 @@ export default function ConsentRoute(): ReactNode {
   const [busy, setBusy] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
+  /**
+   * MR-23 B1. The visit and the doctor come from the store the pull maintains; the notices
+   * come from Supabase under RLS.
+   *
+   * **The last of the three gating reads.** This screen fetched its versions from the mock
+   * at `:4010`, so an MR standing in front of a doctor was shown a FIXTURE notice, and a
+   * capture made against it would have named a version id Supabase does not hold —
+   * `capture_consent` would have refused it `45001` after the doctor had already answered.
+   */
+  const { store, status, failure: pullFailure } = usePulledStore();
+  const visit = visitsFromStore(store).find((candidate) => candidate.id === visitId) ?? null;
+  const doctor =
+    visit === null
+      ? null
+      : (doctorsFromStore(store).find((candidate) => candidate.id === visit.doctorId) ?? null);
+
   useEffect(() => {
-    const client = createClientForScenario();
     let cancelled = false;
 
-    void Promise.all([
-      client.listVisits(),
-      client.listDoctors(),
-      client.getMe(),
-      client.listConsentTextVersions(),
-    ])
-      .then(([visits, doctors, me, texts]) => {
+    void fetchConsentNotices()
+      .then((texts) => {
         if (cancelled) return;
-        const found = visits.items.find((candidate) => candidate.id === visitId) ?? null;
-        setVisit(found);
-        setDoctor(
-          found === null
-            ? null
-            : (doctors.items.find((candidate) => candidate.id === found.doctorId) ?? null),
-        );
-        setMrName(me.profile.fullName);
-        // The employer's registered name, for the fiduciary line. Nothing in the
-        // contract returns it — see `fiduciaryNote` — so this stays null and the
-        // note falls back to naming the rep rather than printing a placeholder.
-        setOrganisation(null);
-        const live = offerableVersions(texts.items, new Date().toISOString());
+        const live = offerableVersions(texts, new Date().toISOString());
         setVersions(live);
+        // MR-22 B2. `offerableVersions` now sorts, so `live[0]` is a DETERMINISTIC default
+        // rather than whatever order the server happened to return. What the screen shows
+        // first is what the server will record as `displayed_language`, because it is
+        // derived from the version this choice selects.
         setLanguage((current) => current ?? live[0]?.language ?? null);
         // No live version means there is nothing for the second effect to fetch,
         // so this is where the looking stops.
@@ -110,7 +124,7 @@ export default function ConsentRoute(): ReactNode {
     return () => {
       cancelled = true;
     };
-  }, [visitId]);
+  }, []);
 
   // The active version is fetched per language rather than picked out of the list
   // already in hand. `getActiveConsentText` is the server's answer to "which one is
@@ -118,11 +132,9 @@ export default function ConsentRoute(): ReactNode {
   // list happened to be.
   useEffect(() => {
     if (language === null) return;
-    const client = createClientForScenario();
     let cancelled = false;
 
-    void client
-      .getActiveConsentText({ language })
+    void fetchActiveNotice(language)
       .then((version) => {
         if (!cancelled) setNotice(version);
       })
@@ -141,7 +153,9 @@ export default function ConsentRoute(): ReactNode {
     };
   }, [language]);
 
-  const firstName = (mrName ?? 'your rep').split(' ')[0] ?? 'your rep';
+  // `mrName` is null by construction -- see the note above -- so this is the fallback
+  // rather than a choice between two values.
+  const firstName = 'your rep';
   const copy = consentCopy(firstName);
 
   // MR-20 B2. A channel for "this screen cannot act", separate from `blockedReason`, which
@@ -211,15 +225,25 @@ export default function ConsentRoute(): ReactNode {
   return (
     <Screen scrollable>
       <ConsentScreen
-        askedBy={mrName ?? 'Your rep'}
+        askedBy="Your rep"
         /*
           `unavailable` wins over `blockedReason`: if the screen cannot act at all, saying
           "there is no notice for this language" would be answering a question the MR is
           not yet able to reach.
         */
-        blocked={unavailable ?? (settled ? blockedReason(notice, failed) : null)}
+        blocked={
+          unavailable ??
+          (pullFailure !== null
+            ? {
+                title: 'Could not load this visit',
+                detail: 'The app could not reach the server. It will try again.',
+              }
+            : settled
+              ? blockedReason(notice, failed)
+              : null)
+        }
         busy={busy}
-        loading={!settled}
+        loading={!settled || status === 'loading'}
         facts={copy.facts}
         ifAgree={copy.ifAgree}
         ifDecline={copy.ifDecline}

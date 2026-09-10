@@ -26,6 +26,7 @@ import {
 } from './entities.js';
 import type { CheckIn, CheckOut, ClinicAddress, MileageDay, Visit } from './entities.js';
 import { ConsentOutcomeSchema, ConsentRecordSchema, ConsentTextVersionSchema } from './consent.js';
+import type { ConsentTextVersion } from './consent.js';
 import { RecordingSchema, TranscriptSchema, VoiceNoteSchema } from './capture.js';
 import { UploadSessionStateSchema } from './upload.js';
 import { AnalysisOverrideSchema, AnalysisSchema } from './analysis.js';
@@ -845,6 +846,41 @@ export const ClinicAddressRowSchema = z.object({
   updated_at: IsoDateTimeSchema,
 });
 export type ClinicAddressRow = z.infer<typeof ClinicAddressRowSchema>;
+
+/**
+ * A `consent_text_versions` row, as PostgREST returns it — MR-23 B1.
+ *
+ * **`organisation_id` is deliberately not carried.** The client never filters by tenant:
+ * `consent_text_versions_tenant_boundary` is a RESTRICTIVE policy (BE-W79) and
+ * `consent_text_versions_select_own_tenant` is the permissive one, so a row that arrives
+ * has already been scoped by the server. Mapping the column would invite a client-side
+ * check of something the database has already decided, which is the one thing this
+ * repository does not do.
+ */
+const ConsentTextVersionRowSchema = z.object({
+  id: z.string(),
+  version_label: z.string(),
+  language: z.string(),
+  full_text: z.string(),
+  hash: z.string(),
+  effective_from: z.string(),
+  effective_until: z.string().nullable(),
+  created_at: z.string(),
+});
+
+export const fromConsentTextVersionRow = (row: unknown): ConsentTextVersion => {
+  const parsed = ConsentTextVersionRowSchema.parse(row);
+  return ConsentTextVersionSchema.parse({
+    id: parsed.id,
+    versionLabel: parsed.version_label,
+    language: parsed.language,
+    fullText: parsed.full_text,
+    hash: parsed.hash,
+    effectiveFrom: parsed.effective_from,
+    effectiveUntil: parsed.effective_until,
+    createdAt: parsed.created_at,
+  });
+};
 
 export const fromClinicAddressRow = (row: unknown): ClinicAddress => {
   const parsed = ClinicAddressRowSchema.parse(row);
