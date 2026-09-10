@@ -11334,3 +11334,37 @@ At the end of Part B, by agreement, before Part C. Carried forward:
   brief gates a push past Part A on review. No CI run id can be recorded here yet, and
   `@fieldforce/api` — the whole Gate 0 RLS suite and the rollback verification — has not been
   run this session.
+
+#### MR-14 — correction: CI has now run
+
+The section above says *"CI has not run on this work"* and *"no CI run id can be recorded
+here yet"*, because the commits were still local pending review. That was true when it was
+written. The push has since happened and this closes it. Appended rather than edited, per
+the append-only rule.
+
+| | |
+| --- | --- |
+| **Run id** | `34460511926` |
+| **Workflow** | `CI` |
+| **Event** | `push` |
+| **Head SHA** | `a9f4c2cabe03175ac801be75331bc2cc9af08720` |
+| **Is that SHA HEAD?** | **Yes** — `git rev-parse HEAD` matches |
+| **Conclusion** | `success` |
+
+Both jobs, not one:
+
+```
+typecheck . lint . format . unit tests          success
+migrations . Gate 0 RLS suite . rollbacks       success
+```
+
+**This closes the ninth workspace-runner pair.** The counts table above marks
+`@fieldforce/api` as *NOT RUN — not green: not run*, which was honest at the time: a local
+run of `pnpm turbo run test --filter @fieldforce/api --force` was started against the local
+stack and produced no output after ten minutes, so it was stopped rather than reported. The
+`database` job in run `34460511926` ran that same suite on Ubuntu against a fresh stack and
+passed, along with `check:decision-debt` and `verify:rollbacks`.
+
+So the position is: eight pairs verified locally by `pnpm run ci:local`, and the ninth
+verified by CI on the pushed SHA. Nothing in this session's counts rests on a suite that was
+skipped or assumed.
