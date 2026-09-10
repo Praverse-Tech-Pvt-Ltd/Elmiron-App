@@ -1,13 +1,11 @@
-import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useLocalSearchParams } from 'expo-router';
-import { ApiRequestError } from '@fieldforce/core';
 import { DoctorProfileScreen, Screen } from '@fieldforce/ui';
-import { createClientForScenario } from '../../src/api';
+import { usePulledStore } from '../../src/sync/pulled-store';
+import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { lastSeenLabel } from '../../src/doctors/list';
 import { availabilityFrom, availabilitySentence } from '../../src/doctors/availability';
 import { buildDoctorProfile, consentLabel, dayMonthFrom } from '../../src/doctors/profile';
-import type { DoctorProfile } from '../../src/doctors/profile';
 
 /** B9 shows three. More than that is a history screen, which this is not. */
 const VISITS_SHOWN = 3;
@@ -20,66 +18,50 @@ const VISITS_SHOWN = 3;
 const BOUNDARY =
   'Nothing here about what he prescribes, and nothing about his patients. Neither is recorded anywhere in this app.';
 
-type State =
-  | { readonly kind: 'loading' }
-  | { readonly kind: 'loaded'; readonly profile: DoctorProfile }
-  | { readonly kind: 'failed'; readonly title: string; readonly detail: string };
-
 export default function DoctorProfile(): ReactNode {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [state, setState] = useState<State>({ kind: 'loading' });
+  // MR-14 B2. The doctor and their visits come from the store the pull maintains.
+  const { store, status, failure: pullFailure } = usePulledStore();
 
-  useEffect(() => {
-    const client = createClientForScenario();
-    let cancelled = false;
+  const doctor = doctorsFromStore(store).find((candidate) => candidate.id === id);
+  const visits = visitsFromStore(store).filter((visit) => visit.doctorId === id);
 
-    void Promise.all([
-      client.listDoctors(),
-      client.listVisits({ doctorId: id }),
-      client.listConsentRecords({ doctorId: id }),
-    ])
-      .then(([doctorPage, visitPage, consentPage]) => {
-        if (cancelled) return;
-        const doctor = doctorPage.items.find((candidate) => candidate.id === id);
-        if (doctor === undefined) {
-          // Not found is not a denial, and saying "you do not have access" to a
-          // doctor who simply is not in the list would be the app inventing a
-          // decision the server never made.
-          setState({
-            kind: 'failed',
+  /**
+   * **Consent records are not in the pull, by the server's own declaration.**
+   *
+   * `sync_pull`'s completeness field lists `consent_record` in `omittedEntities` alongside
+   * the other capture entities -- a deliberate phase-2 scope, not a gap in this screen. So
+   * the profile is built with none, and `consentLabel(null)` renders NOTHING rather than
+   * "not asked". That distinction is the whole reason this is safe to do: an absent line
+   * makes no claim, while "not asked" against a doctor who agreed would be a false
+   * statement about a consent decision -- the one record in this product where being wrong
+   * is worst. Recorded as a B9 divergence with its verdict in PROJECT-OVERVIEW.md.
+   */
+  const profile = doctor === undefined ? null : buildDoctorProfile(doctor, visits, [], Date.now());
+
+  const failure =
+    pullFailure !== null
+      ? pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
+        ? {
+            title: 'You do not have access to this doctor',
+            detail: 'The server refused this request for your account.',
+          }
+        : {
+            title: 'Could not load this doctor',
+            detail:
+              pullFailure.kind === 'refused'
+                ? `The server refused this sync (${pullFailure.refusal.sqlState}).`
+                : 'The app could not reach the server. It will try again.',
+          }
+      : status !== 'loading' && doctor === undefined
+        ? {
+            // Not found is not a denial. Saying "you do not have access" about a doctor who
+            // simply is not in the list would be the app inventing a decision the server
+            // never made.
             title: 'That doctor is not in your list',
             detail: 'They may belong to another territory, or have been made inactive.',
-          });
-          return;
-        }
-        setState({
-          kind: 'loaded',
-          profile: buildDoctorProfile(doctor, visitPage.items, consentPage.items, Date.now()),
-        });
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        if (error instanceof ApiRequestError && error.code === 'permission_denied') {
-          setState({
-            kind: 'failed',
-            title: 'You do not have access to this doctor',
-            detail: error.message,
-          });
-          return;
-        }
-        setState({
-          kind: 'failed',
-          title: 'Could not load this doctor',
-          detail: error instanceof Error ? error.message : 'Unknown failure',
-        });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
-
-  const profile = state.kind === 'loaded' ? state.profile : null;
+          }
+        : null;
 
   return (
     <Screen scrollable>
@@ -93,8 +75,8 @@ export default function DoctorProfile(): ReactNode {
         )}
         boundary={BOUNDARY}
         detail={profile?.detail ?? ''}
-        failure={state.kind === 'failed' ? { title: state.title, detail: state.detail } : null}
-        loading={state.kind === 'loading'}
+        failure={failure}
+        loading={status === 'loading'}
         name={profile?.name ?? 'Doctor'}
         recentVisits={(profile?.recentVisits ?? []).slice(0, VISITS_SHOWN).map((visit) => ({
           id: visit.visitId,

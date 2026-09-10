@@ -1,16 +1,15 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useRouter } from 'expo-router';
-import { ApiRequestError } from '@fieldforce/core';
 import { BodyText, Heading, ListRow, Screen, TodayScreen } from '@fieldforce/ui';
-import { createClientForScenario } from '../../src/api';
 import { useSession } from '../../src/session';
 import { loadQueueState } from '../../src/sync/async-storage-store';
 import { indicatorStateFor } from '../../src/sync/indicator';
+import { usePulledStore } from '../../src/sync/pulled-store';
+import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { emptyQueue } from '../../src/sync/reducer';
 import type { SyncQueueState } from '../../src/sync/reducer';
 import { clockFrom, summariseDay } from '../../src/today/plan';
-import type { DaySummary } from '../../src/today/plan';
 
 /**
  * The role-aware shell. Which destinations exist depends on the role in the token.
@@ -29,11 +28,6 @@ const destinationsFor = (role: string): readonly { title: string; detail: string
   }
 };
 
-type DayState =
-  | { readonly kind: 'loading' }
-  | { readonly kind: 'loaded'; readonly summary: DaySummary }
-  | { readonly kind: 'failed'; readonly title: string; readonly detail: string };
-
 /**
  * An MR's home is their day — Phase 2 B1, which replaces the "My day — FE-W3"
  * placeholder row that stood here.
@@ -44,8 +38,10 @@ type DayState =
  */
 const MrToday = (): ReactNode => {
   const router = useRouter();
-  const [state, setState] = useState<DayState>({ kind: 'loading' });
   const [queue, setQueue] = useState<SyncQueueState>(emptyQueue);
+  // MR-14 B2/B3. The day comes from the store the pull maintains, not from
+  // `createClientForScenario()`. This line is the read conversion.
+  const { store, status, notice, failure: pullFailure, removals } = usePulledStore();
 
   useEffect(() => {
     // B2. The queue is read on every visit to this screen rather than once, because
@@ -61,58 +57,60 @@ const MrToday = (): ReactNode => {
     };
   }, []);
 
-  useEffect(() => {
-    const client = createClientForScenario();
-    let cancelled = false;
+  // B5. `done` and `notMet` are the SERVER's visit statuses, carried through
+  // `summariseDay` unchanged. An MR who found three doctors unavailable reads three
+  // not-met and no congratulation -- the count is attendance, never a score.
+  const summary = summariseDay(visitsFromStore(store), doctorsFromStore(store));
+  const startedAt = summary.startedAt;
+  const next = summary.next;
 
-    void Promise.all([client.listVisits(), client.listDoctors()])
-      .then(([visits, doctors]) => {
-        if (!cancelled) {
-          setState({ kind: 'loaded', summary: summariseDay(visits.items, doctors.items) });
-        }
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        // A denial is its own state, never an empty day — the rule the doctors screen
-        // establishes. An empty day and a forbidden day look identical to an MR, and
-        // only one of them means they can stop working.
-        if (error instanceof ApiRequestError && error.code === 'permission_denied') {
-          setState({
-            kind: 'failed',
+  // B6 and B8, through one channel. `notice` is null on an ordinary sync and the
+  // removals list is empty, so this is an empty array and TodayScreen renders nothing
+  // -- the silence B6 requires, asserted rather than assumed.
+  const notices = [
+    ...(notice === null ? [] : [{ title: notice.title, body: notice.body }]),
+    // B8. `removalWording` says "no longer yours" for out_of_scope and never
+    // "deleted" -- false for a reassignment, and dangerously so for consent.
+    ...removals.map((removal) => ({
+      title:
+        removal.reason === 'out_of_scope' ? 'One of your records moved' : 'A record was removed',
+      body: removal.message,
+    })),
+  ];
+
+  // A refusal is its own state, never an empty day. An empty day and a refused one
+  // look identical to an MR, and only one of them means they can stop working.
+  const failure =
+    pullFailure === null
+      ? null
+      : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
+        ? {
             title: 'You do not have access to this plan',
-            detail: error.message,
-          });
-          return;
-        }
-        setState({
-          kind: 'failed',
-          title: 'Could not load your day',
-          detail: error instanceof Error ? error.message : 'Unknown failure',
-        });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const summary = state.kind === 'loaded' ? state.summary : null;
-  const startedAt = summary?.startedAt ?? null;
-  const next = summary?.next ?? null;
+            detail: 'The server refused this request for your account.',
+          }
+        : {
+            title: 'Could not load your day',
+            detail:
+              pullFailure.kind === 'refused'
+                ? `The server refused this sync (${pullFailure.refusal.sqlState}).`
+                : 'The app could not reach the server. It will try again when you come back to it.',
+          };
 
   return (
     <TodayScreen
       dayLabel="Today"
       startedLabel={startedAt === null ? null : `Started ${clockFrom(startedAt)}`}
-      planned={summary?.planned ?? 0}
-      done={summary?.done ?? 0}
-      notMet={summary?.notMet ?? 0}
+      planned={summary.planned}
+      done={summary.done}
+      notMet={summary.notMet}
       next={
         next === null
           ? null
           : {
               doctorName: next.doctorName,
               clinic: next.clinic,
+              // B4. "Not arrived yet" is not the same as "there is none".
+              clinicPending: next.clinicPending,
               scheduledLabel:
                 next.scheduledFor === null ? null : `Scheduled ${clockFrom(next.scheduledFor)}`,
             }
@@ -140,8 +138,9 @@ const MrToday = (): ReactNode => {
               router.push(`/visit/${next.visitId}`);
             },
           })}
-      loading={state.kind === 'loading'}
-      failure={state.kind === 'failed' ? { title: state.title, detail: state.detail } : null}
+      loading={status === 'loading'}
+      failure={failure}
+      notices={notices}
     />
   );
 };

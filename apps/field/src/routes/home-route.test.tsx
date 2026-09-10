@@ -5,14 +5,19 @@ import { BodyText as mockBodyText } from '@fieldforce/ui';
 const mockSession = jest.fn();
 jest.mock('../session', () => ({ useSession: () => mockSession() }));
 
-// The MR branch is the day view now, and it fetches. Mocked at the client boundary
-// like the doctors route does — importing the real one pulls in `src/config`, which
-// validates EXPO_PUBLIC_* at module load and throws under jest.
-const mockListVisits = jest.fn<() => Promise<unknown>>();
-const mockListDoctors = jest.fn<() => Promise<unknown>>();
-jest.mock('../api', () => ({
-  createClientForScenario: () => ({ listVisits: mockListVisits, listDoctors: mockListDoctors }),
-}));
+// MR-14 B2. The MR branch reads the day from the store the pull maintains, so the
+// boundary this route is mocked at moved from the API client to that store.
+//
+// Mocked for the same reason the client was: `pulled-store.tsx` imports `../session`,
+// which imports `../supabase` and then `../config`, and `loadAppConfig` throws at module
+// load on a missing EXPO_PUBLIC_* value. That throw is correct for the app — a
+// misconfigured build should fail on the first screen — and wrong for a unit test that
+// has no `.env` and needs none to check how a screen presents a value.
+//
+// The PROVIDER itself is exercised for real, with injected dependencies, in
+// `src/sync/pulled-store.test.tsx`. This file is about the screen.
+const mockStore = jest.fn();
+jest.mock('../sync/pulled-store', () => ({ usePulledStore: () => mockStore() }));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
   // Rendered through @fieldforce/ui rather than react-native's Text: apps/field is
@@ -26,13 +31,23 @@ import Home from '../../app/(tabs)/home';
 
 const signedInAs = (role: string) => ({ status: 'signed-in', role, signOut: jest.fn() });
 
+/** An empty, settled store — the shape `usePulledStore` returns after a quiet sync. */
+const emptyPulled = () => ({
+  store: { visit: new Map(), doctor: new Map(), beat_plan: new Map(), clinic_address: new Map() },
+  status: 'ready',
+  notice: null,
+  failure: null,
+  resynced: false,
+  removals: [],
+  refresh: jest.fn(),
+});
+
 describe('app/home.tsx — the role-aware shell', () => {
   it('shows the MR their own day, not a row promising one later', async () => {
     // "My day — FE-W3" was a placeholder for exactly this screen; B1 replaces it.
     // The MR's home IS the day, so the assertion is that the day rendered.
     mockSession.mockReturnValue(signedInAs('mr'));
-    mockListVisits.mockResolvedValue({ items: [] });
-    mockListDoctors.mockResolvedValue({ items: [] });
+    mockStore.mockReturnValue(emptyPulled());
     await render(<Home />);
     // The day view's own furniture, not a navigation row that leads to one.
     expect(await screen.findByText('Nothing planned for today')).toBeTruthy();
@@ -43,6 +58,7 @@ describe('app/home.tsx — the role-aware shell', () => {
 
   it("shows a field manager their team, not the MR's day view", async () => {
     mockSession.mockReturnValue(signedInAs('field_manager'));
+    mockStore.mockReturnValue(emptyPulled());
     await render(<Home />);
     expect(screen.getByText('Team')).toBeTruthy();
     expect(screen.queryByText('Nothing planned for today')).toBeNull();
@@ -50,6 +66,7 @@ describe('app/home.tsx — the role-aware shell', () => {
 
   it('shows an admin the administration surface', async () => {
     mockSession.mockReturnValue(signedInAs('admin'));
+    mockStore.mockReturnValue(emptyPulled());
     await render(<Home />);
     expect(screen.getByText('Administration')).toBeTruthy();
     expect(screen.queryByText('Nothing planned for today')).toBeNull();
@@ -59,6 +76,7 @@ describe('app/home.tsx — the role-aware shell', () => {
     // The role comes from the JWT claim Backend's auth hook installs. Displaying it
     // is how an MR and a support engineer can both see which role the server issued.
     mockSession.mockReturnValue(signedInAs('field_manager'));
+    mockStore.mockReturnValue(emptyPulled());
     await render(<Home />);
     expect(screen.getByText(/Signed in as field_manager/u)).toBeTruthy();
   });
@@ -76,6 +94,7 @@ describe('app/home.tsx — the role-aware shell', () => {
       // something this test can observe. What home still owes every signed-in role
       // is a screen of their own, which is what this asserts.
       mockSession.mockReturnValue(signedInAs(role));
+      mockStore.mockReturnValue(emptyPulled());
       await render(<Home />);
       expect(screen.queryByText('redirect:/sign-in')).toBeNull();
     },

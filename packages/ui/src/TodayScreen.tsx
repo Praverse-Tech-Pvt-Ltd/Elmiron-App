@@ -36,6 +36,15 @@ import type { SyncQueueState } from './SyncQueueIndicator';
 export interface TodayNextVisit {
   readonly doctorName: string;
   readonly clinic: string | null;
+  /**
+   * MR-14 B4. The clinic address is expected and has not synced yet.
+   *
+   * Distinguishes "this visit has no clinic address" from "this visit's address has not
+   * arrived", which `clinic: null` alone conflated — both rendered as a missing line. The
+   * second is a state of the client, not a fact about the day. `clinic` is always null
+   * when this is true.
+   */
+  readonly clinicPending: boolean;
   /** Already formatted by the caller — this component does no clock arithmetic. */
   readonly scheduledLabel: string | null;
 }
@@ -104,6 +113,19 @@ export interface TodayScreenProps {
   readonly onOpenRoute?: () => void;
   /** A denial or a failure the MR needs to see instead of the day. */
   readonly failure?: { readonly title: string; readonly detail: string } | null;
+  /**
+   * MR-14 B6 and B8. Things the SERVER said about this sync, in its own words.
+   *
+   * Two kinds arrive here and both are the server's sentence rather than this component's:
+   * the completeness notice when a full re-sync carried no tombstones, and the wording for
+   * a record that has left the MR's scope.
+   *
+   * **Empty must render nothing at all.** The silence is load-bearing: a notice that
+   * appears on every sync teaches people to dismiss it, and then it is not there on the
+   * sync where it mattered. `noticeFor` returns null when the server omits nothing, and
+   * this renders that as an absence rather than as an empty container.
+   */
+  readonly notices?: readonly { readonly title: string; readonly body: string }[];
 }
 
 const styles = StyleSheet.create({
@@ -132,6 +154,7 @@ export const TodayScreen = ({
   onOpenDayEnd,
   loading = false,
   failure = null,
+  notices = [],
 }: TodayScreenProps): ReactNode => {
   if (failure !== null) {
     return <Banner detail={failure.detail} title={failure.title} tone="critical" />;
@@ -150,6 +173,18 @@ export const TodayScreen = ({
         answers is a visit they do not log.
       */}
       {loading ? <Spinner label="Getting today's plan" /> : null}
+
+      {/*
+        B6/B8. Rendered only when the server actually said something. `notices` is empty on
+        an ordinary sync and this whole block disappears -- see the prop's comment for why
+        that silence is the point rather than an optimisation.
+      */}
+      {notices.map((item) => (
+        <Card key={`${item.title}:${item.body}`}>
+          <BodyText>{item.title}</BodyText>
+          <Label muted>{item.body}</Label>
+        </Card>
+      ))}
 
       {loading && planned === 0 ? null : next === null ? (
         // Two different nulls, and conflating them would be a lie in one direction
@@ -175,7 +210,15 @@ export const TodayScreen = ({
           <Label>Next visit</Label>
           <View style={styles.heroLines}>
             <Heading>{next.doctorName}</Heading>
-            {next.clinic === null ? null : <BodyText>{next.clinic}</BodyText>}
+            {next.clinic !== null ? (
+              <BodyText>{next.clinic}</BodyText>
+            ) : next.clinicPending ? (
+              // MR-14 B4. The address is expected and has not arrived. Said plainly,
+              // because silence here reads as "this visit has no clinic" -- and the one
+              // thing this screen must never do is present an absence as a fact. Never a
+              // wrong address, never an empty one dressed up as an answer.
+              <BodyText>Address still syncing</BodyText>
+            ) : null}
             {next.scheduledLabel === null ? null : <BodyText>{next.scheduledLabel}</BodyText>}
           </View>
         </Card>

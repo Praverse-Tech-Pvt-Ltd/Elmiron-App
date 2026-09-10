@@ -14,6 +14,7 @@ import {
 import { SessionProvider } from '../src/session';
 import { AuthGate } from '../src/auth-gate';
 import { OutboxFlusher } from '../src/sync/flusher';
+import { PulledStoreProvider } from '../src/sync/pulled-store';
 
 /**
  * The four faces Phase 1's scale actually asks for.
@@ -91,8 +92,16 @@ export default function RootLayout(): ReactNode {
             screen they happen to be on.
           */}
           <OutboxFlusher>
-            <StatusBar style="dark" />
-            <Stack screenOptions={{ headerShown: false }} />
+            {/*
+              MR-14 B1. The pull's caller, at the root for the same reason the flusher is:
+              every screen that reads the day reads it from here, and mounting it on one
+              screen would leave the next one reading nothing. Inside AuthGate, so a
+              signed-out session never pulls with no token.
+            */}
+            <PulledStoreProvider>
+              <StatusBar style="dark" />
+              <Stack screenOptions={{ headerShown: false }} />
+            </PulledStoreProvider>
           </OutboxFlusher>
         </AuthGate>
       </SessionProvider>

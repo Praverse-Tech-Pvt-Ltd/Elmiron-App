@@ -28,6 +28,20 @@ export interface NextVisit {
   readonly doctorName: string;
   /** "Sunrise Clinic, Prabhadevi" — label and city, when the address is known. */
   readonly clinic: string | null;
+  /**
+   * MR-14 B4. The address is expected and has not arrived yet.
+   *
+   * **`clinic: null` used to mean two different things** — this visit has no clinic
+   * address, and this visit's clinic address has not synced — and the screen rendered
+   * both as a missing line. The second is a temporary state of the client, not a fact
+   * about the day, and telling an MR nothing when the answer is "wait a moment" is the
+   * same class of error as showing them a wrong address.
+   *
+   * A doctor and their addresses are independent rows in one cursor-ordered stream, so
+   * this window is real rather than theoretical. `clinic` is always null when this is
+   * true: the rule is never a wrong address, and never an empty one presented as fact.
+   */
+  readonly clinicPending: boolean;
   /** Server-scheduled time, ISO. Null for an unplanned visit. */
   readonly scheduledFor: string | null;
 }
@@ -67,10 +81,45 @@ const bySchedule = (a: Visit, b: Visit): number => {
   return a.scheduledFor.localeCompare(b.scheduledFor);
 };
 
-const clinicFor = (doctor: Doctor | undefined, clinicAddressId: string | null): string | null => {
-  if (doctor === undefined || clinicAddressId === null) return null;
+/**
+ * The clinic line, and whether its absence is a fact or a wait — B4.
+ *
+ * Three outcomes, and they are genuinely different things to an MR standing in the street:
+ *
+ *   * a label            — the address is known;
+ *   * nothing, settled   — the visit carries no clinic address at all, so there is nothing
+ *                          to show and nothing to wait for;
+ *   * nothing, pending   — the visit names an address that has not arrived, or names a
+ *                          doctor who has not arrived. It is coming.
+ *
+ * The pending case is decided by `clinicAddressId` being set and unresolvable, which needs
+ * no extra parameter: the visit itself says whether an address is expected.
+ */
+const clinicFor = (
+  doctor: Doctor | undefined,
+  clinicAddressId: string | null,
+): { readonly label: string | null; readonly pending: boolean } => {
+  // The visit names no clinic address. Nothing is missing and nothing is coming.
+  if (clinicAddressId === null) return { label: null, pending: false };
+  // An address is expected. Until the doctor and the address are both here, it is pending
+  // rather than absent -- including when the doctor row itself has not arrived, because
+  // the addresses travel with neither of them guaranteed to be first.
+  if (doctor === undefined) return { label: null, pending: true };
   const address = doctor.clinicAddresses.find((candidate) => candidate.id === clinicAddressId);
-  return address === undefined ? null : `${address.label}, ${address.city}`;
+  return address === undefined
+    ? { label: null, pending: true }
+    : { label: `${address.label}, ${address.city}`, pending: false };
+};
+
+const nextVisitFrom = (visit: Visit, doctor: Doctor | undefined): NextVisit => {
+  const clinic = clinicFor(doctor, visit.clinicAddressId);
+  return {
+    visitId: visit.id,
+    doctorName: doctor?.fullName ?? 'Doctor not in your list',
+    clinic: clinic.label,
+    clinicPending: clinic.pending,
+    scheduledFor: visit.scheduledFor,
+  };
 };
 
 export const summariseDay = (visits: readonly Visit[], doctors: readonly Doctor[]): DaySummary => {
@@ -97,15 +146,7 @@ export const summariseDay = (visits: readonly Visit[], doctors: readonly Doctor[
     done: counted.filter((visit) => visit.status === 'completed').length,
     notMet: counted.filter((visit) => visit.status === 'not_met').length,
     startedAt: startedTimes[0] ?? null,
-    next:
-      head === undefined
-        ? null
-        : {
-            visitId: head.id,
-            doctorName: byId.get(head.doctorId)?.fullName ?? 'Doctor not in your list',
-            clinic: clinicFor(byId.get(head.doctorId), head.clinicAddressId),
-            scheduledFor: head.scheduledFor,
-          },
+    next: head === undefined ? null : nextVisitFrom(head, byId.get(head.doctorId)),
   };
 };
 

@@ -9,7 +9,12 @@ const props = (over: Partial<TodayScreenProps> = {}): TodayScreenProps => ({
   planned: 9,
   done: 6,
   notMet: 0,
-  next: { doctorName: 'Dr S. Iyer', clinic: 'Sunrise Clinic, Prabhadevi', scheduledLabel: null },
+  next: {
+    doctorName: 'Dr S. Iyer',
+    clinic: 'Sunrise Clinic, Prabhadevi',
+    clinicPending: false,
+    scheduledLabel: null,
+  },
   sync: { kind: 'idle', at: null },
   onOpenQueue: () => undefined,
   ...over,
@@ -172,5 +177,85 @@ describe('D3 — attendance, not achievement', () => {
     await render(<TodayScreen {...props({ next: null, planned: 3, done: 3, notMet: 0 })} />);
     expect(screen.getByText('You went to every visit on the plan.')).toBeTruthy();
     expect(screen.queryByText(/not available/u)).toBeNull();
+  });
+});
+
+/**
+ * MR-14 B4, B6 and B8 — the three places this screen must not present an absence as a fact.
+ */
+describe('what the screen says when it does not know', () => {
+  it('says the address is still syncing rather than showing no clinic line at all', async () => {
+    // B4. The visit names a clinic address that has not arrived. Rendering nothing here is
+    // indistinguishable from a visit that genuinely has no clinic, and one of those is a
+    // fact while the other is a state of the client.
+    await render(
+      <TodayScreen
+        {...props({
+          next: {
+            doctorName: 'Dr S. Iyer',
+            clinic: null,
+            clinicPending: true,
+            scheduledLabel: null,
+          },
+        })}
+      />,
+    );
+    expect(screen.getByText('Address still syncing')).toBeTruthy();
+  });
+
+  it('and shows no clinic line at all when the visit genuinely has no address', async () => {
+    // The other side of the same guard. Without this, "always say syncing" would pass the
+    // test above while being just as wrong.
+    await render(
+      <TodayScreen
+        {...props({
+          next: {
+            doctorName: 'Dr S. Iyer',
+            clinic: null,
+            clinicPending: false,
+            scheduledLabel: null,
+          },
+        })}
+      />,
+    );
+    expect(screen.queryByText('Address still syncing')).toBeNull();
+  });
+
+  it('is SILENT when the server omitted nothing', async () => {
+    // B6. The silence is the assertion. A notice on every sync is a notice nobody reads,
+    // and this is the case that makes the other one meaningful.
+    await render(<TodayScreen {...props()} />);
+    expect(screen.queryByText('Your list has been rebuilt')).toBeNull();
+  });
+
+  it('carries the completeness notice when there was one', async () => {
+    // The positive control for the silence above.
+    await render(
+      <TodayScreen
+        {...props({
+          notices: [{ title: 'Your list has been rebuilt', body: 'This was a full refresh.' }],
+        })}
+      />,
+    );
+    expect(screen.getByText('Your list has been rebuilt')).toBeTruthy();
+  });
+
+  it('says a reassigned record is no longer yours, and never that it was deleted', async () => {
+    // B8. ADR §6 Q2. "Deleted" is false for a record that moved territory, and for a
+    // consent record it is dangerously so. This path had never been exercised.
+    await render(
+      <TodayScreen
+        {...props({
+          notices: [
+            {
+              title: 'One of your records moved',
+              body: 'This is no longer yours. It has moved to another territory.',
+            },
+          ],
+        })}
+      />,
+    );
+    expect(screen.getByText(/no longer yours/)).toBeTruthy();
+    expect(screen.queryByText(/deleted/i)).toBeNull();
   });
 });
