@@ -1,12 +1,13 @@
 import {
   ApiRequestError,
+  CreateCallReportRequestSchema,
   CreateConsentRecordRequestSchema,
   CreateSampleAndInputRequestSchema,
   SyncQueueItemSchema,
 } from '@fieldforce/core';
 import type {
-  ApiClient,
   ApiErrorCode,
+  CreateCallReportRequest,
   SyncRejectionCode,
   CreateCheckInRequest,
   CreateCheckOutRequest,
@@ -15,6 +16,8 @@ import type {
   SyncQueueItem,
 } from '@fieldforce/core';
 import { asyncStorageQueueStore, loadQueueState } from './async-storage-store';
+import { SyncPushRefusal } from './push-client';
+import type { OutboxWriteClient } from './push-client';
 import { syncQueueReducer } from './reducer';
 import type { SyncQueueState } from './reducer';
 
@@ -176,6 +179,35 @@ export const consentQueueItem = (
   });
 
 /**
+ * A queue row for a call report — MR-18 B2.
+ *
+ * **The last of the five to get one, and the only write that never queued at all.** The
+ * screen called `createClientForScenario().createCallReport()` directly, so an MR who lost
+ * signal after typing a visit summary was shown *"Your words are still on this screen — try
+ * again when you have signal"* — the app asking them to retype work it had chosen not to
+ * keep.
+ *
+ * `entityId` is the visit, matching the other four, so everything waiting on one visit
+ * groups together on the queue screen.
+ */
+export const callReportQueueItem = (
+  body: CreateCallReportRequest,
+  operation: 'create' = 'create',
+): SyncQueueItem =>
+  SyncQueueItemSchema.parse({
+    id: body.id,
+    entity: 'call_report',
+    operation,
+    entityId: body.visitId,
+    payload: { ...body, __queueEntity: 'call_report' },
+    status: 'queued',
+    attemptCount: 1,
+    lastError: null,
+    clientCreatedAt: nowIso(),
+    syncedAt: null,
+  });
+
+/**
  * Send something, and queue it only if the attempt never reached a verdict.
  *
  * The caller passes the work twice — once as the call to make, once as the row to
@@ -278,7 +310,7 @@ export interface FlushResult {
  * MR whose second check-in is refused should still have their third one sent.
  */
 export const flushOutbox = async (
-  client: ApiClient,
+  client: OutboxWriteClient,
   store: QueuePersistence = devicePersistence,
 ): Promise<FlushResult> => {
   let state = await store.read();
@@ -341,6 +373,28 @@ export const flushOutbox = async (
       // **A refusal is not a silence.** `sendOrQueue` has always drawn this line; the
       // flush did not, and treated a server "no" as "no answer" — retrying a permanently
       // refused row forever and never showing anybody why.
+      // MR-18 B1. The `sync_push` refusal carries the SQLSTATE, which is the whole point
+      // of MR-17's threading: 45001, 45004, 45007 and 45008 each reach the MR with their
+      // own remedy instead of collapsing onto `internal_error`. Checked BEFORE
+      // `ApiRequestError` because it is the richer verdict; the REST branch below stays for
+      // any path still on that transport.
+      if (error instanceof SyncPushRefusal) {
+        state = syncQueueReducer(state, {
+          type: 'verdict_received',
+          verdict: {
+            id: item.id,
+            status: error.deadLettered ? 'dead_lettered' : 'rejected',
+            rejectionCode: error.rejectionCode ?? 'internal_error',
+            sqlState: error.sqlState,
+            explanation: error.message,
+            warnings: [],
+            attemptsRemaining: 0,
+            receivedAt: null,
+          },
+        });
+        continue;
+      }
+
       if (error instanceof ApiRequestError) {
         state = syncQueueReducer(state, {
           type: 'verdict_received',
@@ -424,7 +478,7 @@ type SendPlan = { readonly send: () => Promise<unknown> } | SendBlocked;
  * endpoint yet, so "we cannot send this" is a decision written down once rather than the
  * absence of a branch.
  */
-const sendFor = (client: ApiClient, item: SyncQueueItem): SendPlan => {
+const sendFor = (client: OutboxWriteClient, item: SyncQueueItem): SendPlan => {
   const blocked = (reason: SendBlocked['blocked']): SendBlocked => ({ blocked: reason });
   const plan = <T>(body: T | null, call: (body: T) => Promise<unknown>): SendPlan =>
     body === null ? blocked('unreadable_payload') : { send: () => call(body) };
@@ -446,15 +500,20 @@ const sendFor = (client: ApiClient, item: SyncQueueItem): SendPlan => {
     case 'consent_record':
       return plan(CreateConsentRecordRequestFrom(item), (body) => client.createConsentRecord(body));
 
-    // Nothing enqueues these today, and each is a deliberate gap rather than an oversight:
-    //   `visit`        -- written straight to the table, no RPC in the way (FIX-07).
-    //   `call_report`  -- written directly and NOT queued at all; MR-09 Part D converts it.
-    //   `recording`    -- needs an uploadGrantId only an upload session can mint (FE-W29).
-    //   `voice_note`   -- the same.
+    // MR-18 B2. A call report replays as a call report. It was the one write that did not
+    // queue at all -- a bare `createClientForScenario().createCallReport()` straight to the
+    // mock -- so an MR with no signal was told to retype a visit summary the app had
+    // declined to keep.
+    case 'call_report':
+      return plan(CreateCallReportRequestFrom(item), (body) => client.createCallReport(body));
+
+    // Still deliberate gaps rather than oversights:
+    //   `visit`      -- written straight to the table, no RPC in the way (FIX-07).
+    //   `recording`  -- needs an uploadGrantId only an upload session can mint (FE-W29).
+    //   `voice_note` -- the same.
     // Listed rather than defaulted, so that converting one is a change to this line and
     // not a change to nothing.
     case 'visit':
-    case 'call_report':
     case 'recording':
     case 'voice_note':
       return blocked('not_convertible');
@@ -564,6 +623,19 @@ const CreateSampleAndInputRequestFrom = (
  * that lost either of those would push a consent record nobody can reconstruct, and
  * an unprovable consent is worse than a missing one — so it stays queued instead.
  */
+/**
+ * The same, for a call report.
+ *
+ * Parsed by the contract schema rather than shape-checked by hand, for the reason the
+ * samples reader gives: a row written by an older build whose fields have since changed
+ * fails here and stays queued, instead of being posted as a half-valid report.
+ */
+const CreateCallReportRequestFrom = (item: SyncQueueItem): CreateCallReportRequest | null => {
+  if (!payloadIs(item, 'call_report')) return null;
+  const parsed = CreateCallReportRequestSchema.safeParse(item.payload);
+  return parsed.success ? parsed.data : null;
+};
+
 const CreateConsentRecordRequestFrom = (item: SyncQueueItem): CreateConsentRecordRequest | null => {
   if (!payloadIs(item, 'consent_record')) return null;
   const parsed = CreateConsentRecordRequestSchema.safeParse(item.payload);

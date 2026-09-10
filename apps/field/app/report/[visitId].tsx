@@ -2,10 +2,15 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import uuid from 'expo-modules-core/src/uuid';
-import { ApiRequestError } from '@fieldforce/core';
 import type { Doctor, Visit } from '@fieldforce/core';
 import { CallReportScreen, Screen } from '@fieldforce/ui';
+// The WRITE is converted; the READS on this screen are not. `listVisits`/`listDoctors`
+// below still come from the mock, and this screen is named as such in the MR-18 C7 table.
+// Part B is the write conversion, and pretending otherwise here would be the single-column
+// table all over again.
 import { createClientForScenario } from '../../src/api';
+import { createPushClient } from '../../src/sync/push-client';
+import { callReportQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { dayMonthFrom } from '../../src/doctors/profile';
 
 /**
@@ -53,31 +58,64 @@ export default function CallReport(): ReactNode {
     setSending(true);
     setFailure(null);
 
-    void createClientForScenario()
-      .createCallReport({
-        id: uuid.v4(),
-        visitId,
-        summary,
-        // See the note above: no catalogue, so no ids rather than invented ones.
-        productIdsDiscussed: [],
-        objectionsRaised: objections.trim() === '' ? null : objections,
-        nextStep: nextStep.trim() === '' ? null : nextStep,
-      })
-      .then(() => {
-        setSentNote('Your manager sees this next time they open your visits.');
+    const body = {
+      id: uuid.v4(),
+      visitId,
+      summary,
+      // See the note above: no catalogue, so no ids rather than invented ones.
+      productIdsDiscussed: [],
+      objectionsRaised: objections.trim() === '' ? null : objections,
+      nextStep: nextStep.trim() === '' ? null : nextStep,
+    };
+
+    /**
+     * MR-18 B2/B3. Through the outbox to Supabase, like the other four.
+     *
+     * **This was the only write that did not queue at all** — a bare
+     * `createClientForScenario().createCallReport()` straight to `:4010`. So the copy
+     * below is not a wording change, it is the wording catching up with what the code now
+     * does. Three outcomes, and each says something different:
+     *
+     *   sent    — the server answered and accepted. Only here may the app say the manager
+     *             will see it.
+     *   queued  — no answer. The note IS SAFE, on this phone, and will go by itself. It is
+     *             NOT sent, and saying so would be the app taking credit for work it has
+     *             not done.
+     *   refused — the server said no. `flushOutbox` renders the reason and the remedy on
+     *             the queue screen; here the MR is told it needs attention.
+     *
+     * **Does this depend on `draft` status working?** No. `call_reports.status` has only
+     * ever been `submitted` in any fixture (MR-16 B4), and nothing here writes `draft`:
+     * `apply_sync_item` defaults a call report with no `supersedesCallReportId` to
+     * `'draft'` on the direct-insert branch, but the copy makes no claim about the report's
+     * STATUS at all — only about whether the SERVER has it. That distinction is why the
+     * replacement is safe while `draft` remains unexercised.
+     */
+    void sendOrQueue(() => createPushClient().createCallReport(body), callReportQueueItem(body))
+      .then((outcome) => {
+        if (outcome.kind === 'sent') {
+          setSentNote('Your manager sees this next time they open your visits.');
+          return;
+        }
+        if (outcome.kind === 'queued') {
+          setSentNote(
+            'Saved on this phone. It will send by itself when you have signal — you do not have to retype it.',
+          );
+          return;
+        }
+        setFailure({ title: 'That was refused', detail: outcome.message });
       })
       .catch((error: unknown) => {
-        setFailure(
-          error instanceof ApiRequestError
-            ? { title: 'That was refused', detail: error.message }
-            : {
-                title: 'Not sent yet',
-                detail:
-                  error instanceof Error
-                    ? `${error.message} Your words are still on this screen — try again when you have signal.`
-                    : 'Your words are still on this screen — try again when you have signal.',
-              },
-        );
+        // `sendOrQueue` only rejects if the QUEUE itself could not be written, which means
+        // the note is genuinely not safe anywhere. That is the one case where the MR must
+        // be told to keep the screen open.
+        setFailure({
+          title: 'Not saved',
+          detail:
+            error instanceof Error
+              ? `${error.message} Keep this screen open — the note is not saved yet.`
+              : 'Keep this screen open — the note is not saved yet.',
+        });
       })
       .finally(() => {
         setSending(false);

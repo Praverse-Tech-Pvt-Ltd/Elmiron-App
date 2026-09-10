@@ -18,6 +18,7 @@ import { ApiRequestError } from '@fieldforce/core';
 import type { ConsentRecord, Doctor, Visit } from '@fieldforce/core';
 import { Screen, VisitScreen } from '@fieldforce/ui';
 import { createClientForScenario } from '../../src/api';
+import { createPushClient } from '../../src/sync/push-client';
 import { takeFix } from '../../src/capture/location';
 import { actionLabelFor, blockedReason, checkInRequest, stageOf } from '../../src/capture/visit';
 import {
@@ -206,7 +207,8 @@ export default function VisitRoute(): ReactNode {
           return;
         }
 
-        const client = createClientForScenario();
+        // MR-18 B1. Writes go through `sync_push` to Supabase, never to :4010.
+        const client = createPushClient();
         const body = checkInRequest({
           id: uuid.v4(),
           visitId: visit.id,

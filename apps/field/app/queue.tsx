@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { QueueScreen } from '@fieldforce/ui';
-import { createClientForScenario } from '../src/api';
 import { loadQueueState } from '../src/sync/async-storage-store';
 import { flushOutbox } from '../src/sync/outbox';
+import { createPushClient } from '../src/sync/push-client';
 import { presentRejection } from '../src/sync/explanation';
 import { emptyQueue } from '../src/sync/reducer';
 import type { SyncQueueState } from '../src/sync/reducer';
@@ -43,7 +43,7 @@ export default function Queue(): ReactNode {
     <QueueScreen
       items={state.items}
       onRetry={() => {
-        void flushOutbox(createClientForScenario()).then(refresh);
+        void flushOutbox(createPushClient()).then(refresh);
       }}
       /*
         MR-17 B1. Through `presentRejection`, which until now was written, tested and

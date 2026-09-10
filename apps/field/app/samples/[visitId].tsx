@@ -10,6 +10,7 @@ import type { Doctor, Visit } from '@fieldforce/core';
 import { SamplesScreen, Screen } from '@fieldforce/ui';
 import type { SampleLine, SampleLinePatch } from '@fieldforce/ui';
 import { createClientForScenario } from '../../src/api';
+import { createPushClient } from '../../src/sync/push-client';
 import { blankLine, CAP_NOTE, errorsFor, sampleRequest } from '../../src/capture/samples';
 import { sampleQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { dayMonthFrom } from '../../src/doctors/profile';
@@ -117,7 +118,8 @@ export default function SamplesRoute(): ReactNode {
     setSaved(null);
 
     void (async () => {
-      const client = createClientForScenario();
+      // MR-18 B1. Writes go through `sync_push` to Supabase, never to :4010.
+      const client = createPushClient();
       const occurredAt = new Date().toISOString();
       const remaining: SampleLine[] = [];
       let sent = 0;

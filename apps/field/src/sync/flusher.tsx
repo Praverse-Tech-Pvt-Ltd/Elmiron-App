@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { AppState } from 'react-native';
-import { createClientForScenario } from '../api';
 import { flushOutbox } from './outbox';
+import { createPushClient } from './push-client';
 
 /**
  * Tries the outbox whenever the app comes to the foreground.
@@ -31,7 +31,7 @@ import { flushOutbox } from './outbox';
 export const OutboxFlusher = ({ children }: { readonly children: ReactNode }): ReactNode => {
   useEffect(() => {
     const attempt = (): void => {
-      void flushOutbox(createClientForScenario()).catch(() => {
+      void flushOutbox(createPushClient()).catch(() => {
         // Nothing to report. The queue is unchanged and remains visible.
       });
     };

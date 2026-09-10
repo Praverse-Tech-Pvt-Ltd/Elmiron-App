@@ -6,6 +6,7 @@ import type { ConsentTextVersion, Doctor, Visit } from '@fieldforce/core';
 import { ConsentDetailsScreen, ConsentScreen, Screen } from '@fieldforce/ui';
 import type { ConsentAnswer } from '@fieldforce/ui';
 import { createClientForScenario } from '../../src/api';
+import { createPushClient } from '../../src/sync/push-client';
 import {
   CONSENT_VARIANT,
   consentCopy,
@@ -158,7 +159,9 @@ export default function ConsentRoute(): ReactNode {
 
         // Both outcomes take the same path. There is no faster route for a yes.
         await sendOrQueue(
-          () => createClientForScenario().createConsentRecord(body),
+          // MR-18 B1. Through `sync_push`, so `capture_consent` runs and the three
+          // FIX-02/FIX-12 bounds apply on the offline path they exist for.
+          () => createPushClient().createConsentRecord(body),
           consentQueueItem(body),
         );
 

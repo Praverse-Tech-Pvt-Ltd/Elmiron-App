@@ -15,8 +15,14 @@ jest.mock('../api', () => ({
     getMe: mockGetMe,
     listConsentTextVersions: mockListConsentTextVersions,
     getActiveConsentText: mockGetActiveConsentText,
-    createConsentRecord: mockCreateConsentRecord,
   }),
+}));
+// MR-18 B1. The WRITE boundary moved from the mock REST client to `sync_push`, so the
+// mock moved with it. The reads on these screens are still `createClientForScenario`, and
+// both are mocked here because the screen uses both -- which is exactly the two-column
+// distinction the real-versus-fixture table is about.
+jest.mock('../sync/push-client', () => ({
+  createPushClient: () => ({ createConsentRecord: mockCreateConsentRecord }),
 }));
 const mockReplace = jest.fn();
 const mockBack = jest.fn();
