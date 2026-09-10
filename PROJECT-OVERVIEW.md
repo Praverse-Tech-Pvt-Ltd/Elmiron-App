@@ -11368,3 +11368,172 @@ passed, along with `check:decision-debt` and `verify:rollbacks`.
 So the position is: eight pairs verified locally by `pnpm run ci:local`, and the ninth
 verified by CI on the pushed SHA. Nothing in this session's counts rests on a suite that was
 skipped or assumed.
+
+---
+
+### MR-19 — the emulator session (10 September 2026)
+
+**EMULATOR, EXPO GO.** Pixel_10 AVD, Android 16, Expo Go — not a dev client. See *What this
+cannot prove* below.
+
+**Partial. Part A done, one write proved end to end, and a blocker found that stops the
+rest.** `G-WRITE` is **NOT MET** — see the verdict at the end, which is now a statement about
+a specific defect rather than about missing evidence.
+
+#### A1 — CI
+
+| | |
+| --- | --- |
+| Run | `34468188701` · workflow `CI` · event `push` |
+| SHA | `bb85ab3adc507e459c4f47b6a7773ba106b13557` — **was HEAD at push** |
+| Conclusion | `success` — `typecheck · lint · format · unit tests` AND `migrations · Gate 0 RLS suite · rollbacks` |
+
+#### A2 — the environment, and two preconditions nobody had written down
+
+Up on the first attempt: Docker 29.5.3, Supabase HTTP 200, Metro, mock, emulator, all four
+`adb reverse` ports. `db:reset` then `seed:day` for one known tenant — the database had
+accumulated four demo organisations, because `seed-day.spec.ts` passes `another: true` and the
+guard that refuses a second run does not apply to it.
+
+**Two things the app needs that no document mentions**, both found by the check-in doing
+nothing at all:
+
+1. **`ACCESS_FINE_LOCATION` must be granted to Expo Go.** `advance()` calls `takeFix()` first
+   and returns on a denial. Granted with `adb shell pm grant host.exp.exponent`.
+2. **A GPS fix must be set**, `adb emu geo fix 73.8567 18.5204` — longitude first. Without it
+   the emulator reports Mountain View, which is outside every seeded geofence.
+
+Also: **the stylus handwriting tutorial intercepts `adb shell input text`** on Android 16 and
+swallows it into its own field. `settings put secure stylus_handwriting_enabled 0`.
+
+#### THE BLOCKER — three of four write screens cannot write against real data
+
+**The check-in button did nothing. No error, no message, no busy state, nothing on the wire.**
+
+`app/visit/[id].tsx:196` opens with `if (visit === null || busy) return;`. `visit` is set by
+`load()`, which calls **`createClientForScenario()`** — the mock — and looks for
+`visits.items.find((candidate) => candidate.id === id)`. The `id` is the route parameter, which
+now comes from **Supabase** via the converted Today screen. The mock holds its own fixture
+visits with different ids, so `found === null`, so `visit === null`, so the handler returns on
+its first line.
+
+Confirmed across all four write screens — every one reads from the mock and keys off the route
+id:
+
+| Screen | Reads via | Look-up | Write reachable? |
+| --- | --- | --- | --- |
+| `app/visit/[id].tsx` | `createClientForScenario()` :61 | `id === route id` :70 | **NO** — `advance()` returns |
+| `app/samples/[visitId].tsx` | `createClientForScenario()` :46 | same :48 | **NO** |
+| `app/consent/[visitId].tsx` | `createClientForScenario()` :72 | same :83 | **NO** |
+| `app/report/[visitId].tsx` | `createClientForScenario()` :38 | same :42 | **YES** — the body takes `visitId` from the ROUTE, not from the loaded visit |
+
+**This is the two-halves defect in its purest form yet.** MR-18 converted the writes and every
+unit test passed; the push client is correct; and no MR could check in, hand over a sample or
+capture consent. The write was converted and **the read it depends on was not** — and it fails
+*silently*, which is worse than an error.
+
+It is also the reason `G-WRITE` is a gate about the APP. A module test could never have caught
+this, and neither could a green suite.
+
+#### WHAT WAS PROVED — the first screen write in this project to reach Supabase
+
+The call-report screen writes with a `visitId` taken from the route rather than from the
+mock-loaded visit, so its write survives the blocker. Deep-linked to
+`exp://127.0.0.1:8081/--/report/<a real Supabase visit id>`, typed a summary, pressed Send:
+
+```
+sync_batches                                        1
+sync_items      call_report | accepted | no rejection
+call_reports    MR19-proof-dosing | draft | manual | received_at 11:06:21
+```
+
+and on screen:
+
+> **Report sent** — Your manager sees this next time they open your visits.
+
+**The `sent` branch, correctly** — MR-18 B3's three-way copy resolving to the only one that
+claims the server has it, because the server actually did.
+
+**Value checks, not provenance checks** — the MR-14 B3 lesson applied:
+
+| | |
+| --- | --- |
+| Summary byte-identical to what was typed | `summary = 'MR19-proof-dosing'` → **t** |
+| `received_at` in the territory's zone | **16:36:21 IST**, device clock 4:36 PM — exact |
+| Status | `draft`, which is what `apply_sync_item` writes for a report with no `supersedesCallReportId` |
+
+That last line is worth keeping: MR-16 B4 recorded `call_reports.status` as *always
+`submitted`, `draft` never exercised*. **This is the first `draft` row this repository has ever
+produced**, and it arrived from a screen. It also confirms MR-18 B3's reasoning — the copy
+makes no claim about status, only about whether the server has it, which is exactly why it is
+safe while `draft` remains untested.
+
+#### C5 — the read screens, values checked against the server
+
+Today, against a three-day seed, with the server holding `today (IST) = 2026-09-10`:
+
+| Rendered | Server holds | |
+| --- | --- | --- |
+| Next visit **Dr Asha Deshpande (DEMO)** | Asha, planned, today | correct |
+| **Scheduled 13:00** | `13:00` IST = `07:30` UTC | correct — the MR-14 defect rendered `07:30` |
+| **2 of 3** visits attended | 3 visits today, 2 completed | correct |
+| **Started 13:52** | `minutesAgo(150)` from the seed at 16:22 | correct |
+| Yesterday's Asha 11:00 · tomorrow's Vikram 10:00 | both present in the store | **both correctly excluded** |
+
+The completeness notice appeared on the first full re-sync and was **absent** on the following
+delta — B6's silence, on live data.
+
+#### What this cannot prove — EXPO GO
+
+Geofenced check-in and background location (`react-native-background-geolocation`), and audio
+(`expo-audio`, already a dependency and working only because nothing invokes it) are native
+modules. **Expo Go cannot load them.** `FE-G1` and `FE-G2` cannot close on this setup whatever
+else is demonstrated here — they need a dev-client build, which needs JDK 17, `cmake;3.31.6`
+and the long-path trap `gotchas.md` prices at a day. The prebuild is now on the critical path
+to the device gates rather than beside it.
+
+#### Real versus fixture — TWO columns
+
+| Capability | Module | Screen | Reads / writes |
+| --- | --- | --- | --- |
+| Today | — | **REAL** — `usePulledStore()` | Supabase (read) |
+| Doctor list | — | **REAL** | Supabase (read) |
+| Doctor profile | — | **REAL** | Supabase (read) |
+| The pull | **Real** | **CALLED** at the root | Supabase |
+| Call report | **Real** — `push-client.ts` | **REAL WRITE, MOCK READ** — write proved to Supabase; the doctor name is blank because the read finds nothing | **Supabase (write)** / mock (read) |
+| Check-in | **Real** — converted | **BLOCKED** — write converted, unreachable: mock read gates it | — |
+| Check-out | **Real** — converted | **BLOCKED** — same | — |
+| Consent | **Real** — converted | **BLOCKED** — same | — |
+| Samples | **Real** — converted | **BLOCKED** — same | — |
+| Beat plan | — | **MOCK** — `BE-W89`, and the "On plan" chip is REMOVED, not absent-by-design | mock |
+| Day end · coaching · analysis · mileage · reply | — | **MOCK** | mock |
+| Recording / voice note | Blocked — needs an `uploadGrantId` (FE-W29) | Not converted | — |
+
+**Screens still on fixtures for READS:** `app/(tabs)/coaching.tsx`, `app/analysis/[id].tsx`,
+`app/beat-plan.tsx`, `app/day-end.tsx`, `app/mileage.tsx`, `app/reply/[analysisId].tsx`,
+`app/visit/[id].tsx`, `app/consent/[visitId].tsx`, `app/samples/[visitId].tsx`,
+`app/report/[visitId].tsx`, `app/voice-note/[visitId].tsx`.
+
+#### G-WRITE — NOT MET
+
+Stated plainly rather than qualified. The **mechanism** is proved: a screen write reached
+Supabase through `sync_push`, was accepted, and rendered the correct copy with correct values.
+The **gate** is not met, because four of the five writes cannot be performed at all from a
+screen holding real data — their reads are still on the mock and the handlers return before
+reaching the client.
+
+The remaining work is now specific rather than open-ended: **convert the reads on
+`app/visit/[id].tsx`, `app/samples/[visitId].tsx` and `app/consent/[visitId].tsx` to the pulled
+store**, the way Today and the doctor screens were converted, and then run C1's five-write
+offline proof.
+
+#### Where this stopped
+
+After the single-write proof and the blocker, before Part C's failure matrix. Not started:
+
+- **C1** — the five-write offline baseline. Blocked by the above for four of the five.
+- **C2** — the whole drop-point matrix, including the `am force-stop` kill while `in_flight`.
+- **B1–B4** — 45007/45008/45001 on screen, the Allow/Decline emphasis tokens, the UCPMP
+  cap-message pair, and 45004 with its numbers. All need a reachable consent and samples
+  screen.
+- **A3** — the three `gotchas.md` entries from the MR-19 brief.
