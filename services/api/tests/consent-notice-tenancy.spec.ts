@@ -268,3 +268,108 @@ describe.skipIf(!reachable)('C4 — another tenant publishing a notice has no ef
     });
   });
 });
+
+/**
+ * MR-16 B3 — the language predicate, made falsifiable.
+ *
+ * `active_consent_text_at` selects the notice a doctor was shown:
+ *
+ * ```sql
+ * where v.organisation_id = p_organisation_id
+ *   and v.language = p_language          -- this clause
+ *   and v.effective_from <= p_at
+ * order by v.effective_from desc
+ * ```
+ *
+ * **Deleting `and v.language = p_language` from the live function used to leave the entire
+ * consent suite green** — 30 passed, 0 failed across `consent-notice-tenancy`,
+ * `consent-withdrawal-bounds` and `error-contract`. The clause could not fail, so it proved
+ * nothing about which notice a consent record claims a doctor read.
+ *
+ * The reason it hid is worth stating, because `freshLanguage()` above looks like it should
+ * have caught it: minting a unique language per TEST makes languages vary across the run,
+ * but the predicate also filters `organisation_id`, and each tenant still held exactly one
+ * language. One value per tenant is enough to hide a per-tenant predicate.
+ *
+ * `seedFixtures()` now publishes `hi-IN` for the same tenant, **newer** than `en-IN`. The
+ * ordering is what makes these assertions bite: with the clause gone, `order by
+ * effective_from desc` hands an `en-IN` capture the Hindi notice.
+ */
+describe('MR-16 B3 — a capture resolves ITS language, not the newest notice', () => {
+  it('resolves en-IN even though the hi-IN notice for the same tenant is NEWER', async () => {
+    // THE LOAD-BEARING CASE. Without the language clause this returns the Hindi row,
+    // because it is the most recent notice this tenant has.
+    await inRolledBackTransaction(async (client) => {
+      await asOwner(client, async () => {
+        const rows = await client.query<{ id: string; language: string }>(
+          'select id, language from public.active_consent_text_at($1, now(), $2)',
+          ['en-IN', world.organisationId],
+        );
+        expect(rows.rows.length, 'no active en-IN notice for this tenant').toBe(1);
+        expect(rows.rows[0]?.language).toBe('en-IN');
+        expect(rows.rows[0]?.id).toBe(world.consentTextVersionId);
+        // Named explicitly: the wrong answer has a known id, so a failure says which
+        // notice was selected rather than only that the ids differ.
+        expect(rows.rows[0]?.id, 'selected the Hindi notice for an en-IN capture').not.toBe(
+          world.hindiConsentTextVersionId,
+        );
+      });
+    });
+  });
+
+  it('and resolves hi-IN when the capture IS in Hindi — the positive control', async () => {
+    // Without this, a predicate hard-coded to always return the en-IN row would satisfy
+    // the case above while being just as wrong.
+    await inRolledBackTransaction(async (client) => {
+      await asOwner(client, async () => {
+        const rows = await client.query<{ id: string; language: string }>(
+          'select id, language from public.active_consent_text_at($1, now(), $2)',
+          ['hi-IN', world.organisationId],
+        );
+        expect(rows.rows.length, 'no active hi-IN notice for this tenant').toBe(1);
+        expect(rows.rows[0]?.language).toBe('hi-IN');
+        expect(rows.rows[0]?.id).toBe(world.hindiConsentTextVersionId);
+      });
+    });
+  });
+
+  it('asserts its own precondition: BOTH languages exist for this tenant', async () => {
+    // The fixture is the whole mechanism here. If `seedFixtures()` ever stopped publishing
+    // the second notice, the two cases above would still pass -- the en-IN one trivially,
+    // and the hi-IN one would fail in a way that reads as a selection defect rather than a
+    // missing fixture. This says which.
+    await inRolledBackTransaction(async (client) => {
+      await asOwner(client, async () => {
+        const rows = await client.query<{ language: string }>(
+          `select distinct language from public.consent_text_versions
+            where organisation_id = $1 and language in ('en-IN','hi-IN')`,
+          [world.organisationId],
+        );
+        expect(
+          rows.rows.length,
+          'the language dimension is single-valued for this tenant again',
+        ).toBe(2);
+      });
+    });
+  });
+
+  it('and the Hindi notice really is the newer of the two', async () => {
+    // The ordering is not incidental -- it is what makes the deletion mutation fail. If
+    // hi-IN ever became the older row, the mutation would pass again and this suite would
+    // go back to proving nothing, silently.
+    await inRolledBackTransaction(async (client) => {
+      await asOwner(client, async () => {
+        const rows = await client.query<{ newest: string }>(
+          `select language as newest from public.consent_text_versions
+            where organisation_id = $1 and language in ('en-IN','hi-IN')
+            order by effective_from desc limit 1`,
+          [world.organisationId],
+        );
+        expect(
+          rows.rows[0]?.newest,
+          'hi-IN must be newer, or deleting the language clause stops being detectable',
+        ).toBe('hi-IN');
+      });
+    });
+  });
+});

@@ -89,6 +89,29 @@ export interface FixtureWorld {
   callReports: { pune: string; south: string };
   samples: { pune: string };
   consentTextVersionId: string;
+  /**
+   * MR-16 B1 — a SECOND language for the SAME tenant, purely as a test dimension.
+   *
+   * `active_consent_text_at` selects with `and v.language = p_language`, and every fixture
+   * in this repository held `en-IN` and nothing else. Deleting that clause from the live
+   * function left the whole consent suite green: the predicate could not fail, so it
+   * proved nothing.
+   *
+   * `consent-notice-tenancy.spec.ts` already mints a `freshLanguage()` per test, which
+   * makes languages unique across the RUN but still leaves exactly one language per
+   * TENANT — and the predicate also filters on `organisation_id`, so a single language per
+   * tenant is enough to hide it.
+   *
+   * This notice is **deliberately NEWER** than the `en-IN` one. `active_consent_text_at`
+   * orders by `effective_from desc`, so without the language clause an `en-IN` capture
+   * would resolve THIS row. That is what makes the clause load-bearing rather than
+   * decorative.
+   *
+   * `hi-IN` rather than `mr-IN`: `mr` is a ROLE in this codebase and a language code `mr`
+   * beside it would cost somebody an afternoon. Which languages the product actually
+   * ships is a separate client question and is NOT answered here.
+   */
+  hindiConsentTextVersionId: string;
   consentRecords: { pune: string; south: string };
   analyses: { pune: string; south: string };
   beatPlans: { pune: string };
@@ -182,6 +205,7 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
     callReports: { pune: randomUUID(), south: randomUUID() },
     samples: { pune: randomUUID() },
     consentTextVersionId: randomUUID(),
+    hindiConsentTextVersionId: randomUUID(),
     consentRecords: { pune: randomUUID(), south: randomUUID() },
     analyses: { pune: randomUUID(), south: randomUUID() },
     beatPlans: { pune: randomUUID() },
@@ -399,6 +423,16 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
        values ($1, $2, 'en-IN', 'I agree to this conversation being recorded for coaching purposes.',
                now() - interval '30 days', $3)`,
       [world.consentTextVersionId, `v1-${runId}`, organisationId],
+    );
+
+    // MR-16 B1. The second language, NEWER than the first, for the SAME tenant. See
+    // `hindiConsentTextVersionId` above for why newer is the point.
+    await client.query(
+      `insert into public.consent_text_versions
+         (id, version_label, language, full_text, effective_from, organisation_id)
+       values ($1, $2, 'hi-IN', 'मैं इस बातचीत को कोचिंग के लिए रिकॉर्ड करने से सहमत हूँ।',
+               now() - interval '1 day', $3)`,
+      [world.hindiConsentTextVersionId, `v1-hi-${runId}`, organisationId],
     );
 
     await client.query(
