@@ -46,9 +46,12 @@ import { consentQueueItem, sendOrQueue } from '../../src/sync/outbox';
  *   where the question was never put, and it takes a reason the MR gives later —
  *   writing it here would be the app answering on the doctor's behalf.
  *
- * The MR's own name and their organisation come from the token, not from a
- * constant: an app that names the wrong rep or the wrong Data Fiduciary on a
- * consent face is worse than one that names neither.
+ * **Neither the MR's name nor their organisation is known to this app**, and the
+ * screen says so honestly rather than filling the gap. See the note on
+ * `organisation` below, and **BE-W93** — registered by MR-24 as a COMPLIANCE item,
+ * because a DPDP notice that identifies no fiduciary is a defect in the EVIDENCE a
+ * consent record carries, not a weak sentence. The comment that stood here claimed
+ * the opposite and survived a session in which it was already false.
  */
 export default function ConsentRoute(): ReactNode {
   const { visitId } = useLocalSearchParams<{ visitId: string }>();
