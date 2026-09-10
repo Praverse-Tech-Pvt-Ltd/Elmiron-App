@@ -11021,3 +11021,316 @@ to this session's own output twice within the hour:
   positive control is not a guard* — and neither is one whose control can silently skip.
 
 Both are in the record because the pattern is the finding, not the two defects.
+
+---
+
+### MR-14 — the chain finished (10 September 2026)
+
+**Parts A and B. Part C (writes) and Part D (the emulator proof) were NOT started, so
+`G-WRITE` is still NOT MET.** The read half of the conversion is done and proved on a real
+server; the write half is untouched. See *Where this stopped* at the end.
+
+Session ran across 9–10 September. Base `0103278`, checkout guard exit 0 (namespace
+`@fieldforce/core`, remote `Praverse-Tech-Pvt-Ltd/Elmiron-App`, `f34ceef` an ancestor of
+HEAD — never verified by path). The pull was a clean fast-forward of 101 commits.
+
+#### A1 — the environment, and a machine failure that is not in `gotchas.md`
+
+**This is not the machine the MR-13 handover describes.** That one is
+`C:\Users\Admin\StudioProjects\Elmiron-App` with JDK 17 installed. This one had no JDK at
+all, no CMake in the SDK, no `apps/field/android/`, and **no `apps/field/.env`** — which
+matters more than it sounds, because `src/config.ts` calls `loadAppConfig` at module load
+and throws on a missing value, so the app could not reach its first screen.
+
+**The blocker cost the first session entirely: every Supabase host port was inside a
+Windows reserved range.**
+
+```
+pnpm db:start
+LegacyContainerStartError: exposing port TCP 0.0.0.0:54322
+bind: An attempt was made to access a socket in a way forbidden by its access permissions
+
+netsh interface ipv4 show excludedportrange protocol=tcp
+     54224       54323      <- 54321 (API), 54322 (Postgres), 54323 (Studio)
+     54324       54423      <- 54324 (Mailpit)
+```
+
+The message reads like a port conflict and is not one: `netstat` showed **nothing
+listening**. WinNAT/HNS had dynamically reserved the whole block. Two things made it worse
+than it needed to be:
+
+- **`db:start` reported success while publishing no ports at all.** The first symptom was a
+  healthy-looking stack whose `docker ps` showed `5432/tcp` rather than
+  `0.0.0.0:54322->5432/tcp`, and a `seed:day` failing with `ECONNREFUSED`. A stack that is
+  up and unreachable looks exactly like a stack that is up.
+- **Stopping Docker is necessary and not sufficient**, because `hns` re-grabs the range.
+  An elevated `netsh int ipv4 add excludedportrange ... store=persistent` is the durable
+  fix; the tell that it worked is an asterisk (*administered*) beside the range.
+
+**A reboot cleared it** and the stack then bound the ports before HNS could retake them.
+Recorded here because the error text points at permissions and the cause is a reservation,
+and because the failure mode — a database that starts, reports its URLs, and is not
+reachable — will not announce itself.
+
+Expo Go was used rather than a dev client, by decision: no JDK 17 and no CMake on this
+machine, and `gotchas.md` records that the CMake pin costs a day and is lost on every
+`expo prebuild`. The handover §2.5 is right that Expo Go works with the current dependency
+set. `expo start --android` installed it; the bundle is 1,710 modules.
+
+#### A2 — `pnpm run ci:local`, derived from `ci.yml` rather than duplicated
+
+The last session took five CI runs, one of them failing on `pnpm run lint` — a step never
+run locally while typecheck, tests and prettier were green throughout. There was no single
+local command covering CI's list.
+
+`scripts/ci-local.mjs` parses `.github/workflows/ci.yml` at run time and executes
+`jobs.static.steps[].run` in order; `--with-db` adds the `database` job, `--list` prints the
+plan. **Derived, not duplicated** — a hand-kept parallel list has already failed three times
+in this repository (`@fieldforce/console` had ten passing cases and no CI line for several
+sessions; `ui-tokens` was *"decorative in CI from the day it was written"*; `@fieldforce/ui`'s
+221 jest cases were read as 4). It reads the workflow as text, following
+`ci-covers-every-suite.spec.ts`, and **adds no dependency**: `yaml` and `js-yaml` exist here
+only transitively, so importing one would mean depending on another package's dependency
+under `node-linker=hoisted`.
+
+Two positive controls on the derivation itself, because a reader that quietly stopped
+understanding `ci.yml` would report that an empty step list all passed — the exact failure
+shape the command exists to prevent: fewer than five runnable steps in a job is an error,
+and the static job must contain `pnpm run lint` **by name**.
+
+**Proved, not asserted.** With an injected `import { View } from 'react-native'` in
+`apps/field` — valid TypeScript, prettier-clean, an eslint error under the
+component-extraction guard:
+
+```
+[3/12] build       Tasks: 4 successful, 4 total
+[4/12] typecheck   Tasks: 9 successful, 9 total
+[5/12] lint        flusher.tsx 3:20 error 'View' import from 'react-native' is restricted
+FAILED - static . pnpm run lint (exit 1)
+```
+
+The first probe was wrong and is worth recording: an `import type` to `import` change is
+caught by `tsc` too, because `verbatimModuleSyntax` is on. It was not lint-only, and the
+eslint config had to be read rather than guessed at.
+
+**It found a defect on its first run.** `apps/console/next-env.d.ts` is generated by
+`next build`, git-ignored, and written CRLF on Windows, while `.prettierrc.json` sets
+`endOfLine: "lf"` — so `format:check` could not pass on Windows *after* `build`, while CI on
+Linux passed. Nobody had hit it because nobody had run the two in CI's order locally.
+
+#### B — the read conversion
+
+`sync/pull.ts` had been complete, tested and **reached by nothing** for several sessions.
+`src/sync/pulled-store.tsx` is the caller it never had (FE-W36). Today, the doctor list and
+the doctor profile now read from the store it maintains; `createClientForScenario()` is gone
+from all three.
+
+**B3 — the proof.** On the emulator, against `seed:day`, signed in as
+`demo-8952e16a-mr@example.test`:
+
+```
+Today
+Started 06:28
+Your list has been rebuilt        <- the completeness notice, on a REAL full re-sync
+Next visit  Dr Meera Iyer (DEMO)  Main clinic, Pune  Scheduled 07:30
+Today  2 of 3 visits attended
+
+Doctors
+Dr Meera Iyer (DEMO)      Urology . Pune . never visited   Overdue
+Dr Asha Deshpande (DEMO)  Urology . Pune . today
+Dr Vikram Rao (DEMO)      Nephrology . Pune . today
+3 doctors in your territory.
+```
+
+matching `select ... from public.visits` exactly. The day before, the same screen read
+*"Dr Rohini Kulkarni, Sahyadri Clinic, Pune"* from the mock at `:4010`.
+
+**The brief's one-liner needs one correction.** It says Today must render *Asha Deshpande*.
+`seed:day` gives Asha a **completed** visit and Meera Iyer the only **planned** one, so the
+Next-visit card correctly names Meera; Asha appears in the day's count and on the doctor
+list. The seeded names also carry a `(DEMO)` suffix, which `seed-day.mjs` adds on purpose.
+The proof is that the screens render this MR's real Supabase day — not that one particular
+name lands in one particular card.
+
+**B4 — "not arrived yet" is not "there is none".** `clinicFor()` returned null for both and
+the screen rendered both as a missing line. A doctor and their addresses are independent
+rows in one cursor-ordered stream, so the window is real. `NextVisit.clinicPending` and
+`TodayScreen`'s *"Address still syncing"* make it sayable.
+
+**B5 — a real defect, found by running it.** See the next section.
+
+**B6 — the silence is asserted as well as the message**, in the provider and at the screen.
+Both halves were then seen on live data: the notice appeared on the first full re-sync and
+was **absent** on the cursored delta that followed.
+
+**B7 — the cursor.** `pullOnce` already handled 45006/45005. What was missing was anything
+that would notice if it stopped: deleting `cursors.clear()` passed all twenty cases, because
+every one let the retry succeed and a successful pull writes a fresh cursor over the dead
+one. The new case drives 45006 on **both** attempts and asserts the cursor is null
+afterwards. Without it, a handset that hit an expired cursor at the moment it lost signal
+would send the same dead cursor on every launch, for ever, silently.
+
+**B8 — exercised on the real server, not only at the screen.** `update public.doctors set
+territory_id = <other territory>` made `doctors_sync_events` write
+`reason: out_of_scope, former_territory_id: <the MR's>`. On the next foreground the app
+rendered:
+
+> **One of your records moved**
+> This is no longer yours. It has moved to another territory.
+
+and the doctor left the list (*"2 doctors in your territory"*). The word "deleted" does not
+appear. ADR §6 Q2, end to end, for the first time.
+
+#### B5 — "Today" counted every visit the MR had ever been sent
+
+**Nothing in this app filtered visits by date, and with the mock nothing had to:** the
+fixture was a single day, so every visit the client held was today's by construction. The
+pull is not. `sync_pull` carries no date filter — read from the live function definition,
+not the migration — and the local store accumulates.
+
+Measured on the emulator on 10 September against a store seeded on the 9th:
+
+```
+Today
+Next visit  Dr Meera Iyer (DEMO)  Main clinic, Pune  Scheduled 07:30
+Today  2 of 3 visits attended
+```
+
+Every one of those visits was scheduled **2026-09-09**. The MR had nothing at all that day,
+and the app was offering to send them to a clinic for a visit that had already happened.
+This is the second day of the store's life; it is what a pilot MR would have seen on their
+second morning.
+
+The date is compared **as the server wrote it** — `scheduledFor` carries the territory's
+offset, not the handset's, the same reason `clockFrom` slices characters instead of parsing
+a `Date`. `deviceDay()` builds the local date from local parts rather than
+`toISOString().slice(0,10)`, which returns *yesterday* for anyone east of Greenwich in the
+early morning. A visit with neither `scheduledFor` nor `startedAt` is **not** claimed for
+today: asserting that an undated visit belongs to this day would present an absence as a
+fact, which is the rule B4 applies to a clinic address.
+
+After the fix, the same store and the same MR read **"Nothing planned for today · 0 of 0"**,
+which is true.
+
+#### B9 — divergences, with verdicts
+
+| # | Divergence | Verdict | What was done |
+| --- | --- | --- | --- |
+| 1 | The pull sends **rows, not aggregates**: `DoctorRecord` = `Doctor` minus `clinicAddresses`, which arrive as their own entity | **Database right** | Joined on the client in `src/sync/selectors.ts`. No schema change |
+| 2 | `sync_pull` emits `visit`, `doctor`, `beat_plan`, `clinic_address` and has **no `beat_plan_entry`**, so `BeatPlanRecord` omits `entries` — while `public.beat_plan_entries` HAS rows | **Contract right — register (proposed BE-W89)** | Nothing faked. See below |
+| 3 | `consent_record` is in `sync_pull`'s own `omittedEntities` — a declared phase-2 scope | **Contract right — no action** | Profile built with no consents; `consentLabel(null)` renders **nothing**, never "not asked" |
+| 4 | Neither `sync_pull` nor `summariseDay` scoped visits to a day | **Client right to fix** | B5 above |
+
+**Divergence 2 is the one that changed the deliverable.** Two screens could not be converted
+honestly, and were not:
+
+- **`app/beat-plan.tsx` stays on the mock.** Converting it would render an empty route as
+  fact.
+- **The "On plan" chip is removed from the doctor list.** It filters by today's approved
+  plan, so with no entries it would have matched nothing and shown **no doctors** — the
+  client presenting its own gap as a fact about the day, which is the same failure as
+  rendering a denial as an empty list. A test asserts its absence, so adding the entity is a
+  change to that test rather than a chip quietly reappearing with nothing behind it.
+
+#### What the existing tests caught
+
+The first draft of the provider gave it a single `refusal` field, so an unreachable server
+and a `42501` produced the same words. `doctors-route.test.tsx` has guarded that since FE-W1
+under *"separates a transport failure from a denial"*, and it failed. `PullFailure` is a
+discriminated union because of that test. **Telling an MR they lack access when their wifi
+dropped is how trust in the app dies** — and the test, not the author, is what stopped it.
+
+#### Guards, all mutation-tested two-sided
+
+| Mutation | Caught by |
+| --- | --- |
+| remove `persistence.save` | *writes what it pulled to disk* |
+| keep the cursor when records cannot be restored | *clears the cursor* |
+| ignore the restored store | *restores those records* |
+| always say "syncing" | *no clinic line when there is none* |
+| never say "syncing" | *says the address is still syncing* |
+| drop notices on the floor | the notice and `out_of_scope` cases |
+| remove the date filter | 3 cases, incl. *does not offer yesterday's visit* |
+| date filter drops everything | **13 cases** — the positive control |
+| `deviceDay` via `toISOString` | *reads the device's own date* |
+| `cursors.clear()` removed | *FORGETS the expired cursor* (added this session) |
+
+#### P1 — the records and the cursor now move together
+
+The cursor was already persisted and the records were not. A restart therefore loaded a
+valid cursor over an empty store, `sync_pull` correctly returned only the changes since —
+nothing, on a quiet morning — and the MR got a blank day with no error. The server was
+right, the client was right, and the day was gone. Records are now written after **every
+page**, parsed rather than cast on the way back, and a store that cannot be restored
+**clears the cursor** so the next pull is a full sweep.
+
+#### Real versus fixture — TWO columns
+
+| Capability | Module | Screen | Reads/writes |
+| --- | --- | --- | --- |
+| Today | — | **REAL** — `app/(tabs)/home.tsx` via `usePulledStore()` | **Supabase** (read) |
+| Doctor list | — | **REAL** — `app/(tabs)/doctors.tsx` | **Supabase** (read) |
+| Doctor profile | — | **REAL** — `app/doctor/[id].tsx` | **Supabase** (read) |
+| The pull | **Real and complete** | **CALLED** — `src/sync/pulled-store.tsx` at the root | **Supabase** |
+| Beat plan | — | **MOCK** — blocked on B9 #2, not on effort | mock |
+| Check-in | **Real** — `src/capture/check-in.ts` | **MOCK** — `app/visit/[id].tsx` | Outbox to **mock** |
+| Check-out | **Real** — same module | **MOCK** — same screen | Outbox to **mock** |
+| Consent | **Real** — `capture_consent`, all three bounds | **MOCK** — `app/consent/[visitId].tsx` | Outbox to **mock** |
+| Samples | **Real** — UCPMP cap by trigger | **MOCK** — `app/samples/[visitId].tsx` | Outbox to **mock** |
+| Call report | **Real** — `revise_call_report` | **MOCK, and not queued** — bare `createClientForScenario()` | **Direct to mock** |
+| Day end | — | **MOCK** — `app/day-end.tsx` | mock |
+| Coaching / analysis | — | **MOCK** — out of v1 (C4) | mock |
+| Recording / voice note | Blocked — needs an `uploadGrantId` | Not converted | — |
+
+**Every screen still on fixtures:** `app/(tabs)/coaching.tsx`, `app/analysis/[id].tsx`,
+`app/beat-plan.tsx`, `app/day-end.tsx`, `app/mileage.tsx`, `app/reply/[analysisId].tsx`,
+`app/visit/[id].tsx`, `app/consent/[visitId].tsx`, `app/samples/[visitId].tsx`,
+`app/report/[visitId].tsx`, `app/voice-note/[visitId].tsx`.
+
+#### Counts — by workspace AND runner
+
+`pnpm run ci:local`, all 12 steps, zero skips:
+
+| Workspace | Runner | Files | Cases |
+| --- | --- | --- | --- |
+| `@fieldforce/core` | vitest | 3 | 21 |
+| `@fieldforce/ui-tokens` | vitest | 3 | 54 |
+| `@fieldforce/ui` | vitest | 1 | 4 |
+| `@fieldforce/ui` | jest | 20 | **231** |
+| `@fieldforce/mock` | vitest | 1 | 40 |
+| `@fieldforce/field` | vitest | 25 files | — |
+| `@fieldforce/field` | jest | 13 | **82** |
+| `@fieldforce/console` | vitest | 1 | 10 |
+| `@fieldforce/api` | vitest | — | **NOT RUN — the database job. Not green: not run** |
+
+#### Open, unexplained, NOT chased
+
+`ci:local` produced two different sets of failures on two consecutive runs with no code
+change (`@fieldforce/ui` 2 failed, then `@fieldforce/field` 6 failed), then went green; both
+workspaces pass 100% standalone. A separate, deterministic failure later in the session
+turned out to be a stale test fixture and is fixed — **the two are not the same thing, and
+the first is still unexplained.** It is a risk to every count this project reports.
+
+#### G-WRITE
+
+**NOT MET.** Unchanged by this session, and it does not move until Part C. Every screen
+write still goes to `127.0.0.1:4010`; `grep -rn "createClientForScenario" apps/field/app`
+still returns the five write screens. What changed is the READ half.
+
+#### Where this stopped
+
+At the end of Part B, by agreement, before Part C. Carried forward:
+
+- **Part C** — the write conversion. **P3 is a precondition for C5 and C6**:
+  `outbox.ts:rejectionCodeFor` collapses every `450xx` to `internal_error` and
+  `explanation.ts` reads only `code`, so `45001`, `45004`, `45007` and `45008` cannot reach
+  the MR with their own remedy until `sqlState` is carried through the reducer to the
+  screen. `refusalForSqlState` already does the mapping and is guarded in both directions by
+  `error-contract.spec.ts`; this is why BE-W75 added the field.
+- **Part D** — the emulator proof of the five writes, naming check-out explicitly.
+- **BE-W89** — `beat_plan_entry` in `sync_pull`, which unblocks the beat-plan screen and the
+  "On plan" chip.
+- **CI has not run on this work.** The four commits are local and unpushed, because the
+  brief gates a push past Part A on review. No CI run id can be recorded here yet, and
+  `@fieldforce/api` — the whole Gate 0 RLS suite and the rollback verification — has not been
+  run this session.
