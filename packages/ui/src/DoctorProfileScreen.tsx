@@ -12,7 +12,7 @@ import { Spinner } from './Spinner';
  * B9 — the doctor profile.
  *
  * **`boundary` is the most important prop on this component.** B9 closes with
- * "Nothing here about what he prescribes, and nothing about his patients. Neither
+ * "Nothing here about what they prescribe, and nothing about their patients. Neither
  * is recorded anywhere in this app," and the design's note explains why it is
  * printed rather than assumed: a profile screen is exactly where prescriber
  * profiling would creep in. It is required, not optional — a build of this screen

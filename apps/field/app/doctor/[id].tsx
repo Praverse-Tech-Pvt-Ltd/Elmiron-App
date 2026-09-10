@@ -16,7 +16,7 @@ const VISITS_SHOWN = 3;
  * stated.
  */
 const BOUNDARY =
-  'Nothing here about what he prescribes, and nothing about his patients. Neither is recorded anywhere in this app.';
+  'Nothing here about what they prescribe, and nothing about their patients. Neither is recorded anywhere in this app.';
 
 export default function DoctorProfile(): ReactNode {
   const { id } = useLocalSearchParams<{ id: string }>();

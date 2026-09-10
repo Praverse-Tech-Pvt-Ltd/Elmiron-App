@@ -161,7 +161,7 @@ describe('the doctor list', () => {
 
 describe('the doctor profile', () => {
   const boundary =
-    'Nothing here about what he prescribes, and nothing about his patients. Neither is recorded anywhere in this app.';
+    'Nothing here about what they prescribe, and nothing about their patients. Neither is recorded anywhere in this app.';
 
   const profile = (over = {}) => ({
     name: 'Dr V. Kulkarni',

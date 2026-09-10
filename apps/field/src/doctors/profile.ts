@@ -4,7 +4,7 @@ import type { ConsentOutcome, ConsentRecord, Doctor, Visit } from '@fieldforce/c
  * B9 — the doctor profile, from the MR's own visit history.
  *
  * **Read the design's closing line before changing anything here.** B9 ends with
- * "Nothing here about what he prescribes, and nothing about his patients. Neither is
+ * "Nothing here about what they prescribe, and nothing about their patients. Neither is
  * recorded anywhere in this app," and the design's note says why it is written down
  * rather than assumed: *a profile screen is exactly where prescriber profiling would
  * creep in*. Every field below is about **the MR's own visits** — when they went,
