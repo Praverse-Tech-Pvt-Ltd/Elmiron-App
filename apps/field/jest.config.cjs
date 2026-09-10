@@ -43,6 +43,31 @@ module.exports = {
   // The other half of the boundary. Narrower than jest's default on purpose.
   testMatch: ['<rootDir>/**/*.test.tsx'],
 
+  // MR-22 A2. Jest's 5000 ms default is too tight for this suite ON CI, and the failure
+  // it produced was blamed on machine load for five sessions.
+  //
+  // MEASURED, both sides, rather than guessed at:
+  //
+  //   locally   first test 363 ms, the other five 7-29 ms, whole field suite 4.98 s
+  //   on CI     the SAME first test exceeded 5000 ms; the suite took 10.5-12 s
+  //             (runs 34470900684 and 34471969217, both `samples-route.test.tsx`)
+  //
+  // The first test in a file pays for module resolution, the babel transform of
+  // `@fieldforce/ui` as SOURCE (see transformIgnorePatterns below), and the first render
+  // of a whole screen. On a cold runner that is 13x the local cost and it lands on
+  // whichever test happens to be first.
+  //
+  // **An earlier diagnosis of this was WRONG and is recorded so nobody repeats it.** It
+  // was read as a race between an async route load and `findByText`'s timeout. It is not:
+  // `day-end-route.test.tsx` has exactly that shape and passes, while `samples-route`
+  // failed AFTER being converted to a synchronous store read. The cost is cold start, not
+  // waiting.
+  //
+  // 20 s is ~4x the observed CI suite time, which leaves room for a slower runner while
+  // still failing a genuine hang in a reasonable interval. It is a property of the runner
+  // and the environment, so it belongs here rather than on one `it`.
+  testTimeout: 20_000,
+
   // Build artifacts are not source. apps/field/dist holds a compiled Hermes bundle
   // that contains supabase-js's entire SDK; a runner walking it is slow at best and
   // misleading at worst. See the search convention in docs/gotchas.md.

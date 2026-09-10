@@ -28,6 +28,25 @@ import { languageName } from './content';
  * offset, and parsing them re-expresses them in the handset's timezone — the same
  * rule `today/plan.ts` follows, and here it decides whether a legal document is
  * still in force.
+ *
+ * ---
+ *
+ * **MR-22 B2. "In a stable order" was a claim this function did not deliver.** It
+ * filtered and returned whatever order the caller handed it, and the consent screen
+ * takes `live[0].language` as the DEFAULT language to show a doctor. With one language
+ * in every fixture that was deterministic by accident; MR-16 added `hi-IN` as a test
+ * dimension and the default became a function of however the server happened to sort
+ * `consent_text_versions`.
+ *
+ * That matters more than an ordinary default: `displayed_language` is derived
+ * SERVER-side from the version the client sends, so the client decides it implicitly by
+ * deciding which version to display. An unordered list was therefore choosing a field on
+ * a compliance record.
+ *
+ * The sort below makes it deterministic. **It does not make it a product decision** —
+ * which language an MR should be shown first is a client question, registered rather
+ * than answered here. Sorting by language code is a defensible arbitrary rule and is
+ * labelled as arbitrary, not dressed up as a preference.
  */
 export const offerableVersions = (
   versions: readonly ConsentTextVersion[],
@@ -35,7 +54,15 @@ export const offerableVersions = (
 ): readonly ConsentTextVersion[] =>
   versions
     .filter((version) => version.effectiveFrom <= nowIso)
-    .filter((version) => version.effectiveUntil === null || version.effectiveUntil > nowIso);
+    .filter((version) => version.effectiveUntil === null || version.effectiveUntil > nowIso)
+    .slice()
+    // Language first so the DEFAULT is stable, then `effectiveFrom` descending so that
+    // within a language the newest live version leads. `localeCompare` on the code, not
+    // on the display name: the name is localised and would reorder with the device.
+    .sort(
+      (a, b) =>
+        a.language.localeCompare(b.language) || b.effectiveFrom.localeCompare(a.effectiveFrom),
+    );
 
 /**
  * One option per language, labelled, in the order the server sent them.

@@ -137,3 +137,68 @@ describe('no notice, no question', () => {
     expect(blocked?.detail).toMatch(/Carry on with the visit/u);
   });
 });
+
+/**
+ * MR-22 B2 — the DEFAULT language a doctor is shown must not depend on list order.
+ *
+ * `app/consent/[visitId].tsx` takes `offerableVersions(...)[0].language` as the language to
+ * display. `displayed_language` is then derived SERVER-side from the version the client
+ * sends, so the client decides that compliance field implicitly by deciding which version
+ * to show.
+ *
+ * With one language in every fixture this was deterministic by accident. MR-16 added
+ * `hi-IN` as a test dimension and the default became a function of however the server
+ * happened to sort `consent_text_versions` — an unordered list choosing a field on a
+ * consent record. The doc comment claimed "in a stable order" and the code did not sort.
+ */
+describe('the offered order is deterministic, because a default depends on it', () => {
+  const en = version({ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11', language: 'en-IN' });
+  const hi = version({ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa12', language: 'hi-IN' });
+
+  it('gives the same first version whichever order the server sent them in', () => {
+    // THE ASSERTION THAT MATTERS. Same set, two input orders, one answer -- so the
+    // language a doctor is shown cannot flip between two syncs.
+    const forwards = offerableVersions([en, hi], NOW);
+    const backwards = offerableVersions([hi, en], NOW);
+    expect(forwards[0]?.language).toBe(backwards[0]?.language);
+    expect(forwards.map((v) => v.language)).toEqual(backwards.map((v) => v.language));
+  });
+
+  it('puts the NEWEST live version first within one language', () => {
+    // Within a language the newest live notice is the one in force. Offering an older
+    // live version first would show a doctor text the company has already moved on from,
+    // even though it has not formally expired.
+    const older = version({
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa13',
+      language: 'en-IN',
+      effectiveFrom: '2026-07-01T00:00:00+05:30',
+    });
+    const newer = version({
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa14',
+      language: 'en-IN',
+      effectiveFrom: '2026-08-01T00:00:00+05:30',
+    });
+    expect(offerableVersions([older, newer], NOW)[0]?.id).toBe(newer.id);
+    expect(offerableVersions([newer, older], NOW)[0]?.id).toBe(newer.id);
+  });
+
+  it('still filters — ordering did not replace the retirement rule', () => {
+    // The positive control on the change. A sort that quietly dropped the filters would
+    // pass both cases above while offering a doctor a retired notice, which is the whole
+    // reason this function exists.
+    const retired = version({
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa15',
+      language: 'hi-IN',
+      effectiveUntil: '2026-08-01T00:00:00+05:30',
+    });
+    const offered = offerableVersions([en, retired], NOW);
+    expect(offered).toHaveLength(1);
+    expect(offered[0]?.id).toBe(en.id);
+  });
+
+  it('asserts its own precondition: the fixture really does hold two languages', () => {
+    // If this ever collapsed to one language the ordering cases would pass trivially and
+    // the guard would be back to proving nothing -- MR-16's finding, applied to itself.
+    expect(new Set([en.language, hi.language]).size).toBe(2);
+  });
+});
