@@ -1,4 +1,6 @@
 import type { Doctor, Visit } from '@fieldforce/core';
+import { dayIn } from './territory-day';
+import type { TerritoryZone } from './territory-day';
 
 /**
  * The day, reduced to what B1 puts on screen.
@@ -81,33 +83,38 @@ const countsTowardTheDay = (visit: Visit): boolean => visit.status !== 'cancelle
  * Iyer · Scheduled 07:30"** for a visit scheduled the previous day. The MR had nothing at
  * all that day and the app was sending them to a clinic.
  *
- * **The date is compared as the SERVER wrote it.** `scheduledFor` is contract ISO-8601
- * with an offset, and that offset is the territory's rather than the handset's — the same
- * reason `clockFrom` slices characters instead of parsing a `Date`. Parsing here would
- * re-express the instant in the phone's timezone and move visits across midnight for an MR
- * whose phone is set wrong, which is exactly the failure this is fixing, in a new place.
+ * **MR-15 A2 corrected how this compares.** MR-14 sliced the first ten characters of the
+ * ISO string, on `clockFrom`'s stated belief that the server sends the territory's offset.
+ * `services/mock` does — every fixture is `+05:30` — and **Supabase does not**: it renders
+ * `+00:00`. So the slice produced a UTC date and compared it against a device-local one,
+ * two different frames, and it only looked right because the emulator is set to IST.
+ *
+ * The comparison is now between two TERRITORY days: the visit's instant read in the
+ * territory's zone, against today read the same way from the server's clock.
  *
  * **A visit with no date is not claimed for today.** An unscheduled visit falls back to
  * `startedAt`, which is server-stamped; with neither, nothing says it belongs to this day,
  * and asserting that it does would be presenting an absence as a fact. It is not lost —
  * it is simply not part of today's count.
  */
-const onDay = (visit: Visit, day: string): boolean => {
+const onDay = (visit: Visit, day: string, zone: TerritoryZone): boolean => {
   const stamp = visit.scheduledFor ?? visit.startedAt;
-  return stamp !== null && stamp.slice(0, 10) === day;
+  return stamp !== null && dayIn(stamp, zone) === day;
 };
 
 /**
- * The device's own date as `YYYY-MM-DD`, built from local parts.
+ * **`deviceDay()` was here and is deliberately gone — MR-15 A2.**
  *
- * `toISOString()` would convert to UTC first and hand back yesterday's date for anyone
- * east of Greenwich for the first hours of their morning — an MR in Pune opening the app
- * at 05:00 IST would be shown the previous day's plan.
+ * MR-14 read the handset's own date to decide which day to show. That is the wrong
+ * authority: "which day was this visit on" has compliance meaning, and this repository's
+ * rule is a server clock for anything that does. A phone on the wrong timezone would have
+ * moved every visit in the day, silently.
+ *
+ * `today` now arrives from `PulledStoreProvider`, computed by `territoryToday()` from the
+ * server's `serverTime` read in the territory's zone. There is no device-reading fallback,
+ * on purpose: a caller with no day cannot summarise one, and must say so rather than
+ * guess.
  */
-export const deviceDay = (now: Date = new Date()): string => {
-  const pad = (value: number): string => String(value).padStart(2, '0');
-  return `${String(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-};
 
 /**
  * Ordered the way the MR walks the day: by the time the server scheduled, with
@@ -171,9 +178,10 @@ const nextVisitFrom = (visit: Visit, doctor: Doctor | undefined): NextVisit => {
 export const summariseDay = (
   visits: readonly Visit[],
   doctors: readonly Doctor[],
-  day: string = deviceDay(),
+  day: string,
+  zone: TerritoryZone,
 ): DaySummary => {
-  const counted = visits.filter((visit) => countsTowardTheDay(visit) && onDay(visit, day));
+  const counted = visits.filter((visit) => countsTowardTheDay(visit) && onDay(visit, day, zone));
   const byId = new Map(doctors.map((doctor) => [doctor.id, doctor]));
 
   // `in_progress` comes before `planned`: a visit the MR is standing inside is the
@@ -201,13 +209,26 @@ export const summariseDay = (
 };
 
 /**
- * "10:04" from a contract ISO timestamp, by reading the characters rather than
- * parsing a `Date`.
+ * "10:04" by slicing the characters — **VALID ONLY FOR MOCK-BACKED SCREENS.**
  *
- * The contract sends an offset (`2026-08-10T10:04:00+05:30`), and that offset is
- * the territory's, not the handset's. `toLocaleTimeString` would re-express it in
- * whatever timezone the phone is set to, which for an MR whose phone is on the
- * wrong timezone silently moves every visit in the day. Slicing keeps the time the
- * server meant.
+ * **MR-15 A2 found the assumption under this false against the real server.** The comment
+ * that stood here said: *"The contract sends an offset (`2026-08-10T10:04:00+05:30`), and
+ * that offset is the territory's, not the handset's. Slicing keeps the time the server
+ * meant."*
+ *
+ * `services/mock` does send `+05:30` — every fixture in it does, which is why this looked
+ * right for the whole of the frontend's life. **Supabase sends `+00:00`.** Slicing that
+ * keeps UTC and prints it as though it were local, so a visit at `07:30+00:00` — 13:00 in
+ * Asia/Kolkata — rendered to the MR as "Scheduled 07:30". Five and a half hours early,
+ * measured on the device.
+ *
+ * Screens reading the pulled store use `clockIn(iso, zone)` instead. This stays for the
+ * screens still on `:4010`, where the premise still holds, and it is labelled rather than
+ * left as a trap: **converting a screen to real data means replacing this call**, and any
+ * screen that forgets will show times that are wrong by the territory's UTC offset.
+ *
+ * Still on it today: `app/(tabs)/coaching.tsx`, `app/day-end.tsx`, and
+ * `route-labels.ts:clockFromOrNull` for `app/beat-plan.tsx`. The same applies to
+ * `dayMonthFrom` in `src/doctors/profile.ts` and the slices in `src/doctors/availability.ts`.
  */
 export const clockFrom = (iso: string): string => iso.slice(11, 16);

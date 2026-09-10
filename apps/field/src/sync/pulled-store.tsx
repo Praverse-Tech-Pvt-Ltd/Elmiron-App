@@ -17,6 +17,9 @@ import type { PullCursorStore } from './pull-cursor';
 import { asyncStoragePulledStore, loadPulledStore } from './pulled-store-persistence';
 import type { PulledStorePersistence } from './pulled-store-persistence';
 import { useSession } from '../session';
+import { fetchTerritoryZone } from '../today/shift-window';
+import { UTC_FALLBACK, territoryToday } from '../today/territory-day';
+import type { TerritoryZone } from '../today/territory-day';
 
 /**
  * The caller `sync/pull.ts` never had — MR-14 B1, closing FE-W36.
@@ -79,6 +82,19 @@ export interface PulledStoreState {
   readonly resynced: boolean;
   /** What left the MR's scope on the last pull — B8. */
   readonly removals: readonly RemovalNotice[];
+  /**
+   * MR-15 A2. The zone the MR's day is reckoned in, and where that answer came from.
+   *
+   * `source: 'fallback_utc'` means the server declined to say — no territory, or no
+   * configured hours — and the day boundary is therefore UTC, which cuts an Indian
+   * working day at 05:30 local. A screen that cares can tell.
+   */
+  readonly zone: TerritoryZone;
+  /**
+   * Today, as the TERRITORY reckons it, from the SERVER's clock. `null` until the first
+   * pull answers — a screen must not fill that gap with the handset's date.
+   */
+  readonly today: string | null;
   readonly refresh: () => void;
 }
 
@@ -118,6 +134,8 @@ export const PulledStoreProvider = ({
   const [failure, setFailure] = useState<PullFailure | null>(null);
   const [resynced, setResynced] = useState(false);
   const [removals, setRemovals] = useState<readonly RemovalNotice[]>([]);
+  const [zone, setZone] = useState<TerritoryZone>(UTC_FALLBACK);
+  const [today, setToday] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
 
   // One sync at a time. A foreground event arriving mid-sweep would otherwise start a
@@ -138,10 +156,23 @@ export const PulledStoreProvider = ({
       setNotice(null);
       setFailure(null);
       setRemovals([]);
+      setToday(null);
       return;
     }
 
     let cancelled = false;
+    /**
+     * Read through a function, not directly.
+     *
+     * `cancelled` is mutated by the cleanup below, which TypeScript's control-flow
+     * analysis cannot see: after the first `if (cancelled) return`, it narrows the
+     * variable to `false` for the rest of the block and
+     * `@typescript-eslint/no-unnecessary-condition` then calls every later check dead
+     * code. The checks are not dead -- an unmount during any `await` sets it -- so the
+     * honest fix is to stop the narrowing rather than to delete the guards or silence
+     * the rule.
+     */
+    const isCancelled = (): boolean => cancelled;
 
     const sync = async (): Promise<void> => {
       if (running.current) return;
@@ -151,13 +182,21 @@ export const PulledStoreProvider = ({
         // restored, `loadPulledStore` clears the cursor so this is a full sweep rather
         // than a delta onto nothing.
         let next = await loadPulledStore(userId, persistence, cursors);
-        if (!cancelled) setStore(next);
+        if (!isCancelled()) setStore(next);
+
+        // A2. The zone comes from the server, once per sync, and never from the device.
+        // Fetched before the pages so the first render that has visits also has the zone
+        // to read their times in -- otherwise the screen would briefly show every clock
+        // in UTC and then correct itself, which is worse than showing nothing.
+        const territoryZone = await fetchTerritoryZone();
+        if (isCancelled()) return;
+        setZone(territoryZone);
 
         let pages = 0;
         let outcome: PullOutcome;
         do {
           outcome = await pull({ userId, cursors });
-          if (cancelled) return;
+          if (isCancelled()) return;
 
           if (outcome.kind === 'refused') {
             // The server answered and said no. That is a verdict the MR must see: their
@@ -184,6 +223,9 @@ export const PulledStoreProvider = ({
           // Written after every page rather than at the end, so a sweep interrupted by
           // the app being killed leaves the records and the cursor agreeing with each
           // other rather than a cursor ahead of the records it was saved beside.
+          // A2. "Today" is the SERVER's instant read in the TERRITORY's zone. The
+          // handset decides neither half.
+          setToday(territoryToday(outcome.serverTime, territoryZone));
           await persistence.save(userId, next);
           pages += 1;
         } while (outcome.hasMore && pages < MAX_PAGES);
@@ -191,7 +233,7 @@ export const PulledStoreProvider = ({
         setFailure(null);
         setStatus('ready');
       } catch (error: unknown) {
-        if (cancelled) return;
+        if (isCancelled()) return;
         // A parse failure or an unreachable server. Both mean the screens are stale and
         // neither is something the MR can act on beyond trying again, so the status says
         // so and the store keeps whatever it had.
@@ -218,8 +260,8 @@ export const PulledStoreProvider = ({
   }, [userId, sessionStatus, nonce, cursors, persistence, pull]);
 
   const value = useMemo<PulledStoreState>(
-    () => ({ store, status, notice, failure, resynced, removals, refresh }),
-    [store, status, notice, failure, resynced, removals, refresh],
+    () => ({ store, status, notice, failure, resynced, removals, zone, today, refresh }),
+    [store, status, notice, failure, resynced, removals, zone, today, refresh],
   );
 
   return <PulledStoreContext.Provider value={value}>{children}</PulledStoreContext.Provider>;

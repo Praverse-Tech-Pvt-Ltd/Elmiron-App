@@ -9,7 +9,8 @@ import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { emptyQueue } from '../../src/sync/reducer';
 import type { SyncQueueState } from '../../src/sync/reducer';
-import { clockFrom, summariseDay } from '../../src/today/plan';
+import { summariseDay } from '../../src/today/plan';
+import { clockIn } from '../../src/today/territory-day';
 
 /**
  * The role-aware shell. Which destinations exist depends on the role in the token.
@@ -41,7 +42,7 @@ const MrToday = (): ReactNode => {
   const [queue, setQueue] = useState<SyncQueueState>(emptyQueue);
   // MR-14 B2/B3. The day comes from the store the pull maintains, not from
   // `createClientForScenario()`. This line is the read conversion.
-  const { store, status, notice, failure: pullFailure, removals } = usePulledStore();
+  const { store, status, notice, failure: pullFailure, removals, zone, today } = usePulledStore();
 
   useEffect(() => {
     // B2. The queue is read on every visit to this screen rather than once, because
@@ -60,9 +61,15 @@ const MrToday = (): ReactNode => {
   // B5. `done` and `notMet` are the SERVER's visit statuses, carried through
   // `summariseDay` unchanged. An MR who found three doctors unavailable reads three
   // not-met and no congratulation -- the count is attendance, never a score.
-  const summary = summariseDay(visitsFromStore(store), doctorsFromStore(store));
-  const startedAt = summary.startedAt;
-  const next = summary.next;
+  // A2. `today` is the server's instant in the territory's zone. Until it arrives there
+  // is no day to summarise, and the handset must not supply one -- so the screen shows
+  // its loading state rather than a day computed from the wrong clock.
+  const summary =
+    today === null
+      ? null
+      : summariseDay(visitsFromStore(store), doctorsFromStore(store), today, zone);
+  const startedAt = summary?.startedAt ?? null;
+  const next = summary?.next ?? null;
 
   // B6 and B8, through one channel. `notice` is null on an ordinary sync and the
   // removals list is empty, so this is an empty array and TodayScreen renders nothing
@@ -99,10 +106,10 @@ const MrToday = (): ReactNode => {
   return (
     <TodayScreen
       dayLabel="Today"
-      startedLabel={startedAt === null ? null : `Started ${clockFrom(startedAt)}`}
-      planned={summary.planned}
-      done={summary.done}
-      notMet={summary.notMet}
+      startedLabel={startedAt === null ? null : `Started ${clockIn(startedAt, zone)}`}
+      planned={summary?.planned ?? 0}
+      done={summary?.done ?? 0}
+      notMet={summary?.notMet ?? 0}
       next={
         next === null
           ? null
@@ -112,7 +119,7 @@ const MrToday = (): ReactNode => {
               // B4. "Not arrived yet" is not the same as "there is none".
               clinicPending: next.clinicPending,
               scheduledLabel:
-                next.scheduledFor === null ? null : `Scheduled ${clockFrom(next.scheduledFor)}`,
+                next.scheduledFor === null ? null : `Scheduled ${clockIn(next.scheduledFor, zone)}`,
             }
       }
       sync={indicatorStateFor(queue)}
@@ -138,7 +145,7 @@ const MrToday = (): ReactNode => {
               router.push(`/visit/${next.visitId}`);
             },
           })}
-      loading={status === 'loading'}
+      loading={status === 'loading' || today === null}
       failure={failure}
       notices={notices}
     />

@@ -48,6 +48,7 @@ const pulled = (over: Partial<Extract<PullOutcome, { kind: 'pulled' }>> = {}): P
   hasMore: false,
   cursor: 'cursor-1',
   resynced: false,
+  serverTime: '2026-09-10T09:00:00+00:00',
   ...over,
 });
 

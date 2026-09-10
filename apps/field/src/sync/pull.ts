@@ -86,6 +86,13 @@ export type PullOutcome =
       readonly cursor: string;
       /** True when a too-old cursor forced this pull to start over. */
       readonly resynced: boolean;
+      /**
+       * The SERVER's clock at the moment it answered — MR-15 A2.
+       *
+       * Carried because "which day is it" must not be decided by the handset. It was in
+       * the response and in `SyncPullResponseSchema` from the start, and nothing read it.
+       */
+      readonly serverTime: string;
     }
   | { readonly kind: 'refused'; readonly refusal: Refusal };
 
@@ -216,6 +223,7 @@ export const pullOnce = async (deps: PullDeps): Promise<PullOutcome> => {
     hasMore: response.hasMore,
     cursor: response.nextCursor,
     resynced,
+    serverTime: response.serverTime,
   };
 };
 

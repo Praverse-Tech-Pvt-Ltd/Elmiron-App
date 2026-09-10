@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DoctorSchema, VisitSchema } from '@fieldforce/core';
 import type { Doctor, Visit } from '@fieldforce/core';
-import { clockFrom, deviceDay, summariseDay } from './plan';
+import { clockFrom, summariseDay } from './plan';
 
 /**
  * Inputs are parsed through the contract's own schemas rather than written as
@@ -65,6 +65,13 @@ const doctor = (over: Partial<Doctor> = {}): Doctor =>
  */
 const DAY = '2026-08-10';
 
+/**
+ * MR-15 A2. The zone is now an argument, so these cases say which day boundary they mean
+ * instead of inheriting the handset's. The fixtures are all `+05:30`, so IST is the frame
+ * they were written in.
+ */
+const IST = { timeZone: 'Asia/Kolkata', source: 'territory' } as const;
+
 describe('MR-12 D3 — a not-met visit is attended, not undone', () => {
   it('counts not_met separately from completed, and neither as the other', () => {
     const summary = summariseDay(
@@ -79,6 +86,7 @@ describe('MR-12 D3 — a not-met visit is attended, not undone', () => {
       ],
       [doctor()],
       DAY,
+      IST,
     );
     expect(summary.planned).toBe(3);
     expect(summary.done, 'a not-met visit was counted as completed').toBe(1);
@@ -98,6 +106,7 @@ describe('MR-12 D3 — a not-met visit is attended, not undone', () => {
       ],
       [doctor()],
       DAY,
+      IST,
     );
     expect(summary.next).toBeNull();
   });
@@ -113,6 +122,7 @@ describe('what the day counts', () => {
       ],
       [doctor()],
       DAY,
+      IST,
     );
     expect(summary.done).toBe(2);
     expect(summary.planned).toBe(3);
@@ -128,6 +138,7 @@ describe('what the day counts', () => {
       ],
       [doctor()],
       DAY,
+      IST,
     );
     expect(summary.done).toBe(1);
     expect(summary.planned).toBe(1);
@@ -151,6 +162,7 @@ describe('which visit is next', () => {
       ],
       [doctor()],
       DAY,
+      IST,
     );
     expect(summary.next?.visitId).toBe('66666666-6666-4666-8666-666666666602');
   });
@@ -175,6 +187,7 @@ describe('which visit is next', () => {
       ],
       [doctor()],
       DAY,
+      IST,
     );
     expect(summary.next?.visitId).toBe('66666666-6666-4666-8666-666666666602');
   });
@@ -193,25 +206,26 @@ describe('which visit is next', () => {
       ],
       [doctor()],
       DAY,
+      IST,
     );
     expect(summary.next?.visitId).toBe('66666666-6666-4666-8666-666666666602');
   });
 
   it('is null when the day is finished', () => {
-    const summary = summariseDay([visit({ status: 'completed' })], [doctor()], DAY);
+    const summary = summariseDay([visit({ status: 'completed' })], [doctor()], DAY, IST);
     expect(summary.next).toBeNull();
     expect(summary.done).toBe(1);
   });
 
   it('names the doctor and the clinic from the address the visit points at', () => {
-    const summary = summariseDay([visit()], [doctor()], DAY);
+    const summary = summariseDay([visit()], [doctor()], DAY, IST);
     expect(summary.next?.doctorName).toBe('Dr Rohini Kulkarni');
     expect(summary.next?.clinic).toBe('Sunrise Clinic, Prabhadevi');
   });
 
   it('says so plainly when the doctor is not in the list it was given', () => {
     // Rendering a blank name would look like a loading state that never resolves.
-    const summary = summariseDay([visit()], [], DAY);
+    const summary = summariseDay([visit()], [], DAY, IST);
     expect(summary.next?.doctorName).toBe('Doctor not in your list');
     expect(summary.next?.clinic).toBeNull();
   });
@@ -234,12 +248,13 @@ describe('the times shown are the server’s', () => {
       ],
       [doctor()],
       DAY,
+      IST,
     );
     expect(summary.startedAt).toBe('2026-08-10T08:55:00+05:30');
   });
 
   it('has no start time before the first visit begins', () => {
-    expect(summariseDay([visit({ startedAt: null })], [doctor()], DAY).startedAt).toBeNull();
+    expect(summariseDay([visit({ startedAt: null })], [doctor()], DAY, IST).startedAt).toBeNull();
   });
 
   it('reads the clock off the timestamp instead of reinterpreting its offset', () => {
@@ -278,6 +293,7 @@ describe('the day is scoped to the day', () => {
       ],
       [doctor()],
       DAY,
+      IST,
     );
     expect(summary.planned).toBe(1);
     expect(summary.done).toBe(1);
@@ -296,6 +312,7 @@ describe('the day is scoped to the day', () => {
       ],
       [doctor()],
       DAY,
+      IST,
     );
     expect(summary.next).toBeNull();
     expect(summary.planned).toBe(0);
@@ -311,6 +328,7 @@ describe('the day is scoped to the day', () => {
       ],
       [doctor()],
       DAY,
+      IST,
     );
     expect(summary.planned).toBe(2);
     expect(summary.done).toBe(1);
@@ -331,6 +349,7 @@ describe('the day is scoped to the day', () => {
       ],
       [doctor()],
       DAY,
+      IST,
     );
     expect(summary.done).toBe(1);
   });
@@ -350,16 +369,31 @@ describe('the day is scoped to the day', () => {
       ],
       [doctor()],
       DAY,
+      IST,
     );
     expect(summary.planned).toBe(0);
     expect(summary.next).toBeNull();
   });
 
-  it("reads the device's own date, not a UTC-shifted one", () => {
-    // `toISOString().slice(0,10)` would hand back the previous day for anyone east of
-    // Greenwich in the early morning — an MR in Pune opening the app at 05:00 IST would
-    // be shown yesterday's plan, which is the bug this whole block is about, inverted.
-    const earlyMorningInPune = new Date(2026, 8, 10, 5, 0, 0);
-    expect(deviceDay(earlyMorningInPune)).toBe('2026-09-10');
+  it('files an early-morning IST visit on the IST day, not the UTC one', () => {
+    // MR-15 A2. This case used to assert `deviceDay()`, which read the HANDSET. That
+    // function is gone: the day now comes from the server's clock in the territory's zone.
+    // 05:00 IST on the 10th is 23:30 UTC on the 9th, so a UTC boundary files it under the
+    // wrong day -- and 05:30 IST is exactly where a UTC day cuts an Indian working
+    // morning.
+    const summary = summariseDay(
+      [
+        visit({
+          id: '66666666-6666-4666-8666-666666666605',
+          status: 'planned',
+          scheduledFor: '2026-08-09T23:30:00+00:00',
+          startedAt: null,
+        }),
+      ],
+      [doctor()],
+      '2026-08-10',
+      IST,
+    );
+    expect(summary.planned).toBe(1);
   });
 });
