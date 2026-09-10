@@ -11,6 +11,7 @@ import { SamplesScreen, Screen } from '@fieldforce/ui';
 import type { SampleLine, SampleLinePatch } from '@fieldforce/ui';
 import { createClientForScenario } from '../../src/api';
 import { createPushClient } from '../../src/sync/push-client';
+import { unavailableReason } from '../../src/capture/preconditions';
 import { blankLine, CAP_NOTE, errorsFor, sampleRequest } from '../../src/capture/samples';
 import { sampleQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { dayMonthFrom } from '../../src/doctors/profile';
@@ -101,7 +102,15 @@ export default function SamplesRoute(): ReactNode {
   };
 
   const record = (): void => {
-    if (busy || visit === null || doctor === null) return;
+    // MR-20 B2. See `preconditions.ts`: `busy` is silent on purpose, a missing visit or
+    // doctor is not.
+    if (busy) return;
+    const unavailable = unavailableReason(visit, doctor);
+    if (unavailable !== null) {
+      setFailure(unavailable);
+      return;
+    }
+    if (visit === null || doctor === null) return;
 
     const errors = errorsFor(lines);
     if (Object.keys(errors).length > 0) {

@@ -135,3 +135,45 @@ describe('app/samples/[visitId].tsx — C5', () => {
     expect(screen.queryByText('Recorded')).toBeNull();
   });
 });
+
+/**
+ * MR-20 B3 — the tap must produce something.
+ *
+ * **This is the case that holds the behaviour once Part C makes the defect unreachable.**
+ * MR-19 pressed a primary action against a real Supabase visit id while the screen read the
+ * mock: `visit === null`, the handler returned on its first line, and there was no error, no
+ * message, no busy state and nothing on the wire. The MR would have pressed it again.
+ *
+ * Converting the reads stops `visit === null` happening in the common case — which is
+ * exactly why this exists now rather than after.
+ */
+describe('MR-20 B3 — a tap on an unusable screen is never silent', () => {
+  it('says the visit is not on this phone rather than doing nothing', async () => {
+    // The server holds no visit with this id, which is precisely the MR-19 state: the
+    // screen was opened for an id its data source does not have.
+    mockListVisits.mockResolvedValue({ items: [], nextCursor: null });
+    mockListDoctors.mockResolvedValue({ items: [doctor], nextCursor: null });
+    mockCreateSampleAndInput.mockClear();
+
+    await render(<SamplesRoute />);
+    await fireEvent.press(await screen.findByText('Record what I left'));
+
+    expect(await screen.findByText('This visit is not on your phone')).toBeTruthy();
+    // ...and nothing was sent, because there was nothing to send it against.
+    expect(mockCreateSampleAndInput).not.toHaveBeenCalled();
+  });
+
+  it('and stays silent when the screen IS usable — the positive control', async () => {
+    // Without this, "always show the message" would pass the case above while putting a
+    // permanent error on a working screen. A guard that fires on correct states gets
+    // deleted, and its removal takes the real coverage with it.
+    loaded();
+    mockCreateSampleAndInput.mockClear();
+    mockCreateSampleAndInput.mockResolvedValue({});
+
+    await render(<SamplesRoute />);
+    await screen.findByText(/Dr\. S\. Iyer/u);
+
+    expect(screen.queryByText('This visit is not on your phone')).toBeNull();
+  });
+});

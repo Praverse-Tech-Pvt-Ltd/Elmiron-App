@@ -7,6 +7,8 @@ import { ConsentDetailsScreen, ConsentScreen, Screen } from '@fieldforce/ui';
 import type { ConsentAnswer } from '@fieldforce/ui';
 import { createClientForScenario } from '../../src/api';
 import { createPushClient } from '../../src/sync/push-client';
+import { unavailableReason } from '../../src/capture/preconditions';
+import type { PreconditionMessage } from '../../src/capture/preconditions';
 import {
   CONSENT_VARIANT,
   consentCopy,
@@ -142,9 +144,22 @@ export default function ConsentRoute(): ReactNode {
   const firstName = (mrName ?? 'your rep').split(' ')[0] ?? 'your rep';
   const copy = consentCopy(firstName);
 
+  // MR-20 B2. A channel for "this screen cannot act", separate from `blockedReason`, which
+  // answers a different question -- whether the QUESTION may be put to the doctor at all.
+  const [unavailable, setUnavailable] = useState<PreconditionMessage | null>(null);
+
   const answer = useCallback(
     (given: ConsentAnswer): void => {
-      if (busy || visit === null || doctor === null || notice === null) return;
+      // `busy` stays silent: the screen already shows it. A missing visit or doctor does
+      // not, and pressing Allow to no effect is the worst possible place for a tap that
+      // does nothing -- the doctor has just been asked out loud.
+      if (busy) return;
+      const missing = unavailableReason(visit, doctor);
+      if (missing !== null) {
+        setUnavailable(missing);
+        return;
+      }
+      if (visit === null || doctor === null || notice === null) return;
       setBusy(true);
 
       void (async () => {
@@ -197,7 +212,12 @@ export default function ConsentRoute(): ReactNode {
     <Screen scrollable>
       <ConsentScreen
         askedBy={mrName ?? 'Your rep'}
-        blocked={settled ? blockedReason(notice, failed) : null}
+        /*
+          `unavailable` wins over `blockedReason`: if the screen cannot act at all, saying
+          "there is no notice for this language" would be answering a question the MR is
+          not yet able to reach.
+        */
+        blocked={unavailable ?? (settled ? blockedReason(notice, failed) : null)}
         busy={busy}
         loading={!settled}
         facts={copy.facts}

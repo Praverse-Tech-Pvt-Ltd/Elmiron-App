@@ -30,6 +30,7 @@ import {
   recordingRequest,
 } from '../../src/capture/recording';
 import { checkInQueueItem, checkOutQueueItem, sendOrQueue } from '../../src/sync/outbox';
+import { unavailableReason } from '../../src/capture/preconditions';
 import { clockFrom } from '../../src/today/plan';
 
 /**
@@ -194,7 +195,18 @@ export default function VisitRoute(): ReactNode {
   };
 
   const advance = (): void => {
-    if (visit === null || busy) return;
+    // MR-20 B2. `busy` still returns silently -- a second tap while a request is in flight
+    // is correctly ignored, because the screen is already showing a busy state. A missing
+    // VISIT is different: the condition is sustained, so pressing again does nothing again,
+    // and MR-19 found exactly that -- the button did nothing at all, with nothing on screen
+    // and nothing on the wire.
+    if (busy) return;
+    const unavailable = unavailableReason(visit, doctor);
+    if (unavailable !== null) {
+      setFailure(unavailable);
+      return;
+    }
+    if (visit === null) return;
     setBusy(true);
     setBlocked(null);
 
