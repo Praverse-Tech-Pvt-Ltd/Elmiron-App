@@ -4,6 +4,7 @@ import { QueueScreen } from '@fieldforce/ui';
 import { createClientForScenario } from '../src/api';
 import { loadQueueState } from '../src/sync/async-storage-store';
 import { flushOutbox } from '../src/sync/outbox';
+import { presentRejection } from '../src/sync/explanation';
 import { emptyQueue } from '../src/sync/reducer';
 import type { SyncQueueState } from '../src/sync/reducer';
 
@@ -44,7 +45,15 @@ export default function Queue(): ReactNode {
       onRetry={() => {
         void flushOutbox(createClientForScenario()).then(refresh);
       }}
-      rejections={state.rejections}
+      /*
+        MR-17 B1. Through `presentRejection`, which until now was written, tested and
+        CALLED BY NOTHING -- the reducer's records went straight to the screen, so the
+        remedy it derives and the retry/escalate judgement it makes were both unreachable.
+        This is the line that makes the SQLSTATE mean something to an MR.
+      */
+      rejections={Object.fromEntries(
+        Object.entries(state.rejections).map(([id, record]) => [id, presentRejection(record)]),
+      )}
     />
   );
 }

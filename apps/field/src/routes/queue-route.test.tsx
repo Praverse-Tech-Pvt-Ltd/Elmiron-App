@@ -2,6 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import { SyncQueueItemSchema } from '@fieldforce/core';
 import { QueueScreen } from '@fieldforce/ui';
+import { presentRejection } from '../sync/explanation';
 import { emptyQueue, syncQueueReducer } from '../sync/reducer';
 import type { SyncEvent } from '../sync/events';
 
@@ -52,6 +53,7 @@ describe('contract -> reducer -> screen', () => {
           id: parsed.id,
           status: 'rejected',
           rejectionCode: 'outside_geofence',
+          sqlState: null,
           explanation: 'You were not close enough to the clinic when this was recorded.',
           warnings: [],
           attemptsRemaining: 2,
@@ -61,7 +63,14 @@ describe('contract -> reducer -> screen', () => {
     ];
     const state = events.reduce(syncQueueReducer, emptyQueue);
 
-    await render(<QueueScreen items={state.items} rejections={state.rejections} />);
+    await render(
+      <QueueScreen
+        items={state.items}
+        rejections={Object.fromEntries(
+          Object.entries(state.rejections).map(([id, r]) => [id, presentRejection(r)]),
+        )}
+      />,
+    );
 
     expect(screen.getByText('Refused')).toBeTruthy();
     expect(
@@ -82,7 +91,14 @@ describe('contract -> reducer -> screen', () => {
       });
     }
 
-    await render(<QueueScreen items={state.items} rejections={state.rejections} />);
+    await render(
+      <QueueScreen
+        items={state.items}
+        rejections={Object.fromEntries(
+          Object.entries(state.rejections).map(([id, r]) => [id, presentRejection(r)]),
+        )}
+      />,
+    );
 
     expect(screen.getByText('Still trying')).toBeTruthy();
     expect(screen.queryByText('Refused')).toBeNull();

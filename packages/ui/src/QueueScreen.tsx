@@ -25,6 +25,20 @@ export interface QueueScreenRejection {
   readonly code: string;
   /** Backend's sentence. Rendered verbatim; `null` when the server sent none. */
   readonly explanation: string | null;
+  /**
+   * What the MR should DO about it — MR-17 B1. Rendered under Backend's sentence.
+   *
+   * **Two different things, deliberately kept apart.** `explanation` is the server's, says
+   * what went wrong, and is displayed verbatim. This is the client's, says what to do next,
+   * and is derived from the SQLSTATE through `refusalForSqlState` -- so 45001, 45004, 45007
+   * and 45008 each get their own, where the queue's `code` collapses all four into
+   * `internal_error`.
+   *
+   * `null` when there is nothing honest to say, which includes every SQLSTATE this build
+   * does not recognise. Nothing renders then; a guessed remedy sends the MR to do the wrong
+   * thing with no way to tell.
+   */
+  readonly remedy: string | null;
   readonly deadLettered: boolean;
   /**
    * Server clock, or null when the server sent none. The only timestamp this screen is
@@ -276,6 +290,11 @@ const QueueRow = ({
         <>
           {/* Backend's sentence, verbatim. Never reworded, truncated or wrapped. */}
           {rejection.explanation === null ? null : <BodyText>{rejection.explanation}</BodyText>}
+          {/*
+            The client's half: what to do next. Under the server's sentence, because the
+            MR needs to know what happened before what to do about it.
+          */}
+          {rejection.remedy === null ? null : <BodyText>{rejection.remedy}</BodyText>}
           {/*
             The server's clock, and ONLY the server's. No duration is computed anywhere
             on this screen, and nothing is rendered when the server sent no timestamp --

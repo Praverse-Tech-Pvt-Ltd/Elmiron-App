@@ -2065,6 +2065,11 @@ else in this file: a control that cannot tell you it did not run is not a contro
 
 ## 10 September 2026 — a fixture holding one VALUE of a dimension cannot test a predicate on that dimension
 
+> **SUPERSEDED, same day, by the entry at the end of this file.** This statement is true but
+> too weak: it misses the case where the fixture DOES vary the dimension and the predicate
+> still cannot fail, because the variation happens outside the scope the predicate reads.
+> Kept because this file is append-only.
+
 The 8 September entry above says *a boundary with one instance in the fixtures is untested
 by construction*, about **entities**: one sample row owned by one MR cannot prove another
 MR's samples are invisible.
@@ -2143,3 +2148,81 @@ unfalsifiable*, which is a fact worth knowing before trusting a green suite.
 **Vary the dimension in the fixture, or state in writing that the predicate on it is
 untested.** Silence reads as coverage, and a green suite over a single-valued column is the
 most confident-looking way this repository has of proving nothing.
+
+---
+
+## 10 September 2026 — SUPERSEDES the entry above: a predicate over `A AND B` is only falsifiable if the PAIR varies within the scope it reads
+
+**The entry immediately above is not wrong, it is too weak**, and it is left in place because
+this file is append-only. Read this one.
+
+It said: *a fixture holding a single value of a dimension cannot test a predicate on that
+dimension.* True. But it misses the case that actually bit, where **the fixture DOES vary the
+dimension and the predicate still cannot fail.**
+
+> **A predicate over `A AND B` is only falsifiable if the pair varies within the scope it
+> reads.** Varying `A` across the run while `B` is single-valued inside each `A` means the
+> combination never varies at all.
+
+### The worked example, which looked covered
+
+`active_consent_text_at` selects the notice a doctor was shown:
+
+```sql
+where v.organisation_id = p_organisation_id   -- A
+  and v.language = p_language                 -- B
+```
+
+`consent-notice-tenancy.spec.ts` already had this helper, and it looks exactly like the
+control this rule asks for:
+
+```ts
+/** A language nothing else in the run uses, so the only rows in it are this test's. */
+const freshLanguage = (): string => `zz-${randomUUID().slice(0, 8)}`;
+```
+
+**Languages varied across the run. The language clause still could not fail.** Deleting
+`and v.language = p_language` from the live function left the consent suite green — 30
+passed, 0 failed — because the predicate also filters `organisation_id`, and **each tenant
+held exactly one language**. The variation happened outside the scope the predicate reads.
+
+The fix was one row: a second-language notice **for the same tenant**, deliberately *newer*
+than the first, so that `order by effective_from desc` hands an `en-IN` capture the Hindi
+notice when the clause is gone. Both runs, same mutation:
+
+```
+clause DELETED, one language per tenant    30 passed, 0 failed   <- proved nothing
+clause DELETED, two languages per tenant    2 suites FAILED
+```
+
+### Why this is the general statement
+
+The three earlier instances are all special cases of it, with `A` trivial:
+
+| Instance | A | B | Why it hid |
+| --- | --- | --- | --- |
+| One organisation | — | `organisation_id` | Isolation tests asserted rows that did not exist |
+| One day | — | the visit's date | Nothing filtered by date; no fixture could tell |
+| One UTC offset | — | the ISO offset | `+05:30` in the mock made a wrong assumption look verified |
+| **One language per tenant** | `organisation_id` | `language` | **Varied globally, single-valued within the scope** |
+
+The first three are found by counting distinct values in a column. **The fourth is not** —
+the column has plenty of distinct values. It is found by counting distinct values *per
+value of the other operand*:
+
+```sql
+-- not `count(distinct language)`, which reads healthy, but:
+select organisation_id, count(distinct language)
+  from public.consent_text_versions group by 1;
+-- every row reading 1 means the pair never varies
+```
+
+### And assert the fixture's own shape
+
+The fixture is the whole mechanism, so it needs its own assertion. `consent-notice-tenancy`
+now checks that **both languages exist for the tenant** and that **`hi-IN` is genuinely the
+newer of the two** — because if that ordering ever flipped, the deletion mutation would pass
+again and the suite would go back to proving nothing, with nothing anywhere to say so.
+
+**A control that cannot fail is indistinguishable from one that is absent, and it costs more,
+because it also buys confidence.**

@@ -39,6 +39,24 @@ export interface ServerVerdict {
   readonly id: string;
   readonly status: ServerSyncStatus;
   readonly rejectionCode: SyncRejectionCode | null;
+  /**
+   * The SQLSTATE the server refused with — MR-17 B1 / BE-W75.
+   *
+   * **The contract has carried this since BE-W75 and the client dropped it.**
+   * `SyncPushResultSchema` says so in its own comment: *"Prefer this over `rejectionCode`
+   * when it is present, and pass it to `refusalForSqlState`, which is the one derivation
+   * `error-contract.spec.ts` guards in both directions."* This type did not have the field,
+   * so every `450xx` collapsed to `internal_error` and all four consent remedies plus the
+   * UCPMP refusal reached the MR as one generic failure.
+   *
+   * `rejectionCode` stays beside it and is NOT widened. MR-04 settled why: the client
+   * already holds a complete SQLSTATE map guarded in both directions, and extending the
+   * enum would derive the same meaning twice with only one copy guarded.
+   *
+   * `null` on an accepted item, and `null` on a dead-letter replay where the code is read
+   * back from `sync_items` and the original SQLSTATE was never stored.
+   */
+  readonly sqlState: string | null;
   /** The sentence Backend wrote. Displayed verbatim, never rephrased or invented. */
   readonly explanation: string | null;
   readonly warnings: readonly SyncWarning[];

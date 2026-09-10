@@ -29,6 +29,9 @@ const rejection = (over: Partial<QueueScreenRejection> = {}): QueueScreenRejecti
   // rendering as an unknown string.
   code: SyncRejectionCodeSchema.parse('outside_shift_window'),
   explanation: 'This visit was recorded outside your territory working hours.',
+  // MR-17 B1. Null by default so the existing cases keep asserting the SERVER's sentence
+  // alone; the remedy has its own cases below.
+  remedy: null,
   deadLettered: false,
   receivedAt: '2026-08-17T11:22:33.000Z',
   ...over,
@@ -283,5 +286,51 @@ describe('S3 — when something will not go', () => {
     await fireEvent.press(screen.getByText('Try again now'));
     expect(onRetry).toHaveBeenCalledTimes(1);
     expect(screen.getByText('Tell the help desk')).toBeTruthy();
+  });
+});
+
+/**
+ * MR-17 B1 — the remedy reaches the screen, under the server's sentence.
+ *
+ * The two are different things and are kept apart deliberately: `explanation` is Backend's,
+ * says what went wrong, and is rendered verbatim; `remedy` is the client's and says what to
+ * do next. A screen that showed only the first tells an MR they are stuck without telling
+ * them how to get unstuck.
+ */
+describe('what to do about a refusal, not only what it was', () => {
+  it('renders the remedy beneath the server sentence', async () => {
+    await render(
+      <QueueScreen
+        items={[item({ id: '15151515-1515-4515-8515-151515151577' })]}
+        rejections={{
+          '15151515-1515-4515-8515-151515151577': rejection({
+            explanation: 'The consent notice changed since it was displayed.',
+            remedy: 'Open consent again, read the current notice aloud, and ask once more.',
+          }),
+        }}
+      />,
+    );
+    expect(screen.getByText('The consent notice changed since it was displayed.')).toBeTruthy();
+    expect(
+      screen.getByText('Open consent again, read the current notice aloud, and ask once more.'),
+    ).toBeTruthy();
+  });
+
+  it('renders NOTHING extra when there is no honest remedy to give', async () => {
+    // The other half, and the one that keeps the first honest. An unmapped SQLSTATE has no
+    // remedy, and inventing one would send the MR to do the wrong thing.
+    await render(
+      <QueueScreen
+        items={[item({ id: '15151515-1515-4515-8515-151515151577' })]}
+        rejections={{
+          '15151515-1515-4515-8515-151515151577': rejection({
+            explanation: 'Something the app does not recognise.',
+            remedy: null,
+          }),
+        }}
+      />,
+    );
+    expect(screen.getByText('Something the app does not recognise.')).toBeTruthy();
+    expect(screen.queryByText(/read the current notice/i)).toBeNull();
   });
 });

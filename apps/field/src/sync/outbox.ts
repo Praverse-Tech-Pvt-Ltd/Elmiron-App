@@ -320,6 +320,8 @@ export const flushOutbox = async (
           id: item.id,
           status: 'accepted',
           rejectionCode: null,
+          // Null on an accepted item, as the contract states -- absence means success.
+          sqlState: null,
           explanation: null,
           warnings: [],
           attemptsRemaining: 0,
@@ -346,6 +348,14 @@ export const flushOutbox = async (
             id: item.id,
             status: 'dead_lettered',
             rejectionCode: rejectionCodeFor(error.code),
+            // **Null on THIS path, and that is honest rather than lazy.** An
+            // `ApiRequestError` comes from the REST client, whose envelope carries an
+            // `ApiErrorCode` and no SQLSTATE -- there is nothing to thread. The SQLSTATE
+            // exists on the `sync_push` verdict, which Part C introduces; until a screen
+            // writes through it, `refusalForSqlState(null)` correctly yields
+            // `unrecognised` and the surface shows the honest fallback rather than a
+            // guessed remedy.
+            sqlState: null,
             // The server's sentence, verbatim. Never reworded — the queue screen renders
             // exactly this.
             explanation: error.message,

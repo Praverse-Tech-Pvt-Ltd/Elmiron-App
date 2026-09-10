@@ -20,6 +20,15 @@ import type { ServerVerdict, SyncEvent } from './events';
 
 export interface RejectionRecord {
   readonly code: SyncRejectionCode;
+  /**
+   * The SQLSTATE, carried so the surface can name a REMEDY — MR-17 B1.
+   *
+   * `code` is a coarse queue category (`internal_error` covers 45001, 45004, 45007 and
+   * 45008 alike). The SQLSTATE is the precise answer, and `refusalForSqlState` is the
+   * mapping `error-contract.spec.ts` guards in both directions. Null when the server sent
+   * none — and an unmapped value must render the honest fallback, never a guessed remedy.
+   */
+  readonly sqlState: string | null;
   /** Backend's sentence, verbatim. `null` when the server sent none. */
   readonly explanation: string | null;
   readonly attemptsRemaining: number;
@@ -108,6 +117,9 @@ const applyVerdict = (state: SyncQueueState, verdict: ServerVerdict): SyncQueueS
           ...state.rejections,
           [verdict.id]: {
             code: verdict.rejectionCode,
+            // MR-17 B1. Carried, not dropped. This is the line the whole error contract
+            // hung on: without it every 450xx arrives as `internal_error`.
+            sqlState: verdict.sqlState,
             explanation: verdict.explanation,
             attemptsRemaining: verdict.attemptsRemaining,
             deadLettered: verdict.status === 'dead_lettered',

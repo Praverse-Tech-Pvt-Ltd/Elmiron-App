@@ -22,6 +22,7 @@ const item = (id: string, clientCreatedAt: string): SyncQueueItem => ({
 const verdict = (over: Partial<ServerVerdict> & { id: string }): ServerVerdict => ({
   status: 'accepted',
   rejectionCode: null,
+  sqlState: null,
   explanation: null,
   warnings: [],
   attemptsRemaining: 2,
