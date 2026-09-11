@@ -94,3 +94,34 @@ and none is blocked on this codebase.
    6 November whatever else is happening.
 2. **5.1** has been open six weeks and blocks two gates that nothing else can close.
 3. **5.5** blocks a second product, not just this one.
+
+---
+
+## Status against this list — 11 September 2026, after MR-28
+
+**Nothing on this list has been answered.** What follows is what changed around it, so the
+next reader can see which items got *more* expensive rather than fewer.
+
+| # | What moved | Where it now bites |
+| --- | --- | --- |
+| **5.13 / `BE-W93`** | **Nothing. Still the most urgent item here, and the only one whose cost grows every day the app is used.** `G-WRITE` closing makes it worse, not better: the consent path is now proved working end to end, which means real consents can be captured, which means defective-and-unamendable rows can start accruing for real | The consent screen still names **nobody** as Data Fiduciary |
+| **5.9** | **Now demonstrably load-bearing, not theoretical.** MR-27 C2 and MR-28 B4 drove a real `45004` with a **test-only** cap of 1, reverted and verified back to null in the same session. The refusal now reaches the MR with *"cap 1, already given 0, this entry 2, period starting 2026-09-01"* and the doctor's NAME. **All of that is correct and all of it is unreachable while the cap is null.** Deadline unchanged: CI fails **6 November**, warning from **16 October** | Plus `FE-W41`: the samples screen's cap note says the app does not count against the cap. It becomes FALSE the day this is answered, and it sits three lines below a refusal quoting the cap |
+| **5.1** | **Now the single blocker on both device gates from this side, with one engineering item beside it.** `FE-W38` is closed — an MR with no signal performs all five writes, they survive a restart and arrive exactly once. What remains is the handset **and** a dev-client build (JDK 17, CMake, prebuild) for the native modules Expo Go cannot load | `FE-G1`, `FE-G2`. Seven weeks open |
+| **5.14 / `BE-W95`** | Unchanged, and the mechanism is fully built and driven by nothing. `is_withdrawal` and `supersedes_consent_record_id` are still null because the client sends neither | A reader must still infer the current answer from `captured_at` |
+| **5.15 / `FE-W39`** | **Narrowed again, and mostly answered by MR-26 B2/B5 in engineering's default.** `STAGE_WORDS_PENDING` reads **"Checked in — waiting to send"** — different SENTENCES, not a badge, because a badge is easy to miss and the claim lives in the sentence | What is left is whether that wording is the one you want |
+| **5.12** | Unchanged. MR-22 made the language order deterministic and labelled the rule **arbitrary** rather than dressing it as a preference | Still decides `displayed_language` on a compliance record |
+| **5.10** | Unchanged and still **UNVERIFIED**. MR-27 C1 drove both `45007` and `45008` by moving these thresholds temporarily — which means both now have a proven MR-facing remedy built on numbers nobody has confirmed | |
+
+### New, and it is ours rather than yours
+
+**`FE-W40` — what an MR sees on a cold start with no signal.** Four options written for a
+decision in `docs/decisions/FE-W40-cold-start-staleness.md`. **Engineering recommends option
+D**, bounded at the territory day boundary. Option B (fall back to the device clock) is named
+and refused so it is not proposed again as an obvious shortcut. Not implemented, and it is
+one of the two things an 8-hour `FE-G2` run would hit.
+
+### The three that are actually urgent — unchanged, and re-ordered by cost, not by age
+
+1. **5.13.** It compounds. The other two do not.
+2. **5.9.** It has a date and the date is in the build.
+3. **5.1.** Seven weeks, two gates, nothing else can close them.

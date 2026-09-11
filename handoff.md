@@ -347,3 +347,92 @@ between 21 August and 7 September is consistent with the evidence and is not evi
 **What to watch:** the same signature — `runner_id: 0`, zero steps, a few seconds — is how
 it will look if it recurs, and it will look identical for CI and for retention, which is
 the quickest way to tell an account-level outage from a code failure.
+
+---
+
+# STATUS AS OF 11 SEPTEMBER 2026 — read this first
+
+**Everything above this line describes 7 September and is kept for history. Where it
+disagrees with this section, this section is right; where this section disagrees with
+`PROJECT-OVERVIEW.md` or `docs/gotchas.md`, THOSE are right.** Those two are append-only
+and durable; this file is a snapshot and goes stale the way the version above it did.
+
+## What changed in four days
+
+**The backend did not stop at BE-W8.** Migrations went from 19 to **56**. Twenty-eight
+review rounds (`MR-14` → `MR-28`) ran across 9–11 September, and the work was not "frontend
+on top of a frozen backend" — most rounds changed both halves, because most defects were in
+the seam between them.
+
+## The one-line state
+
+**`G-WRITE` is MET.** All five MR write paths — check-in, check-out, consent, samples, call
+report — write to Supabase from real screens, **online and offline**, exactly once, with
+capture timestamps preserved through the queue, and all four project SQLSTATE refusals
+(`45001`, `45004`, `45007`, `45008`) reach the MR with their own remedy and never another's.
+Proved on an emulator with the database watched, not asserted.
+
+**`FE-G1` and `FE-G2` are NOT met and are blocked on two things that are not engineering:**
+a real Xiaomi/Oppo/Vivo/Realme handset (`blocked-on-you` 5.1, open seven weeks) and a
+**dev-client build** — JDK 17, CMake, `expo prebuild` — deferred since MR-14 and now the only
+item on the critical path from this side. Expo Go cannot load
+`react-native-background-geolocation` or `expo-audio`'s native halves.
+
+## What a new reader most needs to know
+
+**The app is no longer on the mock for the paths that matter.** Reads come from `sync_pull`
+through `apps/field/src/sync/pulled-store.tsx`; writes go through one `sync_push` RPC via
+`apps/field/src/sync/push-client.ts`. `createClientForScenario()` (the `:4010` mock) still
+serves `coaching`, `analysis`, `mileage`, `reply`, `day-end` and `beat-plan`. The
+module/screen split is the two-column table in `PROJECT-OVERVIEW.md`'s MR-14 section,
+updated since.
+
+**Nothing in the client decides permissions, and nothing re-derives a server rule.** Two
+rules earned the hard way:
+
+- The **ordering** of consent-notice precedence exists exactly once, in
+  `public.consent_text_version_precedence`, and is *transmitted* to the client (MR-27 B1).
+  The client mirrored it for one session and that duplication would have failed as a `45001`
+  in front of a doctor, not as a red test.
+- The **clock** is always the server's. `serverTime` from the last pull drives both the
+  territory day (MR-15 A2) and the consent activation window (MR-28 A2). Reading
+  `new Date()` for either is a defect, and both have been shipped once.
+
+**`sync_push` now carries a refusal's FIGURES, not just its sentence** (`BE-W97`, MR-28 B).
+`sqlDetail` and `sqlHint` are the raise site's `DETAIL`/`HINT`, verbatim, and are
+**rendered, never parsed**. `sqlState` is the contract.
+
+## The blocking list has not moved
+
+`docs/blocked-on-you.md` is current and is the file to read next. The three that matter:
+
+1. **5.13 / `BE-W93` — the fiduciary name.** `consent_records` is append-only, so every
+   consent captured before the organisation's registered name exists is permanently
+   defective **and cannot be amended by design**. This one compounds daily; the rest wait.
+2. **5.9 — the UCPMP cap value.** A build-failing deadline of **6 November** is wired, with
+   a warning from 16 October. Do not invent a value; `check:decision-debt` exists to stop
+   exactly that.
+3. **5.1 — the handset.** Two device gates, seven weeks, nothing else can close them.
+
+## Two things that are true and easy to misread
+
+- **A dead-letter REPLAY carries no refusal figures.** `sync_items` stores the message and
+  no SQLSTATE, so the sixth attempt at an item answers `sqlDetail: null` — the first five
+  each carried them. Recorded, not closed; closing it is two new columns.
+- **`FE-W41`** — the samples screen's cap note says the app does not count against the UCPMP
+  cap. That becomes false the day **5.9** is answered, and it sits three lines under a
+  refusal that quotes the cap. Copy defect, not a write-path defect.
+
+## Verification commands, in the order a new machine needs them
+
+```
+pnpm db:start            # now also runs db:instrument (BE-W92's log_lock_waits)
+pnpm --filter @fieldforce/api seed:day
+pnpm ci:local            # 13 static steps; --with-db adds the database job's 6
+pnpm ci:local --with-db  # needs Docker; verify:rollbacks EMPTIES the schema, db:reset after
+```
+
+**`pnpm ci:local` green is not "CI will pass".** It deliberately omits the database job and
+says so loudly on stderr. The half that needs no database —
+`verify-rollbacks.mjs --files-only` — was moved into the STATIC job precisely because the
+end-of-run warning fired at the wrong moment twice (MR-26, MR-27).

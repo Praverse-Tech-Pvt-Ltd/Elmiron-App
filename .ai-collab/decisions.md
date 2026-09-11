@@ -798,3 +798,145 @@ is invisible to whoever finds it next.
 Transcribed into `docs/blocked-on-you.md` under *"Transcribed from the review conversation"*
 with owners. They are **not engineering items** and none of them is blocked on this
 codebase.
+
+---
+
+## MR-14 → MR-28 — the decisions, 9–11 September 2026
+
+Recorded here because `PROJECT-OVERVIEW.md` records what was DONE and this file records
+what was CHOSEN, including the options that were rejected. Where the two disagree, the
+overview is right.
+
+### D-28.1 — the client applies the effective window; the server transmits the ORDER
+
+**Decided MR-27 B1, corrected the reviewer's own proposal.**
+
+The obvious move was to transmit *which consent notice is active*. That is wrong, and the
+reason generalises: **activeness is time-dependent and a pull is a snapshot.** A notice that
+becomes active tomorrow because the clock passed `effective_from` does not CHANGE, so its
+`updated_at` does not move, so `sync_pull` — a cursor over `updated_at` — never re-emits it.
+A client holding a transmitted `is_active` flag would offer yesterday's notice forever with
+nothing to correct it.
+
+**So the split follows what each side can know.** The server transmits `precedence`, a rank,
+which carries no clock and is the half the client got wrong on its own. The client applies
+the window, because it has a clock and the pull does not.
+
+`public.consent_text_version_precedence` holds the `order by` **once**;
+`active_consent_text_at` reads it and `sync_pull` joins it. `security_invoker = true` is not
+optional — without it the view runs as its owner and BE-W79's RESTRICTIVE tenant boundary
+would not apply to the join.
+
+**Rejected:** mirroring the ordering in the client (MR-26 B1's shipped version). It worked
+and it created two copies of one rule, and a disagreement between them does not fail in a
+test — it fails as a `45001` refusal, at capture, with a doctor waiting.
+
+### D-28.2 — the activation window uses `serverTime`, and a stale one is not cleared
+
+**Decided MR-28 A2.**
+
+The window was applied against `new Date()`. Now it is `serverTime` from the last pull, the
+same value that already produces `today`, so the day boundary and the consent window read
+one clock.
+
+**A failed pull does NOT clear it**, and the two directions are deliberately asymmetric:
+
+| | behaviour | why acceptable |
+| --- | --- | --- |
+| notice becomes active after the last pull | withheld until a pull succeeds | nothing false is shown |
+| notice retired after the last pull | still offered | `capture_consent` re-resolves and refuses `45001` with its own remedy |
+
+Clearing on failure would blank the consent screen on every transient error — the defect
+MR-26 B3 removed from three screens. **With no server clock at all, the screen declines to
+decide rather than guessing.** Falling back to the handset is `FE-W40` option B and is
+refused.
+
+### D-28.3 — `BE-W97`: refusal DETAIL is transmitted verbatim and never parsed
+
+**Decided MR-28 B.**
+
+`sync_push` read `MESSAGE_TEXT` out of `get stacked diagnostics` and nothing else, so
+**fifteen** `raise ... using detail = format(...)` sites died inside one exception handler.
+`sqlDetail` and `sqlHint` now travel beside `sqlState`.
+
+**Rejected: emitting the figures as JSON so the client composes its own sentence.** All
+fifteen sites use prose `format()`, so JSON would be a convention of one — and a client that
+parses server prose is precisely the defect FIX-06 minted `45002`/`45003` to remove, where
+`when v_message ilike '%shift window%'` stood in for a real code and outlived it by three
+sessions.
+
+**Rejected: special-casing 45004 in the transport.** It would have left fourteen sites where
+they were and put a second copy of the cap rule in `sync_push`.
+
+**Accepted cost:** some DETAILs carry UUIDs and read like support notes. That is a wording
+problem at each raise site, fixable where the raise lives — and the worst offender, the
+45004 message's raw `doctor_id`, was fixed in its own migration so the two changes can be
+told apart.
+
+### D-28.4 — a test-only threshold IS admissible, with conditions
+
+**Decided MR-27 C1/C2, applied again in MR-28 B4.** MR-26 E left this unsettled.
+
+A refusal that cannot be driven cannot be proved to reach the MR. So a threshold may be set
+purely to make a refusal reachable, provided: it is **reverted in the same session**, the
+revert is **verified by reading the value back**, `app_thresholds` being append-only means
+both the set and the revert are **rows carrying their own notes**, and the note says plainly
+that it is **not a product decision**.
+
+This does **not** touch `blocked-on-you` **5.9**. A cap set to prove a refusal is not an
+answer to what the ceiling should be, and the note on every such row says so.
+
+### D-28.5 — `BE-W92` is instrumented, not reproduced, and not theorised about
+
+**Decided MR-28 D, following MR-27 D1's measurement.**
+
+One deadlock, seen once, MR-26. MR-27 D1 ran the suite three times concurrently and five
+times sequentially: **0 in 9**, and the concurrent runs failed on cross-run interference
+they manufactured themselves. **Concurrency against one database is the wrong instrument.**
+
+`log_lock_waits` is now on, which names the relation — the first thing that item's
+verification order asks for. It also catches waits that RESOLVE, which is the point: a
+deadlock seen once is a race lost once, and the same contention is being won silently the
+rest of the time.
+
+**`deadlock_timeout` is deliberately left at its default**, and a test asserts it still is.
+Lowering it would fire sooner and read as progress while changing the thing being measured.
+**No mechanism is proposed and none should be read into this file.**
+
+**Implementation note that cost time:** it was written as a migration and the migration
+failed — `permission denied to set parameter "log_lock_waits"`. It is a `SUSET` parameter
+and Supabase's `postgres` role, which every migration runs as, is not a superuser. It is now
+`services/api/scripts/enable-lock-logging.mjs`, connecting as `supabase_admin`, which
+nothing else in this repository does and nothing else should.
+
+### D-28.6 — `FE-W40`: engineering recommends option D, and it is not implemented
+
+**Written MR-27 E1 as a decision for the product owner.** Full text in
+`docs/decisions/FE-W40-cold-start-staleness.md`.
+
+An MR who cold-starts with no signal sees no day, because `today` comes from the pull's
+`serverTime` and is not persisted. Four options. **B (fall back to the device clock) is
+named and refused** so it is not proposed again as an obvious shortcut — it is MR-15 A2's
+defect behind a condition. **C (persist and label the age) is the reviewer's lean and its
+cost is stated with it**: crossing midnight is the common case, and "yesterday's visits,
+labelled yesterday" is a subtler wrong than an error message.
+
+**D — persist, bounded at the territory day boundary — is engineering's recommendation.** It
+needs no new number: `dayIn(anchor, zone)` versus `dayIn(anchor + elapsed, zone)`, which
+`territory-day.ts` already computes.
+
+And the thing to write down rather than rediscover: **with no server clock, some
+device-clock dependence is the price of rendering anything at all.** D buys the least.
+
+### D-28.7 — a refusal is never queued, and that removed where refusals were EXPLAINED
+
+**MR-24 decided the first half; MR-27 C1 paid for the second.**
+
+A refusal is a verdict, so queueing it would push the same refused item forever. Correct —
+and the queue screen was *the only place a refusal was explained*. After that change a
+consent refused at `45001` reached nobody. `sendOrQueue`'s refused outcome now carries
+`sqlState`, `explanation.ts` gained `remedyForSqlState`, and MR-28 added `refusalTextFor`
+so a screen refused in the moment gets the remedy **and** the server's figures.
+
+The general rule is now in `docs/gotchas.md`: **when a fix removes where something was
+shown, check where it is shown now.**

@@ -324,3 +324,84 @@ set plan_cache_mode = force_generic_plan;   -- with the null branch: Seq Scan
 Fast five times and slow for ever after is the worst shape a performance defect can take,
 because the first person to measure it sees the fast number. Branch in plpgsql instead of
 writing one predicate that has to serve both cases.
+
+---
+
+## Constraints added 9–11 September 2026 (MR-14 → MR-28)
+
+### The clock is the server's, everywhere, with no exceptions granted so far
+
+`new Date()` is not an acceptable source for **any** date or time the server also reasons
+about. Two separate shipped defects, five sessions apart:
+
+- **MR-15 A2** — every clock read rendered 5h30m early; the territory day was taken from the
+  handset.
+- **MR-28 A2** — the consent activation window was applied against the handset, so a fast
+  phone would display a not-yet-active notice, the doctor would answer it, and
+  `capture_consent` would refuse `45001` after the conversation.
+
+Both now read `serverTime` from the last pull. `eslint.config.mjs` bans the obvious readers
+(`toLocale*String`, `.slice(11,16)`, `Date` getters, `clockFrom*`) inside `apps/field/app/**`
+— **a lint rule, because a convention is not a control.**
+
+The one thing this costs is `FE-W40`: with no server clock the app genuinely does not know
+what day it is, and it says so rather than guessing.
+
+### A property that depends on the clock cannot ride `sync_pull`
+
+`sync_pull` is a cursor over `updated_at`. A row travels when it **changes**. So *active*,
+*expired*, *due*, *overdue* and *current* are computations, not fields — the clock crossing a
+threshold moves no `updated_at` and re-emits nothing. **Ordering, identity, text and
+ownership travel. Time-derived state does not.**
+
+### The client re-derives nothing the server owns
+
+Extended from the tenant-filter rule (MR-23) to **ordering** (MR-27 B1). A duplicated rule
+does not fail as a red test; it fails as a refusal in front of a doctor. If both sides need
+the same answer, one side computes it and the other is **told**.
+
+### Records stay append-only, and the revert is a row
+
+`consent_records`, `call_reports`, `app_thresholds` and `consent_text_versions` (immutable
+except `effective_until`). Consequences that are load-bearing rather than tidy:
+
+- A test-only threshold is set and **reverted by inserting another row**, each carrying its
+  own note saying what it is and that it is not a product decision.
+- A consent captured before the fiduciary name exists is **permanently defective and cannot
+  be amended by design** — `BE-W93`, and the reason it compounds daily.
+- MR-25 could not delete a call report to re-run a cycle, so MR-26 B4's fifth write was
+  refused by `call_reports_one_per_visit_version` — the constraint working, recorded as
+  evidence rather than worked around.
+
+### `ALTER SYSTEM` and SUSET parameters are out of reach of migrations
+
+`log_lock_waits` is a `SUSET` parameter; the `postgres` role every migration runs as is not a
+superuser, and the migration fails with `permission denied to set parameter`. Cluster-level
+settings live in `services/api/scripts/enable-lock-logging.mjs`, which connects as
+`supabase_admin`. **Nothing else in this repository connects as `supabase_admin` and nothing
+else should.**
+
+### A new relation is born `anon`-executable, and a view is no exception
+
+Supabase's default privileges grant `anon` on every new object and `postgres` cannot change
+that default (`permission denied to change default privileges`, 42501). MR-27 B1's new view
+silently acquired `REFERENCES`/`TRIGGER`/`TRUNCATE` for `anon`; the `foundations` and
+`privilege-posture` suites caught it. **Every new relation needs an explicit
+`revoke all ... from anon, authenticated, service_role` before its grant.**
+
+### Every migration ships with a rollback, and the guard fires when a migration is ADDED
+
+CI failed on missing rollbacks twice in consecutive sessions (MR-24's four, MR-26's two) —
+the second time *one session after building the warning meant to prevent it*, because the
+warning printed at the END of a run and the moment that matters is when somebody adds a
+migration. The DB-free half (`verify-rollbacks.mjs --files-only`) now runs in CI's **STATIC**
+job, which `ci-local.mjs` derives its steps from, so it runs on every local invocation too.
+
+**A rollback file must state what rolling back MEANS**, not just how. Several now say
+explicitly that the client must be rolled back with them.
+
+### The verdict shape does not vary by branch
+
+`SyncPushResultSchema` requires `sqlDetail` and `sqlHint` on every verdict, null where there
+is nothing to say. A response whose KEYS change with the branch pushes the branching into
+every client, and the mock's contract suite is what enforces it.

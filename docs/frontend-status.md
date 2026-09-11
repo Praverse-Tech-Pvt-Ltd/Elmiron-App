@@ -295,3 +295,79 @@ and this run is recorded as `emulator-passed / device-pending`. The push, the
 handset, and the eight backend asks in `handoff-frontend.md` §2 are all exactly where
 they were on 3 September. **Nothing in this section is progress; it is confirmation
 that four-day-old work still starts.**
+
+---
+
+## 9–11 September 2026 — MR-14 → MR-28, and the gates
+
+**The section above ends with *"nothing in this section is progress; it is confirmation that
+four-day-old work still starts."* This one is progress, and the gates still did not move.**
+
+### What closed
+
+**`G-WRITE`: MET.** All five write paths — check-in, check-out, consent, samples, call report
+— write to Supabase **from real screens**, online and offline, exactly once, with capture
+timestamps preserved through the queue. All four project refusals reach the MR with their own
+remedy and never another's:
+
+| SQLSTATE | forced by | proved in |
+| --- | --- | --- |
+| `45001` | a newer notice published while the device held a stale store | MR-27 C1 |
+| `45007` | future tolerance set to −3600 (test-only, reverted, verified) | MR-27 C1 |
+| `45008` | lag ceiling set to 0 (test-only, reverted, verified) | MR-27 C1 |
+| `45004` | cap of 1 (test-only, reverted, verified) — **with the cap, month-to-date, this entry and the period as real numbers, and the doctor by NAME** | MR-28 B4 |
+
+**`FE-W38`: CLOSED.** MR-26 B4 ran the full five-write cycle with the Supabase ports removed
+(**not** by turning wifi off — `adb reverse` runs over the adb transport and wifi cuts
+nothing). The app was force-stopped and relaunched still offline; all five survived, then
+arrived within two seconds of reconnecting, each as the correct entity type, with the queue
+gap visible in the data (`capture_lag = 00:10:04` on the consent row) — which is the proof
+that nothing is restamped at flush.
+
+### What did NOT close, and why
+
+**`FE-G1` and `FE-G2` are DEVICE gates and every run above was an EMULATOR.** They are now
+blocked on exactly two things:
+
+1. **A real Xiaomi / Oppo / Vivo / Realme handset** — `blocked-on-you` 5.1, open seven weeks.
+   A Pixel proves nothing; those four ROMs are the battery killers the app has to survive.
+2. **A dev-client build** — JDK 17, CMake, `expo prebuild`. Deferred since MR-14 and now the
+   only item on the critical path from this side. Expo Go cannot load
+   `react-native-background-geolocation` or `expo-audio`'s native halves.
+
+`FE-G2` is *8 hours offline, ≥20 queued writes, then sync*. MR-26 B4 was five writes over
+eleven minutes. **`FE-W40` also means an MR who restarts offline sees no day**, which an
+8-hour run would hit.
+
+### Machine facts a rebuild will need
+
+- The terminal `JAVA_HOME` on this machine is **JDK 25**. The Gradle build needs **17**. This
+  has been true and unblocking since 3 September only because the existing debug APK keeps
+  being reinstalled rather than rebuilt.
+- `adb emu geo fix` **returns OK and delivers nothing.** MR-19 recorded a gotcha that was
+  never validated. What works:
+  `adb shell appops set 2000 android:mock_location allow` then
+  `adb shell cmd location providers set-test-provider-location fused --location <LAT>,<LNG>`
+  — **latitude first**, the opposite order to `geo fix`.
+- Android Studio launches its AVD with `-qt-hide-window`; a blank or off-screen emulator is
+  that, not a broken image. Launch the AVD standalone.
+- `adb reverse` is needed for **8081, 54321, 54322 and 4010**, and none of it survives a
+  reboot.
+
+### Defects found by RUNNING the app, 9–11 September
+
+Twelve numbered, plus several unnumbered. The ones worth the next reader's attention because
+they were invisible to every test that existed at the time:
+
+- Every clock read rendered **5h30m early** (MR-15 A2).
+- A check-in never marked the visit started, so **check-out was unreachable** (MR-24).
+- A doctor's **withdrawal of consent was silently discarded** — the app said "accepted" and
+  one row said `consented` (MR-24).
+- A **server refusal was shown as an offline save** and re-queued (MR-24).
+- A refused consent **reached nobody**: the screen discarded the outcome and navigated back
+  whatever the server said (MR-27 C1).
+- **Defect 12** — a check-in the server ACCEPTED left the screen on "Not started", so it was
+  pressed twice and the server recorded two (MR-28 B4).
+
+The detector in every case was the same one the handover has named since day one: **running
+the app.**

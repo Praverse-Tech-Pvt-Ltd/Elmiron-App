@@ -119,3 +119,83 @@ born `anon`-executable, and the only thing preventing that from recurring is a t
 **Nothing here argues that one design is better.** The point is that the next security
 review should read 88 function bodies and one grant test, and should not conclude from
 "RLS forced on 35 tables" that the boundary has been reviewed.
+
+---
+
+## The field app's data path, as of 11 September 2026 (MR-14 → MR-28)
+
+Written because the section above describes the database and a reader arriving at
+`apps/field` needs the other half. **This is a snapshot. The code is the authority.**
+
+### Reads — one provider, one store, one clock
+
+```
+sync_pull (RPC, SECURITY INVOKER, RESTRICTIVE tenant policy)
+  -> apps/field/src/sync/pull.ts          pullOnce / applyChanges
+  -> apps/field/src/sync/pulled-store.tsx PulledStoreProvider   <- mounted once in app/_layout.tsx
+       store   : Map per entity  (visit, doctor, beat_plan, clinic_address, consent_text_version)
+       today   : territoryToday(outcome.serverTime, zone)
+       serverTime : the SERVER's instant, exposed since MR-28 A2
+       failure : refused | unreachable      <- a refusal and a silence are different states
+  -> apps/field/src/sync/selectors.ts     joins the streams the pull cannot aggregate
+```
+
+Persisted to AsyncStorage beside the cursor, in the same step, per user — a cursor ahead of
+the records it was saved beside is silent data loss.
+
+**Five entities travel. `consent_record`, `analysis`, `call_report`, `check_in`,
+`check_out`, `sample_and_input`, `voice_note` and `recording` are in `sync_pull`'s own
+`c_omitted` list, deliberately.**
+
+### Writes — one RPC, one queue, exactly once
+
+```
+screen -> sendOrQueue(send, queueItem)          apps/field/src/sync/outbox.ts
+            server answered + accepted  -> sent
+            server answered + refused   -> refused   <- NEVER queued; a verdict is not a failure
+            no answer                   -> queued    <- AsyncStorage, replayed by flushOutbox
+       -> createPushClient()                     apps/field/src/sync/push-client.ts
+       -> public.sync_push(batch, items[])       one RPC for all five entities
+            -> apply_sync_item -> record_check_in / record_check_out / capture_consent / ...
+```
+
+`sync_items.id` is the device-generated request id and is the idempotency key. A duplicate
+verdict is a **success**, not an error: the write landed and the acknowledgement did not.
+
+### How a refusal becomes a sentence an MR can act on
+
+```
+raise ... using errcode = '45004', detail = '...', hint = '...'
+  -> sync_push  get stacked diagnostics  sqlstate | message | DETAIL | HINT   (DETAIL/HINT: MR-28 BE-W97)
+  -> verdict    { sqlState, sqlDetail, sqlHint, rejectionCode, rejectionDetail }
+  -> SyncPushRefusal  ->  sendOrQueue  { kind: 'refused', message, sqlState, detail }
+  -> refusalTextFor()        apps/field/src/sync/explanation.ts
+       remedyForSqlState(sqlState)   <- the INSTRUCTION, keyed by refusalForSqlState()
+       + "Figures from the server: <DETAIL>."   <- attributed, verbatim, NEVER parsed
+```
+
+`sqlState` decides. `sqlDetail` informs. `error-contract.spec.ts` guards the SQLSTATE map in
+both directions; nothing guards prose, which is why nothing may branch on it.
+
+`presentRejection()` is the same derivation for the QUEUE screen, which has a whole
+`RejectionRecord`; `refusalTextFor()` is for a screen refused in the moment, which has only
+what `sendOrQueue` handed back.
+
+### What is still on the mock
+
+`createClientForScenario()` → `:4010` serves `coaching`, `analysis`, `mileage`, `reply`,
+`day-end` and `beat-plan`. The two-column module/screen table in `PROJECT-OVERVIEW.md`
+(MR-14 D4, updated since) is the authority on which is which. **`beat-plan` is on the mock
+deliberately**: `sync_pull` has no `beat_plan_entry` entity, and converting it would render
+an empty route as fact.
+
+### The one rule that shapes all of it
+
+The server owns every verdict and every fact; the client owns only what this device
+**witnessed**. `witnessedStage(visit, queued)` is that rule in code — a queued check-in is
+not a guess, because this device watched itself write a durable row, and the copy says
+**"Checked in — waiting to send"** rather than "You are checked in".
+
+MR-28's defect 12 is the same rule failing on the other branch: a write the server
+**accepted** is on neither the store nor the queue until the next pull, so the sent path now
+calls `refresh()` and lets the server move the stage.
