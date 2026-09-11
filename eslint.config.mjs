@@ -132,6 +132,81 @@ export default tseslint.config(
     },
   },
   {
+    // MR-25 C1 — SCREENS MUST NOT RENDER A TIME THEMSELVES.
+    //
+    // MR-14 found every time on the Today screen rendered 5½ hours wrong: `clockFrom` is a
+    // CHARACTER SLICE of the ISO string, `iso.slice(11, 16)`, correct only while the server
+    // sends the territory's own offset. The mock at :4010 does; Supabase does not. It was
+    // fixed, and written up in `gotchas.md`, and the entry named the trap exactly —
+    // "converting a screen to real data means replacing this call".
+    //
+    // MR-21 then converted `app/visit/[id].tsx` to real data and kept the call. MR-24 found
+    // a check-in stamped 11:15:34 IST rendered as "Checked in 05:45". **The lesson was
+    // written down and it did not prevent the defect**, which is the whole of gotchas rule 6:
+    // a written lesson is not a control.
+    //
+    // So this is the control. Note what it has to ban to work: the defect was NOT a raw
+    // slice in a screen — it was a screen calling `clockFrom`, a perfectly ordinary-looking
+    // helper. A rule that only banned `.slice(11, 16)` would have missed it entirely. The
+    // offset-naive HELPERS are therefore what is restricted here, and the raw shapes are
+    // banned beside them so the next person cannot simply inline one.
+    //
+    // Screens read the pulled store, which holds SERVER timestamps. `clockIn(iso, zone)` and
+    // `dayIn(iso, zone)` in `src/today/territory-day.ts` take the territory's zone explicitly
+    // and are the only correct answer for them. The restricted helpers remain legitimate in
+    // `src/` for the screens still on the mock, which is why this override is scoped to
+    // `apps/field/app/` — the screens — and not to the whole workspace.
+    files: ['apps/field/app/**/*.ts', 'apps/field/app/**/*.tsx'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/today/plan', '**/today/plan.js', '../../src/today/plan'],
+              importNames: ['clockFrom'],
+              message:
+                'clockFrom is a character slice of the ISO string and is only correct while the server sends the territory offset — Supabase sends Z. This is the MR-14 defect, reintroduced by MR-21 in a screen converted after it was documented. Use clockIn(iso, zone) from src/today/territory-day, with zone from usePulledStore().',
+            },
+            {
+              group: ['**/today/route-labels', '**/today/route-labels.js'],
+              importNames: ['clockFromOrNull'],
+              message:
+                'clockFromOrNull wraps clockFrom, which is a character slice. Use clockIn(iso, zone) from src/today/territory-day and handle null at the call site.',
+            },
+            {
+              group: ['**/doctors/profile', '**/doctors/profile.js'],
+              importNames: ['dayMonthFrom'],
+              message:
+                'dayMonthFrom is a character slice of the ISO date and renders the UTC day for a Supabase timestamp — a visit received at 19:00Z renders the previous day. Use dayIn(iso, zone) from src/today/territory-day.',
+            },
+          ],
+        },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'CallExpression[callee.property.name=/^(toLocaleTimeString|toLocaleDateString|toLocaleString)$/]',
+          message:
+            "toLocale*String formats in the DEVICE's timezone and locale. An MR's handset is not the territory. Use clockIn(iso, zone) or dayIn(iso, zone) from src/today/territory-day, where the zone comes from the server.",
+        },
+        {
+          selector:
+            "CallExpression[callee.property.name='slice'][arguments.0.value=11][arguments.1.value=16]",
+          message:
+            'Slicing characters 11-16 out of an ISO string reads the time in whatever offset the string carries — UTC, for Supabase. This is the MR-14 five-and-a-half-hour defect. Use clockIn(iso, zone) from src/today/territory-day.',
+        },
+        {
+          selector:
+            "CallExpression[callee.property.name=/^get(Hours|Minutes|Date|Month|FullYear|Day)$/][callee.object.callee.name='Date']",
+          message:
+            'Date getters read the DEVICE clock and the device timezone. The territory decides the day and the time — see src/today/territory-day.ts. Use clockIn / dayIn with the zone from the server.',
+        },
+      ],
+    },
+  },
+  {
     // Plain JS: config files and the rollback verifier script. Node globals, and no
     // type-aware rules, since these are outside any tsconfig project.
     files: ['**/*.js', '**/*.mjs', '**/*.cjs'],

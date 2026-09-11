@@ -105,6 +105,55 @@ export const dayIn = (iso: string, zone: TerritoryZone): string => {
 };
 
 /**
+ * The month names the screens already render.
+ *
+ * Deliberately NOT `Intl`'s `month: 'short'`: `en-GB` renders September as **"Sept"**, and
+ * every existing screen shows "Sep". Changing the visible format while fixing a timezone bug
+ * would be two changes wearing one commit, and the second one silent. This table is the same
+ * as `MONTHS` in `src/doctors/profile.ts`, which this function replaces for real-data
+ * screens; that copy goes when the last mock screen is converted.
+ */
+const MONTHS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+] as const;
+
+/**
+ * `9 Sep` — the calendar date this instant falls on, in that zone, for a human.
+ *
+ * Replaces `dayMonthFrom` in `src/doctors/profile.ts` for any screen reading real server
+ * data. That function slices characters out of the ISO string, on the same premise as
+ * `clockFrom`: that the offset in the timestamp is the territory's. The mock at `:4010`
+ * sends the territory offset and Supabase sends `Z`, so against Supabase it renders the UTC
+ * day — invisible for most of the day and wrong for the rest. A visit received at `19:00Z`
+ * is `00:30 IST` the NEXT day and renders as the previous one.
+ *
+ * MR-24 found the visible half of this on the samples screen, which headed a visit scheduled
+ * 11 September as "· 10 Sep" — although that one was the wrong FIELD as well as the wrong
+ * zone, `visits.received_at` being when the row arrived rather than when the visit is.
+ *
+ * Built on the same `partsIn` as `dayIn` and `clockIn`, so all three agree by construction
+ * about which day an instant falls on. `en-GB` with `month: 'short'` gives `9 Sep`, matching
+ * the format the screens already use.
+ */
+export const dayMonthIn = (iso: string, zone: TerritoryZone): string => {
+  const parts = partsIn(iso, zone.timeZone);
+  const month = MONTHS[Number(parts['month'] ?? '0') - 1];
+  const day = Number(parts['day'] ?? '0');
+  return month === undefined ? dayIn(iso, zone) : `${String(day)} ${month}`;
+};
+
+/**
  * `13:00` — the wall-clock time this instant reads in that zone.
  *
  * Replaces `clockFrom`'s character slice for any screen reading real server data. Hermes

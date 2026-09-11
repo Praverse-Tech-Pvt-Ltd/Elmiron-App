@@ -13,7 +13,7 @@ import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { blankLine, CAP_NOTE, errorsFor, sampleRequest } from '../../src/capture/samples';
 import { sampleQueueItem, sendOrQueue } from '../../src/sync/outbox';
-import { dayMonthFrom } from '../../src/doctors/profile';
+import { dayMonthIn } from '../../src/today/territory-day';
 
 /**
  * C5 — the samples binding.
@@ -50,7 +50,7 @@ export default function SamplesRoute(): ReactNode {
    * No `loading` state of its own any more: the provider owns it, and a second one here
    * could disagree with it.
    */
-  const { store, status, failure: pullFailure } = usePulledStore();
+  const { store, status, zone, failure: pullFailure } = usePulledStore();
   const visit = visitsFromStore(store).find((candidate) => candidate.id === visitId) ?? null;
   const doctor =
     visit === null
@@ -177,7 +177,17 @@ export default function SamplesRoute(): ReactNode {
       <SamplesScreen
         busy={busy}
         capNote={CAP_NOTE}
-        dateLabel={visit === null ? 'today' : dayMonthFrom(visit.receivedAt)}
+        dateLabel={
+          // MR-24 DEFECT 6, fixed. TWO bugs in one expression. `visits.received_at` is
+          // server bookkeeping -- when the ROW ARRIVED -- not when the visit is; it headed a
+          // visit scheduled 11 September as "10 Sep", because that is when `seed:day`
+          // inserted it. And `dayMonthFrom` sliced the UTC day out of the ISO string.
+          //
+          // `scheduledFor` is the visit's own date, and `dayMonthIn` reads it in the
+          // territory's zone. An MR confirming what they handed over at THIS visit, on a
+          // record that is UCPMP-relevant, gets the visit's date.
+          visit === null ? 'today' : dayMonthIn(visit.scheduledFor ?? visit.receivedAt, zone)
+        }
         doctorName={doctor?.fullName ?? 'This visit'}
         failure={shownFailure}
         lines={lines}

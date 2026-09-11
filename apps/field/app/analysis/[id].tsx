@@ -9,6 +9,12 @@ import type { CitationSpanProps } from '@fieldforce/ui';
 import { createClientForScenario } from '../../src/api';
 import { NO_AUDIO_NOTE, retentionNote } from '../../src/coaching/content';
 import { isWorkedWell, orderedFindings, statusNote, timestampFrom } from '../../src/coaching/feed';
+// MR-25 C1. This screen still READS from the mock at :4010, which sends the territory's
+// own offset, so the character slice is correct here. **DELETE THE DISABLE BELOW WHEN
+// THIS SCREEN IS CONVERTED** and move to dayMonthIn / clockIn with the zone from
+// usePulledStore(). MR-21 converted app/visit/[id].tsx and kept clockFrom; the gotcha
+// entry did not stop it, and this line sitting on the import is what will.
+// eslint-disable-next-line no-restricted-imports
 import { dayMonthFrom } from '../../src/doctors/profile';
 
 /**

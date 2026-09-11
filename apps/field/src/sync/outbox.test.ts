@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ApiRequestError } from '@fieldforce/core';
+import { ApiRequestError, ServerSyncStatusSchema, SyncPushResponseSchema } from '@fieldforce/core';
 import type {
   ApiClient,
   CreateCheckInRequest,
@@ -619,5 +619,153 @@ describe('MR-10 C: a refusal during a flush is not a silence', () => {
     const createCheckIn = vi.fn(() => Promise.resolve({ receivedAt: '2026-09-08T00:00:00.000Z' }));
     await flushOutbox({ createCheckIn } as unknown as ApiClient, store);
     expect(store.current().items[0]?.status).toBe('synced');
+  });
+});
+
+/**
+ * MR-25 C3 — the boundary, ENUMERATED rather than spot-checked.
+ *
+ * `sendOrQueue` decides one thing, and the whole product rests on it: **did the server
+ * answer?** A verdict must never be queued (it would re-send something already refused, on
+ * every flush, forever) and a silence must never be reported as a verdict (the MR's work
+ * would be lost while they were told it was refused).
+ *
+ * **Both directions have now been wrong, at this same boundary.**
+ *
+ * - MR-13: a refusal treated as a SILENCE. The reducer's catch recorded `attempt_failed`
+ *   for everything, so a refused row went back to the queue.
+ * - MR-24 defect 2: a refusal treated as a TRANSPORT FAILURE. `sendOrQueue` recognised only
+ *   `ApiRequestError`, and the writes have thrown `SyncPushRefusal` since MR-18 — so a
+ *   check-in the server had rejected told the MR "Saved on this phone. It will send by
+ *   itself when you have signal", listed itself as "Waiting to send", and left Today
+ *   claiming "Everything sent".
+ *
+ * Two fixes, two spot-checks, and the boundary was still only tested at the two points that
+ * had already failed. This enumerates every error type that can cross it and asserts the
+ * handling of each — including the ones nobody has got wrong yet, which are the only ones
+ * worth adding.
+ */
+describe('C3: every error type that can cross the send boundary', () => {
+  const queued = {
+    outcome: 'queued' as const,
+    why: 'the server said nothing; the work must survive',
+  };
+  const refused = {
+    outcome: 'refused' as const,
+    why: 'the server answered; re-sending it forever is the defect',
+  };
+
+  const cases: ReadonlyArray<{
+    readonly name: string;
+    readonly thrown: unknown;
+    readonly expect: typeof queued | typeof refused;
+  }> = [
+    {
+      name: 'SyncPushRefusal — a rejected verdict from sync_push',
+      thrown: new SyncPushRefusal({
+        message: 'This visit is outside your territory working hours.',
+        sqlState: '45003',
+        rejectionCode: 'outside_shift_window',
+        deadLettered: false,
+      }),
+      expect: refused,
+    },
+    {
+      name: 'SyncPushRefusal — a DEAD-LETTERED verdict, which is still an answer',
+      thrown: new SyncPushRefusal({
+        message: 'Refused too many times.',
+        sqlState: '45003',
+        rejectionCode: 'outside_shift_window',
+        deadLettered: true,
+      }),
+      expect: refused,
+    },
+    {
+      name: 'ApiRequestError — the REST client, still used by the legacy endpoints',
+      thrown: new ApiRequestError(403, {
+        code: 'permission_denied',
+        message: 'That is not your record.',
+        requestId: 'req-c3',
+        fieldErrors: null,
+      }),
+      expect: refused,
+    },
+    {
+      name: 'Error — a transport failure, the whole of FE-G2',
+      thrown: new Error('Network request failed'),
+      expect: queued,
+    },
+    {
+      name: 'Error — sync_push answered but said nothing about THIS item',
+      // push-client throws a plain Error here on purpose: the server has issued no verdict
+      // for this id, so it is a silence about this item even though the call succeeded.
+      thrown: new Error(
+        'sync_push returned no verdict for item 77777777-7777-4777-8777-777777777701',
+      ),
+      expect: queued,
+    },
+    {
+      name: 'ZodError — the SERVER CHANGED SHAPE',
+      // Nobody has got this wrong yet, which is why it is here. `SyncPushResponseSchema.parse`
+      // is the only thing that can notice the server's response shape drifting, and it throws
+      // a ZodError. Queued is the right answer -- the item is not refused, and a client that
+      // cannot read the response has learned nothing about the work -- but it is a REPEATING
+      // failure, not a transient one, and this case exists so that if someone later decides
+      // it should dead-letter instead, they change a test that states the current rule rather
+      // than discovering it in production.
+      thrown:
+        SyncPushResponseSchema.safeParse({ nonsense: true }).error ?? new Error('unreachable'),
+      expect: queued,
+    },
+    {
+      name: 'a non-Error throw, which JavaScript permits and a bad library does',
+      thrown: 'something threw a string',
+      expect: queued,
+    },
+  ];
+
+  for (const testCase of cases) {
+    it(`${testCase.name} -> ${testCase.expect.outcome}`, async () => {
+      const store = inMemory();
+      // The enumeration deliberately includes a non-Error throw. JavaScript permits it and a
+      // badly behaved library does it; `sendOrQueue` must still treat it as a silence and keep
+      // the MR's work rather than crashing on `.message`. The rule below is right about
+      // production code, and this is the one case that has to violate it in order to test it.
+      const reject = (): Promise<never> =>
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        Promise.reject(testCase.thrown);
+      const outcome = await sendOrQueue(reject, checkInQueueItem(body), store);
+      expect(outcome.kind, testCase.expect.why).toBe(testCase.expect.outcome);
+      expect(
+        store.current().items,
+        testCase.expect.outcome === 'queued'
+          ? 'a silence must leave the work on the phone'
+          : 'a verdict must not be queued',
+      ).toHaveLength(testCase.expect.outcome === 'queued' ? 1 : 0);
+    });
+  }
+
+  it('covers every SERVER verdict status the contract defines', () => {
+    // **The exhaustiveness half, and the reason this is an enumeration rather than a longer
+    // list of spot-checks.** `accepted` and `duplicate` do not throw -- they return -- so the
+    // two that CAN reach this boundary are the two refusal statuses. If the contract gains a
+    // fifth status, this fails and someone has to decide which side of the boundary it falls
+    // on, rather than it defaulting to "queued" in silence.
+    const refusalStatuses = ServerSyncStatusSchema.options.filter(
+      (status) => status === 'rejected' || status === 'dead_lettered',
+    );
+    const successStatuses = ServerSyncStatusSchema.options.filter(
+      (status) => status === 'accepted' || status === 'duplicate',
+    );
+    expect(
+      [...refusalStatuses, ...successStatuses].sort(),
+      'the server verdict enum changed — decide whether the new status is an answer or a silence, then add it here',
+    ).toEqual([...ServerSyncStatusSchema.options].sort());
+
+    // And both refusal statuses are exercised above, by name rather than by count.
+    const exercised = cases
+      .filter((c) => c.thrown instanceof SyncPushRefusal)
+      .map((c) => ((c.thrown as SyncPushRefusal).deadLettered ? 'dead_lettered' : 'rejected'));
+    expect(exercised.sort()).toEqual([...refusalStatuses].sort());
   });
 });

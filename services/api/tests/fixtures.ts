@@ -335,8 +335,23 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
       `insert into public.territory_shift_windows
          (territory_id, shift_start, shift_end, timezone, grace_minutes, active_weekdays) values
          ($1, '09:00', '19:00', 'Asia/Kolkata', 15, '{1,2,3,4,5,6}'),
-         ($2, '06:00', '10:00', 'Asia/Kolkata', 0,  '{1,2,3,4,5}')`,
-      [territories.national, territories.nagpur],
+         ($2, '06:00', '10:00', 'Asia/Kolkata', 0,  '{1,2,3,4,5}'),
+         -- MR-25 C2. A window whose END PLUS GRACE CROSSES MIDNIGHT: 23:59 + 30 minutes.
+         --
+         -- The dimension is_within_shift actually turns on, which no fixture held. The two
+         -- windows above end at 19:00 and 10:00 and neither wraps, so the wrapping branch did
+         -- not exist as far as any test could tell -- while seed-day.mjs seeded exactly
+         -- 23:59/30, putting the DEMO data in the failing configuration and leaving the suite
+         -- green. MR-24 found it on an emulator: time '23:59' + 30 minutes is 00:29, so
+         -- the predicate became ">= 03:30 AND <= 00:29" and no time of day satisfied it.
+         -- Every check-in and check-out was refused, all day.
+         --
+         -- On rival, deliberately: it belongs to the second organisation and no capture test
+         -- runs against it, so adding this cannot change what any existing case asserts. It is
+         -- here so the VALUE EXISTS in the fixtures and dimension-coverage.spec.ts can hold
+         -- it, which is what stops the dimension quietly collapsing back to one value.
+         ($3, '04:00', '23:59', 'Asia/Kolkata', 30, '{1,2,3,4,5,6,7}')`,
+      [territories.national, territories.nagpur, territories.rival],
     );
 
     await client.query(

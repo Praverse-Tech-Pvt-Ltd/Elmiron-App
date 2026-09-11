@@ -5,7 +5,8 @@ import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { lastSeenLabel } from '../../src/doctors/list';
 import { availabilityFrom, availabilitySentence } from '../../src/doctors/availability';
-import { buildDoctorProfile, consentLabel, dayMonthFrom } from '../../src/doctors/profile';
+import { buildDoctorProfile, consentLabel } from '../../src/doctors/profile';
+import { dayMonthIn } from '../../src/today/territory-day';
 
 /** B9 shows three. More than that is a history screen, which this is not. */
 const VISITS_SHOWN = 3;
@@ -21,7 +22,7 @@ const BOUNDARY =
 export default function DoctorProfile(): ReactNode {
   const { id } = useLocalSearchParams<{ id: string }>();
   // MR-14 B2. The doctor and their visits come from the store the pull maintains.
-  const { store, status, failure: pullFailure } = usePulledStore();
+  const { store, status, zone, failure: pullFailure } = usePulledStore();
 
   const doctor = doctorsFromStore(store).find((candidate) => candidate.id === id);
   const visits = visitsFromStore(store).filter((visit) => visit.doctorId === id);
@@ -80,7 +81,12 @@ export default function DoctorProfile(): ReactNode {
         name={profile?.name ?? 'Doctor'}
         recentVisits={(profile?.recentVisits ?? []).slice(0, VISITS_SHOWN).map((visit) => ({
           id: visit.visitId,
-          dateLabel: dayMonthFrom(visit.completedAt),
+          // MR-25 C1. `dayMonthFrom` slices characters out of the ISO string, which reads
+          // the UTC day for a Supabase timestamp. This screen has been on real data since
+          // MR-14 and the slice was right only by luck: a visit completed at 08:22Z is the
+          // same day in IST, and one completed at 19:00Z is the NEXT day and rendered as the
+          // previous one. MR-24's B1 checked "9 Sep" here and it happened to be correct.
+          dateLabel: dayMonthIn(visit.completedAt, zone),
           durationLabel: visit.minutes === null ? null : `${String(visit.minutes)} min`,
           consentLabel: consentLabel(visit.consent),
         }))}

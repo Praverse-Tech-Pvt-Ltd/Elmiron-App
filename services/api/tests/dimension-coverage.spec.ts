@@ -146,3 +146,69 @@ describe('the predicates that decide who sees what can be falsified', () => {
  * than attempted here. The client-side day boundary is covered directly by
  * `territory-day.test.ts`, which exercises Asia/Kolkata, America/Denver and UTC.
  */
+
+/**
+ * MR-25 C2 — the shift-window dimension `is_within_shift` turns on.
+ *
+ * The predicate compares a local time against `shift_end + grace_minutes`. Whether that sum
+ * crosses midnight is the dimension, because Postgres `time` WRAPS: `23:59 + 30 minutes` is
+ * `00:29`, and the predicate becomes ">= 03:30 AND <= 00:29" — satisfiable by no time of day.
+ *
+ * Every fixture window ended at 19:00 or 10:00. Neither wraps, so the branch did not exist as
+ * far as any test could tell, while `seed-day.mjs` seeded 23:59/30 and put the demo data in
+ * the failing configuration. The suite was green and no MR could check in.
+ *
+ * This holds the dimension open. It asserts the VALUE exists, not the behaviour —
+ * `shift-window-grace.spec.ts` asserts the behaviour, two-sided. Both are needed: a behaviour
+ * test whose fixture quietly loses the dimension passes while proving nothing, which is the
+ * failure this whole file exists to prevent.
+ */
+describe.skipIf(!reachable)(
+  'SHIFT WINDOW — the fixtures hold a window whose grace crosses midnight',
+  () => {
+    it('holds at least one window where shift_end + grace passes 24:00, and one where it does not', async () => {
+      await inRolledBackTransaction(async (client) => {
+        await asOwner(client, async () => {
+          // **SCOPED TO THIS RUN'S TERRITORIES, and that is not a detail.** The first
+          // version of this test queried `territory_shift_windows` unscoped and PASSED
+          // while the fixture's wrapping window was mutated away — because `seedFixtures`
+          // mints fresh ids every run and tears nothing down, so a window left by an
+          // earlier run satisfied it. It was green and proving nothing: the exact defect
+          // this file exists to catch, in a test written for this file.
+          const ids = [
+            world.territories.national,
+            world.territories.nagpur,
+            world.territories.rival,
+          ];
+          const rows = await client.query<{ wraps: boolean; n: string }>(
+            `select ((w.shift_end - time '00:00') + make_interval(mins => w.grace_minutes))
+                      >= interval '24 hours' as wraps,
+                    count(*)::text as n
+               from public.territory_shift_windows w
+              where w.territory_id = any($1::uuid[])
+              group by 1`,
+            [ids],
+          );
+
+          // The precondition: this run's windows were found at all. Without it a typo in
+          // the id list produces zero rows and both assertions below fail for the wrong
+          // reason, reporting a missing dimension when the query is what is broken.
+          const total = rows.rows.reduce((sum, r) => sum + Number(r.n), 0);
+          expect(
+            total,
+            "this run's fixture windows were not found — the query is wrong, not the data",
+          ).toBe(ids.length);
+
+          expect(
+            rows.rows.find((r) => r.wraps),
+            'no fixture window has shift_end + grace crossing midnight — the dimension is gone and is_within_shift is unfalsifiable on it again',
+          ).toBeDefined();
+          expect(
+            rows.rows.find((r) => !r.wraps),
+            'every fixture window wraps — the ordinary case is now the one that is untested',
+          ).toBeDefined();
+        });
+      });
+    });
+  },
+);

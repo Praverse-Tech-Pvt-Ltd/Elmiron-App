@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { UTC_FALLBACK, clockIn, dayIn, territoryToday } from './territory-day';
+import { UTC_FALLBACK, clockIn, dayIn, dayMonthIn, territoryToday } from './territory-day';
+import type { TerritoryZone } from './territory-day';
 
 /**
  * MR-15 A2 — the day boundary, at the edges that actually matter.
@@ -103,5 +104,43 @@ describe('the device is not consulted', () => {
     expect(dayIn(instant, { timeZone: 'America/Denver', source: 'territory' })).toBe('2026-09-09');
     // Same instant, three zones, three answers -- all decided by the argument.
     expect(dayIn(instant, UTC_FALLBACK)).toBe('2026-09-09');
+  });
+});
+
+describe('dayMonthIn — MR-25 C1', () => {
+  const IST: TerritoryZone = { timeZone: 'Asia/Kolkata', source: 'territory' };
+
+  it('renders the day the TERRITORY is on, not the day the offset says', () => {
+    // 19:00Z on the 10th is 00:30 IST on the 11th. `dayMonthFrom` slices characters 8-10 out
+    // of the ISO string and answers "10 Sep" — the defect this replaces.
+    expect(dayMonthIn('2026-09-10T19:00:00.000Z', IST)).toBe('11 Sep');
+  });
+
+  it('THE POSITIVE CONTROL: an instant already on the same day is unchanged', () => {
+    // Without this, "always add a day" would satisfy the case above. Most of the day the two
+    // functions agree, which is exactly why the defect was invisible.
+    expect(dayMonthIn('2026-09-10T08:22:00.000Z', IST)).toBe('10 Sep');
+  });
+
+  it('agrees with dayIn about which day an instant falls on', () => {
+    // The two must not be able to disagree: one is the human form of the other. Built on the
+    // same formatter for that reason.
+    for (const iso of [
+      '2026-09-10T19:00:00.000Z',
+      '2026-09-10T08:22:00.000Z',
+      '2026-09-10T18:29:59.999Z',
+      '2026-09-10T18:30:00.000Z',
+    ]) {
+      const [, month, day] = dayIn(iso, IST).split('-');
+      expect(dayMonthIn(iso, IST)).toMatch(new RegExp(`^${String(Number(day))} `));
+      expect(month).toBeDefined();
+    }
+  });
+
+  it('crosses the IST midnight boundary at exactly 18:30Z', () => {
+    // IST is UTC+5:30, so 18:30Z is 00:00 the next day. Both sides of the boundary, because
+    // a boundary tested from one side is a boundary that has not been tested.
+    expect(dayMonthIn('2026-09-10T18:29:59.999Z', IST)).toBe('10 Sep');
+    expect(dayMonthIn('2026-09-10T18:30:00.000Z', IST)).toBe('11 Sep');
   });
 });
