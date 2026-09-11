@@ -12312,3 +12312,197 @@ lint 7/7, format clean.
 After Part F, before Part E. Not done: the four refusals from screens. `FE-W39` (what an MR
 sees when acting on unconfirmed state) and `FE-W40` (a cold start with no signal) are
 registered as decisions, not as work.
+
+---
+
+### MR-27 — the transmitted selection
+
+**EMULATOR, EXPO GO.** Pixel_10 AVD, Android 16 (SDK 36). Every location was **injected**
+through Android's test provider, verified delivering rather than trusted on its exit code.
+
+#### A1 — CI, and the first push failed again
+
+| | First push | After the fix |
+| --- | --- | --- |
+| Run | `34584093446` — **`failure`** | `34584921359` — `success` |
+| SHA | `3ad7c67` | `e2dd4739f2e3446b1b057b84d6c6b38b69c2c10e` — **is HEAD** |
+
+**Not `BE-W92`.** The same rollback failure as MR-25, for MR-26's two migrations — *one session
+after I built the control meant to prevent it.* MR-26 A4 made `ci:local` print loudly what it
+was skipping, and it worked: I read that warning in MR-26 Part A, added two migrations in Part
+B, and pushed. **The warning prints at the END OF A RUN, and the moment that matters is when
+somebody ADDS A MIGRATION.** A control that is correct, runs, and is read can still fire at the
+wrong time.
+
+The fix moves the half that needs no database: `verify-rollbacks.mjs --files-only` checks the
+pairing and stops, and that step now runs in the STATIC job — which means it also runs in the
+default `pnpm ci:local`, because `ci-local.mjs` derives its steps from `ci.yml` rather than
+duplicating them. Twelve steps became thirteen with no change to `ci-local`. Mutation-verified:
+removing a rollback exits 1 and names the file; breaking the reader exits 1 with *"read only 0
+migration(s) … fix the reader rather than trusting this run"*.
+
+#### B1 — the selection is transmitted, and the recommendation needed one correction
+
+MR-26 B1 had the client mirror this schema's ordering. Mirroring all three keys was necessary —
+the first version sorted on one and would have disagreed with the server on any tie — but it
+left **two copies of one rule**, which is what MR-23 refused to create when it declined a
+client-side tenant filter. And a disagreement between them does not fail in a test; it fails as
+a **`45001` refusal, at capture, with a doctor waiting.**
+
+**A RANK, NOT AN `is_active` FLAG — and this is a correction to the recommendation.**
+Transmitting "which one is active" is subtly wrong, because activeness is **time-dependent**
+and a pull is a **snapshot**. A notice that becomes active tomorrow because the clock passed
+`effective_from` does not change, so its `updated_at` does not move, so it is never re-emitted
+— a client holding a transmitted flag would keep offering yesterday's notice with nothing to
+correct it. On that axis the client's own evaluation is MORE correct.
+
+The ORDERING carries no clock and is the half the client got wrong. So the split follows what
+each side can know: **the server transmits precedence, the client applies the effective
+window.**
+
+New view `consent_text_version_precedence` holds the `order by`; `active_consent_text_at` is
+rewritten to use it; `sync_pull` joins it and ships `precedence`. **The ordering now exists
+exactly once in the schema.** `security_invoker = true` is not optional — without it the view
+runs as its owner and BE-W79's RESTRICTIVE boundary would not apply to the pull's join.
+
+Two things found by RUNNING it rather than reading it: the view needed an explicit grant
+(*"permission denied for view consent_text_version_precedence"* — it would have failed for
+every real client while passing as `postgres`), and Supabase's **default privileges** had
+silently handed `anon` three privileges on the new relation. The posture suites caught the
+second. Grants are now `authenticated | SELECT` and nothing else.
+
+#### B2 — the consequence, which is the point of the change
+
+**A `45001` now means one thing:** the notice genuinely changed between the pull and the
+capture, which is FIX-12 working exactly as designed. While the ordering was mirrored it could
+have meant that, or that the two sorts disagreed — and nobody, including the MR holding the
+phone, could tell which.
+
+#### B3 — the drift guard, where the risk actually remains
+
+The client can no longer diverge; the view and the RPC still can. `consent-precedence.spec.ts`
+asserts they agree with a **tie on each key in turn**. Mutation: re-inlining a one-key
+`order by` into the RPC fails **both** tie cases and leaves the no-tie case green — which is
+precisely why the original defect was invisible.
+
+#### B4 — proved end to end, on a tie
+
+Constructed so a client re-deriving the order could not have got it right: a second `en-IN`
+notice with the SAME `effective_from` and a LATER `created_at`, so the rows differ only on the
+server's second key.
+
+```
+server ranks   MR27 TIEBREAK WINNER  precedence 1   created 10:32:42
+               DEMO v1 902961eb      precedence 2   created 09:32:42
+               ...identical effective_from
+
+screen shows   "Notice MR27 TIEBREAK WINNER · English · 88e12937"
+recorded       version_label MR27 TIEBREAK WINNER, precedence 1, hash 88e12937
+verdict        accepted — NO 45001
+```
+
+Two independent paths agreed — the pull's transmitted rank and `capture_consent` re-resolving
+through `active_consent_text_at` — because they now read the same view.
+
+#### C1 — the three refusals, and the screen that showed none of them
+
+Driving the first one found **defect 11**: `consent/[visitId].tsx` did
+`await sendOrQueue(...)`, **discarded the outcome**, and navigated back whatever the server
+said. A doctor answered, `capture_consent` refused it, the app went quiet, and **no record
+existed** — with nothing on the queue screen either, because since MR-24 a refusal is not
+queued.
+
+`sendOrQueue`'s refused outcome now carries `sqlState`, and `explanation.ts` gains
+`remedyForSqlState`, so a screen refused in the moment gets the same MR-facing sentence the
+queue screen gets.
+
+Each driven from a screen, against the live server, **each with its own remedy**:
+
+| | forced by | what the MR sees |
+| --- | --- | --- |
+| **45001** | a newer notice published while the device held a stale store | *"The consent wording changed while you were with the doctor. Open consent again, read the current notice aloud, and ask once more."* |
+| **45008** | lag ceiling set to 0 (test-only, reverted) | *"This consent was captured too long ago to be accepted now. Connect and sync sooner after a visit — your manager can tell you the limit for your territory."* |
+| **45007** | future tolerance set to −3600 (test-only, reverted) | *"This phone's clock is ahead of the server, so the consent looks like it happened in the future. Turn on automatic date and time in Settings, then send again."* |
+
+The device clock could **not** be moved (`cannot set date: Operation not permitted` — no root
+on a production build), so the thresholds were moved instead. `app_thresholds` is append-only,
+so every change and every revert is a new row carrying its own note. All three values verified
+back afterwards: cap `null`, tolerance `120`, lag `72`.
+
+#### C2 — 45004 fires, and its numbers do not reach the MR
+
+It **can** be driven with a test-only cap, and was: a cap of 1, a sample of 2, refused from the
+screen. That does not touch **5.9** — a cap set to prove a refusal is not a product decision —
+and the row was reverted with a note saying the ceiling remains unknown.
+
+But this is a finding, not a pass. The refusal renders as *"this would put MR27 UCPMP c over
+the UCPMP cap for `83aa5660-470b-4c82-aa90-000b5347cb1c` this month"* — a raw doctor UUID and
+**no figures**. The figures exist: `enforce_ucpmp_sample_cap` raises with
+`detail = format('cap %s, already given %s, this entry %s, period starting %s', …)`, which
+would read *"cap 1, already given 0, this entry 2, period starting 2026-09-01"*. `sync_push`
+captures only the exception MESSAGE, so DETAIL and HINT never leave the database. Registered as
+**`BE-W97`**, with **`FE-W41`** for the cap note that becomes false the day 5.9 is answered.
+
+#### C3 — cited rather than repeated
+
+`call_reports_one_per_visit_version` reached an MR with its own remedy during MR-26 B4,
+unplanned: a real constraint refused a real write from a real screen because the visit already
+had a report, and the queue screen showed *"Refused — call_report"*. That is evidence for the
+same path and is not re-run here.
+
+#### C4 — `G-WRITE`: **NOT MET**
+
+45001, 45007 and 45008 are done. **45004 is not**: it fires and reaches the MR, and it arrives
+without the cap, the month-to-date or the period it was written to carry. The brief's own test
+is *"45004 with the cap, month-to-date and period as real numbers"*, and that is not satisfied
+by a sentence containing a UUID and no numbers. `BE-W97` is the whole of what remains.
+
+#### D1 — `BE-W92` measured: 0 in 9, and one instrument ruled out
+
+| | |
+| --- | --- |
+| 3 × full suite, CONCURRENT | 0 deadlocks. **All three failed on something else** — `grants TRUNCATE on nothing in public` seeing rows from a parallel run. Concurrency against one database manufactures cross-run interference rather than reproducing this |
+| 5 × full suite, SEQUENTIAL | 0 deadlocks. **619/619 every time** |
+| Relation names | **None captured — it did not fire** |
+
+**No mechanism is proposed, per D2.** The log names no relations because there was no deadlock
+to log. What this run does establish is narrower and still useful: **concurrency is the wrong
+instrument**, and the one MR-26 occurrence remains a single unreproduced event on this machine.
+`BE-W92`'s verification order is unchanged and still wants the relation names first.
+
+The four earlier runs that failed did so on the `anon` grant regression described in B1, not on
+a deadlock — so the denominator is 9 runs in which a deadlock could have appeared and did not.
+
+#### E1 — `FE-W40`, the staleness decision
+
+Four options, written for a decision and not implemented. **A** render nothing (today's
+behaviour — asserts nothing, and is useless exactly when it is opened). **B** fall back to the
+device clock (**not recommended**: it is the MR-15 A2 defect behind a condition, and it fails
+silently on the phones whose clocks are wrong). **C** the reviewer's lean — persist the last
+`serverTime` and render the day with a visible age. **D** as C, with a staleness bound.
+
+The argument against **C**, since it is the one most likely to be adopted unexamined: it is
+still the device clock one step removed, because deciding whether the stored day is *today*
+needs elapsed time; **and crossing midnight is the common case** — a rep who synced at 18:20
+and opens at 07:40 is shown YESTERDAY'S day, correctly labelled and actionably wrong. A label
+is not a control, and this project has found true-and-unread copy in every session.
+
+**Engineering recommends D, with the bound at the territory day boundary** — render the
+persisted day while the anchor falls on the same territory date, fall back to A once it does
+not. It needs no new number: `dayIn(anchor, zone)` versus `dayIn(anchor + elapsed, zone)`,
+which `territory-day.ts` already computes. And the thing to write down rather than discover:
+**with no server clock, some device-clock dependence is the price of rendering anything at
+all.** D buys the least.
+
+#### Counts — by workspace AND runner, zero skips
+
+core vitest 21/3 · ui vitest 4/1 · ui jest 243/21 · ui-tokens vitest 54/3 · console vitest 10/1
+· field vitest 458/28 · field jest 87/13 · api vitest 619/39 · mock vitest 40/1. **Total 1536.**
+typecheck 9/9, lint 7/7, format clean, `verify:rollbacks` green with all three new files
+executing.
+
+#### Where this stopped
+
+After E1, with F1 recorded. `G-WRITE` is one item from met and that item is `BE-W97`. **`FE-G2`
+is blocked by the dev-client build and nothing else** — JDK 17, CMake, prebuild, deferred since
+MR-14 and now the only thing on the critical path to both device gates.

@@ -2528,3 +2528,53 @@ prop is where this lives. Grep for it.
 The structural fix, where the two halves can genuinely differ, is to make the fixed part a
 parameter too — `sentNote: { title, detail }` rather than `sentNote: string` — so the branch
 that knows the outcome is the branch that names it, and the compiler asks for both.
+
+## 11 September 2026 — assert the CONTENT, not the container
+
+A non-empty list, a defined object, a non-null response and a `200` all pass while saying
+nothing about what is in them. Each is a check on the SHAPE of an answer rather than on the
+answer, and shape is exactly what survives when the thing that produces it breaks.
+
+**Worked example, and it was a control written to catch this class.** MR-26 A4 added a warning
+to `ci:local` naming the CI steps it had not run, with a guard so the warning could not
+silently become useless:
+
+```js
+if (omitted.length < 3) throw new Error('ci-local could not list the database job steps …');
+```
+
+It passed. And the warning printed:
+
+```
+THIS IS NOT ALL OF CI. The `database` job did NOT run -- 6 step(s):
+  - undefined
+  - undefined
+  - undefined
+  …
+```
+
+Six of them. The guard asserted the list was NON-EMPTY, which was true, and said nothing about
+whether it NAMED anything — and `step.label` did not exist, because `parseSteps` yields `name`
+and `run`. **A warning naming six `undefined` steps is worse than no warning: it looks like a
+control and carries no information.**
+
+It now asserts three things — count, every label a non-empty string, and the rollback step
+present BY NAME — and the third is the one that would survive a future refactor, because it is
+the only one tied to what the warning is FOR.
+
+**The rule.** After writing an assertion about a collection or a response, ask: *what would
+this still pass with?* If the answer includes an empty string, a list of `undefined`, `{}`,
+`null` fields, or a `200` with an error body, the assertion is about the container. Add one
+that names something only a correct answer contains.
+
+**Where it keeps appearing in this repo:**
+
+- `verify-rollbacks` compared migrations to rollbacks and would have passed on an unreadable
+  migration directory — `missing` is `[]` when `migrations` is `[]`. It now refuses below ten.
+- MR-26 C2's first dimension test asserted a wrapping window EXISTED, unscoped, and passed
+  against a row left by an earlier run.
+- MR-27 B3's tie cases assert the RPC and the view agree — and had to assert the RPC returned
+  a row at all, or a query typo makes both `null`, they "agree", and nothing was compared.
+
+The last one is the pattern worth copying: when a test compares two things, assert that each
+of them is *something* before asserting they match. **Two nulls agree.**
