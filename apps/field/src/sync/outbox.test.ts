@@ -15,6 +15,7 @@ import {
   sendOrQueue,
 } from './outbox';
 import type { QueuePersistence } from './outbox';
+import { SyncPushRefusal } from './push-client';
 import { emptyQueue } from './reducer';
 import type { SyncQueueState } from './reducer';
 
@@ -79,6 +80,50 @@ describe('what gets queued', () => {
     const outcome = await sendOrQueue(() => Promise.reject(refusal), checkInQueueItem(body), store);
     expect(outcome.kind).toBe('refused');
     expect(store.current().items).toHaveLength(0);
+  });
+
+  it('does NOT queue a SYNC_PUSH refusal either — the class the writes actually throw', async () => {
+    // **MR-24 B, found on the emulator and not by any test here.** The branch above read
+    // `ApiRequestError` alone. Since MR-18 the five writes go through `sync_push`, and
+    // `push-client.ts` throws `SyncPushRefusal`, which extends `Error` and not
+    // `ApiRequestError` — so a refusal fell through to the queue and the MR was told
+    // "Saved on this phone. It will send by itself when you have signal", about a
+    // check-in the server had already rejected with `outside_shift_window`.
+    //
+    // Every refusal case in this file constructed an `ApiRequestError`. That is the whole
+    // reason the gap survived the conversion: the tests fed the old client's error type to
+    // a path the new client no longer uses.
+    const store = inMemory();
+    const outcome = await sendOrQueue(
+      () =>
+        Promise.reject(
+          new SyncPushRefusal({
+            message: 'This visit is outside your territory working hours.',
+            sqlState: '45003',
+            rejectionCode: 'outside_shift_window',
+            deadLettered: false,
+          }),
+        ),
+      checkInQueueItem(body),
+      store,
+    );
+    expect(outcome.kind, 'a server verdict is a refusal, not an offline save').toBe('refused');
+    expect(store.current().items, 'a refused item must never be re-sent forever').toHaveLength(0);
+  });
+
+  it('STILL queues a plain Error — the positive control for the branch above', async () => {
+    // Without this, widening the refusal branch to `instanceof Error` would satisfy every
+    // assertion above while destroying FE-G2: an MR who loses signal at a clinic door
+    // would be told the server refused them, and the work would not be kept. The two
+    // cases differ only in the error's CLASS, which is the whole of what is being tested.
+    const store = inMemory();
+    const outcome = await sendOrQueue(
+      () => Promise.reject(new Error('Network request failed')),
+      checkInQueueItem(body),
+      store,
+    );
+    expect(outcome.kind, 'silence is not a verdict').toBe('queued');
+    expect(store.current().items).toHaveLength(1);
   });
 
   it('does not queue work that was accepted', async () => {

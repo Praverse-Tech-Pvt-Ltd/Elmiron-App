@@ -225,7 +225,23 @@ export const sendOrQueue = async (
     await send();
     return { kind: 'sent' };
   } catch (error: unknown) {
-    if (error instanceof ApiRequestError) {
+    // **Both refusal classes, and MR-24 found out the expensive way what happens with
+    // only one.** This branch read `ApiRequestError` alone, which is what the REST client
+    // throws. Since MR-18 the five writes go through `sync_push`, and `push-client.ts`
+    // throws `SyncPushRefusal` — a different class, extending `Error`. So every server
+    // refusal on this path missed the branch, fell into the queue below, and did exactly
+    // what the comment forbids.
+    //
+    // On the emulator that meant a check-in the server had REJECTED
+    // (`outside_shift_window`) told the MR "Saved on this phone. It will send by itself
+    // when you have signal — nothing is lost", listed itself as "Waiting to send", and
+    // left Today claiming "Everything sent". Three statements, none of them true, from
+    // one missing class.
+    //
+    // `flushOutbox` below already handled `SyncPushRefusal` correctly (see its catch).
+    // Only the immediate-send path was left reading the old client's error type — which
+    // is why no test caught it: the refusal cases here all construct `ApiRequestError`.
+    if (error instanceof ApiRequestError || error instanceof SyncPushRefusal) {
       // The server answered. Whatever it said, it has the work — queueing it would
       // mean re-sending something already refused, on every flush, forever.
       return { kind: 'refused', message: error.message };
