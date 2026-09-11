@@ -153,6 +153,9 @@ describe.skipIf(!reachable)('what the verdict loses on the way out', () => {
           entity: 'consent_record',
           entityId: id,
           payload: {
+            // MR-24. The row's identity is the body's OWN id, which every one of these
+            // schemas requires; `entityId` is the client's grouping key, not an identity.
+            id,
             visitId: world.visits.pune,
             doctorId: world.doctors.pune,
             outcome: 'consented',
@@ -259,6 +262,9 @@ describe.skipIf(!reachable)('THE FINDING: consent through sync_push skips captur
           entity: 'consent_record',
           entityId: id,
           payload: {
+            // MR-24. The row's identity is the body's OWN id, which every one of these
+            // schemas requires; `entityId` is the client's grouping key, not an identity.
+            id,
             visitId: world.visits.pune,
             doctorId: world.doctors.pune,
             outcome: 'consented',
@@ -290,6 +296,9 @@ describe.skipIf(!reachable)('THE FINDING: consent through sync_push skips captur
           entity: 'consent_record',
           entityId: id,
           payload: {
+            // MR-24. The row's identity is the body's OWN id, which every one of these
+            // schemas requires; `entityId` is the client's grouping key, not an identity.
+            id,
             visitId: world.visits.pune,
             doctorId: world.doctors.pune,
             outcome: 'consented',
@@ -327,6 +336,9 @@ describe.skipIf(!reachable)('THE FINDING: consent through sync_push skips captur
           entity: 'consent_record',
           entityId: id,
           payload: {
+            // MR-24. The row's identity is the body's OWN id, which every one of these
+            // schemas requires; `entityId` is the client's grouping key, not an identity.
+            id,
             visitId: world.visits.pune,
             doctorId: world.doctors.pune,
             outcome: 'consented',

@@ -195,7 +195,8 @@ describe.skipIf(!reachable)('two answers on one visit are two records', () => {
         'consented',
         new Date().toISOString(),
       );
-      const { id: _dropped, ...payloadWithoutId } = item.payload as { id: string };
+      const payloadWithoutId: Record<string, unknown> = { ...item.payload };
+      delete payloadWithoutId['id'];
       const results = await push(client, [{ ...item, payload: payloadWithoutId }]);
 
       expect(results[0]?.status, 'no id means no row').toBe('rejected');

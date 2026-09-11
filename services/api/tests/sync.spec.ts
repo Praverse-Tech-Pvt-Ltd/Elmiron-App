@@ -74,15 +74,33 @@ const visitItem = (overrides: Item = {}): Item => ({
   ...overrides,
 });
 
-const checkInItem = (visitId: string, at = WED_1000_IST, overrides: Item = {}): Item => ({
-  id: randomUUID(),
-  entity: 'check_in',
-  operation: 'create',
-  entityId: randomUUID(),
-  clientCreatedAt: at,
-  payload: { visitId, latitude: CLINIC_LAT, longitude: CLINIC_LON, occurredAt: at },
-  ...overrides,
-});
+const checkInItem = (visitId: string, at = WED_1000_IST, overrides: Item = {}): Item => {
+  // MR-24. One id, used as BOTH the row's identity (in the payload, where the contract puts
+  // it) and the queue's grouping key. Coordinates are NESTED, as
+  // `CreateCheckInRequestSchema` defines them. This literal was flat and carried no id --
+  // it matched `apply_sync_item` rather than the body the app sends, and neither noticed.
+  const rowId = randomUUID();
+  return {
+    id: randomUUID(),
+    entity: 'check_in',
+    operation: 'create',
+    entityId: rowId,
+    clientCreatedAt: at,
+    payload: {
+      id: rowId,
+      visitId,
+      coordinates: {
+        latitude: CLINIC_LAT,
+        longitude: CLINIC_LON,
+        accuracyMetres: null,
+        capturedAt: at,
+      },
+      source: 'automatic',
+      occurredAt: at,
+    },
+    ...overrides,
+  };
+};
 
 // =============================================================================
 // Partial success

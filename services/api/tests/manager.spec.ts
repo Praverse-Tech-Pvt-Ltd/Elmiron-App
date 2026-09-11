@@ -41,19 +41,29 @@ const push = async (client: Client, items: Record<string, unknown>[]): Promise<u
   return result.rows[0];
 };
 
-const poisonCheckIn = (visitId: string): Record<string, unknown> => ({
-  id: randomUUID(),
-  entity: 'check_in',
-  operation: 'create',
-  entityId: randomUUID(),
-  clientCreatedAt: WED_0300_IST,
-  payload: {
-    visitId,
-    latitude: CLINIC_LAT,
-    longitude: CLINIC_LON,
-    occurredAt: WED_0300_IST,
-  },
-});
+const poisonCheckIn = (visitId: string): Record<string, unknown> => {
+  // MR-24. Contract shape: the body's own id, coordinates nested.
+  const rowId = randomUUID();
+  return {
+    id: randomUUID(),
+    entity: 'check_in',
+    operation: 'create',
+    entityId: rowId,
+    clientCreatedAt: WED_0300_IST,
+    payload: {
+      id: rowId,
+      visitId,
+      coordinates: {
+        latitude: CLINIC_LAT,
+        longitude: CLINIC_LON,
+        accuracyMetres: null,
+        capturedAt: WED_0300_IST,
+      },
+      source: 'automatic',
+      occurredAt: WED_0300_IST,
+    },
+  };
+};
 
 // =============================================================================
 // Dead-letter reinstatement

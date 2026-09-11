@@ -146,9 +146,19 @@ const buildDay = async (client: Client): Promise<Day> => {
       entityId: checkInIds[i],
       clientCreatedAt: visitStart,
       payload: {
+        // MR-24. The body's OWN id, and coordinates NESTED -- the shape
+        // `CreateCheckInRequestSchema` defines and the app actually sends. These literals
+        // were flat and id-less, matching `apply_sync_item` rather than the contract, and
+        // the two agreed with each other while neither agreed with the product.
+        id: checkInIds[i],
         visitId: visitIds[i],
-        latitude: stop.lat,
-        longitude: stop.lon,
+        coordinates: {
+          latitude: stop.lat,
+          longitude: stop.lon,
+          accuracyMetres: null,
+          capturedAt: visitStart,
+        },
+        source: 'automatic',
         occurredAt: visitStart,
       },
     });
@@ -160,6 +170,7 @@ const buildDay = async (client: Client): Promise<Day> => {
       entityId: callReportIds[i],
       clientCreatedAt: at(10 + i, 32),
       payload: {
+        id: callReportIds[i],
         visitId: visitIds[i],
         summary: `Discussed the formulary position at stop ${String(i)}.`,
         status: 'submitted',
@@ -176,9 +187,15 @@ const buildDay = async (client: Client): Promise<Day> => {
     entityId: checkOutId,
     clientCreatedAt: at(14, 0),
     payload: {
+      id: checkOutId,
       visitId: visitIds[3],
-      latitude: STOPS[3]?.lat ?? 0,
-      longitude: STOPS[3]?.lon ?? 0,
+      coordinates: {
+        latitude: STOPS[3]?.lat ?? 0,
+        longitude: STOPS[3]?.lon ?? 0,
+        accuracyMetres: null,
+        capturedAt: at(14, 0),
+      },
+      source: 'automatic',
       occurredAt: at(14, 0),
     },
   });
@@ -284,16 +301,23 @@ describe.skipIf(!reachable)('Gate 1 — a full offline day, server half', () => 
       const day = await buildDay(client);
       await asUser(client, world.users.puneMr);
 
+      const poisonId = randomUUID();
       const poison: Item = {
         id: randomUUID(),
         entity: 'check_in',
         operation: 'create',
-        entityId: randomUUID(),
+        entityId: poisonId,
         clientCreatedAt: AFTER_SHIFT_END,
         payload: {
+          id: poisonId,
           visitId: day.visitIds[0],
-          latitude: STOPS[0]?.lat ?? 0,
-          longitude: STOPS[0]?.lon ?? 0,
+          coordinates: {
+            latitude: STOPS[0]?.lat ?? 0,
+            longitude: STOPS[0]?.lon ?? 0,
+            accuracyMetres: null,
+            capturedAt: AFTER_SHIFT_END,
+          },
+          source: 'automatic',
           occurredAt: AFTER_SHIFT_END,
         },
       };
@@ -319,16 +343,23 @@ describe.skipIf(!reachable)('Gate 1 — a full offline day, server half', () => 
       await asUser(client, world.users.puneMr);
       await push(client, day.items);
 
+      const lateId = randomUUID();
       const late: Item = {
         id: randomUUID(),
         entity: 'check_in',
         operation: 'create',
-        entityId: randomUUID(),
+        entityId: lateId,
         clientCreatedAt: AFTER_SHIFT_END,
         payload: {
+          id: lateId,
           visitId: day.visitIds[0],
-          latitude: 18.6,
-          longitude: 73.9,
+          coordinates: {
+            latitude: 18.6,
+            longitude: 73.9,
+            accuracyMetres: null,
+            capturedAt: AFTER_SHIFT_END,
+          },
+          source: 'automatic',
           occurredAt: AFTER_SHIFT_END,
         },
       };
@@ -352,16 +383,23 @@ describe.skipIf(!reachable)('Gate 1 — a full offline day, server half', () => 
       await asUser(client, world.users.puneMr);
       await push(client, day.items);
 
+      const earlyId = randomUUID();
       const early: Item = {
         id: randomUUID(),
         entity: 'check_in',
         operation: 'create',
-        entityId: randomUUID(),
+        entityId: earlyId,
         clientCreatedAt: BEFORE_SHIFT_START,
         payload: {
+          id: earlyId,
           visitId: day.visitIds[0],
-          latitude: 18.6,
-          longitude: 73.9,
+          coordinates: {
+            latitude: 18.6,
+            longitude: 73.9,
+            accuracyMetres: null,
+            capturedAt: BEFORE_SHIFT_START,
+          },
+          source: 'automatic',
           occurredAt: BEFORE_SHIFT_START,
         },
       };

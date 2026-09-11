@@ -237,9 +237,18 @@ describe.skipIf(!reachable)('D2: a check-out queued offline keeps its outcome', 
         [
           randomUUID(),
           JSON.stringify({
+            // MR-24. The body's own id and NESTED coordinates -- the shape
+            // `CreateCheckOutRequestSchema` defines and the app sends. This literal was flat
+            // and id-less, written to match `apply_sync_item` rather than the contract.
+            id: randomUUID(),
             visitId,
-            latitude: CLINIC_LAT,
-            longitude: CLINIC_LON,
+            coordinates: {
+              latitude: CLINIC_LAT,
+              longitude: CLINIC_LON,
+              accuracyMetres: null,
+              capturedAt: WED_1025_IST,
+            },
+            source: 'automatic',
             occurredAt: WED_1025_IST,
             notMetReason: 'Doctor called into theatre',
           }),
@@ -260,9 +269,18 @@ describe.skipIf(!reachable)('D2: a check-out queued offline keeps its outcome', 
         [
           randomUUID(),
           JSON.stringify({
+            // MR-24. The body's own id and NESTED coordinates -- the shape
+            // `CreateCheckOutRequestSchema` defines and the app sends. This literal was flat
+            // and id-less, written to match `apply_sync_item` rather than the contract.
+            id: randomUUID(),
             visitId,
-            latitude: CLINIC_LAT,
-            longitude: CLINIC_LON,
+            coordinates: {
+              latitude: CLINIC_LAT,
+              longitude: CLINIC_LON,
+              accuracyMetres: null,
+              capturedAt: WED_1025_IST,
+            },
+            source: 'automatic',
             occurredAt: WED_1025_IST,
           }),
         ],
