@@ -12506,3 +12506,211 @@ executing.
 After E1, with F1 recorded. `G-WRITE` is one item from met and that item is `BE-W97`. **`FE-G2`
 is blocked by the dev-client build and nothing else** — JDK 17, CMake, prebuild, deferred since
 MR-14 and now the only thing on the critical path to both device gates.
+
+---
+
+### MR-28 — the last G-WRITE item
+
+**EMULATOR, EXPO GO.** Pixel_10 AVD, Android 16 (SDK 36), signed in as
+`demo-167f417d-mr@example.test` — **identified from the sign-in this session performed**, not
+inferred from `auth.sessions`, which is how MR-25 queried the wrong MR.
+
+#### A1 — CI
+
+| | First push | After the fix |
+| --- | --- | --- |
+| Run | `34591537963` — **`failure`** | `34591892548` — `success` |
+| SHA | `2966045` | `5c1259830cf79c5b96792f187b2b5dce34fef255` — **was HEAD** |
+
+Two causes, one real. `samples-route.test.tsx` threw *`Right-hand side of 'instanceof' is not
+an object`* — the `push-client` mock omitted `SyncPushRefusal`, which is **MR-24's defect 2
+committed into a test**, and the fix is `jest.requireActual` so the class stays real. The
+other was a one-off `seedFixtures` 500 (*"Database error creating new user"*) that did not
+recur; left as a single unexplained occurrence rather than explained.
+
+**A correction to MR-27's record.** I reported field jest as **87 passing**. It was **86
+passing and 1 failing** — `test-counts.mjs` counts tests DISCOVERED, not tests PASSED, and I
+read its number as the second. That is standing rule 1 broken by the tool built to satisfy it.
+
+#### A2 — which clock the activation window uses: **it was the HANDSET's**
+
+`consent/[visitId].tsx` applied `effectiveFrom`/`effectiveUntil` against
+`new Date().toISOString()`, twice. That is the defect MR-15 A2 exists to prevent, one screen
+along: a phone running fast displays a notice that is **not yet active**, the doctor answers
+it, and `capture_consent` re-resolves at the SERVER's clock and refuses — `45001`, after the
+conversation, with nothing the rep can do. A notice scheduled for Monday is the ordinary case.
+
+**It is now `serverTime` from the last pull.** `pulled-store.tsx` exposes it, set from the
+same `outcome.serverTime` that already produces `today`, so the day boundary and the consent
+window read **one** clock rather than two.
+
+**As that value ages** — a failed pull does NOT clear it, deliberately, and the two directions
+are not symmetric:
+
+| | what happens | why it is acceptable |
+| --- | --- | --- |
+| A notice becomes active after the last pull | stays **withheld** until a pull succeeds | the safe direction: nothing false is shown |
+| A notice is retired after the last pull | still offered | `capture_consent` re-resolves and refuses `45001` **with its own remedy** — bounded, not silent |
+
+Clearing it on failure would blank the consent screen on every transient error, which is the
+defect MR-26 B3 removed from three screens. **With no server clock at all** — a cold start
+that has never completed a pull — the screen declines to decide the window and says the notice
+could not be loaded. Falling back to the handset there is `FE-W40` option **B**, refused for
+the reason recorded with it.
+
+Five cases, mutation-verified two-sided. **The first version of the WITHHOLDS case passed
+against the defect**, because both clocks were behind a hardcoded `2099` date; its
+`effectiveFrom` is now computed from the device's own now, so the two clocks disagree whatever
+day the suite runs on.
+
+#### B — `BE-W97`: the figures reach the MR, and it was a CLASS
+
+`sync_push` called `get stacked diagnostics` for `RETURNED_SQLSTATE` and `MESSAGE_TEXT` and
+nothing else. **Fifteen** `raise ... using detail = format(...)` sites exist across these
+migrations — 45001's *"displayed %s, active at %s was %s"*, 45007's *"captured_at %s is after
+the server clock %s"*, 45008's *"captured %s ago, the maximum is %s hours"* — every one
+written to tell somebody a number, every one dying in that handler. Special-casing 45004 would
+have left fourteen and put a second copy of the cap rule in the transport.
+
+**Verbatim, never parsed.** `sqlDetail` and `sqlHint` are rendered as the raise site wrote
+them; deciding is `sqlState`'s job, guarded both ways by `error-contract.spec.ts`. The
+tempting alternative — emit the figures as JSON so the client composes its own sentence — is
+refused in the migration header: all fifteen sites use prose `format()`, so JSON would be a
+convention of one, and a client parsing server prose is what FIX-06 minted 45002/45003 to
+remove.
+
+**The second half, in its own migration so the two can be told apart:** the 45004 sentence
+names the doctor instead of their UUID. The lookup runs only in the branch that refuses, so
+the unconfigured-cap path — every territory today — takes no extra query.
+
+**Driven from the samples screen, against the live server.** Global cap of 1 (test-only, note
+attached), Elmiron, 2 packs, ₹300. What the MR read:
+
+```
+This would go past the UCPMP limit for this doctor this month.
+Do not hand anything else over — speak to your manager first.
+
+Figures from the server: cap 1, already given 0, this entry 2,
+period starting 2026-09-01.
+```
+
+The server's own sentence, read back from `sync_items`:
+*"this would put Elmiron over the UCPMP cap for **Dr Asha Deshpande (DEMO)** this month"* — no
+UUID. `samples_and_inputs` held **0 rows**: refused, not written.
+
+**Cap reverted and verified back to null** (append-only, so the revert is a new row with its
+own note), then **the positive control**: the same line resubmitted was **accepted** and the
+row written. Without that, "it refused" could have been any other reason.
+
+Mutation, three ways against the live database, each failing exactly its own case: dropping
+`PG_EXCEPTION_DETAIL` fails the two figures cases and leaves the naming case green; removing
+the per-item reset fails only the cross-item leak case; applying `20260911000900`'s rollback
+fails only the naming case — which exercised that rollback file for free.
+
+**What still does not reach the MR, recorded rather than papered over:** a dead-letter replay.
+`sync_items` stores the message and no SQLSTATE, so that path already answered
+`sqlState: null` and now answers `sqlDetail: null` for the same reason. It is the **sixth**
+attempt at an item whose first five each carried the figures; closing it means two new columns
+nobody asked for.
+
+**`FE-W41`, seen rather than argued.** In the same screenshot as the refusal, the cap note
+still reads *"This app does not count your samples against the UCPMP cap — nothing in it has
+been given your limit or your month to date."* The server had just told the MR their limit,
+their month to date and their period, three lines above. The note becomes false the day 5.9 is
+answered, and this is what that looks like.
+
+#### Defect 12 — found by pressing the button, not by reading the code
+
+I pressed **"I am here — check in"**. The server accepted it — `visits.status` → `in_progress`
+at `11:33:39Z`, one `accepted` `check_in` in `sync_items`. The screen stayed on **"Not
+started"** with the same button under my thumb. So I pressed again, and the server recorded a
+**second** accepted `check_in`.
+
+The guard already existed and its own comment says it: *"an MR who presses 'I am here' with no
+signal and sees 'Not started' will press it again."* It was wired into the **QUEUED** branch
+only. `witnessedStage(visit, queued)` is the store's visit plus the outbox, and a **SENT**
+write is on neither — so `refreshQueue()` re-read a queue the write never entered. **The guard
+held whenever the server was unreachable and failed whenever it answered**, which is the
+common case.
+
+Only the server can say what stage a visit is in (MR-02), so the fix asks it: the sent branch
+calls the pulled store's `refresh()`. `no-unnecessary-condition` then failed on
+`if (sendResult.kind === 'queued')`, because the other two now return above it — the
+exhaustiveness check working, not a nuisance.
+
+#### C — the discarded-outcome sweep
+
+**Four shapes, not one:** a bare `await x()` statement, `void <async call>`, a `.then(` with no
+`.catch`, and `sendOrQueue` without its result. Most bare awaits return void and discard
+nothing; the uncaught `.then` chains are where the defects were.
+
+| | what it cost | |
+| --- | --- | --- |
+| **`session.tsx`** | `getSession()` reads AsyncStorage; on a rejection `setReady(true)` never ran and **the app sat on its splash forever**. Not a silent tap — a handset that will not start | **fixed**: treated as signed out, which is safe and true |
+| **`queue.tsx` "Try again now"** | the flush itself can reject; no row moved and nothing was said, on the screen somebody opens when they already suspect something is wrong | **fixed**: `QueueScreen` gains `retryFailure` |
+| **`takeFix`** | `requestForegroundPermissionsAsync` sat OUTSIDE the try, so `takeFix` could reject, and onboarding's `void takeFix().then(...)` had no catch — "Turn location on" did nothing | **fixed at the ROOT** |
+| **`me.tsx` sign out** | `void signOut();` — shared handsets, and "I pressed sign out" is how a phone changes hands | **fixed** |
+| **`transparency.tsx` Continue** | a failed AsyncStorage write trapped the MR on the LAST screen of first run | **fixed**: navigation happens either way |
+
+**Registered, not fixed:** the mount-time reads (`loadQueueState` ×3, `hasCompletedFirstRun`
+×2, `batteryStepsDone`, `offerableIntents`) and `void saveBatteryStepsDone(next)`, a tick that
+may not survive a restart with nothing said.
+
+**Two apparent hits are NOT defects, and the reason was verified rather than read.**
+`launchSettings` genuinely cannot reject — it catches `ActivityNotFoundException` by design —
+and `visit/[id].tsx`'s recorder chain does have a `.catch`. The second was my shape search's
+false positive, from splitting on the wrong closing brace: **a shape search is only as good as
+the shapes you think of, and only as good as the parser you fake.**
+
+#### D — `BE-W92` instrumented, and not forced
+
+`log_lock_waits` is on. It names the relation a session waited on — the first thing that
+item's verification order asks for and the one thing the single MR-26 deadlock did not leave
+behind. It also catches waits that **resolve**, which is the point: a deadlock seen once is a
+race lost once, and the same contention is being won silently the rest of the time.
+
+**It was written as a migration and the migration failed:** `permission denied to set
+parameter "log_lock_waits"` — a `SUSET` parameter, and the `postgres` role every migration
+runs as is not a superuser. It is now a script connecting as `supabase_admin`, wired into
+`db:start`, `db:reset` and CI's database job **before** the suites, because `ALTER DATABASE`
+applies to sessions opened afterwards.
+
+`deadlock_timeout` is left at its default and `lock-wait-logging.spec.ts` asserts it still is.
+Lowering it would fire sooner and read as progress while changing the thing being measured —
+MR-27 D1's concurrency mistake one layer down. **No mechanism is proposed and none should be
+read in.**
+
+#### E — three rules, in `docs/gotchas.md`
+
+1. **When a fix removes where something was shown, check where it is shown now.** Two
+   instances this session, both one branch of a pair fixed and the pair not re-read.
+2. **A time-derived property cannot ride a change feed.** `sync_pull` is a cursor over
+   `updated_at`; a row travels when it changes. *Active*, *expired*, *due*, *current* are
+   computations, not fields. Ordering, identity, text and ownership travel.
+3. **A control that runs at session start cannot guard later work.** A control is defined by
+   *when it can fire*. If the gap between the action and the next run is "the rest of the
+   session", it is documentation.
+
+#### `G-WRITE`: **MET**
+
+All five writes work from real screens, online and offline, exactly once, with timestamps
+preserved through the queue. The four refusals each reach the MR with their own remedy and
+never another's — 45001, 45007 and 45008 in MR-27 C1, **45004 here with the cap, the
+month-to-date, this entry and the period as real numbers, and the doctor by name.** That was
+the whole of what remained and it is the brief's own test.
+
+**Two things are true beside it and neither reopens the gate.** A dead-letter REPLAY carries
+no figures (sixth attempt; recorded above). And `FE-W41` — the cap note contradicts the server
+the moment a cap exists — is a copy defect that becomes live when **5.9** is answered, not a
+write path that fails.
+
+**`FE-G2`: NOT MET, blocked by the dev-client build and nothing else.** JDK 17, CMake,
+prebuild — deferred since MR-14, still the only thing on the critical path to both device
+gates. `FE-W40` still means an MR who cold-starts offline sees no day, which an 8-hour test
+would hit.
+
+#### Counts — by workspace AND runner, zero skips
+
+core vitest 21/3 · ui vitest 4/1 · ui jest 243/21 · ui-tokens vitest 54/3 · console vitest
+10/1 · field vitest 470/29 · field jest 103/17 · api vitest 626/41 · mock vitest 40/1.
+**Total 1571.** typecheck 9/9, lint 7/7, format clean, 56/56 migrations paired.
