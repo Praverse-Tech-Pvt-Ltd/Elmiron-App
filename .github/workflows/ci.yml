@@ -126,6 +126,22 @@ jobs:
       - name: Start Supabase and apply migrations
         run: pnpm exec supabase --workdir services/api start -x realtime,vector,imgproxy,studio
 
+      # BE-W92. `log_lock_waits` names the relation a session waited on, which is the
+      # first thing that item's verification order asks for and the one thing a
+      # single unreproduced deadlock did not leave behind.
+      #
+      # NOT a migration, and it was written as one first: `log_lock_waits` is a SUSET
+      # parameter and the `postgres` role every migration runs as is not a superuser,
+      # so `supabase db push` failed with "permission denied to set parameter". The
+      # script connects as `supabase_admin`, which nothing else here does and nothing
+      # else here should.
+      #
+      # BEFORE the suites, because `ALTER DATABASE` applies to sessions opened
+      # afterwards -- running it after the tests would set it for nobody and
+      # `lock-wait-logging.spec.ts` would fail saying so.
+      - name: Log lock waits, so a deadlock names its relations
+        run: node services/api/scripts/enable-lock-logging.mjs
+
       # Includes services/api/tests/rls.spec.ts — the Gate 0 adversarial suite.
       # SUPABASE_DB_URL being set does not make the tests run; db.ts hard-fails in CI
       # if the database is unreachable, so a green run always means they executed.

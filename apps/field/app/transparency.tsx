@@ -48,9 +48,18 @@ export default function Transparency(): ReactNode {
         {...(inFirstRun === true
           ? {
               onContinue: () => {
-                void markFirstRunComplete(new Date().toISOString()).then(() => {
-                  router.replace('/home');
-                });
+                // **MR-28 C2.** No `.catch` stood here, and `markFirstRunComplete` writes
+                // AsyncStorage, which can fail. The MR pressed Continue on the LAST screen
+                // of first run and stayed on it, with no way forward and nothing said.
+                //
+                // The navigation moves either way, deliberately. Failing to record that
+                // first run finished means they see this screen again next launch —
+                // annoying, and recoverable. Trapping them here is neither.
+                void markFirstRunComplete(new Date().toISOString())
+                  .catch(() => undefined)
+                  .finally(() => {
+                    router.replace('/home');
+                  });
               },
             }
           : {})}

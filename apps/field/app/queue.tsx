@@ -32,6 +32,7 @@ import type { SyncQueueState } from '../src/sync/reducer';
  */
 export default function Queue(): ReactNode {
   const [state, setState] = useState<SyncQueueState>(emptyQueue);
+  const [retryFailed, setRetryFailed] = useState<string | null>(null);
 
   const refresh = (): void => {
     void loadQueueState().then(setState);
@@ -42,8 +43,35 @@ export default function Queue(): ReactNode {
   return (
     <QueueScreen
       items={state.items}
+      // `QueueScreen` renders its own `Screen`, so this route must not wrap it in a second
+      // one -- that would nest two scroll views and double the page padding. The banner
+      // therefore belongs to the screen, as a prop, which is also where it belongs
+      // semantically: it is part of the queue's story, not a thing floating above it.
+      {...(retryFailed === null ? {} : { retryFailure: retryFailed })}
       onRetry={() => {
-        void flushOutbox(createPushClient()).then(refresh);
+        setRetryFailed(null);
+        // **MR-28 C2.** This was `void flushOutbox(...).then(refresh)` with no `.catch`.
+        //
+        // `flushOutbox` handles each ITEM's verdict, but the flush itself can still
+        // reject — the queue could not be read or written, or `createPushClient` threw
+        // reaching the config. When it did, `refresh` never ran, the rows did not move,
+        // and the MR had pressed "Try again now" on the screen that exists to tell them
+        // why things are stuck. A silent tap there is worse than anywhere else in the
+        // app, because this screen is where somebody goes when they already suspect
+        // something is wrong.
+        //
+        // The FlushResult itself stays discarded, and that is correct: every verdict is
+        // written to the queue, and `refresh` reads it back. The result is a summary of
+        // what the rows already say.
+        void flushOutbox(createPushClient())
+          .then(refresh)
+          .catch((error: unknown) => {
+            setRetryFailed(
+              error instanceof Error
+                ? `${error.message} Nothing has been lost — everything below is still on this phone.`
+                : 'Nothing has been lost — everything below is still on this phone.',
+            );
+          });
       }}
       /*
         MR-17 B1. Through `presentRejection`, which until now was written, tested and

@@ -25,10 +25,25 @@ export const SessionProvider = ({ children }: { readonly children: ReactNode }):
     // A persisted session is read from AsyncStorage asynchronously. Rendering the
     // signed-out shell first and swapping would flash the login screen at an MR who
     // is already signed in, on every cold start.
-    void supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setReady(true);
-    });
+    void supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        setSession(data.session);
+        setReady(true);
+      })
+      // **MR-28 C2, and the worst outcome on the sweep's list.** No `.catch` stood here.
+      // `getSession` reads AsyncStorage, and if that read rejects -- corrupt store, a
+      // keychain the OS will not open -- `setReady(true)` never runs and the app sits on
+      // its splash FOREVER. Not a silent tap: a handset that will not start, with no
+      // message and nothing to press.
+      //
+      // Treated as signed out, which is the safe direction. It is also the true one: a
+      // session that cannot be read is a session this app does not have. The MR signs in
+      // again, which works, rather than force-stopping an app that never finishes loading.
+      .catch(() => {
+        setSession(null);
+        setReady(true);
+      });
 
     const { data } = supabase.auth.onAuthStateChange((_event, next) => {
       setSession(next);

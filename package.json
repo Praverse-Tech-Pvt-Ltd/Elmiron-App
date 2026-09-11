@@ -14,10 +14,11 @@
     "mock": "pnpm --filter @fieldforce/mock build && pnpm --filter @fieldforce/mock start",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "db:start": "supabase --workdir services/api start",
+    "db:start": "supabase --workdir services/api start && pnpm db:instrument",
     "db:stop": "supabase --workdir services/api stop",
     "db:status": "supabase --workdir services/api status",
-    "db:reset": "supabase --workdir services/api db reset",
+    "db:reset": "supabase --workdir services/api db reset && pnpm db:instrument",
+    "db:instrument": "node services/api/scripts/enable-lock-logging.mjs",
     "db:types": "supabase --workdir services/api gen types typescript --local"
   },
   "devDependencies": {

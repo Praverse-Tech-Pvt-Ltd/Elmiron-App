@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
 import { BodyText, Heading, Label } from './Text';
+import { Banner } from './Banner';
 import { Button } from './Button';
 import { Screen } from './Screen';
 
@@ -71,6 +72,20 @@ export interface QueueScreenProps {
   readonly onRetry?: () => void;
   /** S3's "Tell the help desk". Absent until there is a help desk to tell. */
   readonly onContactSupport?: () => void;
+  /**
+   * MR-28 C2 — what happened when the MR last pressed "Try again now", if it failed.
+   *
+   * `onRetry` does a network thing in the route, because `packages/ui` has no client. So
+   * the route is also the only place that learns the retry could not even START — the
+   * queue could not be read, the client could not be built — and it had nowhere to put
+   * that. It put it nowhere: the press was silent, on the one screen an MR opens when they
+   * already suspect something is wrong.
+   *
+   * This is deliberately NOT a queue state. Nothing here may promote, demote or reorder a
+   * row, and a failed retry changes none of them; it is a sentence about the last press,
+   * which is why it arrives as a prop rather than being derived from `items`.
+   */
+  readonly retryFailure?: string;
 }
 
 export type QueueRowState = 'sent' | 'waiting' | 'waiting-long' | 'refused' | 'needs-attention';
@@ -319,6 +334,7 @@ export const QueueScreen = ({
   longRetryAfterAttempts = LONG_RETRY_AFTER_ATTEMPTS,
   onRetry,
   onContactSupport,
+  retryFailure,
 }: QueueScreenProps): ReactNode => {
   const outstanding = items.filter((item) => item.status !== 'synced');
   const summary = stuckSummaryFor(items, rejections, longRetryAfterAttempts);
@@ -326,6 +342,10 @@ export const QueueScreen = ({
   return (
     <Screen scrollable>
       <Heading>Your upload queue</Heading>
+
+      {retryFailure === undefined ? null : (
+        <Banner detail={retryFailure} title="Nothing could be sent" tone="critical" />
+      )}
 
       {summary === null ? null : (
         <StuckBlock onContactSupport={onContactSupport} onRetry={onRetry} summary={summary} />

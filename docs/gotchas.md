@@ -2578,3 +2578,90 @@ that names something only a correct answer contains.
 
 The last one is the pattern worth copying: when a test compares two things, assert that each
 of them is *something* before asserting they match. **Two nulls agree.**
+
+## 11 September 2026 — when a fix REMOVES where something was shown, check where it is shown now
+
+A fix that deletes a display path takes its audience with it, and the audience does not
+move on its own. The rule is small and the two instances this session are both expensive:
+
+**Instance 1 — the refusal that stopped being queued.** MR-24 made a refused write NOT go on
+the queue, which is correct: a refusal is a verdict, and queueing it would push the same
+refused item forever. But the queue screen was *the place refusals were explained*. After
+that change a consent refused at `45001` reached nobody — not the queue screen, which no
+longer had the row, and not the consent screen, which discarded the outcome. MR-27 C1 found
+it by driving a real refusal. **The fix was right and it removed the only place the MR could
+have read about it.**
+
+**Instance 2 — the check-in that was never queued at all.** MR-26 B2 built
+`witnessedStage(visit, queued)` so a QUEUED check-in advances the stage immediately, with
+its own comment: *"an MR who presses 'I am here' with no signal and sees 'Not started' will
+press it again."* The SENT path is on neither half — not the queue, not the store's
+still-`planned` visit — so the guard held whenever the server was unreachable and failed
+whenever it answered. MR-28 B4 pressed it on a live emulator and the server recorded two
+check-ins.
+
+**The rule.** After removing, rerouting or short-circuiting a path, ask: *who used to learn
+about this here, and where do they learn about it now?* If the answer is "the other branch
+still shows it", check that the branch you are on is the other branch. Both instances above
+are one branch of a pair being fixed and the pair not being re-read.
+
+**Why it keeps happening here.** The removals are all correct — that is what makes them
+invisible. Nothing looks wrong in the diff, no test fails, and the missing half is missing
+only in the state the diff is not about.
+
+---
+
+## 11 September 2026 — a time-derived property cannot ride a change feed
+
+`sync_pull` is a cursor over `updated_at`. A row travels when it CHANGES. So any property
+that is a function of the clock rather than of the row cannot be transmitted — the row does
+not change when the clock crosses it, `updated_at` does not move, and nothing is re-emitted.
+
+MR-27 B1 is the worked example, and it is the correction that made the change right.
+Transmitting *"which consent notice is active"* looks like the obvious thing to ship, and it
+is wrong: a notice that becomes active tomorrow because `effective_from` passed does not
+change, so a client holding a transmitted `is_active` flag keeps offering yesterday's notice
+with nothing ever arriving to correct it.
+
+**The split that works follows what each side can know.** The server transmits
+**precedence** — an ordering, which carries no clock and which the client got wrong on its
+own. The client applies the **effective window**, because it has a clock and the pull does
+not.
+
+**The rule.** Before putting a field on a pull, ask whether it can change while the row does
+not. If it can, it is not a field — it is a computation, and it belongs wherever the input
+it depends on lives. Ordering, identity, text and ownership travel. *Active*, *expired*,
+*due*, *overdue* and *current* do not.
+
+MR-28 A2 is the same rule one step further: the clock the client applies that window against
+must be the SERVER's (`serverTime` from the last pull), never the handset's. A fast phone
+otherwise displays a notice that is not yet active, the doctor answers it, and
+`capture_consent` re-resolves at the server's clock and refuses — `45001`, after the
+conversation.
+
+---
+
+## 11 September 2026 — a control that runs at session start cannot guard later work
+
+MR-26 A4 added a loud warning to `pnpm ci:local` naming the CI steps it had not run,
+specifically so that rollback-less migrations could not be pushed again. It was correct, it
+ran, and **I read it** — in MR-26 Part A. Then I added two migrations in Part B and pushed.
+CI failed on rollbacks for the second session running, one session after building the
+control meant to prevent it.
+
+**The control fired at the wrong TIME, not in the wrong way.** It printed at the end of a
+run; the moment that matters is when somebody ADDS A MIGRATION. Between those two moments
+sat an entire part of the session.
+
+The fix moved the half that needs no database — `verify-rollbacks.mjs --files-only` — into
+CI's STATIC job, which `ci-local.mjs` derives its steps from, so it now runs on every local
+invocation as well. Twelve steps became thirteen with no change to `ci-local` itself.
+
+**The rule.** A control is defined by *when it can fire*, not by what it checks. Ask: what
+is the longest gap between the action this is meant to catch and the next time this runs? If
+the answer is "the rest of the session", it is documentation, not a guard.
+
+The same shape, in a different clothing, is the `--files-only` flag's own first bug: the
+CLI printed *"All rollbacks applied"* unconditionally, so a mode that applies nothing
+claimed it had. A control that overstates what it did is worse than one that does nothing,
+because the next reader stops looking.

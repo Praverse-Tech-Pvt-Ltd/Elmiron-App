@@ -49,10 +49,23 @@ const timeout = (ms: number): Promise<'timeout'> =>
   });
 
 export const takeFix = async (timeoutMs: number = FIX_TIMEOUT_MS): Promise<FixOutcome> => {
-  const permission = await Location.requestForegroundPermissionsAsync();
-  if (!permission.granted) return { kind: 'denied' };
-
   try {
+    // **MR-28 C2. This line used to sit OUTSIDE the try.**
+    //
+    // `requestForegroundPermissionsAsync` can reject — a module not linked, the activity
+    // gone, a permission request already in flight — and when it did, `takeFix` rejected
+    // rather than answering. Every caller is written against a `FixOutcome`, so the one
+    // that awaits it inside its own try was covered and the one on the onboarding screen
+    // was not: `void takeFix().then(...)` with no `.catch`, so the MR pressed "Turn
+    // location on" and NOTHING happened.
+    //
+    // Fixed here rather than at the call site, because a `.catch` on each caller is the
+    // same rule written twice and the second copy is the one nobody adds. `takeFix`
+    // promises an outcome; a phone that cannot answer is `unavailable`, which is a real
+    // member of that type and is exactly what this is.
+    const permission = await Location.requestForegroundPermissionsAsync();
+    if (!permission.granted) return { kind: 'denied' };
+
     const result = await Promise.race([
       Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
       timeout(timeoutMs),
