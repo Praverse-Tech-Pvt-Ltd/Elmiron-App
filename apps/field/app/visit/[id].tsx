@@ -33,7 +33,7 @@ import { checkInQueueItem, checkOutQueueItem, sendOrQueue } from '../../src/sync
 import { unavailableReason } from '../../src/capture/preconditions';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
-import { clockFrom } from '../../src/today/plan';
+import { clockIn } from '../../src/today/territory-day';
 
 /**
  * B4 / B5 / B6 — one visit, from arriving to leaving.
@@ -54,7 +54,7 @@ export default function VisitRoute(): ReactNode {
    * on its first line — MR-19's silent check-in, the defect that made G-WRITE a gate about
    * the app rather than the module.
    */
-  const { store, status, failure: pullFailure } = usePulledStore();
+  const { store, status, zone, failure: pullFailure } = usePulledStore();
   const visit = visitsFromStore(store).find((candidate) => candidate.id === id) ?? null;
   const doctor =
     visit === null
@@ -321,7 +321,7 @@ export default function VisitRoute(): ReactNode {
           ? {
               recording: {
                 elapsed: elapsedLabel(recorderState.durationMillis / 1000),
-                label: recordingLabel(clockFrom(authorising.capturedAt)),
+                label: recordingLabel(clockIn(authorising.capturedAt, zone)),
                 onStop: () => {
                   stopRecording(true);
                 },
@@ -345,7 +345,20 @@ export default function VisitRoute(): ReactNode {
           router.push(`/report/${visit?.id ?? id}`);
         }}
         stage={stage}
-        startedLabel={visit?.startedAt == null ? null : `Checked in ${clockFrom(visit.startedAt)}`}
+        startedLabel={
+          // MR-24 B. `clockFrom` is a CHARACTER SLICE of the ISO string, correct only
+          // while the server sends the territory's own offset -- which the mock at :4010
+          // does and Supabase does not. This screen was converted to the pulled store in
+          // MR-21 and this call was not replaced, so a check-in stamped 11:15:34 IST
+          // rendered as "Checked in 05:45" on the emulator: the MR-14 five-and-a-half-hour
+          // defect, in a screen converted after it was found and documented.
+          //
+          // `clockFrom`'s own doc names this trap -- "converting a screen to real data
+          // means replacing this call" -- and lists the screens still entitled to it.
+          // This screen was not on that list. The warning existed and the conversion
+          // walked past it.
+          visit?.startedAt == null ? null : `Checked in ${clockIn(visit.startedAt, zone)}`
+        }
       />
     </Screen>
   );

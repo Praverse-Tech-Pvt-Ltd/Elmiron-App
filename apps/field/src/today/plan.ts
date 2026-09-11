@@ -230,5 +230,17 @@ export const summariseDay = (
  * Still on it today: `app/(tabs)/coaching.tsx`, `app/day-end.tsx`, and
  * `route-labels.ts:clockFromOrNull` for `app/beat-plan.tsx`. The same applies to
  * `dayMonthFrom` in `src/doctors/profile.ts` and the slices in `src/doctors/availability.ts`.
+ *
+ * **MR-24: the warning above did not work.** `app/visit/[id].tsx` was converted to the
+ * pulled store in MR-21 and kept this call, so a check-in stamped 11:15:34 IST rendered as
+ * "Checked in 05:45" on the emulator — the MR-14 defect, in a screen converted after
+ * MR-14 found it. Now on `clockIn`.
+ *
+ * **`src/sync/indicator.ts:51` is still on this call and is NOT entitled to it.** It
+ * formats `lastSyncedAt`, which since MR-18 comes from `sync_push`'s `serverTime` — a
+ * Supabase `Z` timestamp, not a territory offset. Its own comment describes the
+ * five-and-a-half-hour bug and then keeps the slice that causes it. Left here rather than
+ * changed blind: it was NOT observed wrong on the device (the chip rendered no time during
+ * MR-24), and a fix nobody has seen fail is a fix nobody can show works.
  */
 export const clockFrom = (iso: string): string => iso.slice(11, 16);
