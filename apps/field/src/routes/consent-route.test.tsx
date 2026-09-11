@@ -15,12 +15,15 @@ const mockCreateConsentRecord = jest.fn<(body: unknown) => Promise<unknown>>();
  */
 const mockStore = jest.fn();
 jest.mock('../sync/pulled-store', () => ({ usePulledStore: () => mockStore() }));
-const mockFetchNotices = jest.fn<() => Promise<unknown>>();
-const mockFetchActive = jest.fn<(language: string) => Promise<unknown>>();
-jest.mock('../consent/notices', () => ({
-  fetchConsentNotices: () => mockFetchNotices(),
-  fetchActiveNotice: (language: string) => mockFetchActive(language),
-}));
+/**
+ * **MR-26 B1. The notices are no longer fetched, so there is nothing here to mock.**
+ *
+ * They travel in `sync_pull` as their own entity and the screen reads them out of the pulled
+ * store with `noticesFromStore`, which is why consent can now be captured with no signal --
+ * MR-25 D1 measured that it could not. These cases therefore seed the STORE, which is both
+ * simpler and closer to the product: the previous version stubbed two network calls the
+ * screen no longer makes, and would have kept passing over a screen that had stopped working.
+ */
 // MR-18 B1. The WRITE boundary moved from the mock REST client to `sync_push`, so the
 // mock moved with it. The reads on these screens are still `createClientForScenario`, and
 // both are mocked here because the screen uses both -- which is exactly the two-column
@@ -83,12 +86,13 @@ const notice = ConsentTextVersionSchema.parse({
 // doctor -- see "does NOT name the rep" below.
 
 /** A settled store holding the visit and doctor this screen is about. */
-const pulled = (visits: unknown[], doctors: unknown[]) => ({
+const pulled = (visits: unknown[], doctors: unknown[], notices: unknown[] = []) => ({
   store: {
     visit: new Map(visits.map((v) => [(v as { id: string }).id, v])),
     doctor: new Map(doctors.map((d) => [(d as { id: string }).id, d])),
     beat_plan: new Map(),
     clinic_address: new Map(),
+    consent_text_version: new Map(notices.map((n) => [(n as { id: string }).id, n])),
   },
   status: 'ready',
   notice: null,
@@ -101,9 +105,7 @@ const pulled = (visits: unknown[], doctors: unknown[]) => ({
 });
 
 const loaded = (): void => {
-  mockStore.mockReturnValue(pulled([visit], [doctor]));
-  mockFetchNotices.mockResolvedValue([notice]);
-  mockFetchActive.mockResolvedValue(notice);
+  mockStore.mockReturnValue(pulled([visit], [doctor], [notice]));
   mockCreateConsentRecord.mockClear();
   mockReplace.mockClear();
   mockBack.mockClear();
@@ -183,13 +185,36 @@ describe('app/consent/[visitId].tsx — the handoff', () => {
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
-  it('shows no answers when the notice cannot be fetched', async () => {
-    loaded();
-    mockFetchActive.mockRejectedValue(new Error('Network request failed'));
+  it('shows no answers when the handset holds NO notice and the pull could not run', async () => {
+    // MR-26 B1. This used to stub a rejected fetch. There is no fetch now, so the state it
+    // stood for is expressed directly: an empty store AND a failed pull, which is the only
+    // combination that means the app does not KNOW whether a notice exists. With notices in
+    // the store and none for this language the right sentence is "none published yet", and
+    // saying "could not be loaded" there would be the lie this distinction prevents.
+    mockStore.mockReturnValue({
+      ...pulled([visit], [doctor], []),
+      failure: { kind: 'unreachable' },
+    });
+    mockCreateConsentRecord.mockClear();
     await render(<ConsentRoute />);
 
     expect(await screen.findByText('The consent notice could not be loaded')).toBeTruthy();
     expect(screen.queryByText("Yes, that's fine")).toBeNull();
+  });
+
+  it('THE POSITIVE CONTROL: a failed pull does NOT block when the notice is in the store', async () => {
+    // The defect MR-26 B3 found in three screens: a failed BACKGROUND refresh rendered as
+    // "this screen has no data", over a store that held everything. Consent offline is the
+    // whole point of B1, so this is the case that proves it.
+    mockStore.mockReturnValue({
+      ...pulled([visit], [doctor], [notice]),
+      failure: { kind: 'unreachable' },
+    });
+    mockCreateConsentRecord.mockClear();
+    await render(<ConsentRoute />);
+
+    expect(await screen.findByText(notice.fullText)).toBeTruthy();
+    expect(screen.getByText("Yes, that's fine")).toBeTruthy();
   });
 
   it('offers only the languages the server has a live notice in', async () => {
@@ -206,8 +231,8 @@ describe('app/consent/[visitId].tsx — the handoff', () => {
       hash: 'c'.repeat(64),
       effectiveUntil: '2026-08-01T00:00:00+05:30',
     });
-    loaded();
-    mockFetchNotices.mockResolvedValue([notice, hindi, retired]);
+    mockStore.mockReturnValue(pulled([visit], [doctor], [notice, hindi, retired]));
+    mockCreateConsentRecord.mockClear();
 
     await render(<ConsentRoute />);
     await screen.findByText(notice.fullText);

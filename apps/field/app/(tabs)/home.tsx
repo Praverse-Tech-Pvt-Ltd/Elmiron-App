@@ -87,6 +87,31 @@ const MrToday = (): ReactNode => {
 
   // A refusal is its own state, never an empty day. An empty day and a refused one
   // look identical to an MR, and only one of them means they can stop working.
+  // **MR-26 B4. A failed refresh is not an empty day.** Third instance of this, and the one
+  // that matters most, because Today is where an MR starts.
+  //
+  // The banner was keyed on `pullFailure` alone, so a refresh failing hid a day the app
+  // already had. The case that matters is the ordinary one: an MR working with the app open
+  // walks into a basement, the next background pull fails, and the day they were reading
+  // vanishes underneath them. With visits in the store the day is STALE, not absent, and
+  // staleness is the sync indicator's job -- it is already on this screen and hides nothing.
+  //
+  // **What this deliberately does NOT change, because it must not: a COLD START offline.**
+  // `today` comes from the pull's `serverTime` and is not persisted, so after a restart with
+  // no signal `summary` is null and this banner still fires. That is CORRECT. MR-15 A2's rule
+  // is that the territory's day comes from the SERVER's clock, never the handset's -- an app
+  // that guessed the date from the device would put visits on the wrong day, which is the
+  // defect `territory-day.ts` exists to prevent. With no server clock the app does not know
+  // what day it is, and saying so is the only honest answer.
+  //
+  // That leaves a real gap -- an MR who cold-starts in a basement sees no day at all -- and it
+  // is registered as FE-W40 rather than closed here, because closing it means deciding whether
+  // a persisted `serverTime` plus elapsed time is an acceptable substitute for asking, and that
+  // trades against the exact rule above.
+  //
+  // `not_permitted` stays unconditional. That is a server DECISION about this MR's access,
+  // not a silence, and it must be shown even over a cached plan.
+  const nothingToShow = summary === null;
   const failure =
     pullFailure === null
       ? null
@@ -95,13 +120,15 @@ const MrToday = (): ReactNode => {
             title: 'You do not have access to this plan',
             detail: 'The server refused this request for your account.',
           }
-        : {
-            title: 'Could not load your day',
-            detail:
-              pullFailure.kind === 'refused'
-                ? `The server refused this sync (${pullFailure.refusal.sqlState}).`
-                : 'The app could not reach the server. It will try again when you come back to it.',
-          };
+        : nothingToShow
+          ? {
+              title: 'Could not load your day',
+              detail:
+                pullFailure.kind === 'refused'
+                  ? `The server refused this sync (${pullFailure.refusal.sqlState}).`
+                  : 'The app could not reach the server. It will try again when you come back to it.',
+            }
+          : null;
 
   return (
     <TodayScreen

@@ -255,7 +255,12 @@ export default function ConsentRoute(): ReactNode {
                 title: 'You do not have access to this visit',
                 detail: 'The server refused this request for your account.',
               }
-            : pullFailure !== null && notice === null && versionsFromStore.length === 0
+            : // Only when the VISIT itself is missing. Keyed on the notices instead, this
+              // said "Could not load this visit" while holding the visit -- the caught-by-test
+              // version of the very defect B3 is about. With the visit present and no notices,
+              // `blockedReason(notice, failed)` has the accurate sentence and a next step:
+              // "the consent notice could not be loaded ... you can ask once you have signal".
+              pullFailure !== null && (visit === null || doctor === null)
               ? {
                   title: 'Could not load this visit',
                   detail: 'The app could not reach the server. It will try again.',

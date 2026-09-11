@@ -251,7 +251,27 @@ export const VisitScreen = ({
         // Not `critical`: a phone that cannot see a satellite, or an MR who has not
         // granted a permission, is not a failure of theirs. §02 keeps critical for
         // genuine failures, and this is a condition with a remedy.
-        <Banner detail={blocked} title="This check-in cannot be sent yet" tone="attention" />
+        <Banner
+          detail={blocked}
+          /*
+            MR-26 B4. **The title follows the STAGE.** It was hardcoded "This check-in cannot
+            be sent yet", so an MR who checked out with no signal was told their CHECK-IN
+            could not be sent -- about a departure, naming an arrival.
+            This is defect 8's shape exactly: a message assembled from a fixed part and a
+            variable part, where fixing the variable part is not fixing the message. MR-18 B3
+            rewrote the call-report copy for the same reason, corrected the caller-supplied
+            detail, and left the hardcoded title behind. Same defect, same file-shape, second
+            instance -- which is why the rule is going into gotchas rather than just the fix.
+            `before` is the only stage that can produce a check-in, so it is the only one that
+            may say so.
+          */
+          title={
+            stage === 'before'
+              ? 'This check-in cannot be sent yet'
+              : 'This check-out cannot be sent yet'
+          }
+          tone="attention"
+        />
       )}
 
       <View style={styles.spacer} />

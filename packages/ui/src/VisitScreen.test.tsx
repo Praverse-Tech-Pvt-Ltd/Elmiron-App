@@ -207,3 +207,29 @@ describe('MR-26 B5: a pending stage must not borrow confirmed wording', () => {
     expect(screen.queryByText(/waiting to send/i)).toBeNull();
   });
 });
+
+describe('MR-26 B4: the blocked banner names the write the MR actually attempted', () => {
+  /**
+   * Found on the emulator: checking OUT with no signal produced "This check-in cannot be sent
+   * yet". The title was hardcoded while the detail came from the caller, so the check-out
+   * branch could only ever change half the message.
+   *
+   * That is defect 8's shape a second time -- MR-18 B3 rewrote the call-report copy for
+   * exactly this reason, fixed the caller-supplied detail, and left the hardcoded "Report
+   * sent" title. A message assembled from a fixed part and a variable part is not fixed by
+   * fixing the variable part.
+   */
+  it('says CHECK-OUT when the MR was checking out', async () => {
+    await render(<VisitScreen {...props({ stage: 'during', blocked: 'Saved on this phone.' })} />);
+    expect(screen.getByText('This check-out cannot be sent yet')).toBeTruthy();
+    expect(screen.queryByText('This check-in cannot be sent yet')).toBeNull();
+  });
+
+  it('THE POSITIVE CONTROL: still says CHECK-IN when the MR was checking in', async () => {
+    // Without this, flipping the hardcoded string to "check-out" would satisfy the case above
+    // and tell an arriving MR their departure failed -- the same lie pointing the other way.
+    await render(<VisitScreen {...props({ stage: 'before', blocked: 'Saved on this phone.' })} />);
+    expect(screen.getByText('This check-in cannot be sent yet')).toBeTruthy();
+    expect(screen.queryByText('This check-out cannot be sent yet')).toBeNull();
+  });
+});
