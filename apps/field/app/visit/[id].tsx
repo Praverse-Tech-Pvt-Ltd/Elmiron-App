@@ -62,7 +62,7 @@ export default function VisitRoute(): ReactNode {
    * on its first line — MR-19's silent check-in, the defect that made G-WRITE a gate about
    * the app rather than the module.
    */
-  const { store, status, zone, failure: pullFailure } = usePulledStore();
+  const { store, status, zone, failure: pullFailure, refresh: refreshPulled } = usePulledStore();
   const visit = visitsFromStore(store).find((candidate) => candidate.id === id) ?? null;
   const doctor =
     visit === null
@@ -274,20 +274,47 @@ export default function VisitRoute(): ReactNode {
         );
 
         refreshQueue();
+        if (sendResult.kind === 'sent') {
+          // **Defect 12, found by driving MR-28 B4 on the device.**
+          //
+          // The stage is `witnessedStage(visit, queued)`: the pulled store's visit, plus
+          // anything sitting on the queue. A SENT write is on neither. `refreshQueue()`
+          // re-reads a queue the write never entered, the store still holds the `planned`
+          // visit the last pull returned, and the screen stays on "Not started" with the
+          // same button under the MR's thumb.
+          //
+          // The comment on `refreshQueue` above says it exactly -- *"an MR who presses 'I
+          // am here' and sees 'Not started' will press it again"* -- and that guard was
+          // built for the QUEUED path and never given to this one. So it held whenever the
+          // server was unreachable and failed whenever it answered, which is the common
+          // case. I pressed twice and the server recorded two accepted `check_in` items.
+          //
+          // The server has the visit and only the server can say what stage it is in, so
+          // the fix is to ask it rather than to assume: `refresh()` re-pulls, and the
+          // stage moves because the SERVER moved it.
+          refreshPulled();
+          return;
+        }
         if (sendResult.kind === 'refused') {
           // The server answered and said no. That is a decision, shown as one.
           setFailure({ title: 'That was refused', detail: sendResult.message });
           return;
         }
-        if (sendResult.kind === 'queued') {
-          // The stage must advance NOW. Without this the MR presses "I am here", sees
-          // "Not started" still, and presses again.
-          refreshQueue();
-          setBlocked(
-            'Saved on this phone. It will send by itself when you have signal — nothing is lost.',
-          );
-          return;
-        }
+        // QUEUED, and the type system now says so: `sent` and `refused` both returned
+        // above, so re-testing `kind` here fails `no-unnecessary-condition`. That is the
+        // exhaustiveness check doing its job rather than a comment claiming it -- if a
+        // fourth outcome is ever added, the lint stops failing and this block becomes
+        // reachable for it, which is a compile-time prompt to decide what it should do.
+        //
+        // The stage must advance NOW. Without this the MR presses "I am here", sees
+        // "Not started" still, and presses again. Re-reading the QUEUE is the right move
+        // here and only here: a queued write is the half of `witnessedStage` the outbox
+        // owns, and re-pulling would ask an unreachable server a question it cannot answer.
+        refreshQueue();
+        setBlocked(
+          'Saved on this phone. It will send by itself when you have signal — nothing is lost.',
+        );
+        return;
       } catch (error: unknown) {
         if (error instanceof ApiRequestError && error.code === 'permission_denied') {
           setFailure({ title: 'That was refused', detail: error.message });
