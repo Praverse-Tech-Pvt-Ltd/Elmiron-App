@@ -246,6 +246,62 @@ const main = () => {
       ' runner-setup step(s) not applicable locally.' +
       (withDb ? '' : '  (--with-db also runs the database job.)'),
   );
+  // MR-26 A4. **A green result that silently omits a CI job manufactures confidence.**
+  //
+  // Not hypothetical. MR-24 shipped four migrations with no rollback file and the push failed
+  // on `Verify every migration can be rolled back` -- a step in the `database` job, which THIS
+  // COMMAND RUNS under `--with-db`. The tool was not the hole; running the default and reading
+  // its green as "CI will pass" was.
+  //
+  // The omission is DELIBERATE: the database job needs Docker and a Supabase stack, and
+  // `verify:rollbacks` empties the public schema, so it cannot be the default. But the hint
+  // saying so was printed with the PLAN, twelve steps of output earlier, and had scrolled away
+  // by the time the green line appeared. A warning nobody is looking at when they form the
+  // belief is not a warning.
+  //
+  // Repeated HERE, beside the word "passed", and naming the STEPS rather than the job --
+  // "the database job" is abstract and "Verify every migration can be rolled back" is the one
+  // that actually failed. On stderr, so it survives a pipe to a log.
+  const omittedDbSteps = withDb
+    ? []
+    : (() => {
+        const omitted = parseSteps(jobLines(workflow, 'database'))
+          .filter((step) => step.run !== null)
+          // `step.label` does not exist -- `parseSteps` yields `name` and `run`, and the
+          // planner at line 227 is what derives a label. Read from the same two fields it
+          // does, so this warning and `--list` can never name steps differently.
+          .map((step) => step.name ?? step.run.split(String.fromCharCode(10))[0]);
+
+        // A positive control on the warning itself. If the reader ever stops finding the database
+        // job's steps this must fail loudly rather than print an empty list and look reassuring --
+        // the same failure shape the derivation control above exists for.
+        // **Two controls, because the first one was not enough.** The count check passed while
+        // every label printed `undefined` -- it asserted the list was NON-EMPTY, not that it said
+        // anything. A warning naming six `undefined` steps is worse than no warning: it looks
+        // like a control and carries no information. Assert the CONTENT too.
+        if (omitted.length < 3) {
+          throw new Error(
+            'ci-local could not list the database job steps it is warning about (found ' +
+              omitted.length +
+              '). Fix the reader rather than trusting this run.',
+          );
+        }
+        if (omitted.some((label) => typeof label !== 'string' || label.length === 0)) {
+          throw new Error(
+            'ci-local read the database job steps but could not name them. The warning would ' +
+              'print a list of blanks, which is the shape of a control that has stopped working.',
+          );
+        }
+        if (!omitted.some((label) => label.toLowerCase().includes('roll'))) {
+          throw new Error(
+            'ci-local did not find the rollback step in the database job. That is the step whose ' +
+              'absence locally shipped four migrations with no rollback, and this warning exists ' +
+              'to name it.',
+          );
+        }
+        return omitted;
+      })();
+
   if (listOnly) return 0;
 
   let index = 0;
@@ -276,6 +332,20 @@ const main = () => {
   }
 
   console.log('\nAll ' + index + ' step(s) passed. This is what CI runs for ' + jobs.join(' and '));
+  if (!withDb) {
+    const omitted = omittedDbSteps;
+    const bar = '!'.repeat(78);
+    console.error('');
+    console.error(bar);
+    console.error(
+      'THIS IS NOT ALL OF CI. The `database` job did NOT run -- ' + omitted.length + ' step(s):',
+    );
+    for (const label of omitted) console.error('  - ' + label);
+    console.error('');
+    console.error('Run `pnpm ci:local --with-db` before pushing anything touching migrations,');
+    console.error('RLS or the database tests. It needs Docker and it RESETS the local database.');
+    console.error(bar);
+  }
   return 0;
 };
 
