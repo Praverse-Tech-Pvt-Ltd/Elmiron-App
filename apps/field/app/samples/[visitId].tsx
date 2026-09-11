@@ -13,6 +13,7 @@ import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { blankLine, CAP_NOTE, errorsFor, sampleRequest } from '../../src/capture/samples';
 import { sampleQueueItem, sendOrQueue } from '../../src/sync/outbox';
+import { refusalTextFor } from '../../src/sync/explanation';
 import { dayMonthIn } from '../../src/today/territory-day';
 
 /**
@@ -172,9 +173,15 @@ export default function SamplesRoute(): ReactNode {
         );
 
         if (outcome.kind === 'refused') {
-          // The server answered and said no about this line only. It stays on
-          // screen carrying the server's own words.
-          remaining.push({ ...line, error: outcome.message });
+          // The server answered and said no about this line only. It stays on screen
+          // carrying the remedy and the server's own figures.
+          //
+          // **BE-W97, and this is the line MR-27 C2 stopped at.** It was
+          // `error: outcome.message`, so a real `45004` read "this would put MR27 UCPMP c
+          // over the UCPMP cap for 83aa5660-470b-4c82-aa90-000b5347cb1c this month" -- a
+          // doctor UUID and no numbers -- while the cap, the month-to-date total, this
+          // entry and the period all sat in a DETAIL that `sync_push` discarded.
+          remaining.push({ ...line, error: refusalTextFor(outcome) });
           continue;
         }
         if (outcome.kind === 'queued') queued += 1;

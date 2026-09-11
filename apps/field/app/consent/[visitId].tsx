@@ -27,7 +27,7 @@ import {
   offerableVersions,
 } from '../../src/consent/record';
 import { consentQueueItem, sendOrQueue } from '../../src/sync/outbox';
-import { remedyForSqlState } from '../../src/sync/explanation';
+import { refusalTextFor } from '../../src/sync/explanation';
 
 /**
  * Phase 3 — the handoff, as a route.
@@ -253,9 +253,10 @@ export default function ConsentRoute(): ReactNode {
         if (outcome.kind === 'refused') {
           setRefusal({
             title: 'That was refused',
-            // The remedy first when there is one — it is an instruction. Backend's sentence
-            // is the fallback: written for support, true, and not a next step.
-            detail: remedyForSqlState(outcome.sqlState) ?? outcome.message,
+            // The remedy first when there is one — it is an instruction — then whatever
+            // figures the server attached. BE-W97: a `45001` carries which version was
+            // displayed and which is current, and that used to die inside `sync_push`.
+            detail: refusalTextFor(outcome),
           });
           refresh();
           return;

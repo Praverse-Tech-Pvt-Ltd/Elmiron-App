@@ -665,18 +665,42 @@ const routes: Route[] = [
         // The `45003` on the shift-window row is the point of the change -- that verdict
         // used to be produced by string-matching a message, and now carries the code that
         // FIX-06 minted to replace the string.
-        { status: 'accepted', rejectionCode: null, sqlState: null, warnings: [] as string[] },
-        { status: 'duplicate', rejectionCode: null, sqlState: null, warnings: [] as string[] },
+        {
+          status: 'accepted',
+          rejectionCode: null,
+          sqlState: null,
+          // BE-W97. Null on every accepted verdict, so a client can read absence as
+          // success -- the same property the `sqlState` fixture already asserts.
+          sqlDetail: null,
+          sqlHint: null,
+          warnings: [] as string[],
+        },
+        {
+          status: 'duplicate',
+          rejectionCode: null,
+          sqlState: null,
+          sqlDetail: null,
+          sqlHint: null,
+          warnings: [] as string[],
+        },
         {
           status: 'rejected',
           rejectionCode: 'outside_shift_window',
           sqlState: '45003',
+          // BE-W97. The FIGURES, which is what `sync_push` used to discard: it read
+          // `MESSAGE_TEXT` out of `get stacked diagnostics` and nothing else, so every
+          // `raise ... using detail` in the schema died in that handler. The shift-window
+          // raise attaches the window it was measured against, and this is that shape.
+          sqlDetail: 'occurred at 03:12, shift 09:00-18:00 with 30 minutes grace',
+          sqlHint: 'Ask your manager to correct your shift if these hours are wrong.',
           warnings: [] as string[],
         },
         {
           status: 'accepted',
           rejectionCode: null,
           sqlState: null,
+          sqlDetail: null,
+          sqlHint: null,
           warnings: ['stale_beat_plan'],
         },
         {
@@ -686,6 +710,11 @@ const routes: Route[] = [
           // never stored the original SQLSTATE. The fixture says so rather than inventing
           // one, because an invented code here is the FIX-14 `sizeBytes: 1` shape.
           sqlState: null,
+          // Null for the same reason, and BE-W97 makes it the same reason exactly:
+          // `sync_items` stores the message and nothing else, so a replay has no DETAIL to
+          // read back either.
+          sqlDetail: null,
+          sqlHint: null,
           warnings: [] as string[],
         },
       ] as const;
@@ -699,6 +728,8 @@ const routes: Route[] = [
               status: verdict.status,
               rejectionCode: verdict.rejectionCode,
               sqlState: verdict.sqlState,
+              sqlDetail: verdict.sqlDetail,
+              sqlHint: verdict.sqlHint,
               rejectionDetail:
                 verdict.rejectionCode === null
                   ? null

@@ -34,6 +34,7 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ visitId: '22222222-2222-4222-8222-222222222201' }),
 }));
 
+import { SyncPushRefusal } from '../sync/push-client';
 import SamplesRoute from '../../app/samples/[visitId]';
 
 const visit = VisitSchema.parse({
@@ -161,6 +162,65 @@ describe('app/samples/[visitId].tsx — C5', () => {
 
     expect(await screen.findByText('This visit is already closed.')).toBeTruthy();
     expect(screen.queryByText('Recorded')).toBeNull();
+  });
+
+  it('BE-W97 \u2014 a 45004 arrives with the CAP, the month-to-date and the period', async () => {
+    // **This is the case `G-WRITE`'s last item is about.** MR-27 C2 drove a real 45004 from
+    // this screen with a test-only cap of 1 and a sample of 2. It fired, it was refused, and
+    // what the MR read was:
+    //
+    //     this would put MR27 UCPMP c over the UCPMP cap for
+    //     83aa5660-470b-4c82-aa90-000b5347cb1c this month
+    //
+    // A raw doctor UUID and no figures. The brief's test is "45004 with the cap,
+    // month-to-date and period as real numbers", and a sentence containing a UUID and no
+    // numbers does not satisfy it.
+    //
+    // The refusal below is the SHAPE the server now produces: `enforce_ucpmp_sample_cap`'s
+    // own DETAIL, threaded through `sync_push` by 20260911000800, with the doctor named
+    // rather than identified by 20260911000900.
+    loaded();
+    mockCreateSampleAndInput.mockClear();
+    mockCreateSampleAndInput.mockRejectedValue(
+      new SyncPushRefusal({
+        message: 'this would put Elmiron 100 mg, 30s over the UCPMP cap for Dr. S. Iyer this month',
+        sqlState: '45004',
+        rejectionCode: 'internal_error',
+        deadLettered: false,
+        detail: 'cap 1, already given 0, this entry 2, period starting 2026-09-01',
+        hint: 'Stop and speak to your manager. The quantity is never trimmed to fit.',
+      }),
+    );
+    await render(<SamplesRoute />);
+    await screen.findByText(/Dr\. S\. Iyer/u);
+
+    await fireEvent.changeText(screen.getByLabelText('What you left'), 'Elmiron 100 mg, 30s');
+    await fireEvent.changeText(screen.getByLabelText('Declared value, \u20b9 each'), '240');
+    await fireEvent.press(screen.getByText('Record what I left'));
+
+    // One node, read back and asserted figure by figure. `findByText` with a substring
+    // matcher would pass on a screen showing only part of it.
+    const shown = await screen.findByText(/UCPMP limit/u);
+    const children: unknown = (shown.props as { children?: unknown }).children;
+    // The screen renders the whole refusal in ONE Text node, and that is ASSERTED rather
+    // than assumed: if it were split across children, `String(children)` would be
+    // "[object Object]" and every `toContain` below would fail for a reason that looks
+    // nothing like the reason.
+    expect(typeof children).toBe('string');
+    const text = children as string;
+    expect(text).toContain('speak to your manager');
+    expect(text).toContain('cap 1');
+    expect(text).toContain('already given 0');
+    expect(text).toContain('this entry 2');
+    expect(text).toContain('period starting 2026-09-01');
+    // And no UUID anywhere in it. This is the half of the finding that is about the
+    // MESSAGE rather than the DETAIL, and it would still be broken if only the transport
+    // had been fixed.
+    expect(text).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/u);
+
+    // The line stays put, and nothing was queued: the server answered.
+    expect(screen.queryByText('Recorded')).toBeNull();
+    expect(screen.getByLabelText('What you left').props.value).toBe('Elmiron 100 mg, 30s');
   });
 });
 

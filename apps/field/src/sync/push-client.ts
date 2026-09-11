@@ -56,18 +56,35 @@ export class SyncPushRefusal extends Error {
   readonly sqlState: string | null;
   readonly rejectionCode: SyncRejectionCode | null;
   readonly deadLettered: boolean;
+  /**
+   * BE-W97 — the server's own figures for this refusal, verbatim.
+   *
+   * `message` is the sentence; this is the numbers in it. For `45004` that is the cap, the
+   * month-to-date total, this entry and the period — without which "this would go past the
+   * UCPMP limit" is not something an MR can act on or repeat to their manager.
+   *
+   * Optional in the constructor because every existing caller predates it and a required
+   * field would have been filled with `null` at each of them to keep the build quiet —
+   * which is how a field arrives everywhere and means nothing anywhere.
+   */
+  readonly detail: string | null;
+  readonly hint: string | null;
 
   constructor(args: {
     readonly message: string;
     readonly sqlState: string | null;
     readonly rejectionCode: SyncRejectionCode | null;
     readonly deadLettered: boolean;
+    readonly detail?: string | null;
+    readonly hint?: string | null;
   }) {
     super(args.message);
     this.name = 'SyncPushRefusal';
     this.sqlState = args.sqlState;
     this.rejectionCode = args.rejectionCode;
     this.deadLettered = args.deadLettered;
+    this.detail = args.detail ?? null;
+    this.hint = args.hint ?? null;
   }
 }
 
@@ -170,6 +187,11 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
           sqlState: verdict.sqlState,
           rejectionCode: verdict.rejectionCode,
           deadLettered: verdict.status === 'dead_lettered',
+          // BE-W97. The figures, carried beside the sentence rather than folded into it,
+          // so a screen can render them under the remedy and a screen that does not want
+          // them is unchanged.
+          detail: verdict.sqlDetail,
+          hint: verdict.sqlHint,
         });
     }
   };

@@ -141,6 +141,46 @@ const RETRYABLE: ReadonlySet<SyncRejectionCode> = new Set<SyncRejectionCode>([
 export const remedyForSqlState = (sqlState: string | null): string | null =>
   REMEDIES[refusalForSqlState(sqlState).code] ?? null;
 
+/** What `sendOrQueue` hands a screen that was refused in the moment. */
+export interface InTheMomentRefusal {
+  readonly sqlState: string | null;
+  readonly message: string;
+  readonly detail: string | null;
+}
+
+/**
+ * The whole sentence an MR reads when a write is refused in front of a doctor — BE-W97.
+ *
+ * Three parts, in the order they are useful:
+ *
+ *   1. **The remedy**, because it is the only part that is an INSTRUCTION. Backend's own
+ *      sentence is the fallback when there is no remedy — true, written for support, and
+ *      not a next step.
+ *   2. **The server's figures**, when it sent any. This is the half MR-27 C2 found
+ *      missing: a real `45004` reached the screen as *"this would put MR27 UCPMP c over
+ *      the UCPMP cap for 83aa5660-… this month"*, and "do not hand anything else over,
+ *      speak to your manager" is not something an MR can act on without knowing WHAT the
+ *      cap is, how much of it is already gone, and which month it resets.
+ *
+ * The figures are rendered exactly as the server wrote them and are never parsed. They are
+ * prose from the raise site; `sqlState` is the contract.
+ *
+ * Attributed — *"Figures from the server"* — rather than blended into the app's own words.
+ * The app did not count these and must not appear to have: MR-15's rule is that the client
+ * re-derives nothing the server owns, and that applies to the voice a sentence is said in
+ * as much as to the number in it.
+ */
+export const refusalTextFor = (refusal: InTheMomentRefusal): string => {
+  const lead = remedyForSqlState(refusal.sqlState) ?? refusal.message;
+  // Whitespace-only is treated as absent alongside null. `sync_push` already normalises
+  // the empty string away, so this is the second line of defence rather than the first --
+  // and MR-26 C is the reason there is a second: the three spellings of absent all
+  // interpolated into the same empty parentheses on a screen.
+  const figures = refusal.detail?.trim();
+  if (figures === undefined || figures === '') return lead;
+  return `${lead}\n\nFigures from the server: ${figures}.`;
+};
+
 export const presentRejection = (record: RejectionRecord): RejectionPresentation => {
   // The SQLSTATE first, because it is the precise answer. `refusalForSqlState` returns
   // `unrecognised` for null and for anything unmapped, so this needs no null branch of its

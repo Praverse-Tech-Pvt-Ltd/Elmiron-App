@@ -405,6 +405,27 @@ export const SyncPushResultSchema = z.object({
    * SQLSTATE was never stored.
    */
   sqlState: z.string().nullable(),
+  /**
+   * BE-W97 — the raiser's `DETAIL`, verbatim.
+   *
+   * Every `450xx` in this schema is raised with figures attached:
+   * `45004` carries *"cap 1, already given 0, this entry 2, period starting 2026-09-01"*,
+   * `45008` carries *"captured 3 days ago, the maximum is 72 hours"*. `sync_push` read only
+   * `MESSAGE_TEXT` out of `get stacked diagnostics`, so all of it died in the handler and a
+   * refusal reached the MR as a sentence with no numbers in it.
+   *
+   * **Render it. Never parse it.** It is prose written by the raise site and it is not a
+   * contract — `refusalForSqlState(sqlState)` is the one derivation that decides anything,
+   * and `error-contract.spec.ts` guards that in both directions. A client reading server
+   * prose to make a decision is the defect FIX-06 minted `45002`/`45003` to remove.
+   *
+   * `null` on an accepted item, on a malformed item (raised by `sync_push` itself, so
+   * nothing is stacked), and on a dead-letter replay — `sync_items` stores the message and
+   * nothing else, exactly as with `sqlState`.
+   */
+  sqlDetail: z.string().nullable(),
+  /** BE-W97 — the raiser's `HINT`. Same rules as `sqlDetail`: rendered, never parsed. */
+  sqlHint: z.string().nullable(),
   /** Human-readable detail for support. Not for display to the MR unmodified. */
   rejectionDetail: z.string().nullable(),
   /** Accepted, but with something the MR should know — e.g. `stale_beat_plan`. */

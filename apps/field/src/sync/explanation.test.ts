@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SyncRejectionCodeSchema } from '@fieldforce/core';
-import { presentRejection } from './explanation';
+import { presentRejection, refusalTextFor } from './explanation';
 import type { RejectionRecord } from './reducer';
 
 const record = (over: Partial<RejectionRecord> = {}): RejectionRecord => ({
@@ -145,5 +145,76 @@ describe('MR-17 B2 — a SQLSTATE carries its own remedy', () => {
     );
     expect(new Set(codes).size, 'the queue code now discriminates; re-check these tests').toBe(1);
     expect(codes[0]).toBe('internal_error');
+  });
+});
+
+describe('BE-W97 — refusalTextFor: the remedy AND the server\u2019s figures', () => {
+  /** Exactly what `sendOrQueue` hands a screen that was refused in the moment. */
+  const refusal = (over: Partial<Parameters<typeof refusalTextFor>[0]> = {}) => ({
+    sqlState: '45004',
+    message: 'this would put Elmiron 100mg over the UCPMP cap for Dr. S. Iyer this month',
+    detail: 'cap 1, already given 0, this entry 2, period starting 2026-09-01',
+    ...over,
+  });
+
+  it('puts the cap, the month-to-date, this entry and the period on the screen', () => {
+    // The brief\u2019s own test for `G-WRITE`, and what MR-27 C2 could not satisfy: a real
+    // 45004 reached the MR as a sentence containing a doctor UUID and no numbers at all.
+    const text = refusalTextFor(refusal());
+    expect(text).toContain('cap 1');
+    expect(text).toContain('already given 0');
+    expect(text).toContain('this entry 2');
+    expect(text).toContain('period starting 2026-09-01');
+  });
+
+  it('leads with the REMEDY, because it is the only part that is an instruction', () => {
+    const text = refusalTextFor(refusal());
+    expect(text).toMatch(/^This would go past the UCPMP limit/);
+    expect(text).toMatch(/manager/i);
+    // And the figures come after it, not before. An MR reading the first line must get the
+    // action; numbers first would bury it.
+    expect(text.indexOf('manager')).toBeLessThan(text.indexOf('cap 1'));
+  });
+
+  it('ATTRIBUTES the figures to the server rather than speaking them as its own', () => {
+    // MR-15\u2019s rule reaches the voice a sentence is said in, not only the number in it.
+    // The app did not count these and must not appear to have.
+    expect(refusalTextFor(refusal())).toMatch(/Figures from the server:/);
+  });
+
+  it('falls back to the SERVER\u2019S sentence when the code has no remedy', () => {
+    // An unmapped SQLSTATE has no remedy on purpose. The message is then the only true
+    // thing available, and the figures still travel with it.
+    const text = refusalTextFor(refusal({ sqlState: '99999' }));
+    expect(text).toContain('over the UCPMP cap');
+    expect(text).toContain('cap 1');
+    expect(text).not.toMatch(/UCPMP limit for this doctor/);
+  });
+
+  it('says NOTHING extra when the server sent no figures \u2014 all three spellings', () => {
+    // MR-26 C: missing, null and empty string are the three spellings of absent, and they
+    // all interpolated into the same empty parentheses on a screen. Whitespace is the
+    // fourth and is the one a `format()` with a null argument can produce.
+    for (const detail of [null, '', '   ']) {
+      const text = refusalTextFor(refusal({ detail }));
+      expect(text).not.toMatch(/Figures from the server/);
+      expect(text).not.toMatch(/:\s*\.$/);
+      expect(text).toBe(
+        'This would go past the UCPMP limit for this doctor this month. Do not hand anything else over \u2014 speak to your manager first.',
+      );
+    }
+  });
+
+  it('carries the figures for every OTHER 450xx too, not just the cap', () => {
+    // BE-W97 is a class, not a code. Fifteen raise sites attach a DETAIL and all fifteen
+    // were dying in `sync_push`\u2019s handler. If this only worked for 45004 it would be the
+    // special case the migration header argues against.
+    const tooOld = refusalTextFor({
+      sqlState: '45008',
+      message: 'this consent was captured too long ago',
+      detail: 'captured 4 days ago, the maximum is 72 hours',
+    });
+    expect(tooOld).toMatch(/sync sooner/i);
+    expect(tooOld).toContain('the maximum is 72 hours');
   });
 });

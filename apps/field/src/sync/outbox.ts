@@ -76,6 +76,21 @@ export type SendOutcome =
        * that is the honest outcome rather than a guessed one.
        */
       readonly sqlState: string | null;
+      /**
+       * The server's FIGURES for this refusal, verbatim — BE-W97.
+       *
+       * `sqlState` picks the remedy; this says what the numbers behind it are. For `45004`
+       * that is *"cap 1, already given 0, this entry 2, period starting 2026-09-01"*. MR-27
+       * C2 drove a real one and the MR saw a sentence containing a doctor UUID and no
+       * figures at all, because `sync_push` read `MESSAGE_TEXT` out of
+       * `get stacked diagnostics` and discarded `PG_EXCEPTION_DETAIL`.
+       *
+       * **Rendered, never parsed.** It is prose from the raise site, not a contract.
+       *
+       * Null for an `ApiRequestError`, which is a transport category with no raise site,
+       * and null on a dead-letter replay, where the server has only the stored message.
+       */
+      readonly detail: string | null;
     }
   /** No answer. The work is on disk and will go later. */
   | { readonly kind: 'queued' };
@@ -265,6 +280,9 @@ export const sendOrQueue = async (
         kind: 'refused',
         message: error.message,
         sqlState: error instanceof SyncPushRefusal ? error.sqlState : null,
+        // BE-W97. Null for an `ApiRequestError`, which is a transport category and carries
+        // no raise site at all — the same reason `sqlState` is null there.
+        detail: error instanceof SyncPushRefusal ? error.detail : null,
       };
     }
 

@@ -31,6 +31,10 @@ const response = (over: Record<string, unknown> = {}) => ({
       status: 'accepted',
       rejectionCode: null,
       sqlState: null,
+      // BE-W97. Required by `SyncPushResultSchema`, not optional, and that is the point:
+      // a verdict whose keys vary by branch pushes the branching into every client.
+      sqlDetail: null,
+      sqlHint: null,
       rejectionDetail: null,
       warnings: [],
     },
@@ -164,6 +168,8 @@ describe('EXACTLY ONCE — B4', () => {
             status: 'duplicate',
             rejectionCode: null,
             sqlState: null,
+            sqlDetail: null,
+            sqlHint: null,
             rejectionDetail: null,
             warnings: [],
           },
@@ -200,6 +206,8 @@ describe('what a refusal carries', () => {
             status: 'rejected',
             rejectionCode: 'internal_error',
             sqlState: '45001',
+            sqlDetail: 'displayed 1a2b, active at 09:00 was 3c4d, language en-IN',
+            sqlHint: 'Re-read the current notice aloud before asking again.',
             rejectionDetail: 'the consent notice changed since it was displayed',
             warnings: [],
           },
@@ -213,6 +221,56 @@ describe('what a refusal carries', () => {
     expect((error as SyncPushRefusal).sqlState).toBe('45001');
     expect((error as SyncPushRefusal).deadLettered).toBe(false);
     expect((error as SyncPushRefusal).message).toMatch(/consent notice changed/);
+    // BE-W97. The figures, carried rather than dropped. `sync_push` read only
+    // `MESSAGE_TEXT` out of `get stacked diagnostics`, so every `raise ... using detail` in
+    // the schema died in that handler -- fifteen of them, all written to tell somebody a
+    // number.
+    expect((error as SyncPushRefusal).detail).toBe(
+      'displayed 1a2b, active at 09:00 was 3c4d, language en-IN',
+    );
+    expect((error as SyncPushRefusal).hint).toBe(
+      'Re-read the current notice aloud before asking again.',
+    );
+  });
+
+  it('carries the UCPMP FIGURES, which is the whole of BE-W97', async () => {
+    // MR-27 C2 drove a real 45004 from the samples screen. It fired, it was refused, and
+    // the MR was shown a sentence containing a raw doctor UUID and no numbers -- while the
+    // cap, the month-to-date total, this entry and the period all sat in a DETAIL nothing
+    // transmitted. This is the exact verdict that capture produced, with the DETAIL the
+    // trigger actually raised.
+    const { push } = clientWith(() => ({
+      data: response({
+        results: [
+          {
+            id: ITEM,
+            status: 'rejected',
+            rejectionCode: 'internal_error',
+            sqlState: '45004',
+            sqlDetail: 'cap 1, already given 0, this entry 2, period starting 2026-09-01',
+            sqlHint: 'Stop and speak to your manager. The quantity is never trimmed to fit.',
+            rejectionDetail:
+              'this would put Elmiron 100mg over the UCPMP cap for Dr. S. Iyer this month',
+            warnings: [],
+          },
+        ],
+      }),
+      error: null,
+    }));
+
+    const error = await push.createSampleAndInput(sample).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(SyncPushRefusal);
+    const refusal = error as SyncPushRefusal;
+    // Each figure named, not just "the detail is non-null" -- the container would pass on
+    // an empty string, and MR-27's gotcha entry is about exactly that.
+    expect(refusal.detail).toContain('cap 1');
+    expect(refusal.detail).toContain('already given 0');
+    expect(refusal.detail).toContain('this entry 2');
+    expect(refusal.detail).toContain('period starting 2026-09-01');
+    // And the doctor by NAME. The UUID is what MR-27 C2 saw and is the second half of the
+    // same finding.
+    expect(refusal.message).toContain('Dr. S. Iyer');
+    expect(refusal.message).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/);
   });
 
   it('marks a dead_lettered verdict as such, so it is not retried forever', async () => {
@@ -224,6 +282,12 @@ describe('what a refusal carries', () => {
             status: 'dead_lettered',
             rejectionCode: 'internal_error',
             sqlState: '45004',
+            // Null on a replay, and the assertion below says so. `sync_items` stores the
+            // message and nothing else, so the server has no DETAIL to read back -- the
+            // same reason `sqlState` is null on that path. It is the sixth attempt at an
+            // item whose first five each carried the figures.
+            sqlDetail: null,
+            sqlHint: null,
             rejectionDetail: 'over the cap',
             warnings: [],
           },
@@ -233,6 +297,7 @@ describe('what a refusal carries', () => {
     }));
     const error = await push.createSampleAndInput(sample).catch((e: unknown) => e);
     expect((error as SyncPushRefusal).deadLettered).toBe(true);
+    expect((error as SyncPushRefusal).detail).toBeNull();
   });
 
   it('a TRANSPORT failure is NOT a refusal — it must stay queued', async () => {
