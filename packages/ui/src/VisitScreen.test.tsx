@@ -165,3 +165,45 @@ describe('after the recording question is answered', () => {
     expect(screen.queryByText('Ask about recording')).toBeNull();
   });
 });
+
+describe('MR-26 B5: a pending stage must not borrow confirmed wording', () => {
+  /**
+   * The rule this enforces is the one MR-26 Part B is careful not to break. The client may
+   * ACT on a write it watched itself queue; it may not DESCRIBE that write in the words it
+   * uses for one the server has acknowledged.
+   *
+   * Both directions are asserted, because either lie is believed just as readily: a pending
+   * stage claiming confirmation, and a confirmed stage hedged into uselessness.
+   */
+  it('says "waiting to send" when the check-in is only queued', async () => {
+    await render(<VisitScreen {...props({ stage: 'during', stagePending: true })} />);
+    expect(screen.getByText(/waiting to send/i)).toBeTruthy();
+    // The confirmed sentence asserts a server fact the server has not given.
+    expect(screen.queryByText('You are checked in')).toBeNull();
+  });
+
+  it('THE POSITIVE CONTROL: says "You are checked in" when the server HAS confirmed it', async () => {
+    // Without this, hedging every stage would satisfy the case above while telling an MR
+    // whose write landed ten minutes ago that it is still waiting. That is the same defect
+    // pointing the other way.
+    await render(<VisitScreen {...props({ stage: 'during' })} />);
+    expect(screen.getByText('You are checked in')).toBeTruthy();
+    expect(screen.queryByText(/waiting to send/i)).toBeNull();
+  });
+
+  it('marks a queued CHECK-OUT as pending too, not just the arrival', async () => {
+    await render(
+      <VisitScreen {...props({ stage: 'after', stagePending: true, actionLabel: null })} />,
+    );
+    expect(screen.getByText(/waiting to send/i)).toBeTruthy();
+    expect(screen.queryByText('Visit finished')).toBeNull();
+  });
+
+  it('leaves `before` alone — nothing has been queued, so nothing is pending', async () => {
+    // `before` has a pending entry only so the lookup is total. If it ever started saying
+    // "waiting to send" it would be announcing a write that does not exist.
+    await render(<VisitScreen {...props({ stage: 'before', stagePending: true })} />);
+    expect(screen.getByText('Not started')).toBeTruthy();
+    expect(screen.queryByText(/waiting to send/i)).toBeNull();
+  });
+});

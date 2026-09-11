@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ConsentTextVersionSchema, CreateConsentRecordRequestSchema } from '@fieldforce/core';
 import type { ConsentTextVersion } from '@fieldforce/core';
 import {
+  activeNoticeFor,
   blockedReason,
   consentRequest,
   languageOptionsFrom,
@@ -200,5 +201,98 @@ describe('the offered order is deterministic, because a default depends on it', 
     // If this ever collapsed to one language the ordering cases would pass trivially and
     // the guard would be back to proving nothing -- MR-16's finding, applied to itself.
     expect(new Set([en.language, hi.language]).size).toBe(2);
+  });
+});
+
+describe('MR-26 B1: activeNoticeFor mirrors the server rule', () => {
+  const version = (over: Partial<ConsentTextVersion> = {}): ConsentTextVersion => ({
+    id: '11111111-1111-4111-8111-111111111111',
+    versionLabel: 'v1',
+    language: 'en-IN',
+    fullText: 'text',
+    hash: 'a'.repeat(64),
+    effectiveFrom: '2026-08-01T00:00:00.000Z',
+    effectiveUntil: null,
+    createdAt: '2026-08-01T00:00:00.000Z',
+    ...over,
+  });
+
+  const NOW = '2026-09-11T12:00:00.000Z';
+
+  it('picks the newest version in force for that language', () => {
+    const older = version({ id: '11111111-1111-4111-8111-111111111111' });
+    const newer = version({
+      id: '22222222-2222-4222-8222-222222222222',
+      effectiveFrom: '2026-09-01T00:00:00.000Z',
+    });
+    expect(activeNoticeFor([older, newer], 'en-IN', NOW)?.id).toBe(newer.id);
+  });
+
+  it('does not cross languages — the clause MR-16 made falsifiable', () => {
+    const english = version({ id: '11111111-1111-4111-8111-111111111111', language: 'en-IN' });
+    const hindi = version({
+      id: '22222222-2222-4222-8222-222222222222',
+      language: 'hi-IN',
+      // NEWER, so a rule that ignored language would return this one.
+      effectiveFrom: '2026-09-10T00:00:00.000Z',
+    });
+    expect(activeNoticeFor([english, hindi], 'en-IN', NOW)?.id).toBe(english.id);
+    expect(activeNoticeFor([english, hindi], 'hi-IN', NOW)?.id).toBe(hindi.id);
+  });
+
+  it('excludes a RETIRED notice, which is the only UPDATE the table permits', () => {
+    // `effective_until` is the one column `reject_consent_text_rewrite` allows to change, and
+    // the reason `updated_at` was added so retirement travels in the pull at all. A client
+    // that kept offering a retired notice would capture against it and meet 45001 in front of
+    // a doctor.
+    const retired = version({ effectiveUntil: '2026-09-01T00:00:00.000Z' });
+    expect(activeNoticeFor([retired], 'en-IN', NOW)).toBeNull();
+  });
+
+  it('excludes one that is not yet in force', () => {
+    expect(
+      activeNoticeFor([version({ effectiveFrom: '2026-12-01T00:00:00.000Z' })], 'en-IN', NOW),
+    ).toBeNull();
+  });
+
+  it('TIEBREAKS on createdAt then id, exactly as active_consent_text_at does', () => {
+    // **The fidelity case, and the reason this is not `offerableVersions(...)[0]`.** The SQL
+    // orders by `effective_from desc, created_at desc, id desc`. `offerableVersions` sorts on
+    // `effectiveFrom` alone -- enough for a stable display order, not enough to AGREE with the
+    // server when two notices in one language share an `effective_from`. A disagreement does
+    // not fail here; it fails as a 45001 refusal in front of a doctor.
+    const sameFrom = '2026-09-01T00:00:00.000Z';
+    const earlier = version({
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      effectiveFrom: sameFrom,
+      createdAt: '2026-09-01T09:00:00.000Z',
+    });
+    const later = version({
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      effectiveFrom: sameFrom,
+      createdAt: '2026-09-01T10:00:00.000Z',
+    });
+    expect(activeNoticeFor([earlier, later], 'en-IN', NOW)?.id).toBe(later.id);
+
+    // And with createdAt equal too, the id breaks the tie descending — the SQL's last key.
+    const sameCreated = '2026-09-01T09:00:00.000Z';
+    const lowId = version({
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      effectiveFrom: sameFrom,
+      createdAt: sameCreated,
+    });
+    const highId = version({
+      id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      effectiveFrom: sameFrom,
+      createdAt: sameCreated,
+    });
+    expect(activeNoticeFor([lowId, highId], 'en-IN', NOW)?.id).toBe(highId.id);
+  });
+
+  it('THE POSITIVE CONTROL: an empty list is null, not a throw and not a guess', () => {
+    // Without this, "return the first thing you find" would satisfy every case above. An empty
+    // store is a real state -- a fresh install that has not synced -- and it must produce the
+    // "no notice" wording rather than an exception on a screen in front of a doctor.
+    expect(activeNoticeFor([], 'en-IN', NOW)).toBeNull();
   });
 });

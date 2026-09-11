@@ -447,7 +447,17 @@ export type SyncPushResponse = z.infer<typeof SyncPushResponseSchema>;
  * the build in both directions — it caught this file being left behind within a minute of
  * the migration landing.
  */
-export const SyncPullEntitySchema = z.enum(['visit', 'beat_plan', 'doctor', 'clinic_address']);
+export const SyncPullEntitySchema = z.enum([
+  'visit',
+  'beat_plan',
+  'doctor',
+  'clinic_address',
+  // MR-26 B1. The consent NOTICE, so a doctor can be asked with no signal. Server-issued,
+  // tenant-scoped by a RESTRICTIVE policy, immutable except for retirement. NOT the consent
+  // RECORD, which stays out of the pull for MR-12 Q4's reason: ~3,000 audit rows a day for
+  // reinstall-only value.
+  'consent_text_version',
+]);
 export type SyncPullEntity = z.infer<typeof SyncPullEntitySchema>;
 
 /**

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CreateCheckInRequestSchema, VisitSchema } from '@fieldforce/core';
 import type { Coordinates, Visit } from '@fieldforce/core';
-import { actionLabelFor, blockedReason, checkInRequest, stageOf } from './visit';
+import { actionLabelFor, blockedReason, checkInRequest, stageOf, witnessedStage } from './visit';
 
 const coordinates: Coordinates = {
   latitude: 18.5204,
@@ -108,5 +108,89 @@ describe('a check-in is never sent without a real position', () => {
       coordinates,
     });
     expect(request.coordinates).toBe(coordinates);
+  });
+});
+
+describe('MR-26 B2: witnessedStage — facts the client saw itself record', () => {
+  const visit = (status: Visit['status']): Visit =>
+    ({
+      id: '55555555-5555-4555-8555-555555555501',
+      mrId: 'm',
+      doctorId: 'd',
+      beatPlanId: null,
+      clinicAddressId: null,
+      status,
+      scheduledFor: null,
+      startedAt: null,
+      completedAt: null,
+      notMetReason: null,
+      receivedAt: '2026-09-11T00:00:00.000Z',
+      createdAt: '2026-09-11T00:00:00.000Z',
+      updatedAt: '2026-09-11T00:00:00.000Z',
+    }) satisfies Visit;
+
+  const q = (entity: string, entityId: string): { entity: string; entityId: string } => ({
+    entity,
+    entityId,
+  });
+  const V = '55555555-5555-4555-8555-555555555501';
+
+  it('a QUEUED check-in makes the visit `during`, and says it is pending', () => {
+    // The defect this exists for. Offline, `record_check_in` never runs, `visit.status` stays
+    // `planned`, and before this the screen offered nothing but check-in for the whole visit.
+    const result = witnessedStage(visit('planned'), [q('check_in', V)]);
+    expect(result.stage).toBe('during');
+    expect(result.pending, 'the server has not confirmed this and the copy must say so').toBe(true);
+  });
+
+  it('a QUEUED check-out makes it `after`, pending', () => {
+    const result = witnessedStage(visit('planned'), [q('check_in', V), q('check_out', V)]);
+    expect(result.stage).toBe('after');
+    expect(result.pending).toBe(true);
+  });
+
+  it('check-out WINS over check-in when both are queued', () => {
+    // A departure is the later fact. Offering check-out again to an MR who has already taken
+    // it is how a visit gets two departures.
+    expect(witnessedStage(visit('planned'), [q('check_out', V), q('check_in', V)]).stage).toBe(
+      'after',
+    );
+  });
+
+  it('THE POSITIVE CONTROL: a SERVER-confirmed stage is never marked pending', () => {
+    // Without this, "always pending" would satisfy every case above and put a pending marker
+    // on every screen in the product, including ones the server has fully confirmed. That is
+    // the inverse lie and it would be believed just as readily.
+    const confirmed = witnessedStage(visit('in_progress'), []);
+    expect(confirmed.stage).toBe('during');
+    expect(confirmed.pending).toBe(false);
+  });
+
+  it('a queued row for ANOTHER visit changes nothing — the scoping control', () => {
+    // `entityId` on a capture queue item is the VISIT id. A test that queued an item without
+    // varying the visit could not tell "this visit's check-in" from "any check-in", and one
+    // MR's queue holds many.
+    const other = witnessedStage(visit('planned'), [
+      q('check_in', '66666666-6666-4666-8666-666666666602'),
+    ]);
+    expect(other.stage).toBe('before');
+    expect(other.pending).toBe(false);
+  });
+
+  it('does not re-open a visit the SERVER has already closed', () => {
+    // Once the server says `completed`, a stale queued check-in must not drag it back to
+    // `during`. That would be the client overruling the server rather than anticipating it,
+    // which is the line this whole change is careful not to cross.
+    const closed = witnessedStage(visit('completed'), [q('check_in', V)]);
+    expect(closed.stage).toBe('after');
+    expect(closed.pending).toBe(false);
+  });
+
+  it('agrees with stageOf whenever the queue is empty', () => {
+    // The compatibility control: with nothing queued this must be exactly the old behaviour,
+    // for every status, or the change has moved something it did not mean to.
+    for (const status of ['planned', 'in_progress', 'completed', 'not_met', 'cancelled'] as const) {
+      expect(witnessedStage(visit(status), []).stage).toBe(stageOf(visit(status)));
+    }
   });
 });

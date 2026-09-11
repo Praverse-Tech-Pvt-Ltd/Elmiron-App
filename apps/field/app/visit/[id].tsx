@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { ConsentRecord } from '@fieldforce/core';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -20,7 +20,12 @@ import { Screen, VisitScreen } from '@fieldforce/ui';
 import { createClientForScenario } from '../../src/api';
 import { createPushClient } from '../../src/sync/push-client';
 import { takeFix } from '../../src/capture/location';
-import { actionLabelFor, blockedReason, checkInRequest, stageOf } from '../../src/capture/visit';
+import {
+  actionLabelFor,
+  blockedReason,
+  checkInRequest,
+  witnessedStage,
+} from '../../src/capture/visit';
 import {
   authorisingConsent,
   blockReason,
@@ -30,6 +35,9 @@ import {
   recordingRequest,
 } from '../../src/capture/recording';
 import { checkInQueueItem, checkOutQueueItem, sendOrQueue } from '../../src/sync/outbox';
+import { loadQueueState } from '../../src/sync/async-storage-store';
+import { emptyQueue } from '../../src/sync/reducer';
+import type { SyncQueueState } from '../../src/sync/reducer';
 import { unavailableReason } from '../../src/capture/preconditions';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
@@ -105,7 +113,26 @@ export default function VisitRoute(): ReactNode {
     };
   }, []);
 
-  const stage = stageOf(visit);
+  // The queue is re-read whenever this screen is entered AND after every write, because a
+  // check-in that has just been queued must change the stage immediately -- an MR who presses
+  // "I am here" with no signal and sees "Not started" will press it again.
+  const [queue, setQueue] = useState<SyncQueueState>(emptyQueue);
+  const refreshQueue = useCallback(() => {
+    void loadQueueState().then(setQueue);
+  }, []);
+  useEffect(refreshQueue, [refreshQueue]);
+
+  // **MR-26 B2. The stage the client WITNESSED, not only the one the server confirmed.**
+  //
+  // `stageOf(visit)` reads `visit.status`, which only the server writes. Offline that never
+  // moves, so a checked-in MR saw "Not started" and was offered nothing but check-in for the
+  // rest of the visit -- three of the five writes unreachable, and FE-G2 with them.
+  //
+  // A queued check-in is a fact this device watched itself record. Acting on it is MR-02's
+  // constraint, not a breach of the honesty rule: `stagePending` carries the distinction
+  // through to the copy, and `STAGE_WORDS_PENDING` says "waiting to send" rather than
+  // claiming the server has it.
+  const { stage, pending: stagePending } = witnessedStage(visit, queue.items);
 
   /**
    * Whether a consultation may be recorded right now.
@@ -246,12 +273,16 @@ export default function VisitRoute(): ReactNode {
           stage === 'before' ? checkInQueueItem(body) : checkOutQueueItem(body),
         );
 
+        refreshQueue();
         if (sendResult.kind === 'refused') {
           // The server answered and said no. That is a decision, shown as one.
           setFailure({ title: 'That was refused', detail: sendResult.message });
           return;
         }
         if (sendResult.kind === 'queued') {
+          // The stage must advance NOW. Without this the MR presses "I am here", sees
+          // "Not started" still, and presses again.
+          refreshQueue();
           setBlocked(
             'Saved on this phone. It will send by itself when you have signal — nothing is lost.',
           );
@@ -345,6 +376,7 @@ export default function VisitRoute(): ReactNode {
           router.push(`/report/${visit?.id ?? id}`);
         }}
         stage={stage}
+        stagePending={stagePending}
         startedLabel={
           // MR-24 B. `clockFrom` is a CHARACTER SLICE of the ISO string, correct only
           // while the server sends the territory's own offset -- which the mock at :4010

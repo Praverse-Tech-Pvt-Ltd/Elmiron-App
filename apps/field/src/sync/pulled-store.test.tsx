@@ -320,6 +320,7 @@ describe('the records and the cursor move together', () => {
       doctor: new Map([[ASHA.id, ASHA]]),
       beat_plan: new Map(),
       clinic_address: new Map(),
+      consent_text_version: new Map(),
     });
     await cursors.save(USER, 'cursor-from-the-previous-run');
 

@@ -142,6 +142,10 @@ describe.skipIf(!reachable)('C4 — what the payload actually contains', () => {
     expect(Object.keys(payloads).sort()).toEqual([
       'beat_plan',
       'clinic_address',
+      // MR-26 B1. The consent NOTICE, so consent can be captured with no signal. It arrived
+      // here first as a FAILURE of this assertion, which is the assertion working: the
+      // migration landed and this list said so before anything else did.
+      'consent_text_version',
       'doctor',
       'visit',
     ]);

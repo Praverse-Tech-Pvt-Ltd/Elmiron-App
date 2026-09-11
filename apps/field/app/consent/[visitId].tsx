@@ -7,7 +7,7 @@ import { ConsentDetailsScreen, ConsentScreen, Screen } from '@fieldforce/ui';
 import type { ConsentAnswer } from '@fieldforce/ui';
 import { createPushClient } from '../../src/sync/push-client';
 import { unavailableReason } from '../../src/capture/preconditions';
-import { fetchActiveNotice, fetchConsentNotices } from '../../src/consent/notices';
+import { noticesFromStore } from '../../src/consent/notices';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import type { PreconditionMessage } from '../../src/capture/preconditions';
@@ -19,6 +19,7 @@ import {
   NEVER_COLLECTED,
 } from '../../src/consent/content';
 import {
+  activeNoticeFor,
   blockedReason,
   consentRequest,
   languageOptionsFrom,
@@ -74,7 +75,6 @@ export default function ConsentRoute(): ReactNode {
   const [versions, setVersions] = useState<readonly ConsentTextVersion[]>([]);
   const [language, setLanguage] = useState<string | null>(null);
   const [notice, setNotice] = useState<ConsentTextVersion | null>(null);
-  const [failed, setFailed] = useState(false);
   /**
    * Whether the notice has been looked for yet.
    *
@@ -101,60 +101,61 @@ export default function ConsentRoute(): ReactNode {
       ? null
       : (doctorsFromStore(store).find((candidate) => candidate.id === visit.doctorId) ?? null);
 
+  // **MR-26 B1. Both notice lookups now come from the PULLED STORE, and neither touches the
+  // network.**
+  //
+  // These were two effects: `fetchConsentNotices()` over PostgREST, then
+  // `fetchActiveNotice(language)` over `active_consent_text`. MR-25 D1 measured what that
+  // cost — with no signal the screen rendered "Could not load this visit. The app could not
+  // reach the server", and the doctor was never asked. A consent flow that needs a live
+  // server is a consent flow that does not work in a clinic.
+  //
+  // The comment that stood on the second effect said the active version "is fetched per
+  // language rather than picked out of the list already in hand", because "choosing on the
+  // device would make the record depend on how fresh the list happened to be". That was a
+  // true statement about a list of unknown freshness. The list now arrives through
+  // `sync_pull` with a cursor, and `activeNoticeFor` applies the SERVER's published rule --
+  // `active_consent_text_at`, tiebreakers and all -- to rows the server issued.
+  //
+  // FIX-02 is untouched: the client still captures against a version id the server minted,
+  // and `capture_consent` still re-resolves at `captured_at` and refuses 45001 if they
+  // disagree. The arbiter has not moved; only the round trip has gone.
+  //
+  // Synchronous, so there is no `failed` path and no `settled` race to lose: an empty store
+  // is an empty list, and `blockedReason` words that as "there is no consent notice for this
+  // language yet" -- a sentence that is now true whenever it appears.
+  const notices = noticesFromStore(store);
+  // **What `failed` means now.** It used to mean "the network call threw". There is no network
+  // call, so it means the honest thing instead: the handset holds NO notices at all AND the
+  // pull could not run, so the app does not KNOW whether this company has published one.
+  //
+  // The distinction is the whole reason `blockedReason` takes it. With notices in the store
+  // and none for this language, "there is no consent notice for this language yet" is true.
+  // On a fresh install with no signal it would be a lie, and "the notice could not be loaded"
+  // is the true sentence -- which is what this keeps reachable.
+  const failed = notices.length === 0 && pullFailure !== null;
+  const versionsFromStore = offerableVersions(notices, new Date().toISOString());
+
   useEffect(() => {
-    let cancelled = false;
+    setVersions(versionsFromStore);
+    // MR-22 B2. `offerableVersions` sorts, so `[0]` is a DETERMINISTIC default rather than
+    // whatever order the rows arrived in. What the screen shows first is what the server
+    // records as `displayed_language`.
+    setLanguage((current) => current ?? versionsFromStore[0]?.language ?? null);
+    setSettled(true);
+    // Keyed on the notice IDENTITIES rather than the array, which is rebuilt every render
+    // and would loop.
+  }, [versionsFromStore.map((version) => version.id).join(',')]);
 
-    void fetchConsentNotices()
-      .then((texts) => {
-        if (cancelled) return;
-        const live = offerableVersions(texts, new Date().toISOString());
-        setVersions(live);
-        // MR-22 B2. `offerableVersions` now sorts, so `live[0]` is a DETERMINISTIC default
-        // rather than whatever order the server happened to return. What the screen shows
-        // first is what the server will record as `displayed_language`, because it is
-        // derived from the version this choice selects.
-        setLanguage((current) => current ?? live[0]?.language ?? null);
-        // No live version means there is nothing for the second effect to fetch,
-        // so this is where the looking stops.
-        if (live.length === 0) setSettled(true);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setFailed(true);
-        setSettled(true);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // The active version is fetched per language rather than picked out of the list
-  // already in hand. `getActiveConsentText` is the server's answer to "which one is
-  // in force"; choosing on the device would make the record depend on how fresh the
-  // list happened to be.
   useEffect(() => {
-    if (language === null) return;
-    let cancelled = false;
-
-    void fetchActiveNotice(language)
-      .then((version) => {
-        if (!cancelled) setNotice(version);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setNotice(null);
-          setFailed(true);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setSettled(true);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [language]);
+    if (language === null) {
+      setNotice(null);
+      return;
+    }
+    setNotice(activeNoticeFor(notices, language, new Date().toISOString()));
+    setSettled(true);
+    // Keyed on identities, as above.
+  }, [language, notices.map((version) => version.id).join(',')]);
 
   // `mrName` is null by construction -- see the note above -- so this is the fallback
   // rather than a choice between two values.
@@ -236,14 +237,32 @@ export default function ConsentRoute(): ReactNode {
         */
         blocked={
           unavailable ??
-          (pullFailure !== null
+          // **MR-26 B1/B3. A failed background refresh is not "this screen has no data".**
+          //
+          // This was keyed on `pullFailure` alone, so a failure in a SEPARATE, CONCURRENT
+          // operation -- the background pull -- blocked a screen holding everything it needed.
+          // With the visit, the doctor and the notices all in the store, a dead network means
+          // the data is STALE, not absent, and refusing to ask the question asserts something
+          // false in the other direction.
+          //
+          // `not_permitted` is deliberately still unconditional: that is a server DECISION
+          // about this MR's access, not a silence, and an MR who has lost access to a visit
+          // must be told even while a cached copy sits in the store.
+          (pullFailure !== null &&
+          pullFailure.kind === 'refused' &&
+          pullFailure.refusal.code === 'not_permitted'
             ? {
-                title: 'Could not load this visit',
-                detail: 'The app could not reach the server. It will try again.',
+                title: 'You do not have access to this visit',
+                detail: 'The server refused this request for your account.',
               }
-            : settled
-              ? blockedReason(notice, failed)
-              : null)
+            : pullFailure !== null && notice === null && versionsFromStore.length === 0
+              ? {
+                  title: 'Could not load this visit',
+                  detail: 'The app could not reach the server. It will try again.',
+                }
+              : settled
+                ? blockedReason(notice, failed)
+                : null)
         }
         busy={busy}
         loading={!settled || status === 'loading'}

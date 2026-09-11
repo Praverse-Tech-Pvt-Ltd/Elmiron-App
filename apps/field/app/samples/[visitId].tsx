@@ -84,6 +84,30 @@ export default function SamplesRoute(): ReactNode {
 
   // A sync that was refused or unreachable is its own state. Reported through the same
   // channel as a write failure, because to the MR both mean "the screen is not current".
+  // **MR-26 B3. A FAILED BACKGROUND REFRESH IS NOT "THIS SCREEN HAS NO DATA".**
+  //
+  // This screen reads the visit and the doctor from the PULLED STORE, which is persisted to
+  // disk and survives a restart. It does no live read of its own. Yet with no signal it
+  // rendered "Could not load this visit -- the app could not reach the server", while holding
+  // the visit the whole time. The banner was keyed on `pullFailure` alone, so a failure in a
+  // SEPARATE, CONCURRENT operation -- the background pull -- blocked a screen that had
+  // everything it needed.
+  //
+  // That is not the honesty rule working. The honesty rule is about ASSERTING FACTS: do not
+  // tell an MR the server has something it does not. It says nothing about refusing to act on
+  // state the client already holds and the server already confirmed. Refusing here asserted
+  // something FALSE in the other direction -- that the visit could not be loaded, when it was
+  // loaded.
+  //
+  // So the failure is surfaced only when the screen genuinely lacks what it needs. With the
+  // visit in hand the data is STALE, not absent, and staleness is the sync indicator's job --
+  // it is already on Today and it does not block anything.
+  //
+  // `not_permitted` is deliberately NOT gated on `visit === null`. That one is a server
+  // DECISION about this MR's access rather than a silence, and an MR who has lost access to a
+  // visit must be told even while a cached copy sits in the store -- showing them a visit the
+  // server has just refused them is the failure this screen must never have.
+  const lacksWhatItNeeds = visit === null || doctor === null;
   const shownFailure =
     failure ??
     (pullFailure === null
@@ -93,10 +117,12 @@ export default function SamplesRoute(): ReactNode {
             title: 'You do not have access to this visit',
             detail: 'The server refused this request for your account.',
           }
-        : {
-            title: 'Could not load this visit',
-            detail: 'The app could not reach the server. It will try again.',
-          });
+        : lacksWhatItNeeds
+          ? {
+              title: 'Could not load this visit',
+              detail: 'The app could not reach the server. It will try again.',
+            }
+          : null);
 
   const record = (): void => {
     // MR-20 B2. See `preconditions.ts`: `busy` is silent on purpose, a missing visit or

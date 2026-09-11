@@ -2,6 +2,7 @@ import {
   SyncPullResponseSchema,
   fromBeatPlanRow,
   fromClinicAddressRow,
+  fromConsentTextVersionRow,
   fromDoctorRow,
   fromVisitRow,
   refusalForSqlState,
@@ -9,6 +10,7 @@ import {
 import type {
   BeatPlanRecord,
   ClinicAddress,
+  ConsentTextVersion,
   DoctorRecord,
   Refusal,
   SyncCompleteness,
@@ -53,9 +55,22 @@ export type PullChange =
       readonly entity: 'clinic_address';
       readonly record: ClinicAddress;
     }
+  /**
+   * MR-26 B1. The consent NOTICE, so the question can be put with no signal.
+   *
+   * Its own entity for the same reason `clinic_address` is: the payload is the row. It is
+   * NOT the consent RECORD -- MR-12 Q4 keeps that out of the pull and this does not reopen
+   * it. A record costs ~3,000 audit rows a day for reinstall-only value; a text version is
+   * two rows a tenant, immutable except for retirement.
+   */
+  | {
+      readonly kind: 'upsert';
+      readonly entity: 'consent_text_version';
+      readonly record: ConsentTextVersion;
+    }
   | {
       readonly kind: 'remove';
-      readonly entity: 'visit' | 'doctor' | 'beat_plan' | 'clinic_address';
+      readonly entity: 'visit' | 'doctor' | 'beat_plan' | 'clinic_address' | 'consent_text_version';
       readonly id: string;
       /**
        * Why it is going. `deleted` means the record is gone; `out_of_scope` means it still
@@ -139,6 +154,12 @@ const mapChange = (change: SyncPullResponse['changes'][number]): PullChange => {
         kind: 'upsert',
         entity: 'clinic_address',
         record: fromClinicAddressRow(change.payload),
+      };
+    case 'consent_text_version':
+      return {
+        kind: 'upsert',
+        entity: 'consent_text_version',
+        record: fromConsentTextVersionRow(change.payload),
       };
     default: {
       // **The same guard `applyChanges` got in MR-11, on the dispatcher directly above
@@ -268,6 +289,15 @@ export type LocalStore = {
    * separate entity exists to avoid.
    */
   readonly clinic_address: ReadonlyMap<string, ClinicAddress>;
+  /**
+   * MR-26 B1. The consent notices this tenant has published, so `notices.ts` can answer
+   * from the handset instead of calling `active_consent_text` over the network.
+   *
+   * Retirement travels too: `effective_until` is the one column the table permits an UPDATE
+   * on, and the row's `updated_at` moves with it, so a superseded notice reaches the client
+   * as an upsert carrying its new end date rather than silently staying offerable.
+   */
+  readonly consent_text_version: ReadonlyMap<string, ConsentTextVersion>;
 };
 
 export const emptyStore = (): LocalStore => ({
@@ -275,6 +305,7 @@ export const emptyStore = (): LocalStore => ({
   doctor: new Map(),
   beat_plan: new Map(),
   clinic_address: new Map(),
+  consent_text_version: new Map(),
 });
 
 export const applyChanges = (store: LocalStore, changes: readonly PullChange[]): LocalStore => {
@@ -283,6 +314,7 @@ export const applyChanges = (store: LocalStore, changes: readonly PullChange[]):
     doctor: new Map(store.doctor),
     beat_plan: new Map(store.beat_plan),
     clinic_address: new Map(store.clinic_address),
+    consent_text_version: new Map(store.consent_text_version),
   };
   for (const change of changes) {
     if (change.kind === 'remove') {
@@ -310,6 +342,9 @@ export const applyChanges = (store: LocalStore, changes: readonly PullChange[]):
         break;
       case 'clinic_address':
         next.clinic_address.set(change.record.id, change.record);
+        break;
+      case 'consent_text_version':
+        next.consent_text_version.set(change.record.id, change.record);
         break;
       default: {
         const unhandled: never = change;

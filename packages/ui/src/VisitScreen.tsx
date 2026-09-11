@@ -31,6 +31,24 @@ export interface VisitScreenProps {
   readonly doctorName: string;
   readonly clinic: string | null;
   readonly stage: 'before' | 'during' | 'after';
+  /**
+   * True when the stage rests on a write this device has QUEUED and the server has not yet
+   * acknowledged — MR-26 B2/B5.
+   *
+   * **This exists so the screen can act without claiming.** Offline, `visit.status` cannot
+   * move, so before MR-26 a checked-in MR was shown "Not started" and offered nothing but
+   * check-in for the rest of the visit. The client may act on a write it watched itself queue;
+   * it may NOT describe that write in the words it uses for one the server has confirmed.
+   *
+   * So the stage advances and the WORDS change: "Checked in - waiting to send", not "You are
+   * checked in". A reader who takes the sentence at face value is not misled, which is the
+   * whole of the honesty rule.
+   *
+   * `FE-W39` is the open product question of whether a marker, nothing, or a warning is the
+   * right treatment. The marker is the default because it is the only one of the three that
+   * cannot be read as a false claim.
+   */
+  readonly stagePending?: boolean;
   /** Null once there is nothing left to do. */
   readonly actionLabel: string | null;
   readonly onAction: () => void;
@@ -117,10 +135,28 @@ const STAGE_WORDS = {
   after: 'Visit finished',
 } as const;
 
+/**
+ * The same three stages, for a write the server has not acknowledged yet.
+ *
+ * Deliberately DIFFERENT SENTENCES rather than the confirmed ones with a badge beside them:
+ * a badge is easy to miss and easy to strip, and the claim lives in the sentence. "You are
+ * checked in" asserts a server fact; "Checked in - waiting to send" asserts what this device
+ * did, which is exactly what is known.
+ *
+ * `before` has no pending form and never will: nothing has been queued in that state, so
+ * there is nothing to be pending about. It is present so the lookup is total.
+ */
+const STAGE_WORDS_PENDING = {
+  before: 'Not started',
+  during: 'Checked in — waiting to send',
+  after: 'Visit finished — waiting to send',
+} as const;
+
 export const VisitScreen = ({
   doctorName,
   clinic,
   stage,
+  stagePending = false,
   actionLabel,
   onAction,
   busy = false,
@@ -175,7 +211,7 @@ export const VisitScreen = ({
       {loading ? <Spinner label="Getting this visit" /> : null}
 
       <Card tone={stage === 'during' ? 'hero' : 'default'}>
-        <Label muted>{STAGE_WORDS[stage]}</Label>
+        <Label muted>{(stagePending ? STAGE_WORDS_PENDING : STAGE_WORDS)[stage]}</Label>
         {durationLabel === null ? null : (
           <View style={styles.figureRow}>
             <Figure>{durationLabel}</Figure>

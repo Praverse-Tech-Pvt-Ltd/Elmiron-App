@@ -45,7 +45,7 @@ import type { TerritoryZone } from '../today/territory-day';
 
 /** A record that has left the MR's scope, in the words they should read — B8. */
 export interface RemovalNotice {
-  readonly entity: 'visit' | 'doctor' | 'beat_plan' | 'clinic_address';
+  readonly entity: 'visit' | 'doctor' | 'beat_plan' | 'clinic_address' | 'consent_text_version';
   readonly id: string;
   readonly reason: 'deleted' | 'out_of_scope';
   /**

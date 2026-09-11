@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   BeatPlanRecordSchema,
   ClinicAddressSchema,
+  ConsentTextVersionSchema,
   DoctorRecordSchema,
   VisitSchema,
 } from '@fieldforce/core';
@@ -50,6 +51,7 @@ interface StoredShape {
   readonly doctor: readonly unknown[];
   readonly beat_plan: readonly unknown[];
   readonly clinic_address: readonly unknown[];
+  readonly consent_text_version: readonly unknown[];
 }
 
 export interface PulledStorePersistence {
@@ -65,6 +67,7 @@ const serialise = (store: LocalStore): StoredShape => ({
   doctor: [...store.doctor.values()],
   beat_plan: [...store.beat_plan.values()],
   clinic_address: [...store.clinic_address.values()],
+  consent_text_version: [...store.consent_text_version.values()],
 });
 
 /**
@@ -84,7 +87,11 @@ const deserialise = (raw: unknown): LocalStore | null => {
     !Array.isArray(shape.visit) ||
     !Array.isArray(shape.doctor) ||
     !Array.isArray(shape.beat_plan) ||
-    !Array.isArray(shape.clinic_address)
+    !Array.isArray(shape.clinic_address) ||
+    // MR-26 B1. A store written before the notices joined the pull has no such key, so it
+    // fails here and `loadPulledStore` clears the cursor with it -- P1's rule, that records
+    // and the cursor move together. The next pull is a full re-sync that fetches them.
+    !Array.isArray(shape.consent_text_version)
   ) {
     return null;
   }
@@ -94,6 +101,7 @@ const deserialise = (raw: unknown): LocalStore | null => {
   const doctor = new Map(next.doctor);
   const beatPlan = new Map(next.beat_plan);
   const clinicAddress = new Map(next.clinic_address);
+  const consentTextVersion = new Map(next.consent_text_version);
 
   for (const row of shape.visit) {
     const parsed = VisitSchema.safeParse(row);
@@ -115,8 +123,19 @@ const deserialise = (raw: unknown): LocalStore | null => {
     if (!parsed.success) return null;
     clinicAddress.set(parsed.data.id, parsed.data);
   }
+  for (const row of shape.consent_text_version) {
+    const parsed = ConsentTextVersionSchema.safeParse(row);
+    if (!parsed.success) return null;
+    consentTextVersion.set(parsed.data.id, parsed.data);
+  }
 
-  return { visit, doctor, beat_plan: beatPlan, clinic_address: clinicAddress };
+  return {
+    visit,
+    doctor,
+    beat_plan: beatPlan,
+    clinic_address: clinicAddress,
+    consent_text_version: consentTextVersion,
+  };
 };
 
 export const asyncStoragePulledStore: PulledStorePersistence = {

@@ -27,6 +27,28 @@ import type { RpcCaller } from '../capture/client';
  * depth and would in fact be a second, unguarded copy of a rule the database owns.
  */
 
+/**
+ * The notices this tenant has published, FROM THE PULLED STORE — MR-26 B1.
+ *
+ * **Why this exists beside the two network functions below.** MR-25 D1 measured that consent
+ * could not be captured with no signal: `fetchConsentNotices` calls PostgREST, so an MR in a
+ * basement clinic saw *"the app could not reach the server"* and the visit ended with the
+ * doctor never asked either way. A question that cannot be put is not a consent flow.
+ *
+ * Since MR-26 B1 the consent text version travels in `sync_pull` as its own entity, so the
+ * rows are on the handset already — server-issued, tenant-scoped by the RESTRICTIVE policy,
+ * and refreshed by the same cursor as everything else. Reading them here is not the client
+ * deciding anything; it is the client using what it was sent.
+ *
+ * Synchronous and total. There is no failure mode to model: an empty store is an empty list,
+ * which `blockedReason` already words as *"there is no consent notice for this language yet"*
+ * — and that sentence is now TRUE when it appears, which it was not when a dead network could
+ * produce it.
+ */
+export const noticesFromStore = (store: {
+  readonly consent_text_version: ReadonlyMap<string, ConsentTextVersion>;
+}): readonly ConsentTextVersion[] => [...store.consent_text_version.values()];
+
 /** `select` on one table. Narrow on purpose, like `RpcCaller` beside it. */
 export interface TableReader {
   from(table: string): {

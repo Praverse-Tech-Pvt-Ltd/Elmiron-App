@@ -48,6 +48,60 @@ import { languageName } from './content';
  * than answered here. Sorting by language code is a defensible arbitrary rule and is
  * labelled as arbitrary, not dressed up as a preference.
  */
+/**
+ * Which version is in force for a language — the SERVER's rule, applied to the SERVER's rows.
+ *
+ * **MR-26 B1, and the FIX-02 question this has to answer.** `notices.ts` used to ask
+ * `active_consent_text` over the network for exactly one reason, stated there: the client
+ * holds the whole list and could pick the newest itself, which is the FIX-12 defect — the
+ * record would then attest to whichever version *the client's list happened to contain*
+ * rather than the one the server says was in force.
+ *
+ * That reasoning was about a list of unknown freshness. It is not an argument against the
+ * client applying a published rule to rows the server sent it through the pull, with a
+ * cursor, which is what it now has. The client is not choosing which notice is in force; it
+ * is carrying the server's answer in its pocket. And `capture_consent` still re-resolves at
+ * `captured_at` and refuses `45001` when the two disagree, so a client running on stale rows
+ * is told — the arbiter has not moved.
+ *
+ * **It mirrors `active_consent_text_at` exactly, tiebreakers included**, because an
+ * approximate mirror is worse than none: a disagreement does not fail here, it fails in front
+ * of a doctor as a refusal. The SQL is
+ *
+ * ```sql
+ *  where v.language = p_language
+ *    and v.effective_from <= p_at
+ *    and (v.effective_until is null or v.effective_until > p_at)
+ *  order by v.effective_from desc, v.created_at desc, v.id desc
+ *  limit 1
+ * ```
+ *
+ * `offerableVersions` above applies the same two window predicates but sorts only on
+ * `effectiveFrom` — enough for a stable DISPLAY order, not enough to agree with the server
+ * when two notices in one language share an `effective_from`. Hence the full three-key
+ * ordering here rather than `offerableVersions(...)[0]`.
+ *
+ * The organisation predicate has no counterpart and needs none: the rows reached this device
+ * through `sync_pull`, which is SECURITY INVOKER, so the RESTRICTIVE tenant policy already
+ * scoped them. Re-filtering by organisation here would be permission logic in the client.
+ */
+export const activeNoticeFor = (
+  versions: readonly ConsentTextVersion[],
+  language: string,
+  nowIso: string,
+): ConsentTextVersion | null =>
+  versions
+    .filter((version) => version.language === language)
+    .filter((version) => version.effectiveFrom <= nowIso)
+    .filter((version) => version.effectiveUntil === null || version.effectiveUntil > nowIso)
+    .slice()
+    .sort(
+      (a, b) =>
+        b.effectiveFrom.localeCompare(a.effectiveFrom) ||
+        b.createdAt.localeCompare(a.createdAt) ||
+        b.id.localeCompare(a.id),
+    )[0] ?? null;
+
 export const offerableVersions = (
   versions: readonly ConsentTextVersion[],
   nowIso: string,

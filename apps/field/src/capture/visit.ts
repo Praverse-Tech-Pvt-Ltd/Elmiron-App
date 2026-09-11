@@ -24,6 +24,66 @@ export type VisitStage =
   /** Checked out. Nothing further is captured for this visit. */
   | 'after';
 
+/**
+ * What the client WITNESSED about this visit, which the server may not have heard yet.
+ *
+ * **MR-26 B2, and the constraint it applies is MR-02's: re-derive facts the server owns,
+ * record facts the client witnessed.**
+ *
+ * `stageOf` reads `visit.status`, which only `record_check_in` and `record_check_out` set,
+ * SERVER-side. With no signal that round trip never happens, so an offline check-in left the
+ * visit `planned`, `stageOf` stayed `'before'`, and `VisitScreen` offered nothing but
+ * check-in for the rest of the visit. MR-25 D1 measured the result: three of the five writes
+ * unreachable offline, and `FE-G2` -- 8h offline, 20+ queued writes -- unreachable with them,
+ * because those writes could not be made.
+ *
+ * **This is not the client asserting a fact the server has not confirmed.** The client is not
+ * guessing that a check-in happened; it WATCHED ITSELF QUEUE ONE, and that queue row is
+ * durable, on disk, and will be sent. The honesty rule governs what the app TELLS an MR --
+ * and the caller renders this as PENDING, never as confirmed. What it does not govern is
+ * whether a screen may act on something it knows.
+ *
+ * Check-out wins over check-in when both are queued: a departure is the later fact, and an
+ * MR who checked out must not be offered check-out again.
+ *
+ * `entityId` on a capture queue item is the VISIT id -- see `captureQueueItem` in
+ * `outbox.ts` -- which is what makes this a lookup rather than a payload parse.
+ */
+export interface WitnessedStage {
+  readonly stage: VisitStage;
+  /**
+   * True when the stage rests on a queued write rather than on the server's own status.
+   *
+   * The caller MUST NOT render a pending stage in the words it uses for a confirmed one.
+   * Nothing may claim a state the server has given when it has not -- that is the rule this
+   * whole change is careful not to break, and it is a rule about copy.
+   */
+  readonly pending: boolean;
+}
+
+export const witnessedStage = (
+  visit: Visit | null,
+  queued: readonly { readonly entity: string; readonly entityId: string }[],
+): WitnessedStage => {
+  const confirmed = stageOf(visit);
+  if (visit === null) return { stage: confirmed, pending: false };
+
+  // Only the server can end a visit, and it already has: once it says `completed` or
+  // `not_met` there is nothing a queued row can add, and re-opening a closed visit from the
+  // queue would be the client overruling the server rather than anticipating it.
+  if (confirmed === 'after') return { stage: 'after', pending: false };
+
+  const forThisVisit = queued.filter((item) => item.entityId === visit.id);
+  if (forThisVisit.some((item) => item.entity === 'check_out')) {
+    return { stage: 'after', pending: true };
+  }
+  if (confirmed === 'during') return { stage: 'during', pending: false };
+  if (forThisVisit.some((item) => item.entity === 'check_in')) {
+    return { stage: 'during', pending: true };
+  }
+  return { stage: confirmed, pending: false };
+};
+
 export const stageOf = (visit: Visit | null): VisitStage => {
   if (visit === null) return 'before';
   switch (visit.status) {
