@@ -2451,3 +2451,80 @@ condition and no test did**, which is the worst arrangement of the two — the d
 the suite is green.
 
 The fixture now includes a window ending near midnight so the dimension exists.
+
+## 11 September 2026 — check the value at a value that would EXPOSE the defect
+
+Third clause on the value-check rule, and each clause was earned by a check that passed while
+the product was broken.
+
+1. **Check the value**, field by field, against what the server holds — MR-14, where every
+   time on the Today screen was 5½ hours wrong under a correct-looking render.
+2. **Check the path producing it is reachable in real use** — MR-24, where "Started 13:52"
+   was verified twice against `seed:day` data for a line `record_check_in` never wrote.
+3. **Check it at a value that would expose the defect.** New.
+
+**Worked example.** MR-24's B1 compared the doctor profile field by field and found
+`9 Sep` correct. It was. `doctor/[id].tsx` had been on real data since MR-14 and rendered the
+date with `dayMonthFrom`, a character slice of the ISO string — so it printed the **UTC** day
+for a Supabase timestamp. The visit it was checked against completed at `08:22Z`, which is the
+same calendar day in IST. The check passed because the sample fell on the safe side of a
+boundary. A visit completing at `19:00Z` is `00:30 IST` the next day and would have rendered
+the day before.
+
+MR-26 C1's lint rule found it, not the value check.
+
+**The rule.** A single sample can be correct by coincidence. For anything that depends on a
+boundary — a timezone, a day rollover, a threshold, a sort order, a wrap — the sample must be
+CHOSEN so that a broken implementation gives a different answer from a correct one. Ask: *what
+value would this render differently if the code were wrong?* If the answer is "not the one I
+used", the check has not been done yet.
+
+This is the dimension rule pointed at a verification rather than a fixture. There, a fixture
+holding one value of a dimension could not falsify a predicate on it. Here, a sample sitting
+away from the boundary cannot falsify a boundary bug. Same shape: **the evidence has to be
+able to come out the other way.**
+
+Cheapest form: for a timezone, pick an instant inside the offset window (for IST, anything
+between `18:30Z` and `24:00Z`); for a sort, make the keys disagree; for a threshold, sit one
+unit either side. `territory-day.test.ts` and `shift-window-grace.spec.ts` both do this
+deliberately and are worth copying.
+
+## 11 September 2026 — fixing the variable part of a message is not fixing the message
+
+**Three instances, two sessions, one shape.** When a message is assembled from a FIXED part
+and a VARIABLE part, correcting the variable part leaves the fixed part making whatever claim
+it always made — and the fixed part is usually the heading, which is the half a reader takes
+away.
+
+**Instance 1 — MR-18 B3 → found by MR-25.** The call-report screen's copy was rewritten
+precisely so it would stop telling an MR the server had work it did not have. The DETAIL came
+from the caller and was fixed. The TITLE was hardcoded `"Report sent"` in
+`CallReportScreen.tsx` and nobody re-read it. A report saved with no signal therefore rendered:
+
+> **Report sent**
+> Saved on this phone. It will send by itself when you have signal.
+
+Two halves of one banner contradicting each other, and the half that claims the server has it
+is the heading.
+
+**Instance 2 — MR-26 B4, found on the emulator minutes after the first was fixed.** Checking
+OUT with no signal produced **"This check-in cannot be sent yet"**. Same file, same structure:
+`<Banner detail={blocked} title="This check-in cannot be sent yet" />`. The detail came from
+the caller and was right; the title named an arrival on a departure.
+
+**Instance 3 — the samples screen**, checked while fixing instance 2 and found ACCEPTABLE:
+`"Recorded"` over `"saved on this phone"`. "Recorded" claims the app recorded it, which is
+true of a queued write. The test is not "is the title fixed" but "does the fixed part assert
+something the variable part contradicts".
+
+**The rule.** When you change a message with a variable part, read the fixed part in every
+state the variable part can take. Ask of the heading alone: *is this sentence true in all of
+them?* A title that is true for one branch and false for another is a defect in the branch
+where it is false, however correct the body is.
+
+**The tell.** `title="..."` next to `detail={...}` in the same component. A literal beside a
+prop is where this lives. Grep for it.
+
+The structural fix, where the two halves can genuinely differ, is to make the fixed part a
+parameter too — `sentNote: { title, detail }` rather than `sentNote: string` — so the branch
+that knows the outcome is the branch that names it, and the compiler asks for both.

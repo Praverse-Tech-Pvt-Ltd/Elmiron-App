@@ -552,3 +552,140 @@ describe('MR-25 D1: a silence is not a refusal', () => {
     expect(outcome.refusal.sqlState, 'the code the screen prints in brackets').toBe('45006');
   });
 });
+
+/**
+ * MR-26 C1 — the READ boundary, ENUMERATED rather than spot-checked.
+ *
+ * `sendOrQueue` got this treatment in MR-25 C3, after both directions of the WRITE boundary
+ * had been wrong: MR-13 found a refusal treated as a silence, MR-24 defect 2 found a refusal
+ * treated as a transport failure. Seven error types were enumerated there.
+ *
+ * The READ boundary was then found wrong separately, by running the app: MR-25 defect 9,
+ * `pullOnce` returning `refused` for every error. So the same enumeration is owed here, and
+ * the reason it is owed is that the write-side enumeration did not generalise on its own --
+ * the same class of defect was sitting one module away, and the fix to one did not find it.
+ *
+ * `pullOnce` answers exactly three ways, and every case below asserts which:
+ *   - `pulled`   the server answered with data
+ *   - `refused`  the server issued a VERDICT, identified by a SQLSTATE
+ *   - THROWS     no verdict: a silence, a shape change, or a defect in the response
+ *
+ * `pulled-store.tsx` maps the throw to `{ kind: 'unreachable' }`, with the comment that
+ * reasoning already carried: "NOT a refusal: the server has said nothing to report, and
+ * claiming it refused would invent a decision."
+ */
+describe('MR-26 C1: every error type that can cross the read boundary', () => {
+  const rpc = (
+    impl: () => { data: unknown; error: { code?: string | null; message: string } | null },
+  ) => ({ rpc: vi.fn((_fn: string, _args: Record<string, unknown>) => Promise.resolve(impl())) });
+  const USER = 'mr-c1';
+  const run = async (impl: Parameters<typeof rpc>[0]) =>
+    pullOnce({ client: rpc(impl), cursors: memoryPullCursorStore(), userId: USER });
+
+  it('a SQLSTATE that maps to a refusal is a refusal, with its code', async () => {
+    const outcome = await run(() => ({
+      data: null,
+      error: { code: '42501', message: 'not yours' },
+    }));
+    expect(outcome.kind).toBe('refused');
+    if (outcome.kind !== 'refused') throw new Error('unreachable');
+    expect(outcome.refusal.code).toBe('not_permitted');
+    expect(outcome.refusal.sqlState).toBe('42501');
+  });
+
+  it('an UNRECOGNISED SQLSTATE is still a refusal — the server did decide', async () => {
+    // The code is not in `BY_SQLSTATE`, so the app cannot name the remedy. It must still not
+    // pretend the server said nothing: a verdict it cannot interpret is a verdict.
+    //
+    // `53300` (too_many_connections) chosen deliberately as a REAL Postgres SQLSTATE that
+    // this app does not map. The first draft used `23505`, which IS mapped -- to
+    // `already_exists` -- and the case failed, which is the assertion doing its job on the
+    // test author. The sixteen mapped codes are listed in `BY_SQLSTATE`; anything outside
+    // them must land here rather than be mistaken for a silence.
+    const outcome = await run(() => ({
+      data: null,
+      error: { code: '53300', message: 'too many connections' },
+    }));
+    expect(outcome.kind).toBe('refused');
+    if (outcome.kind !== 'refused') throw new Error('unreachable');
+    expect(outcome.refusal.code).toBe('unrecognised');
+    expect(outcome.refusal.sqlState, 'the code is carried even when unmapped').toBe('53300');
+  });
+
+  it('C2: an error with NO code is a SILENCE, and never prints empty brackets', async () => {
+    // **MR-25 defect 9, stated as an assertion.** `refusalForSqlState(undefined)` answers
+    // `{ code: 'unrecognised', sqlState: '' }`, and the screen interpolates that into
+    // "The server refused this sync (${sqlState})" -- so an MR with no signal was shown
+    // "The server refused this sync ()", the ABSENCE of a code rendered as if it were one.
+    await expect(
+      run(() => ({ data: null, error: { message: 'Network request failed' } })),
+    ).rejects.toThrow(/network request failed/i);
+  });
+
+  it('C2: an explicitly NULL code is a silence too', async () => {
+    // supabase-js fills `code` from PostgREST's envelope. A fetch that never reached
+    // PostgREST has no envelope, and the field arrives null rather than absent.
+    await expect(
+      run(() => ({ data: null, error: { code: null, message: 'Failed to fetch' } })),
+    ).rejects.toThrow(/failed to fetch/i);
+  });
+
+  it('C2: an EMPTY-STRING code is a silence too — the third spelling of absent', async () => {
+    // Three spellings of the same nothing, and the screen's interpolation turns all three
+    // into the same empty parentheses. A test that checked one would leave two.
+    await expect(
+      run(() => ({ data: null, error: { code: '', message: 'socket hang up' } })),
+    ).rejects.toThrow(/socket hang up/i);
+  });
+
+  it('a RESPONSE THE CONTRACT CANNOT PARSE throws, rather than being read as a refusal', async () => {
+    // The server changed shape. Nobody has got this wrong yet -- it is here for the same
+    // reason C3's ZodError case is: the boundary should be described completely, not only
+    // where it has already failed.
+    await expect(run(() => ({ data: { nonsense: true }, error: null }))).rejects.toThrow();
+  });
+
+  it('an UPSERT WITH NO PAYLOAD throws rather than being mapped to a null record', async () => {
+    // A server defect. `mapChange` refuses to parse null through a row mapper, because the
+    // message that produces names nothing the MR or a reader can act on.
+    await expect(
+      run(() => ({
+        data: {
+          changes: [
+            {
+              entity: 'visit',
+              entityId: '11111111-1111-4111-8111-111111111111',
+              reason: 'upserted',
+              payload: null,
+            },
+          ],
+          nextCursor: null,
+          hasMore: false,
+          serverTime: '2026-09-11T10:00:00.000Z',
+          completeness: { omittedEntities: [] },
+        },
+        error: null,
+      })),
+    ).rejects.toThrow();
+  });
+
+  it('THE POSITIVE CONTROL: a good response still returns `pulled`', async () => {
+    // Without this, "throw on everything" would satisfy every silence case above and break
+    // the pull entirely. The boundary has three answers and this is the one that matters.
+    const outcome = await run(() => ({ data: response(), error: null }));
+    expect(outcome.kind).toBe('pulled');
+  });
+
+  it('covers every way the boundary can answer — the exhaustiveness case', async () => {
+    // `PullOutcome` has exactly two shapes; the third answer is a throw. If a third VARIANT
+    // is ever added, this fails and someone has to decide which side of the silence/verdict
+    // line it falls on, rather than it defaulting into one of them unexamined.
+    const refused = await run(() => ({ data: null, error: { code: '42501', message: 'x' } }));
+    const pulled = await run(() => ({ data: response(), error: null }));
+    const kinds = new Set([refused.kind, pulled.kind]);
+    expect(
+      [...kinds].sort(),
+      'pullOnce gained or lost an outcome kind — enumerate it above before changing this',
+    ).toEqual(['pulled', 'refused']);
+  });
+});

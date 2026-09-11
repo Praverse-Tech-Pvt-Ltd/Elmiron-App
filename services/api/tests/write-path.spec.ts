@@ -14,17 +14,34 @@ import { seedFixtures } from './fixtures.js';
 import type { FixtureWorld } from './fixtures.js';
 
 /**
- * FE-W15 — the first write in this product's history that reaches a real server.
+ * The RPCs and their RLS, over HTTP — originally FE-W15.
  *
- * Every other write in `apps/field` goes to `services/mock`, which answers `201` and
- * forgets it. This exercises the whole chain over HTTP: a real token through Kong, the
- * `record_check_in` RPC, the server-side work-hours refusal, and a row that is still
- * there afterwards.
+ * **MR-26 D1 CORRECTED THIS HEADER, and the correction is the point.** It used to open:
+ * *"the first write in this product's history that reaches a real server ... this exercises
+ * the whole chain over HTTP"*, and it named `apps/field/src/capture/check-in.test.ts` as the
+ * client half they met at.
  *
- * The client half — mapping the row and the refusal into something an MR can act on —
- * is covered in `apps/field/src/capture/check-in.test.ts`. The two meet at
- * `fromCheckInRow` and `refusalForSqlState`, both exercised here against the real
- * payloads rather than fixtures of them.
+ * Both halves of that claim had expired. Since MR-18 the app's five writes go through
+ * `sync_push`, so **no screen takes the REST route this suite exercises** — and
+ * `recordCheckIn`/`recordCheckOut`, the client functions it paired with, had ZERO CALLERS.
+ * They are deleted in the same change; a module with no callers is not a client half.
+ *
+ * A stale parity claim is worse than no claim, because its name says otherwise — which is
+ * exactly what `gate1.spec.ts` turned out to be. So the claim is corrected rather than the
+ * suite deleted, because what it tests is emphatically NOT dead:
+ *
+ *   - `record_check_in` and `record_check_out` are what `apply_sync_item` calls. The SQL
+ *     under test is on the live path even though this HTTP route is not.
+ *   - `daily_mileage` IS called by the app today, from `src/capture/visits.ts`.
+ *   - The RLS refusals here — another MR's visit, an unauthenticated caller, a doctor
+ *     outside the territory — are the tenant boundary, and nothing else asserts them over
+ *     HTTP with a real token through Kong.
+ *   - `fromCheckInRow` and `refusalForSqlState` are still the shared mappers, and this is
+ *     still the only place they meet a REAL PostgREST payload rather than a fixture of one.
+ *
+ * **What this suite does NOT prove, stated so nobody infers it again:** that the app's write
+ * path works. `services/api/tests/gate1.spec.ts` and `sync-row-identity.spec.ts` cover
+ * `sync_push`, and the device cycle in MR-26 B4 covers the screens.
  *
  * A Monday at noon IST, fixed rather than "now": the national window is 09:00-19:00,
  * Mon-Sat, so a test that used the wall clock would fail on a Sunday and at 8pm.

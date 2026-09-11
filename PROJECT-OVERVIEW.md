@@ -12094,3 +12094,221 @@ green and run.
 After D2, before D3. Not done: 45007/45008/45001/45004 from screens; the full five-write
 offline cycle, which `FE-W38` blocks; and `write-path.spec.ts`'s stale parity claim, registered
 not fixed.
+
+---
+
+### MR-26 — the offline writes
+
+**EMULATOR, EXPO GO.** Pixel_10 AVD, Android 16 (SDK 36). Every location below was
+**injected** through Android's test provider, verified delivering rather than trusted on its
+exit code.
+
+#### A1 — CI
+
+| | |
+| --- | --- |
+| Run | `34577168896` · workflow `CI` · event `push` |
+| SHA | `0c131b11080923102afa01be59f40b43b894ea30` — **is HEAD** |
+| Conclusion | `success` — both jobs |
+
+#### A4 — `ci:local` omits the database job DELIBERATELY, and the tool was not the hole
+
+`--with-db` runs it, and that path includes **"Verify every migration can be rolled back"** —
+the step MR-25's push failed on. So the command that would have caught four rollback-less
+migrations already existed. **Running the default and reading its green as "CI will pass" was
+the hole.**
+
+The omission has to stay: the database job needs Docker and `verify:rollbacks` empties the
+public schema. What changed is where the warning lives. It was printed with the PLAN, twelve
+steps of output earlier, and had scrolled away by the time the green line appeared — *a
+warning nobody is looking at when they form the belief is not a warning*. It now prints beside
+the word "passed", on stderr, naming the STEPS rather than the job, because "the database job"
+is abstract and "Verify every migration can be rolled back" is the one that failed.
+
+**Three controls, and the first was not enough.** A count check passed while every label
+printed `undefined` — it asserted the list was non-empty, not that it said anything. Now:
+count ≥ 3, every label a non-empty string, and the rollback step present by name; all lifted
+above the `--list` early return so the fast path exercises them. Mutation-verified — blanking
+the labels and renaming the step in `ci.yml` each fail with their own message, and `--with-db`
+stays correctly silent.
+
+#### A2 / A3 — two record corrections
+
+**`FE-W38` re-filed as ENGINEERING.** It was filed Client/Operator on a framing that does not
+survive inspection, and the framing was mine. *"Never display what the server has not
+confirmed"* is a rule about **asserting facts**. It is not a rule about **gating actions on a
+live round trip**. The pulled store exists so the client can hold server-confirmed state and
+act on it offline. A screen that refuses to act because it cannot reach the server *right now*
+is not obeying the honesty rule — it is missing the store. The one genuinely open question is
+split out as **`FE-W39`**: what an MR SEES when acting on unconfirmed state.
+
+**`BE-W93` raised to the top of `blocked-on-you`**, with its cost curve attached:
+`consent_records` is append-only, so every consent captured before the fiduciary name exists is
+**permanently defective and cannot be amended by design**. The property that protects the
+ledger prevents repair. Every other item on that list waits; this one compounds.
+
+#### B1 — the consent notice joins the pull
+
+- `consent_text_versions` gains `updated_at` + `set_updated_at`. `created_at` would not do:
+  the table is immutable except for `effective_until`, so the one permitted UPDATE is
+  **retirement** — exactly the change a client must learn about, and exactly the one a
+  `created_at` cursor would never send.
+- The new `sync_pull` arm carries **no predicate**, like the doctor and clinic_address arms,
+  because `sync_pull` is SECURITY INVOKER and BE-W79's RESTRICTIVE policy scopes it. Verified
+  as `authenticated`: **1 notice returned — this tenant's — not the 31** that exist across all
+  accumulated test organisations.
+- **MR-12 Q4 is not reopened.** `consent_record` stays in `c_omitted` for the reason it gave.
+  A text VERSION is two rows a tenant; a RECORD is ~3,000 audit rows a day for reinstall-only
+  value.
+- **FIX-02 is untouched.** `activeNoticeFor` mirrors `active_consent_text_at` exactly,
+  tiebreakers included — `effective_from desc, created_at desc, id desc`. `offerableVersions`
+  sorts on `effectiveFrom` alone, which is enough for a display order and **not** enough to
+  agree with the server when two notices share an `effective_from`; a disagreement there does
+  not fail in a test, it fails as a 45001 refusal in front of a doctor. `capture_consent` still
+  re-resolves at `captured_at`. The arbiter has not moved — only the round trip has gone.
+
+The existing `sync-pull-contract.spec.ts` caught the enum being left behind within seconds,
+exactly as its own comment claims it would: six cases red, then green.
+
+#### B3 — diagnosed before fixing, and it was not a live read
+
+The samples screen has read from the pulled store since MR-21 and makes no network call. The
+*"Could not load this visit"* banner was keyed on **`pullFailure` alone**, so a failure in a
+**separate, concurrent** operation — the background pull — blocked a screen holding everything
+it needed. With the visit in hand the data is STALE, not absent, and refusing to act asserted
+something false in the other direction.
+
+**One diagnosis, three screens.** The same defect was in consent and in Today. Consent
+additionally had the genuine live read, which is B1 — so the answer to "does one fix cover
+both" is *partly*, and the difference is stated rather than smoothed. `not_permitted` stays
+unconditional everywhere: that is a server DECISION about access, not a silence, and an MR who
+has lost a visit must be told even over a cached copy.
+
+#### B2 / B5 — check-out, and the copy that keeps it honest
+
+`witnessedStage` applies MR-02's constraint — *re-derive facts the server owns, record facts
+the client witnessed*. A queued check-in is not a guess: this device watched itself write a
+durable row. Check-out wins over check-in; a server-closed visit is never re-opened from the
+queue; a queued row for another visit changes nothing.
+
+The honesty rule is satisfied **in the copy**, not bent. `STAGE_WORDS_PENDING` says
+**"Checked in — waiting to send"**, never "You are checked in" — different SENTENCES rather
+than a badge, because a badge is easy to miss and the claim lives in the sentence.
+Mutation-tested both ways: borrowing the confirmed words fails two cases, hedging everything
+fails two others.
+
+#### B4 — THE FULL CYCLE, and it runs
+
+Offline by removing the Supabase ports, not by disabling wifi — `adb reverse` runs over the
+adb transport, so wifi alone cuts nothing.
+
+**Precondition, asserted not assumed:** `sync_items` for the target visit was EMPTY throughout
+the offline window and the visit was still `planned`.
+
+All five writes performed from their screens with no signal — the thing that was impossible at
+the start of this session:
+
+```
+check_in         08:38:44.523Z   "Checked in — waiting to send"
+consent_record   08:39:43.814Z   declined, en-IN, notice served from the pull
+sample_and_input 08:41:26.366Z   Elmiron 100mg MR26offline, qty 2, ₹300
+check_out        08:42:09.977Z   "Visit finished — waiting to send"
+call_report      08:43:54Z       "Report saved"
+```
+
+App force-stopped and relaunched **still offline**; all five survived. Reconnected; all five
+arrived within two seconds, **exactly once, each as the correct entity type** — `check_out` as
+`check_out`, the event MR-08 found replayed as an arrival.
+
+| Write | captured (UTC) | received (UTC) | held in the queue |
+| --- | --- | --- | --- |
+| `check_in` | 08:38:44.523 | 08:49:47.812 | **11m 03s** |
+| `consent_record` | 08:39:43.814 | 08:49:47.968 | **10m 04s** |
+| `sample_and_input` | 08:41:26.366 | 08:49:48.296 | **8m 22s** |
+| `check_out` | 08:42:09.977 | 08:49:48.296 | **7m 38s** |
+
+**That gap is the D2 proof**: restamping at flush would make `occurred_at` equal
+`received_at`, and it does not. The server records `capture_lag = 00:10:04.154399` on the
+consent row. Visit lifecycle `planned → in_progress (14:08:44.523 IST) → completed
+(14:12:09.977 IST)`.
+
+**Four accepted, one refused — correctly.** `call_reports_one_per_visit_version` rejected the
+report because this visit already had one, from MR-25, which the **append-only rule would not
+let me delete** earlier in this session. The constraint working, and the refusal reached the
+MR: the queue screen shows *"Refused — call_report"*.
+
+#### Two more copy defects, both the shape MR-25's defect 8 had
+
+| # | What | Status |
+| --- | --- | --- |
+| 10 | Checking out with no signal said **"This check-in cannot be sent yet"** — the title hardcoded while the detail came from the caller, so the check-out branch could only change half the message. Fixed mid-cycle and re-observed on the device as "This check-out cannot be sent yet" | **fixed** |
+| — | Today's banner hid a hydrated day behind a failed refresh — the third instance of B3 | **fixed** |
+
+**A correction to my own fix.** I first claimed the Today change also fixed the COLD START
+case. It does not, and must not: `today` comes from the pull's `serverTime`, is not persisted,
+and MR-15 A2 forbids taking the day from the handset. With no server clock the app genuinely
+does not know what day it is, and the banner correctly still fires. Registered as **`FE-W40`**
+rather than papered over.
+
+#### C — the read boundary, enumerated
+
+MR-25 C3 enumerated seven error types on the WRITE boundary. Defect 9 was the same class on
+the READ boundary, found separately by running the app — **the write-side enumeration did not
+generalise on its own**, which is the argument for doing this one explicitly.
+
+Eight cases: a mapped SQLSTATE; an **unmapped** SQLSTATE (still a verdict — a decision the app
+cannot interpret is a decision); the three spellings of absent — **missing, `null`, and empty
+string**, because the screen interpolates all three into the same empty parentheses; a response
+the contract cannot parse; an upsert with a null payload; and the positive control that a good
+response still returns `pulled`. Plus an exhaustiveness case over the outcome kinds.
+
+Mutation-verified: making every error a refusal (defect 9 restored) fails **5**; making every
+error a silence fails **6**.
+
+> The unmapped-SQLSTATE case failed on first run because `23505` **is** mapped — to
+> `already_exists`. The assertion caught the test author, which is the point of writing it as
+> an assertion rather than an assumption. It now uses `53300`.
+
+#### D1 — DELETED the dead half, KEPT and corrected the live one
+
+`recordCheckIn` / `recordCheckOut` in `apps/field/src/capture/check-in.ts` had **zero
+callers** — **deleted**, with their six tests. A module with no callers is not a client half.
+
+`write-path.spec.ts` is **kept**, and its header corrected. The stale part was the CLAIM —
+*"the whole chain over HTTP"*, when since MR-18 no screen takes that route. What it tests is
+not dead: `record_check_in` is what `apply_sync_item` calls; `daily_mileage` is called by the
+app today; and its RLS refusals are the tenant boundary asserted over HTTP with a real token
+through Kong, which nothing else does. The header now says what it does prove and, explicitly,
+what it does not — so nobody infers the old claim again.
+
+#### E — NOT RUN
+
+45007, 45008, 45001 and 45004 were not driven from screens. 45004 additionally needs a cap
+value; `blocked-on-you` **5.9** says not to invent one, and whether a test-only threshold is
+admissible was not settled.
+
+#### The state of the two gates, plainly
+
+**`G-WRITE`: NOT MET.** All five writes now work from real screens both online (MR-24) and
+offline (B4 above), exactly once, with timestamps preserved through the queue and refusals
+reaching the MR. What is missing is **E**: 45007, 45008, 45001 and 45004 driven from screens,
+each rendering its own remedy and never another's. That is the whole of the remaining list.
+
+**`FE-G2`: NOT MET, and now blocked by ONE thing rather than two.** `FE-W38` is closed — an MR
+with no signal can perform all five writes, and they survive a restart and arrive exactly once.
+The gate itself is *8 hours offline, ≥20 queued writes, then sync*; today's cycle was five
+writes over eleven minutes. It still needs a **dev-client build** for the native modules
+(`react-native-background-geolocation`, `expo-audio`), which Expo Go cannot load — and
+`FE-W40` means an MR who restarts offline sees no day, which an 8-hour test would hit.
+
+#### Counts — by workspace AND runner, zero skips
+
+core vitest 21/3 · ui vitest 4/1 · ui jest 243/21 · ui-tokens vitest 54/3 · console vitest 10/1
+· field vitest 458/28 · field jest 85/13 · api vitest 614/38 · mock vitest 40/1. typecheck 9/9,
+lint 7/7, format clean.
+
+#### Where this stopped
+
+After Part F, before Part E. Not done: the four refusals from screens. `FE-W39` (what an MR
+sees when acting on unconfirmed state) and `FE-W40` (a cold start with no signal) are
+registered as decisions, not as work.
