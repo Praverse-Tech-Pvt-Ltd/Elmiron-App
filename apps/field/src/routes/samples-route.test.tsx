@@ -17,6 +17,16 @@ jest.mock('../sync/pulled-store', () => ({ usePulledStore: () => mockStore() }))
 // both are mocked here because the screen uses both -- which is exactly the two-column
 // distinction the real-versus-fixture table is about.
 jest.mock('../sync/push-client', () => ({
+  // **`SyncPushRefusal` must stay REAL.** `sendOrQueue` classifies refusals with
+  // `error instanceof SyncPushRefusal` (MR-24 defect 2), so a mock that omits the class makes
+  // that expression `instanceof undefined` and throws `TypeError: Right-hand side of
+  // 'instanceof' is not an object` — which is what this file did until MR-28, and it is why
+  // the mock spreads the real module rather than replacing it.
+  //
+  // A look-alike class would be worse than the throw: `instanceof` would be false, the
+  // refusal would be treated as a transport failure and queued, and the test would pass while
+  // asserting the opposite of the behaviour.
+  ...jest.requireActual<Record<string, unknown>>('../sync/push-client'),
   createPushClient: () => ({ createSampleAndInput: mockCreateSampleAndInput }),
 }));
 jest.mock('expo-router', () => ({
