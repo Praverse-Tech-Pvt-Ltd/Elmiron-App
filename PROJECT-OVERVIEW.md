@@ -11783,3 +11783,82 @@ visit — the new `update` deliberately does not consult the geofence, mirroring
 `record_check_out`), `BE-W95` + 5.14 (a second consent answer is recorded but does not
 SUPERSEDE the first, and nothing marks which is current), and defect 6 (the samples screen
 dates a visit by `received_at`).
+
+---
+
+### Gate 1 — its evidence was VOID FOR THE WRITE PATH (11 September 2026)
+
+**A gate correction, not a fixed bug.** The bug is fixed and recorded in MR-24. This section
+exists because *"the Gate 1 server half is built and green"* appears in this file (line 21,
+14 August 2026) and in the handover, and it did not mean what a reader would take it to mean.
+Nothing above is edited; this supersedes it.
+
+#### What the suite claimed
+
+`services/api/tests/gate1.spec.ts` opens:
+
+> This is the server half, decoupled so that when Frontend arrives the gate is a matter of
+> RUNNING it rather than building it. Everything below simulates one MR's day entirely
+> through the sync path — **the same path a real device uses** — and asserts the properties
+> the gate is actually about.
+
+#### What it did
+
+It built its sync items by hand. Five payload literals, none produced by the client's own body
+builder, all shaped to satisfy `apply_sync_item`:
+
+```ts
+payload: { visitId, latitude: stop.lat, longitude: stop.lon, occurredAt: visitStart }
+```
+
+The body the app sends, per `CreateCheckInRequestSchema` in `packages/core` — unchanged since
+the schema was written, and what both the REST endpoint and the mock at `:4010` accept — is:
+
+```ts
+{ id, visitId, source, occurredAt,
+  coordinates: { latitude, longitude, accuracyMetres, capturedAt } }
+```
+
+Flat versus nested, and no `id`. **The test and the function agreed with each other and neither
+agreed with the product.**
+
+#### What that means for the gate
+
+Gate 1 is *"one territory runs a full simulated day offline and syncs clean: no lost writes, no
+duplicates, location capture visibly stops at shift end."* The suite asserted all three against
+a payload shape no client has ever sent. So:
+
+- **"No lost writes" was never tested for the real body.** The first real check-in body ever
+  sent to this server, on 11 September 2026, was refused: `null value in column "latitude" of
+  relation "check_ins" violates not-null constraint`. Check-in and check-out had never worked
+  end to end from a real client, through every green run of this suite.
+- **"No duplicates" was tested against a shape that could not exhibit the duplicate defect.**
+  With no `id` in the payload, row identity fell back to `entityId` — which the client sets to
+  the VISIT as a queue-grouping key — so every clinical row for a visit collapsed onto one
+  primary key. A doctor's withdrawal of consent was silently discarded and reported as accepted.
+- **"Location capture stops at shift end" was tested only on the refusing side**, and the
+  accepting side was broken in a way the fixtures could not show: `is_within_shift` added grace
+  to a Postgres `time`, which wraps, so a window ending `23:59` with 30 minutes' grace refused
+  every capture all day. Every fixture window ended at `19:00` or `10:00`; neither wraps.
+
+The suite's own passes were real. **What they were evidence OF was narrower than the sentence
+in the header**, and the gap was exactly the client.
+
+#### Status
+
+**Gate 1's server-half evidence is void for the write path** for every run before
+`c515922` (11 September 2026). It is re-established from that commit forward: the payload
+literals in `gate1.spec.ts`, `sync.spec.ts`, `manager.spec.ts`, `sync-push-enforcement.spec.ts`
+and `visit-not-met.spec.ts` now carry the body's own `id` and nested `coordinates`, and MR-25
+Part B binds them to the contract type so a shape change fails at compile time rather than in
+production.
+
+The read path, the RLS assertions, the partial-success behaviour and the ordering properties in
+that suite are unaffected — those never depended on the write body's shape.
+
+#### The rule this produced
+
+A test that claims device parity must obtain its payload from the real producer, or be typed
+against the contract that defines it. Constructing one that happens to satisfy the code under
+test proves the two agree with each other and nothing about the product. Recorded in
+`docs/gotchas.md`, 11 September 2026 — *"a test that builds its own payload is testing itself"*.

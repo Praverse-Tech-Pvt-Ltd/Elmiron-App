@@ -236,12 +236,31 @@ the resulting support cost permanent. Nothing found here contradicts that.
 | Process death mid-queue | `adb shell am kill <pkg>` |
 | Permission revocation | `adb shell pm revoke <pkg> android.permission.ACCESS_FINE_LOCATION` (and `ACCESS_BACKGROUND_LOCATION`) |
 | Granting background without the UI | `adb shell pm grant <pkg> android.permission.ACCESS_BACKGROUND_LOCATION` — this **bypasses the Settings trip a real user must make**, so it exercises the code path and not the flow |
-| Mock position | Emulator extended controls, or `adb emu geo fix <longitude> <latitude>` |
+| Mock position | **NOT `adb emu geo fix`** — it returns `OK` and delivers nothing. See the correction below. Use `adb shell appops set 2000 android:mock_location allow`, then `cmd location providers add-test-provider fused` / `set-test-provider-enabled fused true` / `set-test-provider-location fused --location <LATITUDE>,<LONGITUDE> --accuracy 12`, driven in a loop for the whole request window |
 | Offline | Emulator airplane mode, or `adb shell svc wifi disable` / `svc data disable` |
 
 The Doze and Standby commands are from the Android source above; the rest are standard
 `adb`. The `adb emu geo fix` argument order — **longitude first** — is a known trap and
 worth confirming on the device rather than trusting this line.
+
+> **CORRECTED 11 September 2026 (MR-25 A3).** The line above was right to say "confirm on the
+> device rather than trusting this line", and nobody did. `adb emu geo fix` **prints `OK` and
+> delivers nothing** on this setup. MR-19 recorded it as a verified precondition on the strength
+> of its exit code, having never completed a check-in to test it; MR-24 lost about an hour to it.
+>
+> `takeFix()` uses `Accuracy.Balanced`, which on Android reads the **fused** provider. During a
+> real request `dumpsys location` shows `gps provider: ProviderRequest[OFF]`, `mStarted=false`,
+> `Number of location reports: 0` — the GPS provider the emulator console feeds is never asked.
+>
+> **Verify, never assume:** `adb shell dumpsys location | grep "last location"` and check the
+> `et=` elapsed time is ADVANCING. A frozen `et` means nothing is arriving. `last location=null`
+> with nothing subscribed is normal.
+>
+> Note the argument orders are OPPOSITE: `geo fix` takes longitude first,
+> `set-test-provider-location --location` takes **latitude first**.
+>
+> **A command that exits 0 is not a command that worked.** The wrong line is kept above, struck
+> through in meaning rather than deleted, because the reason it was believed is the lesson.
 
 ### 3.3 Physical-device-only — nothing else will do
 

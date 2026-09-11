@@ -2338,3 +2338,116 @@ Three things worth knowing before doing that again:
 
 And when an emulator window IS off-screen (`GetWindowRect` showed `Top = -665`), `MoveWindow`
 via `user32.dll` puts it back without restarting anything.
+
+## 11 September 2026 — check the value, AND check the path producing it is reachable
+
+The value-check rule as written says: check what is on the screen against what the server holds,
+field by field, because MR-14 proved provenance while every time was 5½ hours wrong. That rule
+is correct and it is not sufficient.
+
+**Worked example.** Today renders "Started 13:52" from `visits.started_at`. MR-19 checked it
+against the server and called it correct. MR-24's own B1 checked it again, on a different day,
+and called it correct. Both were right about the value.
+
+Then MR-24 found that **`record_check_in` never wrote `visits.started_at` at all** — it inserted
+the check-in row and touched `public.visits` not at all, while `record_check_out` ended with
+exactly such an update. `seed-day.mjs` sets `started_at` directly, so the only rows that ever had
+one were seeded. **That line was unreachable in production and had been verified twice.**
+
+The same gap made `visit_status.in_progress` a value nothing wrote, which made `stageOf()` never
+return `'during'`, which made **check-out unreachable from the app**. A render verified against
+seeded data concealed a missing write path and an impossible user action.
+
+**The rule.** A value check answers "is this number right". It does not answer "does this number
+ever get here". Ask both:
+
+1. Does the rendered value match the server? (the existing rule)
+2. **What in the PRODUCT writes the field it came from?** Name the function. If the answer is
+   "the seed script", the check proved nothing about the product.
+
+**The tell.** If a screen state only ever appears after `seed:day` and never after using the
+app, it is not verified — it is staged. The cheap version of this check is to perform the action
+and see the value change; MR-24's was to check in and watch `started_at` stay NULL.
+
+This is the characteristic defect of this codebase — unexercised code that looks exercised —
+wearing the costume of a passing value check.
+
+
+## 11 September 2026 — a field's meaning is not enforced by its comment
+
+Every comment finding before this one was a comment claiming something the code did not do. This
+one is different and worse: **a comment correctly stating what a field means, ignored by a
+different module.** The producer documented its semantics; the consumer used its own.
+
+**Worked example.** `apps/field/src/sync/push-client.ts` sends, for all five writes:
+
+```ts
+p_items: [{ id: body.id, entity, entityId: body.visitId, payload: body }]
+```
+
+and says exactly what it means by it:
+
+> `entityId` is the VISIT for every one of these five, matching what `outbox.ts` already
+> stores, so everything waiting on one visit groups together **on the queue screen**. `id` is
+> the request's own id and is never regenerated — it is the idempotency key.
+
+A **display grouping key**. Correct, deliberate, and documented at the call site.
+
+`apply_sync_item` passed `p_entity_id` to `record_check_in`, `record_check_out` and
+`capture_consent` as `p_id` — each record's **PRIMARY KEY**. Each of those opens with an
+idempotency guard of the shape `select ... where c.id = p_id; if found then return v_existing`.
+
+So the second consent on a visit found the first and returned it. **A doctor tapped "No, don't
+record", the server answered `accepted`, and `consent_records` still said `consented`.** The
+refusal existed nowhere and the MR was told it was recorded — on the artefact that IS the
+evidence.
+
+**The rule.** If two modules must agree on the meaning of a value, the TYPE has to carry it. A
+comment is a request; a type is a constraint. A grouping key and a primary key have the same
+shape — both `uuid` — and nothing in the type system could tell them apart, so nothing could
+notice when one was used as the other.
+
+This is the MR-09 discriminant lesson in a new place. There, `CreateCheckOutRequestSchema` IS
+`CreateCheckInRequestSchema`, so no shape check could tell a departure from an arrival, and only
+the entity tag carried the difference. Here, two identifiers with different meanings shared one
+type. **Same shape, different meaning, nothing to tell them apart.**
+
+**The tell.** When a comment has to explain what a field means at the point it is passed, ask
+what happens if a reader three modules away does not read it. If the answer is "silent data
+corruption", the comment is doing a type's job.
+
+
+## 11 September 2026 — do not do arithmetic on a type whose domain wraps
+
+`is_within_shift` ended with:
+
+```sql
+return v_local_time >= (v_window.shift_start - make_interval(mins => v_window.grace_minutes))
+   and v_local_time <= (v_window.shift_end   + make_interval(mins => v_window.grace_minutes));
+```
+
+All three operands are Postgres `time`, whose domain is one day and **wraps**:
+
+```
+time '23:59' + make_interval(mins => 30)  ->  00:29:00
+```
+
+So the predicate became `>= 03:30 AND <= 00:29` — a condition **no time of day can satisfy**.
+Every check-in and check-out was refused, all day, for any territory whose
+`shift_end + grace_minutes` crosses midnight. `seed-day.mjs` seeds exactly `23:59 / 30`, so the
+demo data sat in the failing configuration and no MR could check in at all.
+
+**The rule.** `time`, `angle`-like values, modular counters and anything else with a bounded,
+cyclic domain must not be added to or subtracted from when the result may leave the domain. Do
+the arithmetic in a type that does not wrap and compare there — here, INTERVALS since local
+midnight, where `23:59 + 30 min` stays `24:29:00`, which is exactly the "half an hour past the
+end of shift" the grace always meant.
+
+**Why no test caught it, which is the reusable half.** `shift_end` had one kind of value in
+every fixture — `19:00` with 15 minutes' grace, and `10:00` with none. Neither wraps. The
+wrapping branch did not exist as far as any test could tell. This is the dimension rule again:
+the fixtures held one value of the dimension the predicate turns on. **The seed created the
+condition and no test did**, which is the worst arrangement of the two — the demo is broken and
+the suite is green.
+
+The fixture now includes a window ending near midnight so the dimension exists.
