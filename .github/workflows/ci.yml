@@ -61,6 +61,25 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm run lint
       - run: pnpm run format:check
+
+      # MR-27 A1. Every migration has a rollback FILE. No database, no destruction.
+      #
+      # The pairing check lived only inside `verify:rollbacks`, which EXECUTES every
+      # rollback and empties the public schema -- so it is in the `database` job, it needs
+      # Docker, and it is not what anybody runs locally. Migrations reached `main` with no
+      # rollback twice (MR-24, MR-26) and both pushes failed on a step nothing local had run.
+      #
+      # MR-26 A4 made `ci:local` print loudly what it was skipping. That helped and was not
+      # enough: the warning prints at the END OF A RUN and the moment that matters is when
+      # somebody ADDS A MIGRATION. It was read in MR-26 Part A, two migrations were added in
+      # Part B, and the push failed again.
+      #
+      # So the half that needs no database runs HERE, in the fast job -- which also means it
+      # runs in the default `pnpm ci:local`, because `scripts/ci-local.mjs` derives its steps
+      # from this file rather than duplicating them. `verify:rollbacks` in the database job
+      # below still EXECUTES them, because a rollback that has never run is a claim.
+      - name: Every migration has a rollback file
+        run: node services/api/scripts/verify-rollbacks.mjs --files-only
       - run: pnpm turbo run test --filter @fieldforce/core
       # The WCAG contrast guard. It fails the build when a design token drops below
       # its required ratio, and it had never run here — the step simply did not
