@@ -95,6 +95,24 @@ export interface PulledStoreState {
    * pull answers — a screen must not fill that gap with the handset's date.
    */
   readonly today: string | null;
+  /**
+   * The SERVER's clock at the last successful pull, ISO — MR-28 A2.
+   *
+   * `today` is this reduced to a territory DATE, which is the right shape for the day
+   * boundary and the wrong one for an activation window: `effective_from <= now` needs an
+   * INSTANT. The consent screen was using `new Date()` for that, which is the handset's
+   * clock — the thing MR-15 A2 forbids for the day boundary, for the same reason.
+   *
+   * **Null until the first successful pull, and that is meaningful rather than a gap.** With
+   * no server clock the app cannot say which notice is in force; see the consent screen,
+   * which declines to guess rather than falling back to the device.
+   *
+   * **It AGES between pulls**, and the bound on that is the pull interval. What that costs is
+   * stated at `activeNoticeFor`'s call site: a notice that activates mid-visit is not offered
+   * until the next pull, and a capture against the older one is refused `45001` — which is
+   * precisely what `45001` means and is designed to do.
+   */
+  readonly serverTime: string | null;
   readonly refresh: () => void;
 }
 
@@ -136,6 +154,7 @@ export const PulledStoreProvider = ({
   const [removals, setRemovals] = useState<readonly RemovalNotice[]>([]);
   const [zone, setZone] = useState<TerritoryZone>(UTC_FALLBACK);
   const [today, setToday] = useState<string | null>(null);
+  const [serverTime, setServerTime] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
 
   // One sync at a time. A foreground event arriving mid-sweep would otherwise start a
@@ -157,6 +176,7 @@ export const PulledStoreProvider = ({
       setFailure(null);
       setRemovals([]);
       setToday(null);
+      setServerTime(null);
       return;
     }
 
@@ -226,6 +246,7 @@ export const PulledStoreProvider = ({
           // A2. "Today" is the SERVER's instant read in the TERRITORY's zone. The
           // handset decides neither half.
           setToday(territoryToday(outcome.serverTime, territoryZone));
+          setServerTime(outcome.serverTime);
           await persistence.save(userId, next);
           pages += 1;
         } while (outcome.hasMore && pages < MAX_PAGES);
@@ -260,8 +281,19 @@ export const PulledStoreProvider = ({
   }, [userId, sessionStatus, nonce, cursors, persistence, pull]);
 
   const value = useMemo<PulledStoreState>(
-    () => ({ store, status, notice, failure, resynced, removals, zone, today, refresh }),
-    [store, status, notice, failure, resynced, removals, zone, today, refresh],
+    () => ({
+      store,
+      status,
+      notice,
+      failure,
+      resynced,
+      removals,
+      zone,
+      today,
+      serverTime,
+      refresh,
+    }),
+    [store, status, notice, failure, resynced, removals, zone, today, serverTime, refresh],
   );
 
   return <PulledStoreContext.Provider value={value}>{children}</PulledStoreContext.Provider>;

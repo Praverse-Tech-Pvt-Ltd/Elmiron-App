@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { render, screen, waitFor } from '@testing-library/react-native';
-import { BodyText } from '@fieldforce/ui';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { BodyText, Button } from '@fieldforce/ui';
 import type { ReactNode } from 'react';
 
 /**
@@ -54,7 +54,7 @@ const pulled = (over: Partial<Extract<PullOutcome, { kind: 'pulled' }>> = {}): P
 
 /** Renders one field of the store's state, so an assertion can read it off the screen. */
 const Probe = (): ReactNode => {
-  const { store, status, notice, failure, resynced } = usePulledStore();
+  const { store, status, notice, failure, resynced, serverTime, refresh } = usePulledStore();
   return (
     <>
       <BodyText>{`status:${status}`}</BodyText>
@@ -62,6 +62,9 @@ const Probe = (): ReactNode => {
       <BodyText>{`resynced:${String(resynced)}`}</BodyText>
       <BodyText>{`notice:${notice === null ? 'none' : notice.title}`}</BodyText>
       <BodyText>{`failure:${failure === null ? 'none' : failure.kind}`}</BodyText>
+      {/* MR-28 A2. The clock the consent screen applies the activation window against. */}
+      <BodyText>{`serverTime:${serverTime ?? 'none'}`}</BodyText>
+      <Button variant="quiet" label="refresh" onPress={refresh} />
     </>
   );
 };
@@ -191,6 +194,67 @@ describe('the provider that finally calls pull()', () => {
       expect(screen.getByText('failure:unreachable')).toBeTruthy();
     });
     expect(screen.queryByText('failure:refused')).toBeNull();
+  });
+
+  it('EXPOSES the server’s clock, which is the only one the window may use', async () => {
+    // MR-28 A2. `consent/[visitId].tsx` applied `effectiveFrom`/`effectiveUntil` against
+    // `new Date()`. MR-15 A2 forbids the handset for the day boundary for the same reason,
+    // and this is the same defect one screen along: a fast phone offers a notice that is
+    // not yet active and `capture_consent` refuses it at 45001 with a doctor waiting.
+    const pull = jest.fn(async () =>
+      Promise.resolve(pulled({ serverTime: '2026-09-10T09:00:00+00:00' })),
+    );
+
+    await render(
+      <PulledStoreProvider
+        cursors={memoryPullCursorStore()}
+        persistence={memoryPulledStore()}
+        pull={pull as never}
+      >
+        <Probe />
+      </PulledStoreProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('serverTime:2026-09-10T09:00:00+00:00')).toBeTruthy();
+    });
+  });
+
+  it('HOLDS the last server clock when a later pull fails — it ages, deliberately', async () => {
+    // The answer to “what happens as that value ages”, asserted rather than described.
+    // A failed pull does NOT clear it, and that is the safe direction on both sides: a
+    // notice scheduled for later stays withheld until a pull succeeds, and a notice
+    // retired since the last pull is still re-resolved by `capture_consent`, which refuses
+    // it at 45001 with its own remedy. Clearing it would blank the consent screen on every
+    // transient failure, which is what MR-26 B3 removed everywhere else.
+    const pull = jest
+      .fn<() => Promise<PullOutcome>>()
+      .mockResolvedValueOnce(pulled({ serverTime: '2026-09-10T09:00:00+00:00' }))
+      .mockRejectedValueOnce(new Error('Network request failed'));
+
+    await render(
+      <PulledStoreProvider
+        cursors={memoryPullCursorStore()}
+        persistence={memoryPulledStore()}
+        pull={pull as never}
+      >
+        <Probe />
+      </PulledStoreProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText('serverTime:2026-09-10T09:00:00+00:00')).toBeTruthy();
+    });
+
+    await fireEvent.press(screen.getByText('refresh'));
+
+    await waitFor(() => {
+      expect(screen.getByText('failure:unreachable')).toBeTruthy();
+    });
+    // The precondition for the assertion below: the second pull really did run and really
+    // did fail. Without it this passes over a refresh that never fired.
+    expect(pull).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('serverTime:2026-09-10T09:00:00+00:00')).toBeTruthy();
+    expect(screen.queryByText('serverTime:none')).toBeNull();
   });
 
   it('is SILENT when the server omitted nothing', async () => {

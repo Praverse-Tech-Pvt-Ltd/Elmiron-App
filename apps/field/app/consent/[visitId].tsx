@@ -95,7 +95,7 @@ export default function ConsentRoute(): ReactNode {
    * capture made against it would have named a version id Supabase does not hold —
    * `capture_consent` would have refused it `45001` after the doctor had already answered.
    */
-  const { store, status, failure: pullFailure, refresh } = usePulledStore();
+  const { store, status, failure: pullFailure, refresh, serverTime } = usePulledStore();
   const visit = visitsFromStore(store).find((candidate) => candidate.id === visitId) ?? null;
   const doctor =
     visit === null
@@ -134,8 +134,35 @@ export default function ConsentRoute(): ReactNode {
   // and none for this language, "there is no consent notice for this language yet" is true.
   // On a fresh install with no signal it would be a lie, and "the notice could not be loaded"
   // is the true sentence -- which is what this keeps reachable.
-  const failed = notices.length === 0 && pullFailure !== null;
-  const versionsFromStore = offerableVersions(notices, new Date().toISOString());
+  // **MR-28 A2. THE WINDOW USES THE SERVER'S CLOCK, NOT THE HANDSET'S.**
+  //
+  // MR-27 B1 split the selection: the server transmits `precedence`, the client applies
+  // `effective_from <= now < effective_until`. The half left on the client needs a clock, and
+  // it was `new Date()` — the handset's.
+  //
+  // That is the defect MR-15 A2 forbids for the day boundary, in a second place. A handset
+  // running fast offers a notice that is NOT YET ACTIVE; `capture_consent` re-resolves at
+  // `captured_at` and refuses `45001`, in front of a doctor. A handset running slow keeps
+  // offering a retired one. Worse, it puts `45001` back to meaning two things — "the notice
+  // changed" or "your clock is wrong" — which is exactly what MR-27 B2 removed. A notice
+  // scheduled to take effect on Monday is the ordinary case, not an exotic one.
+  //
+  // **What it costs, stated rather than discovered.** `serverTime` is the last pull's clock
+  // and it AGES; the bound is the pull interval. A notice that activates mid-visit is not
+  // offered until the next pull, and a capture against the older one is refused `45001` —
+  // which is what `45001` is for, and is now the ONLY thing it means.
+  //
+  // **Null is not a gap to paper over.** Before the first successful pull the app has no
+  // server clock, so it cannot say which notice is in force. It declines rather than
+  // substituting the device's — the same choice `FE-W40` documents for the day itself, and
+  // the same persisted-`serverTime` decision would answer both.
+  const windowNow = serverTime;
+  const versionsFromStore = windowNow === null ? [] : offerableVersions(notices, windowNow);
+
+  // Extended for MR-28 A2: with no server clock the app cannot determine the active notice
+  // either, and "there is no notice for this language yet" would be a claim it cannot support.
+  // `blockedReason`'s other sentence — "the notice could not be loaded" — is the true one.
+  const failed = (notices.length === 0 && pullFailure !== null) || windowNow === null;
 
   useEffect(() => {
     setVersions(versionsFromStore);
@@ -153,10 +180,10 @@ export default function ConsentRoute(): ReactNode {
       setNotice(null);
       return;
     }
-    setNotice(activeNoticeFor(notices, language, new Date().toISOString()));
+    setNotice(windowNow === null ? null : activeNoticeFor(notices, language, windowNow));
     setSettled(true);
     // Keyed on identities, as above.
-  }, [language, notices.map((version) => version.id).join(',')]);
+  }, [language, windowNow, notices.map((version) => version.id).join(',')]);
 
   // `mrName` is null by construction -- see the note above -- so this is the fallback
   // rather than a choice between two values.

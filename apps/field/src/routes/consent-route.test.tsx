@@ -111,6 +111,12 @@ const pulled = (visits: unknown[], doctors: unknown[], notices: unknown[] = []) 
   removals: [],
   zone: { timeZone: 'Asia/Kolkata', source: 'territory' },
   today: '2026-08-14',
+  // MR-28 A2. The clock the activation window is applied against. It is the SERVER's, from
+  // the last pull -- not `new Date()`, which is what this screen used and which MR-15 A2
+  // forbids for the day boundary for the same reason: a handset running fast displays a
+  // notice that is not yet active and `capture_consent` refuses it at 45001, in front of a
+  // doctor.
+  serverTime: '2026-08-14T12:00:00+05:30',
   refresh: jest.fn(),
 });
 
@@ -193,6 +199,80 @@ describe('app/consent/[visitId].tsx — the handoff', () => {
 
     expect(mockCreateConsentRecord).not.toHaveBeenCalled();
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  // ---------------------------------------------------------------------------------------
+  // MR-28 A2 -- WHICH CLOCK the activation window uses. These three are two-sided about the
+  // one thing that matters: the answer must change with the SERVER's time and must not
+  // change with the handset's. Each fixture below is built so the two clocks DISAGREE, which
+  // is the only arrangement that can tell them apart -- a notice active under both proves
+  // nothing, and that is why the defect survived MR-27.
+  // ---------------------------------------------------------------------------------------
+
+  it('OFFERS a notice the SERVER’s clock has reached, though the handset’s has not', async () => {
+    // `effectiveFrom` is in the future by the machine running this test and in the past by
+    // `serverTime`. On `new Date()` the screen said "There is no consent notice for this
+    // language yet" -- a published, live notice withheld from a doctor who was sitting there.
+    const scheduled = PulledConsentTextVersionSchema.parse({
+      ...notice,
+      id: '44444444-4444-4444-8444-4444444444de',
+      versionLabel: 'v2.0-monday',
+      fullText: 'Monday wording: this conversation may be audio recorded.',
+      effectiveFrom: '2099-01-01T00:00:00+05:30',
+    });
+    mockStore.mockReturnValue({
+      ...pulled([visit], [doctor], [scheduled]),
+      serverTime: '2099-06-01T09:00:00+05:30',
+    });
+    mockCreateConsentRecord.mockClear();
+    await render(<ConsentRoute />);
+
+    expect(await screen.findByText(scheduled.fullText)).toBeTruthy();
+    expect(screen.queryByText('There is no consent notice for this language yet')).toBeNull();
+  });
+
+  it('WITHHOLDS a notice the handset’s clock has reached and the SERVER’s has not', async () => {
+    // The other side, and the one with a doctor waiting: a fast handset would display
+    // Monday's notice on Sunday, the doctor would answer it, and `capture_consent`
+    // re-resolves at the SERVER's clock and refuses -- 45001, after the conversation.
+    // Nothing is shown here because nothing is servable, and the app says so plainly.
+    const scheduled = PulledConsentTextVersionSchema.parse({
+      ...notice,
+      id: '44444444-4444-4444-8444-4444444444df',
+      versionLabel: 'v2.0-monday',
+      // Computed from the DEVICE's now rather than hardcoded, so the two clocks disagree
+      // whatever day this suite is run on: yesterday by the handset, next year by the
+      // server's stale `serverTime`. A fixed date here would drift into agreement and the
+      // case would pass against the defect -- which it did on the first attempt.
+      effectiveFrom: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    });
+    mockStore.mockReturnValue({
+      ...pulled([visit], [doctor], [scheduled]),
+      serverTime: '2020-01-01T12:00:00+05:30',
+    });
+    mockCreateConsentRecord.mockClear();
+    await render(<ConsentRoute />);
+
+    expect(
+      await screen.findByText('There is no consent notice for this language yet'),
+    ).toBeTruthy();
+    expect(screen.queryByText(scheduled.fullText)).toBeNull();
+    expect(screen.queryByText("Yes, that's fine")).toBeNull();
+  });
+
+  it('with NO server clock, declines to decide the window rather than guessing', async () => {
+    // A cold start that has never completed a pull holds notices from disk and no
+    // `serverTime`. There is no honest answer to "is this one active" -- so the screen does
+    // not offer one. It says the notice could not be loaded, which is the true sentence:
+    // the notice ROWS are here, the thing needed to serve one is not. Falling back to
+    // `new Date()` here is `FE-W40` option B and is refused for the same reason.
+    mockStore.mockReturnValue({ ...pulled([visit], [doctor], [notice]), serverTime: null });
+    mockCreateConsentRecord.mockClear();
+    await render(<ConsentRoute />);
+
+    expect(await screen.findByText('The consent notice could not be loaded')).toBeTruthy();
+    expect(screen.queryByText(notice.fullText)).toBeNull();
+    expect(screen.queryByText("Yes, that's fine")).toBeNull();
   });
 
   it('shows no answers when the handset holds NO notice and the pull could not run', async () => {

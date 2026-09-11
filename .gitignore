@@ -89,3 +89,4 @@ apps/field/.gitignore
 # in e2fb1fe alongside an unrelated change and removed the same session.
 .idea/
 
+SESSION-2026-09-11.md
