@@ -36,7 +36,7 @@ export default function CallReport(): ReactNode {
   const [objections, setObjections] = useState('');
   const [nextStep, setNextStep] = useState('');
   const [sending, setSending] = useState(false);
-  const [sentNote, setSentNote] = useState<string | null>(null);
+  const [sentNote, setSentNote] = useState<{ title: string; detail: string } | null>(null);
   const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
 
   useEffect(() => {
@@ -100,13 +100,21 @@ export default function CallReport(): ReactNode {
     void sendOrQueue(() => createPushClient().createCallReport(body), callReportQueueItem(body))
       .then((outcome) => {
         if (outcome.kind === 'sent') {
-          setSentNote('Your manager sees this next time they open your visits.');
+          setSentNote({
+            title: 'Report sent',
+            detail: 'Your manager sees this next time they open your visits.',
+          });
           return;
         }
         if (outcome.kind === 'queued') {
-          setSentNote(
-            'Saved on this phone. It will send by itself when you have signal — you do not have to retype it.',
-          );
+          // MR-25 D1. "Report SAVED", not "Report sent". The server has not taken this and
+          // the title must not say it has -- observed on the emulator with no signal, where
+          // this banner read "Report sent" over a body saying it had not been sent.
+          setSentNote({
+            title: 'Report saved',
+            detail:
+              'Saved on this phone. It will send by itself when you have signal — you do not have to retype it.',
+          });
           return;
         }
         setFailure({ title: 'That was refused', detail: outcome.message });

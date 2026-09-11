@@ -207,6 +207,31 @@ export const pullOnce = async (deps: PullDeps): Promise<PullOutcome> => {
       ({ data, error } = await callPull(db, null, limit));
     }
     if (error !== null) {
+      // **A refusal carries a SQLSTATE. A silence does not.** MR-25 D1.
+      //
+      // This returned `refused` for EVERY error, including a server that was simply not
+      // there. `refusalForSqlState(undefined)` answers `{ code: 'unrecognised', sqlState:
+      // '' }`, so an MR with no signal was told **"The server refused this sync ()"** —
+      // a decision the server never made, with an empty pair of brackets where the code
+      // that does not exist should have been. Observed on the emulator after an offline
+      // restart.
+      //
+      // It is the mirror of MR-24's defect 2, on the read path: there a refusal was
+      // reported as a transport failure and re-queued forever; here a transport failure is
+      // reported as a refusal. `PullFailure` has carried an `unreachable` variant the
+      // screens render correctly since MR-14, and nothing ever emitted it for a network
+      // error — the characteristic defect, a handled branch nothing produces.
+      //
+      // Throwing rather than returning a new variant is deliberate: `pulled-store.tsx`
+      // already treats a throw as `unreachable`, with the comment "NOT a refusal: the
+      // server has said nothing to report, and claiming it refused would invent a
+      // decision." That reasoning was right and unreachable. This connects it.
+      //
+      // `sync_pull` raises 45005/45006 for a bad cursor, and those DO carry a SQLSTATE and
+      // must stay refusals — which is what the check discriminates on.
+      if (error.code === null || error.code === undefined || error.code === '') {
+        throw new Error(error.message);
+      }
       return { kind: 'refused', refusal: refusalForSqlState(error.code) };
     }
   }

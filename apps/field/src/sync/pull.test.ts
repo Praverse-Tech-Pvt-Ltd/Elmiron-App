@@ -495,3 +495,60 @@ describe('MR-11 B4 — a doctor whose addresses have not arrived says so', () =>
     expect(store.beat_plan.size, 'a clinic address landed in beat_plan').toBe(0);
   });
 });
+
+describe('MR-25 D1: a silence is not a refusal', () => {
+  const rpc = (
+    impl: () => {
+      data: unknown;
+      error: { code?: string | null; message: string } | null;
+    },
+  ) => ({
+    rpc: vi.fn((_fn: string, _args: Record<string, unknown>) => Promise.resolve(impl())),
+  });
+  const USER = 'mr-mr25';
+
+  /**
+   * Observed on the emulator, after restarting the app with no route to the server: Today
+   * rendered **"Could not load your day — The server refused this sync ()."**
+   *
+   * The server refused nothing. It was not there. `pullOnce` returned `refused` for every
+   * error, and `refusalForSqlState(undefined)` answers `{ code: 'unrecognised', sqlState: '' }`
+   * — which is where the empty brackets came from, printing the absence of a code as if it
+   * were one.
+   *
+   * This is MR-24's defect 2 mirrored onto the read path. There, a refusal was reported as a
+   * transport failure and re-queued forever. Here, a transport failure was reported as a
+   * refusal. Both directions of the same boundary, now both wrong at least once.
+   */
+  it('treats a transport error with NO SQLSTATE as unreachable, not as a verdict', async () => {
+    const client = rpc(() => ({ data: null, error: { message: 'Network request failed' } }));
+    await expect(
+      pullOnce({ client, cursors: memoryPullCursorStore(), userId: USER }),
+    ).rejects.toThrow(/network request failed/i);
+  });
+
+  it('also treats an explicitly NULL code as unreachable', async () => {
+    // supabase-js populates `code` from PostgREST's envelope. A fetch that never reached
+    // PostgREST has no envelope, and the field arrives null rather than absent.
+    const client = rpc(() => ({ data: null, error: { code: null, message: 'Failed to fetch' } }));
+    await expect(
+      pullOnce({ client, cursors: memoryPullCursorStore(), userId: USER }),
+    ).rejects.toThrow(/failed to fetch/i);
+  });
+
+  it('THE POSITIVE CONTROL: a real SQLSTATE is still a refusal, with its code intact', async () => {
+    // Without this, "throw on any error" would satisfy both cases above and destroy the
+    // cursor-expiry path entirely — 45005 and 45006 are genuine server decisions that the
+    // store must act on, not silences to retry. The discriminator is the SQLSTATE, so the
+    // pair has to vary exactly that and nothing else.
+    const client = rpc(() => ({ data: null, error: { code: '45006', message: 'cursor too old' } }));
+    const outcome = await pullOnce({
+      client,
+      cursors: memoryPullCursorStore(),
+      userId: USER,
+    });
+    expect(outcome.kind).toBe('refused');
+    if (outcome.kind !== 'refused') throw new Error('unreachable');
+    expect(outcome.refusal.sqlState, 'the code the screen prints in brackets').toBe('45006');
+  });
+});

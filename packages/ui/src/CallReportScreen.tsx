@@ -38,8 +38,22 @@ export interface CallReportScreenProps {
   readonly onObjectionsChange: (value: string) => void;
   readonly onSend: () => void;
   readonly sending?: boolean;
-  /** Set once the server has taken it. */
-  readonly sentNote?: string | null;
+  /**
+   * The outcome banner: what happened to the report, in its own words.
+   *
+   * **A `{ title, detail }` pair, not a bare string, and MR-25 D1 is why.** This was
+   * `sentNote?: string`, rendered under a HARDCODED `title="Report sent"`. The route sets it
+   * for the QUEUED outcome as well as the sent one, so a report saved with no signal was
+   * headed "Report sent" above a body reading "Saved on this phone. It will send by itself
+   * when you have signal" — the two halves of the same banner contradicting each other, with
+   * the heading making the claim a reader actually takes away.
+   *
+   * MR-18 B3 replaced this screen's copy precisely so it would stop claiming the server had
+   * work it did not have. The detail was fixed and the title was left behind, which is the
+   * same defect in the half nobody re-read. The title now comes from the caller, so the
+   * branch that knows the outcome is the branch that names it.
+   */
+  readonly sentNote?: { readonly title: string; readonly detail: string } | null;
   readonly failure?: { readonly title: string; readonly detail: string } | null;
 }
 
@@ -73,7 +87,9 @@ export const CallReportScreen = ({
       <Banner detail={failure.detail} title={failure.title} tone="critical" />
     )}
 
-    {sentNote === null ? null : <Banner detail={sentNote} title="Report sent" tone="info" />}
+    {sentNote === null ? null : (
+      <Banner detail={sentNote.detail} title={sentNote.title} tone="info" />
+    )}
 
     <Card>
       <BodyText>Every word here is yours.</BodyText>
