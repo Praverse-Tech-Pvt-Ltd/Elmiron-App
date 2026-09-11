@@ -59,7 +59,24 @@ export type SendOutcome =
   /** The server answered and accepted it. Nothing is queued. */
   | { readonly kind: 'sent' }
   /** The server answered and refused. Nothing is queued; the MR is told. */
-  | { readonly kind: 'refused'; readonly message: string }
+  | {
+      readonly kind: 'refused';
+      readonly message: string;
+      /**
+       * The server's SQLSTATE, when it gave one — MR-27 C1.
+       *
+       * The message alone is backend's sentence for support. The REMEDY an MR can act on is
+       * keyed by this, through `refusalForSqlState` and `explanation.ts`'s table. Without it
+       * a screen can only repeat what the server said, which for `45001` is "re-read the
+       * current notice" rather than "open consent again, read the current notice ALOUD, and
+       * ask once more" — the difference between a fact and an instruction.
+       *
+       * Null for an `ApiRequestError`, which carries an `ApiErrorCode` rather than a
+       * SQLSTATE. `refusalForSqlState(null)` answers `unrecognised`, which has no remedy, and
+       * that is the honest outcome rather than a guessed one.
+       */
+      readonly sqlState: string | null;
+    }
   /** No answer. The work is on disk and will go later. */
   | { readonly kind: 'queued' };
 
@@ -244,7 +261,11 @@ export const sendOrQueue = async (
     if (error instanceof ApiRequestError || error instanceof SyncPushRefusal) {
       // The server answered. Whatever it said, it has the work — queueing it would
       // mean re-sending something already refused, on every flush, forever.
-      return { kind: 'refused', message: error.message };
+      return {
+        kind: 'refused',
+        message: error.message,
+        sqlState: error instanceof SyncPushRefusal ? error.sqlState : null,
+      };
     }
 
     const state = await store.read();

@@ -1,5 +1,5 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { DoctorSchema, PulledConsentTextVersionSchema, VisitSchema } from '@fieldforce/core';
 
 const mockCreateConsentRecord = jest.fn<(body: unknown) => Promise<unknown>>();
@@ -29,6 +29,11 @@ jest.mock('../sync/pulled-store', () => ({ usePulledStore: () => mockStore() }))
 // both are mocked here because the screen uses both -- which is exactly the two-column
 // distinction the real-versus-fixture table is about.
 jest.mock('../sync/push-client', () => ({
+  // `createPushClient` is replaced; `SyncPushRefusal` is kept REAL. `sendOrQueue` classifies
+  // by `instanceof`, so a look-alike class would be treated as a transport failure and the
+  // refusal path -- the one under test -- would never run. MR-24's defect 2 was exactly that
+  // mistake in production code; a test that made it here would prove nothing.
+  ...jest.requireActual<Record<string, unknown>>('../sync/push-client'),
   createPushClient: () => ({ createConsentRecord: mockCreateConsentRecord }),
 }));
 const mockReplace = jest.fn();
@@ -38,6 +43,7 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ visitId: '44444444-4444-4444-8444-444444444401' }),
 }));
 
+import { SyncPushRefusal } from '../sync/push-client';
 import ConsentRoute from '../../app/consent/[visitId]';
 
 const visit = VisitSchema.parse({
@@ -204,6 +210,49 @@ describe('app/consent/[visitId].tsx — the handoff', () => {
 
     expect(await screen.findByText('The consent notice could not be loaded')).toBeTruthy();
     expect(screen.queryByText("Yes, that's fine")).toBeNull();
+  });
+
+  it('SHOWS a server refusal with its remedy, and does NOT navigate away', async () => {
+    // **MR-27 C1, found by driving a real 45001 from the screen.** The handler awaited
+    // `sendOrQueue` and DISCARDED the outcome, then navigated back whatever the server said.
+    // So the doctor answered, `capture_consent` refused it, the app went quiet, and no
+    // record existed -- with nothing on the queue screen either, because since MR-24 a
+    // refusal is not queued.
+    //
+    // Staying put is also the 45001 remedy: re-read the CURRENT notice and ask once more.
+    loaded();
+    mockCreateConsentRecord.mockRejectedValue(
+      new SyncPushRefusal({
+        message: 'the consent notice changed since it was displayed; re-read and ask again',
+        sqlState: '45001',
+        rejectionCode: 'internal_error',
+        deadLettered: false,
+      }),
+    );
+    await render(<ConsentRoute />);
+    await screen.findByText(notice.fullText);
+    await fireEvent.press(screen.getByText("Yes, that's fine"));
+
+    // The MR-facing REMEDY, not backend's sentence for support.
+    expect(await screen.findByText(/read the current notice aloud/i)).toBeTruthy();
+    // A refusal must not send them back as though it worked.
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('THE POSITIVE CONTROL: an ACCEPTED capture still navigates straight back', async () => {
+    // Without this, "never navigate" would satisfy the case above and strand every MR on the
+    // consent screen after a successful answer -- with the phone still in the doctor's hand,
+    // which is the one place this screen must not linger.
+    loaded();
+    mockCreateConsentRecord.mockResolvedValue({ receivedAt: '2026-09-11T10:00:00.000Z' });
+    await render(<ConsentRoute />);
+    await screen.findByText(notice.fullText);
+    await fireEvent.press(screen.getByText("Yes, that's fine"));
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.queryByText(/read the current notice aloud/i)).toBeNull();
   });
 
   it('THE POSITIVE CONTROL: a failed pull does NOT block when the notice is in the store', async () => {

@@ -127,6 +127,20 @@ const RETRYABLE: ReadonlySet<SyncRejectionCode> = new Set<SyncRejectionCode>([
   'internal_error',
 ]);
 
+/**
+ * The remedy for a SQLSTATE, or null when there is none to give — MR-27 C1.
+ *
+ * `presentRejection` exists for the QUEUE screen, which has a whole `RejectionRecord`. A
+ * screen that has just been refused in the moment has only what `sendOrQueue` handed back,
+ * and it needs the same sentence: an MR who has just been refused in front of a doctor is
+ * the person who most needs to be told what to do next.
+ *
+ * Returns null rather than inventing one for an unmapped code, which is the same choice
+ * `REMEDIES` makes by having no `unrecognised` entry.
+ */
+export const remedyForSqlState = (sqlState: string | null): string | null =>
+  REMEDIES[refusalForSqlState(sqlState).code] ?? null;
+
 export const presentRejection = (record: RejectionRecord): RejectionPresentation => {
   // The SQLSTATE first, because it is the precise answer. `refusalForSqlState` returns
   // `unrecognised` for null and for anything unmapped, so this needs no null branch of its

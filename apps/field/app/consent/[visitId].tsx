@@ -27,6 +27,7 @@ import {
   offerableVersions,
 } from '../../src/consent/record';
 import { consentQueueItem, sendOrQueue } from '../../src/sync/outbox';
+import { remedyForSqlState } from '../../src/sync/explanation';
 
 /**
  * Phase 3 — the handoff, as a route.
@@ -94,7 +95,7 @@ export default function ConsentRoute(): ReactNode {
    * capture made against it would have named a version id Supabase does not hold —
    * `capture_consent` would have refused it `45001` after the doctor had already answered.
    */
-  const { store, status, failure: pullFailure } = usePulledStore();
+  const { store, status, failure: pullFailure, refresh } = usePulledStore();
   const visit = visitsFromStore(store).find((candidate) => candidate.id === visitId) ?? null;
   const doctor =
     visit === null
@@ -165,6 +166,13 @@ export default function ConsentRoute(): ReactNode {
   // MR-20 B2. A channel for "this screen cannot act", separate from `blockedReason`, which
   // answers a different question -- whether the QUESTION may be put to the doctor at all.
   const [unavailable, setUnavailable] = useState<PreconditionMessage | null>(null);
+  /**
+   * A refusal the SERVER gave to this capture — MR-27 C1.
+   *
+   * Separate from `unavailable`, which means "this screen cannot act". This means the screen
+   * acted, the doctor answered, and the server said no.
+   */
+  const [refusal, setRefusal] = useState<{ title: string; detail: string } | null>(null);
 
   const answer = useCallback(
     (given: ConsentAnswer): void => {
@@ -191,7 +199,7 @@ export default function ConsentRoute(): ReactNode {
         });
 
         // Both outcomes take the same path. There is no faster route for a yes.
-        await sendOrQueue(
+        const outcome = await sendOrQueue(
           // MR-18 B1. Through `sync_push`, so `capture_consent` runs and the three
           // FIX-02/FIX-12 bounds apply on the offline path they exist for.
           () => createPushClient().createConsentRecord(body),
@@ -199,14 +207,41 @@ export default function ConsentRoute(): ReactNode {
         );
 
         setBusy(false);
-        // Straight back to the visit either way, and with no confirmation screen in
+
+        // **MR-27 C1. A REFUSAL IS NOT A SUCCESS, AND THIS DISCARDED THE DIFFERENCE.**
+        //
+        // The outcome was not captured at all: the screen navigated back whatever the server
+        // said. Driving a real `45001` from this screen is what surfaced it — the doctor
+        // answered, the server refused, the app went quiet, and NO RECORD EXISTS. The MR had
+        // no way to know the question needed asking again.
+        //
+        // The reasoning in the comment below is right about a SUCCESS and wrong about this.
+        // A refusal is not the app addressing the doctor; it is the app telling the REP that
+        // the answer did not land. Staying put is also the remedy for `45001`, which is to
+        // re-read the CURRENT notice and ask once more — so `refresh()` fetches it and the
+        // screen is already where they need to be.
+        //
+        // The queue screen cannot cover this: since MR-24 a refusal is not queued, so there
+        // is nothing there to find.
+        if (outcome.kind === 'refused') {
+          setRefusal({
+            title: 'That was refused',
+            // The remedy first when there is one — it is an instruction. Backend's sentence
+            // is the fallback: written for support, true, and not a next step.
+            detail: remedyForSqlState(outcome.sqlState) ?? outcome.message,
+          });
+          refresh();
+          return;
+        }
+
+        // Straight back to the visit, and with no confirmation screen in
         // between: the doctor has answered and the phone is about to change hands.
         // A "thank you" here would be the app addressing the doctor after the
         // decision, which is the moment pressure is cheapest to apply.
         router.replace(`/visit/${visit.id}`);
       })();
     },
-    [busy, doctor, notice, router, visit],
+    [busy, doctor, notice, refresh, router, visit],
   );
 
   if (showDetails && notice !== null) {
@@ -237,6 +272,7 @@ export default function ConsentRoute(): ReactNode {
         */
         blocked={
           unavailable ??
+          refusal ??
           // **MR-26 B1/B3. A failed background refresh is not "this screen has no data".**
           //
           // This was keyed on `pullFailure` alone, so a failure in a SEPARATE, CONCURRENT

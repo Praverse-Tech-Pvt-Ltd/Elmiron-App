@@ -58,6 +58,20 @@ comment on view public.consent_text_version_precedence is
   'it. Deliberately excludes the effective-window filter, which is time-dependent and belongs '
   'wherever the question is asked.';
 
+-- **REVOKE FIRST, then grant exactly one privilege.** Found by the posture suites, which
+-- failed consistently after this view landed: `foundations` ("grants TRUNCATE on nothing in
+-- public, to anyone but the owner") and `privilege-posture` ("every grant to anon or PUBLIC is
+-- on the allowlist").
+--
+-- Supabase ships DEFAULT PRIVILEGES that hand `anon`, `authenticated` and `service_role`
+-- REFERENCES, TRIGGER and TRUNCATE on every new relation in `public`. So creating a view
+-- silently granted `anon` three privileges on it -- nothing this view is for, and `anon` is
+-- the unauthenticated role. A `grant select` alone would have left all of that in place, which
+-- is why the revoke is not tidiness.
+--
+-- Exactly what the base table has, and nothing more.
+revoke all on public.consent_text_version_precedence from anon, authenticated, service_role;
+
 -- **SELECT and nothing else, to `authenticated` only** -- exactly what the base table grants.
 -- Found by running the pull as `authenticated` and getting "permission denied for view
 -- consent_text_version_precedence": a new relation grants nothing by default, and the arm

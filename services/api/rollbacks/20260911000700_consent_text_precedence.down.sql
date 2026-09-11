@@ -270,4 +270,6 @@ as $$
    limit 1;
 $$;
 
+-- The grant and the revoke go with the view; dropping it removes both, and the default
+-- privileges Supabase hands out apply only to relations that exist.
 drop view if exists public.consent_text_version_precedence;
