@@ -39,10 +39,10 @@ const territoryWithWindow = async (
 ): Promise<string> => {
   const orgId = randomUUID();
   const territoryId = randomUUID();
-  await client.query(
-    `insert into public.organisations (id, name) values ($1, $2)`,
-    [orgId, `MR24 grace ${shiftEnd}/${String(graceMinutes)}`],
-  );
+  await client.query(`insert into public.organisations (id, name) values ($1, $2)`, [
+    orgId,
+    `MR24 grace ${shiftEnd}/${String(graceMinutes)}`,
+  ]);
   await client.query(
     `insert into public.territories (id, organisation_id, name, code) values ($1, $2, $3, $4)`,
     [territoryId, orgId, `MR24 ${shiftEnd}`, `MR24-${randomUUID().slice(0, 8)}`],
@@ -101,9 +101,10 @@ describe.skipIf(!reachable)('grace that crosses midnight', () => {
     await inRolledBackTransaction(async (client) => {
       // The shape every existing fixture already had. The fix must not move this.
       const territoryId = await territoryWithWindow(client, '09:00', '19:00', 15);
-      expect(await within(client, territoryId, MID_MORNING_UTC), '10:55 is inside 09:00-19:00').toBe(
-        true,
-      );
+      expect(
+        await within(client, territoryId, MID_MORNING_UTC),
+        '10:55 is inside 09:00-19:00',
+      ).toBe(true);
       expect(
         await within(client, territoryId, SMALL_HOURS_UTC),
         '02:30 is outside 09:00-19:00',

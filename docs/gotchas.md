@@ -2226,3 +2226,115 @@ again and the suite would go back to proving nothing, with nothing anywhere to s
 
 **A control that cannot fail is indistinguishable from one that is absent, and it costs more,
 because it also buys confidence.**
+
+## 11 September 2026 — a test that builds its own payload is testing itself
+
+MR-24 put the five writes through real screens for the first time and found **seven** defects
+stacked behind one another. Three of them share a single cause, and it is the one worth
+carrying forward.
+
+`gate1.spec.ts` opens by saying it simulates *"one MR's day entirely through the sync path,
+the same path a real device uses"*. It built its sync items by hand:
+
+```ts
+payload: { visitId, latitude: stop.lat, longitude: stop.lon, occurredAt: visitStart }
+```
+
+The body the app actually sends, per `CreateCheckInRequestSchema` in `packages/core`, is
+
+```ts
+{ id, visitId, source, occurredAt, coordinates: { latitude, longitude, accuracyMetres, capturedAt } }
+```
+
+Flat versus nested, and no `id`. `apply_sync_item` read the flat shape. **The test and the
+function agreed with each other, and neither agreed with the product.** So the suite was green
+while check-in had never once worked end to end from a real client — the first real body ever
+sent came back `null value in column "latitude" violates not-null`.
+
+The same hand-built payload hid a second defect: with no `id`, the row's identity fell back to
+`entityId`, which `push-client.ts` sets to **the visit** — deliberately, as a queue-screen
+grouping key. So every clinical row for a visit shared the visit's primary key, and a doctor's
+**withdrawal of consent was silently discarded**: `capture_consent` found the existing row by
+id and returned it, accepted, unchanged. The app told the MR it was recorded.
+
+**The rule.** A test that constructs the input itself is testing the function against the
+test author's belief about the input. When a producer for that input exists in the codebase,
+use it, or validate against the schema that defines it. Where the layering forbids importing
+the producer — these are server tests and the builders live in `apps/field` — the schema is
+still importable, and parsing the literal through it costs one line and makes drift
+impossible.
+
+**The tell.** Ask what would have to be true for this test to pass while the product is
+broken. If the answer is "the payload shape I typed is the one the client sends", the test is
+not evidence of that — it is an assertion of it.
+
+This is the same shape as the 10 September dimension rule, one level up: there, a fixture with
+one VALUE could not falsify a predicate on that dimension. Here, a fixture with one SHAPE
+cannot falsify a contract. And note what made both visible in the end — not a better test, but
+a real write from a real screen.
+
+## 11 September 2026 — `adb emu geo fix` returns `OK` and does nothing
+
+Recorded because MR-19 wrote down the opposite and it cost MR-24 an hour.
+
+MR-19's gotcha says a GPS fix "must be set" with `adb emu geo fix <lon> <lat>` — longitude
+first, which is true — and implies it works. It was never validated end to end: MR-19 never
+completed a check-in (the silent-return blocker stopped it), so the only evidence was the
+emulator reporting Mountain View, which is the BOOT default rather than a delivered fix.
+
+What is actually true on this setup:
+
+- `adb emu geo fix` prints `OK` whether or not anything is delivered. **Never trust the `OK`.**
+  Verify with `adb shell dumpsys location | grep "last location"` and check that the `et=`
+  elapsed time is ADVANCING between calls. A frozen `et` means no fix is arriving.
+- `last location=null` with no app subscribed is normal, not a failure.
+- `takeFix()` uses `Accuracy.Balanced` — a deliberate product choice, documented in
+  `capture/location.ts` — which on Android reads the **fused** provider. During a real request
+  `dumpsys` showed `gps provider: ProviderRequest[OFF]`, `mStarted=false`, `Number of location
+  reports: 0`: the GPS provider is never even asked, so a console `geo fix` cannot satisfy it.
+- `getCurrentPositionAsync` wants a FRESH fix, so a cached location does not help, and the
+  timeout is 10 s (`FIX_TIMEOUT_MS`).
+
+**What works:** Android's test-provider injection, which targets the provider the app reads.
+
+```
+adb shell appops set 2000 android:mock_location allow          # the missing step
+adb shell cmd location providers add-test-provider fused
+adb shell cmd location providers set-test-provider-enabled fused true
+adb shell cmd location providers set-test-provider-location fused --location 18.5204,73.8567 --accuracy 12
+```
+
+Without the `appops` line every command fails with `SecurityException: ... not allowed to
+perform MOCK_LOCATION`, and the failure is printed as a bare "Exception occurred while
+executing 'providers'" with the cause several lines down. Note the flag is
+`--location <LAT>,<LNG>` — latitude first here, the opposite order to `geo fix`. Drive it in a
+loop for the whole 10-second window; a single injection is not enough.
+
+Two more gates nobody had written down, between a granted permission and a check-in:
+
+1. **Expo Go asks its OWN per-experience permission**, twice — coarse, then fine — on top of
+   `adb shell pm grant host.exp.exponent`. Granting the Android permission is not enough.
+2. **Google "Location Accuracy"** prompts after that. Choosing **Turn on** appeared to wedge
+   the emulated GPS for the rest of the session. Prefer **No thanks**.
+
+## 11 September 2026 — `adb reboot` can lose an emulator you can still reach
+
+The Pixel_10 AVD had a pattern lock that no session had ever seen, because the device had been
+unlocked by hand long before and never re-locked. Rebooting it to unwedge the GPS surfaced the
+keyguard and cost the session its device.
+
+Three things worth knowing before doing that again:
+
+- Android names the **keyguard** window `NotificationShade`. `mCurrentFocus=Window{... 
+  NotificationShade}` on a fresh boot means LOCKED, not "the shade is stuck". Two attempts were
+  wasted trying to collapse a shade that was not open.
+- `dumpsys device_policy` reporting `Password quality: {0=0}` does **not** mean no credential
+  is set. It said that while `locksettings clear` replied *"User has a lock credential"*.
+  Trust `locksettings`, not the policy dump.
+- Android Studio starts emulators with **`-qt-hide-window`**, so there is no standalone window
+  to look at — it renders inside the Running Devices panel. A user reporting "the screen is
+  blank" is describing a window that does not exist. `Get-CimInstance Win32_Process` on
+  `qemu-system-x86_64.exe` shows the flag.
+
+And when an emulator window IS off-screen (`GetWindowRect` showed `Top = -665`), `MoveWindow`
+via `user32.dll` puts it back without restarting anything.

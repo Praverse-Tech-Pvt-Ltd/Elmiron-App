@@ -11537,3 +11537,249 @@ After the single-write proof and the blocker, before Part C's failure matrix. No
   cap-message pair, and 45004 with its numbers. All need a reachable consent and samples
   screen.
 - **A3** — the three `gotchas.md` entries from the MR-19 brief.
+
+---
+
+### MR-24 — verification
+
+**EMULATOR, EXPO GO.** Pixel_10 AVD, Android 16 (SDK 36), Expo Go — not a dev client.
+Everything below was done on that setup and nothing here closes a DEVICE gate. FE-G1
+(geofenced check-in) and FE-G2 (background location) still cannot close on it: those are
+native modules Expo Go cannot load, and the location behind every check-in proved here was
+**injected** through Android's test provider, not sensed.
+
+#### A1 — CI
+
+| | |
+| --- | --- |
+| Run | `34475564284` · workflow `CI` · event `push` |
+| SHA | `e410c3dad90193e45c21eec02eec150a28496b61` — **was HEAD at push** |
+| Conclusion | `success` — both jobs: `typecheck · lint · format · unit tests`, and `migrations · Gate 0 RLS suite · rollbacks` |
+
+#### A2 — the fiduciary gap, registered as COMPLIANCE
+
+`BE-W93` and `blocked-on-you` **5.13**. Registered, deliberately not implemented. The consent
+face tells a doctor *"your rep's employer is the Data Fiduciary for this recording"* — true,
+and it identifies nobody. Not weak copy: the identity is not in the system. The JWT carries
+`app_role`, `app_territory_id`, `app_is_active`, `email`; `user_profiles` has an
+`organisationId` and no organisation NAME; `API_PATHS` has no organisations path. So
+`consent/[visitId].tsx:70` hard-codes `organisation = null` and `:158` hard-codes
+`firstName = 'your rep'`. Filed as COMPLIANCE because `consent_records` is append-only: every
+consent captured before the name exists keeps the anonymous notice as its permanent evidence.
+It is the one open item that gets **worse** while it stays open rather than merely staying open.
+
+Also removed the header comment on that route still claiming name and organisation "come from
+the token" — MR-23 disproved it ten lines below and the comment survived the session that
+falsified it.
+
+#### A3 — who picks the active consent version
+
+**The RPC does.** `fetchActiveNotice(language)` calls `active_consent_text`, which calls
+`active_consent_text_at(language, now(), org)`, whose `order by effective_from desc` decides.
+The client holds the whole list and deliberately does not choose — that is the FIX-12 defect,
+where the record would attest to whichever version the client's list happened to hold.
+`capture_consent` re-resolves at `captured_at` and refuses `45001` on disagreement.
+
+Two qualifications, both verified rather than recalled. The **client** picks the LANGUAGE
+(`offerableVersions`, arbitrary by admission — 5.12), so it chooses which question is asked
+while the server chooses which version answers it. And `displayed_language` is written from
+`v_active_then.language`, the version the SERVER resolved, ignoring the client's parameter —
+the insert carries the comment *"so a mismatched language cannot be recorded as if it had been
+displayed."*
+
+#### B1 — values checked against the server, twice, on two different days
+
+The seed's day rolled from 10 to 11 September mid-session, so the same code was checked against
+two different server states. That is stronger than one check.
+
+**10 September.** Today: next visit **Dr Asha Deshpande (DEMO)** (the only `planned` visit that
+day); **Scheduled 13:00** against `scheduled_for 13:00 IST` = `07:30Z` — the MR-14 defect
+rendered `07:30`; **2 of 3** against 3 visits with 2 `completed`; **Started 13:52** against the
+earliest `started_at` (Meera's was 14:52); **Main clinic, Pune** against `12 FC Road, Pune`;
+yesterday's and tomorrow's visits both correctly excluded.
+
+**11 September.** Next visit **Dr Vikram Rao (DEMO)**, **Scheduled 10:00**, **0 of 1**, and
+**no "Started" line at all** — nothing started that day. The four visits from other days all
+excluded. The day boundary moved with the territory, not the device.
+
+Doctors list: **3 doctors**, specialties exact, and the derived "last seen" strings correct —
+Asha **yesterday** (her last COMPLETED visit was 09-09; she also had a `planned` one that day,
+correctly not counted as seen), Meera and Vikram **today**. No "On plan" chip, as MR-14 B9
+removed it rather than let it filter an empty set.
+
+Doctor profile: **Urology · Main clinic, Pune**; *Since your last visit* **yesterday**; *Your
+last visits* **9 Sep ✓ 45 min** against `13:52 → 14:37` — exactly 45 minutes. No consent line
+at all, which is `BE-W90` behaving as registered: `consentLabel(null)` renders nothing rather
+than claiming "not asked".
+
+#### B2 — the displayed version IS what the server recorded
+
+| On screen | Client sent | Server recorded |
+| --- | --- | --- |
+| `DEMO v1 55ad7cc2` | `consentTextVersionId: e9ff36da…` | `consent_text_version_id = e9ff36da…` |
+| `English` | `displayedLanguage: "en-IN"` | `displayed_language = en-IN` (server-derived) |
+| `09ce2467` | — | `hash = 09ce2467…` |
+| — | `capturedAt: …T05:50:58.897Z` | `captured_at = 05:50:58.897` — **to the millisecond** |
+
+`capture_lag = 216 ms`.
+
+#### B3 — the language default, now actually falsifiable
+
+`seed-day.mjs` seeds **one** language, so on the device the default was deterministic by
+accident — the same single-value dimension MR-16 named. A `hi-IN` notice was inserted into the
+local database effective **09-09**, making it NEWER than `en-IN` (08-11). The two candidate
+rules then disagree: sort-by-language-code gives `en-IN`, sort-by-newest gives `hi-IN`.
+
+The screen defaulted to **English**. The documented rule held, against a dimension that can now
+fail. **`seed-day.mjs` still seeds one language** and should not.
+
+#### B4 — Allow and Decline carry equal weight
+
+Measured off the rendered screen, not read off the source:
+
+| Button | Bounds | Size |
+| --- | --- | --- |
+| "No, don't record" | `[58,1821][1022,1958]` | **964 × 137** |
+| "Yes, that's fine" | `[58,2010][1022,2147]` | **964 × 137** |
+
+Identical geometry, and **decline renders first**. Both are `variant="secondary"` in
+`ConsentScreen.tsx`. "Give the phone back" is a `Pressable` in the muted tone — not an answer,
+and correctly not styled as one.
+
+#### B6 — SEVEN defects, each hidden behind the one in front of it
+
+Not one. Each became visible only when the one before it was fixed, and **not one was findable
+by a test as written**. Full evidence in the commits; the shape is what matters.
+
+| # | Where | What | Verdict |
+| --- | --- | --- | --- |
+| 1 | server | `is_within_shift` added grace to a Postgres `time`, which **wraps**: `23:59 + 30min = 00:29`. The predicate became `>= 03:30 AND <= 00:29` — satisfiable by **no time of day**. Every check-in and check-out refused, all day. `seed-day.mjs` seeds exactly `23:59/30` | **fixed** — `20260911000100` |
+| 2 | client | `sendOrQueue` classified refusals by `ApiRequestError`; the writes throw `SyncPushRefusal`. Refusals were shown as *"Saved on this phone… when you have signal"* **and re-queued** — what that function's own comment forbids | **fixed** |
+| 3 | server | `apply_sync_item` read coordinates FLAT; the contract nests them. Check-in had **never** worked from a real client body | **fixed** — `20260911000200` |
+| 4 | server | `record_check_in` never touched `visits`. `in_progress` and `started_at` were written by nothing — and `stageOf()` returns `'during'` only for `in_progress`, so **check-out was unreachable from the app** | **fixed** — `20260911000300` |
+| 5 | client | The visit screen rendered `Checked in 05:45` for an `11:15:34 IST` check-in — the MR-14 five-and-a-half-hour defect, in a screen converted *after* MR-14 documented the trap | **fixed** |
+| 6 | client | The samples screen dates a visit by `visits.received_at` — when the ROW ARRIVED. It headed a visit scheduled 11 Sep as **"· 10 Sep"** | **registered** |
+| 7 | server | **A doctor's withdrawal of consent was silently discarded.** The doctor declined; the server said `accepted`; `consent_records` still held one row saying `consented` | **fixed** — `20260911000400` |
+
+Defect 7 is the one to read twice. `push-client.ts` sends `entityId: body.visitId` and says
+why — *"so everything waiting on one visit groups together ON THE QUEUE SCREEN"*, a display
+key. `apply_sync_item` used it as each record's **primary key**, and `capture_consent` opens
+with `where c.id = p_id; if found then return v_existing`. Every clinical row for a visit
+shared the visit's id, so per visit there could be one consent record, one call report, one
+samples row — while `is_withdrawal`, `supersedes_consent_record_id`,
+`supersedes_call_report_id` and the samples screen's "Add another item" all exist for the
+opposite.
+
+**What made three of them possible.** `gate1.spec.ts` — the suite whose header says it runs
+"the same path a real device uses" — hand-built five flat, id-less payload literals to match
+`apply_sync_item`. The test and the function agreed with each other and neither agreed with
+the product. Corrected across five spec files; `gotchas.md` carries the rule.
+
+**Two corrections to things earlier sessions called correct.** Today's "Started HH:MM" was
+verified by MR-19 and by MR-24's own B1 against SEEDED `started_at`; until defect 4 was fixed
+that line was unreachable through real use. And MR-19's gotcha that `adb emu geo fix` sets a
+usable fix was never validated end to end — it returns `OK` while delivering nothing.
+
+#### C1 — the five writes, from real screens, against live Supabase
+
+One visit (`fca2d102`, Dr Vikram Rao), one sitting, each accepted **exactly once**:
+
+```
+check_in         accepted   11:15:35 IST
+consent_record   accepted   11:20:59
+sample_and_input accepted   11:24:40
+check_out        accepted   11:25:31      <- as check_out, NOT check_in
+call_report      accepted   11:29:09
+```
+
+`visits`: `planned -> in_progress (started 11:15:34.894) -> completed (11:25:31)`.
+
+Check-out is named explicitly because MR-14 D1 asked for it: it is the event that was once
+replayed as a check-in, and it arrived as `check_out` with its own row —
+`18.5204/73.8567, accuracy_metres 12, geofence inside, source manual, 11:25:31.155 IST`.
+
+Values, not provenance:
+
+| Entered | Server row |
+| --- | --- |
+| `Elmiron 100mg MR24`, Sample — product, 2 packs, ₹250 | `item_name` byte-identical, `kind sample`, `quantity 2`, `declared_value_inr 250.00` |
+| samples tap at `05:54:39.959Z` | `occurred_at 11:24:39.864 IST` (= `05:54:39.864Z`) |
+| report: summary / objection / next step | `MR24 dosing discussed with Dr Rao` / `Asked about price` / `Send leaflet Monday`, status `draft` |
+| consent tap at `05:50:58.993Z` | `captured_at 05:50:58.897` — **millisecond-exact through the push** |
+
+#### C4 — refusals reaching the MR, observed
+
+**45003 `outside_shift_window`**, on the queue screen, with the server's own detail and the
+remedy from `explanation.ts`:
+
+> **Refused — check_in** · *"check-in at 2026-09-11 05:25:13.186+00 is outside the configured
+> shift window for territory f4306092…"* · **"This was recorded outside your territory's
+> working hours. If the hours are wrong, your manager can change them."**
+
+**UCPMP, the unconfigured side**, rendered on the samples screen while
+`ucpmp_sample_cap_quantity` is null:
+
+> *"This app does not count your samples against the UCPMP cap — nothing in it has been given
+> your limit or your month to date. Keep your own count, and check with your manager before you
+> go near it."*
+
+**The configured side (45004 with real numbers) was NOT exercised.** The cap is null, and
+`blocked-on-you` **5.9** says not to invent a value. Setting a local one to fire the guard would
+have proved the guard and said nothing about the product, so it is named as not done rather
+than dressed up.
+
+#### D1 — G-WRITE: **NOT MET**
+
+Stated plainly. The **mechanism** is now proved in a way it never has been: all five writes
+performed from real screens against live Supabase, accepted exactly once, values correct to the
+millisecond, with a refusal reaching the MR carrying its own remedy. Before this session **no
+write had ever been performed from a converted screen**, and three of the five were impossible.
+
+It is not met, because the gate is about the app in use, and:
+
+- **C2 was not run** — the offline → restart → reconnect cycle. Every write above was made
+  online. The exactly-once claim rests on `sync_items` and on one accepted verdict per entity,
+  not on a queue that was cut off and reconnected.
+- `captured_at` was proved millisecond-exact **through the push**, not **through the queue**,
+  which is what C3 actually asks.
+- 45007, 45008, 45001 and 45004 were not driven from the screens.
+- Defect 6 is unfixed and `report/[visitId].tsx` is still on the mock for reads.
+- FE-G1 and FE-G2 remain unfakeable on Expo Go.
+
+The remaining work is specific rather than open-ended, which it was not at the start of this
+session.
+
+#### D3 — real versus fixture
+
+| Capability | Module | Screen | Reads / writes |
+| --- | --- | --- | --- |
+| Today | — | **REAL** — `usePulledStore()` | Supabase (read) |
+| Doctor list · doctor profile | — | **REAL** | Supabase (read) |
+| The pull | **Real** | **CALLED** at the root | Supabase |
+| Check-in | **Real** | **REAL WRITE, REAL READ** | **Supabase** |
+| Check-out | **Real** | **REAL WRITE, REAL READ** | **Supabase** |
+| Consent | **Real** | **REAL WRITE, REAL READ** | **Supabase** |
+| Samples | **Real** | **REAL WRITE, REAL READ** | **Supabase** |
+| Call report | **Real** | **REAL WRITE, MOCK READ** — `report/[visitId].tsx:38` still `createClientForScenario()`; the doctor name renders as an empty `"This visit · "` | **Supabase (write)** / mock (read) |
+| Recording | — | `visit/[id].tsx:181` still writes `createRecording` to the mock; blocked anyway by FE-W29 and Expo Go | mock |
+| Beat plan | — | **MOCK** — `BE-W89` | mock |
+| Day end · coaching · analysis · mileage · reply | — | **MOCK** | mock |
+
+Screens still on fixtures for READS: `app/(tabs)/coaching.tsx`, `app/analysis/[id].tsx`,
+`app/beat-plan.tsx`, `app/day-end.tsx`, `app/mileage.tsx`, `app/reply/[analysisId].tsx`,
+`app/report/[visitId].tsx`, `app/voice-note/[visitId].tsx`.
+
+#### Counts — by workspace AND runner, zero skips
+
+core vitest 21/3 · ui vitest 4/1 · ui jest 233/20 · ui-tokens vitest 54/3 · console vitest 10/1
+· field vitest 433/29 · field jest 84/13 · api vitest 613/38 · mock vitest 40/1. **Total 1492.**
+No runner reporting zero, no skips. typecheck 9/9, lint 7/7. Every new guard is
+mutation-tested two-sided and carries a positive control.
+
+#### Registered, not implemented
+
+`BE-W93` + 5.13 (the fiduciary identity), `BE-W94` (does an out-of-geofence check-in start the
+visit — the new `update` deliberately does not consult the geofence, mirroring
+`record_check_out`), `BE-W95` + 5.14 (a second consent answer is recorded but does not
+SUPERSEDE the first, and nothing marks which is current), and defect 6 (the samples screen
+dates a visit by `received_at`).
