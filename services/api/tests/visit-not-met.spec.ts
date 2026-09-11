@@ -4,6 +4,7 @@ import type { Client } from 'pg';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
 import { asUser } from './auth.js';
 import { seedFixtures } from './fixtures.js';
+import { checkOutBody } from './sync-bodies.js';
 import type { FixtureUser, FixtureWorld } from './fixtures.js';
 
 /**
@@ -237,19 +238,15 @@ describe.skipIf(!reachable)('D2: a check-out queued offline keeps its outcome', 
         [
           randomUUID(),
           JSON.stringify({
-            // MR-24. The body's own id and NESTED coordinates -- the shape
-            // `CreateCheckOutRequestSchema` defines and the app sends. This literal was flat
-            // and id-less, written to match `apply_sync_item` rather than the contract.
-            id: randomUUID(),
-            visitId,
-            coordinates: {
-              latitude: CLINIC_LAT,
-              longitude: CLINIC_LON,
-              accuracyMetres: null,
-              capturedAt: WED_1025_IST,
-            },
-            source: 'automatic',
-            occurredAt: WED_1025_IST,
+            // MR-25 B3. `checkOutBody` annotates against `CreateCheckOutRequest` and parses
+            // through the schema, so a contract change fails at compile time. The literal
+            // that stood here was flat and id-less, written to match `apply_sync_item`
+            // rather than the contract.
+            ...checkOutBody({
+              visitId,
+              occurredAt: WED_1025_IST,
+              coordinates: { latitude: CLINIC_LAT, longitude: CLINIC_LON },
+            }),
             notMetReason: 'Doctor called into theatre',
           }),
         ],
@@ -269,19 +266,15 @@ describe.skipIf(!reachable)('D2: a check-out queued offline keeps its outcome', 
         [
           randomUUID(),
           JSON.stringify({
-            // MR-24. The body's own id and NESTED coordinates -- the shape
-            // `CreateCheckOutRequestSchema` defines and the app sends. This literal was flat
-            // and id-less, written to match `apply_sync_item` rather than the contract.
-            id: randomUUID(),
-            visitId,
-            coordinates: {
-              latitude: CLINIC_LAT,
-              longitude: CLINIC_LON,
-              accuracyMetres: null,
-              capturedAt: WED_1025_IST,
-            },
-            source: 'automatic',
-            occurredAt: WED_1025_IST,
+            // MR-25 B3. `checkOutBody` annotates against `CreateCheckOutRequest` and parses
+            // through the schema, so a contract change fails at compile time. The literal
+            // that stood here was flat and id-less, written to match `apply_sync_item`
+            // rather than the contract.
+            ...checkOutBody({
+              visitId,
+              occurredAt: WED_1025_IST,
+              coordinates: { latitude: CLINIC_LAT, longitude: CLINIC_LON },
+            }),
           }),
         ],
       );

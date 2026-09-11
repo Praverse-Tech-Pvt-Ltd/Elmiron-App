@@ -4,6 +4,7 @@ import type { Client } from 'pg';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
 import { asUser } from './auth.js';
 import { seedFixtures } from './fixtures.js';
+import { checkInItem } from './sync-bodies.js';
 import type { FixtureUser, FixtureWorld } from './fixtures.js';
 
 /**
@@ -41,29 +42,13 @@ const push = async (client: Client, items: Record<string, unknown>[]): Promise<u
   return result.rows[0];
 };
 
-const poisonCheckIn = (visitId: string): Record<string, unknown> => {
-  // MR-24. Contract shape: the body's own id, coordinates nested.
-  const rowId = randomUUID();
-  return {
-    id: randomUUID(),
-    entity: 'check_in',
-    operation: 'create',
-    entityId: rowId,
-    clientCreatedAt: WED_0300_IST,
-    payload: {
-      id: rowId,
-      visitId,
-      coordinates: {
-        latitude: CLINIC_LAT,
-        longitude: CLINIC_LON,
-        accuracyMetres: null,
-        capturedAt: WED_0300_IST,
-      },
-      source: 'automatic',
-      occurredAt: WED_0300_IST,
-    },
-  };
-};
+const poisonCheckIn = (visitId: string): Record<string, unknown> =>
+  // MR-25 B3. Contract-bound; see sync-bodies.ts.
+  checkInItem({
+    visitId,
+    occurredAt: WED_0300_IST,
+    coordinates: { latitude: CLINIC_LAT, longitude: CLINIC_LON },
+  });
 
 // =============================================================================
 // Dead-letter reinstatement

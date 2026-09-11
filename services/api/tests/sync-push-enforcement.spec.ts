@@ -5,6 +5,7 @@ import { inRolledBackTransaction, requireDatabase } from './db.js';
 import { refusalForSqlState } from '@fieldforce/core';
 import { asUser } from './auth.js';
 import { seedFixtures } from './fixtures.js';
+import { consentBody } from './sync-bodies.js';
 import type { FixtureWorld } from './fixtures.js';
 
 /**
@@ -153,14 +154,18 @@ describe.skipIf(!reachable)('what the verdict loses on the way out', () => {
           entity: 'consent_record',
           entityId: id,
           payload: {
-            // MR-24. The row's identity is the body's OWN id, which every one of these
-            // schemas requires; `entityId` is the client's grouping key, not an identity.
-            id,
-            visitId: world.visits.pune,
-            doctorId: world.doctors.pune,
-            outcome: 'consented',
-            consentTextVersionId: displayed,
-            displayedLanguage: language,
+            // MR-25 B3. `consentBody` annotates against `CreateConsentRecordRequest` and
+            // parses through the schema, so a contract change fails at compile time.
+            // `entityId` stays the client's grouping key; the row's identity is `id`.
+            ...consentBody({
+              id,
+              visitId: world.visits.pune,
+              doctorId: world.doctors.pune,
+              outcome: 'consented',
+              consentTextVersionId: displayed,
+              displayedLanguage: language,
+              capturedAt: new Date().toISOString(),
+            }),
             // A minute ago, not `new Date()`. `capture_consent` compares against
             // `now()`, which is TRANSACTION START time, so a timestamp taken after the
             // test transaction opened is in the future and trips 45007 before the
@@ -262,14 +267,18 @@ describe.skipIf(!reachable)('THE FINDING: consent through sync_push skips captur
           entity: 'consent_record',
           entityId: id,
           payload: {
-            // MR-24. The row's identity is the body's OWN id, which every one of these
-            // schemas requires; `entityId` is the client's grouping key, not an identity.
-            id,
-            visitId: world.visits.pune,
-            doctorId: world.doctors.pune,
-            outcome: 'consented',
-            consentTextVersionId: displayed,
-            displayedLanguage: language,
+            // MR-25 B3. `consentBody` annotates against `CreateConsentRecordRequest` and
+            // parses through the schema, so a contract change fails at compile time.
+            // `entityId` stays the client's grouping key; the row's identity is `id`.
+            ...consentBody({
+              id,
+              visitId: world.visits.pune,
+              doctorId: world.doctors.pune,
+              outcome: 'consented',
+              consentTextVersionId: displayed,
+              displayedLanguage: language,
+              capturedAt: new Date().toISOString(),
+            }),
             capturedAt: new Date().toISOString(),
           },
         },
@@ -296,14 +305,18 @@ describe.skipIf(!reachable)('THE FINDING: consent through sync_push skips captur
           entity: 'consent_record',
           entityId: id,
           payload: {
-            // MR-24. The row's identity is the body's OWN id, which every one of these
-            // schemas requires; `entityId` is the client's grouping key, not an identity.
-            id,
-            visitId: world.visits.pune,
-            doctorId: world.doctors.pune,
-            outcome: 'consented',
-            consentTextVersionId: displayed,
-            displayedLanguage: language,
+            // MR-25 B3. `consentBody` annotates against `CreateConsentRecordRequest` and
+            // parses through the schema, so a contract change fails at compile time.
+            // `entityId` stays the client's grouping key; the row's identity is `id`.
+            ...consentBody({
+              id,
+              visitId: world.visits.pune,
+              doctorId: world.doctors.pune,
+              outcome: 'consented',
+              consentTextVersionId: displayed,
+              displayedLanguage: language,
+              capturedAt: new Date().toISOString(),
+            }),
             // A day in the future. capture_consent refuses this with 45007.
             capturedAt: new Date(Date.now() + 86_400_000).toISOString(),
           },
