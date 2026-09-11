@@ -1,7 +1,4 @@
-import { fromConsentTextVersionRow } from '@fieldforce/core';
-import type { ConsentTextVersion } from '@fieldforce/core';
-import { resolveClient } from '../capture/client';
-import type { RpcCaller } from '../capture/client';
+import type { PulledConsentTextVersion } from '@fieldforce/core';
 
 /**
  * The consent notices, from Supabase — MR-23 B1.
@@ -46,79 +43,5 @@ import type { RpcCaller } from '../capture/client';
  * produce it.
  */
 export const noticesFromStore = (store: {
-  readonly consent_text_version: ReadonlyMap<string, ConsentTextVersion>;
-}): readonly ConsentTextVersion[] => [...store.consent_text_version.values()];
-
-/** `select` on one table. Narrow on purpose, like `RpcCaller` beside it. */
-export interface TableReader {
-  from(table: string): {
-    select(columns: string): PromiseLike<{
-      data: unknown;
-      error: { code?: string | null; message: string } | null;
-    }>;
-  };
-}
-
-/**
- * Every notice this MR's tenant holds.
- *
- * Returned unfiltered and unsorted: `offerableVersions` decides which are still in force
- * and in what order, and it is tested. Doing either here would put the retirement rule in
- * two places.
- *
- * **Throws rather than returning empty.** An empty list and an unreachable server mean
- * completely different things to this screen — `blockedReason` says *"there is no consent
- * notice for this language yet"* for the first and *"the notice could not be loaded"* for
- * the second, and the MR is told to carry on for different reasons. Collapsing them would
- * tell a doctor their company has published nothing when the truth is that the phone could
- * not ask.
- */
-export const fetchConsentNotices = async (
-  client?: TableReader,
-): Promise<readonly ConsentTextVersion[]> => {
-  const db = await resolveClient<TableReader>(client);
-  const { data, error } = await db
-    .from('consent_text_versions')
-    // Named columns, not `*`. `organisation_id` is not read, and asking for it would
-    // suggest this file has some use for it.
-    .select('id,version_label,language,full_text,hash,effective_from,effective_until,created_at');
-
-  if (error !== null) throw new Error(error.message);
-  if (!Array.isArray(data)) throw new Error('consent_text_versions did not return a list');
-  // Parsed, never cast — one bad row fails loudly rather than reaching a doctor.
-  return data.map(fromConsentTextVersionRow);
-};
-
-/**
- * The version in force for a language, as the SERVER decides it.
- *
- * `active_consent_text(p_language)` calls `active_consent_text_at(language, now(), org)`,
- * whose `and v.language = p_language` clause MR-16 made falsifiable by adding a second
- * language to the fixtures — and whose `order by effective_from desc` decides which of
- * several live versions is the current one.
- *
- * **The client must not make this choice.** It holds the whole list already and could pick
- * the newest itself, which is exactly the FIX-12 defect: the record would then attest to
- * whichever version the client's list happened to contain rather than the one the server
- * says was in force. `capture_consent` re-resolves it at `captured_at` and refuses with
- * `45001` when the two disagree, so a client that guessed would simply be refused later,
- * in front of a doctor.
- *
- * `null` when the tenant has no live notice in that language — a real answer, not an error.
- */
-export const fetchActiveNotice = async (
-  language: string,
-  client?: RpcCaller,
-): Promise<ConsentTextVersion | null> => {
-  const db = await resolveClient<RpcCaller>(client);
-  const { data, error } = await db.rpc('active_consent_text', { p_language: language });
-  if (error !== null) throw new Error(error.message);
-  if (data === null || data === undefined) return null;
-  // The RPC returns the row itself, or a one-element array depending on how PostgREST
-  // renders a table-returning function. Both are handled rather than assumed.
-  // `Array.isArray` narrows `unknown` to `any[]`, so the element has to be re-typed as
-  // unknown or it arrives as `any` and every check below it becomes decorative.
-  const row: unknown = Array.isArray(data) ? (data as readonly unknown[])[0] : data;
-  if (row === undefined || row === null) return null;
-  return fromConsentTextVersionRow(row);
-};
+  readonly consent_text_version: ReadonlyMap<string, PulledConsentTextVersion>;
+}): readonly PulledConsentTextVersion[] => [...store.consent_text_version.values()];

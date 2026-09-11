@@ -892,6 +892,46 @@ export const fromConsentTextVersionRow = (row: unknown): ConsentTextVersion => {
   });
 };
 
+/**
+ * A consent notice as the PULL sends it: the row, plus the server's precedence — MR-27 B1.
+ *
+ * **Separate from `ConsentTextVersion` on purpose.** `precedence` exists only on the pull
+ * path, computed by `public.consent_text_version_precedence`. The REST endpoints and the
+ * mock produce notices without it, and widening the shared type would make the field
+ * optional — at which point a caller could silently fall back to re-deriving the order,
+ * which is the whole thing this removes. A distinct type means the compiler asks.
+ *
+ * **What the number means.** 1 is the version the server would choose for that language
+ * were it in force; 2 is the next; and so on, over `effective_from desc, created_at desc,
+ * id desc`. It is NOT "is active" — see the migration header. Activeness depends on
+ * `now()`, a pull is a snapshot, and a notice that becomes active because the clock passed
+ * `effective_from` never changes and so is never re-emitted. The ordering carries no clock,
+ * so it travels safely; the time window is applied wherever the question is asked.
+ */
+export const PulledConsentTextVersionSchema = ConsentTextVersionSchema.extend({
+  precedence: z.number().int().positive(),
+});
+export type PulledConsentTextVersion = z.infer<typeof PulledConsentTextVersionSchema>;
+
+const PulledConsentTextVersionRowSchema = ConsentTextVersionRowSchema.extend({
+  precedence: z.number().int().positive(),
+});
+
+export const fromPulledConsentTextVersionRow = (row: unknown): PulledConsentTextVersion => {
+  const parsed = PulledConsentTextVersionRowSchema.parse(row);
+  return PulledConsentTextVersionSchema.parse({
+    id: parsed.id,
+    versionLabel: parsed.version_label,
+    language: parsed.language,
+    fullText: parsed.full_text,
+    hash: parsed.hash,
+    effectiveFrom: parsed.effective_from,
+    effectiveUntil: parsed.effective_until,
+    createdAt: parsed.created_at,
+    precedence: parsed.precedence,
+  });
+};
+
 export const fromClinicAddressRow = (row: unknown): ClinicAddress => {
   const parsed = ClinicAddressRowSchema.parse(row);
   return ClinicAddressSchema.parse({

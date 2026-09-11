@@ -2,7 +2,7 @@ import {
   SyncPullResponseSchema,
   fromBeatPlanRow,
   fromClinicAddressRow,
-  fromConsentTextVersionRow,
+  fromPulledConsentTextVersionRow,
   fromDoctorRow,
   fromVisitRow,
   refusalForSqlState,
@@ -10,7 +10,7 @@ import {
 import type {
   BeatPlanRecord,
   ClinicAddress,
-  ConsentTextVersion,
+  PulledConsentTextVersion,
   DoctorRecord,
   Refusal,
   SyncCompleteness,
@@ -66,7 +66,7 @@ export type PullChange =
   | {
       readonly kind: 'upsert';
       readonly entity: 'consent_text_version';
-      readonly record: ConsentTextVersion;
+      readonly record: PulledConsentTextVersion;
     }
   | {
       readonly kind: 'remove';
@@ -159,7 +159,7 @@ const mapChange = (change: SyncPullResponse['changes'][number]): PullChange => {
       return {
         kind: 'upsert',
         entity: 'consent_text_version',
-        record: fromConsentTextVersionRow(change.payload),
+        record: fromPulledConsentTextVersionRow(change.payload),
       };
     default: {
       // **The same guard `applyChanges` got in MR-11, on the dispatcher directly above
@@ -297,7 +297,7 @@ export type LocalStore = {
    * on, and the row's `updated_at` moves with it, so a superseded notice reaches the client
    * as an upsert carrying its new end date rather than silently staying offerable.
    */
-  readonly consent_text_version: ReadonlyMap<string, ConsentTextVersion>;
+  readonly consent_text_version: ReadonlyMap<string, PulledConsentTextVersion>;
 };
 
 export const emptyStore = (): LocalStore => ({

@@ -3,6 +3,7 @@ import type {
   ConsentOutcome,
   ConsentTextVersion,
   CreateConsentRecordRequest,
+  PulledConsentTextVersion,
 } from '@fieldforce/core';
 import type { ConsentAnswer, ConsentLanguageOption } from '@fieldforce/ui';
 import { languageName } from './content';
@@ -49,74 +50,69 @@ import { languageName } from './content';
  * labelled as arbitrary, not dressed up as a preference.
  */
 /**
- * Which version is in force for a language — the SERVER's rule, applied to the SERVER's rows.
+ * Which version is in force for a language — **the server's answer, not a re-derivation**.
  *
- * **MR-26 B1, and the FIX-02 question this has to answer.** `notices.ts` used to ask
- * `active_consent_text` over the network for exactly one reason, stated there: the client
- * holds the whole list and could pick the newest itself, which is the FIX-12 defect — the
- * record would then attest to whichever version *the client's list happened to contain*
- * rather than the one the server says was in force.
+ * **MR-27 B1 removed the mirror that stood here.** MR-26 B1 put the notices in the pull and
+ * had this function reproduce the schema's ordering: `effective_from desc, created_at desc,
+ * id desc`. Mirroring all three keys was necessary once the first version sorted on one and
+ * would have disagreed with the server on any tie — but it left TWO COPIES OF ONE RULE, and
+ * a disagreement between them does not fail in a test. It fails as a `45001` refusal, at
+ * capture, with a doctor waiting.
  *
- * That reasoning was about a list of unknown freshness. It is not an argument against the
- * client applying a published rule to rows the server sent it through the pull, with a
- * cursor, which is what it now has. The client is not choosing which notice is in force; it
- * is carrying the server's answer in its pocket. And `capture_consent` still re-resolves at
- * `captured_at` and refuses `45001` when the two disagree, so a client running on stale rows
- * is told — the arbiter has not moved.
+ * The pull now carries `precedence`, computed by `public.consent_text_version_precedence`,
+ * which is also what `active_consent_text_at` orders by. **One definition, on the server.**
  *
- * **It mirrors `active_consent_text_at` exactly, tiebreakers included**, because an
- * approximate mirror is worse than none: a disagreement does not fail here, it fails in front
- * of a doctor as a refusal. The SQL is
+ * **What is still decided here, and why that is right.** The effective WINDOW —
+ * `effectiveFrom <= now < effectiveUntil` — stays on the client, because it depends on the
+ * clock and a pull is a snapshot. A notice that becomes active tomorrow because the clock
+ * passes `effective_from` does not change, so its `updated_at` does not move, so it is never
+ * re-emitted; a transmitted `is_active` flag would go stale with nothing to correct it. The
+ * ordering carries no clock and travels safely. The split follows what each side can know.
  *
- * ```sql
- *  where v.language = p_language
- *    and v.effective_from <= p_at
- *    and (v.effective_until is null or v.effective_until > p_at)
- *  order by v.effective_from desc, v.created_at desc, v.id desc
- *  limit 1
- * ```
+ * Taking the LOWEST precedence among the in-force versions is equivalent to the server's
+ * filter-order-limit by construction: precedence is a total order over the same keys, so the
+ * minimum within a subset is that subset's first element under the ordering.
  *
- * `offerableVersions` above applies the same two window predicates but sorts only on
- * `effectiveFrom` — enough for a stable DISPLAY order, not enough to agree with the server
- * when two notices in one language share an `effective_from`. Hence the full three-key
- * ordering here rather than `offerableVersions(...)[0]`.
- *
- * The organisation predicate has no counterpart and needs none: the rows reached this device
- * through `sync_pull`, which is SECURITY INVOKER, so the RESTRICTIVE tenant policy already
- * scoped them. Re-filtering by organisation here would be permission logic in the client.
+ * `capture_consent` still re-resolves at `captured_at` and refuses `45001` when it disagrees
+ * — and that refusal now means ONE thing. It means the notice genuinely changed between the
+ * pull and the capture, which is FIX-12 working exactly as designed. While the ordering was
+ * mirrored it could have meant that, or that the two sorts disagreed, and nobody — including
+ * the MR holding the phone — could tell which.
  */
 export const activeNoticeFor = (
-  versions: readonly ConsentTextVersion[],
+  versions: readonly PulledConsentTextVersion[],
   language: string,
   nowIso: string,
-): ConsentTextVersion | null =>
+): PulledConsentTextVersion | null =>
   versions
     .filter((version) => version.language === language)
     .filter((version) => version.effectiveFrom <= nowIso)
     .filter((version) => version.effectiveUntil === null || version.effectiveUntil > nowIso)
-    .slice()
-    .sort(
-      (a, b) =>
-        b.effectiveFrom.localeCompare(a.effectiveFrom) ||
-        b.createdAt.localeCompare(a.createdAt) ||
-        b.id.localeCompare(a.id),
-    )[0] ?? null;
+    .reduce<PulledConsentTextVersion | null>(
+      (best, version) => (best === null || version.precedence < best.precedence ? version : best),
+      null,
+    );
 
 export const offerableVersions = (
-  versions: readonly ConsentTextVersion[],
+  versions: readonly PulledConsentTextVersion[],
   nowIso: string,
-): readonly ConsentTextVersion[] =>
+): readonly PulledConsentTextVersion[] =>
   versions
     .filter((version) => version.effectiveFrom <= nowIso)
     .filter((version) => version.effectiveUntil === null || version.effectiveUntil > nowIso)
     .slice()
-    // Language first so the DEFAULT is stable, then `effectiveFrom` descending so that
-    // within a language the newest live version leads. `localeCompare` on the code, not
-    // on the display name: the name is localised and would reorder with the device.
-    .sort(
-      (a, b) =>
-        a.language.localeCompare(b.language) || b.effectiveFrom.localeCompare(a.effectiveFrom),
-    );
+    // **Language first, then the SERVER's precedence.**
+    //
+    // The language key decides which one an MR is offered by DEFAULT, and it is arbitrary by
+    // admission -- `blocked-on-you` 5.12 is the open question of what it should be. It is
+    // presentation, not selection, and `localeCompare` on the CODE rather than the display
+    // name keeps it stable: the name is localised and would reorder with the device.
+    //
+    // Within a language it was `effectiveFrom` descending -- a third, weaker copy of the
+    // ordering the server owns, which would have disagreed with `activeNoticeFor` on exactly
+    // the ties MR-27 B1 removed. Using `precedence` makes the list's order and the selection
+    // the same rule, so the version shown first IS the version that would be captured.
+    .sort((a, b) => a.language.localeCompare(b.language) || a.precedence - b.precedence);
 
 /**
  * One option per language, labelled, in the order the server sent them.

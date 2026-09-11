@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   BeatPlanRecordSchema,
   ClinicAddressSchema,
-  ConsentTextVersionSchema,
+  PulledConsentTextVersionSchema,
   DoctorRecordSchema,
   VisitSchema,
 } from '@fieldforce/core';
@@ -124,7 +124,7 @@ const deserialise = (raw: unknown): LocalStore | null => {
     clinicAddress.set(parsed.data.id, parsed.data);
   }
   for (const row of shape.consent_text_version) {
-    const parsed = ConsentTextVersionSchema.safeParse(row);
+    const parsed = PulledConsentTextVersionSchema.safeParse(row);
     if (!parsed.success) return null;
     consentTextVersion.set(parsed.data.id, parsed.data);
   }

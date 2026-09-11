@@ -1,6 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { ConsentTextVersionSchema, DoctorSchema, VisitSchema } from '@fieldforce/core';
+import { DoctorSchema, PulledConsentTextVersionSchema, VisitSchema } from '@fieldforce/core';
 
 const mockCreateConsentRecord = jest.fn<(body: unknown) => Promise<unknown>>();
 /**
@@ -70,7 +70,11 @@ const doctor = DoctorSchema.parse({
   updatedAt: '2026-08-01T08:00:00+05:30',
 });
 
-const notice = ConsentTextVersionSchema.parse({
+// MR-27 B1. `precedence` is what the SERVER ranks this row, transmitted by the pull. The
+// fixtures carry it because the pull cannot produce a notice without one -- a fixture
+// missing it would be a shape no client ever sees, which is how gate1.spec.ts went wrong.
+const notice = PulledConsentTextVersionSchema.parse({
+  precedence: 1,
   id: '44444444-4444-4444-8444-4444444444dd',
   versionLabel: 'v1.2',
   language: 'en-IN',
@@ -218,17 +222,20 @@ describe('app/consent/[visitId].tsx — the handoff', () => {
   });
 
   it('offers only the languages the server has a live notice in', async () => {
-    const hindi = ConsentTextVersionSchema.parse({
+    const hindi = PulledConsentTextVersionSchema.parse({
       ...notice,
       id: '44444444-4444-4444-8444-4444444444ee',
       language: 'hi-IN',
       hash: 'b'.repeat(64),
+      // Its own language, so the server ranks it first in that partition.
+      precedence: 1,
     });
-    const retired = ConsentTextVersionSchema.parse({
+    const retired = PulledConsentTextVersionSchema.parse({
       ...notice,
       id: '44444444-4444-4444-8444-4444444444ff',
       language: 'mr-IN',
       hash: 'c'.repeat(64),
+      precedence: 1,
       effectiveUntil: '2026-08-01T00:00:00+05:30',
     });
     mockStore.mockReturnValue(pulled([visit], [doctor], [notice, hindi, retired]));

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ConsentTextVersionSchema, CreateConsentRecordRequestSchema } from '@fieldforce/core';
-import type { ConsentTextVersion } from '@fieldforce/core';
+import { CreateConsentRecordRequestSchema, PulledConsentTextVersionSchema } from '@fieldforce/core';
+import type { PulledConsentTextVersion } from '@fieldforce/core';
 import {
   activeNoticeFor,
   blockedReason,
@@ -11,9 +11,10 @@ import {
   outcomeFor,
 } from './record';
 
-const version = (over: Partial<ConsentTextVersion> = {}): ConsentTextVersion =>
-  ConsentTextVersionSchema.parse({
+const version = (over: Partial<PulledConsentTextVersion> = {}): PulledConsentTextVersion =>
+  PulledConsentTextVersionSchema.parse({
     id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01',
+    precedence: 1,
     versionLabel: 'v1.2',
     language: 'en-IN',
     fullText: 'I agree that this conversation may be audio recorded.',
@@ -169,15 +170,24 @@ describe('the offered order is deterministic, because a default depends on it', 
     // Within a language the newest live notice is the one in force. Offering an older
     // live version first would show a doctor text the company has already moved on from,
     // even though it has not formally expired.
+    //
+    // MR-27 B1: the INTENT is unchanged and the mechanism moved. "Newest first" is what the
+    // server's precedence MEANS -- `consent_text_version_precedence` orders by
+    // `effective_from desc, created_at desc, id desc` -- so the fixtures now carry the rank
+    // the server would compute, and this asserts the client honours it. The `effectiveFrom`
+    // values are kept, and deliberately still point the same way, so the case reads the same
+    // to a human.
     const older = version({
       id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa13',
       language: 'en-IN',
       effectiveFrom: '2026-07-01T00:00:00+05:30',
+      precedence: 2,
     });
     const newer = version({
       id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa14',
       language: 'en-IN',
       effectiveFrom: '2026-08-01T00:00:00+05:30',
+      precedence: 1,
     });
     expect(offerableVersions([older, newer], NOW)[0]?.id).toBe(newer.id);
     expect(offerableVersions([newer, older], NOW)[0]?.id).toBe(newer.id);
@@ -204,8 +214,8 @@ describe('the offered order is deterministic, because a default depends on it', 
   });
 });
 
-describe('MR-26 B1: activeNoticeFor mirrors the server rule', () => {
-  const version = (over: Partial<ConsentTextVersion> = {}): ConsentTextVersion => ({
+describe('MR-27 B1: activeNoticeFor uses the SERVER precedence, not a mirrored sort', () => {
+  const version = (over: Partial<PulledConsentTextVersion> = {}): PulledConsentTextVersion => ({
     id: '11111111-1111-4111-8111-111111111111',
     versionLabel: 'v1',
     language: 'en-IN',
@@ -214,18 +224,30 @@ describe('MR-26 B1: activeNoticeFor mirrors the server rule', () => {
     effectiveFrom: '2026-08-01T00:00:00.000Z',
     effectiveUntil: null,
     createdAt: '2026-08-01T00:00:00.000Z',
+    precedence: 1,
     ...over,
   });
 
   const NOW = '2026-09-11T12:00:00.000Z';
 
-  it('picks the newest version in force for that language', () => {
-    const older = version({ id: '11111111-1111-4111-8111-111111111111' });
-    const newer = version({
+  it('picks precedence 1, whatever the other fields say', () => {
+    // **The case that would have caught the original defect.** `effectiveFrom` deliberately
+    // points the OTHER WAY: the row the server ranks first is the OLDER one. A client that
+    // still sorted by `effectiveFrom desc` would pick the wrong version here and meet 45001
+    // in front of a doctor. Only obeying the transmitted rank gets this right.
+    const serverPicks = version({
+      id: '11111111-1111-4111-8111-111111111111',
+      effectiveFrom: '2026-08-01T00:00:00.000Z',
+      precedence: 1,
+    });
+    const newerButRankedSecond = version({
       id: '22222222-2222-4222-8222-222222222222',
       effectiveFrom: '2026-09-01T00:00:00.000Z',
+      precedence: 2,
     });
-    expect(activeNoticeFor([older, newer], 'en-IN', NOW)?.id).toBe(newer.id);
+    expect(activeNoticeFor([newerButRankedSecond, serverPicks], 'en-IN', NOW)?.id).toBe(
+      serverPicks.id,
+    );
   });
 
   it('does not cross languages — the clause MR-16 made falsifiable', () => {
@@ -233,66 +255,44 @@ describe('MR-26 B1: activeNoticeFor mirrors the server rule', () => {
     const hindi = version({
       id: '22222222-2222-4222-8222-222222222222',
       language: 'hi-IN',
-      // NEWER, so a rule that ignored language would return this one.
-      effectiveFrom: '2026-09-10T00:00:00.000Z',
+      precedence: 1,
     });
     expect(activeNoticeFor([english, hindi], 'en-IN', NOW)?.id).toBe(english.id);
     expect(activeNoticeFor([english, hindi], 'hi-IN', NOW)?.id).toBe(hindi.id);
   });
 
-  it('excludes a RETIRED notice, which is the only UPDATE the table permits', () => {
-    // `effective_until` is the one column `reject_consent_text_rewrite` allows to change, and
-    // the reason `updated_at` was added so retirement travels in the pull at all. A client
-    // that kept offering a retired notice would capture against it and meet 45001 in front of
-    // a doctor.
-    const retired = version({ effectiveUntil: '2026-09-01T00:00:00.000Z' });
-    expect(activeNoticeFor([retired], 'en-IN', NOW)).toBeNull();
+  it('applies the TIME WINDOW on the client, which is the half the server cannot snapshot', () => {
+    // Precedence carries no clock. A notice ranked 1 that is RETIRED must not be offered, and
+    // the server cannot have told us that at pull time -- `effective_until` passing moves
+    // nothing, so the row is never re-emitted. This is why the split is a rank and not an
+    // `is_active` flag.
+    const retired = version({ precedence: 1, effectiveUntil: '2026-09-01T00:00:00.000Z' });
+    const live = version({
+      id: '22222222-2222-4222-8222-222222222222',
+      precedence: 2,
+    });
+    expect(activeNoticeFor([retired, live], 'en-IN', NOW)?.id).toBe(live.id);
   });
 
-  it('excludes one that is not yet in force', () => {
-    expect(
-      activeNoticeFor([version({ effectiveFrom: '2026-12-01T00:00:00.000Z' })], 'en-IN', NOW),
-    ).toBeNull();
-  });
-
-  it('TIEBREAKS on createdAt then id, exactly as active_consent_text_at does', () => {
-    // **The fidelity case, and the reason this is not `offerableVersions(...)[0]`.** The SQL
-    // orders by `effective_from desc, created_at desc, id desc`. `offerableVersions` sorts on
-    // `effectiveFrom` alone -- enough for a stable display order, not enough to AGREE with the
-    // server when two notices in one language share an `effective_from`. A disagreement does
-    // not fail here; it fails as a 45001 refusal in front of a doctor.
-    const sameFrom = '2026-09-01T00:00:00.000Z';
-    const earlier = version({
-      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-      effectiveFrom: sameFrom,
-      createdAt: '2026-09-01T09:00:00.000Z',
-    });
-    const later = version({
-      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-      effectiveFrom: sameFrom,
-      createdAt: '2026-09-01T10:00:00.000Z',
-    });
-    expect(activeNoticeFor([earlier, later], 'en-IN', NOW)?.id).toBe(later.id);
-
-    // And with createdAt equal too, the id breaks the tie descending — the SQL's last key.
-    const sameCreated = '2026-09-01T09:00:00.000Z';
-    const lowId = version({
-      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-      effectiveFrom: sameFrom,
-      createdAt: sameCreated,
-    });
-    const highId = version({
-      id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-      effectiveFrom: sameFrom,
-      createdAt: sameCreated,
-    });
-    expect(activeNoticeFor([lowId, highId], 'en-IN', NOW)?.id).toBe(highId.id);
+  it('excludes one that is not yet in force, however it is ranked', () => {
+    const future = version({ precedence: 1, effectiveFrom: '2026-12-01T00:00:00.000Z' });
+    expect(activeNoticeFor([future], 'en-IN', NOW)).toBeNull();
   });
 
   it('THE POSITIVE CONTROL: an empty list is null, not a throw and not a guess', () => {
-    // Without this, "return the first thing you find" would satisfy every case above. An empty
-    // store is a real state -- a fresh install that has not synced -- and it must produce the
-    // "no notice" wording rather than an exception on a screen in front of a doctor.
+    // Without this, "return the first thing you find" would satisfy every case above. An
+    // empty store is a real state -- a fresh install that has not synced -- and it must
+    // produce the "no notice" wording rather than an exception in front of a doctor.
     expect(activeNoticeFor([], 'en-IN', NOW)).toBeNull();
+  });
+
+  it('offerableVersions orders WITHIN a language by precedence too', () => {
+    // So the version shown first IS the version that would be captured. Within-language
+    // ordering was a third copy of the server rule and is now the same one.
+    const first = version({ id: '11111111-1111-4111-8111-111111111111', precedence: 2 });
+    const second = version({ id: '22222222-2222-4222-8222-222222222222', precedence: 1 });
+    const ordered = offerableVersions([first, second], NOW);
+    expect(ordered[0]?.id).toBe(second.id);
+    expect(activeNoticeFor(ordered, 'en-IN', NOW)?.id).toBe(ordered[0]?.id);
   });
 });
