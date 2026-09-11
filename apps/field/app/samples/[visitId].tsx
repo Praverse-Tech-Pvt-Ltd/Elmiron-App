@@ -153,6 +153,11 @@ export default function SamplesRoute(): ReactNode {
     void (async () => {
       // MR-18 B1. Writes go through `sync_push` to Supabase, never to :4010.
       const client = createPushClient();
+      // **MR-29 A3 - ALLOWLIST: a RECORD of when this device acted.**
+      // `occurred_at` is when the samples were handed over. Same reasoning as `captured_at`
+      // on the consent screen: offline is the case it exists for, so the handset is the only
+      // possible source, and the server bounds it rather than trusting it.
+      // eslint-disable-next-line no-restricted-syntax -- allowlisted above
       const occurredAt = new Date().toISOString();
       const remaining: SampleLine[] = [];
       let sent = 0;

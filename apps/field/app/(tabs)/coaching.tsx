@@ -116,6 +116,14 @@ export default function Coaching(): ReactNode {
   }));
 
   const ratio = reviewedRatio(analyses, visits);
+  // **MR-29 A3 - REAL DEFECT, registered as `FE-W42`, not fixed here.**
+  // `recentMonths` picks which months the objection-handling trend shows, from the
+  // HANDSET's clock. That is a DECISION on a month boundary, which is MR-15 A2's
+  // defect one screen along. It needs `serverTime`, and it needs an answer to what
+  // the screen shows when there is no `serverTime` at all - which is the question
+  // `FE-W40` asks and nobody has answered. Disabled rather than half-fixed, so the
+  // rule still fails on any NEW site.
+  // eslint-disable-next-line no-restricted-syntax -- FE-W42, see above
   const months = recentMonths(new Date());
   const points = trendFor(analyses, 'objection_handling', months);
 

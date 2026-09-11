@@ -4,6 +4,108 @@ import prettier from 'eslint-config-prettier';
 import importPlugin from 'eslint-plugin-import';
 import globals from 'globals';
 
+/**
+ * **MR-29 A3 - the shared restriction lists, hoisted so two blocks can both carry them.**
+ *
+ * Flat config does NOT merge `no-restricted-syntax` or `no-restricted-imports` across
+ * blocks: a later block whose `files` match REPLACES the earlier block's value. Both
+ * restriction blocks below match every screen in `apps/field/app/`, so before this change
+ * the screens-only block silently switched the component-extraction rule OFF for exactly
+ * the files it was written to police - both halves of it, the namespace ban and the named
+ * imports. Verified rather than reasoned: the identical `import * as RN from 'react-native'`
+ * raised two errors in `src/sync/outbox.ts` and NONE in `app/mileage.tsx`.
+ *
+ * That is MR-28's defect 12 in the lint config - a guard wired into one branch of a
+ * two-branch path protects the branch nobody exercises and abandons the one everybody
+ * uses. Hoisting the lists and spreading them into both blocks is what stops the two
+ * from drifting apart again.
+ */
+const noComponentMaterials = {
+  selector: 'ImportDeclaration[source.value="react-native"] > ImportNamespaceSpecifier',
+  message:
+    'Namespace-importing react-native reaches the visual primitives that are restricted here. Components live in @fieldforce/ui. Import the specific non-visual API you need by name.',
+};
+
+const restrictedReactNativeImports = {
+  name: 'react-native',
+  importNames: [
+    'View',
+    'Text',
+    'ScrollView',
+    'Pressable',
+    'TouchableOpacity',
+    'TouchableHighlight',
+    'TouchableWithoutFeedback',
+    'StyleSheet',
+    'Image',
+    'ImageBackground',
+    'TextInput',
+    'FlatList',
+    'SectionList',
+    'VirtualizedList',
+    'Button',
+    'Switch',
+    'ActivityIndicator',
+    'Modal',
+    'SafeAreaView',
+    'KeyboardAvoidingView',
+  ],
+  message:
+    'Components live in @fieldforce/ui, never in apps/field. Import the component you need from @fieldforce/ui, or add it there if it does not exist yet.',
+};
+
+/**
+ * **MR-29 A3 - THE DEVICE CLOCK MAY NOT BE A SOURCE OF *NOW*. The third instance closed.**
+ *
+ * MR-14 RENDERED the device clock as a server time. MR-15 A2 COMPUTED the territory day
+ * boundary from it. MR-28 A2 RESOLVED the consent activation window with it. Three
+ * appearances of one class, and the guard built after the first two did not stop the
+ * third: MR-25's C1 rule bans offset-naive FORMATTING helpers in screens, so it covers
+ * the RENDER and not the SOURCE. `new Date()` acquiring "now" walked straight past it.
+ *
+ * This bans the source. Only the zero-argument forms are restricted - `new Date(iso)` is
+ * PARSING a value somebody else supplied and is untouched.
+ *
+ * **The rule is the DECIDING / RECORDING split, not "always use serverTime".** Saying the
+ * only legitimate instant is `serverTime` is too strong, and applied literally it would
+ * mint a new defect: an offline capture stamped with `serverTime` would claim the time of
+ * the LAST SYNC, possibly hours earlier, on the one class of record where being wrong is
+ * worst.
+ *
+ * The line the repository already draws, in `src/sync/outbox.ts`: `receivedAt` was
+ * `nowIso()` under the comment "the server answered, so this is the server's clock by
+ * definition", and it was REMOVED, because `QueueScreen` rendered it as "Server recorded
+ * this at ..." - a device clock asserting a SERVER fact. `clientCreatedAt` in the same
+ * file stayed, because it means "when this device created this row" and nothing else can
+ * answer that.
+ *
+ *   - A DECISION - which day is it, is this notice active, how old is this, which month
+ *     do I request - may never come from the handset. It comes from `serverTime`.
+ *   - A RECORD of when THIS DEVICE acted may only come from the handset, because offline
+ *     is the case it exists for. The server bounds those: 45007 refuses a `captured_at`
+ *     ahead of the server clock, 45008 refuses one too far behind it.
+ *   - An ELAPSED duration measured between two device reads is the third legitimate case.
+ *
+ * Allowlisted sites carry an `eslint-disable-next-line` NAMING which of the three they
+ * are. A disable with no reason is not an allowlist entry.
+ *
+ * Tests are exempted in their own block below: a fixture that has to make the two clocks
+ * DISAGREE must reach the device clock to do it, which is how MR-28 A2's withholding case
+ * was made to fail against the defect rather than passing against it.
+ */
+const noDeviceClockAsNow = [
+  {
+    selector: "NewExpression[callee.name='Date'][arguments.length=0]",
+    message:
+      "`new Date()` reads the HANDSET's clock. MR-14 rendered it, MR-15 A2 computed the day boundary from it, MR-28 A2 resolved the consent activation window with it - three instances of one class. For a DECISION (which day, which notice is active, how old, which month) use `serverTime` from usePulledStore(). For a RECORD of when this device acted (captured_at, occurred_at, recorded_at, client_created_at) the handset is the only possible source and the server bounds it - allowlist that site with `eslint-disable-next-line no-restricted-syntax` and a comment saying which it is. `new Date(iso)` for PARSING is not restricted.",
+  },
+  {
+    selector: "CallExpression[callee.object.name='Date'][callee.property.name='now']",
+    message:
+      "`Date.now()` reads the HANDSET's clock. See the `new Date()` message: a DECISION takes `serverTime` from usePulledStore(); only a RECORD of when this device acted, or an ELAPSED duration measured between two device reads, may take the handset, and only with a named allowlist comment.",
+  },
+];
+
 export default tseslint.config(
   {
     ignores: [
@@ -87,48 +189,8 @@ export default tseslint.config(
     // person finds the bypass, so the namespace form is banned outright below.
     files: ['apps/field/**/*.ts', 'apps/field/**/*.tsx'],
     rules: {
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector: 'ImportDeclaration[source.value="react-native"] > ImportNamespaceSpecifier',
-          message:
-            'Namespace-importing react-native reaches the visual primitives that are restricted here. Components live in @fieldforce/ui. Import the specific non-visual API you need by name.',
-        },
-      ],
-      'no-restricted-imports': [
-        'error',
-        {
-          paths: [
-            {
-              name: 'react-native',
-              importNames: [
-                'View',
-                'Text',
-                'ScrollView',
-                'Pressable',
-                'TouchableOpacity',
-                'TouchableHighlight',
-                'TouchableWithoutFeedback',
-                'StyleSheet',
-                'Image',
-                'ImageBackground',
-                'TextInput',
-                'FlatList',
-                'SectionList',
-                'VirtualizedList',
-                'Button',
-                'Switch',
-                'ActivityIndicator',
-                'Modal',
-                'SafeAreaView',
-                'KeyboardAvoidingView',
-              ],
-              message:
-                'Components live in @fieldforce/ui, never in apps/field. Import the component you need from @fieldforce/ui, or add it there if it does not exist yet.',
-            },
-          ],
-        },
-      ],
+      'no-restricted-syntax': ['error', noComponentMaterials, ...noDeviceClockAsNow],
+      'no-restricted-imports': ['error', { paths: [restrictedReactNativeImports] }],
     },
   },
   {
@@ -158,9 +220,14 @@ export default tseslint.config(
     // `apps/field/app/` — the screens — and not to the whole workspace.
     files: ['apps/field/app/**/*.ts', 'apps/field/app/**/*.tsx'],
     rules: {
+      // `paths` and `noDeviceClockAsNow`/`noComponentMaterials` below are REPEATED from the
+      // `apps/field/**` block on purpose. Flat config replaces these two rules rather than
+      // merging them, and this block matches every screen -- see the note on
+      // `noComponentMaterials`. Omitting them here is what switched them off.
       'no-restricted-imports': [
         'error',
         {
+          paths: [restrictedReactNativeImports],
           patterns: [
             {
               group: ['**/today/plan', '**/today/plan.js', '../../src/today/plan'],
@@ -185,6 +252,8 @@ export default tseslint.config(
       ],
       'no-restricted-syntax': [
         'error',
+        noComponentMaterials,
+        ...noDeviceClockAsNow,
         {
           selector:
             'CallExpression[callee.property.name=/^(toLocaleTimeString|toLocaleDateString|toLocaleString)$/]',
@@ -204,6 +273,29 @@ export default tseslint.config(
             'Date getters read the DEVICE clock and the device timezone. The territory decides the day and the time — see src/today/territory-day.ts. Use clockIn / dayIn with the zone from the server.',
         },
       ],
+    },
+  },
+  {
+    // **MR-29 A3 - tests may reach the device clock, and only tests.**
+    //
+    // A fixture whose job is to make the SERVER's clock and the HANDSET's clock DISAGREE
+    // has to be able to read the handset. MR-28 A2's withholding case is the reason this
+    // exemption exists rather than being an oversight: its first version PASSED AGAINST
+    // THE DEFECT because both clocks sat behind a hardcoded 2099 date, and the fix was to
+    // compute `effectiveFrom` from the device's own now so the two disagree whatever day
+    // the suite runs on. A rule that banned `new Date()` here would have forbidden the fix.
+    //
+    // The restriction lists are spread back in MINUS `noDeviceClockAsNow`, because this
+    // block replaces the rule rather than adding to it. Screens' own suites live under
+    // `src/routes/`, so this glob covers both trees.
+    files: [
+      'apps/field/**/*.test.ts',
+      'apps/field/**/*.test.tsx',
+      'apps/field/**/__tests__/**/*.ts',
+      'apps/field/**/__tests__/**/*.tsx',
+    ],
+    rules: {
+      'no-restricted-syntax': ['error', noComponentMaterials],
     },
   },
   {

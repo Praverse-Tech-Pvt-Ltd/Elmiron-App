@@ -55,6 +55,11 @@ export default function Transparency(): ReactNode {
                 // The navigation moves either way, deliberately. Failing to record that
                 // first run finished means they see this screen again next launch —
                 // annoying, and recoverable. Trapping them here is neither.
+                // **MR-29 A3 - ALLOWLIST: a device-local marker whose VALUE is never read.**
+                // `hasCompletedFirstRun` tests the stored key for `!== null` and nothing anywhere
+                // reads the timestamp back. It is never sent, never compared to a server instant and
+                // never rendered, so there is no clock to be wrong about. Verified, not assumed.
+                // eslint-disable-next-line no-restricted-syntax -- allowlisted above
                 void markFirstRunComplete(new Date().toISOString())
                   .catch(() => undefined)
                   .finally(() => {

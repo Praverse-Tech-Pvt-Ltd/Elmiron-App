@@ -222,6 +222,15 @@ export default function ConsentRoute(): ReactNode {
           doctorId: doctor.id,
           answer: given,
           version: notice,
+          // **MR-29 A3 - ALLOWLIST: a RECORD of when this device acted, not a DECISION.**
+          // `captured_at` is the instant the doctor answered. `serverTime` would be WRONG here
+          // and not merely imprecise: it is the last pull's clock, so an offline capture would
+          // claim the time of the last sync, possibly hours earlier, on a compliance record.
+          // The handset is the only thing that knows, and the server BOUNDS it rather than
+          // trusting it - 45007 refuses a `captured_at` ahead of the server clock, 45008 one
+          // too far behind it. The WINDOW this screen resolves takes `serverTime` (MR-28 A2);
+          // that is the decision. This is the record.
+          // eslint-disable-next-line no-restricted-syntax -- allowlisted above
           capturedAt: new Date().toISOString(),
         });
 

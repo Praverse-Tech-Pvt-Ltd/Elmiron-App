@@ -71,6 +71,12 @@ export default function Doctors(): ReactNode {
   // `Date.now()` is read once per data change rather than per render: a list whose
   // "6 weeks ago" labels recompute on every keystroke is doing arithmetic nobody
   // asked for, and could tick over mid-search.
+  // **MR-29 A3 - REAL DEFECT, registered as `FE-W42`, not fixed here.**
+  // This `now` reaches `daysBetween(lastSeenAt, now)` and renders "6 weeks ago" against
+  // the HANDSET's clock. The cheapest of the five: an age is insensitive to a few hours
+  // of staleness, so `serverTime` works even when it is old. It still needs a decision
+  // on what the label reads when `serverTime` is null, which is `FE-W40`.
+  // eslint-disable-next-line no-restricted-syntax -- FE-W42, see above
   const all = useMemo(() => buildDoctorRows(doctors, visits, Date.now()), [doctors, visits]);
   const ranked = useMemo(() => rankDoctors(all, query, filter), [all, query, filter]);
 

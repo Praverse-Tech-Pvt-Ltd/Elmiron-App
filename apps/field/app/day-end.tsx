@@ -64,6 +64,13 @@ export default function DayEnd(): ReactNode {
 
   useEffect(() => {
     const client = createClientForScenario();
+    // **MR-29 A3 - REAL DEFECT, registered as `FE-W42`, and the worst of the five.**
+    // This is MR-15 A2 verbatim: the territory's DAY computed from the handset. It is not
+    // only rendered - it is the `fromDate`/`toDate` this screen ASKS THE SERVER FOR, so an
+    // MR whose phone has drifted across the 18:30Z IST midnight pulls the wrong day's
+    // mileage and counts the wrong day's visits, and nothing on the screen says so.
+    // Needs `serverTime` plus `FE-W40`'s answer for the no-server-clock case.
+    // eslint-disable-next-line no-restricted-syntax -- FE-W42, see above
     const day = todayIso(new Date());
     let cancelled = false;
 

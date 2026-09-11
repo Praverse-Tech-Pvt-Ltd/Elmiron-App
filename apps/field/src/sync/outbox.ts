@@ -95,6 +95,15 @@ export type SendOutcome =
   /** No answer. The work is on disk and will go later. */
   | { readonly kind: 'queued' };
 
+// **MR-29 A3 - ALLOWLIST: a RECORD of when this device acted, and the prior art.**
+// This feeds `clientCreatedAt` on queue rows: "when THIS DEVICE created this row",
+// which nothing else can answer - a queued row has no server clock by definition.
+// The line is already drawn in this file. `receivedAt` below USED to read `nowIso()`
+// under the comment "the server answered, so this is the server's clock by
+// definition"; it was removed, because `QueueScreen` rendered it as "Server recorded
+// this at ..." - a device clock asserting a SERVER fact. That is the difference
+// between the two, and it is why this one stays.
+// eslint-disable-next-line no-restricted-syntax -- allowlisted above
 const nowIso = (): string => new Date().toISOString();
 
 /**

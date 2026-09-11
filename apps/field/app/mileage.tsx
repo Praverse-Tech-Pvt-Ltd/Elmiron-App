@@ -44,6 +44,11 @@ export default function Mileage(): ReactNode {
   useEffect(() => {
     let cancelled = false;
     void createClientForScenario()
+      // **MR-29 A3 - REAL DEFECT, registered as `FE-W42`, not fixed here.**
+      // `monthWindow` decides which MONTH of mileage is requested from the server, from the
+      // handset. On the first or last day of a month a drifted phone asks for the wrong
+      // month and the MR sees a claim total that is not theirs for this period.
+      // eslint-disable-next-line no-restricted-syntax -- FE-W42, see above
       .listMileage(monthWindow(new Date()))
       .then((response) => {
         if (!cancelled) setData(response);

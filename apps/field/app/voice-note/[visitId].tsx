@@ -133,6 +133,9 @@ export default function VoiceNoteRoute(): ReactNode {
           // a minimum of 1 keeps the schema's `positive()` satisfiable and the
           // real size lands with the upload.
           sizeBytes: 1,
+          // **MR-29 A3 - ALLOWLIST: a RECORD of when this device acted.**
+          // When the note was recorded on this handset. Same category as `captured_at`.
+          // eslint-disable-next-line no-restricted-syntax -- allowlisted above
           recordedAt: new Date().toISOString(),
         }),
       )

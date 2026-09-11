@@ -155,6 +155,12 @@ export default function VisitRoute(): ReactNode {
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       await recorder.prepareToRecordAsync();
       recorder.record();
+      // **MR-29 A3 - ALLOWLIST: a RECORD of when this device acted.**
+      // Filed as the recording's start time, so it is the same category as `captured_at`.
+      // Note it is NOT the elapsed-duration case: the DURATION comes from
+      // `recorderState.durationMillis`, which the recorder measures monotonically and which
+      // never touches this clock.
+      // eslint-disable-next-line no-restricted-syntax -- allowlisted above
       setRecordingStartedAt(new Date().toISOString());
     })().catch((error: unknown) => {
       setFailure({
