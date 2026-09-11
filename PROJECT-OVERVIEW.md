@@ -11862,3 +11862,235 @@ A test that claims device parity must obtain its payload from the real producer,
 against the contract that defines it. Constructing one that happens to satisfy the code under
 test proves the two agree with each other and nothing about the product. Recorded in
 `docs/gotchas.md`, 11 September 2026 — *"a test that builds its own payload is testing itself"*.
+
+---
+
+### MR-25 — the named gaps
+
+**EMULATOR, EXPO GO.** Pixel_10 AVD, Android 16 (SDK 36). Every location in every capture
+below was **injected** through Android's test provider, not sensed.
+
+#### A1 — pushed, and the first push FAILED
+
+Two runs, and the failing one matters more.
+
+| | First push | After the fix |
+| --- | --- | --- |
+| Run | `34570735843` | `34571354980` |
+| Workflow · event | `CI` · `push` | `CI` · `push` |
+| SHA | `35830a5abe0c785f528aad8328316d68270af204` | `ae5bbece5393bd8082582547412da6478249e48b` — **was HEAD** |
+| Conclusion | **`failure`** — `migrations · Gate 0 RLS suite · rollbacks` | `success`, both jobs |
+
+**All four MR-24 migrations shipped with no rollback file.** The convention is enforced in CI
+and I did not check it, because `verify:rollbacks` empties the schema so I had never run it
+locally — my local green was a different check from the one CI runs. That is *"a command that
+exits 0 is not a command that worked"* pointed at me: nothing I ran could have told me.
+
+Each rollback restores the definition captured with `pg_get_functiondef` **immediately before**
+its migration, obtained by holding the four migrations aside, running `db:reset`, and dumping
+the three functions from the resulting schema — not reconstructed from the migration files
+believed to have written them (gotchas rule 10). Ordering matters for the two that touch
+`apply_sync_item`: rollbacks apply in reverse, so `000400`'s runs first and leaves the function
+at its post-`000200` state, and `000400`'s file therefore carries `000200`'s body rather than
+the original. Each states what rolling it back MEANS — `000100` reinstates a total capture
+outage, `000400` reinstates the silent discard of a doctor's withdrawal of consent.
+
+It was **ten** commits, not nine. `5abe5a2` was also unpushed; my `git log -9` at the end of
+MR-24 cut it off and I reported the wrong count.
+
+#### A2 — Gate 1's evidence, recorded as VOID FOR THE WRITE PATH
+
+In its own dated section above this one, because *"the Gate 1 server half is built and green"*
+sits at line 21 of this file and could not be edited. Each of the gate's three claims is
+addressed separately: "no lost writes" was never tested for the real body; "no duplicates" was
+tested against a shape that could not exhibit the duplicate defect; "capture stops at shift
+end" was tested only on the refusing side. The read path, RLS, partial-success and ordering
+properties in that suite are unaffected — they never depended on the write body's shape.
+Evidence re-established from `c515922` forward.
+
+#### A3 — the `adb emu geo fix` entry, corrected where it is read
+
+`docs/fe-w3-spec.md` still told a reader to use it. Its own next line said *"worth confirming
+on the device rather than trusting this line"*, and nobody did. The wrong line is kept with the
+correction beside it. What works is `appops set 2000 android:mock_location allow` followed by
+test-provider injection — and note the argument orders are **opposite**: `geo fix` takes
+longitude first, `set-test-provider-location --location` takes latitude first.
+
+#### A4 — BE-W95 linked to defect 7
+
+The split is now stated in the register: the **ID GENERATION** half is fixed and proved on the
+device; what a second answer MEANS is the open product question. Closing defect 7 without it
+leaves a consent ledger holding contradictory answers and naming neither as current.
+
+#### B — the payload-parity sweep
+
+**B1, searched by shape.** Three searches: the prose claim (*"the same path a real device
+uses"* and equivalents), every spec building a `payload:` literal, and every spec calling
+`sync_push` or `apply_sync_item`. The union, filtered to the five write entities, is twelve
+files.
+
+**B2 — the split is structural, not cosmetic.**
+
+| Suite | Body built | Bound to the contract? |
+| --- | --- | --- |
+| `apps/field/src/sync/{outbox,push-client,reducer,indicator}.test.ts`, `routes/queue-route.test.tsx`, `packages/ui/src/QueueScreen.test.tsx` | literal annotated `CreateCheckInRequest` etc. | **YES** — never at risk |
+| `services/api/tests/{gate1,sync,manager,sync-push-enforcement,visit-not-met,sync-row-identity}.spec.ts` | literal → `JSON.stringify` → `jsonb` | **NO** — `type Item = Record<string, unknown>` |
+
+The field side was never exposed; the type catches drift. **Every API-side suite was
+structurally unable to detect a contract change**, which is what let defect 3 live.
+
+**B3.** New `services/api/tests/sync-bodies.ts`: every body annotated with its contract type
+**and** parsed through its schema — the annotation catches drift at compile time, the parse
+catches it at run time where the type is erased crossing into `jsonb`. The client's builders
+live in `apps/field` and a server test importing them would invert the dependency, so these
+bind to the SCHEMA, which is the shared artefact. **That limit is stated in the file rather
+than glossed: this proves the body matches the CONTRACT, not that the client produces it.**
+
+**B4 — the class is closed, proved three ways.** Renaming
+`CreateCheckInRequest.coordinates` to `position`:
+
+- **compile:** `error TS2353: 'coordinates' does not exist in type '{ …position… }'`
+- **runtime:** `gate1.spec.ts` **8 failed (8)**, `Invalid input: expected object, received undefined`
+- **contrast:** the OLD hand-built `Record<string, unknown>` literal **compiles clean** under
+  the same change — the half that shows the fix matters
+
+**Two findings from the sweep itself.** My own search missed `write-path.spec.ts`, which calls
+the RPCs with named `p_latitude` parameters and matched neither pattern; it was found by
+grepping residual `latitude:` afterwards. *A shape search is only as good as the shapes you
+think of.* And that suite is a STALENESS case rather than a drift case: its header claims *"the
+whole chain over HTTP"*, and since MR-18 no screen takes the REST `record_check_in` path —
+`recordCheckIn`/`recordCheckOut` in `apps/field/src/capture/check-in.ts` have **zero callers**.
+Registered rather than deleted; the RPC-level coverage still matters because `apply_sync_item`
+calls the same functions.
+
+#### C1 — the time-rendering guard
+
+Scoped to `apps/field/app/**` and it bans the offset-naive **helpers**, not just raw slices.
+That is the whole design: defect 5 was not a slice in a screen, it was a screen calling
+`clockFrom`. A rule banning `.slice(11, 16)` would have missed it.
+
+Positive control, on `app/visit/[id].tsx`:
+
+| Mutation | Caught by |
+| --- | --- |
+| `import { clockFrom }` — defect 5 verbatim | `no-restricted-imports` |
+| `visit.startedAt.slice(11, 16)` — inlined bypass | `no-restricted-syntax` |
+| `new Date(…).toLocaleTimeString()` — device locale | `no-restricted-syntax` |
+| the correct `clockIn(iso, zone)` | **clean** |
+
+It fired on nine existing sites, and **two were real, on converted screens**:
+`app/samples/[visitId].tsx` (MR-24's defect 6 — two bugs in one expression: `received_at` is
+when the ROW ARRIVED, and the slice read the UTC day) and `app/doctor/[id].tsx`, on real data
+since MR-14, whose "9 Sep" MR-24's own B1 verified and which was right only by luck — 08:22Z is
+the same day in IST and 19:00Z is not. New `dayMonthIn(iso, zone)` beside `dayIn`/`clockIn`,
+built on the same `partsIn` so the three cannot disagree; deliberately **not** Intl's
+`month: 'short'`, which renders "Sept" while every screen shows "Sep". The six screens still on
+the mock keep the helper behind an explicit disable reading **DELETE THIS WHEN THIS SCREEN IS
+CONVERTED** — the entitlement was a sentence in a doc comment, which is exactly what failed.
+
+#### C2 — wrapping arithmetic: no other instance exists
+
+Swept the LIVE catalogue, not the migration files. Ten functions use `make_interval`; nine
+operate on `timestamptz` or `interval`, confirmed by querying `information_schema` for the
+column types rather than by reading the names. **Exactly two columns in the whole public schema
+are of a wrapping type** — `territory_shift_windows.shift_start` and `shift_end` — and exactly
+one function does arithmetic on them: `is_within_shift`, already fixed.
+
+Added the fixture the dimension needs: a window ending `23:59` with 30 minutes' grace, on
+`rival` so no capture test changes, plus a `dimension-coverage.spec.ts` case holding it open.
+
+**The control caught my own test.** The first version queried `territory_shift_windows`
+unscoped and PASSED when the wrapping window was mutated away — `seedFixtures` mints fresh ids
+every run and tears nothing down, so a window from an earlier run satisfied it. Green and
+proving nothing, in a test written for the file whose entire job is catching that. Now scoped
+to this run's territory ids, with a precondition assertion that the three rows were found at
+all, so a bad id list cannot masquerade as a missing dimension.
+
+#### C3 — the error boundary, enumerated
+
+MR-13 found a refusal treated as a silence; MR-24 defect 2 found a refusal treated as a
+transport failure. Two fixes, two spot-checks, and the boundary was still only tested at the
+two points that had already failed. Now **seven** types, with the handling of each asserted:
+`SyncPushRefusal` rejected, `SyncPushRefusal` dead-lettered, `ApiRequestError`, a transport
+`Error`, an `Error` for *"sync_push answered but said nothing about THIS item"*, a `ZodError`
+from the response parse (**nobody has got this wrong yet, which is why it is there**), and a
+non-`Error` throw. Plus an exhaustiveness case driven off `ServerSyncStatusSchema.options`.
+
+Mutation-verified: treating a `ZodError` as a refusal fails that case; adding a fifth verdict
+status fails the exhaustiveness case with *"decide whether the new status is an answer or a
+silence"*.
+
+#### D1 — THE OFFLINE CYCLE COULD NOT BE RUN, and why is the finding
+
+**Only 2 of the 5 writes can be performed with no signal, and one of those by accident.**
+
+| Write | Offline | Why |
+| --- | --- | --- |
+| check-in | **YES** | queues correctly |
+| call report | **YES** | *only because it still READS the mock at `:4010`* |
+| consent | **NO** | *"Could not load this visit. The app could not reach the server."* |
+| samples | **NO** | same |
+| check-out | **NO** | **unreachable** — `stageOf()` returns `'during'` only for `in_progress`, which only `record_check_in` writes, SERVER-side |
+
+So the app's offline story stops after the first write, and **FE-G2 — 8h offline, ≥20 queued
+writes — cannot be reached, because those writes cannot be made.** Registered as `FE-W38` and
+`5.15` rather than fixed: every one of these screens is reading server-confirmed state before
+acting, which is this product's founding rule working exactly as designed and producing an app
+that cannot work offline. Both resolutions cost something real, and engineering should not pick.
+
+**What did run, with the precondition asserted rather than assumed.** `sync_items` was EMPTY
+for the whole offline period, so the offline state was genuine. (Note `adb reverse` runs over
+the adb transport, so disabling wifi does **not** cut the app off — the Supabase ports were
+removed.) Both queued writes then survived a full app restart and arrived **exactly once, each
+as the correct entity type**:
+
+```
+check_in     accepted   occurred_at 07:27:42.019Z   lat 18.5204  accuracy 12  inside  manual
+call_report  accepted   "MR25 offline report for Asha"   status draft
+```
+
+#### D2 — `captured_at` through the QUEUE, not through the push
+
+The check-in was captured offline at **`07:27:42.019Z`** and flushed **seventeen minutes
+later** at `07:44:51.171Z` with `occurred_at` unchanged **to the millisecond**.
+`visits.started_at` follows it (`12:57:42.019 IST`). `sync_items.client_created_at` is stamped
+at flush — a different field with a different meaning, noted rather than conflated.
+
+The consent half of D2 as written could not be run: consent cannot be captured offline at all.
+
+#### D3 — NOT RUN
+
+45007, 45008, 45001 and 45004 were not driven from screens. 45004 additionally needs a cap
+value and `blocked-on-you` **5.9** says not to invent one.
+
+#### D4 — FE-G1 and FE-G2 cannot close on Expo Go
+
+Geofenced check-in and background location (`react-native-background-geolocation`) and audio
+(`expo-audio`) are native modules Expo Go cannot load. No amount of emulator work closes those
+two gates; they need a dev-client build, which needs JDK 17, `cmake;3.31.6` and the long-path
+trap `gotchas.md` prices at a day. FE-G2 is now blocked twice over — by the build AND by
+`FE-W38`.
+
+#### D5 — G-WRITE: **NOT MET**
+
+D1 could not be completed and D3 did not run. Stated plainly rather than qualified.
+
+#### Two more defects, found by the cycle
+
+| # | What | Status |
+| --- | --- | --- |
+| 8 | A report saved with no signal was headed **"Report sent"**. `CallReportScreen` hardcoded the title under a caller-supplied detail, so the queued branch could only change half the banner. MR-18 B3 rewrote this screen's copy for exactly this reason, fixed the detail, and nobody re-read the title | **fixed**, 4 cases, mutation-verified |
+| 9 | After the offline restart, Today read **"The server refused this sync ()"**. `pullOnce` returned `refused` for every error, and `refusalForSqlState(undefined)` answers `sqlState: ''` — the absence of a code printed as if it were one. MR-24's defect 2 mirrored onto the read path. `PullFailure`'s `unreachable` variant had been rendered correctly by the screens since MR-14 and emitted by nothing | **fixed**, 3 cases, mutation-verified two-sided |
+
+#### Counts — by workspace AND runner, zero skips
+
+core vitest 21/3 · ui vitest 4/1 · ui jest 237/21 · ui-tokens vitest 54/3 · console vitest 10/1
+· field vitest 448/29 · field jest 84/13 · api vitest 614/38 · mock vitest 40/1. **Total 1512.**
+No runner reporting zero, no skips. typecheck 9/9, lint 7/7, format clean, `verify:rollbacks`
+green and run.
+
+#### Where this stopped
+
+After D2, before D3. Not done: 45007/45008/45001/45004 from screens; the full five-write
+offline cycle, which `FE-W38` blocks; and `write-path.spec.ts`'s stale parity claim, registered
+not fixed.
