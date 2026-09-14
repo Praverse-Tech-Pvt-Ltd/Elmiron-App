@@ -361,6 +361,35 @@ credentials away from people, which is an access decision and not an engineering
 > reported as a configuration error, and a pooler URL the script cannot reach is not the same
 > finding as a divergence.
 
+### What would actually close this — MR-33 C1
+
+The human note in step 4 below is the weak half, and naming what replaces it turns "we chose
+the weaker option" into a dependency somebody can discharge.
+
+**What closes it: `supabase db push` from CI being the ONLY path to production.** Then the
+actor is the workflow run, the timestamp is the run's, and both are recorded by GitHub whether
+anyone writes them down or not — which is exactly what `schema_migrations` cannot give.
+
+**The obvious phrasing of the blocker is wrong, so here is the accurate one.** It is *not*
+"this needs production credentials in CI". **CI already has one**: `secrets.SUPABASE_DB_URL`
+is set, and MR-33 A1 watched the drift check authenticate to
+`aws-0-ap-south-1.pooler.supabase.com` and read the applied versions. What is missing is three
+other things:
+
+1. **A deploy workflow.** Buildable today, and small.
+2. **Whether that credential may APPLY migrations, which is untested.** It has been proven to
+   `select` from `supabase_migrations.schema_migrations`. DDL is a different privilege, and
+   `ci.yml:135` already records one case where a `db push` failed with *"permission denied to
+   set parameter"*. Assuming read access implies write access is the kind of inference this
+   project keeps getting wrong.
+3. **The decision that CI is the only path** — which means human-held production credentials
+   stop being used for this, and a merge to `main` deploys. That is an access decision and an
+   operational one, not an engineering task, and it belongs with whoever owns the Supabase
+   account.
+
+Until all three, the detector plus the written note is the honest posture, and the note is
+where the actor and the timestamp actually live.
+
 ### The step
 
 1. **Before.** Record what you are about to apply:
