@@ -2863,3 +2863,62 @@ adb shell "run-as <pkg> sh -c 'cat /data/local/tmp/RKStorage > databases/RKStora
 
 Force-stop the app first and delete the `-journal`, or the app's own copy wins. There is no
 `sqlite3` on the device, which is why the edit happens on the host.
+
+### When a type has no room for "I don't know", something plausible gets put there
+
+**Three instances, one shape. MR-27, MR-24, MR-30 — and the third was a near-miss on the
+compliance clock, caught only because MR-18's rule says to mutate what you have just written.**
+
+A function has to return *something*. If the return type cannot express "no answer", the author
+picks the most harmless-looking value in range. **That value is then indistinguishable from a
+real one at every call site**, and the call sites are where the damage happens — not at the
+function, which usually has a comment saying exactly what it meant.
+
+| | the absence | dressed as | what it cost |
+| --- | --- | --- | --- |
+| MR-27 | no SQLSTATE | `sqlState: ''` | printed to an MR as *"The server refused this sync ()"* |
+| MR-24 | no measured size | `sizeBytes: 1` | a fabricated figure satisfying a `positive()` contract |
+| MR-30 | no server answer | `UTC_FALLBACK`, a valid IANA zone | would have rendered every clock 5h30m wrong, including a consent screen's |
+
+**The fix is to make the absence unrepresentable-as-a-value**: `null`, or a discriminated
+result the caller has to open. `src/capture/location.ts` is the pattern already in this
+repository — it returns `{ kind: 'fix', coordinates }` or `{ kind: 'unavailable', reason }`, and
+no caller can read a position without first deciding what to do about not having one.
+
+#### The sub-form that is worse, because it looks solved
+
+`UTC_FALLBACK` **already carried a discriminant**: `TerritoryZone.source` is
+`'territory' | 'fallback_utc'`, and the type's own comment reads *"A caller must be able to tell
+an answer from a fallback."* The room existed. **Nothing read it.** Across the whole app,
+`zone.source` was consumed in exactly zero places until MR-30 added one.
+
+So there are two versions of this defect and they need different fixes:
+
+- **(a) No room in the type.** `sqlState: ''`, `sizeBytes: 1`. Add room — nullable, or a
+  discriminated union.
+- **(b) Room exists, discriminant present, no caller opens it.** `UTC_FALLBACK`. The type
+  review passes, the comment promises the property, and nothing enforces it. **This is worse**,
+  because every reviewer who checks the type concludes it is handled. It is MR-28 E rule 3 in a
+  type: a control defined by when it *can* fire, that nothing ever fires.
+
+For (b), the test is not *"is the absence representable"* but **"count the call sites that read
+the discriminant."** If that number is zero, the discriminant is documentation.
+
+#### And check that a value is USABLE, not merely well-shaped
+
+MR-31 B3 found the same class one level down. `deserialiseAnchor` required the persisted
+`timeZone` to be a non-empty string — which `"garbage"` satisfies. `Intl.DateTimeFormat` throws
+`RangeError: Invalid time zone specified` on a bad zone, so the first `dayIn` threw during
+hydration, inside the sync effect's `try`, and was reported as *"the app could not reach the
+server."*
+
+**The cost was not a wrong clock.** Hydration threw *before the pull ran*, so nothing rewrote
+the bad anchor, so every subsequent launch did the same thing: **sync permanently wedged, and
+disguised as a network problem.** A value that crossed a process boundary is input; validating
+its shape is not validating that this app can use it.
+
+#### A third-party function that never throws is a sentinel factory
+
+`fetchTerritoryZone` cannot fail — on any error it answers `UTC_FALLBACK`. That is convenient
+and it moves the decision from the function to every caller, silently. Before trusting a
+"safe" helper, ask what it returns when it fails, and whether that value is in range.

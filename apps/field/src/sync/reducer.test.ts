@@ -132,16 +132,47 @@ describe('a rejection', () => {
     expect(find(state, 'a')?.status).toBe('failed');
   });
 
-  it('refuses a refusal with no code rather than showing an unexplained failure', () => {
-    expect(() =>
-      reduceAll([
-        { type: 'enqueued', item: item('a', '2026-08-14T09:00:00.000Z') },
-        {
-          type: 'verdict_received',
-          verdict: verdict({ id: 'a', status: 'rejected', rejectionCode: null }),
-        },
-      ]),
-    ).toThrow(/no rejectionCode/);
+  /**
+   * **MR-31 B3 — this case previously asserted a THROW, and the throw is gone.**
+   *
+   * It read *"refuses a refusal with no code rather than showing an unexplained failure"*,
+   * and the sentiment was right: an unexplained failure must not be dressed up as an
+   * explained one. The RESPONSE was wrong, in three separate ways.
+   *
+   * 1. **It lost the rest of the flush.** `syncQueueReducer` is called per item inside
+   *    `sendFor`'s loop; throwing there abandons every item after this one.
+   * 2. **It left the item un-`failed`**, so it stayed queued and retried forever against a
+   *    server that had already refused it.
+   * 3. **It could not fire.** `outbox.ts` wrote `rejectionCode ?? 'internal_error'` before
+   *    the reducer saw it, so nothing ever reached the throw from the `sync_push` path.
+   *    A control that cannot fire is documentation.
+   *
+   * The original intent is kept and asserted below where it belongs — in `presentRejection`,
+   * which gives an uncategorised refusal **no remedy** and `escalate`. The MR is told the
+   * server refused this and did not say why, and that it needs a person. That is both true
+   * and actionable, which the thrown error was neither.
+   */
+  it('RECORDS a refusal with no code rather than discarding the whole flush', () => {
+    const state = reduceAll([
+      { type: 'enqueued', item: item('a', '2026-08-14T09:00:00.000Z') },
+      { type: 'batch_started', ids: ['a'] },
+      {
+        type: 'verdict_received',
+        verdict: verdict({ id: 'a', status: 'rejected', rejectionCode: null }),
+      },
+      // A SECOND item in the same flush. Under the throw this verdict was never applied.
+      { type: 'enqueued', item: item('b', '2026-08-14T10:00:00.000Z') },
+      { type: 'batch_started', ids: ['b'] },
+      {
+        type: 'verdict_received',
+        verdict: verdict({ id: 'b', status: 'rejected', rejectionCode: 'outside_geofence' }),
+      },
+    ]);
+
+    expect(find(state, 'a')?.status).toBe('failed');
+    expect(state.rejections['a']?.code).toBeNull();
+    // The assertion that fails against the old behaviour: item b survived.
+    expect(state.rejections['b']?.code).toBe('outside_geofence');
   });
 
   it('marks a dead letter as such, with no attempts remaining', () => {

@@ -75,7 +75,8 @@ const REMEDIES: Partial<Readonly<Record<RefusalCode, string>>> = {
 };
 
 export interface RejectionPresentation {
-  readonly code: SyncRejectionCode;
+  /** The coarse category, or null when the server sent none — see `RejectionRecord.code`. */
+  readonly code: SyncRejectionCode | null;
   /**
    * The precise refusal, derived from the SQLSTATE — MR-17 B1.
    *
@@ -193,7 +194,24 @@ export const presentRejection = (record: RejectionRecord): RejectionPresentation
     remedy: REMEDIES[refusal.code] ?? null,
     explanation: record.explanation,
     fallback: record.explanation === null ? FALLBACK : null,
-    action: record.deadLettered || !RETRYABLE.has(record.code) ? 'escalate' : 'retry',
+    /**
+     * MR-31 B3. **Stated positively, and the null case is load-bearing rather than
+     * decorative.**
+     *
+     * "Retry" is a claim that the cause can change on its own. An uncategorised refusal
+     * supports no such claim, so it needs a person exactly as a dead letter does.
+     *
+     * The first version of this wrote `record.code === null || !RETRYABLE.has(...)`, and a
+     * mutation that deleted the null clause **still passed** -- `RETRYABLE.has(null)` is
+     * already false, so the clause was a guard no runtime reached, carrying a comment
+     * saying it was needed. `territory-day.ts` names that exact shape as a defect this
+     * repository has fourteen instances of. In this form the null check is required by the
+     * TYPE as well as the logic, so removing it fails the build rather than passing quietly.
+     */
+    action:
+      record.code !== null && !record.deadLettered && RETRYABLE.has(record.code)
+        ? 'retry'
+        : 'escalate',
     deadLettered: record.deadLettered,
     receivedAt: record.receivedAt,
   };

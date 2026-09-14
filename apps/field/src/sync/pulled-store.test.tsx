@@ -529,6 +529,55 @@ describe('FE-W40 — the day on a cold start with no signal', () => {
     expect(await persistence.loadAnchor(USER)).toBeNull();
   });
 
+  it('B3/MR-31 — an UNUSABLE persisted timeZone must not wedge sync', async () => {
+    // `"garbage"` is a non-empty string, which is all the original guard required, and
+    // `Intl.DateTimeFormat` throws `RangeError: Invalid time zone specified` on it. That
+    // throw happened during hydration, INSIDE the sync effect's try -- so it was reported
+    // as `{ kind: 'unreachable' }` and, worse, it aborted BEFORE the pull ran. Nothing
+    // rewrote the bad anchor, so every later launch did the same: sync permanently wedged,
+    // and the MR told the app could not reach the server.
+    const persistence = memoryPulledStore();
+    await persistence.save(USER, emptyStore());
+    await persistence.saveAnchor(USER, {
+      ...IST_ANCHOR,
+      timeZone: 'garbage',
+      receivedAt: Date.now() - 30 * MINUTE,
+    });
+
+    const pull = jest.fn(async () =>
+      Promise.resolve(
+        pulled({
+          serverTime: '2026-09-20T09:00:00+00:00',
+          changes: [{ kind: 'upsert', entity: 'doctor', record: ASHA }],
+        }),
+      ),
+    );
+
+    await render(
+      <PulledStoreProvider
+        cursors={memoryPullCursorStore()}
+        persistence={persistence}
+        pull={pull as never}
+      >
+        <Probe />
+      </PulledStoreProvider>,
+    );
+
+    // The assertion that fails against the defect: the PULL RAN.
+    await waitFor(() => {
+      expect(screen.getByText('doctors:1')).toBeTruthy();
+    });
+    expect(screen.getByText('dayOrigin:live')).toBeTruthy();
+    expect(screen.getByText('today:2026-09-20')).toBeTruthy();
+    // And the bad anchor is REPLACED rather than left to wedge the next launch too. The
+    // zone here is UTC, not Asia/Kolkata, because this test has no server for
+    // `fetchTerritoryZone` to ask -- the point is that the stored anchor now PARSES, which
+    // the poisoned one did not.
+    const rewritten = await persistence.loadAnchor(USER);
+    expect(rewritten).not.toBeNull();
+    expect(rewritten?.serverTime).toBe('2026-09-20T09:00:00+00:00');
+  });
+
   it('THE POSITIVE CONTROL: a pull that SUCCEEDS takes the day from the server, not the anchor', async () => {
     // Without this, an implementation that always preferred the anchor would satisfy every
     // case above while quietly making the app never show a live day again.

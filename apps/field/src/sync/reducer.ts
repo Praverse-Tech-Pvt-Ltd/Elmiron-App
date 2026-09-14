@@ -19,7 +19,20 @@ import type { ServerVerdict, SyncEvent } from './events';
  */
 
 export interface RejectionRecord {
-  readonly code: SyncRejectionCode;
+  /**
+   * The coarse queue category, or **null when the server sent none** — MR-31 B3.
+   *
+   * Nullable because the wire contract is (`SyncRejectionCodeSchema.nullable()`), and every
+   * intermediate layer that narrowed it had to invent a value to do so. `outbox.ts` used
+   * `?? 'internal_error'`, and `internal_error` is in `RETRYABLE` — so a refusal whose cause
+   * the app did not know told the MR to try again. The reducer's alternative was to THROW,
+   * which loses the whole flush over one unexplained refusal.
+   *
+   * Neither is necessary. An unknown code is a fact, it is now representable, and
+   * `presentRejection` turns it into `escalate` with no remedy — which is what "the server
+   * refused and did not say why" actually means.
+   */
+  readonly code: SyncRejectionCode | null;
   /**
    * The SQLSTATE, carried so the surface can name a REMEDY — MR-17 B1.
    *
@@ -105,11 +118,12 @@ const applyVerdict = (state: SyncQueueState, verdict: ServerVerdict): SyncQueueS
 
     case 'rejected':
     case 'dead_lettered': {
-      if (verdict.rejectionCode === null) {
-        throw new Error(
-          `Server rejected ${verdict.id} with no rejectionCode. The app cannot explain a refusal it was not given a reason for.`,
-        );
-      }
+      // **MR-31 B3.** This used to throw -- *"The app cannot explain a refusal it was not
+      // given a reason for"* -- which was true and was the wrong response: it discarded the
+      // entire flush, including every item after this one, over one refusal the server
+      // declined to categorise. It was also unreachable, because `outbox.ts` coalesced to
+      // `internal_error` before it got here. Both ends are fixed: the absence travels, and
+      // `presentRejection` renders it as escalate-with-no-remedy.
       return {
         ...state,
         items: replace(state.items, verdict.id, (item) => ({ ...item, status: 'failed' })),

@@ -218,3 +218,32 @@ describe('BE-W97 — refusalTextFor: the remedy AND the server\u2019s figures', 
     expect(tooOld).toContain('the maximum is 72 hours');
   });
 });
+
+describe('MR-31 B3 — a refusal the server did not categorise', () => {
+  /**
+   * `rejectionCode` is nullable on the wire (`SyncRejectionCodeSchema.nullable()`), and
+   * every layer beneath this one used to narrow it by inventing a value. `outbox.ts` wrote
+   * `?? 'internal_error'` and the reducer THREW. The filler was not inert: `internal_error`
+   * is in `RETRYABLE`, so a refusal whose cause the app did not know told the MR to try
+   * again — a claim that the cause can change on its own, which nothing supported.
+   */
+  it('ESCALATES rather than telling the MR to retry', () => {
+    const presented = presentRejection(record({ code: null, deadLettered: false }));
+    expect(presented.action).toBe('escalate');
+    expect(presented.code).toBeNull();
+  });
+
+  it('THE POSITIVE CONTROL: a known retryable code still says retry', () => {
+    // Without this, the case above is satisfiable by escalating everything, which would
+    // send an MR to their manager for a shift window that fixes itself.
+    const presented = presentRejection(record({ code: 'outside_shift_window' }));
+    expect(presented.action).toBe('retry');
+  });
+
+  it('offers no remedy it cannot justify, and still renders the fallback', () => {
+    const presented = presentRejection(record({ code: null, explanation: null }));
+    expect(presented.remedy).toBeNull();
+    // The honest sentence still reaches the MR -- an unknown category is not silence.
+    expect(presented.fallback).toMatch(/without a reason the app can show/);
+  });
+});

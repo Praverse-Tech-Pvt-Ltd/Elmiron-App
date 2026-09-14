@@ -93,6 +93,33 @@ export interface PulledStorePersistence {
 const anchorKey = (userId: string): string => `sync.pull.anchor.v1.${userId}`;
 
 /**
+ * Is this string a timezone `Intl` will actually accept?
+ *
+ * **MR-31 B3. Checking the SHAPE of a value is not checking that it is USABLE, and this one
+ * wedged sync rather than merely rendering wrong.** `deserialiseAnchor` originally required
+ * `timeZone` to be a non-empty string, which `"garbage"` satisfies. `Intl.DateTimeFormat`
+ * does not throw on a bad locale but **does** throw `RangeError: Invalid time zone specified`
+ * on a bad zone, so the first `dayIn` inside `resolveAnchoredDay` threw — inside the sync
+ * effect's `try`, which reported it as `{ kind: 'unreachable' }`.
+ *
+ * The consequence was not a wrong clock. It was that hydration threw **before the pull ran**,
+ * so nothing rewrote the bad anchor, so every subsequent launch did the same thing: sync
+ * permanently wedged and reported to the MR as *"the app could not reach the server"*.
+ *
+ * A value that crossed a process boundary is input. This is the cheapest possible check that
+ * it is input this app can use, and a rejected anchor costs a cold start its day and nothing
+ * else — the pull then runs and writes a good one.
+ */
+const usableTimeZone = (timeZone: string): boolean => {
+  try {
+    new Intl.DateTimeFormat('en-GB', { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
  * Parsed, never cast — the same rule the records follow.
  *
  * An anchor written by an older build with a missing `timeZone` would otherwise reckon the
@@ -105,6 +132,7 @@ const deserialiseAnchor = (raw: unknown): DayAnchor | null => {
   if (typeof shape.serverTime !== 'string' || shape.serverTime === '') return null;
   if (typeof shape.receivedAt !== 'number' || !Number.isFinite(shape.receivedAt)) return null;
   if (typeof shape.timeZone !== 'string' || shape.timeZone === '') return null;
+  if (!usableTimeZone(shape.timeZone)) return null;
   if (shape.zoneSource !== 'territory' && shape.zoneSource !== 'fallback_utc') return null;
   return {
     serverTime: shape.serverTime,

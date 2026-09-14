@@ -448,7 +448,14 @@ export const flushOutbox = async (
           verdict: {
             id: item.id,
             status: error.deadLettered ? 'dead_lettered' : 'rejected',
-            rejectionCode: error.rejectionCode ?? 'internal_error',
+            // **MR-31 B3. NOT `?? 'internal_error'`.** The wire contract already makes
+            // this nullable (`SyncRejectionCodeSchema.nullable()`), so the absence was
+            // representable and the client was filling it in. And the filler was not
+            // inert: `internal_error` is in `RETRYABLE`, so a refusal whose cause the app
+            // does NOT know was telling the MR to try again. The comment three lines above
+            // says the point of MR-17's threading was to stop codes collapsing onto
+            // `internal_error`; this line collapsed the unknown ones onto it.
+            rejectionCode: error.rejectionCode,
             sqlState: error.sqlState,
             explanation: error.message,
             warnings: [],

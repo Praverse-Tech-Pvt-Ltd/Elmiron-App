@@ -23,7 +23,15 @@ import { Screen } from './Screen';
 export const LONG_RETRY_AFTER_ATTEMPTS = 3;
 
 export interface QueueScreenRejection {
-  readonly code: string;
+  /**
+   * The coarse queue category, or null when the server sent none — MR-31 B3.
+   *
+   * Carried rather than rendered: nothing in this component displays it, and the sentence
+   * the MR reads comes from `explanation` and `remedy`. Nullable because the absence is
+   * now representable all the way from the wire, and a component that narrowed it would be
+   * the one place left inventing a value.
+   */
+  readonly code: string | null;
   /** Backend's sentence. Rendered verbatim; `null` when the server sent none. */
   readonly explanation: string | null;
   /**
