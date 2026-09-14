@@ -179,3 +179,85 @@ management; the pilot meets MIUI, ColorOS and Funtouch, each with its own proces
 its own autostart whitelist in its own place. The onboarding screen *"Stop Android putting this
 app to sleep"* renders and its buttons work, and **whether the settings screens it names exist
 or do what its copy claims is unknown until a real handset is in hand.**
+
+
+---
+
+## Escalations — 14 September 2026, MR-33
+
+### 6.1 — PRODUCTION IS 37 MIGRATIONS BEHIND `main`, and nobody knew
+
+**Found by `BE-W40`'s migration-drift check on its first production run** (CI run
+`34837061156`), which MR-32 shipped and explicitly recorded as *unverified against
+production*. It was verified on its first run, by finding this.
+
+| | |
+| --- | --- |
+| Migration files on `main` | **56** |
+| Versions applied to production | **19** |
+| Applied with no file here | **none** — nothing was pushed off-`main` |
+| Never applied | **37**, everything dated `20260907` and later |
+
+Production has not been deployed since **BE-W8, 14 August**. The credential works and the
+project is reachable — the check connected to `aws-0-ap-south-1.pooler.supabase.com` and read
+the 19 versions — so this is not a paused project or a bad secret. **The migrations were
+simply never pushed.**
+
+**What is missing is not incidental.** Among the 37:
+
+- `20260908001300_tenant_boundary_restrictive.sql` — the restrictive tenant boundary
+- `20260908000900_organisation_scoping.sql` — organisation scoping
+- `20260907000300_revoke_public_execute.sql`, `20260908000400_revoke_sequence_grants.sql` —
+  privilege revocations
+- `20260908001000_withdrawal_timestamp_bounds.sql`,
+  `20260908001100_consent_capture_bounds_trigger.sql` — the consent capture bounds
+- `20260907000700_ucpmp_sample_caps.sql` and the two decision-deadline migrations
+- the whole `sync_pull` / `sync_push` layer, phases 1 and 2
+- `20260911000300_check_in_starts_the_visit.sql` — MR-28's defect-12 fix
+
+**So the September security hardening is not on production, and neither is the entire offline
+sync layer the app now depends on.** Nothing is broken *today* because nothing is pointed at
+production — but the app as it now exists cannot run against it.
+
+**Who does what:** this needs `supabase db push` against production, which is an operator
+action. **No engineering session on this machine has production credentials**, and
+`assertLocalhostOnly()` exists to keep them off it. The procedure is in
+`docs/restore-runbook.md` → *"Applying a migration to production"*: drift-check, push from a
+clean `main`, drift-check again, then write down the SHA, the versions, the date and who ran
+it — because `schema_migrations` records no actor and no timestamp.
+
+**Until it is done the drift workflow fails daily**, which is correct and is the point. Do not
+silence it.
+
+### 6.2 — The PITR decision has to be RE-MADE, because both of its premises are absent
+
+**Re-opened as an operator item.** `.ai-collab/decisions.md` records:
+
+> **Decision:** do not buy Point-in-Time Recovery. **Daily backups (included in the Pro
+> plan) plus `docs/restore-runbook.md`** is the right posture.
+
+The reasoning is sound and may still be right. **Both things it rests on are missing.**
+
+| Premise | State |
+| --- | --- |
+| *"Daily backups (included in the Pro plan)"* | **The paid plan is item 5.2 on this list and is unresolved.** Whether any automatic backup exists on the current plan is **not knowable from this machine** — it is a dashboard fact. It has never been confirmed in the record |
+| *"plus `docs/restore-runbook.md`"* | **MR-32 executed it.** Step 2 was the single word *"Restore."* with no mechanism behind it — no PITR, no dump script, no off-machine copy. Three of its four commands exited 0 while doing nothing |
+
+**A decision whose justification turns out not to exist is not a decision that survives on its
+date.** This is not an argument for buying PITR — it is that the alternative it was weighed
+against was never built, so the comparison was never made.
+
+**What is needed from you, and it is two questions rather than one:**
+
+1. **Confirm what plan this project is on and what it actually backs up**, from the Supabase
+   dashboard. That is 5.2, and this now depends on it.
+2. **Then weigh PITR against the cost of building and maintaining the alternative** — which
+   MR-33 B has now built a first version of, so that cost is no longer hypothetical. The
+   ~$100/month PITR figure in `docs/backend-prompt-w8.md` is dated **11 August** and is
+   flagged there as needing re-verification before anyone spends against it.
+
+**The reasoning that remains true regardless:** a restore on this project is a compliance
+event that can un-withdraw a consent, which is why the runbook and
+`reconcile-after-restore.mjs` exist. Finer-grained restore points buy more of the thing the
+design already defends against. That argument was never the problem; the missing alternative
+was.

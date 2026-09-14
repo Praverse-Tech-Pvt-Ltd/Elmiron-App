@@ -2922,3 +2922,36 @@ its shape is not validating that this app can use it.
 `fetchTerritoryZone` cannot fail — on any error it answers `UTC_FALLBACK`. That is convenient
 and it moves the decision from the function to every caller, silently. Before trusting a
 "safe" helper, ask what it returns when it fails, and whether that value is in range.
+
+### `CLAUDE.md` carries only claims that are timeless or checkable in one command
+
+**MR-33 A3.** `CLAUDE.md` is loaded into every session's context **before any code is read**.
+A stale claim there is not one stale claim — it is a **stale prior in every session that will
+ever run**, and it arrives with more authority than anything the session goes on to read,
+because it was there first and nothing asked for it.
+
+**The test:** does the claim hold for all time, or is the command that checks it printed
+beside it? If neither, it belongs in a file a reader chooses to open, with a pointer left
+behind.
+
+**Measured, not argued.** Before MR-33 the file carried *"1,221 nodes, 1,545 edges"*,
+*"159 named communities"*, four measured graph weaknesses with their counts, and — inside a
+paragraph explaining why a build flag is mandatory — *"all **34** migrations contribute
+nothing"*.
+
+**There are 56.** The count had been stale for weeks and had been reaching every session
+unchallenged, in the one file that is read before anything can contradict it. The fix in that
+sentence was not a new number; it was replacing the number with the command:
+
+```bash
+ls services/api/supabase/migrations/*.sql | wc -l
+```
+
+**This is the MR-30 grep rule's worst case.** That rule says: when you correct a fact, grep
+for every other mention of it, because a correction that names one line leaves the rest
+standing with equal authority. `CLAUDE.md` is the mention that outranks all the others and is
+least likely to be in the grep, because nobody thinks of it as documentation — it reads as
+instructions.
+
+The counts that were removed are in `docs/graphify-notes.md`, labelled as a snapshot, with the
+commands that re-derive them.
