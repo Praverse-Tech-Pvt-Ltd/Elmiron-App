@@ -465,3 +465,42 @@ is two, and no mechanism has been chosen on it.
 - **A test double whose looseness was load-bearing.** `home-route.test.tsx` omitted `today`, so
   `today === null` was false and `summariseDay` ran on `undefined`. An explicit `null` broke a
   test that had been green for sessions.
+
+## MR-31 — 14 September 2026: the last device clock is gone
+
+**`FE-W42` is closed.** The five screens that took *now* from the handset — day end, mileage,
+coaching, the doctor list and the doctor profile — now take it from `serverTime`, and with no
+server clock they render no age and ask for no window rather than guessing one.
+
+**They were wrong twice over.** Each built its window with `new Date()` and then read it with
+local `getFullYear()`/`getMonth()`/`getDate()`, so the handset supplied the instant **and the
+calendar**. For an IST territory that is a 5h30m offset applied to a date, which moves the
+answer on the last day of a month and on every day near midnight.
+
+### The table that was missing a column
+
+Three of those screens now read their **clock** from the real store while their **data** is
+still the mock at `:4010`. A two-column real-versus-fixture table cannot say that, and this
+repository already records that a table with one column too few is what hid a defect once. The
+four-column version is in `PROJECT-OVERVIEW.md`'s MR-31 section.
+
+### Found by running it, and by mutating it
+
+- **A first device sample proved nothing.** `07:44Z` is 13 September in UTC and in IST alike,
+  so the profile's "13 Sep" was right by luck — the reviewer's own point. A visit moved to
+  `18:45Z` on the 13th (00:15 IST on the 14th) rendered **"14 Sep"**, which is the check that
+  discriminates.
+- **A mutation found an untested rule that had stood for four sessions.** Reverting `overdue`
+  to `daysSince === null || …` left every test green while badging **every** doctor Overdue
+  whenever the server clock was unknown — and Overdue drives the filter, so it changes which
+  doctors an MR drives to.
+
+### And two defects inside this session's own changes
+
+`deserialiseAnchor` accepted `"garbage"` as a timezone; `Intl` throws on it, during hydration,
+before the pull — so a corrupt anchor **wedged sync permanently** and reported it as a network
+failure. And `lastSeenLabel(null)` means "never visited", which a nullable clock would have
+made the app say about a doctor seen last week.
+
+Neither was visible in the diff. One came from asking what a function returns for input it does
+not validate; the other from mutation.

@@ -1165,3 +1165,34 @@ uncategorised refusal told the MR to retry). Both are in the MR-31 section of
 | **FE-W45** | **`zone` starts as `UTC_FALLBACK`, and no screen can tell.** `pulled-store.tsx` initialises `useState<TerritoryZone>(UTC_FALLBACK)`. Records are restored from disk BEFORE `fetchTerritoryZone` is awaited, so there is a window in which a screen holds real visits and a fallback zone — and `visit/[id].tsx`, `doctor/[id].tsx` and `samples/[visitId].tsx` all render clocks or dates from it. Every one reads **5h30m wrong for IST**, then corrects. MR-28's own comment names this outcome — *"the screen would briefly show every clock in UTC and then correct itself, which is worse than showing nothing"* — and fetches the zone before the PAGES, which does not close the restore window. <br><br>**MR-30 narrowed it without closing it**: a restored day anchor now sets the zone immediately, so the window only remains for a store restored with no anchor beside it — installs that last synced before MR-30. <br><br>The honest fix is `zone: TerritoryZone \| null` and screens that render no clock until it is known; the cheap one is for screens to check `source === 'fallback_utc'`. **The second is what the type already invites and what nothing did for four sessions**, which is the reason this is registered rather than patched with another convention | `sync/pulled-store.tsx`, `today/territory-day.ts`, the clock-rendering screens | MR-30 B | — | 2 | Mount a screen with a restored store and no anchor, assert no clock is rendered before the zone resolves. A positive control that a resolved territory zone renders normally |
 | **FE-W46** | **`sizeBytes: 1` is still fabricated, in two places.** `app/visit/[id].tsx:225` and `app/voice-note/[visitId].tsx:157` both post a literal `1` because the contract's `positive()` refuses zero and the byte count is not knowable until the upload path exists. MR-24 found it; it is unchanged and now has a second site. <br><br>Registered here rather than fixed because the real answer is `BE-W7` — the upload path that would supply a measured size. Until then the field is a declared figure that is false by construction, and the comment at each site says so honestly, which is the best available state but not a good one | `app/visit/[id].tsx`, `app/voice-note/[visitId].tsx`, `BE-W7` | MR-24 | **`BE-W7`** | 1 | When the upload path exists: assert the posted size equals the file's, and a positive control that a zero-byte recording is refused rather than sent as 1 |
 | **FE-W47** | **An unknown role navigates as an MR.** `app/(tabs)/home.tsx:229` calls `destinationsFor(role ?? 'mr')`. Line 228 renders *"Signed in as unknown role"*, so the MR-facing text is honest — but the navigation silently picks a surface. **Not a permission defect**: the server denies what the role may not do, and the file says so. It is the sentinel shape in a place where the consequence is confusion rather than exposure, and it is registered for completeness so the sweep's verdict is on record rather than inferred from silence | `app/(tabs)/home.tsx` | MR-31 B1 | — | 1 | A signed-in session with no role renders no role-specific destinations, rather than the MR set |
+
+### Added by MR-31 D — the `BE-W92` rate asymmetry, measured
+
+**A measurement appended to the reconciled `BE-W92`, with no mechanism proposed.** The
+asymmetry was 1-in-16 for the api suite alone against 2-in-2 for the whole monorepo, and the
+obvious reading — *"another workspace is hitting the same database"* — is **wrong**.
+
+| question | answer |
+| --- | --- |
+| Which workspaces touch the local Postgres during a monorepo run? | **`services/api` and no other.** Nothing else in `apps/`, `packages/` or `services/` references `54322`, `postgresql://`, `DATABASE_URL` or `SUPABASE_DB` — the only other matches are generated Android build artefacts |
+| Are any running concurrently with `api`? | **None that touch the database.** turbo's default concurrency is 10, so up to ten workspace tasks share the machine, but none of them opens a connection |
+| Then what IS writing concurrently? | **Supabase's own services.** Ten containers run against that Postgres for the whole session, and two of them own every relation the three deadlock samples named: `supabase_auth` (GoTrue) owns `auth.users` and `auth.identities`; `supabase_storage` owns `storage.objects` and `storage.buckets` |
+| And how many writers does `api` itself field? | `services/api/vitest.config.ts` sets `minWorkers: 1` and **no `maxWorkers`**, so the pool is sized from the CPU count — **20 on this machine** |
+
+**What this rules out, which is the useful part.** The contention is not cross-workspace. It is
+inside one suite: up to twenty vitest workers, each running `inRolledBackTransaction` around
+DDL, against a Postgres that ten Supabase services are also writing to — and `seedFixtures`
+creates GoTrue users over HTTP, so the `INSERT INTO identities` in sample 1 came from
+**`supabase_auth`'s own backend**, not from a test's connection. A monorepo run does not add a
+database client; it adds machine load, which changes how those twenty workers interleave with
+services the suite is driving indirectly.
+
+**No mechanism is proposed and none should be read in.** The reviewer's `public.organisations`
+FK candidate was refuted by the log in MR-30 A4, and two earlier diagnoses of this repository's
+flakes from plausible reasoning were wrong. `deadlock_timeout` remains at its default and
+`lock-wait-logging.spec.ts` still asserts it.
+
+**The next measurement, unchanged:** run the WHOLE monorepo suite N ≥ 10 times and count. The
+loaded denominator is still two. A candidate worth measuring alongside it, because it is free
+to vary and changes the number of concurrent writers directly, is `maxWorkers` — measured,
+before anything is set.

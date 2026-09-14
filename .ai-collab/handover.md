@@ -402,3 +402,40 @@ The two strongest pieces of evidence this session were both refusals to reason:
 2. **A4** resolved OIDs out of the server log instead of arguing from the schema — and the
    answer contradicted a hypothesis that had stood, unchallenged and clearly labelled as
    unmeasured, for four sessions.
+
+## MR-31 — 14 September 2026
+
+**`FE-W42` closed, and the sentinel class catalogued.**
+
+### Decisions taken
+
+- **The sentinel class is two sub-forms, not one**, and the brief's framing of `UTC_FALLBACK`
+  was corrected rather than repeated: the discriminant existed and no caller read it. The
+  diagnostic is **"count the call sites that read it"**, not "is the absence representable".
+- **The reducer's throw on a null `rejectionCode` was removed** — a deliberate, tested decision
+  with no entry in this file behind it. Kept its *intent* (an unexplained failure must not be
+  dressed as an explained one) and moved it to `presentRejection`: no remedy, and escalate. The
+  throw abandoned the rest of the flush, left the item un-`failed` so it retried forever, and
+  was unreachable because `outbox.ts` coalesced before it.
+- **`buildDoctorRows`/`buildDoctorProfile` take `now: number | null`.** No default, because
+  every candidate default renders an age that looks measured.
+- **`overdue` keys on `lastSeenAt`, not on `daysSince`** — "never visited" is knowable with no
+  clock; "seen 40 days ago" is not.
+- **C1 answered: DEFER** (`BE-W98`), trigger named.
+- **No mechanism proposed for `BE-W92`**, per D2, despite having a sharper measurement.
+
+### The method note worth keeping
+
+Two of this session's defects were in this session's own work, and the diff showed neither.
+
+1. **Read what the function you are newly able to pass `null` to actually returns.**
+   `lastSeenLabel(null)` is "never visited" — a correct function, a new caller, a false
+   sentence.
+2. **Mutate even the guards you are confident in.** `record.code === null || …` was inert and
+   the code was still correct, so no test could fail and no review would catch it. Only the
+   mutation did, and the fix was to restate it so the *type* enforces the check.
+
+And one on evidence: when the device did not reflect a database edit, the answer was not "the
+screen is wrong" — it was that the edit hit another tenant and RLS kept it out. Reading the
+device's own storage settled it in one command. Guessing would have gone the other way and
+"fixed" a screen that was already right.

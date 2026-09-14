@@ -13396,3 +13396,273 @@ What a reader should carry forward:
 4. **A correction is not done until every other mention of the fact is corrected too.** Five
    stale copies of one fact sent a reviewer into a session on a false premise, and the
    correction had existed since 27 August.
+
+### MR-31 — FE-W42 and the sentinel class
+
+**Every screen in this app now takes *now* from the server.** The five `FE-W42` sites are
+converted and the `eslint-disable`s carrying that id are gone. Two of the defects recorded
+below were found inside this session's own changes — one by reading what a function returns,
+one by mutating what had just been written.
+
+#### A1 — CI
+
+| | |
+| --- | --- |
+| Run | `34829719365` — **`success`** |
+| Workflow | `CI` |
+| Event | `push` |
+| SHA | `d76ca200c3c30509f2801881e9f9ba3c7141a9f5` |
+
+**The SHA equals HEAD.** `git rev-parse HEAD` returned the same
+`d76ca200c3c30509f2801881e9f9ba3c7141a9f5`. Three held commits pushed as `246f216..d76ca20`;
+both jobs green.
+
+#### A2 — `C1`'s verdict, stated plainly: **DEFER**
+
+The last report said C1 was complete and did not say which way it went. It is **`BE-W98`,
+defer, with a named trigger.**
+
+The reason is one line of code: `explanation.ts:196` reads
+`action: record.deadLettered || !RETRYABLE.has(record.code) ? 'escalate' : 'retry'`. **For a
+dead letter the action is `escalate` whatever the SQLSTATE is** — attempts are exhausted, a
+person is required, and no figure changes that. Figures exist to tell somebody what to do
+next; on this path what to do next is already fixed. Beside that, `rejection_detail` still
+carries the server's own sentence, which after MR-28 B names the doctor rather than a UUID, so
+only the numeric DETAIL line is absent — and two columns on `sync_items` is a migration
+against a table that grows once per sync attempt.
+
+**The trigger that reverses it:** a manager-facing dead-letter queue. A manager deciding
+whether to override a UCPMP refusal needs the cap, the month-to-date and the period as
+numbers, and is the first reader for whom they change a decision rather than an explanation.
+
+#### B1/B2 — the sentinel sweep, and a correction to the brief
+
+Searched by **shape**, not by name: `catch` blocks returning a value; `??`/`||` coalescing to
+a domain literal; hardcoded literals in request bodies; default parameters; exported
+`*_FALLBACK`/`DEFAULT` constants. Each hit was asked one question — **at the call site, can an
+absence be distinguished from an answer?**
+
+**The brief's framing of `UTC_FALLBACK` is wrong, and the truth is worse.** It says *"nothing
+in its type says it means unknown."* `TerritoryZone.source` is `'territory' | 'fallback_utc'`,
+and the type's own comment reads *"A caller must be able to tell an answer from a fallback."*
+**The room existed. Nothing read it** — `zone.source` was consumed in **zero** places across
+the whole app until MR-30 added one. So the class has two sub-forms:
+
+- **(a) no room in the type** — `sqlState: ''`, `sizeBytes: 1`. Add room.
+- **(b) room exists, discriminant present, no caller opens it** — `UTC_FALLBACK`. **Worse**,
+  because the type review passes and the comment promises the property. The test is not *"is
+  the absence representable"* but **"count the call sites that read the discriminant."** Zero
+  means it is documentation.
+
+| site | verdict |
+| --- | --- |
+| `sync/pulled-store-persistence.ts` — `timeZone` accepted as any non-empty string | **REAL, FIXED.** See below — it wedged sync |
+| `sync/outbox.ts:451` — `rejectionCode ?? 'internal_error'` | **REAL, FIXED.** `internal_error` is in `RETRYABLE`, so an uncategorised refusal told the MR to **retry** |
+| `sync/async-storage-store.ts` — `emptyQueue` on a corrupt read | **REAL, registered `FE-W44`.** Renders *"Everything sent"* over a queue the app cannot read — the strongest of the registered set |
+| `sync/pulled-store.tsx` — `useState(UTC_FALLBACK)` | **REAL, registered `FE-W45`.** Records restore before the zone is fetched, so clocks can render 5h30m wrong and then correct |
+| `visit/[id].tsx:225`, `voice-note/[visitId].tsx:157` — `sizeBytes: 1` | **REAL, registered `FE-W46`.** MR-24's instance, unchanged, now in two places; the answer is `BE-W7` |
+| `home.tsx:229` — `role ?? 'mr'` | **Registered `FE-W47`.** Navigation only; the server denies what the role may not do, and line 228 says "unknown role" |
+| `capture/location.ts` — `{ kind: 'fix' } \\| { kind: 'unavailable', reason }` | **NOT the shape — it is the PATTERN.** No caller can read a position without deciding what to do about not having one |
+| `capture/samples.ts:25` — `quantity: 1` | **Not the shape.** A form default the MR edits, documented as *"nobody leaves zero"* |
+| `consent/[visitId].tsx:350` — `notice?.fullText ?? ''` | **Not the shape.** Guarded by `blockedReason`; the empty string is never presented as a notice |
+| `today/territory-day.ts` — `parts['hour'] ?? '00'` | **Not reachable.** `Intl` throws on a bad zone rather than omitting parts, so the fallback cannot fire for a zone that constructs |
+
+#### B3 — the two that were fixed, and why they mattered
+
+**1. An unusable persisted `timeZone` wedged sync, disguised as a network failure.**
+`deserialiseAnchor` — code this session's predecessor wrote — required `timeZone` to be a
+non-empty string, which `"garbage"` satisfies. `Intl.DateTimeFormat` **throws**
+`RangeError: Invalid time zone specified` on a bad zone, so the first `dayIn` inside
+`resolveAnchoredDay` threw during hydration, **inside the sync effect's `try`**, and was
+reported as `{ kind: 'unreachable' }`.
+
+**The cost was not a wrong clock.** Hydration threw *before the pull ran*, so nothing rewrote
+the bad anchor, so every subsequent launch did the same thing: **sync permanently wedged, and
+the MR told the app could not reach the server.** Checking a value's shape is not checking that
+this app can use it.
+
+**2. `rejectionCode ?? 'internal_error'` told the MR to retry a refusal the app could not
+explain.** The wire contract is already `SyncRejectionCodeSchema.nullable()`, so the absence
+was representable and the client was filling it in — and the filler was not inert, because
+`internal_error` is in `RETRYABLE`. The comment three lines above says the point of MR-17's
+threading was to stop codes collapsing onto `internal_error`.
+
+**And typecheck passing did not reveal that the reducer then THREW on it.** That throw was a
+deliberate, tested decision — *"refuses a refusal with no code rather than showing an
+unexplained failure"* — with no entry in `decisions.md` behind it. The sentiment was right and
+the response was wrong three ways: it **abandoned every later item in the flush**; it left the
+item **un-`failed`**, so it retried forever against a server that had refused it; and it was
+**unreachable**, because `outbox.ts` coalesced before it. A control that cannot fire is
+documentation. The intent is kept where it belongs — `presentRejection` gives an uncategorised
+refusal no remedy and `escalate`.
+
+**A mutation caught a dead guard I had just written.** The first version of that fix read
+`record.code === null || !RETRYABLE.has(record.code)`, and deleting the null clause **still
+passed**: `RETRYABLE.has(null)` is already `false`. `territory-day.ts` names that exact shape
+as *"the defect this repository already has fourteen instances of"*. Restated positively —
+`record.code !== null && !record.deadLettered && RETRYABLE.has(record.code)` — the null check
+is required by the **type**, so deleting it now fails the build rather than passing quietly.
+
+#### B4 — one `gotchas.md` entry, three worked examples
+
+Added, with both sub-forms, the three instances (`sqlState: ''`, `sizeBytes: 1`,
+`UTC_FALLBACK`), the usable-versus-well-shaped lesson, and one more observation: **a
+third-party helper that never throws is a sentinel factory.** `fetchTerritoryZone` cannot fail;
+it moves the decision from the function to every caller, silently.
+
+#### C — `FE-W42`, all five screens
+
+**They were wrong twice over, not once.** Each built its window with `new Date()` and then read
+it with **local getters** — `getFullYear()`, `getMonth()`, `getDate()` — so the handset supplied
+the instant *and* the calendar. For an IST territory that is a 5h30m offset applied to a date.
+
+| screen | was | now |
+| --- | --- | --- |
+| `app/day-end.tsx` | `todayIso(new Date())` | `today` from the store; with none, asks for nothing |
+| `app/mileage.tsx` | `monthWindow(new Date())` | `monthWindowIn(serverTime, zone)` |
+| `app/(tabs)/coaching.tsx` | `recentMonths(new Date())` | `recentMonthsIn(serverTime, zone, 3)` |
+| `app/(tabs)/doctors.tsx` | `Date.now()` | `Date.parse(serverTime)`, nullable |
+| `app/doctor/[id].tsx` | `Date.now()` | `Date.parse(serverTime)`, nullable |
+
+`src/today/server-window.ts` is new and pure — `monthIn`, `monthWindowIn`, `recentMonthsIn` —
+and none of them reads a clock. The instant is always passed in and is always the server's.
+
+**C3 found a defect inside the conversion, which is the shape the prompt warned about.**
+`lastSeenLabel(null)` reads *"never visited"*. With a nullable server clock a **visited** doctor
+also produces `daysSince === null`, so routing both through it would have told an MR that a
+doctor they saw last week had never been seen — false in the direction that wastes a visit.
+There are **three** states, and the third renders the **date**: a fact the server gave, needing
+no clock at all, and more useful than the age it replaces.
+
+**And a mutation found a second, untested for four sessions.** Reverting `overdue` to
+`daysSince === null || …` left every test green while badging **every doctor Overdue** whenever
+the server clock was unknown. Overdue drives the badge *and* the filter, so it changes which
+doctors an MR drives to. "Never visited" is knowable with no clock, which is why the rule now
+keys on `lastSeenAt`; "seen 40 days ago" is not.
+
+#### C2 — values chosen to EXPOSE, and the sample that did not
+
+The unit pair straddles the **last midnight of a month**, where the day and month boundaries
+move together:
+
+| instant | IST | territory month | UTC month |
+| --- | --- | --- | --- |
+| `2026-09-30T18:25:00Z` | 23:55 on the 30th | `2026-09` | `2026-09` |
+| `2026-09-30T18:35:00Z` | 00:05 on the 1st | **`2026-10`** | `2026-09` |
+
+Five minutes either side, and UTC cannot separate them — asserted as a control for the control.
+Plus a leap-February for month **length**, and a year boundary where `monthNumber - n` goes to
+zero.
+
+**Field by field against Postgres, on the dev client:**
+
+| doctor | server `completed_at` | rendered | Overdue? |
+| --- | --- | --- | --- |
+| Asha Deshpande (DEMO) | `2026-09-13 07:44:40Z` | **yesterday** | no |
+| Meera Iyer (DEMO) | `2026-09-14 08:39:40Z` | **today** | no |
+| Vikram Rao (DEMO) | `2026-09-14 07:44:40Z` | **today** | no |
+
+Server now was `2026-09-14 10:12Z`. All three correct, none badged.
+
+**And the first device sample did not discriminate — which is the reviewer's own point about
+"9 Sep" being right by luck.** `07:44Z` is 13 September in UTC *and* in IST, so the profile's
+"13 Sep" proved nothing about the zone. One visit was therefore moved to **`18:45Z` on the
+13th — 00:15 IST on the 14th** — and the profile rendered **"14 Sep"**, the territory's date,
+not "13 Sep". Both data edits were reverted and verified back to their seeded values.
+
+**A first attempt at that check edited a different tenant's row**, and the screen did not move.
+Reading the **device's own AsyncStorage** showed it held only this MR's five visits and the
+modified id was not among them — RLS had kept it out. That is what separated *"the app is
+wrong"* from *"the app never saw it"*, and guessing would have gone the other way.
+
+#### C4 — real versus fixture, with the column this table was missing
+
+**Three of these screens now read their CLOCK from the real store while their DATA is still the
+mock.** A two-column table cannot say that, and `PROJECT-OVERVIEW.md:8466` already records that
+a table with one column too few is what hid a defect once.
+
+| Capability | Screen | DATA source | CLOCK source |
+| --- | --- | --- | --- |
+| Today | `app/(tabs)/home.tsx` | **REAL** — Supabase | **REAL** — `serverTime` / `dayOrigin` |
+| Doctor list | `app/(tabs)/doctors.tsx` | **REAL** — Supabase | **REAL** — `serverTime`, nullable |
+| Doctor profile | `app/doctor/[id].tsx` | **REAL** — Supabase | **REAL** — `serverTime`, nullable |
+| Day end | `app/day-end.tsx` | mock (`:4010`) | **REAL** — `today` |
+| Mileage | `app/mileage.tsx` | mock (`:4010`) | **REAL** — `serverTime` + `zone` |
+| Coaching | `app/(tabs)/coaching.tsx` | mock (`:4010`) | **REAL** — `serverTime` + `zone` |
+| Check-in · check-out · consent · samples | their screens | **REAL WRITE, REAL READ** | **REAL** |
+| Beat plan · analysis · reply · report · voice note | their screens | mock | — (no clock decision) |
+
+**No screen in `apps/field` now takes the current instant from the handset.** The only device-
+clock reads left are the two allowlisted elapsed measurements in `pulled-store.tsx` and the
+`captured_at`/`occurred_at`/`recorded_at` records the server bounds.
+
+#### C5 — mutations, each failing exactly one case
+
+| mutation | fails |
+| --- | --- |
+| day-end: remove the no-day guard, substitute a date | 1 of 6 |
+| doctors: collapse the three label states back to two | 1 of 9 |
+| `server-window`: reckon the month in UTC | 4 of 8 |
+| `list.ts`: let an unknown age claim Overdue | **0 of 9 — the gap**, then 1 of 9 once the missing test existed |
+
+Positive controls throughout: with a day, day-end still fetches; a truly never-visited doctor
+still says so **and is still badged Overdue**; a known retryable code still says retry.
+
+#### D — the `BE-W92` asymmetry, measured, with no mechanism proposed
+
+The obvious reading of 1-in-16 alone against 2-in-2 loaded — *another workspace is hitting the
+same database* — is **wrong**.
+
+| question | answer |
+| --- | --- |
+| Which workspaces touch the local Postgres? | **`services/api` and no other.** Nothing else references `54322`, `postgresql://`, `DATABASE_URL` or `SUPABASE_DB`; the only other matches are generated Android build artefacts |
+| Any running concurrently with `api`? | **None that touch the database.** turbo's default concurrency is 10, but none of those tasks opens a connection |
+| Then what writes concurrently? | **Supabase's own ten containers**, two of which own every relation the three samples named: `supabase_auth` owns `auth.users` and `auth.identities`; `supabase_storage` owns `storage.objects` and `storage.buckets` |
+| How many writers does `api` itself field? | `vitest.config.ts` sets `minWorkers: 1` and **no `maxWorkers`** — the pool is sized from the CPU count, **20 here** |
+
+**What this rules out is the useful part.** The contention is not cross-workspace. It is inside
+one suite: up to twenty workers running DDL inside `inRolledBackTransaction`, against a Postgres
+that ten Supabase services also write to — and `seedFixtures` creates GoTrue users **over
+HTTP**, so sample 1's `INSERT INTO identities` came from `supabase_auth`'s own backend, not from
+a test's connection. A monorepo run adds no database client; it adds machine load.
+
+**No mechanism is proposed and none should be read in.** The next measurement is unchanged: run
+the whole monorepo suite N ≥ 10 times and count. `maxWorkers` is worth measuring alongside it,
+because it varies the number of concurrent writers directly — **measured, before anything is
+set.**
+
+#### Counts — by workspace AND runner, from each runner's own line
+
+Never from `test-counts.mjs`, which counts tests DISCOVERED rather than PASSED.
+
+| Workspace | Runner | Result |
+| --- | --- | --- |
+| `@fieldforce/core` | vitest | 21 passed (3 files) |
+| `@fieldforce/ui-tokens` | vitest | 54 passed (3 files) |
+| `@fieldforce/ui` | vitest | 4 passed (1 file) |
+| `@fieldforce/ui` | jest | 243 passed, 243 total (21 suites) |
+| `@fieldforce/console` | vitest | 10 passed (1 file) |
+| `@fieldforce/mock` | vitest | 40 passed (1 file) |
+| `@fieldforce/field` | vitest | **489 passed (31 files)** — was 478; `server-window.test.ts` is new |
+| `@fieldforce/field` | jest | **122 passed, 122 total (18 suites)** — was 114 |
+| `@fieldforce/api` | vitest | **626 passed (41 files)** — no deadlock in this run |
+
+**1,609 passing, zero skipped, zero failing.** `typecheck`, `lint` and `format:check` all exit 0
+across the monorepo.
+
+#### Where this session stopped
+
+**At the end, with every part complete** — A1–A2, B1–B4, C1–C5, D1–D2.
+
+Three things a reader should carry forward:
+
+1. **No screen takes *now* from the handset any more.** `FE-W42` is closed; the sites that
+   remain are the allowlisted elapsed measurements and the device-observation records the
+   server bounds.
+2. **Two of this session's defects were in this session's own work**, and neither was found by
+   reading the diff: one by asking what `lastSeenLabel(null)` returns, one by mutation. The
+   dead-guard case is the sharper lesson — the code was *correct* and the guard was inert, so
+   only mutation could tell.
+3. **`BE-W92`'s contention is inside one suite, not across workspaces.** That closes off the
+   cross-workspace explanation and leaves worker count and Supabase's own services as what is
+   left to measure — measure, not theorise: the FK candidate was refuted by the log.

@@ -564,3 +564,64 @@ JDK 25"* stood in five places while `frontend-status.md:100` had recorded it res
 27 August. A reviewer working faithfully from the documents inherited the stale copy and wrote a
 brief on it. The cost of the grep is nothing; the cost of skipping it is a session started on a
 false premise.
+
+## MR-31 — FE-W42 and the sentinel class
+
+**No screen in `apps/field` takes the current instant from the handset any more.** The five
+`FE-W42` sites are converted and the `eslint-disable`s carrying that id are gone. What remains
+are the allowlisted elapsed measurements in `pulled-store.tsx` and the
+`captured_at`/`occurred_at`/`recorded_at` records the server bounds with 45007 and 45008.
+
+- **CI `34829719365`** — `CI` / `push` / `d76ca200c3c30509f2801881e9f9ba3c7141a9f5`,
+  **success**, and that SHA **equals HEAD**.
+- **`C1`'s verdict, which the last report left unstated: DEFER (`BE-W98`).**
+  `explanation.ts:196` makes the action `escalate` for a dead letter whatever the SQLSTATE is,
+  so the figures cannot change what anyone does next. Trigger to reverse: a manager-facing
+  dead-letter queue.
+- **`FE-W44`–`FE-W47`** registered from the sentinel sweep. `FE-W44` is the strongest: a
+  corrupt queue store renders **"Everything sent"**, and the fix needs one sentence of copy
+  nobody has written.
+
+### The sentinel class has two sub-forms, and the second is worse
+
+The brief said `UTC_FALLBACK` had no room in its type for "I don't know". It did:
+`TerritoryZone.source` is `'territory' | 'fallback_utc'` and the type's own comment says a
+caller must be able to tell. **Nothing read it** — `zone.source` was consumed in zero places
+app-wide until MR-30.
+
+- **(a) no room in the type** — `sqlState: ''`, `sizeBytes: 1`. Add room.
+- **(b) room exists, nobody opens it** — worse, because the type review passes and the comment
+  promises the property. The test is **"count the call sites that read the discriminant"**.
+
+### Two defects in this session's own work, neither found by reading the diff
+
+1. **`deserialiseAnchor` accepted any non-empty string as a timezone.** `Intl` throws on a bad
+   zone, and that throw happened during hydration *before the pull ran*, so nothing rewrote the
+   bad anchor — **sync permanently wedged, reported as "could not reach the server"**. Found by
+   asking what the function does with input it has not validated.
+2. **`lastSeenLabel(null)` reads "never visited".** With a nullable server clock a *visited*
+   doctor produces `daysSince === null` too, so the list would have said a doctor seen last week
+   had never been seen. Three states, not two; the third renders the date.
+
+And a **dead guard I had just written**: `record.code === null || !RETRYABLE.has(...)` — the
+null clause was inert, because `RETRYABLE.has(null)` is already false. Only mutation could tell,
+because the code was *correct*. Restated positively so the type enforces it.
+
+### If you are converting a screen to `serverTime`
+
+- `serverTime` is nullable. Every fallback is a lie of the same shape — the device clock is
+  `FE-W40` option B, and any fixed value renders like a measured one.
+- Check what your **label function** does with the null you are now able to pass it. Two of the
+  three states in `app/(tabs)/doctors.tsx` exist because of this.
+- The window helpers are in `src/today/server-window.ts` and take the instant rather than
+  reading one. Use them; do not reach for `getMonth()`.
+- Test with values that **straddle 18:30Z**. `07:44Z` is the same date in UTC and IST and
+  proves nothing.
+
+### To drive a calendar-dependent state on the device
+
+`adb root` is refused on a production emulator image, so the clock cannot be moved. Edit the
+data instead, and **check which tenant you edited**: a first attempt this session moved a row
+belonging to another seed run, RLS kept it out of this MR's pull, and the screen did not change.
+Reading the device's own AsyncStorage is what separated *"the app is wrong"* from *"the app
+never saw it"*.
