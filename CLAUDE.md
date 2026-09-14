@@ -32,8 +32,12 @@ derived snapshot. The code, the migrations in `services/api/supabase/migrations/
 `PROJECT-OVERVIEW.md` are the sources of truth; the graph is a way of finding them
 quickly. If the graph and the code disagree, the code is right and the graph is stale.
 
-This is the same rule that keeps `handoff.md` and `.ai-collab/` out of git: a
-point-in-time snapshot goes stale within hours and the next reader trusts it anyway.
+This is the same staleness argument that applies to `handoff.md` and `.ai-collab/`: a
+point-in-time snapshot goes stale within hours and the next reader trusts it anyway. **Those
+two are tracked** — BE-W6 kept them out of git and BE-W8 reversed it (`.gitignore:22-26`);
+they are working notes, expected to be updated, and `PROJECT-OVERVIEW.md` plus
+`docs/gotchas.md` remain the durable record. `graphify-out/` is gitignored for the size
+reason as well as the staleness one.
 
 **Check freshness before trusting it.** `GRAPH_REPORT.md` carries its build date on line 1.
 If migrations or `packages/core` have changed since, the graph is behind:

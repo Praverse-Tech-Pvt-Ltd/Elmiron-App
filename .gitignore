@@ -32,8 +32,12 @@ services/api/supabase/.branches/
 #
 # graphify's own docs recommend committing this so the team shares one map. We do
 # not, for two reasons: it is ~4 MB of mostly graph.html and cache/, and it is a
-# derived artefact that goes stale the moment a migration lands â€” the same
-# staleness argument that keeps handoff.md out of git above.
+# derived artefact that goes stale the moment a migration lands.
+#
+# NOT "the same argument that keeps handoff.md out of git": handoff.md is TRACKED, and has
+# been since BE-W8 — see the note twenty lines above, which this line used to contradict.
+# The staleness argument is why graphify-out/ is not committed; the SIZE is the other half,
+# and handoff.md has neither problem because it is expected to be kept current.
 #
 # Requires `pip install "graphifyy[sql]"` first. The base package bundles 36
 # tree-sitter grammars, SQL is not one of them, and without it every .sql file
