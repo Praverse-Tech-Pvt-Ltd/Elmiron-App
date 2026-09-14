@@ -9,6 +9,7 @@ import {
 import { emptyStore } from './pull';
 import type { LocalStore } from './pull';
 import type { PullCursorStore } from './pull-cursor';
+import type { DayAnchor } from '../today/day-anchor';
 
 /**
  * Where the PULLED records live between app launches — MR-14 B1.
@@ -58,8 +59,60 @@ export interface PulledStorePersistence {
   /** The stored records, or null when there is nothing trustworthy to return. */
   readonly load: (userId: string) => Promise<LocalStore | null>;
   readonly save: (userId: string, store: LocalStore) => Promise<void>;
+  /**
+   * **Clears the records AND the day anchor, and that is the invariant, not a convenience.**
+   *
+   * `FE-W40` B3. An anchor that outlived the records it describes is the
+   * cursor-ahead-of-records failure at the top of this file wearing new clothes: Today would
+   * render a DATE, from a real server instant, over a store holding nothing — *"0 of 0 visits
+   * attended"* presented as the MR's plan for the day. That is a false statement assembled
+   * from two true ones.
+   *
+   * Putting both behind one `clear` means the two cannot be separated by a caller who forgets.
+   */
   readonly clear: (userId: string) => Promise<void>;
+  /** The last server instant this device heard, or null. See `day-anchor.ts`. */
+  readonly loadAnchor: (userId: string) => Promise<DayAnchor | null>;
+  readonly saveAnchor: (userId: string, anchor: DayAnchor) => Promise<void>;
 }
+
+/**
+ * The anchor's own key, beside the records' and keyed per user for the same reason.
+ *
+ * Separate from the records' key rather than folded into `StoredShape`, deliberately. The
+ * records are written after EVERY page of a sweep; the anchor is one small value written
+ * beside them. Bumping `StoredShape` to version 2 would make every existing install fail
+ * `deserialise`, clear its cursor and take a full sweep — a correct but expensive way to add
+ * a field that a missing key already handles safely.
+ *
+ * **Both failure directions are safe, which is why they may be written separately.** A missing
+ * anchor means no day on a cold start, which is exactly the behaviour before this existed. A
+ * STALE anchor means an older `asOf`, which is bounded by the territory day boundary and
+ * renders nothing once it is crossed. Neither can produce a day the server never gave.
+ */
+const anchorKey = (userId: string): string => `sync.pull.anchor.v1.${userId}`;
+
+/**
+ * Parsed, never cast — the same rule the records follow.
+ *
+ * An anchor written by an older build with a missing `timeZone` would otherwise reckon the
+ * day boundary against `undefined`, and `resolveAnchoredDay` would compare a real day against
+ * `"Invalid Date"`. Refusing the whole value costs a cold start its day and claims nothing.
+ */
+const deserialiseAnchor = (raw: unknown): DayAnchor | null => {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const shape = raw as Partial<DayAnchor>;
+  if (typeof shape.serverTime !== 'string' || shape.serverTime === '') return null;
+  if (typeof shape.receivedAt !== 'number' || !Number.isFinite(shape.receivedAt)) return null;
+  if (typeof shape.timeZone !== 'string' || shape.timeZone === '') return null;
+  if (shape.zoneSource !== 'territory' && shape.zoneSource !== 'fallback_utc') return null;
+  return {
+    serverTime: shape.serverTime,
+    receivedAt: shape.receivedAt,
+    timeZone: shape.timeZone,
+    zoneSource: shape.zoneSource,
+  };
+};
 
 const serialise = (store: LocalStore): StoredShape => ({
   version: 1,
@@ -155,17 +208,32 @@ export const asyncStoragePulledStore: PulledStorePersistence = {
   },
   clear: async (userId) => {
     try {
-      await AsyncStorage.removeItem(key(userId));
+      // Both, always. See the note on `clear` in the interface above.
+      await AsyncStorage.multiRemove([key(userId), anchorKey(userId)]);
     } catch {
       // Already gone, or storage is unavailable. The next load returns null and the next
       // pull is a full sweep, which is what clearing it was for.
     }
+  },
+  loadAnchor: async (userId) => {
+    try {
+      const raw = await AsyncStorage.getItem(anchorKey(userId));
+      if (raw === null) return null;
+      return deserialiseAnchor(JSON.parse(raw));
+    } catch {
+      // An unreadable anchor is the same as none: the cold start shows no day and says so.
+      return null;
+    }
+  },
+  saveAnchor: async (userId, anchor) => {
+    await AsyncStorage.setItem(anchorKey(userId), JSON.stringify(anchor));
   },
 };
 
 /** In-memory, for tests and for a first launch before storage is available. */
 export const memoryPulledStore = (): PulledStorePersistence => {
   const held = new Map<string, string>();
+  const anchors = new Map<string, string>();
   return {
     load: (userId) => {
       const raw = held.get(userId);
@@ -177,7 +245,18 @@ export const memoryPulledStore = (): PulledStorePersistence => {
       return Promise.resolve();
     },
     clear: (userId) => {
+      // Both, so the in-memory double cannot pass a test the real one would fail.
       held.delete(userId);
+      anchors.delete(userId);
+      return Promise.resolve();
+    },
+    loadAnchor: (userId) => {
+      const raw = anchors.get(userId);
+      if (raw === undefined) return Promise.resolve(null);
+      return Promise.resolve(deserialiseAnchor(JSON.parse(raw)));
+    },
+    saveAnchor: (userId, anchor) => {
+      anchors.set(userId, JSON.stringify(anchor));
       return Promise.resolve();
     },
   };
@@ -198,6 +277,11 @@ export const loadPulledStore = async (
 ): Promise<LocalStore> => {
   const restored = await persistence.load(userId);
   if (restored !== null) return restored;
+  // `FE-W40` B3. The cursor AND the anchor go with the records. `persistence.clear` drops
+  // both keys, so an anchor can never outlive the store it describes -- see the note on
+  // `clear`. Without this line a corrupt store would leave a perfectly valid anchor behind
+  // and Today would render a real date over nothing.
   await cursors.clear(userId);
+  await persistence.clear(userId);
   return emptyStore();
 };

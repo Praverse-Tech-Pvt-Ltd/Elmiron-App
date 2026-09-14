@@ -39,6 +39,14 @@ const emptyPulled = () => ({
   failure: null,
   resynced: false,
   removals: [],
+  zone: { timeZone: 'Asia/Kolkata', source: 'territory' },
+  // A settled store after a quiet sync HAS a day -- it was undefined here before, which
+  // made `today === null` false and ran `summariseDay` on `undefined`. The looseness was
+  // load-bearing, which is its own small lesson.
+  today: '2026-09-14',
+  serverTime: '2026-09-14T17:45:00.000Z',
+  // FE-W40. The default a live, quiet sync produces nothing worth disclosing from.
+  dayOrigin: { kind: 'live' },
   refresh: jest.fn(),
 });
 
@@ -104,5 +112,95 @@ describe('app/home.tsx — the role-aware shell', () => {
     mockSession.mockReturnValue({ status: 'signed-out', role: null, signOut: jest.fn() });
     await render(<Home />);
     expect(screen.getByText('redirect:/sign-in')).toBeTruthy();
+  });
+});
+
+/**
+ * `FE-W40` B5 — nothing on this screen may assert a fact the server did not give.
+ *
+ * The restored day is true as of an instant and unconfirmed since. The "as of" line is what
+ * makes that a statement rather than an implication, and the expired case must explain
+ * ITSELF rather than borrowing the generic "could not reach the server", which is true and
+ * useless when the MR is holding a phone full of their own visits.
+ */
+describe('app/home.tsx — FE-W40, a day restored from disk says so', () => {
+  const ANCHORED_AT = '2026-09-14T17:45:00.000Z';
+
+  it('an ANCHORED day carries its age, in the TERRITORY zone', async () => {
+    mockSession.mockReturnValue(signedInAs('mr'));
+    mockStore.mockReturnValue({
+      ...emptyPulled(),
+      today: '2026-09-14',
+      serverTime: ANCHORED_AT,
+      dayOrigin: { kind: 'anchored', asOf: ANCHORED_AT },
+    });
+
+    await render(<Home />);
+
+    // 17:45Z is 23:15 in IST. Asserting the CONTENT -- the rendered time -- and not merely
+    // that some label exists, because a label reading 17:45 would be the MR-14 defect.
+    expect(await screen.findByText('Your day as of 23:15 — not confirmed since')).toBeTruthy();
+  });
+
+  it('a LIVE day says nothing, because there is nothing to disclose', async () => {
+    // The positive control for the case above: if the label rendered unconditionally it
+    // would be noise on every ordinary day, and noise is how a true sentence stops being read.
+    mockSession.mockReturnValue(signedInAs('mr'));
+    mockStore.mockReturnValue({
+      ...emptyPulled(),
+      today: '2026-09-14',
+      serverTime: ANCHORED_AT,
+      dayOrigin: { kind: 'live' },
+    });
+
+    await render(<Home />);
+
+    expect(await screen.findByText('Nothing planned for today')).toBeTruthy();
+    expect(screen.queryByText(/Your day as of/)).toBeNull();
+  });
+
+  it('an EXPIRED anchor explains ITSELF rather than blaming the network', async () => {
+    mockSession.mockReturnValue(signedInAs('mr'));
+    mockStore.mockReturnValue({
+      ...emptyPulled(),
+      today: null,
+      serverTime: ANCHORED_AT,
+      dayOrigin: { kind: 'expired', asOf: ANCHORED_AT },
+      failure: { kind: 'unreachable' },
+    });
+
+    await render(<Home />);
+
+    expect(
+      await screen.findByText(
+        'Your last sync was 14 Sep at 23:15, which was a different day. This app shows a day only once the server has confirmed it.',
+      ),
+    ).toBeTruthy();
+    // The assertion that fails if the expired case falls through to the generic branch.
+    expect(
+      screen.queryByText(
+        'The app could not reach the server. It will try again when you come back to it.',
+      ),
+    ).toBeNull();
+  });
+
+  it('THE POSITIVE CONTROL: an ordinary unreachable server still gets the generic message', async () => {
+    // Without this, the expired case above is satisfiable by deleting the generic branch,
+    // which would lose the right message for every failure that is NOT a stale anchor.
+    mockSession.mockReturnValue(signedInAs('mr'));
+    mockStore.mockReturnValue({
+      ...emptyPulled(),
+      today: null,
+      dayOrigin: { kind: 'none' },
+      failure: { kind: 'unreachable' },
+    });
+
+    await render(<Home />);
+
+    expect(
+      await screen.findByText(
+        'The app could not reach the server. It will try again when you come back to it.',
+      ),
+    ).toBeTruthy();
   });
 });

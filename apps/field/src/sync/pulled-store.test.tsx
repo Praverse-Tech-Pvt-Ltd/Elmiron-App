@@ -22,6 +22,7 @@ jest.mock('../session', () => ({ useSession: () => mockSession() }));
 import { PulledStoreProvider, usePulledStore } from './pulled-store';
 import { memoryPullCursorStore } from './pull-cursor';
 import { memoryPulledStore } from './pulled-store-persistence';
+import { emptyStore } from './pull';
 import type { PullOutcome } from './pull';
 
 const USER = '11111111-1111-4111-8111-111111111111';
@@ -54,10 +55,15 @@ const pulled = (over: Partial<Extract<PullOutcome, { kind: 'pulled' }>> = {}): P
 
 /** Renders one field of the store's state, so an assertion can read it off the screen. */
 const Probe = (): ReactNode => {
-  const { store, status, notice, failure, resynced, serverTime, refresh } = usePulledStore();
+  const { store, status, notice, failure, resynced, serverTime, today, dayOrigin, zone, refresh } =
+    usePulledStore();
   return (
     <>
       <BodyText>{`status:${status}`}</BodyText>
+      {/* FE-W40. The day, where it came from, and the zone it is reckoned in. */}
+      <BodyText>{`today:${today ?? 'none'}`}</BodyText>
+      <BodyText>{`dayOrigin:${dayOrigin.kind}`}</BodyText>
+      <BodyText>{`zone:${zone.timeZone}`}</BodyText>
       <BodyText>{`doctors:${String(store.doctor.size)}`}</BodyText>
       <BodyText>{`resynced:${String(resynced)}`}</BodyText>
       <BodyText>{`notice:${notice === null ? 'none' : notice.title}`}</BodyText>
@@ -421,5 +427,136 @@ describe('the records and the cursor move together', () => {
       expect(screen.getByText('status:ready')).toBeTruthy();
     });
     expect(await cursors.load(USER)).toBeNull();
+  });
+});
+
+/**
+ * `FE-W40` — a cold start with no signal, bounded at the territory day boundary.
+ *
+ * **The pair STRADDLES 18:30Z (IST midnight) rather than sitting either side of it.** One
+ * anchor instant, `17:45:00Z` on the 14th — 45 minutes before the boundary — and the only
+ * difference between the two cases is how much device time has elapsed since it arrived:
+ * 30 minutes projects to `18:15Z` (23:45 IST, still the 14th) and 60 minutes to `18:45Z`
+ * (00:15 IST, now the 15th). 15 minutes short of the boundary and 15 minutes past it.
+ *
+ * These run against the REAL provider with the real persistence double, so they exercise the
+ * hydration ORDER as well as the arithmetic — `day-anchor.test.ts` covers the arithmetic on
+ * its own.
+ */
+describe('FE-W40 — the day on a cold start with no signal', () => {
+  const IST_ANCHOR = {
+    serverTime: '2026-09-14T17:45:00.000Z',
+    timeZone: 'Asia/Kolkata',
+    zoneSource: 'territory',
+  } as const;
+
+  const MINUTE = 60_000;
+
+  /** A pull that cannot reach anything — the whole point of a cold start offline. */
+  const unreachable = jest.fn(async () => Promise.reject(new Error('offline')));
+
+  const renderWith = async (persistence: ReturnType<typeof memoryPulledStore>): Promise<void> => {
+    await render(
+      <PulledStoreProvider
+        cursors={memoryPullCursorStore()}
+        persistence={persistence}
+        pull={unreachable as never}
+      >
+        <Probe />
+      </PulledStoreProvider>,
+    );
+  };
+
+  it('an anchor from EARLIER THE SAME territory day renders the day, marked as anchored', async () => {
+    const persistence = memoryPulledStore();
+    await persistence.save(USER, emptyStore());
+    await persistence.saveAnchor(USER, { ...IST_ANCHOR, receivedAt: Date.now() - 30 * MINUTE });
+
+    await renderWith(persistence);
+
+    await waitFor(() => {
+      expect(screen.getByText('today:2026-09-14')).toBeTruthy();
+    });
+    expect(screen.getByText('dayOrigin:anchored')).toBeTruthy();
+  });
+
+  it('an anchor from the PREVIOUS territory day renders NOTHING, and says which', async () => {
+    const persistence = memoryPulledStore();
+    await persistence.save(USER, emptyStore());
+    // Thirty minutes later than the case above. The only difference.
+    await persistence.saveAnchor(USER, { ...IST_ANCHOR, receivedAt: Date.now() - 60 * MINUTE });
+
+    await renderWith(persistence);
+
+    await waitFor(() => {
+      expect(screen.getByText('dayOrigin:expired')).toBeTruthy();
+    });
+    // The invariant: `today` is null unless the origin is live or anchored.
+    expect(screen.getByText('today:none')).toBeTruthy();
+  });
+
+  it("keeps the ANCHOR's zone when the zone fetch falls back to UTC", async () => {
+    // `fetchTerritoryZone` never throws -- offline it answers UTC_FALLBACK, meaning "the
+    // server declined to say". Overwriting the restored Asia/Kolkata with it would render
+    // every clock, including the "as of" label, 5h30m wrong: the MR-14 defect inside this fix.
+    const persistence = memoryPulledStore();
+    await persistence.save(USER, emptyStore());
+    await persistence.saveAnchor(USER, { ...IST_ANCHOR, receivedAt: Date.now() - 30 * MINUTE });
+
+    await renderWith(persistence);
+
+    await waitFor(() => {
+      expect(screen.getByText('zone:Asia/Kolkata')).toBeTruthy();
+    });
+  });
+
+  it('B3 — a store that cannot be restored takes the ANCHOR down with it', async () => {
+    // An anchor outliving its records would render a real DATE over an empty store --
+    // "0 of 0 visits attended" presented as the MR's plan. A false statement assembled from
+    // two true ones, and the cursor-ahead-of-records failure in a new place.
+    const persistence = memoryPulledStore();
+    await persistence.saveAnchor(USER, { ...IST_ANCHOR, receivedAt: Date.now() - 30 * MINUTE });
+    // No `save` at all: `load` answers null, exactly as a corrupt or absent store does.
+
+    await renderWith(persistence);
+
+    await waitFor(() => {
+      expect(screen.getByText('dayOrigin:none')).toBeTruthy();
+    });
+    expect(screen.getByText('today:none')).toBeTruthy();
+    // Asserting the CONTENT, not the screen: the anchor is gone from storage, so the next
+    // cold start cannot find it either.
+    expect(await persistence.loadAnchor(USER)).toBeNull();
+  });
+
+  it('THE POSITIVE CONTROL: a pull that SUCCEEDS takes the day from the server, not the anchor', async () => {
+    // Without this, an implementation that always preferred the anchor would satisfy every
+    // case above while quietly making the app never show a live day again.
+    const persistence = memoryPulledStore();
+    await persistence.save(USER, emptyStore());
+    await persistence.saveAnchor(USER, { ...IST_ANCHOR, receivedAt: Date.now() - 30 * MINUTE });
+
+    const pull = jest.fn(async () =>
+      Promise.resolve(pulled({ serverTime: '2026-09-20T09:00:00+00:00' })),
+    );
+
+    await render(
+      <PulledStoreProvider
+        cursors={memoryPullCursorStore()}
+        persistence={persistence}
+        pull={pull as never}
+      >
+        <Probe />
+      </PulledStoreProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('dayOrigin:live')).toBeTruthy();
+    });
+    // The 20th, from the pull -- not the 14th the anchor carried.
+    expect(screen.getByText('today:2026-09-20')).toBeTruthy();
+    // And the anchor is REWRITTEN, so the next cold start restores the newer day.
+    const saved = await persistence.loadAnchor(USER);
+    expect(saved?.serverTime).toBe('2026-09-20T09:00:00+00:00');
   });
 });

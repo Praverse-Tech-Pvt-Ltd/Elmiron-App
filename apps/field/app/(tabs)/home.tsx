@@ -10,7 +10,30 @@ import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { emptyQueue } from '../../src/sync/reducer';
 import type { SyncQueueState } from '../../src/sync/reducer';
 import { summariseDay } from '../../src/today/plan';
-import { clockIn } from '../../src/today/territory-day';
+import { clockIn, dayMonthIn } from '../../src/today/territory-day';
+import type { TerritoryZone } from '../../src/today/territory-day';
+import type { DayOrigin, PullFailure } from '../../src/sync/pulled-store';
+
+/**
+ * **`FE-W40` B5. Why there is no day — and an EXPIRED anchor gets its own sentence.**
+ *
+ * The generic detail says the app could not reach the server, which is true and useless
+ * here: the MR has a phone full of their visits and an app refusing to name a date. When
+ * the anchor is the reason, say so, and say when it was — "your last sync was yesterday
+ * evening" is something a person can act on, and "could not reach the server" is not.
+ *
+ * **Nothing here asserts a day.** The expired sentence names the instant the server DID
+ * give and then declines to extrapolate from it. That is the whole of option D's second
+ * half: past the bound, fall back to A's behaviour, but with a reason.
+ */
+const dayDetail = (origin: DayOrigin, zone: TerritoryZone, failure: PullFailure): string => {
+  if (origin.kind === 'expired') {
+    return `Your last sync was ${dayMonthIn(origin.asOf, zone)} at ${clockIn(origin.asOf, zone)}, which was a different day. This app shows a day only once the server has confirmed it.`;
+  }
+  return failure.kind === 'refused'
+    ? `The server refused this sync (${failure.refusal.sqlState}).`
+    : 'The app could not reach the server. It will try again when you come back to it.';
+};
 
 /**
  * The role-aware shell. Which destinations exist depends on the role in the token.
@@ -42,7 +65,16 @@ const MrToday = (): ReactNode => {
   const [queue, setQueue] = useState<SyncQueueState>(emptyQueue);
   // MR-14 B2/B3. The day comes from the store the pull maintains, not from
   // `createClientForScenario()`. This line is the read conversion.
-  const { store, status, notice, failure: pullFailure, removals, zone, today } = usePulledStore();
+  const {
+    store,
+    status,
+    notice,
+    failure: pullFailure,
+    removals,
+    zone,
+    today,
+    dayOrigin,
+  } = usePulledStore();
 
   useEffect(() => {
     // B2. The queue is read on every visit to this screen rather than once, because
@@ -123,10 +155,7 @@ const MrToday = (): ReactNode => {
         : nothingToShow
           ? {
               title: 'Could not load your day',
-              detail:
-                pullFailure.kind === 'refused'
-                  ? `The server refused this sync (${pullFailure.refusal.sqlState}).`
-                  : 'The app could not reach the server. It will try again when you come back to it.',
+              detail: dayDetail(dayOrigin, zone, pullFailure),
             }
           : null;
 
@@ -134,6 +163,11 @@ const MrToday = (): ReactNode => {
     <TodayScreen
       dayLabel="Today"
       startedLabel={startedAt === null ? null : `Started ${clockIn(startedAt, zone)}`}
+      dayAsOfLabel={
+        dayOrigin.kind === 'anchored'
+          ? `Your day as of ${clockIn(dayOrigin.asOf, zone)} — not confirmed since`
+          : null
+      }
       planned={summary?.planned ?? 0}
       done={summary?.done ?? 0}
       notMet={summary?.notMet ?? 0}

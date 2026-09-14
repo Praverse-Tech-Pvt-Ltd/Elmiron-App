@@ -54,6 +54,21 @@ export interface TodayScreenProps {
   readonly dayLabel: string;
   /** "Started 8:55 · South Mumbai", or null before the first visit begins. */
   readonly startedLabel: string | null;
+  /**
+   * **`FE-W40`. "Your day as of 17:45", when the day was restored from disk rather than
+   * pulled just now.** Null when the day is live, which is the ordinary case.
+   *
+   * A separate prop rather than folding it into `startedLabel`, which states a different
+   * fact — when the MR's shift began. Putting a staleness claim in the slot that answers
+   * "when did you start" would be asserting one thing in the place of another.
+   *
+   * **This is the honesty half of `FE-W40` and it is not decorative.** The day below it was
+   * true at this instant and has not been confirmed since. Without the label the screen
+   * shows a restored list that is indistinguishable from a live one, which is precisely the
+   * objection recorded against option C in
+   * `docs/decisions/FE-W40-cold-start-staleness.md`.
+   */
+  readonly dayAsOfLabel?: string | null;
   readonly planned: number;
   readonly done: number;
   /**
@@ -141,6 +156,7 @@ const styles = StyleSheet.create({
 export const TodayScreen = ({
   dayLabel,
   startedLabel,
+  dayAsOfLabel = null,
   planned,
   notMet,
   done,
@@ -164,6 +180,7 @@ export const TodayScreen = ({
     <>
       <View style={styles.head}>
         <Heading>{dayLabel}</Heading>
+        {dayAsOfLabel === null ? null : <Label muted>{dayAsOfLabel}</Label>}
         {startedLabel === null ? null : <Label muted>{startedLabel}</Label>}
       </View>
 

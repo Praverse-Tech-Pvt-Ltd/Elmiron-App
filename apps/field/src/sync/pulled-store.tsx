@@ -19,6 +19,7 @@ import type { PulledStorePersistence } from './pulled-store-persistence';
 import { useSession } from '../session';
 import { fetchTerritoryZone } from '../today/shift-window';
 import { UTC_FALLBACK, territoryToday } from '../today/territory-day';
+import { anchorZone, resolveAnchoredDay } from '../today/day-anchor';
 import type { TerritoryZone } from '../today/territory-day';
 
 /**
@@ -113,8 +114,35 @@ export interface PulledStoreState {
    * precisely what `45001` means and is designed to do.
    */
   readonly serverTime: string | null;
+  /**
+   * **`FE-W40`. Where `today` came from, so a screen can say so instead of implying it is
+   * live.**
+   *
+   * `today` keeps exactly the meaning it always had -- the territory date, from the SERVER's
+   * clock -- and that is why this is a separate field rather than a widening of its type. An
+   * anchored day IS from the server's clock; it is simply an older reading of it, and every
+   * screen that only needs "which day" is unaffected and needed no change.
+   *
+   * The invariant, asserted in `pulled-store.test.tsx`: **`today` is non-null if and only if
+   * this is `live` or `anchored`.** `expired` and `none` both carry `today === null`, and
+   * differ in whether there is a reason worth telling the MR.
+   *
+   * Read by `app/(tabs)/home.tsx` and nothing else.
+   */
+  readonly dayOrigin: DayOrigin;
   readonly refresh: () => void;
 }
+
+/** See `dayOrigin`. */
+export type DayOrigin =
+  /** This session pulled it. Nothing to disclose. */
+  | { readonly kind: 'live' }
+  /** Restored from disk, still the same territory day. `asOf` is the SERVER instant. */
+  | { readonly kind: 'anchored'; readonly asOf: string }
+  /** Restored, but from a PREVIOUS territory day. `today` is null and this says why. */
+  | { readonly kind: 'expired'; readonly asOf: string }
+  /** Never synced on this device, or the anchor was unreadable. Nothing to say. */
+  | { readonly kind: 'none' };
 
 const PulledStoreContext = createContext<PulledStoreState | null>(null);
 
@@ -155,6 +183,7 @@ export const PulledStoreProvider = ({
   const [zone, setZone] = useState<TerritoryZone>(UTC_FALLBACK);
   const [today, setToday] = useState<string | null>(null);
   const [serverTime, setServerTime] = useState<string | null>(null);
+  const [dayOrigin, setDayOrigin] = useState<DayOrigin>({ kind: 'none' });
   const [nonce, setNonce] = useState(0);
 
   // One sync at a time. A foreground event arriving mid-sweep would otherwise start a
@@ -177,6 +206,7 @@ export const PulledStoreProvider = ({
       setRemovals([]);
       setToday(null);
       setServerTime(null);
+      setDayOrigin({ kind: 'none' });
       return;
     }
 
@@ -204,12 +234,69 @@ export const PulledStoreProvider = ({
         let next = await loadPulledStore(userId, persistence, cursors);
         if (!isCancelled()) setStore(next);
 
+        /**
+         * **`FE-W40` option D -- the day, before any network answers.**
+         *
+         * Read AFTER `loadPulledStore`, never before: that call clears the anchor along with
+         * the records when the records could not be restored, so reading it here can only
+         * ever produce an anchor whose store is present. Reading it earlier would be the
+         * cursor-ahead-of-records failure again.
+         *
+         * This is the only device-clock read in this file, and it is the ELAPSED case the
+         * MR-29 A3 rule allows: the handset measures a duration between two of its own
+         * readings and never supplies the instant. Every instant here is `serverTime`.
+         */
+        const anchor = await persistence.loadAnchor(userId);
+        if (isCancelled()) return;
+        let restoredZone: TerritoryZone | null = null;
+        if (anchor !== null) {
+          // ALLOWLISTED under the MR-29 A3 rule: an ELAPSED duration, measured between two
+          // of this device's own readings (`anchor.receivedAt` and now). The handset supplies
+          // no instant here -- every instant rendered is `anchor.serverTime`, the server's.
+          // The directive must be the LAST comment line, or it lands on a comment instead.
+          // eslint-disable-next-line no-restricted-syntax
+          const resolved = resolveAnchoredDay(anchor, Date.now());
+          if (resolved !== null) {
+            // The zone travels with the anchor, so the restored day and the clocks beside it
+            // are reckoned in the same zone -- see `DayAnchor.timeZone`.
+            restoredZone = anchorZone(anchor);
+            setZone(restoredZone);
+            setServerTime(anchor.serverTime);
+            if (resolved.kind === 'current') {
+              setToday(resolved.day);
+              setDayOrigin({ kind: 'anchored', asOf: resolved.asOf });
+            } else {
+              // Past the bound. Option A's behaviour, with a reason attached.
+              setToday(null);
+              setDayOrigin({ kind: 'expired', asOf: resolved.asOf });
+            }
+          }
+        }
+
         // A2. The zone comes from the server, once per sync, and never from the device.
         // Fetched before the pages so the first render that has visits also has the zone
         // to read their times in -- otherwise the screen would briefly show every clock
         // in UTC and then correct itself, which is worse than showing nothing.
-        const territoryZone = await fetchTerritoryZone();
+        const fetched = await fetchTerritoryZone();
         if (isCancelled()) return;
+
+        /**
+         * **`FE-W40`. A FAILED zone fetch must not overwrite a zone we already restored.**
+         *
+         * `fetchTerritoryZone` never throws: on any error it answers `UTC_FALLBACK`, which
+         * means *"the server declined to say"* and not *"the territory is UTC"*. On the exact
+         * path this feature exists for -- a cold start with no signal -- that fallback would
+         * land on top of the `Asia/Kolkata` the anchor carried, and every clock on the screen,
+         * including the "as of" label beside the restored day, would render 5h30m wrong.
+         * That is the MR-14 defect inside the fix for `FE-W40`.
+         *
+         * An anchor's `source: 'territory'` is a real server answer that is merely older. An
+         * older real answer beats a declined one -- the same argument the restored day itself
+         * rests on. A LIVE territory answer still wins over both, which is why this only
+         * prefers the anchor when the fetch fell back.
+         */
+        const territoryZone =
+          fetched.source === 'fallback_utc' && restoredZone !== null ? restoredZone : fetched;
         setZone(territoryZone);
 
         let pages = 0;
@@ -247,7 +334,22 @@ export const PulledStoreProvider = ({
           // handset decides neither half.
           setToday(territoryToday(outcome.serverTime, territoryZone));
           setServerTime(outcome.serverTime);
+          setDayOrigin({ kind: 'live' });
           await persistence.save(userId, next);
+          // `FE-W40`. Written beside the records, in the same step, so the pair a cold start
+          // reads back was produced by one pull rather than assembled from two.
+          // ALLOWLISTED under the MR-29 A3 rule: the START of an elapsed measurement, not an
+          // instant. It is never rendered and never compared to a server time -- only
+          // subtracted from a later reading of the same clock. `outcome.serverTime` beside it
+          // is the instant, and it is the server's.
+          // eslint-disable-next-line no-restricted-syntax
+          const receivedAt = Date.now();
+          await persistence.saveAnchor(userId, {
+            serverTime: outcome.serverTime,
+            receivedAt,
+            timeZone: territoryZone.timeZone,
+            zoneSource: territoryZone.source,
+          });
           pages += 1;
         } while (outcome.hasMore && pages < MAX_PAGES);
 
@@ -291,9 +393,22 @@ export const PulledStoreProvider = ({
       zone,
       today,
       serverTime,
+      dayOrigin,
       refresh,
     }),
-    [store, status, notice, failure, resynced, removals, zone, today, serverTime, refresh],
+    [
+      store,
+      status,
+      notice,
+      failure,
+      resynced,
+      removals,
+      zone,
+      today,
+      serverTime,
+      dayOrigin,
+      refresh,
+    ],
   );
 
   return <PulledStoreContext.Provider value={value}>{children}</PulledStoreContext.Provider>;
