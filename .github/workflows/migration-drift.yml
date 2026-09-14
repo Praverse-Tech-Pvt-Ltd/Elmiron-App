@@ -1,0 +1,76 @@
+name: Migration drift
+
+# `BE-W40`. Two `supabase db push` calls were run by hand against production during BE-W8,
+# both outside CI, with nothing recording that they happened.
+#
+# **This does not prevent a third one, and nothing written here could.** CI has no path that
+# deploys migrations — every job in ci.yml runs against 127.0.0.1:54322 — so the only route
+# from a migration file to production is a person typing the command, and taking that away is
+# an access decision rather than an engineering one.
+#
+# What this does is make a hand-run push impossible to HIDE. It compares the versions the
+# production database has applied against the migration files on `main`, and fails when they
+# differ — in either direction:
+#
+#   - applied with no file here: something reached production from a branch, a working copy
+#     or a hand-run push, and is not in `main`;
+#   - a file here not applied: a merged migration never reached production, which looks like
+#     nothing at all until a query hits a column that does not exist.
+#
+# `supabase_migrations.schema_migrations` records `version`, `name` and `statements` and has
+# NO timestamp and NO actor, so no check written against it can say who or when. That
+# limitation is the reason this is a detector and not an audit trail, and it is stated in
+# `docs/restore-runbook.md` beside the runbook step that goes with it.
+#
+# On a schedule as well as on push, because the failure this is for happens BETWEEN pushes:
+# somebody applies a migration by hand on a Tuesday and no commit lands to trigger anything.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/api/supabase/migrations/**'
+      - 'services/api/scripts/check-migration-drift.mjs'
+      - '.github/workflows/migration-drift.yml'
+  schedule:
+    # Daily. A hand-run push is noticed within a day rather than at the next deploy.
+    - cron: '40 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: migration-drift
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    name: does production match the migrations on main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Same reasoning as the retention watchdog: an unconfigured target is a real finding
+      # rather than a reason to skip. A drift check pointed at nothing reports no drift.
+      - name: Check the target is configured
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::The migration drift check is not pointed at any database."
+            echo "::error::Set the SUPABASE_DB_URL repository secret."
+            exit 1
+          fi
+          echo "Drift target configured."
+
+      - name: Compare applied migrations against this repository
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: pnpm --filter @fieldforce/api check:migration-drift

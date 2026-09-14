@@ -1196,3 +1196,34 @@ flakes from plausible reasoning were wrong. `deadlock_timeout` remains at its de
 loaded denominator is still two. A candidate worth measuring alongside it, because it is free
 to vary and changes the number of concurrent writers directly, is `maxWorkers` — measured,
 before anything is set.
+
+### Added by MR-32 — the restore drill, and BE-W40 closed as far as it honestly can be
+
+| ID | Title | Changes | Deps | Blocker | Est | Verification |
+|---|---|---|---|---|---|---|
+| **BE-W40** | **DONE (MR-32 C1), as a DETECTOR and not a preventer — and the distinction is the entry.** Two hand-run `supabase db push` calls reached production during BE-W8 with no audit trail. **No check can produce that audit trail**: `supabase_migrations.schema_migrations` has `version`, `name` and `statements`, with **no timestamp and no actor**, so who applied a migration and when is not recorded anywhere and cannot be recovered. <br><br>What now exists is `check:migration-drift` plus `.github/workflows/migration-drift.yml`, daily and on every migration push, comparing the versions production has applied against the files on `main` and failing **in both directions** — applied-with-no-file (something reached production off `main`) and file-never-applied (the quiet one, invisible until a query hits a missing column). It cannot stop a hand-run push; it makes one impossible to hide for longer than a day. Preventing one means taking production credentials away from people, which is an access decision. <br><br>Paired with a runbook step in `docs/restore-runbook.md`, because the human half — write down the SHA, the versions, the date and who ran it — **is** the audit trail, and it is weaker for a reason that cannot be engineered away from here | `services/api/scripts/check-migration-drift.mjs`, `.github/workflows/migration-drift.yml`, `docs/restore-runbook.md` | BE-W8 | **its production leg is UNVERIFIED** | 2 | Local: clean baseline, both failure directions driven, clean baseline again. 6 unit tests on the pure comparator. **Production: unverified** — credentials are not on this machine and `assertLocalhostOnly()` exists to keep them off it, so the first production run is the workflow's own |
+| **BE-W11** | **Sharper after MR-32 B, and still open — it is now the single blocker on the recovery posture.** The restore runbook's step 2 was the word *"Restore."*, and the drill found there is nothing behind it: PITR was deliberately not purchased, and this repository has **no `db:dump`, no backup script and no off-machine copy**. Steps 3–5 (the reconciliation) are correct and now exercised; step 2 is the gap, and it is the whole gap. <br><br>MR-32 drilled the data path a restore would take — dump, restore into a scratch database, verify by querying — and it works: 56/56 migrations, 37/37 tables, 36/36 RLS, 48/48 policies, 5,033/5,033 auth users, in **3 seconds for 16.4 MB**. That number is a floor and does not extrapolate: local socket, no network transfer, no platform snapshot to locate, no support ticket | operational — a scheduled dump to somewhere that is not this disk | — | **operator decision** | 2 | Restore **from the off-machine copy**, not from a local dump, and verify by querying it the way MR-32 B3 did |
+
+### Added by MR-32 A3 — the `BE-W92` rate, measured again, and the asymmetry does not survive
+
+**Two batches of 8 runs of the api suite alone, same tree, same database, same session:**
+
+| condition | deadlocks / runs |
+| --- | --- |
+| machine **idle** | **3 / 8 (37.5%)** |
+| machine **loaded** — 9 busy workers, as turbo's 10 concurrent tasks load it | **1 / 8 (12.5%)** |
+
+**Load made it LESS frequent, which is the opposite of the prediction**, and 37.5% idle is
+nothing like the 1-in-16 this entry has been carrying since MR-30. Neither remaining
+explanation survives: it is not another workspace (refuted in MR-31 D1) and it is not
+concurrency against the platform writers (refuted here, in the wrong direction).
+
+**What actually failed is the denominators.** The "1-in-16 versus 2-in-2" asymmetry that two
+sessions reasoned from was never established — 2-in-2 is *two samples*, and the 1-in-16 spans
+different days and a database that has since accumulated 2,603 visits and 5,033 auth users.
+Today's idle rate is six times the figure the entry records. **The rate is not stable enough
+for any of the comparisons made so far to mean anything.**
+
+No mechanism is proposed; `deadlock_timeout` is untouched. The next thing worth doing is
+establishing whether the rate is stable at all — the same batch, twice, on the same day —
+before any further comparison is drawn from it.

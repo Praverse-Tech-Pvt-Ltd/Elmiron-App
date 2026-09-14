@@ -270,3 +270,75 @@ snapshot to locate and no support ticket. **Its only honest use is as a floor.**
   (step 4 returned rows). `--apply` against a real divergence remains unexecuted.
 - **`check:purge-health` was never actually run** — the broken filter meant every invocation
   was a no-op, so its behaviour after a restore is still unverified.
+
+
+---
+
+## Applying a migration to production — `BE-W40`
+
+**Not part of a restore.** It is here because this is the operational runbook and there was no
+other one, and because the two things share a failure: a change reaching production with
+nothing recording that it did.
+
+### The situation, stated rather than implied
+
+**CI does not deploy migrations.** Every job in `ci.yml` runs against
+`127.0.0.1:54322`. The only route from a migration file to production is a person typing
+`supabase db push`, and **two such pushes were run by hand during BE-W8 with no audit trail**.
+
+**And no check can produce that audit trail.** `supabase_migrations.schema_migrations` has
+three columns — `version`, `name`, `statements`. There is **no timestamp and no actor**. Who
+applied a migration and when is not recorded anywhere, cannot be recovered, and no amount of
+tooling written against that table can invent it.
+
+### So: both halves, and the weaker one is named
+
+**The check (`BE-W40`, built in MR-32 C1).** `.github/workflows/migration-drift.yml` runs
+`check:migration-drift` daily and on every push that touches a migration, comparing the
+versions production has applied against the files on `main`. It fails in both directions —
+applied-with-no-file, and file-never-applied.
+
+It is an **after-the-fact detector, not a preventer.** It cannot stop a hand-run push; it
+makes one impossible to hide for longer than a day. Preventing one means taking production
+credentials away from people, which is an access decision and not an engineering one.
+
+> **Unverified against production.** The check was exercised only against the local stack —
+> clean baseline, both failure directions, clean baseline again. Production credentials are
+> not on this machine and `assertLocalhostOnly()` exists to keep them from being used from
+> here, so the first production run will be the workflow's own. **If it fails on its first
+> scheduled run, read the output before assuming drift**: an empty `SUPABASE_DB_URL` is
+> reported as a configuration error, and a pooler URL the script cannot reach is not the same
+> finding as a divergence.
+
+### The step
+
+1. **Before.** Record what you are about to apply:
+
+   ```bash
+   pnpm --filter @fieldforce/api check:migration-drift --db-url "<pooler url>"
+   ```
+
+   It must report **no drift** first. A push on top of an existing divergence makes two
+   problems indistinguishable.
+
+2. **Apply**, from `main`, with nothing uncommitted:
+
+   ```bash
+   git status --short        # must be empty
+   git log --oneline -1      # record this SHA in the note below
+   supabase db push --db-url "<direct url, not the pooler>"
+   ```
+
+3. **After**, verify from the database rather than from the command's exit code:
+
+   ```bash
+   pnpm --filter @fieldforce/api check:migration-drift --db-url "<pooler url>"
+   ```
+
+   No drift means production and `main` agree. It does **not** mean the migration did what it
+   was meant to do — that is the migration's own verification.
+
+4. **Write it down, because the database will not.** A row in `docs/decisions.md` or the
+   session record naming: the SHA, the versions applied, the date, and who ran it. **This is
+   the audit trail.** It is a human writing something down, it is weaker than a recorded row,
+   and it is weaker for a reason that cannot be engineered away from here.
