@@ -420,3 +420,48 @@ the heap raised.**
 The detector was the same one this document has named since day one: **running the app** —
 and this is the first session in which "running the app" meant a build of our own rather than
 Expo Go.
+
+## MR-30 — 14 September 2026: `FE-W40`, and the blocked list gets shorter
+
+**The cold-start gap is closed.** An MR who restarts with no signal now sees their day with the
+instant it was confirmed — *"Your day as of 15:02 — not confirmed since"* — and, once that
+instant belongs to a previous territory day, sees nothing with its own reason rather than the
+network's. Both sides were driven on the dev client, not only in tests.
+
+**And the blocked list is shorter for a reason that is not work.**
+`react-native-background-geolocation` is not a dependency of this app. Background location is
+**unwritten code**, so no build and no device unblocks it — and, more usefully, **neither
+`FE-G1` nor `FE-G2` needs it.**
+
+> **`FE-G1` and `FE-G2` are blocked by the handset alone.** Seven weeks.
+
+### Corrections to entries above — the second pass
+
+MR-29 corrected lines 287 and 344. That was not enough, and the reason is now a rule in
+`gotchas.md`.
+
+| Entry | Correction |
+| --- | --- |
+| `gotchas.md:1204-1205` — *"the machine here has JDK 25 as the only JDK; the JBR is 25 too"* | **No JDK 25 exists on this machine at all.** The only JDK under `C:\Program Files\Java` is `jdk-17` (`17.0.12`); Android Studio's JBR is **21.0.10** |
+| `frontend-handoff-2026-09-07.md:70` | Same stale claim. `JAVA_HOME` is unset; `java` on PATH is 17.0.12 |
+| `HANDOVER-2026-09-08.md:83-84` — Microsoft OpenJDK 17 at a named path, *"`JAVA_HOME` is set to it"* | **That path does not exist** and `JAVA_HOME` is unset. The build works regardless, because 17 is the `java` on PATH |
+
+**One fact, six places, five of them stale — and line 100 of this file had recorded it resolved
+on 27 August.** A correction that names one line leaves the rest standing with equal authority.
+
+### `BE-W92`: the instrument delivered, and the theory was wrong
+
+Three live deadlocks named their relations: `auth.users` / `auth.identities` twice,
+`storage.objects` / `storage.buckets` once. **`public.organisations` — the FK the entry
+theorised about — appears in none of them.** Measured rate: **1 in 16** with the api suite
+alone, **2 in 2** with the whole monorepo running. Load is the variable; the loaded denominator
+is two, and no mechanism has been chosen on it.
+
+### Defects found this session — by running the app, again
+
+- **A `UTC_FALLBACK` that would have overwritten the restored territory zone**, rendering every
+  clock — including the new "as of" label — 5h30m wrong. The MR-14 defect *inside* the fix for
+  `FE-W40`, caught while wiring it.
+- **A test double whose looseness was load-bearing.** `home-route.test.tsx` omitted `today`, so
+  `today === null` was false and `summariseDay` ran on `undefined`. An explicit `null` broke a
+  test that had been green for sessions.

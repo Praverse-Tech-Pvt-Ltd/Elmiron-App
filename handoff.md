@@ -509,3 +509,58 @@ pure module, a persisted anchor that must be cleared with the store, new state o
 the straddling-`18:30Z` matrix the decision document specifies. Part B was the session's
 headline and landed end to end; starting a store-wide change on the tail of it is how the
 wrong API gets frozen into the thing everything reads.
+
+## MR-30 — FE-W40
+
+**A cold start with no signal now shows the day.** It was the last engineering item standing
+between an MR and a full offline morning, and an 8-hour `FE-G2` run met it on its first one.
+
+- **CI `34826160203`** — `CI` / `push` / `246f216adc3107cfae84ecfef34c2c403ac06b99`,
+  **success**, and that SHA **equals HEAD**.
+- **`FE-G1` and `FE-G2` are blocked by the HANDSET ALONE.** `react-native-background-geolocation`
+  is not a dependency of this app — background location is **unwritten**, not untested — and
+  neither gate needs it. The Transistorsoft licence never blocked existing code; it blocks a
+  build-versus-buy decision for unstarted work. `blocked-on-you.md` now says so where a buyer
+  will read it.
+- **`FE-W42` is unblocked** by `FE-W40`. Its five screens were waiting on exactly the answer
+  that now exists. Copy `app/(tabs)/home.tsx`; the `eslint-disable`s carrying that id are the
+  worklist.
+- **`BE-W92` and `BE-W99` are one entry now**, and the measurement **refuted** the hypothesis
+  `BE-W92` was carrying: `public.organisations` appears in none of the three samples.
+
+### `FE-W40`, in one paragraph
+
+The pull persists a `DayAnchor { serverTime, receivedAt, timeZone, zoneSource }` beside the
+records. On a cold start the app projects the server instant forward by the elapsed device time
+and renders the day **only while it still falls on the same territory day**; past that it
+renders nothing and says why. `today` keeps its exact prior meaning, so only `home.tsx` changed;
+`dayOrigin` (`live | anchored | expired | none`) is the new field and nothing else reads it.
+
+**Two things to know before touching it.** The zone is persisted **with** the anchor, because
+`fetchTerritoryZone` never throws — offline it answers `UTC_FALLBACK`, meaning *"the server
+declined to say"*, and letting that overwrite a restored `Asia/Kolkata` renders every clock
+5h30m wrong. And the anchor clears **with** the store, in one `persistence.clear`, because an
+anchor outliving its records renders a real date over an empty store.
+
+### New traps, all met this session
+
+- **`eslint-disable-next-line` must be the LAST comment line.** A multi-line reason after it
+  moves the directive onto a comment; ESLint then reports an *unused directive* **warning** and
+  the real **error** separately, and neither points at the cause.
+- **Airplane mode cannot simulate offline for a DEBUG build** — the JS bundle comes from Metro
+  at launch, so the app never starts. Remove the API's reverse ports and leave `tcp:8081`.
+- **Git Bash rewrites absolute DEVICE paths in `adb` commands.** `adb push x /data/local/tmp/x`
+  fails with `secure_mkdirs()` because MSYS expands it to `C:/Program Files/Git/data/...`.
+  `export MSYS_NO_PATHCONV=1`.
+- **To drive calendar-dependent state, edit the app's storage rather than the clock.**
+  `adb root` is refused on a production emulator image, but a debug build is `debuggable`:
+  `run-as <pkg> cat databases/RKStorage` pulls AsyncStorage's SQLite file. Force-stop first and
+  delete the `-journal`.
+
+### And the rule this session produced
+
+**When you correct a fact, grep for every other mention of it.** *"The terminal `JAVA_HOME` is
+JDK 25"* stood in five places while `frontend-status.md:100` had recorded it resolved on
+27 August. A reviewer working faithfully from the documents inherited the stale copy and wrote a
+brief on it. The cost of the grep is nothing; the cost of skipping it is a session started on a
+false premise.

@@ -2785,3 +2785,81 @@ rules are each set in exactly one block, so no shadowing is possible for them.
 **no** test files under `apps/field/app/` today, so nothing is shadowed. If one is ever added it
 will silently lose MR-25 C1's offset-naive formatting guards. Tests belong in `src/`; if that
 ever stops being true, this block needs revisiting.
+
+### Three traps met while verifying `FE-W40` on the dev client — 14 September 2026
+
+#### 1. `eslint-disable-next-line` must be the LAST comment line, or it lands on a comment
+
+A multi-line reason written **after** the directive silently moves it:
+
+```ts
+// eslint-disable-next-line no-restricted-syntax -- allowlisted: ELAPSED duration
+// measured between two device readings.          <-- the directive now points HERE
+const resolved = resolveAnchoredDay(anchor, Date.now());   // still an error
+```
+
+ESLint reports this as **two separate things** — an *"Unused eslint-disable directive"*
+**warning** on the comment, and the real **error** on the code line below it. A reader
+scanning for errors sees only the second and concludes the allowlist does not work; a reader
+scanning for warnings sees only the first. Neither points at the cause.
+
+Write the reason first and the bare directive last:
+
+```ts
+// ALLOWLISTED under the MR-29 A3 rule: an ELAPSED duration, measured between two of this
+// device's own readings. The handset supplies no instant here.
+// eslint-disable-next-line no-restricted-syntax
+const resolved = resolveAnchoredDay(anchor, Date.now());
+```
+
+#### 2. Airplane mode cannot simulate "offline" for a DEBUG build
+
+A debug build fetches `index.android.bundle` from Metro **at launch**. Turning on airplane
+mode therefore stops the app before any of its code runs — the red *"Unable to load script"*
+screen — and tests nothing about the app's behaviour without a server.
+
+Cut the API and leave the bundler:
+
+```sh
+adb reverse --remove tcp:54321
+adb reverse --remove tcp:54322
+adb reverse --remove tcp:4010
+# adb reverse tcp:8081 stays, so Metro can still serve the bundle
+```
+
+That is a truer simulation anyway: the MR's phone has no route to the server, not no radio.
+
+#### 3. Git Bash rewrites absolute DEVICE paths in `adb` commands
+
+`adb push file /data/local/tmp/x` from Git Bash fails with
+
+```
+remote secure_mkdirs() failed: No such file or directory
+```
+
+because MSYS expands `/data/local/tmp/x` into `C:/Program Files/Git/data/local/tmp/x` before
+`adb` sees it. The error names the device, which sends you looking at the device.
+
+```sh
+export MSYS_NO_PATHCONV=1      # or write //data/local/tmp/x
+```
+
+The same mangling hits `adb shell ls /data/...` and every `run-as` path.
+
+#### And the technique the third trap was in service of
+
+To drive a state that depends on the calendar — here, an anchor from a **previous** territory
+day — **edit the app's own storage rather than waiting for midnight or trying to move the
+clock.** `adb root` is refused on a production emulator image and `date` needs it, but a debug
+build is `debuggable`, so `run-as` reaches its private data:
+
+```sh
+adb exec-out run-as <pkg> cat databases/RKStorage > RKStorage   # AsyncStorage is SQLite
+# edit the row on the host, then:
+adb push RKStorage /data/local/tmp/RKStorage
+adb shell "run-as <pkg> sh -c 'cat /data/local/tmp/RKStorage > databases/RKStorage \
+  && rm -f databases/RKStorage-journal'"
+```
+
+Force-stop the app first and delete the `-journal`, or the app's own copy wins. There is no
+`sqlite3` on the device, which is why the edit happens on the host.

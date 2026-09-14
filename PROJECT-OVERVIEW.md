@@ -13100,3 +13100,299 @@ Three things a reader should carry forward that were not true before:
    `packageDebug` heap failure, which will need `org.gradle.jvmargs` raised.
 3. **Background location is unwritten, not untested.** Anyone planning FE-G1 around
    `react-native-background-geolocation` should know it is not a dependency of this app.
+
+### MR-30 — FE-W40
+
+**A cold start with no signal now shows the MR their day, labelled with the instant the server
+gave it — and shows nothing, with its own reason, once that instant belongs to a previous
+territory day.** Both sides driven on the dev-client build, not only in tests.
+
+#### A1 — CI
+
+| | |
+| --- | --- |
+| Run | `34826160203` — **`success`** |
+| Workflow | `CI` |
+| Event | `push` |
+| SHA | `246f216adc3107cfae84ecfef34c2c403ac06b99` |
+
+**The SHA equals HEAD.** `git rev-parse HEAD` returned the same
+`246f216adc3107cfae84ecfef34c2c403ac06b99`. Three held commits pushed as `f7a684c..246f216`;
+both jobs green. The `BE-W99` deadlock did not fire in this run, which matters for the rate
+recorded under A4.
+
+#### A2 — the blocked list was wrong about WHY two items blocked
+
+`react-native-background-geolocation` **is not a dependency of this app and never has been.**
+Location is `expo-location` alone; no config-plugin entry in `app.json`; no
+`expo-task-manager`; and the prebuild-generated manifest carries **no
+`ACCESS_BACKGROUND_LOCATION` and no `FOREGROUND_SERVICE_LOCATION`**. Background location is
+**unwritten code, not untested code.**
+
+| Item | Said | Correct |
+| --- | --- | --- |
+| **2.4** Transistorsoft release licence, *"Before FE-W8, but check now"* | implied it gates shipping code that exists | **It never blocked existing code.** It blocks a **build-versus-buy decision for work nobody has started** |
+| **5.3** *"Transistorsoft licence, or a decision to ship foreground-only check-in"*, blocking *"geofenced check-in, the PRIMARY check-in mechanism"* | implied geofenced check-in is blocked | **Geofenced check-in already works, foreground, with no licence.** MR-29 B4 drove one: `check_ins` `99e71095`, `18.5204 / 73.8567`, **`geofence_status inside`**, `visits.status planned → in_progress`. The licence would buy **passive, background** check-in — a different, unstarted feature |
+
+**The consequence, which is the useful half, and it is now the first thing in
+`blocked-on-you.md`'s correction section:**
+
+> **`FE-G1` and `FE-G2` are blocked by the handset ALONE.** Neither needs background location.
+> FE-G1 asks only that `adb devices` shows a non-emulator serial; FE-G2 is an offline day then
+> sync accepted. The dev-client build that stood in front of both exists and works. **Nothing
+> else is between this app and both device gates except a phone.** Seven weeks outstanding.
+
+Item **1.5** is upgraded to cover both gates rather than FE-G1 alone. Item **5.1**'s *"the
+handset **and** a dev-client build"* is narrowed to the handset.
+
+#### A3 — the stale-fact sweep, and it was six places rather than three
+
+The brief named `frontend-status.md:287` and `:344`. The sweep found more:
+
+| Location | Claim | Measured 14 September 2026 |
+| --- | --- | --- |
+| `frontend-status.md:287`, `:344` | *"the terminal `JAVA_HOME` is JDK 25"* | **`JAVA_HOME` is unset** |
+| `gotchas.md:1204-1205` | *"the machine here has JDK 25 as the only JDK — Android Studio's JBR is 25 too"* | **No JDK 25 exists on this machine at all.** The only JDK under `C:\\Program Files\\Java` is `jdk-17` (`17.0.12`). The JBR is **21.0.10** |
+| `frontend-handoff-2026-09-07.md:70` | *"this machine's terminal `JAVA_HOME` is JDK 25, which fails at CMake"* | as above; `java` on PATH is **17.0.12** |
+| `HANDOVER-2026-09-08.md:83-84` | *"Microsoft OpenJDK 17 at `C:\\Program Files\\Microsoft\\jdk-17.0.20.101-hotspot\\` and `JAVA_HOME` is set to it"* | **That path does not exist**, and `JAVA_HOME` is unset. The build works anyway, because 17 is the `java` on PATH |
+| `PROJECT-OVERVIEW.md:10087` | the same absent path, plus *"no `java` on PATH at all"* | superseded here; that file is append-only |
+
+**And `frontend-status.md:100` and `:111` had recorded it RESOLVED on 27 August** — before four
+of those five were written. One fact, six places, five stale, and the correction that existed
+was invisible to anyone who did not happen to read that line first. A reviewer working
+faithfully from the documents inherited the stale version and put it in a brief.
+
+**So the rule, now in `gotchas.md`: when you correct a fact, grep for every other mention of
+it.** A correction that names one line leaves the rest standing with equal authority, and an
+append-only record gives the reader no way to tell which is current. The cost is one `grep -rn`.
+The cost of skipping it is a session begun on a false premise, which is what happened.
+
+`gotchas.md:1269`'s *"the SDK's CMake 3.22.1 cannot build this app"* is **corrected, not
+deleted** — it did not reproduce under RN 0.86.2, and it was measured and true when written.
+Each correction is a dated section naming the lines it replaces.
+
+#### A4 — `BE-W92` and `BE-W99` reconciled, and the measurement refutes the hypothesis
+
+They were never two defects: same suite, same `describe`, same test — *"and with the RESTRICTIVE
+policy removed, the same policy widens immediately"* — in every occurrence since MR-26. One
+entry now supersedes both by name.
+
+**The measured rate, which is what `BE-W92` was registered waiting for:**
+
+| when | conditions | deadlocks / runs |
+| --- | --- | --- |
+| MR-27 D1 | 9 × api suite, before the instrument | **0 / 9** |
+| MR-29 A2 | api suite alone, clean re-run | **0 / 1** |
+| MR-30 A4 | 6 × api suite alone | **1 / 6** |
+| MR-29 A2 | **whole monorepo** — `ci:local --with-db`, then `pnpm test` | **2 / 2** |
+| MR-29 A1, MR-30 A1 | CI | **0 / 2** |
+
+**api suite alone: 1 in 16. Whole monorepo running: 2 in 2.** The loaded denominator is two and
+nothing is concluded from it — but it is the next thing to measure rather than a curiosity.
+
+**The relation names, from the server log as the entry demanded rather than inferred.** Three
+local samples, resolved through `pg_class`:
+
+- sample 1 — `auth.users` (16458), `auth.identities` (17258); the other session's statement was
+  `INSERT INTO "identities" ...`
+- sample 2 — `storage.objects` (17019), `storage.buckets` (17009)
+- sample 3 — `auth.users` (16458), `auth.identities` (17258) again
+
+**This refutes the hypothesis the entry was carrying.** `BE-W92` reasoned from the schema that
+the mirror's `organisation_id ... references public.organisations` had moved the contention onto
+`public.organisations`. **`public.organisations` is OID 17887 and appears in none of the three
+samples.** The entry had said, in its own words, that it was *"reasoning from the schema, not a
+measurement, and the last two diagnoses of this repo's flakes from plausible reasoning were
+wrong."* It was wrong again, and the MR-28 instrument is what showed it.
+
+**A correction to MR-29's own wording.** MR-29 recorded *"different relations each time"*. Three
+samples say that is too strong: **two** distinct pairs, not three, with `auth.users` /
+`auth.identities` in two of three. The honest statement is *two contended pairs observed, both
+Supabase's own service tables, neither of them the FK that was theorised.*
+
+**The hypothesis that now has measurement under it — and is still a hypothesis.** The blocked
+session's running statement is `create policy`, which takes an `AccessExclusiveLock`; the
+blocking session is inserting a GoTrue user. Postgres names the statement a backend is
+*currently running*, not the one that took the lock it holds, and `inRolledBackTransaction` wraps
+`seedFixtures`/`asUser`, which touch `auth.users` earlier in the same transaction. The shape is
+**DDL inside a long test transaction against concurrent writers to Supabase's service tables**,
+which predicts load-dependence and matches the rates. It argues for **serialising the DDL
+tests** rather than ordering two named relations — ordering `auth.users` against
+`auth.identities` would not have touched sample 2. **Not implemented**; `deadlock_timeout`
+remains at its default and `lock-wait-logging.spec.ts` still asserts it.
+
+#### A5 — the flat-config hazard, swept beyond its instance
+
+Enumerated from the **loaded** config rather than read off the source (the command is in
+`gotchas.md`). **Only two rules in the repository are set in more than one block** —
+`no-restricted-syntax` (three blocks) and `no-restricted-imports` (two) — and both are the ones
+MR-29 A3 touched. **Six other option-valued rules are each set in exactly one block**, so no
+shadowing is possible for them:
+`@typescript-eslint/ban-ts-comment`, `restrict-plus-operands`, `restrict-template-expressions`,
+`return-await`, `no-unused-vars`, `import/no-extraneous-dependencies`.
+
+**Verified by exercising, not by reading** — the same three shapes in three glob regions:
+
+| region (winning block) | `import * as RN` | `Date.now()` | `toLocaleTimeString` |
+| --- | --- | --- | --- |
+| `src/` non-test | **fires** (both rules) | **fires** | — (C1 is screens-only, by design) |
+| `app/` screen | **fires** (both rules) | **fires** | **fires** |
+| `*.test.ts` | **fires** (both rules) | — (intended exemption) | — |
+
+Each overlapping block intends to replace what it shadows and carries forward what it should.
+**One latent hazard, recorded rather than closed:** the test-exemption glob
+`apps/field/**/*.test.*` also matches `apps/field/app/**/*.test.*` and comes last. There are no
+test files under `apps/field/app/` today, so nothing is shadowed; if one is ever added it will
+silently lose MR-25 C1's offset-naive formatting guards.
+
+#### B — `FE-W40`, built
+
+**B1 — proceeding on engineering's recommendation, and why.** No product-owner answer exists;
+`blocked-on-you.md:117` registered the question and nothing has answered it. **Option D is the
+only one of the four whose parameter is *derived* rather than chosen** — the bound is the
+territory day boundary, which `territory-day.ts` already computed — so there is no number to
+wait for, which is precisely what makes it safe to proceed on. Option **B** is refused: the
+device clock is MR-15 A2's defect behind a condition, named and refused in the decision
+document, and since MR-29 A3 a lint failure as well. Option **C** is refused for the reason its
+own entry gives: last sync 18:20, app opened 07:40, and the MR is shown yesterday's list —
+correctly labelled and still the wrong list.
+
+**B2 — the shape, designed before it was written, because `pulled-store.tsx` is read by every
+screen.**
+
+```
+DayAnchor { serverTime, receivedAt, timeZone, zoneSource }      persisted, per user
+resolveAnchoredDay(anchor, deviceNow) -> current | expired | null   pure
+PulledStoreState.dayOrigin: live | anchored{asOf} | expired{asOf} | none
+TodayScreen.dayAsOfLabel?: string | null
+```
+
+**`today` keeps exactly the meaning it had** — the territory date, from the server's clock — and
+that is why `dayOrigin` is a separate field rather than a widening of its type. An anchored day
+*is* the server's clock, merely an older reading of it. **Every screen but `home.tsx` reads
+`today` and needed no change**; `dayOrigin` is read by `app/(tabs)/home.tsx` and nothing else.
+The invariant, asserted: **`today` is non-null if and only if `dayOrigin` is `live` or
+`anchored`.**
+
+**The zone is persisted with the anchor, and that is not incidental.** The zone comes from the
+server too, so a cold start cannot re-fetch it; reckoning the boundary in UTC instead is a
+5h30m error for IST.
+
+**And that nearly shipped as a defect.** `fetchTerritoryZone` **never throws** — offline it
+answers `UTC_FALLBACK`, which means *"the server declined to say"*, not *"the territory is
+UTC"*. On the exact path this feature exists for, that fallback would have landed on top of the
+restored `Asia/Kolkata` and rendered every clock on the screen — including the new "as of"
+label — **5h30m wrong. The MR-14 defect inside the fix for `FE-W40`.** A live territory answer
+still wins; a fallback no longer does, and a test asserts it.
+
+**B3 — the anchor clears with the store, in the same step.** `persistence.clear` drops both
+keys, so the two cannot be separated by a caller who forgets, and `loadPulledStore` calls it
+when the records cannot be restored. An anchor outliving its records would render a real DATE
+over an empty store — *"0 of 0 visits attended"* presented as the MR's plan, a false statement
+assembled from two true ones, and the cursor-ahead-of-records failure in a new place. Asserted
+on the content: after a failed restore, `persistence.loadAnchor(USER)` is `null`.
+
+**B4 — the straddling pair, and both sides on the device.** One anchor instant, `17:45:00Z` —
+45 minutes before IST midnight — with only the elapsed time differing:
+
+| elapsed | projected | IST | territory day | verdict |
+| --- | --- | --- | --- | --- |
+| 30 min | `18:15Z` | 23:45 on the 14th | `2026-09-14` | **current** |
+| 60 min | `18:45Z` | 00:15 on the 15th | `2026-09-15` | **expired** |
+
+Fifteen minutes short of the boundary and fifteen past it. A pair at 09:00Z and 22:00Z would
+pass against an implementation that compared raw UTC dates and never read the zone — the test
+asserts that too, as a control for the control: in UTC those same two instants are the **same**
+day.
+
+Verified at three levels — pure (`day-anchor.test.ts`, 8 cases), store
+(`pulled-store.test.tsx`, 5) and screen (`home-route.test.tsx`, 4) — **and then on the dev
+client, both sides:**
+
+| | on the Pixel_10 dev client |
+| --- | --- |
+| **anchored** | *"Today / **Your day as of 15:02 — not confirmed since** / Started 11:28"*, with the full day beneath it — next visit, "2 of 3 visits attended" |
+| **expired** | *"**Could not load your day** / Your last sync was **13 Sep at 23:15**, which was a different day. This app shows a day only once the server has confirmed it."* — and **nothing** rendered |
+| **live** | no label at all, which is the positive control: an unconditional label would be noise on every ordinary day |
+
+`23:15` is `17:45Z` read in IST, so the persisted zone is doing its job on the device and not
+only in a test. The expired case was driven by **rewriting the on-device anchor through
+`run-as`** rather than by waiting for midnight — `adb root` is refused on a production emulator
+image, so `date` is unavailable. The technique is in `gotchas.md`.
+
+**B5 — nothing asserts a fact the server did not give.** The age is the honesty. The expired
+case explains **itself** rather than borrowing *"the app could not reach the server"*, which is
+true and useless to an MR holding a phone full of their own visits.
+
+**B6 — five mutations, each failing EXACTLY one case and leaving the rest green:**
+
+| mutation | fails |
+| --- | --- |
+| drop the persisted zone, reckon in UTC | 2 of 8 (the expired half of the straddle, and the zone case) |
+| unclamp elapsed | 1 of 8 (the backwards-clock case) |
+| drop the anchor clear in `loadPulledStore` | 1 of 17 (B3) |
+| drop the zone preservation | 1 of 17 |
+| ignore the bound — always render the anchored day | 1 of 17 (the expired case) |
+
+Positive controls throughout: a pull that **succeeds** still takes the day from the server and
+rewrites the anchor; a **live** day shows no label; an ordinary unreachable server still gets
+the generic message, so the expired branch cannot be satisfied by deleting the generic one.
+
+**One find while wiring it.** `home-route.test.tsx`'s store double omitted `today` entirely, so
+`today === null` was **false** and `summariseDay` ran on `undefined`. The looseness was
+load-bearing — an explicit `null` broke a test that had been green for sessions. The double is
+now faithful.
+
+#### C — the two triage verdicts, re-confirmed rather than re-litigated
+
+Unchanged from MR-29 Part D, and deliberately **not** duplicated as new entries: two entries on
+one decision is the `BE-W92`/`BE-W99` divergence this session spent A4 undoing.
+
+**C1 — the dead-letter replay's missing figures: DEFER, trigger named (`BE-W98`).**
+`explanation.ts:196` makes the action `escalate` for a dead letter **whatever the SQLSTATE is**,
+so the figures cannot change what anyone does next. `rejection_detail` still carries the
+server's own sentence, which after MR-28 B names the doctor. Revisit when a **manager-facing**
+dead-letter queue exists — the first reader for whom the numbers change a decision rather than
+an explanation.
+
+**C2 — `FE-W41` and `5.9` are ONE unit of work.** The cap note is true only while
+`ucpmp_sample_cap_quantity` is null; the day 5.9 is answered is the day it becomes false, three
+lines above a refusal quoting the numbers it denies having. **The migration that sets the cap
+and the change that rewrites the note are one commit.** `5.9` build-fails CI on **6 November**,
+warning from **16 October**.
+
+#### Counts — by workspace AND runner, from each runner's own line
+
+Never from `test-counts.mjs`, which counts tests DISCOVERED rather than PASSED.
+
+| Workspace | Runner | Result |
+| --- | --- | --- |
+| `@fieldforce/core` | vitest | 21 passed (3 files) |
+| `@fieldforce/ui-tokens` | vitest | 54 passed (3 files) |
+| `@fieldforce/ui` | vitest | 4 passed (1 file) |
+| `@fieldforce/ui` | jest | 243 passed, 243 total (21 suites) |
+| `@fieldforce/console` | vitest | 10 passed (1 file) |
+| `@fieldforce/mock` | vitest | 40 passed (1 file) |
+| `@fieldforce/field` | vitest | **478 passed (30 files)** — was 470 in 29; `day-anchor.test.ts` is new |
+| `@fieldforce/field` | jest | **114 passed, 114 total (18 suites)** — was 105; +5 `pulled-store`, +4 `home-route` |
+| `@fieldforce/api` | vitest | **626 passed (41 files)** — no deadlock in this run |
+
+**1,590 passing, zero skipped, zero failing.** `typecheck`, `lint` and `format:check` all exit 0
+across the monorepo.
+
+#### Where this session stopped
+
+**At the end, with every part complete** — A1–A5, B1–B6, C1–C2. Nothing was deferred.
+
+What a reader should carry forward:
+
+1. **`FE-G1` and `FE-G2` are blocked by the handset alone**, and that sentence is now in
+   `blocked-on-you.md` where a buyer will read it. Seven weeks.
+2. **`FE-W42` is unblocked.** Its five screens were waiting on the answer `FE-W40` now
+   implements; the pattern to copy is `home.tsx`, and the `eslint-disable`s carrying that id are
+   the worklist.
+3. **`BE-W92`'s next measurement is the loaded one.** api-alone bought one sample in sixteen
+   runs; the whole-monorepo condition is where it reproduces, and its denominator is two.
+4. **A correction is not done until every other mention of the fact is corrected too.** Five
+   stale copies of one fact sent a reviewer into a session on a false premise, and the
+   correction had existed since 27 August.

@@ -362,3 +362,43 @@ microphone remedy, and the defect-12 re-confirmation), and **running a control i
 branches rather than one** (`FE-W43` — the identical import raised 2 errors in `src/` and 0
 in a screen). The second is MR-28's defect 12 restated one layer down: a guard wired into one
 branch of a two-branch path protects the branch nobody exercises.
+
+## MR-30 — 14 September 2026
+
+**`FE-W40` built on its own, as MR-29's stop intended.**
+
+### Decisions taken
+
+- **`FE-W40`: option D, on engineering's recommendation, with no product-owner answer.** Stated
+  rather than assumed. The reason it is safe to proceed without one: **D is the only option
+  whose parameter is derived rather than chosen** — the bound is the territory day boundary,
+  which `territory-day.ts` already computed. A and C were live alternatives; B is refused twice
+  over (MR-15 A2, and a lint failure since MR-29 A3).
+- **`dayOrigin` is a new field, not a widening of `today`.** `today` keeps its exact meaning —
+  the territory date from the server's clock — so every screen but `home.tsx` was untouched. An
+  anchored day *is* the server's clock, merely older. This was the API decision the MR-29 stop
+  existed to protect, and it is the one worth arguing with if anyone disagrees.
+- **The zone is persisted with the anchor**, and a `UTC_FALLBACK` no longer overwrites a
+  restored territory zone. `fetchTerritoryZone` never throws, so "declined to say" and "is UTC"
+  had been the same value.
+- **`BE-W92` and `BE-W99` merged**, with `BE-W92`'s own FK hypothesis refuted by measurement.
+- **Part C re-confirmed rather than re-litigated.** Two entries on one decision is exactly the
+  divergence A4 spent the session undoing, so the MR-29 Part D verdicts were referenced, not
+  duplicated.
+
+### Premises from the brief that the repository contradicted — second session running
+
+Three last time, and this time the brief's own framing of A3 understated the problem: the stale
+JDK claim was in **six** places, not three. The reviewer states plainly that they have not read
+the repository and that the code supersedes them; the grep is what makes that workable, and it
+is now a rule.
+
+### Method note
+
+The two strongest pieces of evidence this session were both refusals to reason:
+
+1. **A5** enumerated the *loaded* ESLint config and then exercised three shapes in three glob
+   regions. Reading the source would have found two plausible-looking blocks and no problem.
+2. **A4** resolved OIDs out of the server log instead of arguing from the schema — and the
+   answer contradicted a hypothesis that had stood, unchallenged and clearly labelled as
+   unmeasured, for four sessions.
