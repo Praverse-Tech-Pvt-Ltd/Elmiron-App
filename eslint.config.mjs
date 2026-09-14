@@ -93,6 +93,58 @@ const restrictedReactNativeImports = {
  * DISAGREE must reach the device clock to do it, which is how MR-28 A2's withholding case
  * was made to fail against the defect rather than passing against it.
  */
+/**
+ * **MR-32 A2 — THE CALENDAR HALF. A correct instant, read in the wrong calendar.**
+ *
+ * MR-29 A3 banned acquiring *now* from the handset. That is the SOURCE. This is the
+ * INTERPRETATION, and it is a separate defect: `getMonth()`, `getDate()`, `getDay()` and
+ * `getHours()` answer in the DEVICE's timezone even when the instant they are called on is
+ * perfectly correct and came from the server.
+ *
+ * **This is how five screens were wrong in a second way that MR-29's rule could not see.**
+ * `day-end.tsx`, `mileage.tsx` and `coaching.tsx` each built a window with `new Date()` AND
+ * then read it with local getters, so fixing only the instant would have left a 5h30m offset
+ * applied to a date -- which moves the answer on the last day of a month and on every day
+ * near midnight.
+ *
+ * MR-25's C1 rule has a getter selector already, and it did not fire, because it requires
+ * the receiver to be a `new Date()` literal: `new Date().getHours()` is caught and
+ * `parsed.getMonth()` is not. Verified by exercising both shapes in both trees rather than
+ * by reading the config -- nothing fired on either.
+ *
+ * Three shapes, because the calendar can be read three ways:
+ *   1. the local component getters, on ANY receiver;
+ *   2. the local string conversions -- `toDateString` and friends;
+ *   3. `new Date(y, m, d)`, whose COMPONENT form constructs in the device's zone.
+ *
+ * `getUTC*` is deliberately not matched: it is zone-independent, and
+ * `src/today/server-window.ts` uses it for exactly that reason. `new Date(iso)` and
+ * `new Date(ms)` take one argument and are untouched -- parsing an instant is not reading a
+ * calendar.
+ *
+ * The correct answer in every case is `dayIn`, `clockIn`, `dayMonthIn` or the helpers in
+ * `src/today/server-window.ts`, all of which take the territory's zone explicitly.
+ */
+const noLocalCalendarReads = [
+  {
+    selector:
+      'CallExpression[callee.property.name=/^get(FullYear|Month|Date|Day|Hours|Minutes|Seconds|Milliseconds|TimezoneOffset)$/]',
+    message:
+      "Local calendar getters answer in the DEVICE's timezone, even when the instant is the server's. An MR in IST is 5h30m from UTC, which changes the DATE near midnight and the MONTH on the last day of one. Use dayIn / clockIn / dayMonthIn from src/today/territory-day, or the window helpers in src/today/server-window, all of which take the zone explicitly. `getUTC*` is not restricted.",
+  },
+  {
+    selector:
+      'CallExpression[callee.property.name=/^(toDateString|toTimeString|toLocaleDateString|toLocaleTimeString|toLocaleString)$/]',
+    message:
+      "These format in the DEVICE's timezone and locale. An MR's handset is not the territory. Use dayIn / clockIn / dayMonthIn from src/today/territory-day, where the zone comes from the server.",
+  },
+  {
+    selector: "NewExpression[callee.name='Date'][arguments.length>1]",
+    message:
+      "`new Date(y, m, d)` constructs in the DEVICE's timezone, so the instant it produces depends on where the phone is. Use `Date.UTC(...)` when you need calendar arithmetic on values you already hold, or the helpers in src/today/server-window. `new Date(iso)` and `new Date(ms)` are single-argument and are not restricted.",
+  },
+];
+
 const noDeviceClockAsNow = [
   {
     selector: "NewExpression[callee.name='Date'][arguments.length=0]",
@@ -189,7 +241,12 @@ export default tseslint.config(
     // person finds the bypass, so the namespace form is banned outright below.
     files: ['apps/field/**/*.ts', 'apps/field/**/*.tsx'],
     rules: {
-      'no-restricted-syntax': ['error', noComponentMaterials, ...noDeviceClockAsNow],
+      'no-restricted-syntax': [
+        'error',
+        noComponentMaterials,
+        ...noDeviceClockAsNow,
+        ...noLocalCalendarReads,
+      ],
       'no-restricted-imports': ['error', { paths: [restrictedReactNativeImports] }],
     },
   },
@@ -254,6 +311,7 @@ export default tseslint.config(
         'error',
         noComponentMaterials,
         ...noDeviceClockAsNow,
+        ...noLocalCalendarReads,
         {
           selector:
             'CallExpression[callee.property.name=/^(toLocaleTimeString|toLocaleDateString|toLocaleString)$/]',
@@ -295,7 +353,11 @@ export default tseslint.config(
       'apps/field/**/__tests__/**/*.tsx',
     ],
     rules: {
-      'no-restricted-syntax': ['error', noComponentMaterials],
+      // MR-32 A2. The CALENDAR rules apply to tests too, and deliberately: a fixture that
+      // reads a date in the device's calendar asserts against whatever zone CI happens to
+      // run in, which is how a test passes on one machine and fails on another. Only the
+      // device-clock SOURCE ban is lifted here -- see the note on the block above.
+      'no-restricted-syntax': ['error', noComponentMaterials, ...noLocalCalendarReads],
     },
   },
   {

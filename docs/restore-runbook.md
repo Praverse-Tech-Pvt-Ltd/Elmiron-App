@@ -71,17 +71,53 @@ HTTP for that reason.
 - Understand that **no audio uploaded after that time will survive as a usable
   recording**, whatever the restore does to the database.
 
-### 2. Restore.
+### 2. Restore
+
+**This step said only "Restore." until MR-32, and there is no mechanism behind it.** PITR was
+deliberately not purchased, so there is no point-in-time restore to invoke; and there is no
+`db:dump`, no backup script and no off-machine copy in this repository — **`BE-W11` is still
+open**. So the honest statement of the current posture is:
+
+> **There is no restore to perform, because there is no backup to restore from.** Steps 3 to 5
+> below are the reconciliation that must follow a restore, and they are correct and now
+> exercised. Step 2 is a gap, and it is the gap.
+
+What MR-32 proved is that the *data path* a restore would take works, drilled against a
+scratch target in the local cluster:
+
+```bash
+# Dump. On Windows + Git Bash, MSYS_NO_PATHCONV=1 is required or the container path
+# /tmp/drill.sql is rewritten to a Windows path and pg_dump fails.
+export MSYS_NO_PATHCONV=1
+docker exec supabase_db_Elmiron-App pg_dump -U postgres -d postgres \
+  --format=plain --no-owner --no-privileges -f /tmp/drill.sql
+
+# Restore into a SCRATCH database, never over the live one.
+docker exec supabase_db_Elmiron-App psql -U postgres -d postgres -c "create database restore_drill;"
+docker exec supabase_db_Elmiron-App psql -U postgres -d restore_drill -f /tmp/drill.sql
+```
+
+**Verify by querying the restored database, never by an exit code** — see the drill log at the
+end of this file for the checks and the numbers they returned.
 
 ### 3. Reconcile — immediately, before letting anyone back in
 
 ```bash
 # Dry run first. Always. It changes nothing and prints exactly what it would do.
-pnpm --filter @elmiron/api reconcile:restore
+pnpm --filter @fieldforce/api reconcile:restore
 
-# Then, once the dry run's numbers make sense:
-pnpm --filter @elmiron/api reconcile:restore -- --apply --note "PITR to 2026-08-14T09:00+05:30"
+# Then, once the dry run's numbers make sense. --db-url is MANDATORY for --apply and the
+# script refuses without it; no `--` separator, because pnpm 11 forwards it literally.
+pnpm --filter @fieldforce/api reconcile:restore --apply \
+  --db-url "<the pooler url for the project you just restored>" \
+  --note "Restored to 2026-08-14T09:00+05:30"
 ```
+
+**Check the output, not the exit code.** `pnpm --filter` on a package name that does not
+exist prints *"No projects matched the filters"* and **exits 0**. Every command in this
+section did exactly that until MR-32, because the filter said `@elmiron/api` and this
+workspace is `@fieldforce/api`. A dry run that reconciles nothing and a dry run that finds
+nothing look identical if you only read the exit code.
 
 What `--apply` does:
 
@@ -132,7 +168,7 @@ doctor withdrew broadly, widen it by hand. That is a judgement, so a person make
 ### 5. Check retention did not stall while you were busy
 
 ```bash
-pnpm --filter @elmiron/api check:purge-health
+pnpm --filter @fieldforce/api check:purge-health
 ```
 
 A restore rewinds `audio_purge_runs` too, so the worker's history may now show a gap
@@ -158,3 +194,79 @@ than no runbook.
   a copy of a "destroyed" object in S3 versioning, a soft-delete window or a
   sub-processor's backup is not in the public documentation. That is a **DPA
   question, not an engineering one**, and it is on the escalation list.
+
+
+---
+
+## Drill log — 14 September 2026 (MR-32)
+
+**The first execution of this runbook since it was written.** Every previous first execution of
+a written procedure in this project has found the procedure wrong, and this one did too: of the
+four executable commands in it, **three were broken and all three exited 0.**
+
+### What the runbook said, and what happened
+
+| Step | Runbook said | What actually happened |
+| --- | --- | --- |
+| 2 | *"Restore."* | **No mechanism exists.** PITR was not purchased; there is no `db:dump`, no backup script, no off-machine copy (`BE-W11`). Step 2 is the gap |
+| 3 dry run | `pnpm --filter @elmiron/api reconcile:restore` | *"No projects matched the filters"*, **exit 0**. The workspace is `@fieldforce/api`. An operator reads no error and no findings, and concludes there was nothing to reconcile |
+| 3 apply | `… reconcile:restore -- --apply --note "…"` | Same silent exit 0. With the name corrected, **two further breaks**: `pnpm 11` forwards `--` literally, so the script received `"--" "--apply"`; and `--db-url` is missing, which `BE-W8` made mandatory — the guard fired, exit 1, correctly |
+| 4 | the quarantine SQL | **Worked.** Returned four quarantined visits with their findings |
+| 5 | `pnpm --filter @elmiron/api check:purge-health` | *"No projects matched the filters"*, **exit 0** |
+
+**Three of four commands were a silent no-op**, and the one that would have refused correctly
+(`--db-url`) could only be reached by first fixing the package name. During a compliance
+incident, an operator following this document exactly would have believed the reconciliation
+ran.
+
+### The restore drill, and what it returned
+
+Dump and restore of the whole local database into a scratch target, then **verified by
+querying the restored copy**:
+
+| Check | Source | Restored |
+| --- | --- | --- |
+| Migrations applied | 56 | **56** |
+| Public tables | 37 | **37** |
+| Tables with RLS enabled | 36 | **36** |
+| Policies on `public` | 48 | **48** |
+| `public.visits` | 2,603 | **2,603** |
+| `public.doctors` | 1,926 | **1,926** |
+| `public.app_thresholds` | 17 | **17** |
+| `purge_batch_limit` / `purge_backlog_multiplier` / `purge_max_silence_hours` | 250 / 3 / 12 | **250 / 3 / 12** |
+| A marker row seeded before the dump | 1 | **1, with its timestamp** |
+| `auth.users` / `auth.identities` | 5,033 / 5,033 | **5,033 / 5,033** |
+| `storage.objects` / `storage.buckets` | 128 / 1 | **128 / 1** |
+
+**Why the queries and not the exit code.** The first attempt failed silently in exactly the way
+this runbook now warns about: Git Bash rewrote the container path `/tmp/drill.sql` into a
+Windows path, `pg_dump` wrote nothing, `create database` **succeeded**, the restore log
+contained **zero `ERROR` lines**, and only *"migrations: source 56, restored 0"* revealed that
+nothing had been restored at all.
+
+### Duration
+
+**Dump plus restore: 3 seconds**, for a 16.4 MB database — 56 migrations, 37 tables, 5,033
+auth users, 2,603 visits. Whole drill including seeding, verification and teardown: **9
+seconds**.
+
+That number does not extrapolate. It is a local socket, no network transfer, no platform
+snapshot to locate and no support ticket. **Its only honest use is as a floor.**
+
+### What this drill does NOT prove
+
+- **It was a scratch target in the local cluster.** Production credentials are not on this
+  machine, and `assertLocalhostOnly()` exists precisely to keep them from being used from here.
+- **Nothing about the platform's restore.** Whether a Supabase restore takes minutes or hours,
+  whether it needs a support ticket, and what it does to roles, extensions and the
+  `supabase_admin`-owned settings is **untested**, because there is nothing to test against.
+- **Nothing about the object store, which is the whole reason this runbook exists.**
+  `storage.objects` restored 128 rows — and those are *metadata*. The objects themselves never
+  moved, because they are not in the database. A restored `storage.objects` asserts that 128
+  objects exist; whether they do is unknowable from the database, which is the point made at
+  the top of this file and is now demonstrated rather than argued.
+- **The reconciliation itself was not run end to end**, because there was no real restore to
+  reconcile. Its guards were exercised (`--db-url` refused correctly) and its SQL was exercised
+  (step 4 returned rows). `--apply` against a real divergence remains unexecuted.
+- **`check:purge-health` was never actually run** — the broken filter meant every invocation
+  was a no-op, so its behaviour after a restore is still unverified.
