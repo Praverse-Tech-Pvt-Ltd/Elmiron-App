@@ -1,0 +1,93 @@
+name: Database backup
+
+# `BE-W11`. MR-32 executed docs/restore-runbook.md for the first time and found its step 2
+# was the single word "Restore." — no PITR (declined), no dump, no schedule, no off-machine
+# copy. MR-33 built the producer and the verifier. This is the schedule.
+#
+# **IT REFUSES TO RUN UNTIL A DESTINATION EXISTS, AND THAT IS THE POINT.**
+#
+# A dump of this database is not a file, it is a package of personal data: `doctors.full_name`,
+# `user_profiles`, `transcripts_redacted`, every row of `auth.users`, and
+# `adverse_event_reports.reported_text` — whose lawful contents are **open question 4.1**, the
+# PV/DPDP escalation that has never been answered.
+#
+# So where that file is allowed to land is a **data-processing decision**, not an engineering
+# one. Writing it to a GitHub Actions artifact would put the consent ledger and every identity
+# into GitHub's artifact store; that may well be acceptable, and it is not this workflow's
+# call to make. The destination check therefore runs FIRST, before anything is produced:
+# a failing run leaves no artefact anywhere, which is the correct outcome while nobody has
+# decided where one may go.
+#
+# The precedent is retention.yml and retention-watchdog.yml: "an unconfigured target is a real
+# finding, not a reason to skip." Keep this schedule live and red. The daily failure is the
+# reminder that the recovery posture does not exist yet, and silencing it removes the only
+# thing saying so.
+#
+# See docs/blocked-on-you.md → the BE-W11 destination item.
+
+on:
+  schedule:
+    # Daily, offset from the retention workflows so a busy hour is not made busier.
+    - cron: '25 2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: database-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: produce a restorable artefact, and prove it restores
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # FIRST, before anything is produced. A dump with nowhere lawful to go should not
+      # exist, not even for the lifetime of a runner.
+      - name: Is there a destination for this artefact?
+        env:
+          BACKUP_DESTINATION: ${{ secrets.BACKUP_DESTINATION }}
+        run: |
+          if [ -z "$BACKUP_DESTINATION" ]; then
+            echo "::error::No BACKUP_DESTINATION is configured, so this run produced nothing."
+            echo "::error::A dump of this database contains the consent ledger, doctors' names,"
+            echo "::error::adverse-event report text and every auth identity. Where it may land is"
+            echo "::error::a data-processing decision — see docs/blocked-on-you.md, the BE-W11"
+            echo "::error::destination item. This failure is the reminder that BE-W11 is open."
+            exit 1
+          fi
+          echo "Destination configured."
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # `pg_dump` and `psql` are not on the runner by default, and the backup must not be
+      # taken with a client older than the server.
+      - name: Install the Postgres client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Produce the artefact
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          pnpm --filter @fieldforce/api backup:database \
+            --db-url "$SUPABASE_DB_URL" --out "$RUNNER_TEMP/backups"
+
+      # Producing is not proving. MR-32's first drill exited 0 having restored nothing.
+      - name: Prove it by restoring from it
+        env:
+          PGPASSWORD: postgres
+        run: |
+          sudo systemctl start postgresql || sudo service postgresql start
+          ARTEFACT=$(ls "$RUNNER_TEMP"/backups/*.sql | head -1)
+          pnpm --filter @fieldforce/api backup:verify \
+            --artefact "$ARTEFACT" \
+            --db-url "postgresql://postgres:postgres@127.0.0.1:5432/postgres"

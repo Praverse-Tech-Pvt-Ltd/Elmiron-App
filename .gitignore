@@ -94,3 +94,11 @@ apps/field/.gitignore
 .idea/
 
 SESSION-2026-09-11.md
+
+# BE-W11 (MR-33). backup:database defaults to ./backups when --out is omitted, and a dump of
+# this database contains the consent ledger, doctors' names, adverse-event report text and
+# every auth identity. Committing one would put all of that in git history permanently, where
+# append-only means it cannot be removed. Never tracked, whatever the destination decision
+# turns out to be.
+backups/
+*.sql.manifest.json

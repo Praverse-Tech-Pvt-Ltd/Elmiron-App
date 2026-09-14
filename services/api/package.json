@@ -17,7 +17,9 @@
     "seed:mr": "node scripts/seed-one-mr.mjs",
     "seed:synthetic": "node scripts/seed-synthetic.mjs",
     "seed:day": "node scripts/seed-day.mjs",
-    "check:migration-drift": "node scripts/check-migration-drift.mjs"
+    "check:migration-drift": "node scripts/check-migration-drift.mjs",
+    "backup:database": "node scripts/backup-database.mjs",
+    "backup:verify": "node scripts/verify-backup.mjs"
   },
   "dependencies": {
     "@fieldforce/core": "workspace:*"

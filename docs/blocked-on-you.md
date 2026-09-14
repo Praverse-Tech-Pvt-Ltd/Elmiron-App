@@ -261,3 +261,53 @@ event that can un-withdraw a consent, which is why the runbook and
 `reconcile-after-restore.mjs` exist. Finer-grained restore points buy more of the thing the
 design already defends against. That argument was never the problem; the missing alternative
 was.
+
+
+### 6.3 — `BE-W11`: the backup EXISTS and has nowhere lawful to go
+
+**The mechanism is built and proven (MR-33 B).** `backup:database` produces a plain-SQL dump
+of the whole database with a manifest; `backup:verify` restores it into a scratch database and
+compares counts **by querying the restored copy**. Proven end to end: 56/56 migrations, 36/36
+tables, 36/36 with RLS, 48/48 policies, 1,910/1,910 consent records, 5,447/5,447 auth
+identities. Two failure controls ran beside it — a truncated artefact caught by the hash, and
+an intact artefact with a wrong count caught only by the query.
+
+**What is missing is a destination, and it is a decision you have to make, not work we can
+do.**
+
+`.github/workflows/backup.yml` is scheduled daily and **fails every day on purpose**: it
+checks for a `BACKUP_DESTINATION` secret **before producing anything**, so a run with no
+destination leaves no artefact anywhere. Keep it red. The daily failure is the only thing
+saying the recovery posture does not exist.
+
+**Why this is not an engineering choice.** A dump of this database is not a file, it is a
+package of personal data:
+
+| Contains | Why it matters |
+| --- | --- |
+| `doctors.full_name`, `user_profiles` | named individuals |
+| every row of `auth.users` | 5,447 identities on the local stack alone |
+| `transcripts_redacted` | redacted, not absent |
+| `adverse_event_reports.reported_text` | **open question 4.1** — whether it may lawfully contain patient information has never been answered |
+| `consent_records` | the ledger the whole product exists to keep honest |
+
+Somewhere to put that is a **data-processing decision with a DPA dimension**, and the one
+person who could sign it off is the same unnamed PV/DPDP signatory as items 4.1 and 4.4.
+
+**The options, with what each costs:**
+
+| Option | Cost | The catch |
+| --- | --- | --- |
+| **A GitHub Actions artifact** | free, works today, ~90-day retention | Puts the consent ledger and every identity into GitHub's artifact store. Probably acceptable; **nobody has decided**, and it is not ours to decide |
+| **A private object store** (S3, GCS, Supabase Storage in another project) | a credential you provision, a few dollars a month | The honest answer. Needs a bucket, a scoped key, and a retention rule on the bucket itself |
+| **Supabase's own backups** | included with the **paid plan — item 5.2, still open** | Also the thing the PITR decision assumed existed. **See 6.2**: it has never been confirmed that this project is on a plan that takes any backup at all |
+| **Keep it local** | free | **This is what has been recorded as "not yet a backup" three times.** Two git bundles were cut to the same disk as the repository. A copy on the disk you are protecting against is not a copy |
+
+**What we need from you:** name a destination, or confirm that a GitHub artifact is acceptable
+for this data. Either answer unblocks it in one commit. Until then the mechanism exists, is
+tested, and protects nothing.
+
+**One thing that is already true and worth knowing:** the **repository** is off-machine — it
+is on GitHub and `origin/main` is current. The schema is in 56 migration files there. What has
+no off-machine copy is the **data**, and the data is the part that cannot be copied without
+this decision.

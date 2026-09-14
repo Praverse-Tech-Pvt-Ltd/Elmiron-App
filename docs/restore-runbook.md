@@ -73,17 +73,68 @@ HTTP for that reason.
 
 ### 2. Restore
 
-**This step said only "Restore." until MR-32, and there is no mechanism behind it.** PITR was
-deliberately not purchased, so there is no point-in-time restore to invoke; and there is no
-`db:dump`, no backup script and no off-machine copy in this repository — **`BE-W11` is still
-open**. So the honest statement of the current posture is:
+**This step said only "Restore." until MR-32.** PITR was deliberately not purchased, so there
+is no point-in-time restore to invoke. MR-33 built the mechanism; **what is still missing is a
+place to put the artefact**, and that is a decision rather than a gap in the code.
 
-> **There is no restore to perform, because there is no backup to restore from.** Steps 3 to 5
-> below are the reconciliation that must follow a restore, and they are correct and now
-> exercised. Step 2 is a gap, and it is the gap.
+### 2a. Produce an artefact, and prove it restores
 
-What MR-32 proved is that the *data path* a restore would take works, drilled against a
-scratch target in the local cluster:
+```bash
+# Produce. --container is for a machine where the Postgres client lives in the
+# supabase_db container rather than on PATH, which is the case on the dev machine.
+pnpm --filter @fieldforce/api backup:database \
+  --container supabase_db_Elmiron-App --out ./backups
+
+# Prove it. This is not optional and it is not the same step: producing an artefact and
+# having a restorable one are different claims, and only this one is evidence.
+pnpm --filter @fieldforce/api backup:verify \
+  --artefact ./backups/elmiron-<stamp>.sql --container supabase_db_Elmiron-App
+```
+
+`backup:database` writes a plain-SQL dump of the **whole database** and a manifest beside it
+carrying the sha256, the byte count, and counts taken from the source in the same run:
+migrations, tables, tables with RLS, policies, and rows in `consent_records`, `visits`,
+`doctors`, `app_thresholds` and `auth.users`.
+
+`backup:verify` re-hashes the file, restores it into a scratch database it creates and drops,
+and **compares those counts by querying the restored copy**. It refuses to restore over an
+existing database — a verifier that can overwrite the thing it is verifying is a delete
+command with a reassuring name.
+
+> **Do not use `supabase db dump` for this.** The project depends on that CLI and it is the
+> obvious choice, and it is scoped to `public`: measured against the local stack it produces a
+> schema dump with **zero `auth.` and zero `storage.` tables** and a `--data-only` dump with
+> **zero rows of `auth.users`**. A database restored from it holds the consent ledger and has
+> **nobody who can sign in**, with `storage.objects` empty — which is the metadata the
+> reconciliation in step 3 walks. It looks like a backup. It is not one.
+
+### 2b. The artefact has to leave this machine, and that needs a decision
+
+**`BE-W11` is not closed.** The producer and the verifier exist and are proven; the schedule
+exists in `.github/workflows/backup.yml` and **fails every day on purpose**, because no
+destination is configured.
+
+That is deliberate. A dump of this database contains `doctors.full_name`, `user_profiles`,
+`transcripts_redacted`, every row of `auth.users`, and `adverse_event_reports.reported_text` —
+whose lawful contents are **open question 4.1**, the PV/DPDP escalation that has never been
+answered. Where that file may land is a data-processing decision, not an engineering one, so
+the workflow checks for a destination **before** it produces anything: a failing run leaves no
+artefact anywhere.
+
+See `docs/blocked-on-you.md` → the `BE-W11` destination item for the options and what each
+costs.
+
+### 2c. The platform's own restore, which is still untested
+
+If the restore you are doing is a Supabase platform restore rather than one from an artefact
+above, **none of this section describes it.** Whether it takes minutes or hours, whether it
+needs a support ticket, and what it does to roles, extensions and `supabase_admin`-owned
+settings is unverified — production credentials are not on the machine this was written on.
+Steps 3 to 5 apply either way.
+
+### What MR-32 proved about the data path
+
+Drilled against a scratch target in the local cluster:
 
 ```bash
 # Dump. On Windows + Git Bash, MSYS_NO_PATHCONV=1 is required or the container path
