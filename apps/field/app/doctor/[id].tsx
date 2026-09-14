@@ -22,7 +22,7 @@ const BOUNDARY =
 export default function DoctorProfile(): ReactNode {
   const { id } = useLocalSearchParams<{ id: string }>();
   // MR-14 B2. The doctor and their visits come from the store the pull maintains.
-  const { store, status, zone, failure: pullFailure } = usePulledStore();
+  const { store, status, zone, serverTime, failure: pullFailure } = usePulledStore();
 
   const doctor = doctorsFromStore(store).find((candidate) => candidate.id === id);
   const visits = visitsFromStore(store).filter((visit) => visit.doctorId === id);
@@ -38,11 +38,11 @@ export default function DoctorProfile(): ReactNode {
    * statement about a consent decision -- the one record in this product where being wrong
    * is worst. Recorded as a B9 divergence with its verdict in PROJECT-OVERVIEW.md.
    */
-  // **MR-29 A3 - REAL DEFECT, registered as `FE-W42`, not fixed here.**
-  // Same shape as the doctors list: the handset dates the "last seen" age. Same fix,
-  // same dependency on `FE-W40` for the null-`serverTime` case.
-  // eslint-disable-next-line no-restricted-syntax -- FE-W42, see above
-  const profile = doctor === undefined ? null : buildDoctorProfile(doctor, visits, [], Date.now());
+  // `FE-W42` C1. The SERVER's instant, or none -- see the note in `app/(tabs)/doctors.tsx`.
+  // `daysSince` is already null-checked below before it becomes a label, so a null clock
+  // renders no age rather than a wrong one.
+  const serverNow = serverTime === null ? null : Date.parse(serverTime);
+  const profile = doctor === undefined ? null : buildDoctorProfile(doctor, visits, [], serverNow);
 
   const failure =
     pullFailure !== null

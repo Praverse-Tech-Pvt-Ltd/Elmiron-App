@@ -35,14 +35,18 @@ export const OVERDUE_AFTER_DAYS = 30;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
- * Days between a server timestamp and now.
+ * Days between a server timestamp and a server instant.
  *
- * This is the one place the device clock is allowed into a rendered value, and it
- * is worth being explicit about why that is acceptable here when it is not on the
- * queue screen: "6 weeks ago" is a statement about elapsed time from a
- * server-stamped event, offered to help the MR choose. The queue screen's ban is on
- * presenting a device time *as though the server had confirmed something* — a
- * different claim.
+ * **MR-31 C1 — `now` is no longer the device's, and the old rationale is recorded rather
+ * than deleted.** This comment used to read *"the one place the device clock is allowed into
+ * a rendered value"*, and argued that "6 weeks ago" is elapsed time from a server-stamped
+ * event rather than a device time presented as confirmed. That argument is sound and it is
+ * not why this changed.
+ *
+ * It changed because `serverTime` is strictly better, is already on the pulled store, and
+ * costs nothing to use — and because the age is not only read, it drives the **Overdue**
+ * badge and the filter of the same name, which decide which doctors an MR goes to see. A
+ * handset three days fast marks doctors overdue who are not.
  */
 const daysBetween = (iso: string, now: number): number =>
   Math.floor((now - new Date(iso).getTime()) / MS_PER_DAY);
@@ -65,7 +69,13 @@ const matches = (row: DoctorRow, query: string): boolean => {
 export const buildDoctorRows = (
   doctors: readonly Doctor[],
   visits: readonly Visit[],
-  now: number,
+  /**
+   * The SERVER's instant in epoch ms, or **null when this device has never been told one**.
+   *
+   * Nullable rather than defaulted, because there is no harmless number to put here: any
+   * value produces an age, and an age is rendered as fact and filtered on.
+   */
+  now: number | null,
 ): readonly DoctorRow[] => {
   const lastByDoctor = new Map<string, string>();
   for (const visit of visits) {
@@ -78,7 +88,10 @@ export const buildDoctorRows = (
 
   return doctors.map((doctor) => {
     const lastSeenAt = lastByDoctor.get(doctor.id) ?? null;
-    const daysSince = lastSeenAt === null ? null : daysBetween(lastSeenAt, now);
+    // Null for BOTH "never visited" and "no server clock", which loses nothing: in either
+    // case there is no age to render, and `lastSeenAt === null` still distinguishes the two
+    // for anything that needs to.
+    const daysSince = lastSeenAt === null || now === null ? null : daysBetween(lastSeenAt, now);
     return {
       id: doctor.id,
       name: doctor.fullName,
@@ -86,8 +99,12 @@ export const buildDoctorRows = (
       lastSeenAt,
       daysSince,
       // Never visited counts as overdue: a doctor in the territory nobody has been
-      // to is the strongest case for going, not a blank the list can leave out.
-      overdue: daysSince === null || daysSince >= OVERDUE_AFTER_DAYS,
+      // to is the strongest case for going, not a blank the list can leave out — and that
+      // is knowable without any clock at all, which is why it is keyed on `lastSeenAt`.
+      //
+      // MR-31 C1. It used to read `daysSince === null || ...`, and with a nullable `now`
+      // that would have made an UNKNOWN age claim Overdue for every doctor on the list.
+      overdue: lastSeenAt === null || (daysSince !== null && daysSince >= OVERDUE_AFTER_DAYS),
     };
   });
 };
@@ -148,6 +165,18 @@ export const rankDoctors = (
     });
 
 /** "6 weeks ago", "today", "never visited" — the words B8 puts under each name. */
+/**
+ * The age of the last visit, as a sentence.
+ *
+ * **`daysSince === null` here means NEVER VISITED and nothing else.** After MR-31 C1 a null
+ * `daysSince` also arises when there is no server clock to measure against, and the two are
+ * NOT the same statement -- "never visited" about a doctor seen last week is false, and it
+ * is false in the direction that sends an MR to a doctor they have just seen.
+ *
+ * Callers must separate the two before they get here; `app/(tabs)/doctors.tsx` shows the
+ * shape. This was a live defect for the length of one commit, caught by reading what the
+ * label returns rather than by trusting that a null was still a null.
+ */
 export const lastSeenLabel = (daysSince: number | null): string => {
   if (daysSince === null) return 'never visited';
   if (daysSince <= 0) return 'today';

@@ -67,7 +67,8 @@ export const buildDoctorProfile = (
   doctor: Doctor,
   visits: readonly Visit[],
   consents: readonly ConsentRecord[],
-  now: number,
+  /** The SERVER's instant in epoch ms, or null when none is known — see `buildDoctorRows`. */
+  now: number | null,
 ): DoctorProfile => {
   // Consent is looked up per visit rather than per doctor: a withdrawal supersedes
   // an earlier row without touching it, so the *latest* row for a visit is the one
@@ -101,8 +102,10 @@ export const buildDoctorProfile = (
     detail: [doctor.specialty, addressOf(doctor)]
       .filter((part): part is string => part !== null)
       .join(' · '),
+    // MR-31 C1. Null for BOTH "no completed visit" and "no server clock" -- in either case
+    // there is no age to render, and the screen already null-checks this before labelling it.
     daysSince:
-      latest === undefined
+      latest === undefined || now === null
         ? null
         : Math.floor((now - new Date(latest.completedAt).getTime()) / MS_PER_DAY),
     recentVisits: completed.map((visit) => ({

@@ -5,6 +5,8 @@ import { ApiRequestError } from '@fieldforce/core';
 import { DayEndScreen, Screen } from '@fieldforce/ui';
 import { createClientForScenario } from '../src/api';
 import { loadQueueState } from '../src/sync/async-storage-store';
+import { usePulledStore } from '../src/sync/pulled-store';
+import { NO_SERVER_CLOCK } from '../src/today/server-window';
 import { indicatorStateFor } from '../src/sync/indicator';
 import { emptyQueue } from '../src/sync/reducer';
 import type { SyncQueueState } from '../src/sync/reducer';
@@ -34,12 +36,6 @@ import { clockFrom } from '../src/today/plan';
  */
 const KM = (metres: number): string => `${(metres / 1000).toFixed(1)} km`;
 
-/** Today, on the device calendar — which month and day the MR is looking at. */
-const todayIso = (now: Date): string => {
-  const pad = (value: number): string => String(value).padStart(2, '0');
-  return `${String(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-};
-
 /** The same refusal `MileageScreen` makes, on the screen that shows the day's total. */
 const RATE_NOTE =
   'Distance only. Your rate per kilometre is set by your company and this app has not been given it, so the amount comes from payroll rather than from here.';
@@ -49,6 +45,8 @@ export default function DayEnd(): ReactNode {
   const [summary, setSummary] = useState<ReturnType<typeof summariseDayEnd> | null>(null);
   const [distanceMetres, setDistanceMetres] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  // `FE-W42` C1. The territory's day, from the server's clock -- never the handset's.
+  const { today } = usePulledStore();
   const [denial, setDenial] = useState<{ title: string; detail: string } | null>(null);
   const [queue, setQueue] = useState<SyncQueueState>(emptyQueue);
 
@@ -63,15 +61,26 @@ export default function DayEnd(): ReactNode {
   }, []);
 
   useEffect(() => {
+    /**
+     * **`FE-W42` C1. The day is the SERVER's, and with none this screen asks for nothing.**
+     *
+     * It used to be `todayIso(new Date())`, which read the handset for both the instant and
+     * the calendar, and it is not merely rendered -- it is the `fromDate`/`toDate` this
+     * screen asks the server for. A phone drifted across the 18:30Z IST midnight counted
+     * the wrong day's visits and pulled the wrong day's mileage, and nothing said so.
+     *
+     * `today` is the territory date from the pull's `serverTime`, and after `FE-W40` it
+     * survives a cold start bounded at the territory day boundary -- so when it is present
+     * it is the right day, and when it is absent there is no honest day to substitute.
+     */
+    if (today === null) {
+      setDenial({ title: 'Could not confirm which day this is', detail: NO_SERVER_CLOCK });
+      setLoading(false);
+      return;
+    }
+
     const client = createClientForScenario();
-    // **MR-29 A3 - REAL DEFECT, registered as `FE-W42`, and the worst of the five.**
-    // This is MR-15 A2 verbatim: the territory's DAY computed from the handset. It is not
-    // only rendered - it is the `fromDate`/`toDate` this screen ASKS THE SERVER FOR, so an
-    // MR whose phone has drifted across the 18:30Z IST midnight pulls the wrong day's
-    // mileage and counts the wrong day's visits, and nothing on the screen says so.
-    // Needs `serverTime` plus `FE-W40`'s answer for the no-server-clock case.
-    // eslint-disable-next-line no-restricted-syntax -- FE-W42, see above
-    const day = todayIso(new Date());
+    const day = today;
     let cancelled = false;
 
     void Promise.all([
@@ -99,7 +108,7 @@ export default function DayEnd(): ReactNode {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [today]);
 
   return (
     <Screen scrollable>

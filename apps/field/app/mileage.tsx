@@ -4,6 +4,8 @@ import { ApiRequestError } from '@fieldforce/core';
 import type { ListMileageResponse } from '@fieldforce/core';
 import { MileageScreen, Screen } from '@fieldforce/ui';
 import { createClientForScenario } from '../src/api';
+import { usePulledStore } from '../src/sync/pulled-store';
+import { NO_SERVER_CLOCK, monthWindowIn } from '../src/today/server-window';
 // MR-25 C1. This screen still READS from the mock at :4010, which sends the territory's
 // own offset, so the character slice is correct here. **DELETE THE DISABLE BELOW WHEN
 // THIS SCREEN IS CONVERTED** and move to dayMonthIn / clockIn with the zone from
@@ -22,13 +24,6 @@ import { dayMonthFrom } from '../src/doctors/profile';
  */
 const KM = (metres: number): string => `${(metres / 1000).toFixed(1)} km`;
 
-const monthWindow = (now: Date): { fromDate: string; toDate: string } => {
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const iso = (d: Date): string => d.toISOString().slice(0, 10);
-  return { fromDate: iso(new Date(year, month, 1)), toDate: iso(new Date(year, month + 1, 0)) };
-};
-
 /**
  * Why there is no rupee figure. Shown to the MR rather than kept in a comment,
  * because they came to this screen for that number.
@@ -40,16 +35,29 @@ export default function Mileage(): ReactNode {
   const [data, setData] = useState<ListMileageResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
+  // `FE-W42` C1. The instant and the zone both come from the server.
+  const { serverTime, zone } = usePulledStore();
 
   useEffect(() => {
+    /**
+     * **`FE-W42` C1. Which MONTH is requested, reckoned in the territory from the server.**
+     *
+     * `monthWindow(new Date())` read the handset for the instant AND used local `getMonth()`
+     * for the calendar, so for an IST territory it was wrong by 5h30m applied to a date. On
+     * the first or last day of a month that returns the wrong month, and the MR reads a
+     * claim total that is not theirs for this period.
+     *
+     * With no server clock this screen asks for nothing rather than guessing a month.
+     */
+    if (serverTime === null) {
+      setFailure({ title: 'Could not tell which month to show', detail: NO_SERVER_CLOCK });
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     void createClientForScenario()
-      // **MR-29 A3 - REAL DEFECT, registered as `FE-W42`, not fixed here.**
-      // `monthWindow` decides which MONTH of mileage is requested from the server, from the
-      // handset. On the first or last day of a month a drifted phone asks for the wrong
-      // month and the MR sees a claim total that is not theirs for this period.
-      // eslint-disable-next-line no-restricted-syntax -- FE-W42, see above
-      .listMileage(monthWindow(new Date()))
+      .listMileage(monthWindowIn(serverTime, zone))
       .then((response) => {
         if (!cancelled) setData(response);
       })
@@ -70,7 +78,7 @@ export default function Mileage(): ReactNode {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [serverTime, zone]);
 
   return (
     <Screen scrollable>

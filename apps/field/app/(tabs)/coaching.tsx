@@ -6,6 +6,8 @@ import type { Analysis, Doctor, Visit } from '@fieldforce/core';
 import { CoachingFeedScreen, Screen } from '@fieldforce/ui';
 import type { CoachingFeedRow } from '@fieldforce/ui';
 import { createClientForScenario } from '../../src/api';
+import { usePulledStore } from '../../src/sync/pulled-store';
+import { recentMonthsIn } from '../../src/today/server-window';
 import { reviewedNote, SEEN_FIRST, TREND_NOTE } from '../../src/coaching/content';
 import {
   isWorkedWell,
@@ -45,15 +47,10 @@ import { clockFrom } from '../../src/today/plan';
  */
 const MONTHS_SHOWN = 3;
 
-/** The last three calendar months, oldest first, as `YYYY-MM`. */
-const recentMonths = (now: Date): readonly string[] =>
-  Array.from({ length: MONTHS_SHOWN }, (_, index) => {
-    const month = new Date(now.getFullYear(), now.getMonth() - (MONTHS_SHOWN - 1 - index), 1);
-    return `${String(month.getFullYear())}-${String(month.getMonth() + 1).padStart(2, '0')}`;
-  });
-
 export default function Coaching(): ReactNode {
   const router = useRouter();
+  // `FE-W42` C1. Which months the trend names, from the server and in the territory.
+  const { serverTime, zone } = usePulledStore();
   const [analyses, setAnalyses] = useState<readonly Analysis[]>([]);
   const [visits, setVisits] = useState<readonly Visit[]>([]);
   const [doctors, setDoctors] = useState<readonly Doctor[]>([]);
@@ -116,15 +113,16 @@ export default function Coaching(): ReactNode {
   }));
 
   const ratio = reviewedRatio(analyses, visits);
-  // **MR-29 A3 - REAL DEFECT, registered as `FE-W42`, not fixed here.**
-  // `recentMonths` picks which months the objection-handling trend shows, from the
-  // HANDSET's clock. That is a DECISION on a month boundary, which is MR-15 A2's
-  // defect one screen along. It needs `serverTime`, and it needs an answer to what
-  // the screen shows when there is no `serverTime` at all - which is the question
-  // `FE-W40` asks and nobody has answered. Disabled rather than half-fixed, so the
-  // rule still fails on any NEW site.
-  // eslint-disable-next-line no-restricted-syntax -- FE-W42, see above
-  const months = recentMonths(new Date());
+  /**
+   * **`FE-W42` C1. Which months the trend covers, from the server and in the territory.**
+   *
+   * An empty list when no server clock is known, so `trendFor` produces no points and the
+   * chart renders nothing. That is the honest outcome: a trend is a claim about named
+   * months, and naming the wrong three is worse than naming none -- an MR comparing
+   * "August" against a month the app picked from a drifted handset is reading a chart whose
+   * axis is wrong, with nothing on screen saying so.
+   */
+  const months = serverTime === null ? [] : recentMonthsIn(serverTime, zone, MONTHS_SHOWN);
   const points = trendFor(analyses, 'objection_handling', months);
 
   return (

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { DoctorListScreen, Screen } from '@fieldforce/ui';
 import { useRouter } from 'expo-router';
 import { usePulledStore } from '../../src/sync/pulled-store';
+import { dayMonthIn } from '../../src/today/territory-day';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { FILTER_LABELS, buildDoctorRows, lastSeenLabel, rankDoctors } from '../../src/doctors/list';
 import type { DoctorFilter } from '../../src/doctors/list';
@@ -25,7 +26,7 @@ export default function Doctors(): ReactNode {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<DoctorFilter>('all');
   // MR-14 B2. Doctors and visits come from the store the pull maintains.
-  const { store, status, failure: pullFailure } = usePulledStore();
+  const { store, status, serverTime, zone, failure: pullFailure } = usePulledStore();
   const doctors = doctorsFromStore(store);
   const visits = visitsFromStore(store);
 
@@ -71,13 +72,24 @@ export default function Doctors(): ReactNode {
   // `Date.now()` is read once per data change rather than per render: a list whose
   // "6 weeks ago" labels recompute on every keystroke is doing arithmetic nobody
   // asked for, and could tick over mid-search.
-  // **MR-29 A3 - REAL DEFECT, registered as `FE-W42`, not fixed here.**
-  // This `now` reaches `daysBetween(lastSeenAt, now)` and renders "6 weeks ago" against
-  // the HANDSET's clock. The cheapest of the five: an age is insensitive to a few hours
-  // of staleness, so `serverTime` works even when it is old. It still needs a decision
-  // on what the label reads when `serverTime` is null, which is `FE-W40`.
-  // eslint-disable-next-line no-restricted-syntax -- FE-W42, see above
-  const all = useMemo(() => buildDoctorRows(doctors, visits, Date.now()), [doctors, visits]);
+  /**
+   * **`FE-W42` C1. The reference instant is the SERVER's, and there is no fallback.**
+   *
+   * `serverTime` is the last instant the server gave this device. It is null until a pull has
+   * succeeded at least once, and after `FE-W40` it is also restored from the day anchor on a
+   * cold start -- bounded at the territory day boundary, so it is never more than one
+   * territory day old.
+   *
+   * Null produces no age and no Overdue claim rather than a fallback, because every candidate
+   * fallback is a lie of the same shape: the device clock is `FE-W40` option B, and any fixed
+   * number renders an age that looks exactly like a measured one. See the sentinel entry in
+   * `gotchas.md`.
+   */
+  const serverNow = serverTime === null ? null : Date.parse(serverTime);
+  const all = useMemo(
+    () => buildDoctorRows(doctors, visits, serverNow),
+    [doctors, visits, serverNow],
+  );
   const ranked = useMemo(() => rankDoctors(all, query, filter), [all, query, filter]);
 
   return (
@@ -102,7 +114,23 @@ export default function Doctors(): ReactNode {
           id: row.id,
           name: row.name,
           detail: row.detail,
-          lastSeenLabel: lastSeenLabel(row.daysSince),
+          /**
+           * **MR-31 C1/C3. Three states, not two, and the third is new.**
+           *
+           * `lastSeenLabel(null)` reads *"never visited"*. With a nullable server clock a
+           * visited doctor now also produces `daysSince === null`, so routing both through
+           * it would have told the MR a doctor they saw last week had never been seen --
+           * the sentinel class, inside this very conversion.
+           *
+           * The third state renders the DATE instead of the age. It is a fact the server
+           * gave, it needs no clock at all, and it is more useful than the age it replaces.
+           */
+          lastSeenLabel:
+            row.lastSeenAt === null
+              ? lastSeenLabel(null)
+              : row.daysSince === null
+                ? `last seen ${dayMonthIn(row.lastSeenAt, zone)}`
+                : lastSeenLabel(row.daysSince),
           overdue: row.overdue,
         }))}
         total={all.length}
