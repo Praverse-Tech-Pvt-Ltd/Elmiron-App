@@ -184,3 +184,24 @@ In the order that unblocks the most:
 5. **Decide the console's auth story** before it is demonstrated to anyone.
 6. Fold today's three run traps into `docs/gotchas.md`, and fix the stale
    `com.anonymous.elmironapp` in the root `app.json`.
+
+
+---
+
+## Correction — 14 September 2026 (MR-30 A3)
+
+**Line 70 of this file is stale.** It reads:
+
+> `#    this machine's terminal JAVA_HOME is JDK 25, which fails at CMake.`
+
+Measured on 14 September 2026: **`JAVA_HOME` is unset**, `java` on PATH is **17.0.12**
+(`C:\Program Files\Common Files\Oracle\Java\javapath\java.exe`), and **no JDK 25 exists on
+this machine at all** — the only JDK under `C:\Program Files\Java` is `jdk-17`. Android
+Studio's bundled JBR is **21.0.10**.
+
+`docs/frontend-status.md:100` and `:111` had already recorded this resolved on **27 August**,
+before this file was written; the correction was simply never propagated here. That is the rule
+now in `docs/gotchas.md`: **when you correct a fact, grep for every other mention of it.**
+
+Line 69 — *"Rebuilding the APK additionally needs JDK 17"* — remains correct, and MR-29 B2
+rebuilt the APK successfully on exactly that.

@@ -2665,3 +2665,123 @@ The same shape, in a different clothing, is the `--files-only` flag's own first 
 CLI printed *"All rollbacks applied"* unconditionally, so a mode that applies nothing
 claimed it had. A control that overstates what it did is worse than one that does nothing,
 because the next reader stops looking.
+
+### Correction — 14 September 2026: three entries above are stale, and the rule that follows from it
+
+**None of these is deleted.** Each was true when written; each is now false about this machine,
+and an append-only record gives a reader no way to tell which mention is current unless the
+correction says so explicitly.
+
+#### THE RULE THIS PRODUCED — when you correct a fact, grep for every other mention of it
+
+A correction that names one line **leaves every other mention standing with equal authority.**
+In an append-only record the reader has no way to tell which is current, and the natural reading
+— the first one found, or the most detailed one — is as likely to be the stale one as not.
+
+Measured here: *"the terminal `JAVA_HOME` is JDK 25"* had been corrected once, in
+`frontend-status.md:100` (*"Resolved"*, 27 August) and `:111` (*"Resolved 27 August"*). The
+same file still asserted the opposite at **`:287`** and **`:344`**, `gotchas.md` asserted it at
+**`:1204-1205`**, and `frontend-handoff-2026-09-07.md` at **`:70`**. A reviewer working
+faithfully from the documents inherited the stale version and wrote it into a brief — **one
+fact, six places, five of them stale, and the correction that existed was invisible.**
+
+So: after correcting a fact, `grep -rn` the whole repository for it, and either correct or
+explicitly supersede **every** mention. The cost is one grep. The cost of not doing it is a
+session started on a false premise.
+
+#### 1. `:1204-1205` — "the machine here has JDK 25 as the only JDK"
+
+Both halves are now false. Measured 14 September 2026:
+
+| | Recorded at `:1204-1205` | Measured now |
+| --- | --- | --- |
+| JDKs present | *"JDK 25 as the only JDK"* | **No JDK 25 exists on this machine.** The only JDK under `C:\Program Files\Java` is `jdk-17` (`JAVA_VERSION="17.0.12"`) |
+| Android Studio's JBR | *"25 too, so `JAVA_HOME` does not help"* | **21.0.10** |
+| `JAVA_HOME` | implied set to 25 | **unset**, in both Bash and PowerShell |
+| `java` on PATH | implied 25 | **17.0.12**, via `C:\Program Files\Common Files\Oracle\Java\javapath\java.exe` |
+
+The JEP 472 mechanism described at `:1125-1127` and `:1194-1203` is **still correct as a
+mechanism** — a newer JDK does fail CMake configuration that way, and the entry explaining that
+the error names a *warning* is worth keeping. What is stale is only the claim about **this
+machine's state**.
+
+#### 2. `:1269` — "the SDK's CMake 3.22.1 cannot build this app"
+
+**Did not reproduce under React Native 0.86.2.** MR-29 B2 built the app with AGP's
+auto-provisioned `cmake;3.22.1` and `ndk;27.1.12297006`, and **every** `configureCMakeDebug`
+and `buildCMakeDebug` task passed — `react-native-gesture-handler` included, which is the
+package the entry names. `BUILD SUCCESSFUL`, a 79 MB APK.
+
+**Kept, not deleted,** because it was measured and true on RN 0.79 and the `ninja` `MAX_PATH`
+cap is real. But do **not** run `sdkmanager "cmake;3.31.6"` and re-apply the `build.gradle`
+pin before testing whether you need it — the pin does not survive `expo prebuild`, so the cost
+is paid again on every regeneration for a problem this React Native does not have.
+
+#### 3. The build trap that replaced it
+
+The first build failed at **`:app:packageDebug`** with `java.lang.OutOfMemoryError: Java heap
+space`. **Not** the system-memory OOM recorded elsewhere in this file — Gradle's own JVM heap,
+`org.gradle.jvmargs=-Xmx2048m`, while packaging **four** ABIs. `gradle.properties` line 30
+documents the override, so no file edit is needed:
+
+```sh
+./gradlew.bat assembleDebug --no-daemon --max-workers=3 -PreactNativeArchitectures=x86_64
+```
+
+A flag rather than an edit matters: `apps/field/android/` is gitignored and regenerated, so an
+edit must be re-applied after every prebuild — the same trap as the CMake pin above. **That APK
+is x86_64 only and will not install on a handset.** A device build drops the flag and will then
+need the heap raised, because four ABIs is what exhausted it.
+
+#### 4. `adb`'s mock location needs the provider ADDED first
+
+`adb shell cmd location providers set-test-provider-location fused ...` on its own answers
+**`IllegalArgumentException: fused provider is not a test provider`**. The full sequence:
+
+```sh
+adb shell appops set 2000 android:mock_location allow
+adb shell cmd location providers add-test-provider fused
+adb shell cmd location providers set-test-provider-enabled fused true
+adb shell cmd location providers set-test-provider-location fused --location LAT,LNG
+```
+
+**Latitude first**, and re-push the fix while the screen is actually asking — a one-shot
+location goes stale, and the check-in then honestly refuses rather than inventing a position.
+`adb emu geo fix` still returns `OK` and delivers nothing.
+
+### Adding a guard can remove one — ESLint flat config replaces array-valued rules
+
+**New class, found in MR-29 A3 and swept in MR-30 A5.**
+
+In ESLint flat config a later `rules` entry whose `files` match **replaces** an array-valued
+rule rather than merging with it. So a new restriction arrives and an old one leaves, silently,
+with no warning and no diff anywhere near the rule that disappeared.
+
+Measured: MR-25 C1 added a screens-only block setting `no-restricted-syntax` and
+`no-restricted-imports` for `apps/field/app/**`. Both rules were already set for
+`apps/field/**`, banning react-native's visual primitives — so the component-extraction rule was
+**switched off for every screen**, which is precisely the tree it was written to police, and it
+stayed off for weeks.
+
+**Verified by exercising, not by reading:** the identical `import * as RN from 'react-native'`
+raised **two errors** in `src/sync/outbox.ts` and **none** in `app/mileage.tsx`. A reasoned
+reading of the config finds nothing — both blocks are present and both look active.
+
+**The sweep (MR-30 A5).** Enumerate the loaded config rather than eyeballing the source:
+
+```sh
+node -e "import('./eslint.config.mjs').then(m=>m.default.forEach((b,i)=>b.rules&&
+  Object.entries(b.rules).forEach(([r,v])=>Array.isArray(v)&&v.length>1&&
+  console.log(i,JSON.stringify(b.files),r))))"
+```
+
+Only two rules in this repository are set in more than one block — `no-restricted-syntax`
+(three blocks) and `no-restricted-imports` (two) — and both are now deliberate: the lists are
+hoisted to module scope and spread into each block that needs them. Six other option-valued
+rules are each set in exactly one block, so no shadowing is possible for them.
+
+**The latent one that remains, recorded rather than closed.** The test-exemption block's glob
+`apps/field/**/*.test.*` also matches `apps/field/app/**/*.test.*`, and it comes last. There are
+**no** test files under `apps/field/app/` today, so nothing is shadowed. If one is ever added it
+will silently lose MR-25 C1's offset-naive formatting guards. Tests belong in `src/`; if that
+ever stops being true, this block needs revisiting.
