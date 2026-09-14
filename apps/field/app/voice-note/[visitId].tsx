@@ -53,6 +53,20 @@ export default function VoiceNoteRoute(): ReactNode {
     let cancelled = false;
     const stopped = (): boolean => cancelled;
 
+    // **MR-29 B3. TWO OPERATIONS, TWO REMEDIES.** These were one `async` block under one
+    // `.catch` titled "Could not open the microphone", and the block did two unrelated
+    // things: it opened the microphone, and it fetched the visit and doctor over the
+    // network. So a failed FETCH was reported as a failed MICROPHONE.
+    //
+    // Found by pressing the button on the dev client with the mock server down. The MR
+    // read *"Could not open the microphone — fetch failed: java.io.IOException: unexpected
+    // end of stream on http://127.0.0.1:4010/..."* and the remedy they would act on —
+    // turn the microphone on in Settings — was for the wrong failure entirely.
+    //
+    // That is the rule `G-WRITE` closed on the refusal path, one screen along: every
+    // failure reaches the MR with ITS OWN remedy and never another's. Splitting the block
+    // is the whole fix; neither half depends on the other, which is why they could be
+    // merged without anyone noticing.
     void (async () => {
       const permission = await AudioModule.requestRecordingPermissionsAsync();
       if (stopped()) return;
@@ -61,7 +75,15 @@ export default function VoiceNoteRoute(): ReactNode {
         // Android needs this before a recorder will open the microphone at all.
         await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       }
+    })().catch((error: unknown) => {
+      if (stopped()) return;
+      setFailure({
+        title: 'Could not open the microphone',
+        detail: error instanceof Error ? error.message : 'Unknown failure',
+      });
+    });
 
+    void (async () => {
       const client = createClientForScenario();
       const [visits, doctors] = await Promise.all([client.listVisits(), client.listDoctors()]);
       if (stopped()) return;
@@ -75,7 +97,7 @@ export default function VoiceNoteRoute(): ReactNode {
     })().catch((error: unknown) => {
       if (stopped()) return;
       setFailure({
-        title: 'Could not open the microphone',
+        title: 'Could not load this visit',
         detail: error instanceof Error ? error.message : 'Unknown failure',
       });
     });
