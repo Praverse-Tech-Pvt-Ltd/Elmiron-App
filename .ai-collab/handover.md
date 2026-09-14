@@ -316,3 +316,49 @@ Drafts for the first two are in `docs/escalations-week3.md`.
 4. **Per-territory working hours from the client** — now has a hard deadline, because
    the org-default window expires within 60 days of being configured and capture
    refuses again afterwards.
+
+## MR-29 — 14 September 2026
+
+**The dev-client build, and the device-clock class closed at its source.**
+
+### Decisions taken
+
+- **The device-clock rule is the DECIDING / RECORDING split, not "always use `serverTime`".**
+  The reviewer's framing — *"the only legitimate instant is `serverTime`"* — was not
+  implemented as written, because applied literally it mints a new defect: an offline
+  `captured_at` stamped with the last pull's clock claims the time of the last sync, possibly
+  hours earlier, on a compliance record. The repository had already drawn the correct line in
+  `src/sync/outbox.ts`, where `receivedAt` was removed for asserting a SERVER fact from the
+  device clock while `clientCreatedAt` stayed. Prior art beat the proposal, which is the
+  standing rule working.
+- **The five real device-clock sites are registered (`FE-W42`), not fixed.** All five need
+  `serverTime` AND an answer to what they render when there is none — `FE-W40`'s open
+  question. Fixing them first would pre-empt that decision in five places.
+- **`BE-W98` — the dead-letter replay's missing figures: DEFER.** `explanation.ts:196` makes
+  the action `escalate` for a dead letter whatever the SQLSTATE is, so the figures cannot
+  change what anyone does next. Trigger to reverse: a manager-facing dead-letter queue.
+- **`FE-W41` + `5.9` are ONE unit of work.** The cap value and the copy must land in the same
+  commit or the screen contradicts the server on the day somebody starts relying on it.
+- **Part C was not started.** Sized, not skipped — four packages and the store every screen
+  reads. Recorded in `PROJECT-OVERVIEW.md` under "C — NOT RUN".
+
+### Premises from the brief that the repository contradicted
+
+Three, all checked rather than argued:
+
+1. **JDK 25 / `JAVA_HOME`** — unset; `java` is 17.0.12; this file's own sibling
+   (`frontend-status.md:100`) had recorded it resolved on 27 August.
+2. **`cmake;3.31.6` required** — not under RN 0.86.2; 3.22.1 built it.
+3. **`react-native-background-geolocation` blocks the gates** — it is not a dependency at all.
+   Background location is unwritten, so no build unblocks it.
+
+The reviewer states plainly that they have not read the repository and that the code
+supersedes them. Acting on that is what this section is.
+
+### Method note
+
+Every defect this session came from the same two moves: **pressing the button** (the
+microphone remedy, and the defect-12 re-confirmation), and **running a control in both
+branches rather than one** (`FE-W43` — the identical import raised 2 errors in `src/` and 0
+in a screen). The second is MR-28's defect 12 restated one layer down: a guard wired into one
+branch of a two-branch path protects the branch nobody exercises.

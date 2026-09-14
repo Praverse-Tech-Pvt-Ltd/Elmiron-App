@@ -436,3 +436,76 @@ pnpm ci:local --with-db  # needs Docker; verify:rollbacks EMPTIES the schema, db
 says so loudly on stderr. The half that needs no database —
 `verify-rollbacks.mjs --files-only` — was moved into the STATIC job precisely because the
 end-of-run warning fired at the wrong moment twice (MR-26, MR-27).
+
+## MR-29 — the dev-client build
+
+**The app now runs as a real Android build.** `com.praversetech.fieldforce`, a 79 MB debug
+APK from `apps/field/android/`, installed on the Pixel_10 AVD, signed in, driven to Today,
+and used to write a real check-in to Postgres. Not Expo Go.
+
+- **CI `34598547854`** — workflow `CI`, event `push`, SHA
+  `f7a684c569f73a4062039d8af3ac736be015942a`, **success**, and that SHA **equals HEAD**.
+- **`BE-W92`'s instrument earned itself on its first run.** A live deadlock in
+  `tenant-boundary-restrictive.spec.ts` was named down to its relations. It has now happened
+  twice in three local runs and the relations DIFFERED between them — `auth.users` /
+  `auth.identities` once, `storage.objects` / `storage.buckets` once. Registered as
+  **`BE-W99`**; CI is green on the same SHA, so it will meet this eventually.
+- **The device-clock class is closed at the SOURCE** (`A3`). Eleven sites, six allowlisted,
+  five real and registered as **`FE-W42`**, blocked on `FE-W40`. Adding the rule exposed
+  **`FE-W43`**: MR-25 C1's screens-only block had silently switched the component-extraction
+  rule OFF for every screen, because flat config REPLACES `no-restricted-syntax` rather than
+  merging it. Verified, not reasoned — the same import raised 2 errors in `src/` and 0 in a
+  screen.
+- **Defect 12 was not an exactly-once failure** and the record now says so. The second press
+  made a genuinely new request id and `sync_items.id` did what it promises; the defect was
+  that the screen did not reflect the FIRST acceptance. Confirmed fixed on the real build.
+- **One new defect, found by pressing the button.** The voice-note screen reported a failed
+  network fetch as *"Could not open the microphone"* — one `.catch` over two unrelated
+  operations, so the MR got the wrong remedy. Split, with a new route test and a two-sided
+  mutation.
+
+### What a new machine needs that the old notes get wrong
+
+- **`JAVA_HOME` is unset here and `java` is already 17.0.12.** The "terminal JAVA_HOME is
+  JDK 25" lines in `frontend-status.md:287/:344` and `frontend-handoff-2026-09-07.md:70` are
+  **stale**; `frontend-status.md:100/:111` records the same problem RESOLVED on 27 August.
+- **`gotchas.md`'s "CMake 3.22.1 cannot build this app" did not reproduce** under RN 0.86.2.
+  AGP auto-provisioned `cmake;3.22.1` and `ndk;27.1.12297006` and every CMake task passed.
+  Do not spend an afternoon installing 3.31.6 before testing whether you need it.
+- **The build fails at `:app:packageDebug` with `OutOfMemoryError: Java heap space`** —
+  Gradle's heap, not system memory. `org.gradle.jvmargs=-Xmx2048m` while packaging four ABIs.
+  For the emulator, pass the flag that file's own line 30 documents rather than editing it:
+
+```
+cd apps/field/android
+./gradlew.bat assembleDebug --no-daemon --max-workers=3 -PreactNativeArchitectures=x86_64
+```
+
+  **That APK is x86_64 only.** A handset build needs the flag dropped, and then the heap
+  raised, because four ABIs is what ran it out.
+- **`adb emu geo fix` still delivers nothing, and the documented `set-test-provider-location`
+  is not enough on its own** — `fused` must be ADDED as a test provider first, or it answers
+  *"fused provider is not a test provider"*:
+
+```
+adb shell appops set 2000 android:mock_location allow
+adb shell cmd location providers add-test-provider fused
+adb shell cmd location providers set-test-provider-enabled fused true
+adb shell cmd location providers set-test-provider-location fused --location LAT,LNG
+```
+
+  Latitude first, and re-push it while the screen is actually asking — a one-shot fix goes
+  stale and the check-in honestly refuses rather than inventing a position.
+- **`react-native-background-geolocation` is NOT a dependency of this app.** Location is
+  `expo-location`, with no config-plugin entry, no `expo-task-manager`, and no
+  `ACCESS_BACKGROUND_LOCATION` in the generated manifest. Background location is unwritten
+  code, not untested code. `expo-dev-client` is not a dependency either and was not needed.
+
+### Where MR-29 stopped
+
+**After Part D, with Part C (`FE-W40` option D) deliberately not started.** It spans a new
+pure module, a persisted anchor that must be cleared with the store, new state on
+`pulled-store.tsx` which every screen reads, a new `TodayScreen` prop in `packages/ui`, and
+the straddling-`18:30Z` matrix the decision document specifies. Part B was the session's
+headline and landed end to end; starting a store-wide change on the tail of it is how the
+wrong API gets frozen into the thing everything reads.

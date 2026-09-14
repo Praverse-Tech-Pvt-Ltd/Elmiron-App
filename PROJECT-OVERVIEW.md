@@ -12714,3 +12714,389 @@ would hit.
 core vitest 21/3 · ui vitest 4/1 · ui jest 243/21 · ui-tokens vitest 54/3 · console vitest
 10/1 · field vitest 470/29 · field jest 103/17 · api vitest 626/41 · mock vitest 40/1.
 **Total 1571.** typecheck 9/9, lint 7/7, format clean, 56/56 migrations paired.
+
+### MR-29 — the dev-client build
+
+**A REAL ANDROID BUILD, on the Pixel_10 AVD.** Not Expo Go: `com.praversetech.fieldforce`,
+a 79 MB debug APK built from `apps/field/android/` by Gradle, installed and driven.
+
+#### A1 — CI
+
+| | |
+| --- | --- |
+| Run | `34598547854` — **`success`** |
+| Workflow | `CI` |
+| Event | `push` |
+| SHA | `f7a684c569f73a4062039d8af3ac736be015942a` |
+
+**The SHA equals HEAD.** `git rev-parse HEAD` returned the same
+`f7a684c569f73a4062039d8af3ac736be015942a`. Six held commits pushed as
+`5c12598..f7a684c`; both jobs green — `migrations · Gate 0 RLS suite · rollbacks` and
+`typecheck · lint · format · unit tests`. Green first time, so there is no cause to report.
+
+#### A2 — the instrument is on, and it caught something on its first run
+
+`pnpm ci:local --with-db` runs **`[16/20] database · Log lock waits, so a deadlock names its
+relations`**, and `tests/lock-wait-logging.spec.ts` passed (2 tests). `db:start` reports
+`log_lock_waits=on ... deadlock_timeout 1000ms (default), unchanged`.
+
+**And a real deadlock fired during that very run.** `tenant-boundary-restrictive.spec.ts`
+failed on `create policy ... on public.mr07_d2_mirror_<hex>` inside `inRolledBackTransaction`.
+The instrument did exactly the job `BE-W92` was written for: it named both relations and both
+blocking processes, and `pg_class` resolved them.
+
+It then happened **again** on a later run of an unchanged tree, and **the relations were
+different**:
+
+| run | relations named | the other session |
+| --- | --- | --- |
+| 1 | `auth.users` (16458), `auth.identities` (17258) | `INSERT INTO identities` — the harness creating a GoTrue user |
+| 2 | `storage.objects` (17019), `storage.buckets` (17009) | — |
+
+**Two failures in three local runs, and the third passed 626/626.** CI is green on the same
+SHA. So it is load-dependent rather than deterministic, and **CI will meet it eventually**.
+
+**That the pair CHANGES is the finding.** It is not one contended pair to be ordered away — it
+is DDL, which takes an `AccessExclusiveLock`, running inside a test transaction alongside
+whatever Supabase's own services are touching at that moment. A fix that ordered `auth.users`
+against `auth.identities` would have cured run 1 and left run 2 exactly as it was. Registered
+as **`BE-W99`** with no mechanism proposed, `deadlock_timeout` still untouched, and a
+verification that asks for a failure RATE rather than one green run — because a single green
+run is precisely what made this look like a one-off the first time.
+
+#### A3 — the device-clock class is closed, and a guard was found switched off
+
+The class has appeared three times: MR-14 **rendered** the device clock as a server time,
+MR-15 A2 **computed** the territory day boundary from it, MR-28 A2 **resolved** the consent
+activation window with it. MR-25's C1 rule bans offset-naive **formatting** in screens — the
+render, not the source — which is why the third walked past it.
+
+The new rule bans the source: zero-argument `new Date()` and `Date.now()` across
+`apps/field`. `new Date(iso)` is parsing and is untouched.
+
+**The reviewer's framing is too strong and is not what was built.** "The only legitimate
+instant is `serverTime`", applied literally, mints a new defect: an offline capture stamped
+with the last pull's clock would claim the time of the **last sync**, possibly hours earlier,
+on a compliance record. The repository had already drawn the correct line, in
+`src/sync/outbox.ts` — `receivedAt` was `nowIso()` under the comment *"the server answered, so
+this is the server's clock by definition"* and was **removed**, because `QueueScreen` rendered
+it as *"Server recorded this at ..."*. `clientCreatedAt` in the same file **stayed**. So the
+rule implemented is the **deciding / recording split**:
+
+- A **decision** — which day is it, is this notice active, how old is this, which month do I
+  request — may never come from the handset.
+- A **record of when this device acted** may only come from the handset, because offline is
+  the case it exists for, and the server bounds it: `45007` refuses a `captured_at` ahead of
+  the server clock, `45008` one too far behind.
+- An **elapsed duration** measured between two device reads is the third legitimate case.
+
+**Every site the rule fires on — eleven, with a verdict on each:**
+
+| # | Site | Verdict |
+| --- | --- | --- |
+| 1 | `app/day-end.tsx:67` — `todayIso(new Date())` | **REAL — the worst.** MR-15 A2 verbatim, and not merely rendered: it is the `fromDate`/`toDate` the screen **asks the server for**, so a phone drifted across the 18:30Z IST midnight pulls the wrong day's mileage and counts the wrong day's visits |
+| 2 | `app/mileage.tsx:47` — `monthWindow(new Date())` | **REAL.** Decides which MONTH is requested; on the first or last day of a month a drifted phone shows a claim total that is not the MR's for this period |
+| 3 | `app/(tabs)/coaching.tsx:119` — `recentMonths(new Date())` | **REAL.** Picks which months the objection-handling trend covers |
+| 4 | `app/(tabs)/doctors.tsx:74` — `Date.now()` | **REAL.** Feeds `daysBetween(lastSeenAt, now)` — the "6 weeks ago" ages, dated against the handset |
+| 5 | `app/doctor/[id].tsx:41` — `Date.now()` | **REAL.** Same ages, same fix |
+| 6 | `app/consent/[visitId].tsx:225` — `capturedAt` | **ALLOW.** A record. The WINDOW takes `serverTime` (MR-28 A2); this is when the doctor answered, and `serverTime` here would be a new defect |
+| 7 | `app/samples/[visitId].tsx:156` — `occurredAt` | **ALLOW.** A record — when the samples were handed over |
+| 8 | `app/voice-note/[visitId].tsx:136` — `recordedAt` | **ALLOW.** A record |
+| 9 | `app/visit/[id].tsx:158` — `recordingStartedAt` | **ALLOW.** A record. Checked rather than assumed: it is **not** the elapsed case — the DURATION comes from `recorderState.durationMillis`, which the recorder measures monotonically and which never touches this clock |
+| 10 | `app/transparency.tsx:58` — `markFirstRunComplete(...)` | **ALLOW.** Verified write-only: `hasCompletedFirstRun` tests the key for `!== null` and nothing anywhere reads the timestamp back |
+| 11 | `src/sync/outbox.ts:98` — `nowIso()` → `clientCreatedAt` ×4 | **ALLOW, and the prior art.** "When THIS DEVICE created this row", which nothing else can answer — a queued row has no server clock by definition |
+
+The five real ones are **registered as `FE-W42` and disabled with that id, not half-fixed**.
+All five need `serverTime` *and* an answer to what they show when there is none — which is
+`FE-W40`'s open question. Fixing them before that decision would pre-empt it in five places.
+Tests are exempted in their own config block, and named: a fixture that must make the two
+clocks **disagree** has to reach the device clock to do it, which is how MR-28 A2's
+withholding case was made to fail against the defect instead of passing against it.
+
+**And the rule could not be added safely, because adding it exposed `FE-W43`.** ESLint flat
+config does **not merge** `no-restricted-syntax` or `no-restricted-imports` across blocks — a
+later block whose `files` match **replaces** the earlier value. MR-25 C1's `apps/field/app/**`
+block set both, so it had silently switched off the component-extraction rule — **both halves**
+— for every screen, which is the tree it was written to police.
+
+**Verified, not reasoned:** the identical `import * as RN from 'react-native'` raised **two
+errors** in `src/sync/outbox.ts` and **none** in `app/mileage.tsx`. That is MR-28's defect 12
+one layer down — a guard wired into one branch protects the branch nobody exercises. Both
+lists are now hoisted to module scope and spread into both blocks. No existing violation was
+hiding behind it, so closing it cost nothing; it would not have stayed true for long.
+
+Positive controls: the namespace import in a screen went **0 errors → 3**; a `new Date()` and
+a `Date.now()` both fail; and `new Date(iso)` on the next line does **not**, which is the
+negative control for the parsing carve-out.
+
+#### A4 — the correction to defect 12, stated plainly
+
+**MR-28's defect 12 was NOT an exactly-once failure, and the record must say so.** The second
+press generated a **genuinely new request id**, and `sync_items.id` did exactly what it
+promises — two different ids are two different writes, which is the contract working, not
+failing. The idempotency key was never involved and is not suspect.
+
+The defect was **that the screen did not reflect the first acceptance**: the server had
+accepted the check-in, `witnessedStage` read the store plus the outbox, a SENT write is on
+neither, and the screen still said "Not started" under the MR's thumb. A reader who takes it
+for an exactly-once failure will go looking in `sync_items` and the request-id path and find
+nothing wrong there, because nothing is wrong there.
+
+#### B1 — what was actually installed, and two stale premises corrected
+
+**The reviewer's premise is out of date, and the repository's own docs contradict it.** The
+brief says the terminal `JAVA_HOME` is JDK 25 and that `gotchas.md` records a newer JDK failing
+at CMake. Measured here:
+
+| | Found |
+| --- | --- |
+| `JAVA_HOME` | **unset**, in both Bash and PowerShell |
+| `java` on PATH | **17.0.12** — the version Gradle needs — at `C:\Program Files\Common Files\Oracle\Java\javapath\java.exe` |
+| JDK homes | `C:\Program Files\Java\jdk-17`; Android Studio's JBR is 21.0.10 |
+| Android SDK | build-tools 36.0.0, platforms android-36.1, platform-tools, emulator, system-images android-36.1 + android-37.1 |
+| `cmake`, `ndk`, `cmdline-tools` | **all absent** at the start |
+| `LongPathsEnabled` | already `1` |
+
+`docs/frontend-status.md:100` and `:111` record the JDK 25 → 17 problem as **"Resolved,
+27 August"**, and `:123` records that a **first native build already succeeded** on this
+machine. The lines the brief quotes — `frontend-status.md:287`, `:344` and
+`frontend-handoff-2026-09-07.md:70` — are stale **within the same file**.
+
+**Nothing was installed by me, so nothing needed asking.** AGP auto-provisioned
+`cmake;3.22.1` and `ndk;27.1.12297006` during the first Gradle run.
+
+**And `gotchas.md`'s CMake entry is stale for this React Native.** Line 1269 says the SDK's
+CMake 3.22.1 **cannot** build this app — its bundled `ninja` is capped at `MAX_PATH` — and
+prescribes `sdkmanager "cmake;3.31.6"` plus a `build.gradle` pin. **That did not reproduce.**
+Every `configureCMakeDebug` / `buildCMakeDebug` task passed on 3.22.1 under RN 0.86.2, which
+ships prebuilt native artifacts. Tested rather than obeyed, and worth knowing before somebody
+spends an afternoon installing 3.31.6 and re-applying a pin that prebuild erases.
+
+**A second correction, and it is larger than a build detail.**
+`react-native-background-geolocation` is **not a dependency of this app**. Location is
+`expo-location` alone, it has **no config-plugin entry** in `app.json`, there is no
+`expo-task-manager`, and the generated manifest contains **no `ACCESS_BACKGROUND_LOCATION` and
+no `FOREGROUND_SERVICE_LOCATION`**. Background location is not built, so it is not something a
+dev client unblocks — it is unwritten code. `expo-dev-client` is likewise not a dependency, and
+was not needed: `assembleDebug` produces a debug build that loads our own native modules and
+talks to Metro, which is the whole of what the gates require.
+
+#### B2 — prebuild and build
+
+`expo prebuild --platform android --no-install` run **from `apps/field`**. Package id is
+`com.praversetech.fieldforce` in both `namespace` and `applicationId`; **no
+`com.anonymous.elmironapp` anywhere**; `git status` clean afterwards, and `package.json` was
+reported `no changes`, so the script-rewrite gotcha did not bite this time. The manifest
+carries `RECORD_AUDIO`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK`,
+`ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION` and `android:scheme="com.praversetech.fieldforce"`.
+
+**The build failed first, and the cause was not what the docs predicted.**
+`:app:packageDebug` died with `java.lang.OutOfMemoryError: Java heap space` — Gradle's JVM
+heap, not the system memory the OOM gotcha describes. `gradle.properties` sets
+`org.gradle.jvmargs=-Xmx2048m` while packaging **four** ABIs. Line 30 of that same file
+documents the intended override, so the fix needed **no file edit at all**:
+
+```
+./gradlew.bat assembleDebug --no-daemon --max-workers=3 -PreactNativeArchitectures=x86_64
+```
+
+`BUILD SUCCESSFUL in 45s`. A command-line flag rather than an edit matters here, because
+`apps/field/android/` is gitignored and regenerated — an edit would have to be re-applied after
+every prebuild, which is the same trap the CMake pin entry describes.
+
+**The APK is x86_64 only.** That is right for the emulator and **wrong for a handset**: FE-G1
+will need a rebuild without that flag, and that rebuild is the one that must survive packaging
+four ABIs, so the heap will have to be raised then.
+
+#### B3 — the native modules LOAD, proved by exercising them
+
+**The APK is the new one, checked rather than assumed.** Built 13:55:28, installed 13:59:01
+the same day, and `firstInstallTime == lastUpdateTime` — a fresh install, not an update over a
+stale package.
+
+**Not a manifest read.** Three kinds of evidence, in increasing strength:
+
+1. **`.so` files loaded from our own APK.** `nativeloader` logged `libhermesvm.so`,
+   `libhermestooling.so`, `libworklets.so`, `libexpo-modules-core.so` and `librnscreens.so`,
+   each from `base.apk!/lib/x86_64/`, followed by
+   `ReactNativeJS: Running "main" with {"fabric":true}`.
+2. **`expo-location` exercised.** Pressing check-in raised the real Android runtime permission
+   dialog for `Field Force`, and the granted fix reached the server as
+   `latitude 18.5204, longitude 73.8567, geofence_status inside`.
+3. **`expo-audio` exercised — the module Expo Go cannot load.** A 6-second hold on
+   "Hold to record" produced, from Android's audio HAL:
+   `MediaRecorderService`, `AudioFlinger`, `AudioRecord: createRecord_l(17): Server adjusted
+   notificationFrames from 1024 to 704 for frameCount 2112`, and
+   `acquireAudioSessionId() ... for session 153` against **our app's pid**. The session opened
+   at 14:08:39 and closed at 14:08:45 — six seconds, matching the hold — and the screen showed
+   **00:05** with "Save this note" enabled.
+
+A record session allocated and released by the audio HAL for this process is a native module
+running, not a manifest entry.
+
+#### B4 — sign-in, Today, and one write end to end
+
+Signed in as `demo-ac528cfe-mr@example.test` on a freshly reset and seeded day (3 doctors,
+5 visits across three days, 3 of them today), through first-run onboarding, to **Today**:
+*"2 of 3 visits attended"*, next visit *Dr Asha Deshpande (DEMO), Main clinic, Pune*,
+*"Everything sent"*.
+
+**The write.** One press of "I am here — check in" on the planned visit:
+
+```
+check_ins   99e71095-fb51-4126-abb6-78130e6bdda3
+visit       14c42b1a-ecc0-4499-8ffc-1cd7ffc66798
+lat/lng     18.5204 / 73.8567      geofence_status  inside
+occurred_at 2026-09-14 08:35:39.762+00
+visits.status  planned -> in_progress
+```
+
+**MR-28's defect 12 is confirmed fixed on a real build, which is where it was found.** One
+press, and the screen changed to *"You are checked in — Checked in 14:05"*. No second press was
+needed, and 14:05 IST is the server's `08:35:39Z` — so MR-25 C1's clock fix is right here too.
+
+**Two honest refusals on the way, both correct.** The first press said *"This check-in cannot
+be sent yet — the phone could not find your position in time"* rather than inventing a
+position; the one-shot test-provider fix had gone stale. And `fused` must be **added** as a
+test provider before it can be set — `set-test-provider-location` alone answers *"fused
+provider is not a test provider"*, which the environment steps do not mention:
+
+```
+adb shell cmd location providers add-test-provider fused
+adb shell cmd location providers set-test-provider-enabled fused true
+adb shell cmd location providers set-test-provider-location fused --location 18.5204,73.8567
+```
+
+Latitude first, and the fix must be re-pushed while the screen is asking.
+
+**And pressing the button found a defect, which is how every defect this month was found.**
+With the mock server at `:4010` down, the voice-note screen said:
+
+> **Could not open the microphone**
+> fetch failed: java.io.IOException: unexpected end of stream on http://127.0.0.1:4010/...
+
+The microphone was fine. The mount effect was **one** `async` block under **one** `.catch`
+titled "Could not open the microphone", and that block did two unrelated things: it opened the
+microphone, and it fetched the visit and doctor over the network. Neither half depended on the
+other, which is exactly why they could be merged without anyone noticing — and the MR is handed
+a remedy for the wrong failure, told to turn on a microphone that is already on while the
+server is down. **That is the rule `G-WRITE` closed on the refusal path, one screen along:
+every failure reaches the MR with its own remedy and never another's.**
+
+Split into two blocks with two catches; the network half now says *"Could not load this
+visit"*. `voice-note-route.test.tsx` is **new** — this screen had no route test at all — with
+both directions, because a fix that merely renamed the single title would satisfy one case and
+fail the other. Mutation-verified two-sided: restoring the microphone title on the network
+catch fails the network case and leaves the positive control green, so the mutation is targeted
+rather than a blanket break.
+
+#### B5 — what the emulator can and cannot settle
+
+**Now attemptable, and attempted this session:** a real APK of this app running outside Expo
+Go; our own native modules loading and running; the microphone actually opening; the runtime
+permission dialogs; sign-in, Today, and a real write reaching Postgres from a built app.
+
+**Still not settleable on an emulator, and a dev client does not change it:**
+
+- **`FE-G1` (`FE-W20`) and `FE-G2` (`FE-W19`) are DEVICE gates by definition.** FE-G1's own
+  verification says *"`adb devices` shows a non-emulator serial"*; FE-G2 is an 8-hour offline
+  day with ≥20 queued writes on a physical device. No emulator satisfies either, however the
+  app is built. What changed is that they can now be **attempted** rather than being blocked on
+  a build that did not exist.
+- **The per-OEM battery behaviour cannot be emulated at all.** The AVD is a Pixel image running
+  near-AOSP power management. What the pilot will actually meet is Xiaomi's MIUI, Oppo's and
+  Realme's ColorOS and Vivo's Funtouch — each with its own aggressive process-killer, its own
+  autostart whitelist buried somewhere different, and its own habit of killing a foreground
+  service that AOSP keeps alive. The onboarding screen *"Stop Android putting this app to
+  sleep"* exists for exactly those ROMs and **its instructions cannot be verified on this
+  emulator** — it renders and its buttons work, and whether the settings screens it opens
+  exist, are named that, or do what the copy claims is unknown until a real handset is in hand.
+  `blocked-on-you` 1.5 asks for a Xiaomi, Oppo, Vivo or Realme rather than a Pixel for this
+  reason, and it is **seven weeks** open.
+- **Background location is not merely untested, it is not built** — see B1. Whatever the
+  battery ROMs do to it cannot be measured until there is something to measure.
+- **A release build.** This is a debug APK, unsigned for distribution, x86_64 only. Keystore
+  custody, the package id and the Transistorsoft licence (`blocked-on-you` 2.1–2.4) are all
+  still unanswered, and none of them is an engineering task.
+
+#### C — NOT RUN, and the reason is a size, not a reluctance
+
+`FE-W40` option D is fully specified, including what happens past the bound, and this session
+did **not** implement it. Sized concretely before stopping, it is:
+
+- a new pure module resolving an anchor against the territory day boundary —
+  `dayIn(anchor, zone)` versus `dayIn(anchor + elapsed, zone)`;
+- a persisted anchor (`serverTime`, the device instant it arrived, the zone) that must be
+  cleared together with the store, or a cold start renders a day over records that were
+  dropped;
+- new state on `pulled-store.tsx`, which **every screen reads**;
+- a new label on `TodayScreen` in `packages/ui`, because no existing prop carries "as of";
+- and the straddling-`18:30Z` two-sided matrix the decision document specifies.
+
+That spans four packages and changes the store every screen depends on. Part B was the
+session's stated headline and it landed end to end; beginning a store-wide change on the tail
+of it is how the wrong API gets frozen into the thing everything reads. **Stopped honestly at
+the boundary rather than finishing it badly**, which is the brief's own rule.
+
+`FE-W42`'s five sites stay blocked behind it, and that is now a visible, registered dependency
+rather than an unwritten one.
+
+#### D — two verdicts, decided rather than done
+
+**D1 — the dead-letter replay's missing figures: DEFER, with a named trigger. (`BE-W98`)**
+`sync_items` holds `rejection_code` and `rejection_detail` and nothing else, so the sixth
+attempt answers `sqlState: null` and `sqlDetail: null` while each of its first five carried the
+numbers. The decisive fact is in `explanation.ts:196`:
+`action: record.deadLettered || !RETRYABLE.has(record.code) ? 'escalate' : 'retry'` — **for a
+dead letter the action is `escalate` whatever the SQLSTATE is.** Figures exist to tell somebody
+what to do next; on this path what to do next is already fixed. Beside that, `rejection_detail`
+still holds the server's own sentence, which after MR-28 B names the doctor — only the numeric
+DETAIL line is absent — and two columns on `sync_items` is a migration against a table that
+grows once per sync attempt. **The trigger that reverses this: a manager-facing dead-letter
+queue**, where the cap and the month-to-date would change a decision rather than an
+explanation. Build the columns with that surface, not before it.
+
+**D2 — `FE-W41` and `5.9` are ONE unit of work.** Recorded as a single item, because splitting
+them is exactly how one half ships. The cap note is true **only** while
+`ucpmp_sample_cap_quantity` is null; the day 5.9 is answered is the day the sentence becomes
+false, and it sits three lines above a refusal quoting the very numbers it denies having.
+Shipping the cap without the copy puts a false statement on a compliance screen on the day
+somebody starts relying on it; shipping the copy without the cap replaces a true sentence with
+numbers that do not exist. **The migration that sets the cap and the change that rewrites the
+note are one commit**, and whoever answers 5.9 owns both. `5.9` still build-fails CI on
+**6 November**, warning from **16 October**.
+
+#### Counts — by workspace AND runner, read from each runner's own line
+
+Never from `test-counts.mjs`, which counts tests DISCOVERED rather than PASSED.
+
+| Workspace | Runner | Result |
+| --- | --- | --- |
+| `@fieldforce/core` | vitest | 21 passed (3 files) |
+| `@fieldforce/ui-tokens` | vitest | 54 passed (3 files) |
+| `@fieldforce/ui` | vitest | 4 passed (1 file) |
+| `@fieldforce/ui` | jest | 243 passed, 243 total (21 suites) |
+| `@fieldforce/console` | vitest | 10 passed (1 file) |
+| `@fieldforce/mock` | vitest | 40 passed (1 file) |
+| `@fieldforce/field` | vitest | 470 passed (29 files) |
+| `@fieldforce/field` | jest | **105 passed, 105 total (18 suites)** — was 103 in 17; `voice-note-route.test.tsx` is the new suite |
+| `@fieldforce/api` | vitest | 625 passed, **1 failed** (626, 41 files) — the `BE-W99` deadlock, and 626/626 on a clean re-run |
+
+**1,572 passing, zero skipped, one intermittent failure that is registered rather than
+hidden.** Typecheck, lint and `format:check` all exit 0 across the monorepo.
+
+#### Where this session stopped
+
+**After Part D, with Part C deliberately not started.** Parts A and B are complete; D's two
+verdicts are recorded. C is sized above and is a session of its own.
+
+Three things a reader should carry forward that were not true before:
+
+1. **`FE-G1` and `FE-G2` are now blocked on the handset alone from this side.** The build that
+   blocked them exists, runs, loads its native modules and performs a real write. The handset
+   is seven weeks outstanding and is not ours to fix.
+2. **A rebuild for a real handset is not the same command.** The APK proved here is x86_64
+   only; dropping `-PreactNativeArchitectures` restores four ABIs and brings back the
+   `packageDebug` heap failure, which will need `org.gradle.jvmargs` raised.
+3. **Background location is unwritten, not untested.** Anyone planning FE-G1 around
+   `react-native-background-geolocation` should know it is not a dependency of this app.

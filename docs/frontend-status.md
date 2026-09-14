@@ -371,3 +371,52 @@ they were invisible to every test that existed at the time:
 
 The detector in every case was the same one the handover has named since day one: **running
 the app.**
+
+## MR-29 — 14 September 2026: the dev-client build
+
+**The deferred build is done.** Since MR-14 the plan has said "a dev client, then the device
+gates". There is now a real debug APK — `com.praversetech.fieldforce`, 79 MB, x86_64 — built
+by Gradle from `apps/field/android/`, installed on the Pixel_10 AVD, signed in, and used to
+perform a real check-in that reached Postgres.
+
+**What that does and does not change.** `FE-G1` and `FE-G2` are **device** gates: FE-G1's own
+verification demands `adb devices` show a non-emulator serial, and FE-G2 is an 8-hour offline
+day on a physical handset. A dev client does not close either. It changes them from *blocked
+on a build that did not exist* to *blocked on the handset alone*, which is **seven weeks**
+outstanding and is not an engineering item.
+
+**The per-OEM battery behaviour remains unemulatable.** The AVD is a Pixel image on near-AOSP
+power management. The pilot will meet MIUI, ColorOS and Funtouch, each with its own
+process-killer and its own autostart whitelist in its own place. The onboarding screen *"Stop
+Android putting this app to sleep"* renders and its buttons work; whether the settings screens
+it names exist or do what its copy claims is **unknown until a Xiaomi, Oppo, Vivo or Realme is
+in hand** (`blocked-on-you` 1.5).
+
+### Corrections to entries above, which were stale
+
+| Entry | Correction |
+| --- | --- |
+| *"The terminal `JAVA_HOME` on this machine is JDK 25"* (lines 287, 344) | **Wrong now.** `JAVA_HOME` is **unset** in both Bash and PowerShell and `java` resolves to **17.0.12**. Line 100 of this same file already records the JDK 25 → 17 problem as resolved on 27 August; lines 287 and 344 were never updated with it. |
+| *"Windows CMake path-length"* / `gotchas.md`'s `cmake;3.31.6` requirement | **Did not reproduce** under RN 0.86.2, which ships prebuilt native artifacts. AGP auto-provisioned `cmake;3.22.1` and `ndk;27.1.12297006`, and every `configureCMakeDebug`/`buildCMakeDebug` task passed on 3.22.1. The entry is kept, because it was true when written — but test before installing. |
+
+### The new build trap
+
+The first build failed at `:app:packageDebug` with `java.lang.OutOfMemoryError: Java heap
+space`. Not the system-memory OOM already recorded here — Gradle's own JVM heap, set to
+`-Xmx2048m` while packaging **four** ABIs. The emulator needs one, and `gradle.properties`
+line 30 documents the override, so no file edit is needed:
+`-PreactNativeArchitectures=x86_64`. **A handset build must drop that flag and will then need
+the heap raised.**
+
+### Defects found this session — by running the app, again
+
+- **A network failure wearing the microphone's remedy.** With the mock server down, the
+  voice-note screen said *"Could not open the microphone"* over a `fetch failed` on
+  `127.0.0.1:4010`. One `.catch` covered two unrelated operations, so the MR was told to turn
+  on a microphone that was already on. Split, with the screen's first route test.
+- **A lint guard that had been switched off for every screen** (`FE-W43`) — found only
+  because adding a new rule to the same config made the replacement visible.
+
+The detector was the same one this document has named since day one: **running the app** —
+and this is the first session in which "running the app" meant a build of our own rather than
+Expo Go.
