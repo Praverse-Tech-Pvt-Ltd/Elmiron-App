@@ -940,3 +940,52 @@ so a screen refused in the moment gets the remedy **and** the server's figures.
 
 The general rule is now in `docs/gotchas.md`: **when a fix removes where something was
 shown, check where it is shown now.**
+
+
+---
+
+## 14 September 2026 — MR-32
+
+### The restore runbook's commands are corrected IN PLACE, not appended to
+
+- **Decision:** `docs/restore-runbook.md`'s broken commands were rewritten where they stood,
+  with a dated divergence log appended beneath recording what was wrong.
+- **Why:** A runbook is a **procedure**, not a record. An operator under pressure runs the
+  first command they see, and three of these exited 0 while doing nothing. MR-30's own rule is
+  that a correction which leaves the original standing with equal authority has not corrected
+  anything. The section-freezing rule protects `PROJECT-OVERVIEW.md`; it does not require a
+  procedure to keep a command that silently fails.
+
+### `BE-W40` is a DETECTOR, and is labelled as one
+
+- **Decision:** `check:migration-drift` plus a daily workflow, paired with a runbook step that
+  asks a human to write down the SHA, the versions, the date and who ran it.
+- **Why:** `supabase_migrations.schema_migrations` has no timestamp and no actor, so **no
+  check written against it can produce an audit trail**. Claiming otherwise would have been
+  the defect this project keeps finding — a control that looks solved. The check makes a
+  hand-run push impossible to hide for longer than a day; it cannot prevent one, because
+  preventing one means taking production credentials away from people, which is an access
+  decision rather than an engineering one.
+- **Unverified:** its production leg. Credentials are not on this machine.
+
+### `handoff.md` and `.ai-collab/handover.md` are working notes and may be restructured
+
+- **Decision:** Both were restructured rather than appended to — 627 → 151 and 441 → 100
+  lines — with every per-session narrative replaced by an index into `PROJECT-OVERVIEW.md`.
+- **Why, and this settles a direct contradiction in the instruction rather than a preference:**
+  `.gitignore:22-26` records the BE-W8 decision that these files are *"expected to be updated
+  regularly, not treated as a point-in-time snapshot"*, and the **section-freezing rule above
+  is scoped, in its own words, to "a `###` section in `PROJECT-OVERVIEW.md`"** — it does not
+  govern these two. `handoff.md` had invoked it by analogy, which is how the rule appeared to
+  cover more than it says.
+- **Evidence it was needed:** `handoff.md` carried *"read this first"* at line 353 of 627 with
+  three later sessions beneath it contradicting it.
+
+### `BE-W92`: no mechanism, and the previous comparisons are withdrawn
+
+- **Decision:** No mechanism proposed; `deadlock_timeout` untouched. The recorded rate
+  comparison is withdrawn rather than refined.
+- **Why:** Eight idle runs gave 3 deadlocks and eight loaded runs gave 1 — load made it
+  **less** frequent, and 37.5% idle is six times the 1-in-16 the entry carried. The
+  "1-in-16 versus 2-in-2" asymmetry three sessions reasoned from rests on a two-sample
+  denominator. The correction is to the method.

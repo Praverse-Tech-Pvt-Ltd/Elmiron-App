@@ -13666,3 +13666,287 @@ Three things a reader should carry forward:
 3. **`BE-W92`'s contention is inside one suite, not across workspaces.** That closes off the
    cross-workspace explanation and leaves worker count and Supabase's own services as what is
    left to measure — measure, not theorise: the FK candidate was refuted by the log.
+
+### MR-32 — the restore drill
+
+**The recovery runbook had never been executed. Three of its four commands were broken and
+all three exited 0.** Every previous first execution of a written procedure in this project
+has found the procedure wrong; this one found it wrong in a way that would have been invisible
+during the incident it exists for.
+
+#### A1 — CI
+
+| | |
+| --- | --- |
+| Run | `34833470369` — **`success`** |
+| Workflow | `CI` |
+| Event | `push` |
+| SHA | `025aba76bf37d039c95c63fac0dd0872310294d6` |
+
+**The SHA equals HEAD.** `git rev-parse HEAD` returned the same
+`025aba76bf37d039c95c63fac0dd0872310294d6`. Three held commits pushed as `d76ca20..025aba7`.
+
+#### A2 — the calendar half of the clock class
+
+MR-29's rule bans acquiring *now* from the handset. That is the **source**.
+`getMonth()`, `getDate()`, `getDay()`, `getHours()` are the **interpretation**, and they
+answer in the device's timezone even when the instant they are called on came from the server.
+That is how five screens were wrong a second way — MR-31 C fixed them by hand and no rule
+prevented a sixth.
+
+**Verified by exercising, not by reading.** `parsed.getMonth()`, `parsed.toDateString()` and
+`new Date(2026, 8, 30)` **all passed lint in both trees**. MR-25 C1's getter selector never
+fired because it requires the receiver to be a `new Date()` literal — `new Date().getHours()`
+is caught, `parsed.getMonth()` is not.
+
+**Every site the extended rule fires on: zero.** MR-31 C removed the last of them, so this is
+a regression guard rather than a cleanup. Confirmed across four shapes:
+
+| shape | in `src/` | in a screen | in a test |
+| --- | --- | --- | --- |
+| local component getters, any receiver | **fires** | **fires** | **fires** |
+| `toDateString` / `toLocale*String` | **fires** | **fires** | **fires** |
+| `new Date(y, m, d)` | **fires** | **fires** | **fires** |
+| `getUTCMonth()`, `new Date(iso)` | silent | silent | silent |
+
+The last row is the negative control: `getUTC*` is zone-independent and
+`src/today/server-window.ts` depends on it, and single-argument `new Date` is parsing rather
+than calendar-reading. The positive control is **0 → 4 errors** in each of the three regions.
+
+Tests are covered deliberately: a fixture that reads a date in the device's calendar asserts
+against whatever zone CI happens to run in, which is how a test passes on one machine and
+fails on another.
+
+#### A3 — `BE-W92` measured again, and the asymmetry does not survive
+
+Two batches of eight runs of the api suite alone, same tree, same database, same session:
+
+| condition | deadlocks / runs |
+| --- | --- |
+| machine **idle** | **3 / 8 — 37.5%** |
+| machine **loaded**, nine busy workers as turbo's ten tasks load it | **1 / 8 — 12.5%** |
+
+**Load made it LESS frequent, which is the opposite of the prediction.** And 37.5% idle is
+nothing like the 1-in-16 this entry has carried since MR-30.
+
+**What actually failed is the denominators.** The "1-in-16 versus 2-in-2" asymmetry that two
+sessions reasoned from was never established: 2-in-2 is *two samples*, and the 1-in-16 spans
+different days against a database that has since accumulated 2,603 visits and 5,033 auth
+users. Today's idle rate is six times the figure the entry records. Neither remaining
+explanation survives — not another workspace (refuted MR-31 D1), not concurrency against the
+platform writers (refuted here, in the wrong direction).
+
+**The honest conclusion is about method, not about Postgres:** three sessions drew
+comparisons from samples too small to support one. No mechanism is proposed;
+`deadlock_timeout` is untouched. The next thing worth doing is establishing whether the rate
+is stable at all — the same batch twice on the same day — before any further comparison.
+
+#### A4 — hydration as a third boundary, enumerated
+
+MR-25 C3 and MR-26 C1 enumerated the write and read boundaries. `deserialiseAnchor` threw at
+neither: it threw during **hydration**, before the pull, and a local corruption was reported
+as a network failure.
+
+**Every value read from disk before the first network answer:**
+
+| value | validated by | consumer | can it throw? |
+| --- | --- | --- | --- |
+| pull cursor | none — an opaque server token | sent to `sync_pull` | no; an unrecognised cursor is answered with a forced re-sync |
+| store records | **Zod**, whole load refused on any bad row | `dayIn` / `clockIn`, selectors | **no** — see below |
+| **day anchor** | **hand-written `deserialiseAnchor`** | `resolveAnchoredDay` → `dayIn` → `Intl` | **it did** — fixed MR-31 B3 |
+| queue items | Zod `safeParse` per item | reducer, screens | no |
+| first-run marker | presence only; the value is never read | routing | no |
+| battery steps | hand-filtered to strings | onboarding ticks | no |
+| auth session | `supabase-js` | session context | MR-28 C fixed a missing `.catch`; was a permanent splash |
+
+**The records are safe, and that was measured rather than assumed.** `IsoDateTimeSchema` is
+`z.iso.datetime({ offset: true })`, and probing it with six candidates showed it **rejects**
+impossible months, impossible days, out-of-range offsets and out-of-range years — and
+everything it **accepts** renders through `Intl` without throwing.
+
+**So the finding is a single sentence: the day anchor was the one persisted value validated
+by hand instead of by a schema, and it is the one that broke.** And the second half matters as
+much — *a `catch` around the READ does not protect the CONSUMER.* `deserialiseAnchor`'s own
+try/catch was intact; the throw happened afterwards, in `dayIn`.
+
+#### B — the restore drill
+
+**B1/B2 — what the runbook said, and what happened.**
+
+| Step | Runbook said | What actually happened |
+| --- | --- | --- |
+| 2 | *"Restore."* | **No mechanism exists.** PITR was deliberately not purchased; there is no `db:dump`, no backup script, no off-machine copy. `BE-W11` is open. **Step 2 is the gap** |
+| 3 dry run | `pnpm --filter @elmiron/api reconcile:restore` | *"No projects matched the filters"*, **exit 0**. The workspace is `@fieldforce/api` |
+| 3 apply | `… reconcile:restore -- --apply --note "…"` | Same silent exit 0. With the name fixed, **two further breaks**: `pnpm 11` forwards `--` literally, so the script received `"--" "--apply"`; and `--db-url` was missing, which `BE-W8` made mandatory — that guard fired, exit 1, correctly |
+| 4 | the quarantine SQL | **Worked.** Four quarantined visits with their findings |
+| 5 | `pnpm --filter @elmiron/api check:purge-health` | *"No projects matched the filters"*, **exit 0** |
+
+**Three of four commands were a silent no-op.** During a compliance incident, an operator
+following this document exactly would have run the dry run, seen no error and no findings, and
+concluded there was nothing to reconcile. The one command that would have refused correctly
+could only be reached by first fixing the package name.
+
+**The commands were corrected in place rather than appended to.** A runbook is a procedure,
+not a record: an operator under pressure runs the first command they see, and MR-30's own rule
+is that a correction leaving the original standing with equal authority fails. The divergence
+log is appended beneath, so what was wrong is still on the record.
+
+**B3 — verified by querying the restored database.**
+
+| Check | Source | Restored |
+| --- | --- | --- |
+| Migrations applied | 56 | **56** |
+| Public tables | 37 | **37** |
+| Tables with RLS enabled | 36 | **36** |
+| Policies on `public` | 48 | **48** |
+| `public.visits` | 2,603 | **2,603** |
+| `public.doctors` | 1,926 | **1,926** |
+| `public.app_thresholds` | 17 | **17** |
+| `purge_batch_limit` / `purge_backlog_multiplier` / `purge_max_silence_hours` | 250 / 3 / 12 | **250 / 3 / 12** |
+| A marker row seeded **before** the dump | 1 | **1, with its timestamp** |
+| `auth.users` / `auth.identities` | 5,033 / 5,033 | **5,033 / 5,033** |
+| `storage.objects` / `storage.buckets` | 128 / 1 | **128 / 1** |
+
+**Why the queries and not the exit code, demonstrated rather than asserted.** The first
+attempt failed in exactly the way the runbook now warns about: Git Bash rewrote the container
+path `/tmp/drill.sql` into a Windows path, `pg_dump` wrote nothing, `create database`
+**succeeded**, the restore log contained **zero `ERROR` lines** — and only *"migrations:
+source 56, restored 0"* revealed that nothing had been restored at all.
+
+**And the last row is the runbook's own thesis, demonstrated.** `storage.objects` restored 128
+rows. Those are *metadata*. The objects themselves never moved, because they are not in the
+database. A restored `storage.objects` asserts that 128 objects exist; whether they do is
+unknowable from the database — which is what the top of that file argues and what this now
+shows.
+
+**B4 — duration. Dump plus restore: 3 seconds**, for a 16.4 MB database. Whole drill including
+seeding, verification and teardown: **9 seconds**. **That number does not extrapolate.** Local
+socket, no network transfer, no platform snapshot to locate, no support ticket. Its only
+honest use is as a floor.
+
+**B5 — what the drill does NOT prove.**
+
+- It was a **scratch target in the local cluster**. Production credentials are not on this
+  machine, and `assertLocalhostOnly()` exists to keep them from being used from here.
+- **Nothing about the platform's restore.** Whether a Supabase restore takes minutes or hours,
+  whether it needs a support ticket, and what it does to roles, extensions and
+  `supabase_admin`-owned settings is untested, because there is nothing to test against.
+- **Nothing about the object store**, which is the entire reason the runbook exists.
+- **The reconciliation was not run end to end** — its guards were exercised and its SQL was
+  exercised, but `--apply` against a real divergence remains unexecuted.
+- **`check:purge-health` had never actually run.** The broken filter made every invocation a
+  no-op, so its post-restore behaviour is still unverified. It works now: *"Audio retention is
+  healthy"*, with real figures.
+
+#### C — `BE-W40`, and which option was honest
+
+**A check cannot produce the audit trail, and saying it could would be the defect this project
+keeps finding.** `supabase_migrations.schema_migrations` has `version`, `name` and
+`statements` — **no timestamp and no actor**. Who applied a migration and when is recorded
+nowhere and cannot be recovered. CI has no path that deploys migrations; every job in `ci.yml`
+runs against `127.0.0.1:54322`, so the only route to production is a person typing the command.
+
+**So both halves, with the weaker one named.**
+
+- **The check.** `check:migration-drift` plus `.github/workflows/migration-drift.yml`, daily
+  and on every migration push, comparing the versions production has applied against the files
+  on `main`, failing in **both** directions — applied-with-no-file (something reached
+  production off `main`) and file-never-applied (the quiet one, invisible until a query hits a
+  missing column). **A detector, not a preventer:** it cannot stop a hand-run push, it makes
+  one impossible to hide for longer than a day. Preventing one means taking credentials away
+  from people, which is an access decision.
+- **The step**, in `docs/restore-runbook.md`: drift-check before, push from a clean `main`,
+  drift-check after, then **write down** the SHA, the versions, the date and who ran it. That
+  human note *is* the audit trail, and it is weaker for a reason that cannot be engineered away
+  from here.
+
+**C2 — both directions, with a clean baseline before and after:**
+
+| | exit | says |
+| --- | --- | --- |
+| baseline | 0 | 56 migrations, no drift |
+| a file never applied | **1** | names `20990101000000` |
+| a version applied with no file | **1** | names `20990202000000` |
+| baseline again | 0 | no drift |
+
+Plus six unit tests on the pure comparator, including that it reports **both** directions at
+once — an operator who fixes only the half they were shown runs the check again and is
+surprised.
+
+**Its production leg is UNVERIFIED and the workflow says so.** The first production run will
+be the workflow's own, and the runbook tells the reader to distinguish an unreachable target
+from a real divergence before assuming drift.
+
+#### D — the working-notes split, and one fact stale in three places
+
+**D1 and D3 contradict each other** — *strip point-in-time claims* against *appends only,
+never rewrite*. The repository settles it, not a preference:
+
+- `.gitignore:22-26` records the BE-W8 decision that `handoff.md` and `.ai-collab/` are
+  tracked and *"expected to be updated regularly, not treated as a point-in-time snapshot."*
+- The section-freezing rule in `.ai-collab/decisions.md` is scoped, in its own words, to
+  *"a `###` section in `PROJECT-OVERVIEW.md`"*. It does not govern these two files;
+  `handoff.md` had invoked it by analogy.
+
+So append-only governs the durable record — untouched — and these are the working notes.
+`handoff.md` 627 → 151 lines, `handover.md` 441 → 100. **Nothing deleted:** every per-session
+narrative is in this file at 269–387 lines each, and both now carry an index saying where each
+era went.
+
+**Both files had already failed in the way D1 describes.** `handoff.md` carried *"STATUS AS OF
+11 SEPTEMBER — read this first"* at line 353 of 627, with three later sessions appended
+**beneath** it and contradicting it: the dev-client build it called deferred was built, the
+gates it said were blocked on two things are blocked on one, and the dependency it named does
+not exist. `handover.md`'s "Current state" was 17 August — *seventeen migrations, the three
+GitHub secrets are not set*. There are 56, and BE-W8 set them.
+
+**D2 — the grep rule found one fact stale in three places:**
+
+| Location | Said |
+| --- | --- |
+| `.ai-collab/handover.md:5` | *"Untracked, and that is the only reason this file is allowed to exist"* |
+| `CLAUDE.md:35` | *"the same rule that keeps `handoff.md` and `.ai-collab/` out of git"* |
+| `.gitignore:36` | *"the same staleness argument that keeps `handoff.md` out of git above"* |
+
+All three describe a decision BE-W8 reversed. **The third is the sharpest: `.gitignore:22-26`
+states the reversal and `:36` refers back to "above" for the rule those very lines say no
+longer holds — the contradiction is ten lines apart in the same file.** And the `CLAUDE.md`
+copy is loaded into every session's context, which makes it the highest-leverage stale fact
+found so far: it is how a false premise reaches a session before any code is read. All three
+corrected in place, with the table recorded in `handover.md`.
+
+#### Counts — by workspace AND runner, from each runner's own line
+
+| Workspace | Runner | Result |
+| --- | --- | --- |
+| `@fieldforce/core` | vitest | 21 passed (3 files) |
+| `@fieldforce/ui-tokens` | vitest | 54 passed (3 files) |
+| `@fieldforce/ui` | vitest | 4 passed (1 file) |
+| `@fieldforce/ui` | jest | 243 passed, 243 total (21 suites) |
+| `@fieldforce/console` | vitest | 10 passed (1 file) |
+| `@fieldforce/mock` | vitest | 40 passed (1 file) |
+| `@fieldforce/field` | vitest | 489 passed (31 files) |
+| `@fieldforce/field` | jest | 122 passed, 122 total (18 suites) |
+| `@fieldforce/api` | vitest | **632 passed (42 files)** — was 626; `migration-drift.spec.ts` is new |
+
+**1,615 passing, zero skipped, zero failing.** No deadlock in this run. `typecheck`, `lint` and
+`format:check` all exit 0.
+
+#### Where this session stopped
+
+**At the end, with every part complete** — A1–A4, B1–B5, C1–C2, D1–D3.
+
+Four things a reader should carry forward:
+
+1. **The recovery posture is one gap, and it is step 2.** The reconciliation works and is now
+   exercised. There is nothing to restore *from*. `BE-W11` is no longer one item on a list; it
+   is the whole of what stands between this project and a recovery posture.
+2. **Three commands exited 0 while doing nothing**, in the document written for the worst day
+   this project could have. The exit-code rule was already written down; it had not been
+   applied to the runbook itself.
+3. **`BE-W92`'s numbers were never stable enough to compare.** Three sessions drew conclusions
+   from two-sample and sixteen-sample denominators that today's measurement contradicts by a
+   factor of six. The correction is to the method, not to Postgres.
+4. **One fact was stale in three places, and one copy was in `CLAUDE.md`.** The grep rule from
+   MR-30 keeps earning its place, and the highest-leverage place to apply it is the file that
+   is loaded before anything else is read.

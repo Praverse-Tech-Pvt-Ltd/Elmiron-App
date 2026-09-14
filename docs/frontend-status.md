@@ -504,3 +504,36 @@ made the app say about a doctor seen last week.
 
 Neither was visible in the diff. One came from asking what a function returns for input it does
 not validate; the other from mutation.
+
+## MR-32 — 14 September 2026: the calendar half, and a runbook that had never run
+
+**The clock class is closed at both ends.** MR-29 banned acquiring *now* from the handset;
+this bans reading a **calendar field** off a `Date` — `getMonth()`, `getDate()`,
+`toDateString()`, `new Date(y, m, d)` — which answers in the device's timezone even when the
+instant is the server's. That is how five screens were wrong a second way, fixed by hand in
+MR-31 with nothing preventing a sixth.
+
+**Verified by exercising, not by reading.** `parsed.getMonth()` and `new Date(2026, 8, 30)`
+both passed lint in both trees: MR-25 C1's getter selector only fires when the receiver is a
+`new Date()` literal. The extended rule fires on **zero** existing sites — MR-31 C removed
+them all — so it is a regression guard, with `getUTC*` and `new Date(iso)` asserted as
+negative controls.
+
+### What the frontend should take from the rest of the session
+
+- **`check:purge-health` had never actually run.** Every invocation in the runbook named
+  `@elmiron/api`; `pnpm --filter` on a package that does not exist prints a message and
+  **exits 0**. The same trap applies to any `pnpm --filter` in any document here.
+- **Airplane mode cannot simulate offline for a debug build** — the bundle comes from Metro at
+  launch. Remove the API's reverse ports and leave `tcp:8081`.
+- **`MSYS_NO_PATHCONV=1` must be scoped to the one command that needs it.** Exported
+  shell-wide it breaks corepack's own resolution and makes `pnpm` fail with a
+  `MODULE_NOT_FOUND` that looks like your script's fault — three runs exited 1 from that
+  rather than from the check under test.
+
+### And a correction to this file's neighbours
+
+One fact — that `handoff.md` and `.ai-collab/` are untracked — was stale in **three** places,
+including `CLAUDE.md`, which is loaded into every session before any code is read. BE-W8
+reversed that decision and `.gitignore:22-26` records it, ten lines above a line that
+contradicted it. All three corrected.
