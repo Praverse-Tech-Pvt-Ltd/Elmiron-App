@@ -1,39 +1,71 @@
 name: Database backup
 
-# `BE-W11`. MR-32 executed docs/restore-runbook.md for the first time and found its step 2
-# was the single word "Restore." — no PITR (declined), no dump, no schedule, no off-machine
-# copy. MR-33 built the producer and the verifier. This is the schedule.
+# `BE-W11`. MR-32 executed docs/restore-runbook.md for the first time and found its step 2 was
+# the single word "Restore." — no PITR (declined), no dump, no schedule, no off-machine copy.
+# MR-33 built the producer and the verifier. This is the schedule.
 #
-# **IT REFUSES TO RUN UNTIL A DESTINATION EXISTS, AND THAT IS THE POINT.**
+# **IT STILL REFUSES TO PRODUCE ANYTHING UNTIL A DESTINATION EXISTS.** That has not changed and
+# is not negotiable: a dump of this database is not a file, it is a package of personal data —
+# `doctors.full_name`, `user_profiles`, `transcripts_redacted`, every row of `auth.users`, and
+# `adverse_event_reports.reported_text`, whose lawful contents are **open question 4.1**. Where
+# it may land is a data-processing decision. The destination check runs FIRST, before anything
+# is produced, so a run with no destination leaves no artefact anywhere — not even for the
+# lifetime of a runner.
 #
-# A dump of this database is not a file, it is a package of personal data: `doctors.full_name`,
-# `user_profiles`, `transcripts_redacted`, every row of `auth.users`, and
-# `adverse_event_reports.reported_text` — whose lawful contents are **open question 4.1**, the
-# PV/DPDP escalation that has never been answered.
+# ## What MR-34 D1 changed, and why it reverses MR-33
 #
-# So where that file is allowed to land is a **data-processing decision**, not an engineering
-# one. Writing it to a GitHub Actions artifact would put the consent ledger and every identity
-# into GitHub's artifact store; that may well be acceptable, and it is not this workflow's
-# call to make. The destination check therefore runs FIRST, before anything is produced:
-# a failing run leaves no artefact anywhere, which is the correct outcome while nobody has
-# decided where one may go.
+# MR-33 wrote: *"Keep this schedule live and red. The daily failure is the reminder that the
+# recovery posture does not exist."* **That was wrong, and this repository has the receipt.**
 #
-# The precedent is retention.yml and retention-watchdog.yml: "an unconfigured target is a real
-# finding, not a reason to skip." Keep this schedule live and red. The daily failure is the
-# reminder that the recovery posture does not exist yet, and silencing it removes the only
-# thing saying so.
+# **A red that is correct every day is indistinguishable from a red that is broken.** The
+# retention workflows went red, were disabled on **23 August** (`b5d03a5`, *"retention workflows
+# disabled again"*), and `docs/COMPLETION-PLAN.md:602` still asks *"Why were the retention
+# workflows disabled on 23 August?"* — **the reason was never recorded.** In the silence that
+# followed, production auto-paused from **23 August to 7 September** and was found by a failed
+# connection rather than by an alert. A daily alarm nobody can act on does not stay an alarm; it
+# becomes noise, then it becomes disabled, and then it becomes silence.
 #
-# See docs/blocked-on-you.md → the BE-W11 destination item.
+# So this is structured the way `check:decision-debt` structures the UCPMP cap — **three states,
+# not two**, with the deferral as a dated, attributable record rather than an absence:
+#
+# | State | Outcome | What a human sees |
+# | --- | --- | --- |
+# | destination configured | runs, produces, and proves by restoring | a normal green run |
+# | no destination, **deferral live** | **green, with a `::notice::` naming the decision** | a run that says "deliberately disabled, waiting on X, re-enable when Y" |
+# | no destination, **deferral EXPIRED** | **red, with `::error::`** | a failure that means the deferral lapsed, not that the backup broke |
+#
+# **The disabled state is a RUN, not an absence.** That is the whole point. A disabled workflow
+# produces no runs, and no runs is exactly what 23 August looked like. This one keeps showing up
+# and keeps saying what it is waiting for.
+#
+# ## The re-enable trigger, named
+#
+# **Set the `BACKUP_DESTINATION` secret.** That is the trigger — there is nothing else to do and
+# no code change required. The moment it exists this workflow starts backing up on its schedule.
+# The options and their costs are in `docs/blocked-on-you.md` → 6.3.
+#
+# ## The deferral, dated
+#
+# `DEFERRAL_EXPIRES` below is **2026-10-15**, thirty days from the MR-34 session that set it.
+# When it passes, this workflow goes red every week until somebody either configures a
+# destination or files a new deferral **with a reason**, in this file, in a commit with an
+# author and a date. That is deliberately the same escape hatch as the UCPMP deadline: possible,
+# and impossible to do silently.
 
 on:
   schedule:
-    # Daily, offset from the retention workflows so a busy hour is not made busier.
-    - cron: '25 2 * * *'
+    # WEEKLY, not daily. MR-33 ran this daily while it could not possibly succeed. A weekly
+    # notice is a reminder; a daily one is noise, and noise is what gets switched off.
+    - cron: '25 2 * * 1'
   workflow_dispatch:
 
 concurrency:
   group: database-backup
   cancel-in-progress: false
+
+env:
+  # Change this ONLY in a commit that says why. See the header.
+  DEFERRAL_EXPIRES: '2026-10-15'
 
 jobs:
   backup:
@@ -42,39 +74,70 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # FIRST, before anything is produced. A dump with nowhere lawful to go should not
-      # exist, not even for the lifetime of a runner.
+      # FIRST, before anything is produced, and three-state rather than two.
       - name: Is there a destination for this artefact?
+        id: destination
         env:
           BACKUP_DESTINATION: ${{ secrets.BACKUP_DESTINATION }}
         run: |
-          if [ -z "$BACKUP_DESTINATION" ]; then
-            echo "::error::No BACKUP_DESTINATION is configured, so this run produced nothing."
-            echo "::error::A dump of this database contains the consent ledger, doctors' names,"
-            echo "::error::adverse-event report text and every auth identity. Where it may land is"
-            echo "::error::a data-processing decision — see docs/blocked-on-you.md, the BE-W11"
-            echo "::error::destination item. This failure is the reminder that BE-W11 is open."
+          if [ -n "$BACKUP_DESTINATION" ]; then
+            echo "Destination configured."
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          TODAY=$(date -u +%Y-%m-%d)
+          if [ "$TODAY" \> "$DEFERRAL_EXPIRES" ]; then
+            echo "::error title=BE-W11 deferral expired::The backup destination decision was deferred until $DEFERRAL_EXPIRES and that date has passed."
+            echo "::error::This is NOT a broken backup. Nothing was produced, because there is still"
+            echo "::error::nowhere lawful to put it. A dump of this database contains the consent ledger,"
+            echo "::error::doctors' names, adverse-event report text and every auth identity."
+            echo "::error::TO FIX: set the BACKUP_DESTINATION secret. Options and costs are in"
+            echo "::error::docs/blocked-on-you.md section 6.3. To defer again, change DEFERRAL_EXPIRES"
+            echo "::error::in .github/workflows/backup.yml in a commit that says why."
             exit 1
           fi
-          echo "Destination configured."
+
+          echo "::notice title=BE-W11 deliberately disabled::Waiting on the backup destination decision. Deferred until $DEFERRAL_EXPIRES. Re-enable by setting the BACKUP_DESTINATION secret."
+          echo "proceed=false" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Database backup — deliberately disabled"
+            echo ""
+            echo "This run did nothing **on purpose**, and it is not a failure."
+            echo ""
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Waiting on | a destination for the backup artefact — a data-processing decision |"
+            echo "| Recorded in | \`docs/blocked-on-you.md\` section 6.3 |"
+            echo "| Re-enable trigger | **set the \`BACKUP_DESTINATION\` secret** — no code change needed |"
+            echo "| Deferred until | **$DEFERRAL_EXPIRES** — this job goes red after that date |"
+            echo ""
+            echo "Nothing was produced. The destination check runs before the dump precisely so"
+            echo "that a run with nowhere to put the data leaves no copy of it anywhere."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: pnpm/action-setup@v4
+        if: steps.destination.outputs.proceed == 'true'
 
       - uses: actions/setup-node@v5
+        if: steps.destination.outputs.proceed == 'true'
         with:
           node-version-file: .nvmrc
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+        if: steps.destination.outputs.proceed == 'true'
 
       # `pg_dump` and `psql` are not on the runner by default, and the backup must not be
       # taken with a client older than the server.
       - name: Install the Postgres client
+        if: steps.destination.outputs.proceed == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-client
 
       - name: Produce the artefact
+        if: steps.destination.outputs.proceed == 'true'
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
@@ -83,6 +146,7 @@ jobs:
 
       # Producing is not proving. MR-32's first drill exited 0 having restored nothing.
       - name: Prove it by restoring from it
+        if: steps.destination.outputs.proceed == 'true'
         env:
           PGPASSWORD: postgres
         run: |
