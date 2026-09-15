@@ -2987,3 +2987,39 @@ believing the test — an ordering test that has never failed has probably never
 
 This is the same family as *"assert the content, not the container"*: the test looked correct,
 ran, and measured nothing.
+
+### `tenant-boundary-restrictive.spec.ts` deadlocks about two runs in seven, and it is not new
+
+**MR-35, measured while chasing something else.** `tests/tenant-boundary-restrictive.spec.ts`
+fails with `error: deadlock detected` inside `mirrorTable` (line 81, `create policy ... on
+public.<name>`) on roughly **two runs in seven** of `pnpm --filter @fieldforce/api test`.
+
+**Quantified, because the sample size is the whole story here.** It was first blamed on a new
+suite added in the same session, on the strength of *three* clean runs without that file against
+*two failures in four* with it. Widening the baseline to **seven runs with the new file removed
+entirely** produced **two deadlocks** — same test, same line, and in one case a different `it`
+within it, which is itself a sign of a timing race rather than a fixed ordering bug.
+
+**Three runs is not a baseline.** It is a coincidence with a plausible story attached, and it
+very nearly shipped as a diagnosis. The standing rule — *"the fix worked" is not evidence the
+diagnosis was right* — has a twin that this is an instance of: **"it stopped happening" is not
+evidence either, when you never established the rate it was happening at.**
+
+**What it means in practice**
+
+- **A single red run of the `api` suite is not a regression on its own.** Re-run before
+  investigating, and check whether the failure is this test and this error.
+- **A single green run does not clear a change either**, which is the direction that bites. If
+  you are testing whether something you wrote causes flakiness, you need a rate on both sides,
+  not a pass/fail on each.
+- **CI runs this suite once**, so it has roughly a one-in-four chance of a spurious red on any
+  given push.
+
+**Not fixed here.** It belongs with `BE-W92`, the deadlock work item, which already has
+`enable-lock-logging.mjs` and `log_lock_waits=on` pointed at exactly this class of problem. The
+contribution from this session is the **rate** — previously the deadlock was known to happen and
+nobody had said how often, which is what makes it indistinguishable from a real failure.
+
+**One thing it is NOT:** it is not caused by a test creating its own schema or database. The new
+`organisation-backfill.spec.ts` creates a scratch DATABASE precisely so its DDL shares no catalog
+with the shared test database — and the deadlock rate is the same with it present or absent.
