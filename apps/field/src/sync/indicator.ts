@@ -1,7 +1,7 @@
 import type { SyncQueueState as UiSyncQueueState } from '@fieldforce/ui';
+import type { QueueLoad } from './async-storage-store';
 import { clockFrom } from '../today/plan';
 import { summarise } from './reducer';
-import type { SyncQueueState } from './reducer';
 
 /**
  * The queue, as the one line B1 puts on every screen.
@@ -16,7 +16,11 @@ import type { SyncQueueState } from './reducer';
  * red — an MR offline all morning has done nothing wrong." Waiting, whatever the
  * count and however long, is the ordinary condition of the job.
  */
-export const indicatorStateFor = (state: SyncQueueState): UiSyncQueueState => {
+export const indicatorStateFor = (load: QueueLoad): UiSyncQueueState => {
+  // `FE-W44`. Taking the LOAD rather than the state is the fix: a caller cannot reach the
+  // queue without first saying what it will do when there isn't one.
+  if (load.kind === 'unreadable') return { kind: 'unreadable' };
+  const state = load.state;
   const summary = summarise(state);
 
   if (summary.failed > 0) {

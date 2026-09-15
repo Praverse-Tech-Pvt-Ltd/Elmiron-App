@@ -8,7 +8,7 @@ import { indicatorStateFor } from '../../src/sync/indicator';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { emptyQueue } from '../../src/sync/reducer';
-import type { SyncQueueState } from '../../src/sync/reducer';
+import type { QueueLoad } from '../../src/sync/async-storage-store';
 import { summariseDay } from '../../src/today/plan';
 import { clockIn, dayMonthIn } from '../../src/today/territory-day';
 import type { TerritoryZone } from '../../src/today/territory-day';
@@ -62,7 +62,9 @@ const destinationsFor = (role: string): readonly { title: string; detail: string
  */
 const MrToday = (): ReactNode => {
   const router = useRouter();
-  const [queue, setQueue] = useState<SyncQueueState>(emptyQueue);
+  // `FE-W44`. The LOAD, not the state: an unreadable queue is not an empty one, and
+  // "Everything sent" over a queue this app could not read is the worst thing it says.
+  const [queue, setQueue] = useState<QueueLoad>({ kind: 'loaded', state: emptyQueue });
   // MR-14 B2/B3. The day comes from the store the pull maintains, not from
   // `createClientForScenario()`. This line is the read conversion.
   const {

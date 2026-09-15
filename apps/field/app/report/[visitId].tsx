@@ -10,6 +10,7 @@ import { CallReportScreen, Screen } from '@fieldforce/ui';
 // table all over again.
 import { createClientForScenario } from '../../src/api';
 import { createPushClient } from '../../src/sync/push-client';
+import { QUEUE_UNREADABLE } from '../../src/sync/async-storage-store';
 import { callReportQueueItem, sendOrQueue } from '../../src/sync/outbox';
 // MR-25 C1. This screen still READS from the mock at :4010, which sends the territory's
 // own offset, so the character slice is correct here. **DELETE THE DISABLE BELOW WHEN
@@ -115,6 +116,14 @@ export default function CallReport(): ReactNode {
             detail:
               'Saved on this phone. It will send by itself when you have signal — you do not have to retype it.',
           });
+          return;
+        }
+        if (outcome.kind === 'queue_unreadable') {
+          // `FE-W44`. The server did not answer AND the queue could not be read, so this
+          // report is on neither. The `queued` branch above would have told them it was
+          // saved on the phone; it is not, and that is the one sentence an MR acts on by
+          // closing the screen.
+          setFailure({ title: 'This was NOT saved', detail: QUEUE_UNREADABLE });
           return;
         }
         setFailure({ title: 'That was refused', detail: outcome.message });

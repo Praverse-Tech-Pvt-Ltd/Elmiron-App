@@ -13,7 +13,12 @@ import type { StatusKind } from './StatusGlyph';
  * nothing wrong, and an app that spends the morning showing them a red badge for
  * it teaches them to ignore red by lunchtime. So `waiting`, `wifi` and `sending`
  * are ordinary states in ordinary tones, and `failed` — where sending was tried
- * and did not work — is the only one that gets `critical`.
+ * and did not work — gets `critical`.
+ *
+ * **`unreadable` (`FE-W44`) is the second `critical` state, and the exception is
+ * deliberate.** It is not the MR waiting; it is the app unable to say anything at
+ * all about their work. The only useful thing they can do about it is tell
+ * somebody, which is what red is for.
  *
  * Countable means the number is in the text, not implied by a dot. Tappable means
  * `onPress` opens the list; the caller decides where that goes, because this
@@ -38,7 +43,15 @@ export type SyncQueueState =
     }
   | { readonly kind: 'waiting'; readonly count: number }
   | { readonly kind: 'wifi'; readonly count: number }
-  | { readonly kind: 'failed'; readonly count: number; readonly attempts: number };
+  | { readonly kind: 'failed'; readonly count: number; readonly attempts: number }
+  /**
+   * **`FE-W44`. The queue could not be read, so no claim can be made about it.**
+   *
+   * Not `idle`: "Everything sent" asserts the writes reached the server, and when the store
+   * cannot be read the app does not know what was in it. Not `waiting` either — that counts
+   * something, and there is no count to give.
+   */
+  | { readonly kind: 'unreadable' };
 
 export interface SyncQueueIndicatorProps {
   readonly state: SyncQueueState;
@@ -71,6 +84,12 @@ const describe = (state: SyncQueueState): { status: StatusKind; message: string;
         status: 'critical',
         message: `${String(state.count)} couldn't send · tried ${String(state.attempts)} times`,
         meta: '',
+      };
+    case 'unreadable':
+      return {
+        status: 'critical',
+        message: "Can't read your queue",
+        meta: 'nothing here is confirmed',
       };
   }
 };

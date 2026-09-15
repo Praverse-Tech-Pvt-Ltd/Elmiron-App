@@ -35,7 +35,9 @@ const DEAD_BASE_URL = 'http://127.0.0.1:49517';
 const memoryStore = () => {
   let state: SyncQueueState = emptyQueue;
   return {
-    read: () => Promise.resolve(state),
+    // `FE-W44`. The double answers a LOAD, like the real one: an unreadable queue is
+    // not an empty one, and both writers now refuse to write over it.
+    read: () => Promise.resolve({ kind: 'loaded' as const, state }),
     write: (next: SyncQueueState) => {
       state = next;
       return Promise.resolve();

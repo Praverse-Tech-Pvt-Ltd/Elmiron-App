@@ -27,7 +27,12 @@ jest.mock('../sync/push-client', () => ({
 // so: *"a button that does nothing on the screen reporting a failure is the cruellest
 // possible place for one."* So the route has to be handed a queue with a stuck row, and
 // that comes off disk.
-const mockLoadQueueState = jest.fn<() => Promise<unknown>>(async () => Promise.resolve(emptyQueue));
+// FE-W44. `loadQueueState` answers a LOAD now, and a double that still returns a bare state
+// would feed the screen a shape it no longer reads -- the test passing while the screen is
+// blank is exactly the failure this file exists to prevent.
+const mockLoadQueueState = jest.fn<() => Promise<unknown>>(async () =>
+  Promise.resolve({ kind: 'loaded', state: emptyQueue }),
+);
 jest.mock('../sync/async-storage-store', () => ({
   ...jest.requireActual<Record<string, unknown>>('../sync/async-storage-store'),
   loadQueueState: () => mockLoadQueueState(),
@@ -163,7 +168,7 @@ describe('MR-28 C2 — "Try again now" is never a silent tap', () => {
     //
     // A silent tap is worse HERE than anywhere else in the app: this is where somebody
     // goes when they already suspect something is wrong.
-    mockLoadQueueState.mockResolvedValue(stuck());
+    mockLoadQueueState.mockResolvedValue({ kind: 'loaded', state: stuck() });
     mockFlush.mockRejectedValue(new Error('The queue on this phone could not be read.'));
     await render(<Queue />);
     await screen.findByText('Try again now');
@@ -180,7 +185,7 @@ describe('MR-28 C2 — "Try again now" is never a silent tap', () => {
   it('THE POSITIVE CONTROL: says nothing when the flush worked', async () => {
     // Without this, a banner rendered unconditionally would satisfy the case above while
     // telling every MR their queue is broken.
-    mockLoadQueueState.mockResolvedValue(stuck());
+    mockLoadQueueState.mockResolvedValue({ kind: 'loaded', state: stuck() });
     mockFlush.mockResolvedValue({ attempted: 0, sent: 0, failed: 0 });
     await render(<Queue />);
     await screen.findByText('Try again now');
@@ -191,5 +196,32 @@ describe('MR-28 C2 — "Try again now" is never a silent tap', () => {
       expect(mockFlush).toHaveBeenCalled();
     });
     expect(screen.queryByText('Nothing could be sent')).toBeNull();
+  });
+});
+
+/**
+ * `FE-W44` — the screen an MR opens when they already suspect something is wrong.
+ *
+ * An unreadable store rendered an empty list here: the most reassuring possible rendering
+ * of the least reassuring fact, on the one screen whose entire purpose is to say what is
+ * outstanding.
+ */
+describe('FE-W44 — an unreadable queue is not an empty queue', () => {
+  it('says the queue could not be read, rather than showing nothing', async () => {
+    mockLoadQueueState.mockResolvedValue({ kind: 'unreadable' });
+
+    await render(<Queue />);
+
+    expect(await screen.findByText(/could not read your queue/iu)).toBeTruthy();
+  });
+
+  it('THE POSITIVE CONTROL: a genuinely empty queue says nothing of the kind', async () => {
+    // Without this, showing the banner unconditionally would satisfy the case above and
+    // tell every MR with nothing outstanding that their queue is broken.
+    mockLoadQueueState.mockResolvedValue({ kind: 'loaded', state: emptyQueue });
+
+    await render(<Queue />);
+
+    expect(screen.queryByText(/could not read your queue/iu)).toBeNull();
   });
 });

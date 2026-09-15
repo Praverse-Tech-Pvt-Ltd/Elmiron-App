@@ -2955,3 +2955,35 @@ instructions.
 
 The counts that were removed are in `docs/graphify-notes.md`, labelled as a snapshot, with the
 commands that re-derive them.
+
+### A synchronous test double can hide an ordering defect completely
+
+**MR-33 D1, `FE-W45`.** The bug: `setStore` published restored records before the territory
+zone was read, so one render held real visits with `zone` still at `UTC_FALLBACK` — every
+clock 5h30m wrong for IST, then corrected.
+
+The test recorded **every** render rather than the settled state, which is the right shape for
+an ordering question. It still passed against the defect.
+
+**Why.** The in-memory double resolved `loadAnchor` synchronously, so both `setState` calls
+landed in one React batch and **the intermediate render never existed**. On a device,
+`AsyncStorage.getItem` crosses the bridge — a macrotask — so React commits the store first and
+the bad render is real.
+
+Making the double as asynchronous as the real thing was the whole fix to the test:
+
+```ts
+loadAnchor: async (id) => {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  return inner.loadAnchor(id);
+},
+```
+
+With that, mutating the fix produced `doctors:1, zone:fallback_utc` and failed.
+
+**The rule:** when the thing under test is WHEN something happens rather than what, a double
+that resolves synchronously tests a different program. Check that the mutation fails before
+believing the test — an ordering test that has never failed has probably never been able to.
+
+This is the same family as *"assert the content, not the container"*: the test looked correct,
+ran, and measured nothing.

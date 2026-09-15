@@ -16,6 +16,7 @@ import type {
   SyncQueueItem,
 } from '@fieldforce/core';
 import { asyncStorageQueueStore, loadQueueState } from './async-storage-store';
+import type { QueueLoad } from './async-storage-store';
 import { SyncPushRefusal } from './push-client';
 import type { OutboxWriteClient } from './push-client';
 import { syncQueueReducer } from './reducer';
@@ -31,7 +32,19 @@ import type { SyncQueueState } from './reducer';
  * a renderer, which is where they would stop being tested carefully.
  */
 export interface QueuePersistence {
-  readonly read: () => Promise<SyncQueueState>;
+  /**
+   * **`FE-W44`. `read` can fail, and until MR-33 it said `emptyQueue` when it did.**
+   *
+   * That was not a reporting bug. Both writers here are read-then-write: `enqueue` reads,
+   * reduces and writes; `flushOutbox` reads at the top and writes at the bottom. A read
+   * that answered "empty" on a corrupt store meant the very next write **replaced the MR's
+   * unsent work with an empty queue** — permanently, on a device that may have been offline
+   * all morning, and queued consent captures are among what is lost.
+   *
+   * So the result is discriminated and both writers refuse to write when it is unreadable.
+   * Losing the ability to report is survivable; overwriting the only copy is not.
+   */
+  readonly read: () => Promise<QueueLoad>;
   readonly write: (state: SyncQueueState) => Promise<void>;
 }
 
@@ -93,7 +106,13 @@ export type SendOutcome =
       readonly detail: string | null;
     }
   /** No answer. The work is on disk and will go later. */
-  | { readonly kind: 'queued' };
+  | { readonly kind: 'queued' }
+  /**
+   * `FE-W44`. The server did not answer AND the queue could not be read, so the work is
+   * **not** on disk and will **not** go later. Separate from `queued` because they are
+   * opposite facts and only one of them is safe to tell an MR.
+   */
+  | { readonly kind: 'queue_unreadable' };
 
 // **MR-29 A3 - ALLOWLIST: a RECORD of when this device acted, and the prior art.**
 // This feeds `clientCreatedAt` on queue rows: "when THIS DEVICE created this row",
@@ -295,8 +314,15 @@ export const sendOrQueue = async (
       };
     }
 
-    const state = await store.read();
-    await store.write(syncQueueReducer(state, { type: 'enqueued', item }));
+    const load = await store.read();
+    if (load.kind === 'unreadable') {
+      // `FE-W44`. Writing here would replace whatever is on disk with a queue holding only
+      // this item. The work is not queued, and saying so is the only honest answer — a
+      // `queued` verdict would tell the MR their write is safe on a device that just lost
+      // the rest of them.
+      return { kind: 'queue_unreadable' };
+    }
+    await store.write(syncQueueReducer(load.state, { type: 'enqueued', item }));
     return { kind: 'queued' };
   }
 };
@@ -364,6 +390,12 @@ export interface FlushResult {
   readonly attempted: number;
   readonly sent: number;
   readonly stillQueued: number;
+  /**
+   * `FE-W44`. True when the queue could not be read, so nothing was attempted **and nothing
+   * was written**. Distinct from `attempted: 0` with an empty queue, which means there was
+   * genuinely nothing to send.
+   */
+  readonly unreadable?: boolean;
 }
 
 /**
@@ -377,7 +409,13 @@ export const flushOutbox = async (
   client: OutboxWriteClient,
   store: QueuePersistence = devicePersistence,
 ): Promise<FlushResult> => {
-  let state = await store.read();
+  const load = await store.read();
+  if (load.kind === 'unreadable') {
+    // `FE-W44`. Not "nothing to do". Flushing nothing and then writing at the bottom would
+    // overwrite the queue this run could not read.
+    return { attempted: 0, sent: 0, stillQueued: 0, unreadable: true };
+  }
+  let state = load.state;
   const queued = state.items.filter((item) => item.status === 'queued');
   if (queued.length === 0) return { attempted: 0, sent: 0, stillQueued: 0 };
 

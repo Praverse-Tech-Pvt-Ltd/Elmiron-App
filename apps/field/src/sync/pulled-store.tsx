@@ -232,7 +232,6 @@ export const PulledStoreProvider = ({
         // restored, `loadPulledStore` clears the cursor so this is a full sweep rather
         // than a delta onto nothing.
         let next = await loadPulledStore(userId, persistence, cursors);
-        if (!isCancelled()) setStore(next);
 
         /**
          * **`FE-W40` option D -- the day, before any network answers.**
@@ -277,6 +276,23 @@ export const PulledStoreProvider = ({
         // Fetched before the pages so the first render that has visits also has the zone
         // to read their times in -- otherwise the screen would briefly show every clock
         // in UTC and then correct itself, which is worse than showing nothing.
+        /**
+         * **`FE-W45`, MR-33 D1. The records and the ZONE they are read in arrive together.**
+         *
+         * `setStore` used to run immediately after `loadPulledStore`, before the anchor was
+         * read — so there was a render in which the store held real visits and `zone` was
+         * still the initial `UTC_FALLBACK`. Every clock and date on the screen was **5h30m
+         * wrong for IST**, and then corrected itself. MR-28's own comment names that outcome
+         * as worse than showing nothing, and fetched the zone before the PAGES; it did not
+         * close the window between the RESTORE and the anchor.
+         *
+         * This is the same invariant as records-and-cursor at the top of
+         * `pulled-store-persistence.ts`: two pieces of state that are only meaningful
+         * together must not be published separately.
+         */
+        if (isCancelled()) return;
+        setStore(next);
+
         const fetched = await fetchTerritoryZone();
         if (isCancelled()) return;
 

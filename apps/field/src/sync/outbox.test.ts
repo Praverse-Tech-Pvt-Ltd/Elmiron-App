@@ -30,7 +30,9 @@ import type { SyncQueueState } from './reducer';
 const inMemory = (): QueuePersistence & { current: () => SyncQueueState } => {
   let state: SyncQueueState = emptyQueue;
   return {
-    read: () => Promise.resolve(state),
+    // `FE-W44`. The double answers a LOAD, like the real one: an unreadable queue is
+    // not an empty one, and both writers now refuse to write over it.
+    read: () => Promise.resolve({ kind: 'loaded' as const, state }),
     write: (next) => {
       state = next;
       return Promise.resolve();
@@ -767,5 +769,68 @@ describe('C3: every error type that can cross the send boundary', () => {
       .filter((c) => c.thrown instanceof SyncPushRefusal)
       .map((c) => ((c.thrown as SyncPushRefusal).deadLettered ? 'dead_lettered' : 'rejected'));
     expect(exercised.sort()).toEqual([...refusalStatuses].sort());
+  });
+});
+
+/**
+ * `FE-W44` — the queue could not be READ, so it must not be WRITTEN.
+ *
+ * This is the half that is not about reporting. Both writers here are read-then-write:
+ * `sendOrQueue` reads, reduces and writes; `flushOutbox` reads at the top and writes at the
+ * bottom. While `loadQueueState` answered `emptyQueue` on a corrupt store, the very next
+ * write **replaced the MR's unsent work with an empty queue** — permanently, on a device
+ * that may have been offline all morning, and queued consent captures are among what goes.
+ */
+describe('FE-W44 — an unreadable queue is never overwritten', () => {
+  /** A store that cannot be read, and that records whether anything tried to write it. */
+  const unreadable = () => {
+    let writes = 0;
+    return {
+      persistence: {
+        read: () => Promise.resolve({ kind: 'unreadable' as const }),
+        write: () => {
+          writes += 1;
+          return Promise.resolve();
+        },
+      },
+      writes: () => writes,
+    };
+  };
+
+  it('sendOrQueue does NOT write, and says the work is not saved', async () => {
+    const store = unreadable();
+    const outcome = await sendOrQueue(
+      () => Promise.reject(new Error('offline')),
+      checkInQueueItem(body),
+      store.persistence,
+    );
+
+    // The assertion that matters: nothing was written over the queue we could not read.
+    expect(store.writes()).toBe(0);
+    // And the MR is not told it was queued, because it was not.
+    expect(outcome.kind).toBe('queue_unreadable');
+  });
+
+  it('flushOutbox does NOT write, and reports unreadable rather than "nothing to do"', async () => {
+    const store = unreadable();
+    const result = await flushOutbox({} as never, store.persistence);
+
+    expect(store.writes()).toBe(0);
+    expect(result.unreadable).toBe(true);
+    expect(result.attempted).toBe(0);
+  });
+
+  it('THE POSITIVE CONTROL: a readable empty queue still writes and still queues', async () => {
+    // Without this, refusing to write unconditionally would satisfy both cases above and
+    // break every offline write in the app.
+    const store = inMemory();
+    const outcome = await sendOrQueue(
+      () => Promise.reject(new Error('offline')),
+      checkInQueueItem(body),
+      store,
+    );
+
+    expect(outcome.kind).toBe('queued');
+    expect(store.current().items).toHaveLength(1);
   });
 });

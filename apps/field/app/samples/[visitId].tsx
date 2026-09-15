@@ -8,6 +8,7 @@ import uuid from 'expo-modules-core/src/uuid';
 import { SamplesScreen, Screen } from '@fieldforce/ui';
 import type { SampleLine, SampleLinePatch } from '@fieldforce/ui';
 import { createPushClient } from '../../src/sync/push-client';
+import { QUEUE_UNREADABLE } from '../../src/sync/async-storage-store';
 import { unavailableReason } from '../../src/capture/preconditions';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
@@ -187,6 +188,13 @@ export default function SamplesRoute(): ReactNode {
           // doctor UUID and no numbers -- while the cap, the month-to-date total, this
           // entry and the period all sat in a DETAIL that `sync_push` discarded.
           remaining.push({ ...line, error: refusalTextFor(outcome) });
+          continue;
+        }
+        if (outcome.kind === 'queue_unreadable') {
+          // `FE-W44`. Counting this as `sent` is what the `else` did, and it would have
+          // told the MR their samples were recorded when they are on neither the server
+          // nor the phone. It stays on screen with the line still in it.
+          remaining.push({ ...line, error: QUEUE_UNREADABLE });
           continue;
         }
         if (outcome.kind === 'queued') queued += 1;

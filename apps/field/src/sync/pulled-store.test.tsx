@@ -609,3 +609,73 @@ describe('FE-W40 — the day on a cold start with no signal', () => {
     expect(saved?.serverTime).toBe('2026-09-20T09:00:00+00:00');
   });
 });
+
+/**
+ * `FE-W45` — the records and the ZONE they are read in must arrive together.
+ *
+ * `setStore` ran immediately after `loadPulledStore`, before the anchor was read, so there
+ * was a render holding real visits with `zone` still at the initial `UTC_FALLBACK`. Every
+ * clock and date rendered 5h30m wrong for IST and then corrected itself — which MR-28's own
+ * comment calls worse than showing nothing.
+ *
+ * Ordering is the thing under test, so this records EVERY render rather than the final one.
+ * A test that only reads the settled state passes against the defect.
+ */
+describe('FE-W45 — no render holds records in a fallback zone', () => {
+  it('never shows restored visits while the zone is still UTC_FALLBACK', async () => {
+    const seen: { doctors: number; zone: string; source: string }[] = [];
+    const Watcher = (): ReactNode => {
+      const { store, zone } = usePulledStore();
+      seen.push({ doctors: store.doctor.size, zone: zone.timeZone, source: zone.source });
+      return <BodyText>{`doctors:${String(store.doctor.size)}`}</BodyText>;
+    };
+
+    /**
+     * **The double has to be as ASYNC as the real one, or this test proves nothing.**
+     *
+     * `memoryPulledStore` resolves `loadAnchor` synchronously, so React batches `setStore`
+     * and `setZone` into one render and the intermediate state never exists. Mutating the
+     * fix passed against the original version of this test for exactly that reason. On a
+     * device `AsyncStorage.getItem` crosses the bridge -- a macrotask -- so React commits
+     * the store before the anchor arrives, which is when the 5h30m render happens.
+     */
+    const inner = memoryPulledStore();
+    const persistence = {
+      ...inner,
+      loadAnchor: async (id: string) => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        return inner.loadAnchor(id);
+      },
+    };
+    const base = emptyStore();
+    const restored = { ...base, doctor: new Map([[ASHA.id, ASHA]]) };
+    await persistence.save(USER, restored);
+    await persistence.saveAnchor(USER, {
+      serverTime: '2026-09-14T17:45:00.000Z',
+      receivedAt: Date.now() - 30 * 60_000,
+      timeZone: 'Asia/Kolkata',
+      zoneSource: 'territory',
+    });
+
+    await render(
+      <PulledStoreProvider
+        cursors={memoryPullCursorStore()}
+        persistence={persistence}
+        pull={jest.fn(async () => Promise.reject(new Error('offline'))) as never}
+      >
+        <Watcher />
+      </PulledStoreProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('doctors:1')).toBeTruthy();
+    });
+
+    // The assertion that fails against the defect: no render had records AND a fallback zone.
+    const bad = seen.filter((s) => s.doctors > 0 && s.source === 'fallback_utc');
+    expect(bad).toEqual([]);
+    // THE PRECONDITION: this fixture really did restore records, so the filter had something
+    // to look at. Without it an empty `seen` would pass for the wrong reason.
+    expect(seen.some((s) => s.doctors > 0)).toBe(true);
+  });
+});

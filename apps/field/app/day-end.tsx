@@ -9,7 +9,7 @@ import { usePulledStore } from '../src/sync/pulled-store';
 import { NO_SERVER_CLOCK } from '../src/today/server-window';
 import { indicatorStateFor } from '../src/sync/indicator';
 import { emptyQueue } from '../src/sync/reducer';
-import type { SyncQueueState } from '../src/sync/reducer';
+import type { QueueLoad } from '../src/sync/async-storage-store';
 import { CAPTURE_NOTE, summariseDayEnd } from '../src/today/day-end';
 // MR-25 C1. This screen still READS from the mock at :4010, which sends the territory's
 // own offset, so the character slice is correct here. **DELETE THE DISABLE BELOW WHEN
@@ -48,7 +48,8 @@ export default function DayEnd(): ReactNode {
   // `FE-W42` C1. The territory's day, from the server's clock -- never the handset's.
   const { today } = usePulledStore();
   const [denial, setDenial] = useState<{ title: string; detail: string } | null>(null);
-  const [queue, setQueue] = useState<SyncQueueState>(emptyQueue);
+  // `FE-W44`. The load, not the state — see the note in app/(tabs)/home.tsx.
+  const [queue, setQueue] = useState<QueueLoad>({ kind: 'loaded', state: emptyQueue });
 
   useEffect(() => {
     let live = true;

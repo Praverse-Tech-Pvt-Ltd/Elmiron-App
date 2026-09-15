@@ -6,6 +6,7 @@ import uuid from 'expo-modules-core/src/uuid';
 import { ConsentDetailsScreen, ConsentScreen, Screen } from '@fieldforce/ui';
 import type { ConsentAnswer } from '@fieldforce/ui';
 import { createPushClient } from '../../src/sync/push-client';
+import { QUEUE_UNREADABLE } from '../../src/sync/async-storage-store';
 import { unavailableReason } from '../../src/capture/preconditions';
 import { noticesFromStore } from '../../src/consent/notices';
 import { usePulledStore } from '../../src/sync/pulled-store';
@@ -268,6 +269,16 @@ export default function ConsentRoute(): ReactNode {
             detail: refusalTextFor(outcome),
           });
           refresh();
+          return;
+        }
+
+        if (outcome.kind === 'queue_unreadable') {
+          // `FE-W44`, and this is the worst site of the five. Falling through here treats
+          // the capture as ACCEPTED and returns the MR to the visit -- a doctor's recorded
+          // answer that reached neither the server nor the phone, with the screen saying it
+          // landed. A consent record is the one thing in this product where being wrong is
+          // worst, and `consent_records` is append-only, so there is nothing to amend later.
+          setRefusal({ title: 'This was NOT saved', detail: QUEUE_UNREADABLE });
           return;
         }
 

@@ -78,26 +78,64 @@ export const asyncStorageQueueStore: SyncQueueStore = {
   },
 };
 
+/**
+ * The outcome of reading the queue — **`FE-W44`, MR-33 D1.**
+ *
+ * **An empty queue and an unreadable one are not the same fact, and this used to return the
+ * same value for both.** A parse failure or an AsyncStorage rejection answered `emptyQueue`,
+ * and every caller then acted on "there is nothing outstanding" — which is a claim about the
+ * MR's work, not about storage.
+ *
+ * What that produced, at each of the four call sites:
+ *
+ * | Screen | Said |
+ * | --- | --- |
+ * | `home.tsx`, `day-end.tsx` | **"Everything sent"** — asserting the writes reached the server |
+ * | `queue.tsx` | an empty list, on the screen an MR opens when they already suspect something is wrong |
+ * | `visit/[id].tsx` | fed `witnessedStage` an empty queue, so a queued check-in was invisible — **MR-28's defect 12 by another route** |
+ *
+ * A discriminated result rather than `null`, for the reason MR-31 recorded: the caller has to
+ * open it, so the number of call sites that read the discriminant is structurally all of
+ * them. A discriminant with zero readers is a sentinel with extra steps.
+ */
+export type QueueLoad =
+  { readonly kind: 'loaded'; readonly state: SyncQueueState } | { readonly kind: 'unreadable' };
+
 /** The full state, for a screen that needs rejections and warnings as well as items. */
-export const loadQueueState = async (): Promise<SyncQueueState> => {
+export const loadQueueState = async (): Promise<QueueLoad> => {
   try {
     const raw = await AsyncStorage.getItem(KEY);
-    if (raw === null) return emptyQueue;
+    // Genuinely absent is genuinely empty: nothing has ever been queued on this device.
+    // That is an answer, and it is different from the catch below.
+    if (raw === null) return { kind: 'loaded', state: emptyQueue };
     const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== 'object' || parsed === null) return emptyQueue;
+    if (typeof parsed !== 'object' || parsed === null) return { kind: 'unreadable' };
     const shape = parsed as Partial<Record<keyof SyncQueueState, unknown>>;
     return {
-      items: parseItems(shape.items),
-      // These three are the server's answers about items. They are stored as written
-      // and read back defensively: a malformed map must not take the queue with it.
-      rejections: (shape.rejections ?? {}) as SyncQueueState['rejections'],
-      reinstatements: (shape.reinstatements ?? {}) as SyncQueueState['reinstatements'],
-      warnings: (shape.warnings ?? {}) as SyncQueueState['warnings'],
+      kind: 'loaded',
+      state: {
+        items: parseItems(shape.items),
+        // These three are the server's answers about items. They are stored as written
+        // and read back defensively: a malformed map must not take the queue with it.
+        rejections: (shape.rejections ?? {}) as SyncQueueState['rejections'],
+        reinstatements: (shape.reinstatements ?? {}) as SyncQueueState['reinstatements'],
+        warnings: (shape.warnings ?? {}) as SyncQueueState['warnings'],
+      },
     };
   } catch {
-    return emptyQueue;
+    return { kind: 'unreadable' };
   }
 };
+
+/**
+ * What every screen says when the queue cannot be read.
+ *
+ * One sentence, exported, so four screens cannot drift into four. **Engineering's default**,
+ * in the shape `FE-W39` settled: it names the missing thing and claims nothing either way
+ * about whether the work was sent, because that is exactly what is unknown.
+ */
+export const QUEUE_UNREADABLE =
+  'This app could not read your queue, so it cannot tell you what has been sent. Nothing has been lost from the server — but nothing on this screen is confirmed either. Tell your manager if it persists.';
 
 /** Test seam. */
 export const clearQueue = async (): Promise<void> => {

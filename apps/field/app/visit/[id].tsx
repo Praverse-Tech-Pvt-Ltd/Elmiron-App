@@ -35,9 +35,9 @@ import {
   recordingRequest,
 } from '../../src/capture/recording';
 import { checkInQueueItem, checkOutQueueItem, sendOrQueue } from '../../src/sync/outbox';
-import { loadQueueState } from '../../src/sync/async-storage-store';
+import { QUEUE_UNREADABLE, loadQueueState } from '../../src/sync/async-storage-store';
+import type { QueueLoad } from '../../src/sync/async-storage-store';
 import { emptyQueue } from '../../src/sync/reducer';
-import type { SyncQueueState } from '../../src/sync/reducer';
 import { unavailableReason } from '../../src/capture/preconditions';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
@@ -116,9 +116,13 @@ export default function VisitRoute(): ReactNode {
   // The queue is re-read whenever this screen is entered AND after every write, because a
   // check-in that has just been queued must change the stage immediately -- an MR who presses
   // "I am here" with no signal and sees "Not started" will press it again.
-  const [queue, setQueue] = useState<SyncQueueState>(emptyQueue);
+  // `FE-W44`. The load, not the state: feeding `witnessedStage` an empty queue because the
+  // store could not be READ is defect 12 by another route -- a queued check-in becomes
+  // invisible and the MR presses the button again.
+  const [queueLoad, setQueueLoad] = useState<QueueLoad>({ kind: 'loaded', state: emptyQueue });
+  const queue = queueLoad.kind === 'loaded' ? queueLoad.state : emptyQueue;
   const refreshQueue = useCallback(() => {
-    void loadQueueState().then(setQueue);
+    void loadQueueState().then(setQueueLoad);
   }, []);
   useEffect(refreshQueue, [refreshQueue]);
 
@@ -280,6 +284,13 @@ export default function VisitRoute(): ReactNode {
         );
 
         refreshQueue();
+        if (sendResult.kind === 'queue_unreadable') {
+          // `FE-W44`. Neither sent nor queued. Saying nothing here is defect 12's shape
+          // again -- the MR presses "I am here", the stage does not move, and they press
+          // it a second time.
+          setFailure({ title: 'This was NOT saved', detail: QUEUE_UNREADABLE });
+          return;
+        }
         if (sendResult.kind === 'sent') {
           // **Defect 12, found by driving MR-28 B4 on the device.**
           //

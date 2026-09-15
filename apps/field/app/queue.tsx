@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { QueueScreen } from '@fieldforce/ui';
-import { loadQueueState } from '../src/sync/async-storage-store';
+import { QUEUE_UNREADABLE, loadQueueState } from '../src/sync/async-storage-store';
+import type { QueueLoad } from '../src/sync/async-storage-store';
 import { flushOutbox } from '../src/sync/outbox';
 import { createPushClient } from '../src/sync/push-client';
 import { presentRejection } from '../src/sync/explanation';
 import { emptyQueue } from '../src/sync/reducer';
-import type { SyncQueueState } from '../src/sync/reducer';
 
 /**
  * Route binding. It reads state, passes it down, and renders. Nothing else.
@@ -31,11 +31,15 @@ import type { SyncQueueState } from '../src/sync/reducer';
  * that keeps the queue's verdicts server-owned.
  */
 export default function Queue(): ReactNode {
-  const [state, setState] = useState<SyncQueueState>(emptyQueue);
+  // `FE-W44`. The LOAD, not the state. This is the screen an MR opens when they already
+  // suspect something is wrong, and an empty list here used to be what an unreadable store
+  // looked like -- the most reassuring possible rendering of the least reassuring fact.
+  const [load, setLoad] = useState<QueueLoad>({ kind: 'loaded', state: emptyQueue });
   const [retryFailed, setRetryFailed] = useState<string | null>(null);
+  const state = load.kind === 'loaded' ? load.state : emptyQueue;
 
   const refresh = (): void => {
-    void loadQueueState().then(setState);
+    void loadQueueState().then(setLoad);
   };
 
   useEffect(refresh, []);
@@ -47,7 +51,11 @@ export default function Queue(): ReactNode {
       // one -- that would nest two scroll views and double the page padding. The banner
       // therefore belongs to the screen, as a prop, which is also where it belongs
       // semantically: it is part of the queue's story, not a thing floating above it.
-      {...(retryFailed === null ? {} : { retryFailure: retryFailed })}
+      {...(load.kind === 'unreadable'
+        ? { retryFailure: QUEUE_UNREADABLE }
+        : retryFailed === null
+          ? {}
+          : { retryFailure: retryFailed })}
       onRetry={() => {
         setRetryFailed(null);
         // **MR-28 C2.** This was `void flushOutbox(...).then(refresh)` with no `.catch`.
