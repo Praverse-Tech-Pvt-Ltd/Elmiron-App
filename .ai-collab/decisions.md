@@ -1038,3 +1038,80 @@ future session, arriving with more authority than anything read afterwards. It c
 
 The snapshots moved to `docs/graphify-notes.md`; the migration sentence now prints
 `ls services/api/supabase/migrations/*.sql | wc -l` instead of a number.
+
+## 15 September 2026 — MR-34
+
+### The backup workflow's daily red is REVERSED, and this overrides MR-33
+
+**MR-33 recorded:** *"Keep this schedule live and red. The daily failure is the reminder that
+the recovery posture does not exist yet, and silencing it removes the only thing saying so."*
+
+**That is withdrawn.** The argument is sound in isolation and this repository has already run
+the experiment and got the other answer.
+
+**The evidence, from this repository:** the retention workflows went red, were disabled on
+**23 August** (`b5d03a5`, *"Record: retention workflows disabled again, 23 August"*), and
+`docs/COMPLETION-PLAN.md:602` **still asks why — the reason was never recorded.** In the silence
+that followed, production auto-paused from **23 August to 7 September** and was discovered by a
+failed connection rather than by an alert (`COMPLETION-PLAN.md:561`).
+
+**A red that is correct every day is indistinguishable from a red that is broken.** It stops
+being an alarm, becomes noise, gets disabled, and the disabling is itself silent — which is
+worse than the original gap, because absence of runs looks like health.
+
+**Decision: three states, not two, on the shape `check:decision-debt` uses for the UCPMP cap.**
+
+| State | Outcome |
+| --- | --- |
+| destination configured | runs, produces, proves by restoring |
+| no destination, deferral live | **green, `::notice`**, naming the decision, the trigger and the expiry |
+| no destination, deferral expired | **red, `::error`** — the deferral lapsed, not the backup broke |
+
+Weekly rather than daily. The deferral (`DEFERRAL_EXPIRES`, **2026-10-15**) is a dated record in
+the file, changeable only in a commit that says why — the same escape hatch as the UCPMP
+deadline: possible, and impossible to do silently. **The re-enable trigger is named and needs no
+code change: set the `BACKUP_DESTINATION` secret.**
+
+**What did not change, and was never in question:** the destination check still runs **first**,
+so a run with nowhere lawful to put the data still produces nothing, not even on the runner.
+
+**The generalisable half:** *the disabled state must be a RUN, not an absence.* A workflow
+switched off in the GitHub UI produces no runs, and no runs is exactly what 23 August looked
+like from the outside.
+
+### `min(uuid)` in a pending migration is an ASK, not a fix, and a new migration cannot help
+
+`20260908000800_user_profiles_organisation.sql` calls `min(id)` on a `uuid` column. PostgreSQL
+has no such aggregate — verified on `server_version` 17.6, zero matching entries in `pg_proc`.
+Both non-empty branches of that backfill were executed against seeded databases in MR-34 B5.
+
+**`.ai-collab/constraints.md:78` makes editing an applied migration an "ask before doing", and
+the usual remedy does not apply.** "Write a new migration instead" works when the defective
+migration completes. This one **aborts the deploy**, so no successor ever runs. The fix must go
+in that file or nowhere.
+
+**Decision: do not edit it in this session. Register it and ask.** `docs/blocked-on-you.md` 7.1
+names the one-expression change and the cheaper alternative — run the Phase 0 pre-flight query
+and find out whether the branch can fire at all.
+
+**Recorded because the reasoning is the point:** a constraint whose stated remedy does not work
+for a particular case is a constraint that needs a human, not a constraint to be routed around
+quietly.
+
+### The checked-in graph is to be rebuilt, not caveated
+
+Measured in MR-34 A3: built 11 August, **80% of tracked code files absent**, 39 of 56 migrations
+absent, and `apps/field` **131 of 131** absent — its whole representation is two config files
+and a `placeholder.ts` that no longer exists.
+
+**Decision: treat a graph whose build date lags the code by weeks as unusable, not as degraded.**
+It is *dangerous* rather than merely useless: every node carries a `source_file` and a line
+number, so a stale answer arrives with the strongest available signal of being checkable.
+
+**Not rebuilt in this session** — regenerating needs `pip install "graphifyy[sql]"`, and adding
+a dependency is itself an ask. The verdict and the measurements are in `docs/graphify-notes.md`;
+`CLAUDE.md` gained one time-invariant line that prints its own freshness check.
+
+**Note for whoever rebuilds it:** the `[sql]` extra was **not** the problem here. The graph has
+226 `.sql` nodes, so SQL parsed fine. It is stale, not mis-built, and those have different
+fixes.

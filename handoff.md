@@ -196,3 +196,54 @@ name and the exit code hid it.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-33 — `BE-W11`, there is no restore | `PROJECT-OVERVIEW.md` → `### MR-33 — the restore mechanism` |
+
+---
+
+## After MR-34 — 15 September 2026
+
+**Read `docs/blocked-on-you.md` 6.1 and 7.1 before doing anything with production.**
+
+| | |
+| --- | --- |
+| **The deploy** | **Rehearsed.** `docs/restore-runbook.md` → *"Applying 37 migrations to a database at 19"*. Five phases, both failure paths executed |
+| **And it has a landmine** | `20260908000800_user_profiles_organisation.sql` runs `min(id)` on a uuid column. **PostgreSQL has no `min` for uuid.** If production has any territory-less profile the deploy either crashes (1 organisation) or refuses (more than 1). Only the empty-database path has ever run, and that is the only path CI runs. **7.1** |
+| **Sequencing** | **THE DEPLOY MUST HAPPEN BEFORE THE DATA.** `B11` reference data is dated ~22 Sep — seven days out. Data first means it lands on a schema with `BE-W76`'s cross-tenant admin read still open. **6.1** |
+| **The graph** | **A museum. Rebuild before trusting it.** Built 11 Aug; 80% of tracked code files absent; `apps/field` is 131-of-131 absent. `docs/graphify-notes.md` |
+| **Backup workflow** | No longer a daily red. Three states, weekly, deferral expires **2026-10-15**; re-enable by setting `BACKUP_DESTINATION` |
+| **Tests** | **1,640 passing, zero skipped, zero failing.** Read them from the runners |
+| **Push** | **BLOCKED.** Nine commits held locally; `git push` was denied by the environment. No CI run exists for MR-33 or MR-34 |
+
+### The pre-flight query — one SELECT, and nobody has run it
+
+It decides whether the deploy is six seconds or a half-applied schema:
+
+```bash
+psql "<direct url>" -At -c "select 'territory_less=' || (select count(*) from public.user_profiles where territory_id is null) || ' organisations=' || (select count(*) from public.organisations);"
+```
+
+`territory_less=0` → clean. Anything else → read `blocked-on-you` 7.1 first.
+
+### Three traps measured this session
+
+1. **A partial deploy has the same table count as a complete one.** When the push failed it left
+   17 of 37 applied: 36 tables and `rls_forced=36`, *identical to a finished deploy*, with 42
+   policies and no `organisation_id`. **Only `check:migration-drift` and the presence of
+   `user_profiles.organisation_id` distinguish them.** `db push` is not transactional across
+   migrations, and a partial application is not a failed one — nothing rolls back.
+2. **A full rollback leaves the drift check reporting NO DRIFT against an empty database.**
+   `verify:rollbacks` passes 56/56 and ends with the schema empty — and never touches
+   `supabase_migrations.schema_migrations`, so the database claims all 56 applied with zero
+   tables. The exact inverse of trap 1, defeating the same check. **Forward recovery only.**
+3. **You cannot rehearse this deploy on a bare `create database`.** It fails at migration 1 with
+   *"schema `auth` does not exist"*. No migration creates anything in `auth`/`storage` but 38 of
+   56 reference them, so the baseline must come from the platform's own init — use
+   `supabase db reset` against a copy of the supabase directory with only the 19 in it.
+
+### And one that is not new but keeps earning its place
+
+`check:migration-drift` piped to `tail` reported `exit=0` for a command that exited 1. **`$?`
+after a pipe is the last command's status.** Observed live this session.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-34 — the deploy rehearsal | `PROJECT-OVERVIEW.md` → `### MR-34 — the deploy rehearsal` |

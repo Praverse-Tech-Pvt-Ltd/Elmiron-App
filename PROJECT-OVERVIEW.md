@@ -14200,3 +14200,329 @@ Four things a reader should carry forward:
 4. **Two tests in this session measured nothing until they were mutated** — the ordering test
    that React batched away, and `loadQueueState`'s catch, which had no test at all. Mutation
    is the only thing that distinguishes a passing test from a present one.
+
+
+### MR-34 — the deploy rehearsal
+
+**The session found a migration that crashes, in the batch an operator is about to apply to
+production, on the branch nobody could exercise. It was found by running the deploy, not by
+reading it — and CI has never once run the path it fails on.**
+
+#### A1 — NOT DONE, and this is the only part of MR-34 that is incomplete
+
+**`git push` was denied by this environment's permission classifier** ("Out-of-Place
+Publication"). The five MR-33 commits are still local. **There is therefore no CI run id, no
+workflow, no event and no SHA to report, and no statement that any SHA equals HEAD can be
+made.** Saying otherwise would be inventing a run that does not exist.
+
+What *is* true and checkable: `HEAD` was `577bd815ee76669c2e9cc802448ab4ddfc95e144` at the
+start of this session, the working tree was clean, and the checkout guard passed all three —
+namespace `@fieldforce/api`, remote `Praverse-Tech-Pvt-Ltd/Elmiron-App`, `f34ceef` an ancestor
+of HEAD. **Nine commits are now held locally.** A1 needs the operator to grant push, or to push
+themselves.
+
+#### A2 — the drift item is now a sequencing constraint with a date
+
+> **The deploy must happen BEFORE the data.**
+
+Production sits at 19 migrations. The 37 that follow contain the tenant boundary. **If
+reference data lands first, it lands on a schema with `BE-W76`'s cross-tenant admin read still
+open** — one organisation's admin reading another's rows, for the interval between, with
+nothing in the schema recording that it happened.
+
+**And the interval has a date.** `docs/COMPLETION-PLAN.md:499` puts **`B11` reference data at
+~22 September** — **seven days from this session** — with `B12` shift hours alongside it.
+
+`docs/blocked-on-you.md` 6.1 now lists what is undeployed **by name**, mapped from the
+migration files themselves rather than from the work-item table: `BE-W76` (four migrations,
+including `organisation_scoping` and `tenant_boundary_restrictive`), `BE-W77`, `BE-W78`,
+`BE-W79`, `BE-W84`, `FIX-02`/`FIX-12`'s bounds, MR-28's `DETAIL` threading, MR-28 defect 12,
+both privilege revocations, the UCPMP cap with its 6 November deadline, and the whole
+`sync_pull`/`sync_push` layer. **A number is a backlog item; a list is a decision.**
+
+**One premise is flagged rather than repeated.** The claim that exposure is zero today rests on
+production holding no reference data — and `COMPLETION-PLAN.md:217` states plainly that *"every
+production claim in the brief — `ACTIVE_HEALTHY`, 19 migrations deployed, no reference data,
+the free-plan pause — is unverifiable from here."* `BE-W40` has since verified the migration
+count. **Nothing has ever checked the data.** If that premise is wrong, this is not a sequencing
+item, it is an incident — and checking costs one query.
+
+#### A3 — the graph is a MUSEUM, and the reason it is stale is not the reason expected
+
+The freshness command in `CLAUDE.md`, run: **graph built 2026-08-11; migrations and
+`packages/core` last changed 2026-09-11.** Five weeks, and the five weeks that contain
+everything.
+
+Measured by matching every `source_file` in `graph.json` against `git ls-files`:
+
+| | |
+| --- | --- |
+| Tracked code files now | 439 |
+| **Absent from the graph** | **352 — 80%** |
+| **Migrations absent** | **39 of 56** |
+| `packages/core` absent | 1 of 24 |
+| **`apps/field` absent** | **131 of 131** |
+
+**`apps/field` is not thin in the graph, it is absent.** The graph's entire knowledge of the
+field app is `package.json`, `tsconfig.json`, and `apps/field/src/placeholder.ts` — **a file
+that no longer exists**.
+
+**Two corrections to the expected reading, and both matter.**
+
+1. **The `[sql]` extra was not the problem.** The graph holds **226 `.sql` nodes, 188 under
+   `migrations/`**, so SQL parsed fine. It is **stale, not mis-built** — different failures with
+   different fixes, and rebuilding is the one that works.
+2. **The graph was never built when "34 migrations" was true.** The natural inference — 34 was
+   in `CLAUDE.md`, so the graph dates from then, so 22 are missing — does not survive the dates.
+   The graph is from **11 August**, when **17** migrations were tracked; the *"all 34"* sentence
+   entered `CLAUDE.md` on **14 August** (`d3b841f`), three days later. **Two independent stale
+   numbers that happened to sit near each other, and the real gap is 39.**
+
+**Verdict: do not trust it; rebuild it.** It is gitignored, so it costs nothing either way. It
+is *dangerous* rather than merely useless, because every node carries a `source_file` and a line
+number — a stale answer arrives with the strongest available signal of being checkable. Recorded
+in `docs/graphify-notes.md`; `CLAUDE.md` gained one time-invariant line that prints its own
+check.
+
+#### B1 — production's actual 19, established two ways that agree
+
+1. **By partition.** Exactly **19** migration files are dated before `20260907`, and exactly
+   **37** on or after. That matches the counts `BE-W40` read from production, in both
+   directions, including its *"applied with no file here: none"* — which is the statement that
+   makes the reconstruction valid, because it means every applied version corresponds to a file
+   still on `main`.
+2. **By content, which is the half that could have gone wrong.** *"The first 19 of today's 56"*
+   is only production's state if none of those files changed after they were applied. **None
+   did** — every one of the 19 was last touched on or before **2026-08-14**, the `BE-W8` push.
+
+The CLI then confirmed the split independently: `db push --dry-run` computed **37** pending
+against the reconstructed database, which is a third derivation from a fourth source.
+
+**And the scratch database could not be a scratch database.** A bare `create database` fails at
+migration 1 — *"schema `auth` does not exist"*. No migration creates anything in `auth` or
+`storage`, but **38 of 56 reference them**, so the baseline has to come from the platform's own
+init. Rebuilt with `supabase db reset` against a 19-file copy of the supabase directory in a
+temp folder — the operator's own tool, and the repository is never touched.
+
+#### B3 — "19 then 37" versus "56 from empty"
+
+**Byte-identical across all 421 lines of fingerprint.**
+
+| Measure | 19 → +37 | 56 from empty |
+| --- | --- | --- |
+| migrations | 56 | 56 |
+| tables | 36 | 36 |
+| RLS enabled | 36 | 36 |
+| RLS forced | 36 | 36 |
+| policies | 48 | 48 |
+| functions | 102 | 102 |
+| triggers | 70 | 70 |
+| indexes | 114 | 114 |
+| columns | 450 | 450 |
+| constraints | 493 | 493 |
+
+Counts are the weak claim, so the comparison was content: the table list, per-table
+`relrowsecurity` **and** `relforcerowsecurity`, all 48 policies with `qual` and `with_check`,
+all 102 function identity signatures, all 70 triggers, every `app_thresholds` key and value, and
+all 56 versions. **`diff` returns nothing.**
+
+**Positive control:** the same instrument on *"at 19"* versus *"56 from empty"* returns **193
+differing lines**, 31 of them naming tenancy. The instrument is live, so the identical result is
+a finding and not an empty comparison.
+
+#### B4 — 6.4 seconds, as a floor
+
+Measured with the 19 asserted applied beforehand and **37** `Applying migration` lines counted
+after. A floor, not an estimate: a local Unix socket; **zero rows**, so every rewrite, index
+build and constraint validation ran against empty tables; no concurrent traffic, so nothing
+queued behind the `ACCESS EXCLUSIVE` lock `20260908000800` takes on `user_profiles`; and no
+pooler, connection limit or statement timeout. **Plan a two-minute window.**
+
+#### B5 — the finding: `min(uuid)` does not exist, and the deploy has a coin-flip in it
+
+`20260908000800_user_profiles_organisation.sql` backfills each profile's organisation. For a
+profile with a territory it derives the answer. For one without — an admin — it runs:
+
+```sql
+select count(*), min(id) into v_orgs, v_org from public.organisations;
+```
+
+**PostgreSQL has no `min` aggregate for `uuid`.** Verified on the local stack,
+`server_version` **17.6**: the catalogue holds **zero** `min` functions accepting `uuid`.
+
+| Production's data | The deploy | Intended? |
+| --- | --- | --- |
+| no territory-less profiles | clean | yes — **and the only path CI has ever run** |
+| territory-less profiles, **1** organisation | **crashes, `SQLSTATE 42883`** | **no** |
+| territory-less profiles, **>1** organisations | refuses, `MR-06 / BE-W76` | yes |
+
+Both non-empty branches were **executed**, each against a database seeded to meet its
+precondition, with the precondition asserted before the push. This is measured, not read.
+
+**The migration's own comment claims a test covers it** — *"the single-organisation branch is
+exercised only by its test, not by CI's migration run."* **There is no such test.** A backfill
+runs once, at migration time; nothing can re-run it afterwards. The branch has never executed
+anywhere, and it does not work.
+
+**Not fixed, and deliberately so.** `.ai-collab/constraints.md:78` puts *"changing what a
+migration that has already been applied does"* under **Ask before doing**. The usual remedy —
+write a new migration — **cannot work here**, because the broken one aborts the deploy before
+any successor runs. The fix has to go in that file or nowhere. Registered as `blocked-on-you`
+**7.1** with the one-expression change named.
+
+**And there is a second, cheaper answer that nobody has taken:** run the Phase 0 pre-flight
+query. If production has no territory-less profiles the defect never fires.
+
+#### B7 — the operator's procedure, and the partial-application trap
+
+`docs/restore-runbook.md` → **"Applying 37 migrations to a database at 19 — the rehearsed
+procedure"**. Five phases, each with what to check and what to do when it fails.
+
+**The reason it exists.** When the push failed it left **17 of 37 applied and committed** —
+`supabase db push` is not transactional across migrations. The half-applied database:
+
+| | Partial (18 of 37) | Complete |
+| --- | --- | --- |
+| migrations | 36 | 56 |
+| **tables** | **36** | **36** |
+| **rls_forced** | **36** | **36** |
+| policies | 42 | 48 |
+| **`user_profiles.organisation_id`** | **absent** | **present** |
+
+**A half-applied deploy has exactly the same table count and the same forced-RLS count as a
+complete one.** No structural count distinguishes them. Anyone checking "36 tables, looks right"
+concludes success on a database with no tenant boundary in it. Only two things discriminate:
+`check:migration-drift`, which named all 20 missing versions correctly, and the presence of
+`organisation_id`. **A partial application is not a failed one** — nothing rolls back, and
+nothing warns on the next connection.
+
+#### B6 — rollbacks pass 56 of 56, and rolling back is theoretical
+
+`verify:rollbacks` reports **56 of 56**, in reverse order, ending *"public schema is empty"*,
+with migration/rollback pairing exact in both directions. A real, run, green check.
+
+**It is not an operational rollback.** It is all-or-nothing to empty — there is no way to
+reverse 37 and stop at 19, which is the only rollback anyone would want here; it refuses any
+host but localhost, with no override, by design; and **it leaves the ledger lying.** Measured
+immediately after:
+
+```
+public tables = 0    schema_migrations rows = 56
+```
+
+**The database is empty and still claims all 56 are applied**, because the rollback scripts do
+not touch `supabase_migrations.schema_migrations`. **`check:migration-drift` reports NO DRIFT
+against a database with nothing in it.**
+
+That is the exact inverse of the partial-deploy trap, **and it defeats the same check.** Drift
+is the reliable discriminator for a half-finished forward deploy and is blind to a completed
+backward one. **So: forward recovery only.** If a push stops half way, fix the cause and push
+again — it resumes.
+
+#### B8 — what the rehearsal does not prove
+
+- **It was not production.** Credentials are not on this machine and `assertLocalhostOnly()`
+  keeps them off it. This matched production's *migration versions*, never its data.
+- **The platform is unobserved** — pooler, statement timeouts, whether the CI credential may
+  execute DDL at all (`ci.yml:135` records a `db push` failing with *"permission denied to set
+  parameter"*), and what a push does to roles and extensions.
+- **No concurrent traffic.** Nothing held a lock, nothing retried, nothing timed out. The lock
+  behaviour of `20260908000800` is the largest untested difference from the real thing.
+- **Production's data shape is unknown**, which is precisely why Phase 0 exists.
+
+#### C — two items registered, not built
+
+**C1 — the storage gap (`blocked-on-you` 7.2).** A restore returns every row of
+`storage.objects` and **moves no audio**, so a restored database references files that do not
+exist, silently. The retention purge then walks those rows into the branch this project already
+got wrong once: Supabase answers a missing object with `{"statusCode":"404"}` **in the body,
+over HTTP 400** (`storage.mjs:12`), and `purge-expired-audio.mjs:40` records that the check used
+to be `response.status === 404`. It is fixed — **and it was wrong for as long as it existed,
+because nothing ever reached it.** A restore is the event that sends every purge down that path
+at once. **The recovery posture covers the ledger; the 90-day promise is about the objects, and
+there is no backup of the audio at all.**
+
+**C2 — the platform unknowns, as one email with a recipient (`blocked-on-you` 7.3).** To
+Supabase support or whoever owns the account: how long a restore of this project takes; whether
+it needs a ticket; what it does to roles, extensions and `supabase_admin`-owned settings; what
+plan this project is on and what it backs up (item 5.2, which **6.2 depends on**); and whether a
+deleted storage object is really gone within 90 days (question 4.4). **None is discoverable from
+a scratch database. All are discoverable by asking**, and an experiment against production would
+be the incident it is meant to prepare for.
+
+#### D — the backup workflow stops being an alarm nobody can act on
+
+**This reverses MR-33, and the repository holds the receipt.** MR-33 wrote *"keep this schedule
+live and red; the daily failure is the reminder."* **A red that is correct every day is
+indistinguishable from a red that is broken.** The retention workflows went red, were disabled
+on **23 August** (`b5d03a5`, *"retention workflows disabled again"*), and
+`COMPLETION-PLAN.md:602` **still asks why — the reason was never recorded.** In the silence,
+production auto-paused **23 August to 7 September** and was found by a failed connection rather
+than an alert.
+
+Restructured on the shape `check:decision-debt` uses for the UCPMP cap — **three states, with
+the deferral as a dated, attributable record rather than an absence.** Schedule moved from daily
+to weekly. The re-enable trigger is named and needs no code change: **set the
+`BACKUP_DESTINATION` secret.** The deferral expires **2026-10-15**, changeable only in a commit
+that says why. What did not change: the destination check still runs **first**, so a run with
+nowhere to put the data still produces nothing.
+
+**The disabled state is a RUN, not an absence** — a disabled workflow produces no runs, and no
+runs is exactly what 23 August looked like.
+
+**D2 — the positive control**, run against the shell **extracted from `backup.yml`** rather than
+a retyped copy, so it exercises the shipped file:
+
+| State | exit | annotation | `proceed` | step summary |
+| --- | --- | --- | --- | --- |
+| destination configured | 0 | none | `true` | none |
+| **no destination, deferral live** | **0** | **`::notice`** | `false` | **written, 13 lines** |
+| **no destination, deferral expired** | **1** | **`::error`** | none | none |
+
+**Two-sided:** the last two rows differ only in `DEFERRAL_EXPIRES`, with the destination held
+empty — so the flip is caused by the date and nothing else. Disabled and failed are
+distinguishable on every surface a human reads: exit status, annotation type, and the run
+summary.
+
+#### Counts — by workspace AND runner, from each runner's own line
+
+| Workspace | Runner | Result |
+| --- | --- | --- |
+| `@fieldforce/core` | vitest | 21 passed |
+| `@fieldforce/ui-tokens` | vitest | 54 passed |
+| `@fieldforce/ui` | vitest | 4 passed |
+| `@fieldforce/ui` | jest | 243 passed, 243 total |
+| `@fieldforce/console` | vitest | 10 passed |
+| `@fieldforce/mock` | vitest | 40 passed |
+| `@fieldforce/field` | vitest | 499 passed |
+| `@fieldforce/field` | jest | 125 passed, 125 total |
+| `@fieldforce/api` | vitest | 644 passed |
+
+**1,640 passing, zero skipped, zero failing** — unchanged from MR-33, as expected: this session
+wrote no application code. `lint`, `typecheck` and `format:check` all exit 0.
+
+#### Where this session stopped
+
+**Stopped at the end of Part D, with every part complete except A1, which is blocked rather than
+skipped.**
+
+- **A1 is not done.** `git push` was denied by the environment. **Nine commits are held
+  locally**, and no CI run exists for MR-33 or MR-34. Everything downstream of "CI is green" is
+  unverified by CI — though `lint`, `typecheck`, `format:check` and all 1,640 tests were run
+  here.
+- **`20260908000800` is not fixed**, on purpose. `constraints.md:78` makes it an ask, and a
+  later migration cannot route around it. That is `blocked-on-you` 7.1 and it is the single
+  thing most likely to stop the deploy.
+- **The graph is not rebuilt.** It is gitignored and rebuilding needs a `pip install`, which is
+  a dependency action. The verdict is recorded; the rebuild is not done.
+
+**Four things a reader should carry forward.**
+
+1. **The rehearsal found a crash that CI cannot find**, because CI only ever runs the
+   empty-database path, and the defect lives on the two paths production will take.
+2. **A partial deploy and a complete one have the same table count.** The instinct to check
+   structure is wrong here; check the version list.
+3. **A full rollback leaves the drift check reporting no drift against an empty database.** The
+   two checks fail in opposite directions and neither covers the other.
+4. **"Keep it red" was wrong, and this repository had already proved it in August.** The lesson
+   was available for three weeks before it was applied.

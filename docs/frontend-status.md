@@ -619,3 +619,51 @@ see, which the standing rules forbid. Closed as correct as written.
 **Production is 37 migrations behind** — 19 applied against 56 on `main`. The entire
 `sync_pull`/`sync_push` layer this app depends on is **not on production**. Nothing points at
 production today, which is the only reason nothing is broken. `blocked-on-you` 6.1.
+
+## MR-34 — 15 September 2026: no frontend code changed, and one thing that affects every session
+
+**This was a backend and operations session — the deploy rehearsal (`BE-W11` / `BE-W40`
+territory). No file under `apps/field` or `packages/ui` was touched.** Frontend counts are
+unchanged: `@fieldforce/field` vitest **499**, jest **125**; `@fieldforce/ui` vitest **4**, jest
+**243**; `@fieldforce/ui-tokens` vitest **54**. All passing, none skipped.
+
+### The one finding that does affect frontend work
+
+**The knowledge graph does not contain this app.**
+
+`CLAUDE.md` tells every session to use `graphify-out/` for orientation — *"go through the graph
+before grepping"*. Measured this session:
+
+| | |
+| --- | --- |
+| `apps/field` files tracked in git | 131 |
+| `apps/field` files represented in the graph | **0** |
+| What the graph *does* hold for `apps/field` | `package.json`, `tsconfig.json`, and `apps/field/src/placeholder.ts` |
+| Does `placeholder.ts` still exist? | **No** |
+
+The graph was built **11 August**, before this app had screens. Every route, the outbox, the
+sync layer, the pulled store, the indicator, and all of MR-31 through MR-33's sentinel work are
+absent from it.
+
+**So a graph query about the field app returns a confident, sourced, complete-looking answer
+about a placeholder file that was deleted.** Node records carry `source_file` and
+`source_location`, which is exactly what makes a stale answer persuasive.
+
+**Until it is rebuilt: grep `apps/field`, do not query the graph for it.** The verdict and the
+measurements are in `docs/graphify-notes.md`; `CLAUDE.md` now carries a freshness rule that
+prints its own check.
+
+### What the frontend should take from the rest of the session
+
+**The backend the app talks to is not on production, and that has a date now.** Production holds
+19 of 56 migrations. **The entire `sync_pull` / `sync_push` layer this app depends on is
+missing**, along with the tenant boundary and MR-28's defect-12 fix. Nothing is broken today
+only because nothing points at production — *the app as it now exists cannot run against it.*
+
+`docs/blocked-on-you.md` 6.1 states the constraint: **the deploy must happen before the
+reference data**, which is dated ~22 September. And 7.1 records that the deploy currently has a
+crashing migration in it, so the date is not safe to assume.
+
+**Nothing for the frontend to do about either** — both are operator actions. But if someone
+points a build at production in the next week, `sync_pull` will not exist, and that will read as
+a client bug.
