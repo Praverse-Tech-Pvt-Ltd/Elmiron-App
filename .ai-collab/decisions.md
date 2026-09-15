@@ -1183,3 +1183,62 @@ coincidence with a plausible story attached.
 The rate is now in `docs/gotchas.md`, which is the part nobody had: the deadlock was known to
 occur, and how often was never written down — which is exactly what makes a spurious red
 indistinguishable from a real one.
+
+## 15 September 2026 — MR-36
+
+### The signal comes before the diagnosis, and the diagnosis turned out to be free
+
+**Decision: mitigate `BE-W92` now rather than hold out for the mechanism.** A one-in-four
+spurious red is not a weak signal, it is an absent one — and this repository has already run
+that experiment to its end: red became routine on 22 August, the workflows were disabled on
+23 August **with no reason recorded**, and production auto-paused unnoticed for two weeks.
+
+**The part worth carrying forward is that the two were not actually in tension.** Six fully
+detailed deadlock reports — both statements, both relations — were already in the container log
+from this session's own earlier runs. `BE-W92` had been registered as *waiting for a
+measurement* while the measurement accumulated on disk for months.
+
+**Rule: before designing a way to observe something, check whether it is already being logged.**
+
+### DDL in tests takes the identity advisory lock — reuse, not a new mechanism
+
+Three mechanisms have been proposed for this defect and refuted, one of them reasoned from the
+schema and naming a relation that appears in none of the samples. So the change is deliberately
+**not** a new theory: `createAuthUser` has serialised GoTrue mints behind
+`pg_advisory_lock(0x5eed1de7)` since MR-12, and DDL tests now take the same lock. Both sides of
+the measured cycle are named, and they are simply prevented from being in flight together.
+
+**On its own connection, not the transaction's** — a session holding an advisory lock while
+waiting on a heavyweight lock can itself close a cycle, and advisory locks are visible to the
+deadlock detector.
+
+**Judged by a rate, not a story:** ~29% → ~5%, denominators 7 and 21, p≈0.008. **Recorded as a
+mitigation, not a cure**, because one deadlock survived with every DDL site wrapped and the
+residual path is unknown. Calling it fixed would give the next session a false baseline, which
+is the same error one layer down.
+
+### A discriminant that nobody reads is not a fix
+
+`TerritoryZone.source` has existed since the type was written. `FE-W45` was registered against
+it, and MR-33 fixed the render ORDERING. **Eleven screens still rendered a date computed in that
+zone and not one of them asked which case it was in.**
+
+**Decision: the test for a sentinel is the number of READERS of its discriminant, not whether
+the type can express the absence.** A labelled union with zero readers is the same defect as a
+bare sentinel value, with better documentation.
+
+Fixed with one banner at the root rather than eleven edits, for the reason `FE-W44` taught: MR-31
+recorded two consumers of `loadQueueState` and there were five. **N separate warnings are N
+places to forget the N+1th screen.** The decision returns the sentence or `null` — a string, not
+a boolean — so no caller can render a warning without its reason.
+
+### An estimate wearing the shape of a measurement is worse than an obviously false value
+
+`FE-W46`'s `sizeBytes: 1` is visibly wrong, which is why every reader has re-checked it. The
+available substitute — `bitrateKbps × durationSeconds / 8` — would be plausible, and the next
+reader would stop checking.
+
+**Decision: leave the obviously false value and register the consequence instead.** And the
+consequence is bigger than "a wrong number": it is persisted and summed by
+`audio_storage_bytes()`, so the per-MR storage ceiling **cannot fire**. A control that exists,
+runs, and measures nothing is the `BE-W6` shape again.

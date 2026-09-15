@@ -706,3 +706,67 @@ that it was unlucky — and **a single green run does not clear a change**. MR-3
 false diagnosis by treating three clean runs as a baseline for a failure that happens about two
 runs in seven. If you are testing whether something you wrote causes flakiness, measure a rate
 on both sides.
+
+## MR-36 — 15 September 2026: the sentinel that was labelled and unread
+
+### `FE-W45` was still half open, and the reason is worth generalising
+
+`TerritoryZone` has always carried `source: 'territory' | 'fallback_utc'`. The absence has always
+been **representable**. MR-31 registered it; MR-33 fixed the render **ordering**, so no screen
+shows real visits against a fallback that is about to be corrected.
+
+**Nobody had made the fallback visible once it is the FINAL answer.** Measured this session:
+
+| | |
+| --- | --- |
+| Screens that render a date or clock computed in the zone | **11** |
+| Screens that read `zone.source` | **0** |
+| Readers of the discriminant anywhere in non-test code | **2**, both inside `pulled-store.tsx` |
+
+For a territory in IST the fallback is **5 hours 30 minutes**, which moves a visit after 18:30Z
+onto the previous calendar day. **Which day a doctor was seen is a compliance fact, not a display
+preference.**
+
+**Fixed with one banner at the root** — `ZoneCaveatBanner`, mounted inside `PulledStoreProvider`
+because that is where the zone lives. **Not eleven edits:** eleven warnings would be eleven
+places to forget the twelfth screen, which is precisely the `FE-W44` lesson where MR-31 recorded
+two consumers and there were five.
+
+The decision is a pure function, `zoneCaveat(zone)`, returning **the sentence or `null`** — a
+string rather than a boolean, so a caller cannot render a warning without its reason. It is
+`attention`, not `critical`: the dates are unconfirmed, not known wrong, and overstating it
+trains an MR to dismiss the banner that means *"your work is not saved"*.
+
+**Three mutations, each failing exactly the right tests:** always `null` (2 fail); keying on
+`timeZone === 'UTC'` instead of `source` (1 fails — the control that a territory whose timezone
+genuinely *is* UTC must not be warned); inverting the banner's null check (all 3 render tests
+fail).
+
+### The generalisation
+
+**A discriminant that nobody reads is not a fix.** The test is the number of READERS at the call
+site, not whether the type can express the absence. `FE-W44` passes that test structurally — 21
+reads across 7 files, and TypeScript cannot reach `state` without narrowing first. `FE-W45`
+passed it in the type and failed it in the app.
+
+### A jest trap that cost a probe
+
+**`render()` must be awaited** in `apps/field`'s jest suites. A bare `render(<C />)` leaves
+`screen` unpopulated and every query fails with *"`render` function has not been called"* — which
+reads as *the render never happened*, not as *you forgot an `await`*. Destructuring the return
+gives `getByText is not a function`, a second misleading symptom from the same cause. Every
+`src/routes/*.test.tsx` already awaits it; copying an existing test's shape exactly is faster
+here than reasoning about the API. Now in `docs/gotchas.md`.
+
+### Counts
+
+`@fieldforce/field` vitest **502** (was 499), jest **128** (was 125). Monorepo **1,664 passing,
+zero skipped, zero failing**.
+
+### Still open for the frontend
+
+**`FE-W46`, and it is worse than recorded.** `sizeBytes: 1` is not merely a fabricated figure
+with no visible effect — it is **persisted** to `recordings.size_bytes` / `voice_notes.size_bytes`
+and **summed** by `audio_storage_bytes()`, so the per-MR storage ceiling is inert. Still blocked
+on `BE-W7`: a real byte count needs `expo-file-system`, which is a dependency and therefore an
+ask, and `bitrate × duration` would be an estimate wearing the shape of a measurement.

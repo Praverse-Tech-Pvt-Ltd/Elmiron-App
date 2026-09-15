@@ -301,3 +301,59 @@ roughly **2 of 7** full-suite runs. **Pre-existing**, measured this session, `BE
 | Session | Where the narrative is |
 | --- | --- |
 | MR-35 — the crashing migration | `PROJECT-OVERVIEW.md` → `### MR-35 — the crashing migration` |
+
+---
+
+## After MR-36 — 15 September 2026
+
+**CI's signal is back, but not perfect.** The `api` suite's spurious-red rate is down from
+**~2 in 7 to ~1 in 21**. Plan for about one push in twenty, not one in four.
+
+| | |
+| --- | --- |
+| **`BE-W92`** | **Named on both sides at last:** a test's DDL versus GoTrue minting an identity, contending on `auth.users` / `auth.identities`. Mitigated by making DDL tests take the identity advisory lock. **Not cured** — ~5% remains and the residual mechanism is unknown |
+| **`FE-W45`** | **Was still half open.** The zone's discriminant existed all along and **no screen read it**. One banner at the root now says when dates are UTC-because-unknown |
+| **`FE-W46`** | Worse than recorded: the fabricated `sizeBytes: 1` is persisted and summed, so the per-MR storage ceiling is inert |
+| **The bundle** | **Moot.** `origin/main` has everything; a bundle on the same disk was never the control it was described as |
+| **Tests** | **1,664 passing, zero skipped, zero failing** |
+
+### If the `api` suite goes red, do this before investigating
+
+```bash
+docker logs --since 60m supabase_db_Elmiron-App 2>&1 | grep -A4 "deadlock detected"
+```
+
+One red run is not a regression at a ~5% rate. Re-run, and check whether the failure is
+`deadlock detected`. **And check the log even when the suite is green** — a deadlock that loses
+the race to a rollback never reaches vitest. Fourteen green runs hid one.
+
+### Writing a test that issues DDL
+
+**Use `inDdlTransaction` from `tests/auth.ts`, not `inRolledBackTransaction`.** It holds the
+identity advisory lock on its own connection, so a schema change and a GoTrue mint are never in
+flight together. Use it **only** where a test really changes the schema — every use serialises
+against every fixture mint in the suite.
+
+DDL is not just `create table` / `create policy`: **`create trigger`, `drop trigger`,
+`create function`, `create sequence` and `alter table` all count.** The first sweep this session
+missed three of those and looked like a cure for 14 runs.
+
+### Three traps recorded in `docs/gotchas.md`
+
+1. **The absence of an event is evidence only against a known rate.** Three clean runs is not a
+   baseline. Against a 2-in-7 rate, zero in three has probability 0.36.
+2. **Before enumerating why an action failed, establish it was attempted.** A push was reported
+   as denied by "the environment" and three remote causes were offered; `git` never ran.
+3. **`render()` must be awaited in `apps/field`'s jest suites.** A bare `render(...)` leaves
+   `screen` unpopulated, and both symptoms point at the component instead of the missing `await`.
+
+### For the operator
+
+`docs/blocked-on-you.md` opens with the one `SELECT` that decides whether §6.1 is a scheduling
+item or an incident. `docs/COMPLETION-PLAN.md` now ends with **engineering versus waiting, side
+by side with estimates** — the cheapest engineering item left is one half-day; the most expensive
+item on the page is the fiduciary name, which costs nothing and compounds daily.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-36 — restoring the signal | `PROJECT-OVERVIEW.md` → `### MR-36 — restoring the signal` |

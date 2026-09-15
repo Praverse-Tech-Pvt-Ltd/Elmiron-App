@@ -14792,3 +14792,216 @@ wrong rather than unlucky. It now creates its own scratch **database**.
    migration-time code.
 4. **Establish the rate before you claim a cause.** Three clean runs nearly became a diagnosis,
    in a session whose entire subject was a bug that hid behind a branch nobody had run.
+
+
+### MR-36 — restoring the signal
+
+**The deadlock that has been open since MR-25 was named on both sides in the first ten minutes,
+from a log that was already on disk. The measurement everyone was waiting for had already
+happened; nobody had read it.**
+
+#### A1 — the push, and CI
+
+| | |
+| --- | --- |
+| Run | `34957026101` — **`success`** |
+| Workflow | `CI` |
+| Event | `push` |
+| SHA | `f819c64ef570f456fd7d78deff5c895f3ef28ef0` |
+
+**That SHA equalled HEAD and `origin/main` at the moment of the push.** It is not HEAD now —
+this session has committed three times since, and those commits are pushed at the end rather
+than measured here. Saying "CI is green on HEAD" would be false by three commits.
+
+`Migration drift` failed on the same SHA. **That is the deliberate red of §6.1**, not a
+regression: production is 37 migrations behind and the workflow says so daily until somebody
+deploys.
+
+#### A2 — the bundle, and the honest answer is that it no longer matters
+
+**Nothing was copied off this disk, and the reason is that the thing it protected is now
+elsewhere.** `origin/main` holds every commit through `f819c64`, so the repository is
+off-machine on GitHub. A bundle cut to `D:` was insurance against unpushed work; there is none.
+
+**The record has said "copy the bundle off" four times. It was the wrong instruction, not an
+ignored one** — a bundle on the same disk as the repository protects against exactly one
+failure (the working tree, not the disk), and that is the failure a push already covers better.
+A fresh bundle was cut and `git bundle verify` reports a complete history, but it is a
+convenience, not a control.
+
+**What is still not off-machine is the DATA.** That is `blocked-on-you` 6.3 and it needs a
+human: `BE-W11` is built and proven and has nowhere lawful to send an artefact.
+
+#### B1 — the choice, stated before it was made
+
+| | Cost |
+| --- | --- |
+| **(a) Keep measuring until the mechanism is known** | Live with a one-in-four spurious red per push meanwhile. This repo has run that experiment: red became routine on 22 August, the workflows were **disabled on 23 August with no reason recorded**, and production auto-paused unnoticed for two weeks |
+| **(b) Mitigate now, diagnosis open** | A change that might not work, and a rate that has to be re-established afterwards to know |
+
+**Chosen: (b).** A signal nobody trusts is not a weaker signal, it is an absent one, and the
+absence is what gets switched off.
+
+**And (a) turned out to be nearly free, which is the part worth carrying forward.** Six deadlock
+samples were **already in the container log**, from this session's own earlier runs, each with
+both statements in its `DETAIL` lines. The mechanism was one `docker logs` away. It had been
+registered as waiting for a measurement while the measurement was sitting on disk.
+
+#### B2 — both sides of the cycle, named
+
+```
+Process A: create policy mr07_d2_mirror_<uuid>_select_scope on public.mr07_d2_mirror_<uuid>
+           waits for AccessExclusiveLock on auth.users (16458)
+Process B: INSERT INTO "identities" (...)         <- GoTrue, minting a fixture user
+           waits for RowExclusiveLock on auth.identities (17258), blocked by A
+```
+
+Every sample this shape: **a test issuing DDL against GoTrue creating an identity.** A seventh
+had `drop trigger zzz_break_audit on public.audit_log` instead of the `create policy` — same
+shape, different statement, which is what established that **the DDL is the variable**, not the
+particular statement. OIDs resolved against the live catalogue rather than carried over from
+MR-29's notes.
+
+**Prior art, searched before proposing anything.** The mirror table was already implemented and
+its hypothesis already refuted — `public.organisations` (17887) appears in **none** of the
+samples. The vitest pool constant is what MR-12 deliberately replaced, because a tuned number
+needs re-tuning when the 34th suite arrives. **The advisory lock fits:** `createAuthUser` has
+held `pg_advisory_lock(0x5eed1de7)` since MR-12, so that lock *already* decides when a GoTrue
+mint may run. DDL tests now take the same lock, via `inDdlTransaction`, **on their own
+connection** — deliberately not on the transaction's, because a session holding an advisory lock
+while waiting on a heavyweight lock can itself close a cycle, and advisory locks are visible to
+the deadlock detector.
+
+**Nothing was invented and no constant was tuned.**
+
+#### B3 — the rates, with their denominators
+
+| Configuration | Runs | With a deadlock | Rate |
+| --- | --- | --- | --- |
+| **Before** (MR-35) | 7 | 2 | **~29%** |
+| After, DDL **partly** wrapped | 14 | 0 test failures — **1 in the server log** | — |
+| **After, all DDL wrapped** | **21** | **1** | **~5%** |
+
+Against a true rate of 2-in-7, at most one failure in 21 runs has probability **≈0.008**. Suite
+runtime unchanged at 35–40s, so the serialisation costs nothing measurable.
+
+**The middle row is the one that nearly shipped as a cure.** The first pass wrapped five call
+sites found by grepping `create table|create policy|alter table`, and **14 runs showed zero test
+failures.** That looked finished. The server log had a deadlock in the same window on **`drop
+trigger`** — a shape the grep never looked for, in a test that survived it. **A deadlock that
+loses the race to a rollback is invisible to vitest.** Re-swept for every DDL verb and wrapped
+six more transactions across five more files.
+
+#### B4 — kept, and it is a mitigation rather than a cure
+
+The rate fell six-fold, so the change stays. **It is not zero.** One deadlock survived with every
+DDL site wrapped, an identity insert on the other side, and **how an identity comes to be minted
+while a DDL test holds the lock is not established.** `signIn` (`/auth/v1/token`) is not behind
+the lock and is the obvious suspect; it is used twice, in one file, and suspicion is not a
+measurement. Roughly one push in twenty can still go red spuriously, where it was closer to one
+in four.
+
+#### C1 — the four sentinels, asked at the CALL SITE
+
+**The brief said they "have not moved since" MR-31. Two moved in MR-33 D1** — that is hearsay
+corrected by reading `COMPLETION-PLAN.md`. But MR-36's question is genuinely different from *is
+it fixed*, and asked this way **one of the two "fixed" ones was still half open.**
+
+| ID | Discriminant? | Readers at the call site | Verdict |
+| --- | --- | --- | --- |
+| **`FE-W44`** | Yes — `QueueLoad` | **21 reads, 7 files.** TypeScript cannot narrow without one | Closed |
+| **`FE-W45`** | **Yes, all along** — `TerritoryZone.source` | **2, both inside `pulled-store.tsx`. ZERO on any screen**, while **11 screens render a date computed in that zone** | **Was still open. Fixed.** |
+| **`FE-W46`** | **No** — `1` is a valid positive integer | **0, because there is nothing to read** | Open, blocked on `BE-W7` — **and worse than recorded** |
+| **`FE-W47`** | Yes — `role` before the `??` | **3; two distinguish, one does not** | Closed as correct as written |
+
+**`FE-W45`'s second half.** The label was there from the start; MR-31 registered it and MR-33
+fixed the *ordering*. What nobody had done is make the fallback visible **once it is the final
+answer**. For IST that is 5h30m — enough to move a visit after 18:30Z onto the previous calendar
+day, and which day a doctor was seen is a compliance fact, not a display preference.
+
+**One banner at the root, not eleven edits**, mounted inside `PulledStoreProvider` because that
+is where the zone lives. Eleven warnings would be eleven places to forget the twelfth screen —
+the `FE-W44` lesson exactly, where MR-31 recorded two consumers and there were five. The decision
+is a pure function returning **the sentence or `null`**, a string rather than a boolean, so a
+caller cannot render a warning without its reason.
+
+Three mutations, each failing exactly the right tests: `zoneCaveat` always `null` (2 fail);
+keying on `timeZone === 'UTC'` instead of `source` (1 fails — the control asserting a territory
+whose timezone genuinely *is* UTC must not be warned); inverting the banner's null check (all 3
+render tests fail).
+
+**MR-31's null qualification applied, and found not to bite.** `TerritoryZone` already carried a
+labelled discriminant, so nothing had to become nullable. Making `zone` nullable would have been
+the `lastSeenAt` error in a new guise — `null` there already means *"never visited"*.
+
+**`FE-W46` is worse than recorded.** `sizeBytes: 1` is **persisted** to `recordings.size_bytes`
+and `voice_notes.size_bytes`, and **summed** by `audio_storage_bytes()`
+(`20260816000300_resumable_upload.sql:131`). With every row worth one byte, `liveBytes` is a row
+count in disguise and **the per-MR storage ceiling cannot fire** — a control that exists, runs,
+and measures nothing. Still not fixable here: a real byte count needs `expo-file-system`, which
+is a dependency and therefore an ask, and `bitrate × duration` is an estimate wearing the shape
+of a measurement, which is worse than an obviously false `1`.
+
+#### D2 — engineering versus waiting
+
+**Not a re-audit, and the section says so.** The plan's ordered chain is stale — `G-WRITE` has
+closed, so four of its nine steps are done and its ≈33 half-days no longer means what it says.
+Each row below was checked individually; anything not listed was not checked.
+
+| Engineering — no human needed | Estimate |
+| --- | --- |
+| `FE-W10` — the console tells its user a shipped screen is forbidden | **1 half-day** |
+| `FE-W12` — overrides panel consumes the GET (needs `BE-W13`) | 2 half-days |
+| `FE-W13` — console audit + retention screens (needs `BE-W14`/`BE-W15`) | 3 half-days |
+| `BE-W89` — the beat-plan chain | **UNSIZED, deliberately.** `sync_pull` has **no `beat_plan_entry` entity at all**, so the screen has no data path rather than a thin one. Sizing it means deciding the entity first |
+
+| Waiting on you | Consequence |
+| --- | --- |
+| **`FE-W41` + `5.9`** — the cap value, one unit of work | **CI build-fails 6 November**, warning from 16 October |
+| **`FE-W46`** — `BE-W7` | The storage ceiling is inert until it lands |
+| **The deploy** — one `SELECT`, then `db push` | Reference data is dated ~22 Sep and must not land first |
+| **`BE-W11`** — a destination | Built, proven, protects nothing |
+| **`5.13` / `BE-W93`** — the fiduciary name | **Compounds daily.** `consent_records` is append-only, so every consent captured before the name exists is permanently defective |
+
+**The shape, in one line: the cheapest engineering item left is one half-day; the most expensive
+thing on the page is a name that costs nothing and gets worse every day it is not given.**
+
+#### Counts — by workspace AND runner, from each runner's own line
+
+| Workspace | Runner | Result |
+| --- | --- | --- |
+| `@fieldforce/core` | vitest | 21 passed |
+| `@fieldforce/ui-tokens` | vitest | 54 passed |
+| `@fieldforce/ui` | vitest | 4 passed |
+| `@fieldforce/ui` | jest | 243 passed, 243 total |
+| `@fieldforce/console` | vitest | 10 passed |
+| `@fieldforce/mock` | vitest | 40 passed |
+| `@fieldforce/field` | vitest | **502 passed** — was 499 |
+| `@fieldforce/field` | jest | **128 passed, 128 total** — was 125 |
+| `@fieldforce/api` | vitest | 662 passed |
+
+**1,664 passing, zero skipped, zero failing.** `lint`, `typecheck` and `format:check` all exit 0.
+
+#### Where this session stopped
+
+**At the end of Part D, with every part complete.** Three things are deliberately left:
+
+1. **`BE-W92` is mitigated, not cured** — ~5% remains and the residual mechanism is unknown.
+   Registered with its rate so the next session inherits a denominator.
+2. **`FE-W46` is still blocked** on `BE-W7`, now with a bigger stated consequence.
+3. **The three MR-36 commits are pushed at the end of the session**, so the CI run recorded above
+   is `f819c64`, not the final HEAD.
+
+**Four things a reader should carry forward.**
+
+1. **The measurement was already on disk.** `BE-W92` sat registered as "waiting for a
+   measurement" while seven fully-detailed deadlock reports accumulated in the container log.
+   Before designing a way to observe something, check whether it is already being logged.
+2. **Zero test failures in 14 runs was not zero deadlocks.** The server knew; vitest did not.
+   **Read the log, not just the runner.**
+3. **A discriminant nobody reads is not a fix.** `TerritoryZone.source` existed from the start,
+   was registered as a sentinel, was "fixed" once — and eleven screens still rendered its value
+   without ever asking which case it was.
+4. **Check the premise before doing the work it implies.** Twice this session a stated premise
+   was wrong: four sentinels that "have not moved" (two had), and a bundle that needed copying
+   off (a push made it moot).
