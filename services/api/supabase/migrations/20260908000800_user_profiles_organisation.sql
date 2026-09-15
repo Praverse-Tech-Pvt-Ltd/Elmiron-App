@@ -86,8 +86,20 @@ update public.user_profiles p
 -- a choice; with more than one it is a decision that belongs to a human, and the
 -- exception says so.
 --
--- UNVERIFIED against production data: on a fresh database this block is a no-op, so the
--- single-organisation branch is exercised only by its test, not by CI's migration run.
+-- UNVERIFIED against production data, and UNREACHABLE FROM CI. On a fresh database
+-- `v_orphans` is 0 and this block returns immediately, so neither non-empty branch runs
+-- in CI's migration run -- and no test can reach them either, because a backfill executes
+-- ONCE, at migration time, and cannot be re-run afterwards.
+--
+-- An earlier version of this comment claimed the single-organisation branch was
+-- "exercised only by its test". There was no such test, and the branch did not work:
+-- it called `min(id)` on a uuid column and raised 42883. MR-34 found it by rehearsing
+-- the deploy against seeded databases; MR-35 fixed it. A false coverage claim on a
+-- deploy path is worse than none, because it stops the next reader from checking.
+--
+-- Both branches are now exercised by `services/api/tests/organisation-backfill.spec.ts`,
+-- which runs the same SQL against seeded scratch databases rather than re-running the
+-- migration.
 do $$
 declare
   v_orphans integer;
@@ -101,7 +113,12 @@ begin
     return;
   end if;
 
-  select count(*), min(id) into v_orgs, v_org from public.organisations;
+  -- NOT the `min()` aggregate. PostgreSQL has none for `uuid` -- verified on
+  -- server_version 17.6, zero matching entries in `pg_proc` -- so that form raises
+  -- 42883 the moment this branch is reached. MR-35 B2.
+  select count(*), (select id from public.organisations order by id limit 1)
+    into v_orgs, v_org
+    from public.organisations;
 
   if v_orgs = 1 then
     update public.user_profiles set organisation_id = v_org where organisation_id is null;

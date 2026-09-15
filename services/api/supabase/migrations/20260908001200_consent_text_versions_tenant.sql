@@ -92,7 +92,14 @@ begin
     return;
   end if;
 
-  select count(*), min(id) into v_orgs, v_org from public.organisations;
+  -- NOT the `min()` aggregate. PostgreSQL has none for `uuid`, so that form raises 42883
+  -- the moment this branch is reached. Identical defect to `20260908000800`, found by the
+  -- MR-35 B6 sweep after MR-34 found the first one by rehearsing the deploy. Neither had
+  -- ever executed: this block returns early while `consent_text_versions` is empty, and
+  -- no migration inserts into it, so every CI database takes the early return.
+  select count(*), (select id from public.organisations order by id limit 1)
+    into v_orgs, v_org
+    from public.organisations;
 
   if v_orgs = 1 then
     update public.consent_text_versions set organisation_id = v_org;

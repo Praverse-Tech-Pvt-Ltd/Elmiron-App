@@ -76,7 +76,11 @@ section exists to prevent.
 
 - **Adding a dependency.** Any dependency, including a dev one.
 - **Changing what a migration that has already been applied does.** Write a new
-  migration instead.
+  migration instead. **One named exception exists — MR-35 B3, `20260908000800`. See
+  "The one time a migration was edited in place" at the end of this file.** If you are
+  about to reach for that exception, read it first: it holds only under four conditions
+  that were each checked, and the fourth is the one that makes the usual remedy
+  impossible rather than merely inconvenient.
 - **Anything that widens who can read audio.** The bucket is private; the field reads
   nothing back except its own in-flight upload.
 - **Building any part of the adverse-event path that assumes an org structure** — who
@@ -405,3 +409,47 @@ explicitly that the client must be rolled back with them.
 `SyncPushResultSchema` requires `sqlDetail` and `sqlHint` on every verdict, null where there
 is nothing to say. A response whose KEYS change with the branch pushes the branching into
 every client, and the mock's contract suite is what enforces it.
+
+## The one time a migration was edited in place — MR-35 B3
+
+**This is a NAMED EXCEPTION to "changing what a migration that has already been applied does",
+not a softening of it.** The rule stands. It is written down here so the next person can check
+whether their case matches, rather than citing "there was a precedent".
+
+**The case.** `20260908000800_user_profiles_organisation.sql` called `min(id)` on a `uuid`
+column. PostgreSQL has no `min` aggregate for `uuid`, so the branch raised `42883` whenever it
+was reached. MR-34 found it by rehearsing the deploy against seeded databases.
+
+**The four conditions, each checked rather than assumed:**
+
+1. **Production has never applied it.** It is one of the 37 pending migrations — `BE-W40`'s
+   drift check reads 19 applied against 56 files, and this is not among the 19.
+2. **No database anywhere has executed the broken branch.** It is guarded by
+   `if v_orphans = 0 then return`, and every database that has applied this migration was empty
+   of territory-less profiles at the time. The bug shipped without ever running.
+3. **The ledger verifies a NAME, not a hash — so no database can observe the edit.** This was
+   the deciding question and it was established from the tooling, not from memory:
+   `supabase_migrations.schema_migrations` has `version`, `name` and `statements` and **no
+   checksum column of any kind**; `check-migration-drift.mjs` selects `version` only; and
+   empirically, editing the body of an already-applied migration and running
+   `supabase db push --dry-run` reports **`"upToDate":true`** — while adding a new file to the
+   same directory reports it as pending, which is the positive control proving the check was
+   live rather than dead. `supabase migration list` likewise pairs local and remote by version
+   with no content comparison. **The purpose of constraint 78 — that a database must never
+   disagree with the file that built it — is untouched here, because nothing records what
+   the file said.**
+4. **A successor migration cannot fix it, which is what makes this different from every
+   ordinary case.** The usual remedy assumes the defective migration *completes*. This one
+   **aborts the deploy**, so no migration ordered after it will ever run. The fix had to go in
+   that file or nowhere.
+
+**If any one of those four fails, the exception does not apply.** In particular, if a future
+Supabase CLI starts comparing `statements` — the column already exists and already holds the
+SQL — condition 3 dies, and the answer becomes a Phase 0 pre-flight fix with the file left
+alone.
+
+**What was NOT done under this exception:** nothing else in the file changed. The fix is one
+expression. The comment correction beside it (MR-35 B5) removes a false claim that a test
+covered the branch; the test now exists, in
+`services/api/tests/organisation-backfill.spec.ts`, and runs the shipped `do` block against
+seeded data in a rolled-back transaction rather than re-running the migration.
