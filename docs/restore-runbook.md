@@ -422,3 +422,218 @@ where the actor and the timestamp actually live.
    session record naming: the SHA, the versions applied, the date, and who ran it. **This is
    the audit trail.** It is a human writing something down, it is weaker than a recorded row,
    and it is weaker for a reason that cannot be engineered away from here.
+
+## Applying 37 migrations to a database at 19 — the rehearsed procedure
+
+**Rehearsed 15 September 2026 (MR-34 B) against a local database reconstructed at production's
+exact state.** Everything below was executed, including both failure paths. The section above
+it — *"Applying a migration to production"* — is the general case; this is the specific one an
+operator is about to do, and it has a landmine in it.
+
+> ### Read this before you start
+>
+> **The deploy will stop at migration 18 of 37 if production has any user with no territory.**
+> `20260908000800_user_profiles_organisation.sql` backfills every profile's organisation. For a
+> profile with a territory the answer is derived. For one without — an admin — it either
+> resolves to the single organisation or it refuses to guess.
+>
+> **Both of its non-empty branches currently stop the deploy**, one by design and one by
+> defect. See *"The landmine"* below. **Run the pre-flight query first.** It costs one SELECT
+> and it tells you which of three futures you are in.
+
+### Phase 0 — pre-flight, and this is the one nobody has run
+
+```bash
+psql "<direct url>" -At -c "select 'territory_less=' || (select count(*) from public.user_profiles where territory_id is null) || ' organisations=' || (select count(*) from public.organisations);"
+```
+
+| Result | What happens when you deploy |
+| --- | --- |
+| `territory_less=0` | **The backfill is a no-op and the deploy runs clean.** This is the only path CI has ever exercised |
+| `territory_less>0` and `organisations=1` | **The deploy CRASHES** — `ERROR: function min(uuid) does not exist (SQLSTATE 42883)`. Not by design. See the landmine |
+| `territory_less>0` and `organisations>1` | **The deploy REFUSES**, by design, with `MR-06 / BE-W76`. Assign `user_profiles.organisation_id` by hand first |
+
+**Do not skip this.** It is the difference between a six-second deploy and a half-applied
+schema with no tenant boundary in it.
+
+### Phase 1 — confirm the starting point
+
+```bash
+git status --short
+git log --oneline -1
+pnpm --filter @fieldforce/api check:migration-drift --db-url "<pooler url>"
+```
+
+`git status` must be empty; record the SHA.
+
+**Expected:** `IN THIS REPOSITORY BUT NOT APPLIED` listing exactly 37 versions, all dated
+`20260907` or later, and **nothing** in the applied-with-no-file direction. Anything else and
+you are not in the state this procedure was rehearsed for — stop.
+
+**The exit code is not the check. Read the list.** `check:migration-drift` exits 1 here and
+that is correct. And if you pipe it to `tail`, `$?` is `tail`'s exit code, not the script's —
+that happened during this rehearsal and printed `exit=0` for a command that had failed.
+
+### Phase 2 — dry run
+
+```bash
+supabase db push --db-url "<direct url, not the pooler>" --dry-run
+```
+
+**Expected:** exactly 37 filenames and `"dryRun":true`. Count them. The dry run reaches the
+database and computes the difference there, so 37 here is independent confirmation of Phase 1.
+
+### Phase 3 — apply
+
+```bash
+supabase db push --db-url "<direct url, not the pooler>"
+```
+
+**It prompts `[Y/n]`.** The general procedure above omits that. There is a `--yes` flag for a
+non-interactive shell and you should **not** use it here — the prompt is the last point at
+which a human sees the list.
+
+**Duration: 6.4 seconds** for all 37 against a local socket. See *"How long"* for why that is a
+floor and not an estimate.
+
+### Phase 4 — verify from the database, not from the exit code
+
+```bash
+pnpm --filter @fieldforce/api check:migration-drift --db-url "<pooler url>"
+psql "<direct url>" -At -c "select 'migrations=' || (select count(*) from supabase_migrations.schema_migrations) || ' tables=' || (select count(*) from pg_tables where schemaname='public') || ' policies=' || (select count(*) from pg_policies where schemaname='public') || ' orgcol=' || (select count(*) from information_schema.columns where table_schema='public' and table_name='user_profiles' and column_name='organisation_id');"
+```
+
+**Expected, measured in the rehearsal:** `migrations=56 tables=36 policies=48 orgcol=1`.
+
+### How to tell a PARTIAL application from a FAILED one — and why you must
+
+**`supabase db push` is not transactional across migrations.** When it stopped at migration 18
+during the rehearsal it left the first 17 applied and committed. The state it left:
+
+| | Partial — stopped at 18 of 37 | Complete |
+| --- | --- | --- |
+| `migrations` | **36** | 56 |
+| **`tables`** | **36** | **36** |
+| `policies` | 42 | 48 |
+| `rls_forced` | **36** | **36** |
+| **`orgcol`** | **0** | **1** |
+
+**Read the `tables` row twice.** A half-applied deploy has *exactly the same table count as a
+complete one*, and so does `rls_forced`. **A structural count cannot tell you which state you
+are in.** Anyone eyeballing "36 tables, looks right" concludes success on a database that has
+no tenant boundary in it.
+
+**Only two things discriminate:**
+
+1. **`check:migration-drift`** — it named all 20 missing versions correctly in the rehearsal.
+   This is the check to trust.
+2. **`orgcol`** — `0` means `20260908000800` did not complete, and that is the exact migration
+   that stops.
+
+**A partial application is not a failed one.** Nothing is rolled back, and nothing warns you on
+the next connection. The 17 that applied are real and permanent.
+
+### If a phase fails
+
+| Phase | What to do |
+| --- | --- |
+| **0** | Not a failure — it is the decision. Resolve the profiles by hand, or fix the landmine, before Phase 3 |
+| **1** | Drift in the *other* direction means something was applied off-`main`. Do not push on top of it; that makes two problems indistinguishable |
+| **2** | A dry run listing other than 37 means the repo and the database disagree about the starting point. Go back to Phase 1 |
+| **3** | **Read the error, then run Phase 4 immediately.** You need to know how far it got before you decide anything. Re-running `db push` after a fix resumes from where it stopped — it re-computes the difference, it does not start over |
+| **4** | `migrations=56` while the drift check still lists versions means you are reading a different database than you pushed to. Check pooler versus direct |
+
+### The landmine — `min(uuid)` does not exist
+
+```sql
+select count(*), min(id) into v_orgs, v_org from public.organisations;
+```
+
+**PostgreSQL has no `min` aggregate for `uuid`.** Verified on the local stack, `server_version`
+**17.6**: `select count(*) from pg_proc where proname='min' and proargtypes::text like '%2950%'`
+returns **0**. So the single-organisation branch — the one written to let the deploy proceed —
+raises `42883` the moment it is reached.
+
+| Precondition | What happens | Intended? |
+| --- | --- | --- |
+| no territory-less profiles | returns early, no-op | yes — **and this is the only path CI runs** |
+| territory-less profiles, 1 organisation | **`ERROR: function min(uuid) does not exist`** | **no** |
+| territory-less profiles, >1 organisation | raises `MR-06 / BE-W76`, deploy stops | yes |
+
+Both non-empty branches were executed in the rehearsal, each against a database seeded to meet
+its precondition, with the precondition asserted before the push.
+
+The migration's own comment says the single-organisation branch *"is exercised only by its
+test, not by CI's migration run."* **No such test exists** — searching `services/api/tests` for
+that branch returns nothing, and it could not be re-run after the fact anyway, because a
+backfill executes once at migration time.
+
+**This is not fixed here.** `.ai-collab/constraints.md:78` puts *"changing what a migration that
+has already been applied does"* under **Ask before doing**, and this migration is applied
+locally and in CI while being unapplied on production. A later migration cannot help: the
+broken one aborts the deploy before any successor runs, so the fix has to land in that file or
+not at all. **That is a decision to be asked for, not taken** — registered in
+`docs/blocked-on-you.md`.
+
+### Rolling back — and it is theoretical, not supported
+
+`pnpm --filter @fieldforce/api verify:rollbacks` passes **56 of 56**, in reverse order, ending
+with *"public schema is empty"*. Every migration has a paired rollback file and the pairing is
+exact in both directions. That is a real, run, green check.
+
+**It is not an operational rollback, for three reasons.**
+
+1. **It is all-or-nothing to empty.** It reverses *every* migration. There is no mechanism to
+   reverse 37 and stop at 19, which is the only rollback an operator would ever want here.
+2. **It refuses to run anywhere but localhost.** `assertLocalhostOnly()` has no override, by
+   design. Pointing it at production is not a supported operation; it is a thing you would have
+   to write by hand.
+3. **It leaves the migration ledger lying.** Measured immediately after a full rollback:
+
+   ```
+   public tables = 0    schema_migrations rows = 56
+   ```
+
+   **The database is empty and still claims all 56 are applied**, because the rollback scripts
+   do not touch `supabase_migrations.schema_migrations`. `check:migration-drift` reports **no
+   drift** against a database with nothing in it.
+
+**That is the exact inverse of the partial-deploy trap, and it defeats the same check.** Drift
+is the reliable discriminator for a half-finished *forward* deploy and is blind to a completed
+*backward* one. On a database in this state, the drift check and the table count disagree, and
+the table count is the one telling the truth.
+
+**So: forward recovery only.** If a push stops half way, fix the cause and push again — it
+resumes. Do not reach for the rollbacks to get back to 19; nothing has ever done that and the
+ledger would not survive it.
+
+### How long — 6.4 seconds, as a floor
+
+Measured with the 19 asserted as applied beforehand and 37 `Applying migration` lines counted
+afterwards. It is a **floor**, not an estimate:
+
+- a local Unix socket — no network round trip per statement;
+- **no rows.** Every `alter table` rewrite, index build and constraint validation ran against
+  empty tables. Production's cost is proportional to its data and this number contains none of
+  it;
+- no concurrent traffic, so nothing waited on a lock. `20260908000800` takes an `ACCESS
+  EXCLUSIVE` lock on `user_profiles`, which on a live database queues behind every open
+  transaction and blocks every one arriving after it;
+- no platform layer — no pooler, no connection limit, no statement timeout.
+
+**Plan a two-minute window. Six seconds is not the number to plan with.**
+
+### What this rehearsal does NOT prove
+
+- **It was not run against production.** Production credentials are not on this machine and
+  `assertLocalhostOnly()` exists to keep them off it. Everything above is a local
+  reconstruction that matched production's *migration versions*, not its data.
+- **The platform's own behaviour is unobserved** — the pooler, statement timeouts, whether the
+  CI credential may execute DDL at all (`ci.yml:135` records a `db push` failing with
+  *"permission denied to set parameter"*), and what Supabase does to roles and extensions
+  during a push.
+- **A scratch database has no concurrent traffic.** Nothing held a lock, nothing retried,
+  nothing timed out. The lock behaviour of `20260908000800` is the largest untested difference
+  between this rehearsal and the real thing.
+- **Production's data shape is unknown.** Phase 0 exists precisely because the one fact that
+  decides whether this deploy succeeds has never been looked at.

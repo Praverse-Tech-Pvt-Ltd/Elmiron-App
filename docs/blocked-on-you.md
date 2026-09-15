@@ -336,3 +336,115 @@ tested, and protects nothing.
 is on GitHub and `origin/main` is current. The schema is in 56 migration files there. What has
 no off-machine copy is the **data**, and the data is the part that cannot be copied without
 this decision.
+
+## Escalations — 15 September 2026, MR-34
+
+### 7.1 — ASK: a migration in the pending 37 crashes, and the fix has to go in that file
+
+**Found by rehearsing the deploy (MR-34 B), not by reading it.**
+
+`20260908000800_user_profiles_organisation.sql` backfills every user profile's organisation.
+For a profile with a territory the organisation is derived. For one without — an admin — the
+migration runs this:
+
+```sql
+select count(*), min(id) into v_orgs, v_org from public.organisations;
+```
+
+**PostgreSQL has no `min` aggregate for `uuid`.** Measured on the local stack,
+`server_version` 17.6: the catalogue holds **zero** `min` functions accepting `uuid`. The
+branch raises `ERROR: function min(uuid) does not exist (SQLSTATE 42883)`.
+
+| Production's data | The deploy |
+| --- | --- |
+| no territory-less profiles | clean — **and this is the only path CI has ever run** |
+| territory-less profiles, **1** organisation | **crashes.** Not by design |
+| territory-less profiles, **>1** organisations | refuses, by design (`MR-06 / BE-W76`) |
+
+Both non-empty branches were executed against seeded databases with the precondition asserted
+first. The crash is real, not inferred.
+
+**The migration's own comment claims a test covers this** — *"the single-organisation branch is
+exercised only by its test, not by CI's migration run."* **There is no such test.** A backfill
+runs once, at migration time, so nothing can re-run it afterwards; the branch has never
+executed anywhere.
+
+**Why this is an ask and not a commit.** `.ai-collab/constraints.md:78` lists *"changing what a
+migration that has already been applied does"* under **Ask before doing**. This one is applied
+locally and in CI, and unapplied on production. The usual remedy — write a new migration —
+**does not work here**: the broken migration aborts the deploy before any successor runs, so a
+follow-up migration would never execute. The fix has to go in that file or nowhere.
+
+**What we need from you: permission to edit `20260908000800` in place.** The change is one
+expression — `min(id)` becomes `(select id from public.organisations order by id limit 1)`.
+Databases that already ran it are unaffected, because a migration already recorded in
+`schema_migrations` is never re-applied.
+
+**The alternative is cheaper and worse:** run the Phase 0 pre-flight query, and if production
+has no territory-less profiles the defect never fires and can be left alone. That is a bet on
+a fact nobody has checked, on a schema nobody has looked at, seven days before reference data
+is due.
+
+### 7.2 — The storage gap, promoted from a caveat to an item
+
+**The recovery posture covers the ledger and not the objects, and the 90-day promise is about
+the objects.**
+
+A database restore brings back **rows**, including every row of `storage.objects`. It does not
+move a single audio file. A restored database therefore references audio that does not exist,
+and the mismatch is silent: `storage.objects` is metadata, so nothing in the database can tell
+you the bytes are gone.
+
+**And then the purge walks those rows.** `purge-expired-audio.mjs` deletes audio whose
+retention has expired. Against a restored database, every one of those deletes hits an object
+that is already absent — which is the branch this project got wrong once already:
+
+> `services/api/scripts/storage.mjs:12` — Supabase answers a missing object with
+> `{"statusCode":"404", ...}` **in the body, over HTTP 400**. `purge-expired-audio.mjs:40`
+> records that the check used to be `response.ok || response.status === 404`, so
+> *"somebody already removed it"* was being treated as a failure.
+
+It is fixed now (`isMissing()` reads the body). **But it was wrong for as long as it existed,
+and nothing found it by running, because the case never arose.** A restore is the event that
+sends every purge down that branch at once — the first real exercise of a code path that has
+only ever been exercised by its own unit test.
+
+**What is actually promised.** Item 5.11 and question 4.4 are about whether a deleted storage
+object is really gone within 90 days. That promise is about the objects. **The mechanism this
+project has built — MR-33's `BE-W11` — backs up the database.** There is no backup of the
+audio at all, and a restore cannot produce one.
+
+**Registering, not building.** The decision this waits on is 6.3, the backup destination: the
+same answer governs whether the objects can be copied anywhere, and object storage is far
+larger and far more sensitive than a SQL dump.
+
+### 7.3 — QUESTION, with a recipient: the platform unknowns
+
+**To: Supabase support, or whoever owns the Supabase account.** None of this is discoverable
+from a scratch database, and all of it is discoverable by asking. It is one email.
+
+Every one of these is currently written down as *"unobserved"* in `docs/restore-runbook.md`,
+and each has a decision hanging off it:
+
+1. **How long does a restore of this project actually take?** The runbook has a measured floor
+   for the local path — MR-33 B5, 4 seconds to verify a 17.6 MB artefact — and nothing at all
+   for the platform's own restore. An operator reading the runbook today cannot tell whether
+   the recovery window is minutes or hours, which is the first thing anyone asks during an
+   incident.
+2. **Does a restore need a support ticket, or can it be self-served from the dashboard?** If it
+   needs a ticket, the recovery time includes their response time and the runbook's step 2 is
+   wrong about who performs it.
+3. **What does a restore do to roles, extensions, and `supabase_admin`-owned settings?** The
+   local drill restored a database this project's migrations created. A platform restore
+   touches things migrations never owned. `ci.yml:135` already records a `db push` failing with
+   *"permission denied to set parameter"*, so the privilege boundary here is known to be real
+   and is not mapped.
+4. **What plan is this project on and what does it back up?** This is item 5.2, and **6.2
+   depends on it** — the PITR decision cannot be re-made until it is answered.
+5. **Does deleting a storage object really remove it within 90 days** — no S3 versioning, no
+   soft-delete window? That is question 4.4 and item 5.11, unanswered since week 1, and 7.2
+   above turns on it.
+
+**Why ask rather than test.** Every one of these is a property of the platform's
+implementation and contract. A scratch database on this machine cannot observe any of them,
+and an experiment against production would be the incident it is meant to prepare for.
