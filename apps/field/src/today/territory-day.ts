@@ -188,3 +188,25 @@ export const clockIn = (iso: string, zone: TerritoryZone): string => {
  */
 export const territoryToday = (serverTime: string, zone: TerritoryZone): string =>
   dayIn(serverTime, zone);
+
+/**
+ * **`FE-W45`, second half — MR-36 C2. The zone's discriminant, read at the call site.**
+ *
+ * `UTC_FALLBACK` is a valid `TerritoryZone`. It is *labelled* — `source: 'fallback_utc'` —
+ * so the absence has always been representable. That was never the problem. The problem was
+ * that **eleven screens read the zone's VALUE and none read its discriminant**: every date
+ * and clock they render is computed in it, and for a territory in IST a fallback is 5h30m
+ * out, which moves a late-evening visit onto the previous calendar day.
+ *
+ * MR-33 fixed the ORDERING — records and zone now arrive together, so there is no render
+ * holding real visits against a fallback that is about to be corrected. It did not make the
+ * fallback VISIBLE when it is the final answer, and that is the half this closes.
+ *
+ * Returns the sentence to show, or `null` when the zone is the territory's own. A string
+ * rather than a boolean so the caller cannot render a warning without its reason.
+ */
+export const zoneCaveat = (zone: TerritoryZone): string | null =>
+  zone.source === 'territory'
+    ? null
+    : 'Dates and times are shown in UTC. This app could not get your territory’s timezone, ' +
+      'so a day here may not be the day you worked — in India it runs 5 hours 30 minutes behind.';

@@ -1243,3 +1243,123 @@ before any further comparison is drawn from it.
 | **FE-W45** | **FIXED, and the test that proves it nearly did not.** `setStore` published the restored records *before* the anchor was read, so there was a render holding real visits with `zone` still at the initial `UTC_FALLBACK` — every clock and date **5h30m wrong for IST**, then corrected. MR-28's own comment calls that outcome worse than showing nothing. Records and the zone they are read in now arrive together, which is the records-and-cursor invariant applied to a second pair. <br><br>**The first version of the ordering test passed against the defect.** `memoryPulledStore` resolves `loadAnchor` synchronously, so React batched `setStore` and `setZone` into one render and the intermediate state never existed. Only after the double was made as asynchronous as the real `AsyncStorage` did the mutation produce the bad render — `doctors:1, zone:fallback_utc` — and fail. **A synchronous test double can hide an ordering defect completely**; that is now in `gotchas.md` | closed |
 | **FE-W46** | **NOT FIXED — genuinely blocked, and the blocker is not ours.** `sizeBytes: 1` in `visit/[id].tsx` and `voice-note/[visitId].tsx` is fabricated because the contract's `positive()` refuses zero and the real byte count is not knowable until the upload path exists. That path is **`BE-W7`**, which has no client. Every candidate fix here invents a different wrong number. The comment at each site says the figure is false by construction, which is the best available state and not a good one | open, blocked on `BE-W7` |
 | **FE-W47** | **NOT FIXED, and this is a decision rather than a deferral.** `destinationsFor(role ?? 'mr')` in `home.tsx`. It renders no false claim to the MR — line 228 already says *"Signed in as unknown role"* — and **it is not a permission defect**: the server denies what a role may not do, and `home.tsx` says so in its own header. Changing it would mean the client deciding what an unknown role may see, which is the one thing this project's standing rules forbid. Recorded so the verdict is on the record rather than inferred from silence | closed as "correct as written" |
+
+### Added by MR-36 C — the four sentinels, asked at the CALL SITE
+
+**First, a correction to the premise.** MR-36's brief said these four *"have not moved since"*
+MR-31. **Two of them moved in MR-33 D1** — `FE-W44` and `FE-W45` were fixed there, and
+`FE-W46`/`FE-W47` were given verdicts (rows above, `COMPLETION-PLAN.md` MR-33 block). What had
+NOT been asked is MR-36's actual question, which is different from "is it fixed": **can an
+absence be distinguished from an answer at the CALL SITE — not in the type — and how many
+readers of the discriminant are there?**
+
+Asked that way, one of the two "fixed" ones was still half open.
+
+| ID | Discriminant exists? | Readers at the call site | Verdict |
+|---|---|---|---|
+| **`FE-W44`** | **Yes** — `QueueLoad` is a discriminated union | **21 reads across 7 non-test files**, and TypeScript cannot narrow without one | **Closed.** The absence is unrepresentable-as-an-answer: no consumer can reach `state` without first saying which case it is in |
+| **`FE-W45`** | **Yes, all along** — `TerritoryZone.source` is `'territory' \| 'fallback_utc'` | **2, both inside `pulled-store.tsx`. ZERO on any screen** — while **11 screens render a date or clock computed in that zone** | **WAS STILL OPEN. Fixed this session.** MR-33 fixed the ORDERING; it never made the fallback visible once it is the final answer |
+| **`FE-W46`** | **No** — `sizeBytes: 1` is a valid positive integer and nothing marks it fabricated | **0 readers, because there is no discriminant to read** | **Open, still blocked on `BE-W7` — and the consequence is WORSE than recorded** |
+| **`FE-W47`** | **Yes** — `role` is `string \| undefined` before the `??` | **3 readers; 2 distinguish, 1 does not** | **Closed as correct as written**, now with the count behind it |
+
+#### `FE-W45` — the half that was still open, and why it was invisible
+
+`UTC_FALLBACK` is `{ timeZone: 'UTC', source: 'fallback_utc' }`. **The label was there from the
+start.** MR-31 registered it, MR-33 fixed the render ORDERING so no screen shows real visits
+against a fallback that is about to be corrected — and that is a different defect from this one.
+
+**This one is the fallback being the FINAL answer and nobody saying so.** Eleven screens
+destructure `zone` from `usePulledStore()` and pass it to `dayMonthIn` / `clockIn` /
+`territoryToday`. **None of them reads `zone.source`.** For a territory in IST the fallback is
+**5 hours 30 minutes**, which moves a visit after 18:30Z onto the previous calendar day — and
+which day a doctor was seen is a compliance fact, not a display preference.
+
+**Fixed with one banner at the root** (`ZoneCaveatBanner`), not eleven edits, mounted inside
+`PulledStoreProvider` because that is where the zone lives. Eleven separate warnings would be
+eleven places for the twelfth screen to be forgotten — which is exactly the `FE-W44` lesson,
+where MR-31 recorded two consumers and there were five.
+
+The decision is a pure function, `zoneCaveat(zone)`, returning **the sentence or `null`** — a
+string rather than a boolean so a caller cannot render a warning without its reason. Two
+mutations, each failing exactly the right tests: returning `null` always (2 fail), and keying on
+`timeZone === 'UTC'` instead of on `source` (1 fails — the one asserting that a territory whose
+timezone genuinely IS UTC must not be warned).
+
+#### `FE-W46` — still blocked, and the consequence is bigger than "a wrong number"
+
+`sizeBytes: 1` at `visit/[id].tsx:229` and `voice-note/[visitId].tsx:157`. MR-33 recorded it as
+a fabricated figure with no user-visible effect. **It is persisted and it is summed.**
+
+- `recordings.size_bytes` and `voice_notes.size_bytes`, both `not null check (size_bytes > 0)`.
+- `audio_storage_bytes()` (`20260816000300_resumable_upload.sql:131`) computes `liveBytes` as
+  `sum(size_bytes)` across both tables.
+
+**So the per-MR storage ceiling is silently inert.** With every row worth one byte, `liveBytes`
+is a row count in disguise and no realistic ceiling can ever be reached. A control that cannot
+fire is the `BE-W6` failure shape again: it exists, it runs, and it measures nothing.
+
+**Still not fixable here, and the MR-33 reasoning survives contact.** `expo-file-system` is not
+a dependency of this app — only `expo-audio` is — so a real byte count needs a dependency, which
+is an ask. The available substitute, `bitrateKbps × durationSeconds / 8`, is an **estimate
+wearing the shape of a measurement**, which is worse than an obviously false `1`: the next
+reader would stop checking. **What the user would see when it is the absence:** nothing. No MR
+is ever stopped by a quota that should stop them, and when `BE-W7` lands with real sizes, every
+historical row understates by design.
+
+#### `FE-W47` — closed, with the count that justifies it
+
+`home.tsx` reads `role` three times: `role === 'mr'` (line 225, distinguishes),
+`role ?? 'unknown role'` (line 230, **renders the truth**), and `destinationsFor(role ?? 'mr')`
+(line 231, **does not distinguish**).
+
+**Two of three distinguish, and the one that does not controls navigation.** Navigation is not
+permission — the server denies what a role may not do, and the screen already tells the MR their
+role is unknown. Making the client decide what an unknown role may see is the one thing the
+standing rules forbid. **What the user would see when it is the absence:** the sentence *"Signed
+in as unknown role"* and an MR-shaped destination list, with any action they should not have
+refused by the server rather than hidden by the client.
+
+#### `FE-W45`'s null check — MR-31's qualification, applied
+
+Before reaching for `null` to mean "unknown", MR-31 required checking what `null` already means.
+**It was not needed here and that is the point:** `TerritoryZone` already carried a labelled
+discriminant, so nothing had to become nullable. Making `zone` nullable would have been the
+error MR-31 warned about in another guise — `lastSeenAt: null` already means *"never visited"*,
+and a nullable zone would have put a second meaning on the same absence.
+
+### Added by MR-36 D2 — what is ENGINEERING and what is WAITING, side by side
+
+**For the operator, not for work.** The point is the shape: how much of what remains this team
+can do alone, against how much is sitting on an answer only you can give.
+
+**What this list is NOT.** It is not a re-audit of the plan. The ordered chain above
+(*"BE-W17 synthetic seed → … ≈33 half-days"*) is **stale**: `G-WRITE` has since closed, so the
+first four of its nine steps are done and the total no longer means what it says. Re-deriving
+the whole plan was out of scope for this session, and publishing a number derived from a stale
+chain would be the exact failure this project keeps having. Each row below was checked
+individually; anything not listed was not checked.
+
+#### Engineering — no human answer required
+
+| Work | Estimate | Note |
+| --- | --- | --- |
+| **Manager console — `FE-W10`** | **1 half-day** | The console tells its user a shipped screen is forbidden. One file. A truthfulness defect in a product whose pitch is truthfulness, and the cheapest thing on this page |
+| **Manager console — `FE-W12`** (overrides panel consumes the GET) | **2 half-days** | Needs `BE-W13` |
+| **Manager console — `FE-W13`** (audit + retention screens) | **3 half-days** | Needs `BE-W14`, `BE-W15`. Already judged *"a sales asset, not a compliance requirement"* — the audit trail stays queryable in SQL either way |
+| **`BE-W89` — the beat-plan chain** | **UNSIZED, deliberately** | The row says *"re-size before estimating"* and that is still the right answer. Measured as a seeded MR, `sync_pull` emits `visit`, `doctor`, `beat_plan` and `clinic_address` and has **no `beat_plan_entry` entity at all** — so the screen has no data path, not a thin one. Sizing it means deciding the entity first |
+
+#### Waiting on you — engineering cannot start or cannot finish
+
+| Item | Waiting on | Consequence of delay |
+| --- | --- | --- |
+| **`FE-W41` + `5.9`** — the UCPMP cap | **The cap value.** One unit of work, not two | `5.9` **build-fails CI on 6 November**, warning from 16 October. The samples screen currently says the app does not count samples against the cap, which is true *only while no cap exists*. Configure the cap without the copy and the screen contradicts the server |
+| **`FE-W46`** — fabricated `sizeBytes: 1` | **`BE-W7`**, the upload path, which has no client | Worse than recorded: the value is **persisted** to `recordings.size_bytes` / `voice_notes.size_bytes` and **summed** by `audio_storage_bytes()`, so the per-MR storage ceiling is inert. See the MR-36 C block |
+| **The deploy** — 37 migrations | **One `SELECT` and then `supabase db push`** | The pre-flight query at the top of `blocked-on-you.md`. Reference data is dated ~22 Sep and must not land first |
+| **`BE-W11`** — the backup | **A destination** | Built and proven; protects nothing until somebody says where the artefact may lawfully live |
+| **PITR** (`6.2`), **the plan** (`5.2`) | **A dashboard fact and a decision** | 6.2 cannot be re-made until 5.2 is answered |
+| **`5.13` / `BE-W93`** — the fiduciary name | **The registered name** | **Compounds daily.** `consent_records` is append-only, so every consent captured before the name exists is permanently defective and cannot be amended by design |
+
+#### The shape, in one line
+
+**The cheapest engineering item left is one half-day. The most expensive thing on this page is a
+name that costs you nothing and gets worse every day it is not given.**

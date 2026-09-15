@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { UTC_FALLBACK, clockIn, dayIn, dayMonthIn, territoryToday } from './territory-day';
+import {
+  UTC_FALLBACK,
+  clockIn,
+  dayIn,
+  dayMonthIn,
+  territoryToday,
+  zoneCaveat,
+} from './territory-day';
 import type { TerritoryZone } from './territory-day';
 
 /**
@@ -142,5 +149,35 @@ describe('dayMonthIn — MR-25 C1', () => {
     // a boundary tested from one side is a boundary that has not been tested.
     expect(dayMonthIn('2026-09-10T18:29:59.999Z', IST)).toBe('10 Sep');
     expect(dayMonthIn('2026-09-10T18:30:00.000Z', IST)).toBe('11 Sep');
+  });
+});
+
+/**
+ * `FE-W45`, second half — MR-36 C1/C2.
+ *
+ * The zone has always CARRIED its discriminant. What it lacked was a reader: eleven screens
+ * render a date computed in the zone and not one of them consults `source`. These assert the
+ * decision itself, so the banner's only job is to render what this returns.
+ */
+describe('zoneCaveat — the fallback is visible, not merely representable', () => {
+  it('says nothing when the zone is the territory’s own', () => {
+    expect(zoneCaveat(IST)).toBeNull();
+  });
+
+  it('names the consequence when the zone is the UTC fallback', () => {
+    const caveat = zoneCaveat(UTC_FALLBACK);
+    expect(caveat).not.toBeNull();
+    // The content, not the container: a warning that does not say what is wrong with the dates
+    // is a warning an MR learns to dismiss.
+    expect(caveat).toMatch(/UTC/u);
+    expect(caveat).toMatch(/5 hours 30 minutes/u);
+  });
+
+  it('keys on the SOURCE, not on the timezone name', () => {
+    // A territory whose timezone genuinely IS UTC must not be warned about. This is the whole
+    // reason the sentinel is labelled rather than inferred from the value: `timeZone: 'UTC'`
+    // is a legitimate answer and 'UTC' alone cannot tell you which one it was.
+    expect(zoneCaveat({ timeZone: 'UTC', source: 'territory' })).toBeNull();
+    expect(zoneCaveat({ timeZone: 'UTC', source: 'fallback_utc' })).not.toBeNull();
   });
 });

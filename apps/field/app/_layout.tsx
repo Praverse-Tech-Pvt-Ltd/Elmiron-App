@@ -15,6 +15,7 @@ import { SessionProvider } from '../src/session';
 import { AuthGate } from '../src/auth-gate';
 import { OutboxFlusher } from '../src/sync/flusher';
 import { PulledStoreProvider } from '../src/sync/pulled-store';
+import { ZoneCaveatBanner } from '../src/today/ZoneCaveatBanner';
 
 /**
  * The four faces Phase 1's scale actually asks for.
@@ -100,6 +101,13 @@ export default function RootLayout(): ReactNode {
             */}
             <PulledStoreProvider>
               <StatusBar style="dark" />
+              {/*
+                `FE-W45`, second half. Eleven screens render a date in the territory zone and
+                none of them read its `source`, so a UTC fallback has been indistinguishable
+                from a real answer. One banner here rather than eleven edits, for the same
+                reason the flusher and the store are here: this is where the zone lives.
+              */}
+              <ZoneCaveatBanner />
               <Stack screenOptions={{ headerShown: false }} />
             </PulledStoreProvider>
           </OutboxFlusher>

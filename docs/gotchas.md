@@ -3083,3 +3083,86 @@ defect.
 ```bash
 docker logs --since 60m supabase_db_Elmiron-App 2>&1 | grep -A4 "deadlock detected"
 ```
+
+### The absence of an event is evidence only against a known rate
+
+**MR-36 D1.** *"It did not happen"* is not a finding. *"It did not happen in N trials, where it
+happens about M in K"* is. Without the denominator you are reading noise as signal, and this
+project has now done it twice, in opposite directions, three weeks apart.
+
+**Worked example 1 — a comparison withdrawn (MR-34).** `BE-W92`'s rate had been compared across
+sessions as *"1 in 16 alone versus 2 in 2 under load"*. The loaded arm's denominator was **two**.
+Two. A later measurement contradicted the conclusion by a factor of six, and the correction was
+to the method rather than to any claim about Postgres: **a two-sample denominator cannot
+distinguish a doubling from a coin landing heads twice.** The comparison was withdrawn.
+
+**Worked example 2 — a cause asserted from silence (MR-35).** A deadlock was attributed to a
+suite added in the same session, on **three clean runs with the file removed** against two
+failures in four with it. Widening the baseline to **seven** runs without the file produced the
+deadlock **twice**. It was pre-existing at roughly 2 in 7 and had nothing to do with the new
+file. **Three runs was not a baseline; it was a coincidence with a plausible story attached.**
+
+**The rule, both halves.** The standing one — *"the fix worked" is not evidence the diagnosis was
+right* — has a twin that is easier to miss because it feels like rigour: **"it stopped happening"
+is not evidence either, when you never established the rate it was happening at.**
+
+**What to do instead.** Before claiming a change removed something intermittent:
+
+1. **Write down the before-rate with its denominator.** If you do not have one, you are not
+   ready to claim a cause — you are ready to measure.
+2. **Match the after-denominator to the before-rate's size.** Against a true rate of 2-in-7,
+   seeing zero in three runs has probability ≈0.36 — it means nothing. Zero in 21 runs has
+   probability ≈0.0009.
+3. **Record both rates with both denominators**, so the next person inherits a number rather
+   than an impression. MR-36 B did this and it is what let a 29% → 5% claim be stated as a
+   reduction rather than as a cure.
+
+**And the residue is part of the rate.** MR-36's mitigation cut the deadlock from ~29% to ~5% and
+**did not remove it**. Reporting that as "fixed" would have set up the next session to measure
+against a false baseline — which is the same mistake one layer down.
+
+### Before enumerating why an action failed, establish it was ATTEMPTED
+
+**MR-36 D1, from MR-34/35.** A push was reported as *"denied by the environment"*. The next
+session was asked to distinguish three causes — an account-level authorisation failure, a
+credential expiry, a network or proxy refusal — each with a different owner, one of them a named
+person to escalate to.
+
+**`git` never ran.** The verbatim text was:
+
+> `Permission for this action was denied by the Claude Code auto mode classifier. Reason:
+> [Out-of-Place Publication].`
+
+That is the local agent harness declining to invoke the command. There was **no git error text**,
+because there was no git invocation — and nothing for an org owner to fix. Re-running the same
+command in a later session succeeded with no change to any credential, remote or network.
+
+**Three candidate causes had been enumerated for an event that had not occurred.** All three were
+about the remote; the cause was local and was sitting in the error text, unparaphrased.
+
+**The rule:** an error that names a *layer* — an agent harness, a sandbox, a wrapper script, a CI
+runner — is describing that layer, not the system beyond it. **Quote it verbatim and check which
+layer is speaking before deciding whose problem it is.** Paraphrasing a refusal into "the
+environment denied it" throws away the one word that says who can fix it.
+
+### `render()` must be awaited in `apps/field`'s jest suites
+
+**MR-36 C2.** A bare `render(<Component />)` returns before `screen` is populated. Every query
+then fails with:
+
+```
+`render` function has not been called
+```
+
+which reads as *"the render never happened"* rather than as *"you forgot an `await`"*, and sends
+you looking at the component, the mocks and the jest config in that order. The returned object is
+also empty, so destructuring `const { getByText } = render(...)` fails with
+`getByText is not a function` — a second misleading symptom from the same cause.
+
+```ts
+await render(<Component />);          // correct
+expect(screen.getByText('...')).toBeTruthy();
+```
+
+Every `src/routes/*.test.tsx` already awaits it. That was the clue and it took a probe to see:
+copying an existing test's shape exactly is faster here than reasoning about the API.
