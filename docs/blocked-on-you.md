@@ -1,5 +1,34 @@
 # Blocked on you — 14 August 2026
 
+> # ⚠ ONE QUERY, AND NOBODY HAS RUN IT
+>
+> **If you have production credentials, run this before you read anything else on this page.
+> It takes one second and it decides whether §6.1 is a scheduling item or an incident.**
+>
+> ```bash
+> psql "<direct url>" -At -c "select 'territory_less=' || (select count(*) from public.user_profiles where territory_id is null) || '  organisations=' || (select count(*) from public.organisations) || '  consent_notices=' || (select count(*) from public.consent_text_versions);"
+> ```
+>
+> **What the answer means:**
+>
+> | Result | What it tells you |
+> | --- | --- |
+> | all three are `0` | §6.1 is a **sequencing item**. Deploy the 37 pending migrations before any reference data is loaded, and the whole problem goes away. The deploy takes seconds |
+> | `territory_less > 0` or `consent_notices > 0` | The two backfills in the pending batch will **execute** rather than no-op. They are fixed as of MR-35, but they have still never run anywhere. Read `docs/restore-runbook.md` → Phase 0 before pushing |
+> | **anything is non-zero AND real customer data is present** | **§6.1 IS AN INCIDENT, NOT A SEQUENCING ITEM.** Production is 37 migrations behind, which means it has **no tenant boundary** — `BE-W76`. One organisation's admin can read another's data, and that is true right now, not at some future date |
+>
+> **Why this is at the top of the page.** Every judgement below about production rests on the
+> claim that it holds no reference data — and `docs/COMPLETION-PLAN.md:217` records that claim
+> as **unverifiable from the engineering machine**. `BE-W40` has since verified the migration
+> COUNT over the pooler. **Nothing has ever looked at the rows.** No agent can run this: the
+> credentials are deliberately not on the engineering machine, and `assertLocalhostOnly()` exists
+> to keep them off it.
+>
+> It is the highest-value action available to anyone holding production credentials, it costs
+> one `SELECT`, and until somebody runs it this project does not know which of two very
+> different situations it is in.
+
+
 Every open item that no agent can resolve, consolidated. Backend is stopped by decision. Frontend is at the limit of what can be built without you.
 
 **For the first time on this project, there is no engineering work that can proceed.**
@@ -339,7 +368,31 @@ this decision.
 
 ## Escalations — 15 September 2026, MR-34
 
-### 7.1 — ASK: a migration in the pending 37 crashes, and the fix has to go in that file
+### 7.1 — RESOLVED 15 September 2026 (MR-35). Two migrations crashed, not one
+
+> **Answered and done.** The edit was authorised, applied, and recorded as a named exception in
+> `.ai-collab/constraints.md`. **Nothing is blocked on you here any more** — this entry is kept
+> because the reasoning is the record.
+>
+> **The deciding question turned out to be mechanical:** does the migration ledger verify a
+> HASH of each file, or only a NAME? **Only a name.** `schema_migrations` holds `version`,
+> `name` and `statements` and **no checksum column**; `check-migration-drift.mjs` reads
+> `version` only; `supabase migration list` pairs local and remote by version; and editing an
+> applied migration's body then running `db push --dry-run` reports `"upToDate":true`, with a
+> positive control (a new file IS reported) proving the check was live. So no database anywhere
+> can observe the edit, and constraint 78's purpose is untouched.
+>
+> **The sweep that followed found a SECOND one.** `20260908001200_consent_text_versions_tenant`
+> carries the identical `min(id)` on the identical uuid column, behind its own early return.
+> Neither had ever executed anywhere. Both are fixed, both branches of each are now exercised
+> by `services/api/tests/organisation-backfill.spec.ts`, and a repo-wide guard fails if the
+> shape reappears in any migration.
+>
+> **What is still on you:** the Phase 0 query at the top of this page. The fix means the
+> single-organisation branch now works; it does not tell anyone whether production will take
+> that branch, the refusal branch, or neither.
+
+### 7.1 (as originally written) — ASK: a migration in the pending 37 crashes, and the fix has to go in that file
 
 **Found by rehearsing the deploy (MR-34 B), not by reading it.**
 

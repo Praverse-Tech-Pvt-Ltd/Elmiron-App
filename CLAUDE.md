@@ -15,64 +15,66 @@
 > demonstration: a stale count had been reaching every session unchallenged. The snapshots
 > now live in `docs/graphify-notes.md`.
 
-## Use the knowledge graph for orientation
+## The knowledge graph — CHECK WHETHER ONE EXISTS BEFORE RELYING ON IT
 
-There is a graphify knowledge graph of this codebase at **`graphify-out/`** — gitignored, so
-it will not exist on a fresh clone.
-
-| File | What it is |
-| --- | --- |
-| `graphify-out/GRAPH_REPORT.md` | Human-readable. **Read this first.** |
-| `graphify-out/graph.json` | The graph itself, node-link JSON (`nodes` / `links`) |
-| `graphify-out/graph.html` | Interactive visualisation, for humans not agents |
-
-**Go through the graph before grepping** when the question is *"where does X live"*, *"what
-touches Y"*, *"which migration owns this table"*, or *"what is the shape of this system"*.
-It answers those in one read instead of a dozen searches. Node records carry `source_file`
-and `source_location`, so a graph hit gives you a file and a line number to open next.
-
-There is no `graphify` CLI installed. Query `graph.json` directly — it is plain JSON:
+**There is no checked-in graph. `graphify-out/` is gitignored, so its state is a fact about
+your machine and nothing in this file can tell you what it is.** One command can:
 
 ```bash
-# what nodes mention a concept, and which file each came from
-python -c "import json;g=json.load(open('graphify-out/graph.json',encoding='utf-8'));\
-[print(n.get('label'),'|',n.get('source_file'),'|',n.get('source_location')) \
- for n in g['nodes'] if 'consent' in (n.get('label') or '').lower()]"
+head -1 graphify-out/GRAPH_REPORT.md 2>/dev/null || echo "NO GRAPH — grep instead"
 ```
+
+**Three states, and only the first is usable.**
+
+| What that prints | What it means | What to do |
+| --- | --- | --- |
+| a date, and it is not behind the code | a current index | use it, and still open every file it points at |
+| a date **older than the code** | a museum | **rebuild or delete it. Do not query it.** |
+| `NO GRAPH` | nothing to read | grep. This is the normal state on a fresh clone |
+
+**The freshness comparison, which is the whole decision:**
+
+```bash
+head -1 graphify-out/GRAPH_REPORT.md                                       # when the graph was built
+git log -1 --format=%cd -- services/api/supabase/migrations packages/core  # when the code last moved
+```
+
+### Why this section no longer says "read the graph first"
+
+**MR-35 D1 deleted the graph that was here, and it is worth knowing why before you build
+another one.** It was built on 11 August. By 15 September it was missing **39 of 56
+migrations** and **80% of all tracked code files**, and `apps/field` was absent entirely — its
+whole representation was `package.json`, `tsconfig.json`, and a `placeholder.ts` that had been
+deleted. Every screen, the outbox and the sync layer were simply not in it.
+
+**A stale graph is worse than no graph, not merely less useful.** Every node carries a
+`source_file` and a `source_location`, so a wrong answer arrives with the strongest available
+signal of being checkable — a file and a line number. Asked "what enforces tenancy", it would
+have answered confidently from a schema that had no tenant boundary in it.
+
+It was **not** mis-built: it had 226 SQL nodes, so the `[sql]` extra was installed and parsing
+worked. It was five weeks old. Staleness and mis-building are different failures with different
+fixes, and only one of them is fixed by rebuilding.
+
+**So the rule this file now enforces on itself: a graph must declare its own state, and a
+reader must check that state before trusting a single answer.** The measurements above are in
+`docs/graphify-notes.md`.
 
 ### The graph is an index, not an authority
 
-**Never act on what the graph says without opening the file it points at.** It is a derived
+**Never act on what a graph says without opening the file it points at.** It is a derived
 snapshot. The code, the migrations in `services/api/supabase/migrations/`, and
-`PROJECT-OVERVIEW.md` are the sources of truth; the graph is a way of finding them quickly.
-If the graph and the code disagree, the code is right and the graph is stale.
+`PROJECT-OVERVIEW.md` are the sources of truth.
 
-The same staleness argument applies to `handoff.md` and `.ai-collab/` — a point-in-time
-snapshot goes stale within hours and the next reader trusts it anyway. **Those two are
-tracked** (BE-W6 kept them out of git, BE-W8 reversed it — `.gitignore:22-26`); they are
-working notes, expected to be updated, and `PROJECT-OVERVIEW.md` plus `docs/gotchas.md`
-remain the durable record.
+The same staleness argument applies to `handoff.md` and `.ai-collab/` — a point-in-time snapshot
+goes stale within hours and the next reader trusts it anyway. **Those two are tracked** (BE-W6
+kept them out of git, BE-W8 reversed it — `.gitignore:22-26`); they are working notes, expected
+to be updated, and `PROJECT-OVERVIEW.md` plus `docs/gotchas.md` remain the durable record.
 
-**Check freshness before trusting it.** `GRAPH_REPORT.md` carries its build date on line 1.
-If migrations or `packages/core` have changed since, the graph is behind:
+### Building one
 
-```bash
-git log -1 --format=%cd -- services/api/supabase/migrations packages/core
-```
-
-**A checked-in graph is a build artefact of one date, so "behind" is the default state, not
-the exception.** Compare the two dates before you believe anything it says, and treat a gap of
-weeks as a rebuild rather than a caveat — a stale node still carries a `source_file` and a line
-number, so a wrong answer arrives looking checkable. The last time this was measured, and what
-it found, is in `docs/graphify-notes.md`.
-
-### Known distortions, and the counts
-
-**`docs/graphify-notes.md`** — four measured weaknesses that will make a graph answer
-misleading, with the measurements that established them. Read it before drawing a conclusion
-from a god-node list, a BFS result or the report's "Suggested Questions".
-
-### Regenerating it
+Adding the tool is a dependency install, which this project requires you to **ask about first**
+(`.ai-collab/constraints.md`, "Ask before doing").
 
 ```bash
 pip install "graphifyy[sql]"        # the [sql] extra is NOT optional — see below
@@ -83,13 +85,24 @@ GRAPHIFY_CLAUDE_CLI_MODEL=haiku graphify extract . --backend claude-cli
 **The `[sql]` extra is mandatory for this repo.** The base `graphifyy` package bundles
 tree-sitter grammars and SQL is not among them. Without it, **every** file under
 `services/api/supabase/migrations/` contributes nothing and you get a confident-looking graph
-with the entire RLS enforcement layer missing. It warns, but the warning scrolls past in a
-wall of output. How many that is:
+with the entire RLS enforcement layer missing. It warns, but the warning scrolls past in a wall
+of output. How many files that is:
 
 ```bash
 ls services/api/supabase/migrations/*.sql | wc -l
 ```
 
-Two other traps: the CLI backend is `--backend claude-cli`, not `claude` (`--help` omits it,
-and `claude` demands `ANTHROPIC_API_KEY`); and without `GRAPHIFY_CLAUDE_CLI_MODEL`, doc
-extraction runs on Opus, which the tool's own source comments call "overkill".
+Two other traps: the CLI backend is `--backend claude-cli`, not `claude` (`--help` omits it, and
+`claude` demands `ANTHROPIC_API_KEY`); and without `GRAPHIFY_CLAUDE_CLI_MODEL`, doc extraction
+runs on Opus, which the tool's own source comments call "overkill".
+
+**If you build one, write its build date and the migration count it saw into
+`docs/graphify-notes.md` in the same commit** — so the next reader checks freshness with one
+command instead of inferring it from two unrelated stale numbers, which is what MR-34 had to do.
+
+### Known distortions
+
+**`docs/graphify-notes.md`** — measured weaknesses that make a graph answer misleading, with the
+measurements that established them, and the freshness verdict that led to the deletion. Read it
+before drawing a conclusion from a god-node list, a BFS result or a report's "Suggested
+Questions".

@@ -140,3 +140,40 @@ answer drawn from a schema five weeks gone.
 The rebuild command is in `CLAUDE.md`. Note that **80% absent is not a degraded index, it is a
 different codebase** — nothing in the report's "Suggested Questions" should be run against it
 until it is rebuilt.
+
+---
+
+## DELETED — 15 September 2026 (MR-35 D1)
+
+**`graphify-out/` no longer exists on this machine.** MR-34 measured it and called it a museum;
+MR-35 acted on that rather than leaving a dangerous artefact in place with a warning beside it.
+
+**Why deleted rather than rebuilt.** Rebuilding needs `pip install "graphifyy[sql]"`, and
+`.ai-collab/constraints.md` puts *"adding a dependency — any dependency, including a dev one"*
+under **Ask before doing**. Re-derived rather than assumed: `which graphify` finds nothing,
+`pip show graphifyy` reports *"Package(s) not found"*, and `import graphifyy` fails. So a
+rebuild was not something this session could do without asking, and leaving an 80%-absent index
+in place with a caveat is the option MR-34 had already shown does not work — the caveat was
+written and the file stayed.
+
+**What was deleted:** 3.9 MB, gitignored (`.gitignore:46`), **zero tracked files**, built
+2026-08-11. The `GRAPH_REPORT.md` header was archived outside the repository first so the
+measurement survives the artefact. Nothing in git changed, so no clone is affected.
+
+**The measurements it was deleted on** are in the MR-34 section above: 352 of 439 tracked code
+files absent (80%), 39 of 56 migrations absent, `apps/field` 131 of 131 absent.
+
+**If you build another one, record two things beside it in this file, in the same commit:**
+
+1. **The build date**, and
+2. **the migration count it saw** — `ls services/api/supabase/migrations/*.sql | wc -l` at build
+   time.
+
+**Why those two specifically.** MR-34 had to establish the graph's staleness by inference from
+two unrelated stale numbers — `CLAUDE.md`'s *"all 34 migrations"* and the report's build date —
+and the inference was **wrong**. The natural reading was that the graph dated from when 34 was
+true. It did not: the graph is from 11 August, when 17 migrations were tracked, and the "34"
+sentence entered `CLAUDE.md` on 14 August, three days later. Two independent stale numbers that
+happened to sit near each other, and the real gap was 39 rather than 22.
+
+**One recorded number beside the artefact would have replaced all of that with a subtraction.**
