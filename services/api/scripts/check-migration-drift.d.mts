@@ -33,3 +33,39 @@ export declare const compareMigrations: (
   fileVersions: readonly string[],
   appliedVersions: readonly string[],
 ) => MigrationDrift;
+
+/**
+ * MR-35 C1. The check's own preconditions.
+ *
+ * A drift verdict is only meaningful if the ledger and the schema are describing the same
+ * database. `verify:rollbacks` leaves a database with every version still recorded as applied
+ * and no tables at all, and against that the comparison above agrees perfectly — about a
+ * database that is gone.
+ */
+export interface DriftPreconditions {
+  /** True when a drift verdict may be given at all. */
+  ok: boolean;
+  /** Why not, in a form that names the state rather than the symptom. Empty when `ok`. */
+  reasons: string[];
+}
+
+export declare const evaluatePreconditions: (facts: {
+  migrationFileCount: number;
+  appliedCount: number;
+  publicTableCount: number;
+}) => DriftPreconditions;
+
+/**
+ * MR-35 C1. HOW the applied set falls short, not how far — a count cannot tell a deploy that
+ * stopped from versions applied out of band, and the two need different responses.
+ *
+ * - `complete` — every file is applied.
+ * - `partial-prefix` — the applied set is exactly the first N files in order: a deploy that
+ *   stopped. `supabase db push` resumes.
+ * - `interleaved` — the gaps are not a trailing run, so versions were applied individually.
+ * - `foreign-versions` — the database has applied a version with no file here.
+ */
+export declare const classifyShortfall: (
+  fileVersions: readonly string[],
+  appliedVersions: readonly string[],
+) => 'complete' | 'partial-prefix' | 'interleaved' | 'foreign-versions';
