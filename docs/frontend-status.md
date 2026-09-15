@@ -667,3 +667,42 @@ crashing migration in it, so the date is not safe to assume.
 **Nothing for the frontend to do about either** — both are operator actions. But if someone
 points a build at production in the next week, `sync_pull` will not exist, and that will read as
 a client bug.
+
+## MR-35 — 15 September 2026: no frontend code changed, and one thing that changes every session
+
+**A backend and tooling session.** No file under `apps/field` or `packages/ui` was touched.
+Frontend counts unchanged: `@fieldforce/field` vitest **499**, jest **125**; `@fieldforce/ui`
+vitest **4**, jest **243**; `@fieldforce/ui-tokens` vitest **54**. All passing, none skipped.
+
+### The knowledge graph is gone, and `CLAUDE.md` no longer points at it
+
+MR-34 measured it: `apps/field` was **131 of 131 files absent**, represented only by
+`package.json`, `tsconfig.json` and a `placeholder.ts` that had been deleted. MR-35 deleted the
+artefact rather than leaving it behind a caveat.
+
+**What changes for frontend work: grep `apps/field`.** `CLAUDE.md` no longer opens by telling
+every session to read the graph first — it now opens with the command that says which of three
+states the machine is in (current, museum, absent) and what to do in each.
+
+### The backend this app talks to is still not on production — and the deploy has a date
+
+Production holds **19 of 56** migrations. The whole `sync_pull` / `sync_push` layer the app
+depends on is missing, along with the tenant boundary and MR-28's defect-12 fix.
+
+MR-34 found that the pending batch contained a migration that **crashes**; MR-35 fixed it and
+found a second one with the identical defect. Both are fixed and both are now covered by tests.
+**The deploy is no longer blocked on an engineering unknown** — it is blocked on somebody with
+production credentials running the one-line pre-flight query at the top of
+`docs/blocked-on-you.md`.
+
+**Nothing for the frontend to do**, but the consequence is worth knowing: if a build is pointed
+at production in the next week, `sync_pull` will not exist there, and that will read as a client
+bug.
+
+### One testing rule that applies to `apps/field` too
+
+A suite that passes alone and fails in the full run is telling you the approach is wrong, not
+that it was unlucky — and **a single green run does not clear a change**. MR-35 nearly shipped a
+false diagnosis by treating three clean runs as a baseline for a failure that happens about two
+runs in seven. If you are testing whether something you wrote causes flakiness, measure a rate
+on both sides.

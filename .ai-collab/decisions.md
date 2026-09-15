@@ -1115,3 +1115,71 @@ a dependency is itself an ask. The verdict and the measurements are in `docs/gra
 **Note for whoever rebuilds it:** the `[sql]` extra was **not** the problem here. The graph has
 226 `.sql` nodes, so SQL parsed fine. It is stale, not mis-built, and those have different
 fixes.
+
+## 15 September 2026 — MR-35
+
+### A migration may be edited in place ONLY under the four conditions now named in constraints.md
+
+The deciding question was mechanical and was established from the tooling rather than from
+memory: **does the migration ledger verify a hash of each file, or only a name?** Only a name.
+`schema_migrations` holds `version`, `name` and `statements` and **no checksum column**;
+`check-migration-drift.mjs` reads `version` only; `supabase migration list` pairs local and
+remote by version; and editing an applied migration's body then running `db push --dry-run`
+reports `"upToDate":true` — with a positive control, because "nothing pending" is also what a
+dead command prints: adding a new file to the same directory **was** reported as pending.
+
+**So no database anywhere can observe the edit, and constraint 78's purpose is untouched.**
+
+The full exception, with all four conditions and the one that makes this case different — a
+migration that ABORTS the deploy cannot be fixed by a successor, because nothing ordered after
+it runs — is in `.ai-collab/constraints.md` under *"The one time a migration was edited in
+place"*, with a pointer at the constraint itself so nobody finds the rule without the exception.
+
+**Condition 3 is deliberately fragile.** The `statements` column already holds the SQL. A future
+CLI that compares it kills this exception, and the answer becomes a Phase 0 pre-flight fix with
+the file left alone.
+
+### The stale graph is DELETED rather than kept with a warning
+
+MR-34 measured `graphify-out/` at 80% of tracked code absent and called it a museum, then left
+it in place with a caveat. **Three weeks of sessions would have read `CLAUDE.md`'s "read this
+first" before reaching the caveat.** Writing the warning was not the same as acting on it.
+
+Deleted rather than rebuilt because rebuilding needs `pip install "graphifyy[sql]"` and adding
+any dependency is an ask. Gitignored, zero tracked files, so no clone is affected.
+
+**The generalisable half:** a derived artefact that carries `source_file` and line numbers is
+*dangerous* when stale, not merely useless — a wrong answer arrives with the strongest available
+signal of being checkable. For those, delete beats caveat.
+
+### A guard may not report healthy from a claim
+
+`check:migration-drift` compared the ledger against the files and never looked at the database.
+After a full `verify:rollbacks` it reported **no drift** against a schema with zero tables,
+because the ledger and the files agreed perfectly — about a database that no longer existed.
+
+**Decision: every guard reads the thing, not the record of the thing.** The check now refuses to
+give a verdict in either direction when the ledger and the schema contradict each other, when a
+schema exists with no ledger, or when it read zero migration files — that last one being this
+script in the wrong directory, which would otherwise be reported as a confident finding about
+the wrong system.
+
+It also classifies **how** an applied set falls short rather than how far, because a deploy that
+stopped and a set of cherry-picked versions need different responses and no count distinguishes
+them.
+
+### Establish the rate before claiming a cause
+
+A deadlock in `tenant-boundary-restrictive.spec.ts` was attributed to a suite added the same
+session, on three clean runs without it against two failures in four with it. **Widening the
+baseline to seven runs without it produced the deadlock twice.** Pre-existing, ~2 in 7,
+unrelated.
+
+**The rule, recorded because it nearly shipped as a diagnosis:** *"the fix worked" is not
+evidence the diagnosis was right* has a twin — **"it stopped happening" is not evidence either,
+when the rate it was happening at was never established.** Three runs is not a baseline; it is a
+coincidence with a plausible story attached.
+
+The rate is now in `docs/gotchas.md`, which is the part nobody had: the deadlock was known to
+occur, and how often was never written down — which is exactly what makes a spurious red
+indistinguishable from a real one.

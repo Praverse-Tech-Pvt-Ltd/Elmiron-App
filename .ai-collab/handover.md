@@ -180,3 +180,57 @@ after a pipe is the last command's status.** Observed live this session.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-34 — the deploy rehearsal | `PROJECT-OVERVIEW.md` → `### MR-34 — the deploy rehearsal` |
+
+---
+
+## After MR-35 — 15 September 2026
+
+**The pre-flight query is now the first thing on `docs/blocked-on-you.md`. It is still the
+highest-value action available and still nobody has run it.**
+
+| | |
+| --- | --- |
+| **Push** | **Unblocked.** MR-34's failure was the local agent harness, not GitHub — `git` never ran, so there was nothing for an org owner to fix. `4e8ba61..abf6ff3` pushed; CI run `34951701710` green on `abf6ff3` |
+| **The crashing migration** | **Fixed — and it had a TWIN.** `20260908000800` and `20260908001200` both called `min(id)` on a uuid column. Neither had ever executed anywhere |
+| **Editing an applied migration** | Permitted **in this one named case**. The ledger verifies a NAME, not a hash — see `.ai-collab/constraints.md`, "The one time a migration was edited in place" |
+| **Drift check** | Now asserts its own preconditions. It **refuses** to report on a database the rollbacks emptied, and names the SHAPE of a shortfall rather than its size |
+| **The graph** | **Deleted.** `graphify-out/` is gone; `CLAUDE.md` no longer says "read it first" |
+| **Tests** | **1,658 passing, zero skipped, zero failing.** Read them from the runners |
+
+### Before you deploy: one query, and it decides which of three futures you are in
+
+```bash
+psql "<direct url>" -At -c "select 'territory_less=' || (select count(*) from public.user_profiles where territory_id is null) || ' organisations=' || (select count(*) from public.organisations) || ' consent_notices=' || (select count(*) from public.consent_text_versions);"
+```
+
+All three zero → both backfills no-op and the deploy is seconds. Anything non-zero → the
+backfills **execute**; they are fixed now, but they have still never run anywhere outside a
+test. `docs/restore-runbook.md` → Phase 0.
+
+### The `api` suite is flaky about two runs in seven, and it is NOT your change
+
+`tenant-boundary-restrictive.spec.ts` fails with `deadlock detected` inside `mirrorTable` on
+roughly **2 of 7** full-suite runs. **Pre-existing**, measured this session, `BE-W92`'s problem.
+
+- **A single red `api` run is not a regression.** Re-run, and check whether it is that test and
+  that error.
+- **A single green run does not clear a change either.** This is the direction that bites: if
+  you are testing whether something you wrote causes flakiness, you need a *rate* on both sides.
+  This session nearly shipped a false diagnosis on three clean runs.
+- CI runs the suite once per push, so about a **one-in-four** chance of a spurious red.
+
+### Two traps measured this session
+
+1. **`delete from public.user_profiles` is illegal on this schema once fixtures exist.**
+   `app_thresholds.set_by_user_id` is `ON DELETE SET NULL` and `app_thresholds` is append-only,
+   so the delete raises *"append-only: UPDATE is not permitted by any role"*. A test that clears
+   tables passes alone and fails in the full run. If a test needs whole-table control, give it
+   its own scratch **database** — the `verify-backup.mjs` pattern.
+2. **A `supabase db reset` can fail and leave a half-built stack.** It reported
+   `LegacyDbSetupError: error running container: exit 1`, and `auth.users` then had no
+   `email_confirmed_at` because the auth container had not re-applied its own schema. **Assert
+   the starting state before measuring anything against it.**
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-35 — the crashing migration | `PROJECT-OVERVIEW.md` → `### MR-35 — the crashing migration` |

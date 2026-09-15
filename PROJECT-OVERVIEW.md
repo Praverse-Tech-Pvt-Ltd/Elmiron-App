@@ -14526,3 +14526,269 @@ skipped.**
    two checks fail in opposite directions and neither covers the other.
 4. **"Keep it red" was wrong, and this repository had already proved it in August.** The lesson
    was available for three weeks before it was applied.
+
+
+### MR-35 — the crashing migration
+
+**The migration that MR-34 found by rehearsing the deploy had a twin, and nothing found the
+twin by rehearsing anything. A sweep found it, and the sweep only happened because someone
+asked whether one instance was a shape.**
+
+#### A1/A2 — the push, and the blocker was none of the three things it could have been
+
+**The push succeeded this session.** `4e8ba61..abf6ff3`, exit 0, nine commits.
+
+| | |
+| --- | --- |
+| Run | `34951701710` — **`success`** |
+| Workflow | `CI` |
+| Event | `push` |
+| SHA | `abf6ff363564d3239e30b410e246b0760ae42d18` |
+
+**That SHA equalled HEAD and `origin/main` at the moment of the push.** It is no longer HEAD —
+this session has committed four times since, and those commits have not been pushed or built.
+Saying "CI is green on HEAD" would be false by four commits.
+
+**A2, and the review's three candidate causes were all wrong.** The MR-34 failure was not an
+account authorisation failure, not a credential expiry, and not a network or proxy refusal.
+**`git` never ran.** Verbatim:
+
+> `Permission for this action was denied by the Claude Code auto mode classifier. Reason:
+> [Out-of-Place Publication].`
+
+That is the local agent harness declining to invoke the command. There was no git error text to
+distinguish anything, because there was no git invocation — and **nothing for an org owner to
+fix.** Filing it as "the Devpt1904 problem again" would have sent a real person to inspect
+GitHub account settings for a problem that was never there. The same words — "denied by the
+environment" — cover three causes with three owners and this fourth one with none of them,
+which is exactly why the verbatim text was worth insisting on.
+
+**A4.** A fresh bundle of all refs was cut and `git bundle verify` reports *"The bundle records
+a complete history"*. **It is on `D:`, the same disk as the repository, and is worth nothing
+until a human copies it off.** The push means the repository is now genuinely off-machine, which
+the bundle never was.
+
+#### B1 — the deciding question: a NAME, not a hash
+
+**Established from the tooling, four independent ways.**
+
+| Evidence | Result |
+| --- | --- |
+| `supabase_migrations.schema_migrations` columns | `version`, `name`, `statements` — **no checksum column of any kind** |
+| `check-migration-drift.mjs` | selects `version` only |
+| `supabase migration list` | pairs local and remote by version; no content comparison |
+| **Empirical** — edit an applied migration's body, then `db push --dry-run` | **`"upToDate":true`** |
+
+The fourth needed a control, because "nothing pending" is also what a dead command prints:
+**adding a new file to the same directory was reported as pending in the same breath.** The
+check was live; the silence about the edit was an answer.
+
+**So editing changes nothing any database can observe, and constraint 78's purpose — that a
+database must never disagree with the file that built it — is untouched.**
+
+#### B3 — the exception, written so the constraint survives it
+
+Recorded in `.ai-collab/constraints.md` as **a named exception, with a pointer at the constraint
+itself**, under four conditions each checked rather than assumed:
+
+1. **Production has never applied it** — it is one of the 37 pending.
+2. **No database anywhere has executed the broken branch** — it sits behind an early return that
+   every empty database takes.
+3. **The ledger verifies a name, not a hash** — B1.
+4. **A successor migration cannot fix it.** This is the one that makes the case different. The
+   usual remedy assumes the defective migration *completes*; this one **aborts the deploy**, so
+   nothing ordered after it ever runs. The fix had to go in that file or nowhere.
+
+**If any one of the four fails, the exception does not apply** — and condition 3 is explicitly
+fragile: the `statements` column already holds the SQL, so a future CLI that compares it kills
+the exception and the answer becomes a Phase 0 pre-flight fix with the file left alone.
+
+#### B4 — both branches, run
+
+| Precondition asserted first | Result |
+| --- | --- |
+| 19 applied, **1** organisation, 1 territory-less profile | **push exit 0**, 56 migrations, `organisation_id` column present, admin assigned to Org A |
+| 19 applied, **2** organisations, 1 territory-less profile | **push exit 1**, stopped at 36, refused with `MR-06 / BE-W76`, `SQLSTATE 23502` |
+
+The refusal was read **from the message**, not inferred from the exit code — under the defect
+both branches exited 1, and the broken one exited 1 for the wrong reason.
+
+**One run was thrown away.** A `db reset` failed with `LegacyDbSetupError: error running
+container: exit 1` and the seed ran against a half-built database — `auth.users` had no
+`email_confirmed_at` because the auth container had not re-applied its own schema yet. The
+numbers from that run were discarded and the harness gained a precondition gate that aborts with
+exit 90/91/92 rather than measuring a broken stack.
+
+#### B6 — THE SWEEP, and it found a second one
+
+`20260908001200_consent_text_versions_tenant.sql` carries **the identical `min(id)` on the
+identical uuid column**, behind its own early return (`consent_text_versions` empty). **No
+migration inserts into that table and it is empty on every fresh database, so this one had never
+executed anywhere either.** Fixed the same way, under the same exception.
+
+**The first sweep was wrong and had to be narrowed.** Scanning for `select ... into` matched
+**26 of 37** files — because that shape appears inside `create function` bodies, which run when
+the function is **called**, not when the migration runs. Stripping function bodies first is what
+makes the question answerable:
+
+| Pending migration | Deploy-time data dependence | Ever executed? |
+| --- | --- | --- |
+| `20260908000800_user_profiles_organisation` | branching `do` block, `raise exception`, backfill, `set not null` | **never** — fixed |
+| `20260908001200_consent_text_versions_tenant` | branching `do` block, `raise exception`, backfill, `set not null` | **never** — fixed |
+| `20260908001500_sync_pull_clinic_addresses` | `add constraint ... check` on `sync_events` | never on non-empty data; **fails loudly** on a violating row rather than crashing |
+| `20260909000300_visits_not_met_reason` | two `add constraint ... check` on `visits` | same |
+| `20260911000500_consent_text_versions_updated_at` | unconditional `update ... where updated_at <> created_at` | never on non-empty data; **no branch**, so it cannot take a wrong one |
+
+**5 of 37, and the two that branch are the two that were broken.** The other three fail in a way
+an operator can read.
+
+**Two instances of one mistake is a shape, not an accident**, so the guard is the shape: a test
+scans every migration's executable SQL — comments stripped — and fails if `min(id)` reappears
+anywhere.
+
+#### B5 — the false coverage claim is gone
+
+The migration said the single-organisation branch *"is exercised only by its test"*. **There was
+no such test, and the branch did not work.** It now says why the branch is unreachable from CI —
+a backfill executes once, at migration time — and names the suite that does reach it. **A false
+coverage claim on a deploy path is worse than none, because it stops the next reader looking.**
+
+#### C — the drift check now asserts its own preconditions
+
+It answered "healthy" from a **claim** rather than from the database. MR-34 measured
+`public tables = 0, schema_migrations rows = 56` after a full `verify:rollbacks`, and drift
+reported **no drift** — the ledger and the files agreed perfectly about a database that no
+longer existed.
+
+`evaluatePreconditions()` refuses to give a verdict in either direction when the ledger claims
+applied migrations against an empty schema; when a schema exists with an empty ledger; or when
+the check read **zero migration files**, which is this script in the wrong directory and would
+otherwise have been reported as a confident finding about the wrong system.
+
+`classifyShortfall()` answers **how** the applied set falls short rather than how far —
+`complete` / `partial-prefix` / `interleaved` / `foreign-versions`. A deploy that stopped resumes
+with another `db push`; versions applied out of band mean the repository is not the record of
+production. A count cannot tell those apart.
+
+**C2 — three live controls against real databases, plus nine unit controls:**
+
+| Control | Result |
+| --- | --- |
+| Healthy: 56 applied, 36 tables | exit 0, `shortfall: "complete"` |
+| **Emptied by `verify:rollbacks`** | **exit 1, refuses** — the exact state that used to report no drift |
+| **36 of 56, a push that stopped** | **exit 1, `shortfall: "partial-prefix"`, `publicTables: 36`** |
+
+**Read the last row again: `publicTables` is 36, identical to a complete database.** The
+discrimination is proven live at the one place where the count cannot help.
+
+The unit block carries its own positive control — a healthy database must *pass* — so a function
+returning `ok: false` unconditionally would not satisfy it; and a genuinely fresh database
+(empty ledger **and** empty schema) must still pass, because refusing there would make the check
+unusable on a new database.
+
+**C3 — each precondition neutralised in turn failed exactly its own control and nothing else:**
+1 failed / 14 passed, three times, then 15 passed on restore.
+
+#### D — the graph is deleted
+
+**Deleted, not rebuilt.** Rebuilding needs `pip install "graphifyy[sql]"`, and adding any
+dependency is an "ask before doing". Re-derived rather than assumed: `which graphify` finds
+nothing, `pip show graphifyy` reports not found, `import graphifyy` fails.
+
+3.9 MB, gitignored at `.gitignore:46`, **zero tracked files**, so no clone is affected and git
+saw no change. The `GRAPH_REPORT.md` header was archived outside the repository first, so the
+measurement survives the artefact.
+
+**Leaving it with a caveat was the option MR-34 had already tried** — the caveat was written and
+the file stayed, and a session reading `CLAUDE.md` would still have been told to read the graph
+first.
+
+**D2.** `CLAUDE.md` no longer says "read the graph first". It opens with the command that
+establishes which of three states the machine is in — current, museum, or absent — and what to
+do in each. **It deliberately does not state "there is no graph" as a fact**: `graphify-out/` is
+gitignored, so its state is a property of the reader's machine, and per MR-33's own rule this
+file may only carry a claim that holds for all time or prints its check. This one prints its
+check.
+
+`docs/graphify-notes.md` records the deletion and the rule for the next build: **write the build
+date AND the migration count beside the artefact.** MR-34 had to infer staleness from two
+unrelated stale numbers and **the inference was wrong** — the graph was never built when "34
+migrations" was true. One recorded number replaces all of that with a subtraction.
+
+#### E — one query, at the top of the page
+
+The production pre-flight query is now the first thing on `docs/blocked-on-you.md`, above every
+section, with the consequence stated plainly: **if anything comes back non-zero and real
+customer data is present, §6.1 is an incident rather than a sequencing item**, because
+production has no tenant boundary *right now*.
+
+Every judgement on that page rests on "production holds no reference data", and
+`COMPLETION-PLAN.md:217` records that claim as **unverifiable from the engineering machine**.
+`BE-W40` has verified the migration count. **Nothing has ever looked at the rows.**
+
+#### A correction I had to make, and it is the most useful thing here
+
+While building the new suite I attributed a deadlock in
+`tenant-boundary-restrictive.spec.ts` to it — **three clean runs with the file removed against
+two failures in four with it.** That is a plausible story with a measurement attached, and it
+was wrong.
+
+Widening the baseline to **seven runs with the file absent entirely produced the deadlock
+twice** — same test, same `mirrorTable` line, and in one case a different `it` within it.
+**Pre-existing, roughly two runs in seven, and unrelated.**
+
+**Three runs was not a baseline. It was a coincidence.** The standing rule that *"the fix worked"
+is not evidence the diagnosis was right* has a twin this is an instance of: **"it stopped
+happening" is not evidence either, when you never established the rate it was happening at.**
+
+Recorded in `docs/gotchas.md` **with the rate**, because the rate is the part nobody had. The
+deadlock was known to occur; how often was never written down, which is precisely what makes a
+spurious red indistinguishable from a real one. **CI runs this suite once per push, so it
+carries about a one-in-four chance of a spurious failure.** It belongs to `BE-W92` and is not
+fixed here.
+
+The new suite also had to be rewritten twice before it was honest. Clearing tables first is
+illegal on this schema — `app_thresholds.set_by_user_id` is `ON DELETE SET NULL` and
+`app_thresholds` is append-only, so deleting a profile raises *"append-only: UPDATE is not
+permitted"*. It passed alone and failed in the full run, which is the signal that an approach is
+wrong rather than unlucky. It now creates its own scratch **database**.
+
+#### Counts — by workspace AND runner, from each runner's own line
+
+| Workspace | Runner | Result |
+| --- | --- | --- |
+| `@fieldforce/core` | vitest | 21 passed |
+| `@fieldforce/ui-tokens` | vitest | 54 passed |
+| `@fieldforce/ui` | vitest | 4 passed |
+| `@fieldforce/ui` | jest | 243 passed, 243 total |
+| `@fieldforce/console` | vitest | 10 passed |
+| `@fieldforce/mock` | vitest | 40 passed |
+| `@fieldforce/field` | vitest | 499 passed |
+| `@fieldforce/field` | jest | 125 passed, 125 total |
+| `@fieldforce/api` | vitest | **662 passed** — was 644; +9 backfill, +9 drift preconditions |
+
+**1,658 passing, zero skipped, zero failing.** `lint`, `typecheck` and `format:check` all exit 0.
+
+#### Where this session stopped
+
+**At the end of Part E, with every part complete.** Three things are deliberately not done:
+
+1. **The four MR-35 commits are not pushed and have no CI run.** The green run above is
+   `abf6ff3`, four commits behind. Everything since is locally verified only.
+2. **The `tenant-boundary-restrictive` deadlock is not fixed** — quantified and handed to
+   `BE-W92`, which already owns the lock instrumentation.
+3. **The graph is not rebuilt**, because rebuilding it is a dependency install and that is an
+   ask.
+
+**Four things a reader should carry forward.**
+
+1. **The ledger verifies a name, not a hash.** That single mechanical fact decided whether a
+   crashing migration could be fixed at all, and it took four checks and a positive control to
+   establish. It is also the fact most likely to change under you.
+2. **One instance of a mistake is worth sweeping for.** The rehearsal found one; the sweep found
+   the second; and the second was in a migration nobody had any reason to look at.
+3. **A shape search is only as good as the shapes you think of — and as good as the code you
+   point it at.** The first sweep matched 26 of 37 files because it counted function bodies as
+   migration-time code.
+4. **Establish the rate before you claim a cause.** Three clean runs nearly became a diagnosis,
+   in a session whose entire subject was a bug that hid behind a branch nobody had run.
