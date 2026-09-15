@@ -62,3 +62,81 @@ sit.
 
 The rule that came out of it is in `docs/gotchas.md`: **a claim belongs in `CLAUDE.md` only
 if it holds for all time, or if the command that checks it is printed beside it.**
+
+---
+
+## Freshness verdict — 15 September 2026 (MR-34 A3)
+
+**The graph is a museum. Rebuild it before trusting a single answer from it.**
+
+The freshness check that `CLAUDE.md` prints beside its own warning:
+
+```bash
+head -1 graphify-out/GRAPH_REPORT.md                                          # 2026-08-11
+git log -1 --format=%cd -- services/api/supabase/migrations packages/core     # Fri Sep 11 2026
+```
+
+**The graph was built on 11 August. The layer it indexes last changed on 11 September.** Five
+weeks, and the five weeks that contain everything.
+
+### Measured coverage, not inferred
+
+Counted by matching every `source_file` in `graph.json` against `git ls-files`:
+
+| | |
+| --- | --- |
+| Tracked code files now (`.ts`, `.tsx`, `.sql`, `.mjs`, `.mts`) | 439 |
+| **Absent from the graph** | **352 — 80%** |
+| Migration files represented in the graph | **17** |
+| Migration files on disk | **56** |
+| **Migrations absent** | **39** |
+| `packages/core` files absent | 1 of 24 |
+| `apps/field` files absent | **131 of 131 — all of them** |
+
+**`apps/field` is not thin in the graph. It is absent.** The graph's entire knowledge of the
+field app is three paths: `apps/field/package.json`, `apps/field/tsconfig.json`, and
+`apps/field/src/placeholder.ts` — **a file that no longer exists.** Every screen, the outbox,
+the sync layer, the sentinel work of MR-31 through MR-33: none of it is in there. A graph
+query about the field app will return a confident answer about a placeholder.
+
+### Two corrections to how this was expected to read
+
+**1. The `[sql]` extra was NOT the problem here.** `CLAUDE.md` warns that without it every
+migration contributes nothing. This graph has **226 `.sql` nodes, 188 of them under
+`migrations/`** — so the extra was installed and SQL parsed fine. **The graph is stale, not
+mis-built**, and those are different failures with different fixes. Rebuilding fixes this one;
+installing the extra would not have.
+
+**2. The graph was never built when "34 migrations" was true.** The reasonable inference —
+`CLAUDE.md` said 34, so the graph dates from when there were 34, so 22 are missing — does not
+survive the dates. The graph was built **11 August**, when **17** migration files were tracked.
+The *"all 34 migrations"* sentence entered `CLAUDE.md` on **14 August** (`d3b841f`), three days
+**after** the graph. They are two independent stale numbers that happen to sit near each other.
+
+**So the gap is 39 migrations, not 22** — worse than the number that prompted the check, which
+is the usual direction.
+
+### What is missing is exactly the layer `CLAUDE.md` warns about losing
+
+Among the 39: `20260908001300_tenant_boundary_restrictive.sql`,
+`20260908000900_organisation_scoping.sql`, `20260907000300_revoke_public_execute.sql`,
+`20260908000400_revoke_sequence_grants.sql`,
+`20260908001100_consent_capture_bounds_trigger.sql`, `20260908001400_visits_validation.sql`,
+and the whole `sync_pull` / `sync_push` layer.
+
+**A graph query asking "what enforces tenancy" answers from a schema that has no tenancy
+boundary in it.** Not a wrong answer with a caveat — a confident, sourced, complete-looking
+answer drawn from a schema five weeks gone.
+
+### The verdict
+
+| Question | Answer |
+| --- | --- |
+| Index or museum? | **Museum** |
+| Trust it? | **No.** Not for tenancy, consent bounds, sync, or anything in `apps/field` |
+| Rebuild or delete? | **Rebuild.** It is gitignored, so it costs nothing to regenerate and nothing to be without |
+| Is it dangerous or merely useless? | **Dangerous.** Every node carries a `source_file` and a line number, so a stale answer arrives with the strongest possible signal of being checkable |
+
+The rebuild command is in `CLAUDE.md`. Note that **80% absent is not a degraded index, it is a
+different codebase** — nothing in the report's "Suggested Questions" should be run against it
+until it is rebuilt.

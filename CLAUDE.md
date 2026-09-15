@@ -60,6 +60,12 @@ If migrations or `packages/core` have changed since, the graph is behind:
 git log -1 --format=%cd -- services/api/supabase/migrations packages/core
 ```
 
+**A checked-in graph is a build artefact of one date, so "behind" is the default state, not
+the exception.** Compare the two dates before you believe anything it says, and treat a gap of
+weeks as a rebuild rather than a caveat — a stale node still carries a `source_file` and a line
+number, so a wrong answer arrives looking checkable. The last time this was measured, and what
+it found, is in `docs/graphify-notes.md`.
+
 ### Known distortions, and the counts
 
 **`docs/graphify-notes.md`** — four measured weaknesses that will make a graph answer

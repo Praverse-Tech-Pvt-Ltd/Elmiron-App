@@ -185,49 +185,74 @@ or do what its copy claims is unknown until a real handset is in hand.**
 
 ## Escalations — 14 September 2026, MR-33
 
-### 6.1 — PRODUCTION IS 37 MIGRATIONS BEHIND `main`, and nobody knew
+### 6.1 — SEQUENCING: THE DEPLOY MUST HAPPEN BEFORE THE DATA
 
-**Found by `BE-W40`'s migration-drift check on its first production run** (CI run
-`34837061156`), which MR-32 shipped and explicitly recorded as *unverified against
-production*. It was verified on its first run, by finding this.
+**Rewritten 15 September 2026 (MR-34 A2). This was a backlog number. It is a sequencing
+constraint, and it has a date.**
 
-| | |
-| --- | --- |
-| Migration files on `main` | **56** |
-| Versions applied to production | **19** |
-| Applied with no file here | **none** — nothing was pushed off-`main` |
-| Never applied | **37**, everything dated `20260907` and later |
+> **The constraint, in one line: production must be migrated to `main` BEFORE any reference
+> data is loaded into it.**
 
-Production has not been deployed since **BE-W8, 14 August**. The credential works and the
-project is reachable — the check connected to `aws-0-ap-south-1.pooler.supabase.com` and read
-the 19 versions — so this is not a paused project or a bad secret. **The migrations were
-simply never pushed.**
+**Why the ordering is the whole of it.** Production sits at **19 migrations, applied
+14 August at `BE-W8`**. The 37 that follow include the tenant boundary. If reference data
+arrives first, it lands on a schema with a **known, named, still-open cross-tenant admin
+read** — `BE-W76`, whose closure is `20260908000900_organisation_scoping.sql` and
+`20260908001300_tenant_boundary_restrictive.sql`, neither of which is on production. Loading
+first and migrating second means real organisations' data is mutually readable for the
+interval between, and nothing in the schema records that it was.
 
-**What is missing is not incidental.** Among the 37:
+**And it has a date.** `docs/COMPLETION-PLAN.md:499` puts **`B11` reference data at ~22 Sep**,
+with `B12` shift hours the same day. That is **seven days from today**. The deploy is not
+"sometime"; it is before that.
 
-- `20260908001300_tenant_boundary_restrictive.sql` — the restrictive tenant boundary
-- `20260908000900_organisation_scoping.sql` — organisation scoping
-- `20260907000300_revoke_public_execute.sql`, `20260908000400_revoke_sequence_grants.sql` —
-  privilege revocations
-- `20260908001000_withdrawal_timestamp_bounds.sql`,
-  `20260908001100_consent_capture_bounds_trigger.sql` — the consent capture bounds
-- `20260907000700_ucpmp_sample_caps.sql` and the two decision-deadline migrations
-- the whole `sync_pull` / `sync_push` layer, phases 1 and 2
-- `20260911000300_check_in_starts_the_visit.sql` — MR-28's defect-12 fix
+**One premise in this item is NOT verifiable from this machine, and the record already says
+so.** `COMPLETION-PLAN.md:217` states plainly that *"every production claim in the brief —
+`ACTIVE_HEALTHY`, 19 migrations deployed, no reference data, the free-plan pause — is
+unverifiable from here."* What `BE-W40` has since verified is the migration count, by reading
+`schema_migrations` over the pooler. **Whether production holds reference data today has still
+never been checked by anything.**
 
-**So the September security hardening is not on production, and neither is the entire offline
-sync layer the app now depends on.** Nothing is broken *today* because nothing is pointed at
-production — but the app as it now exists cannot run against it.
+So the "exposure is zero today" half is an assumption, not a finding:
 
-**Who does what:** this needs `supabase db push` against production, which is an operator
-action. **No engineering session on this machine has production credentials**, and
-`assertLocalhostOnly()` exists to keep them off it. The procedure is in
-`docs/restore-runbook.md` → *"Applying a migration to production"*: drift-check, push from a
-clean `main`, drift-check again, then write down the SHA, the versions, the date and who ran
-it — because `schema_migrations` records no actor and no timestamp.
+- **If it is right**, this is a free ordering win and costs nothing but doing it in sequence.
+- **If it is wrong** — if anything was loaded during or after `BE-W8` — **the exposure is
+  already live**, and this stops being a sequencing item and becomes an incident. Checking
+  costs one query and nobody has run it.
+
+### What is undeployed, by name
+
+A number is a backlog item; a list is a decision. Each mapping below was taken from the
+migration files themselves, not from the work-item table.
+
+| Work item | What is not on production | Migrations |
+| --- | --- | --- |
+| **`BE-W76`** — an admin of one organisation reads another's data | the tenancy boundary itself | `20260908000800_user_profiles_organisation.sql`, `20260908000900_organisation_scoping.sql`, `20260908001200_consent_text_versions_tenant.sql`, `20260908001300_tenant_boundary_restrictive.sql` |
+| **`BE-W77`** — nothing bounds a consent withdrawal's timestamp | withdrawal bounds | `20260908001000_withdrawal_timestamp_bounds.sql` |
+| **`BE-W78`** — consent bounds live in a function callers can skip | the bounds moved into a trigger | `20260908001100_consent_capture_bounds_trigger.sql` |
+| **`BE-W79`** — a tenant can break every other tenant's consent capture | consent-text tenancy and precedence | `20260908001200_consent_text_versions_tenant.sql`, `20260911000600_sync_pull_consent_text_versions.sql`, `20260911000700_consent_text_precedence.sql` |
+| **`BE-W84`** — `visits` has a direct write grant and no validation trigger | the visits validation trigger | `20260908001400_visits_validation.sql` |
+| **`FIX-02` / `FIX-12`** — the offline consent bounds | capture bounds, future tolerance, row identity, nested coordinates | `20260908000200_offline_consent_capture.sql`, `20260908000500_sync_consent_through_capture.sql`, `20260908000700_consent_future_tolerance.sql`, `20260911000200_apply_sync_item_nested_coordinates.sql`, `20260911000400_sync_row_identity_from_payload_id.sql` |
+| **MR-28's `DETAIL` threading** | the reason a refusal can be explained to the MR | `20260911000800_sync_verdict_exception_detail.sql`, `20260911000900_ucpmp_cap_names_the_doctor.sql` |
+| **MR-28 defect 12** | a check-in starts the visit | `20260911000300_check_in_starts_the_visit.sql` |
+| **privilege revocations** | `execute` and sequence grants still open to `public` | `20260907000300_revoke_public_execute.sql`, `20260908000400_revoke_sequence_grants.sql` |
+| **the UCPMP cap** | the cap machinery and its 6 November deadline | `20260907000700_ucpmp_sample_caps.sql`, `20260907000900_ucpmp_cap_decision_deadline.sql`, `20260907001000_ucpmp_cap_decision_warning.sql` |
+| **the offline sync layer** | `sync_pull` / `sync_push`, phases 1 and 2 | `20260907001100_sync_pull_phase1.sql`, `20260908000300_sync_pull_phase2.sql`, and the nine `sync_*` migrations around them |
+
+**Read the first row again.** The single largest thing not on production is the mechanism that
+stops one customer reading another's data, and the deadline for putting customers' data there
+is **seven days away**.
+
+**Who does what.** `supabase db push` against production, which is an operator action. **No
+engineering session on this machine has production credentials**, and `assertLocalhostOnly()`
+exists to keep them off it. **The procedure has now been rehearsed** — MR-34 B applied these
+37 to a scratch database standing at production's 19 and verified the result by querying it.
+The operator's numbered procedure is `docs/restore-runbook.md` →
+*"Applying 37 migrations to a database at 19 — the rehearsed procedure"*.
 
 **Until it is done the drift workflow fails daily**, which is correct and is the point. Do not
-silence it.
+silence it. That is deliberate and is **not** the same posture as the backup workflow, which
+MR-34 D1 changed for a reason recorded there: this one names an action an operator can take
+today, and that one named a decision nobody had made.
 
 ### 6.2 — The PITR decision has to be RE-MADE, because both of its premises are absent
 
