@@ -537,3 +537,85 @@ One fact — that `handoff.md` and `.ai-collab/` are untracked — was stale in 
 including `CLAUDE.md`, which is loaded into every session before any code is read. BE-W8
 reversed that decision and `.gitignore:22-26` records it, ten lines above a line that
 contradicted it. All three corrected.
+
+## MR-33 — 15 September 2026: the sentinels, and the one that loses the MR's work
+
+The session was a backend one (`BE-W11`, the restore mechanism). What reached the frontend was
+Part D: the four registered sentinels, taken in consequence order.
+
+### `FE-W44` — fixed, and it was worse than registered in two ways
+
+MR-31 recorded **two** consumers of `loadQueueState`. There are **five**, and the two that were
+missed are the serious ones:
+
+- **`queue.tsx`** rendered an **empty list** when the store could not be read — on the screen
+  an MR opens precisely when they already suspect something is wrong. The most reassuring
+  possible rendering of the least reassuring fact.
+- **`visit/[id].tsx`** fed `witnessedStage` an empty queue, making a queued check-in invisible.
+  That is **MR-28's defect 12 by another route**: the MR presses the button again.
+
+**And the fifth is not a reporting bug at all.** `devicePersistence.read` feeds the outbox, and
+both writers are read-then-write — `sendOrQueue` reads, reduces and writes; `flushOutbox` reads
+at the top and writes at the bottom. While a corrupt read answered `emptyQueue`, **the next
+write replaced the MR's unsent work with an empty queue, permanently**, on a device that may
+have been offline all morning, with queued consent captures among what was lost.
+
+**The fix is a discriminated union, so the call sites that read the discriminant are
+structurally all of them:**
+
+```ts
+export type QueueLoad =
+  | { readonly kind: 'loaded'; readonly state: SyncQueueState }
+  | { readonly kind: 'unreadable' };
+```
+
+- Both writers **refuse to write** when the queue is unreadable.
+- `indicatorStateFor` takes a `QueueLoad` and gains an `unreadable` state — the **second**
+  `critical` one. The comment claiming `failed` was the only critical state is corrected
+  rather than left standing.
+- All five write screens report it instead of claiming `queued` — or, in `samples`, counting
+  it as **sent**.
+- The MR sees *"Can't read your queue"* and, explicitly, that **nothing here is confirmed**.
+
+**Four mutations, each failing exactly one test**, including one on the origin —
+`loadQueueState`'s own `catch`, which had no test file at all until this session.
+
+### `FE-W45` — fixed, and the test that proves it nearly did not
+
+`setStore` published restored records **before** the anchor was read, so one render held real
+visits with `zone` still at `UTC_FALLBACK`: every clock and date **5h30m wrong for IST**, then
+corrected. MR-28's own comment calls that outcome worse than showing nothing. Records and the
+zone they are read in now arrive together — the records-and-cursor invariant applied to a
+second pair.
+
+**The first version of the ordering test passed against the defect.** `memoryPulledStore`
+resolved `loadAnchor` synchronously, so React batched both `setState` calls into one render and
+the intermediate state never existed. Only once the double was made as asynchronous as the real
+`AsyncStorage` did the mutation produce `doctors:1, zone:fallback_utc` and fail.
+
+**A synchronous test double can hide an ordering defect completely.** Now in `docs/gotchas.md`,
+in the same family as *assert the content, not the container*: the test looked correct, ran,
+and measured nothing.
+
+### `FE-W46` — not fixed, genuinely blocked
+
+`sizeBytes: 1` is fabricated because the real byte count is unknowable until `BE-W7` exists,
+and every candidate fix invents a different wrong number. The comment at each site says the
+figure is false by construction. Best available state; not a good one.
+
+### `FE-W47` — not fixed, as a decision rather than a deferral
+
+`destinationsFor(role ?? 'mr')` renders no false claim — the screen already says *"Signed in as
+unknown role"* — and changing it would put the **client** in charge of what an unknown role may
+see, which the standing rules forbid. Closed as correct as written.
+
+### Counts
+
+`@fieldforce/field` vitest **499** (was 489), jest **125** (was 122). Monorepo total
+**1,640 passing, zero skipped, zero failing**.
+
+### What the frontend should take from the rest of the session
+
+**Production is 37 migrations behind** — 19 applied against 56 on `main`. The entire
+`sync_pull`/`sync_push` layer this app depends on is **not on production**. Nothing points at
+production today, which is the only reason nothing is broken. `blocked-on-you` 6.1.

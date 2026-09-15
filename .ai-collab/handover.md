@@ -98,3 +98,34 @@ restructure had to correct:
 `.gitignore:36` refers back to *"above"* for the rule those lines say no longer holds — **the
 contradiction is ten lines apart in the same file.** And the copy in `CLAUDE.md` is loaded
 into every session's context, which makes it the highest-leverage stale fact found so far.
+
+---
+
+## After MR-33 — 15 September 2026
+
+**The two facts that change what you should do next:**
+
+1. **Production is 37 migrations behind.** Applied: 19. On `main`: 56. Nothing was ever
+   applied off-`main`, so this is a deploy that never happened, not a divergence. The app as
+   it now exists **cannot run against production**. `blocked-on-you` 6.1.
+2. **There is now a restore mechanism, and it has nowhere to send its output.** `BE-W11` is
+   built and proven by restoring; where the artefact may lawfully live is a data-processing
+   decision, not an engineering one. `blocked-on-you` 6.3.
+
+**Avoid, added this session:**
+
+- **Do not use `supabase db dump` as the backup.** Measured on the local stack: the schema
+  dump has **zero** `auth.` and `storage.` tables and the data dump has **zero** rows of
+  `auth.users`. A database restored from it holds the consent ledger and has nobody who can
+  sign in. The scripts use raw `pg_dump` of the whole database.
+- **Do not judge a backup by producing one.** The only check that caught the above was
+  restoring the artefact and querying the restored copy. In MR-32's failed drill,
+  `CREATE DATABASE` succeeded and the log had zero `ERROR` lines while nothing had restored.
+- **Do not `export MSYS_NO_PATHCONV=1`.** Scope it to the one docker command; shell-wide it
+  breaks corepack and the failure looks like the check failing.
+- **Do not trust an ordering test that has never failed.** A synchronous test double makes
+  React batch the updates, so the intermediate render the test exists to catch never occurs.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-33 — `BE-W11`, there is no restore | `PROJECT-OVERVIEW.md` → `### MR-33 — the restore mechanism` |

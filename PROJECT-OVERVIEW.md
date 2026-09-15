@@ -13950,3 +13950,253 @@ Four things a reader should carry forward:
 4. **One fact was stale in three places, and one copy was in `CLAUDE.md`.** The grep rule from
    MR-30 keeps earning its place, and the highest-leverage place to apply it is the file that
    is loaded before anything else is read.
+
+
+### MR-33 — the restore mechanism
+
+**Two things were found by running something rather than reading it, and both were found by
+tooling this project shipped in the previous session and labelled "unverified".**
+
+#### A1 — CI, and the check that verified itself by failing
+
+| | |
+| --- | --- |
+| Run | `34837060776` — **`success`** |
+| Workflow | `CI` |
+| Event | `push` |
+| SHA | `4e8ba6193417d7d7d5f39b55ab0d9a53947f0b5f` |
+
+**The SHA equals HEAD.** Four MR-32 commits pushed as `025aba7..4e8ba61`.
+
+**The same push triggered `BE-W40`'s first production run, and it failed — correctly.** MR-32
+shipped that workflow recording its production leg as unverified, and told the reader to
+distinguish an unreachable target from a real divergence before assuming drift. It was a real
+divergence:
+
+| | |
+| --- | --- |
+| Migration files on `main` | **56** |
+| Applied to production | **19** |
+| Applied with no file here | **none** — nothing was ever pushed off-`main` |
+| **Never applied** | **37**, everything dated `20260907` and later |
+
+**Production has not been deployed since BE-W8, 14 August.** The credential works and the
+project is reachable — the check connected to `aws-0-ap-south-1.pooler.supabase.com` and read
+the 19 versions — so this is neither a paused project nor a bad secret.
+
+**What is missing is not incidental:** `tenant_boundary_restrictive`, `organisation_scoping`,
+both privilege revocations, the consent capture bounds, the UCPMP cap machinery with its
+6 November deadline, the entire `sync_pull`/`sync_push` layer, and MR-28's defect-12 fix. The
+September security hardening is not on production, and neither is the offline sync layer the
+app now depends on.
+
+Nothing is broken *today* because nothing is pointed at production. **The app as it now exists
+cannot run against it.** Escalated as `blocked-on-you` **6.1**; it needs an operator
+`supabase db push`, and the drift workflow fails daily until it is done. That is the point.
+
+#### A2 — the PITR decision, and it is worse than one missing premise
+
+The recorded decision reads: *"do not buy Point-in-Time Recovery. **Daily backups (included in
+the Pro plan) plus `docs/restore-runbook.md`** is the right posture."*
+
+| Premise | State |
+| --- | --- |
+| *"Daily backups (included in the Pro plan)"* | **The paid plan is item 5.2 and is unresolved.** Whether any automatic backup exists on the current plan is a dashboard fact, not knowable from here, and has **never been confirmed in the record** |
+| *"plus `docs/restore-runbook.md`"* | **MR-32 executed it.** Step 2 was the single word *"Restore."* |
+
+**Both premises are absent, not one.** The reasoning — that finer restore points buy more of
+the thing the design already defends against — was never the problem. The alternative it was
+weighed against was never built. Re-opened as two questions: confirm the plan and what it
+backs up, *then* weigh PITR against the cost of the alternative, which Part B makes concrete.
+
+#### A3 — what `CLAUDE.md` moved out, and why that file is special
+
+`CLAUDE.md` is loaded into every session's context **before any code is read**. A stale claim
+there is a stale prior in every session that will ever run, and it arrives with more authority
+than anything read afterwards.
+
+**The test applied: does the claim hold for all time, or is the command that checks it printed
+beside it?** What failed and moved to `docs/graphify-notes.md`:
+
+| Moved | Why it failed the test |
+| --- | --- |
+| *"1,221 nodes, 1,545 edges"* | a count of one build |
+| *"159 named communities"* | the same |
+| the four measured graph weaknesses, with `312 tests`, `#14 and #15`, `456 nodes (37%)` | measurements of one snapshot |
+
+**And one claim was already wrong**: *"all **34** migrations contribute nothing"* without the
+`[sql]` extra. **There are 56.** A stale count had been reaching every session unchallenged in
+the one file read before anything can contradict it. The fix in that sentence was not a new
+number — it was replacing the number with `ls services/api/supabase/migrations/*.sql | wc -l`.
+
+Kept: the index-not-authority rule, the freshness check (its command is beside it), the
+`[sql]` trap, and the two graphify CLI traps. Rule added to `gotchas.md` as **the MR-30 grep
+rule's worst case** — `CLAUDE.md` is the mention that outranks all the others and is least
+likely to be in the grep, because it reads as instructions rather than as documentation.
+
+#### B — `BE-W11`: the mechanism, and the decision it is waiting on
+
+**B1, and the decision changed because it was measured.** The obvious choice was
+`supabase db dump` — already a workspace dependency, the project's own CLI, no new tooling.
+Against the local stack it produces a **340 KB schema dump with zero `auth.` and zero
+`storage.` tables**, and a **16 MB `--data-only` dump with zero rows of `auth.users`**. It is
+scoped to `public`.
+
+**A database restored from it holds the consent ledger and has nobody who can sign in**, with
+`storage.objects` empty — the metadata the step-3 reconciliation walks. The obvious tool
+produces something that looks like a backup and is not one, which is the whole reason B4
+proves an artefact by restoring it rather than by producing it. So: raw `pg_dump` of the whole
+database, which MR-32 had already shown carries auth and storage.
+
+**B2.** Plain SQL, not `--format=custom`: restorable by `psql`, readable by anything,
+checkable with `sha256sum`. A backup whose only reader is the tool that wrote it is a backup
+you find out about on the day you need it. The manifest carries the digest, the size, and
+counts taken from the **source** in the same run.
+
+**B4 — proven by restoring into a scratch database and querying it:**
+
+| Check | Source | Restored |
+| --- | --- | --- |
+| Migrations | 56 | **56** |
+| Public tables | 36 | **36** |
+| Tables with RLS | 36 | **36** |
+| Policies | 48 | **48** |
+| `consent_records` | 1,910 | **1,910** |
+| `visits` | 2,823 | **2,823** |
+| `doctors` | 2,088 | **2,088** |
+| `app_thresholds` | 17 | **17** |
+| `auth.users` | 5,447 | **5,447** |
+
+**Two failure controls, independent, with a clean baseline either side:** a truncated artefact
+caught by the **hash**; an intact artefact with one wrong count passing the hash and caught
+**only by the query**. The second is the one that proves the query check is load-bearing
+rather than decorative — which is MR-32's lesson, where `CREATE DATABASE` succeeded, the log
+had zero `ERROR` lines, and only a count revealed nothing had been restored.
+
+**B5 — produce 1s, verify 4s, for a 17.6 MB artefact.** A **floor**, not an estimate: a local
+socket, no network transfer, no platform snapshot to locate, no support ticket.
+
+**B3 — the artefact has nowhere lawful to go, and the workflow says so by failing.** A dump of
+this database is a package of personal data: `doctors.full_name`, `user_profiles`,
+`transcripts_redacted`, 5,447 `auth.users`, and `adverse_event_reports.reported_text`, whose
+lawful contents are **open question 4.1**. Where it may land is a data-processing decision
+with a DPA dimension, not an engineering one.
+
+So `.github/workflows/backup.yml` checks for a destination **before producing anything** — a
+run with no destination leaves no artefact anywhere — and is scheduled daily and red on
+purpose, per the `retention.yml` precedent. Four options with their costs are in
+`blocked-on-you` **6.3**.
+
+**One thing already true:** the **repository** is off-machine, on GitHub, current. What has no
+off-machine copy is the **data**, and the data is the part that cannot be copied without this
+decision.
+
+Two guards worth naming: `backup:database` refuses a non-local target that was not given on
+the command line, because producing that file must never happen because an environment
+variable was left set; and `backup:verify` refuses to restore over an existing database,
+because a verifier that can overwrite what it verifies is a delete command with a reassuring
+name. `backups/` is gitignored — the default `--out` is `./backups`, and committing one would
+put the consent ledger in git history permanently.
+
+**B7 — what remains unverified against production.** The drill was a scratch target in the
+local cluster; production credentials are not on this machine and `assertLocalhostOnly()`
+exists to keep them off it. Untested: whether a Supabase platform restore takes minutes or
+hours, whether it needs a support ticket, what it does to roles, extensions and
+`supabase_admin`-owned settings — and **anything about the object store**, which is the reason
+the runbook exists. `storage.objects` restores its *rows*; the objects never move.
+
+#### C — what would close `BE-W40`'s weaker half, stated accurately
+
+**The obvious phrasing is wrong.** It is *not* "this needs production credentials in CI".
+**CI already has one**: A1 watched the drift check authenticate to the pooler and read the
+applied versions. Three other things are missing:
+
+1. **A deploy workflow.** Buildable today, and small.
+2. **Whether that credential may APPLY migrations, which is untested.** It is proven to
+   `select`. DDL is a different privilege, and `ci.yml:135` already records a `db push`
+   failing with *"permission denied to set parameter"*. Assuming read implies write is the
+   inference this project keeps getting wrong.
+3. **The decision that CI is the only path** — human-held production credentials stop being
+   used, and a merge to `main` deploys. An access and operational decision.
+
+Until all three, the detector plus the written note is the honest posture, and the note is
+where the actor and the timestamp actually live.
+
+#### D1 — the four sentinel registrations, in consequence order
+
+**`FE-W44` — fixed, and worse than registered in two ways.** MR-31 recorded **two** consumers;
+there are **five**, and the two missed were the serious ones: `queue.tsx` rendered an **empty
+list** on the screen an MR opens when they already suspect something is wrong, and
+`visit/[id].tsx` fed `witnessedStage` an empty queue, making a queued check-in invisible —
+**MR-28's defect 12 by another route**.
+
+**And the fifth is not a reporting bug.** `devicePersistence.read` feeds the outbox, and both
+writers are read-then-write. While a corrupt read answered `emptyQueue`, **the next write
+replaced the MR's unsent work with an empty queue — permanently**, on a device that may have
+been offline all morning, with queued consent captures among what is lost.
+
+Fixed as a discriminated `QueueLoad`, so the call sites that read the discriminant are
+structurally all of them. Both writers refuse to write when the queue is unreadable; the
+indicator gains an `unreadable` state — the second `critical` one, and the comment claiming
+`failed` was the only one is corrected rather than left standing; and all five write screens
+report it instead of claiming `queued` or, in `samples`, counting it as **sent**. Four
+mutations, each failing exactly one test, including one on the **origin** — `loadQueueState`'s
+own catch, which had no test file at all until now.
+
+**`FE-W45` — fixed, and the test that proves it nearly did not.** `setStore` published the
+restored records *before* the anchor was read, so one render held real visits with `zone` still
+at `UTC_FALLBACK`: every clock **5h30m wrong for IST**, then corrected. Records and the zone
+they are read in now arrive together — the records-and-cursor invariant applied to a second
+pair.
+
+**The first version of the ordering test passed against the defect.** `memoryPulledStore`
+resolves `loadAnchor` synchronously, so React batched both updates into one render and the
+intermediate state never existed. Only after the double was made as asynchronous as the real
+`AsyncStorage` did the mutation produce `doctors:1, zone:fallback_utc` and fail. **A
+synchronous test double can hide an ordering defect completely** — now a `gotchas.md` entry,
+in the same family as *assert the content, not the container*: the test looked correct, ran,
+and measured nothing.
+
+**`FE-W46` — not fixed, genuinely blocked.** `sizeBytes: 1` is fabricated because the byte
+count is unknowable until `BE-W7` exists, and every candidate fix invents a different wrong
+number.
+
+**`FE-W47` — not fixed, as a decision rather than a deferral.** `role ?? 'mr'` renders no false
+claim — the screen already says *"Signed in as unknown role"* — and changing it would mean the
+**client** deciding what an unknown role may see, which the standing rules forbid. Recorded so
+the verdict is on the record rather than inferred from silence.
+
+#### Counts — by workspace AND runner, from each runner's own line
+
+| Workspace | Runner | Result |
+| --- | --- | --- |
+| `@fieldforce/core` | vitest | 21 passed |
+| `@fieldforce/ui-tokens` | vitest | 54 passed |
+| `@fieldforce/ui` | vitest | 4 passed |
+| `@fieldforce/ui` | jest | 243 passed, 243 total |
+| `@fieldforce/console` | vitest | 10 passed |
+| `@fieldforce/mock` | vitest | 40 passed |
+| `@fieldforce/field` | vitest | **499 passed** — was 489 |
+| `@fieldforce/field` | jest | **125 passed, 125 total** — was 122 |
+| `@fieldforce/api` | vitest | **644 passed** — was 632; `backup.spec.ts` is new |
+
+**1,640 passing, zero skipped, zero failing.** No deadlock in this run. `typecheck`, `lint`
+and `format:check` all exit 0.
+
+#### Where this session stopped
+
+**At the end, with every part complete** — A1–A3, B1–B7, C1, D1.
+
+Four things a reader should carry forward:
+
+1. **Production is 37 migrations behind and nothing said so until a check ran.** It was found
+   by the workflow MR-32 shipped *and labelled unverified* — the label was right, and the
+   first run is what verified it.
+2. **`BE-W11` is built and has nowhere to put its output.** The remaining work is not code; it
+   is somebody deciding where a file containing the consent ledger may lawfully live.
+3. **The obvious tool was not a backup.** `supabase db dump` omits `auth` and `storage`
+   entirely. Proving an artefact by restoring it is what caught that, and producing one would
+   not have.
+4. **Two tests in this session measured nothing until they were mutated** — the ordering test
+   that React batched away, and `loadQueueState`'s catch, which had no test at all. Mutation
+   is the only thing that distinguishes a passing test from a present one.

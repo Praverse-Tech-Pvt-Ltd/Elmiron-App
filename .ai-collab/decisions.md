@@ -989,3 +989,52 @@ shown, check where it is shown now.**
   **less** frequent, and 37.5% idle is six times the 1-in-16 the entry carried. The
   "1-in-16 versus 2-in-2" asymmetry three sessions reasoned from rests on a two-sample
   denominator. The correction is to the method.
+
+## 15 September 2026 — MR-33
+
+### `BE-W11` uses raw `pg_dump`, not `supabase db dump`, and the reason is measured
+
+The obvious choice was the project's own CLI: already a dependency, no new tooling, no
+question to ask. Measured against the local stack it produces a **340 KB schema dump with zero
+`auth.` and zero `storage.` tables** and a **16 MB data dump with zero rows of `auth.users`**.
+It is scoped to `public`.
+
+A database restored from that holds the full consent ledger and has **nobody who can sign in**,
+with `storage.objects` empty — the exact metadata the runbook's step-3 reconciliation walks.
+
+**Decision: raw `pg_dump` of the whole database, plain SQL, not `--format=custom`.** Plain SQL
+is restorable by `psql`, readable by anything, and checkable with `sha256sum`. A backup whose
+only reader is the tool that wrote it is a backup you find out about on the day you need it.
+
+**This was not decided by reading the docs. It was decided by producing both and counting rows
+in each** — which is also why `backup:verify` proves an artefact by restoring it rather than by
+producing it.
+
+### The backup workflow fails daily, on purpose, and produces nothing while it does
+
+A dump of this database is a package of personal data: `doctors.full_name`, `user_profiles`,
+`transcripts_redacted`, 5,447 `auth.users`, and `adverse_event_reports.reported_text`, whose
+lawful contents are still **open question 4.1**. Where that file may land has a DPA dimension.
+
+`.github/workflows/backup.yml` therefore checks for `BACKUP_DESTINATION` **before producing
+anything** — a run with no destination leaves no artefact anywhere, including in the runner's
+own storage — and is scheduled daily and red until one exists. Precedent: `retention.yml`.
+
+**The alternative was worse:** a green workflow that writes to the runner and lets the artefact
+expire is the failure mode `BE-W11` was registered to prevent, wearing a passing badge.
+
+### `FE-W47` is closed as "correct as written", not deferred
+
+`destinationsFor(role ?? 'mr')` in `home.tsx` renders no false claim — the screen already says
+*"Signed in as unknown role"* — and the server decides what a role may do. Changing the
+fallback would mean **the client** deciding what an unknown role may see, which the standing
+rules forbid. Recorded so the verdict is on the record rather than inferred from silence.
+
+### `CLAUDE.md` holds only claims that hold for all time, or that print their own check
+
+`CLAUDE.md` is loaded before any code is read, so a stale claim there is a stale prior in every
+future session, arriving with more authority than anything read afterwards. It carried
+*"1,221 nodes"*, *"159 named communities"*, and *"all 34 migrations"* — **when there are 56**.
+
+The snapshots moved to `docs/graphify-notes.md`; the migration sentence now prints
+`ls services/api/supabase/migrations/*.sql | wc -l` instead of a number.

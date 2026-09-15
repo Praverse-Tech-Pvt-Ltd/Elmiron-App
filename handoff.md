@@ -149,3 +149,50 @@ frozen. Nothing was deleted.
 | Open work items | `docs/COMPLETION-PLAN.md` |
 | Traps and classes of defect | `docs/gotchas.md` |
 | What is blocked on a human | `docs/blocked-on-you.md` |
+
+---
+
+## After MR-33 — 15 September 2026
+
+**Read `docs/blocked-on-you.md` first this time. Two of the three new items are the session's
+actual output.**
+
+| | |
+| --- | --- |
+| **Production** | **37 migrations behind.** 56 files on `main`, **19** applied, nothing applied off-`main`. Last deployed 14 August, at `BE-W8`. The September security hardening and the whole `sync_pull`/`sync_push` layer are **not on production**. Nothing is broken today only because nothing points at it. Needs an operator `supabase db push` — `blocked-on-you` **6.1** |
+| **`BE-W11`** | **Built and proven by restoring.** `pnpm backup:database` produces a plain-SQL `pg_dump` plus a manifest; `pnpm backup:verify` restores it into a scratch database and **queries the restored copy**. 56/56 migrations, 36/36 tables, 36/36 RLS, 48/48 policies, 5,447/5,447 `auth.users` |
+| **...and where it lands** | **Nowhere yet, by design.** The dump is a package of personal data. `.github/workflows/backup.yml` checks for a destination *before producing anything* and is red daily until one exists — `blocked-on-you` **6.3** |
+| **PITR** | **Re-opened.** Both premises of the "do not buy it" decision are absent: the Pro plan is unresolved (item 5.2) and the runbook step it was weighed against was the single word *"Restore."* — `blocked-on-you` **6.2** |
+| **Tests** | **1,640 passing, zero skipped, zero failing.** Read them from the runners |
+
+**The backup commands, both of which refuse things on purpose:**
+
+```bash
+pnpm --filter @fieldforce/api backup:database            # default --out ./backups (gitignored)
+pnpm --filter @fieldforce/api backup:database --container # pg_dump INSIDE the db container
+pnpm --filter @fieldforce/api backup:verify <artefact>   # restores into a scratch DB, then QUERIES it
+```
+
+`backup:database` refuses a non-local target that was not named on the command line, so the
+file is never produced because an environment variable was left set. `backup:verify` refuses
+to restore over an existing database — a verifier that can overwrite what it verifies is a
+delete command with a reassuring name.
+
+**Three traps measured this session, all now in `docs/gotchas.md`:**
+
+1. **`supabase db dump` is not a backup of this database.** Schema: **zero** `auth.` and
+   `storage.` tables. Data: **zero** rows of `auth.users`. It is scoped to `public`. Raw
+   `pg_dump` is what the scripts use.
+2. **`MSYS_NO_PATHCONV=1` must be scoped to the single docker command.** Exporting it
+   shell-wide breaks corepack (`Cannot find module 'D:\c\Program Files\nodejs\...'`), which
+   turns a check into a crash that exits 1 for the wrong reason.
+3. **A synchronous test double can hide an ordering defect completely.** `FE-W45`'s first
+   ordering test passed against the defect because React batched the two updates.
+
+**Namespace, again:** the workspaces are `@fieldforce/*`. `pnpm --filter @elmiron/api …`
+prints *"No projects matched the filters"* and **exits 0** — the runbook carried the stale
+name and the exit code hid it.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-33 — `BE-W11`, there is no restore | `PROJECT-OVERVIEW.md` → `### MR-33 — the restore mechanism` |
