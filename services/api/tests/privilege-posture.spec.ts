@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
+import { inDdlTransaction } from './auth.js';
 
 /**
  * FIX-14 B — ONE guard for one root cause.
@@ -151,7 +152,7 @@ describe.skipIf(!reachable)('nothing in public is reachable by anon unless decla
     // Without this, a green result could mean the posture holds or could mean the query
     // returns nothing because it is broken. The same control FIX-06 put on the function
     // guard, applied to the query that now covers everything.
-    await inRolledBackTransaction(async (client) => {
+    await inDdlTransaction(async (client) => {
       await client.query('create table public.fix14_default_probe (i int)');
       const grants = await publicGrants(client);
       const probe = grants.filter((g) => g.object === 'fix14_default_probe');
@@ -164,7 +165,7 @@ describe.skipIf(!reachable)('nothing in public is reachable by anon unless decla
     // The case that rewrote this file. A newly created function has `proacl = null` --
     // "the defaults apply" -- so an ACL-column query sees nothing and reports a clean
     // posture for precisely the object class FIX-05 found 65 of.
-    await inRolledBackTransaction(async (client) => {
+    await inDdlTransaction(async (client) => {
       await client.query(
         'create function public.fix14_fn_probe() returns int language sql as $$ select 1 $$',
       );
@@ -179,7 +180,7 @@ describe.skipIf(!reachable)('nothing in public is reachable by anon unless decla
   });
 
   it('B3 positive control: a sequence too — the object class both old guards missed', async () => {
-    await inRolledBackTransaction(async (client) => {
+    await inDdlTransaction(async (client) => {
       await client.query('create sequence public.fix14_probe_seq');
       const grants = await publicGrants(client);
       const probe = grants.filter((g) => g.object === 'fix14_probe_seq');
@@ -220,7 +221,7 @@ describe.skipIf(!reachable)('nothing in public is reachable by anon unless decla
     // A derivation control. If a future Postgres adds an ACL column this query does not
     // read, or a refactor drops one of the four unions, the guard silently narrows and
     // every assertion above keeps passing. This asserts the query still sees all four.
-    await inRolledBackTransaction(async (client) => {
+    await inDdlTransaction(async (client) => {
       await client.query('create table public.fix14_cover_probe (i int)');
       await client.query('create sequence public.fix14_cover_seq');
       await client.query(

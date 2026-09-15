@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
-import { asUser } from './auth.js';
+import { asUser, inDdlTransaction } from './auth.js';
 import { seedFixtures } from './fixtures.js';
 import type { FixtureUser, FixtureWorld } from './fixtures.js';
 
@@ -693,7 +693,7 @@ describe.skipIf(!reachable)('doctor search', () => {
     // `is_admin()` does not depend on the row. Resolving the scope to a uuid[] before
     // the query is what turned 2,190 ms into 2.6 ms; putting the OR back would undo it
     // silently, so the body is asserted rather than trusted.
-    await inRolledBackTransaction(async (client) => {
+    await inDdlTransaction(async (client) => {
       const result = await client.query<{ src: string }>(
         `select prosrc as src from pg_proc where proname = 'search_doctors'`,
       );

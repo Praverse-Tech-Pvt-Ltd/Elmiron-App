@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
-import { asUser } from './auth.js';
+import { asUser, inDdlTransaction } from './auth.js';
 import { seedFixtures } from './fixtures.js';
 import type { FixtureWorld } from './fixtures.js';
 
@@ -109,7 +109,7 @@ const visibleRows = async (client: Client, table: string, organisationId: string
 
 describe.skipIf(!reachable)('D2 — a restrictive tenant boundary cannot be widened', () => {
   it('an over-broad PERMISSIVE policy does not widen the boundary', async () => {
-    await inRolledBackTransaction(async (client) => {
+    await inDdlTransaction(async (client) => {
       const table = await mirrorTable(client);
       // Added as the owner, the way a well-meaning future migration would add one.
       await client.query(
@@ -137,7 +137,7 @@ describe.skipIf(!reachable)('D2 — a restrictive tenant boundary cannot be wide
   it('and with the RESTRICTIVE policy removed, the same policy widens immediately', async () => {
     // The other half of the pair, and the world MR-06 shipped: a permissive tenant
     // predicate, OR-ed with whatever else is on the table.
-    await inRolledBackTransaction(async (client) => {
+    await inDdlTransaction(async (client) => {
       const table = await mirrorTable(client);
       await client.query(`drop policy ${table}_tenant_boundary on public.${table}`);
       await client.query(

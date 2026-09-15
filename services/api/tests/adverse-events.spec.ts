@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
-import { asUser, asDatabaseRole } from './auth.js';
+import { asUser, asDatabaseRole, inDdlTransaction } from './auth.js';
 import { seedFixtures } from './fixtures.js';
 import type { FixtureUser, FixtureWorld } from './fixtures.js';
 
@@ -210,7 +210,7 @@ describe.skipIf(!reachable)('the fifteen-day clock', () => {
   });
 
   it('counts an overdue report as overdue', async () => {
-    await inRolledBackTransaction(async (client) => {
+    await inDdlTransaction(async (client) => {
       const id = randomUUID();
       await client.query(
         `insert into public.adverse_event_reports

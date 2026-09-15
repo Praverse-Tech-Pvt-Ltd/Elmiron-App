@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
+import { inDdlTransaction } from './auth.js';
 import { seedFixtures } from './fixtures.js';
 
 /**
@@ -153,7 +154,7 @@ describe.skipIf(!reachable)('a business write cannot succeed unaudited', () => {
 
   it('THE PROOF: with the audit write broken, the business row does not survive', async () => {
     await retryOnDeadlock(() =>
-      inRolledBackTransaction(async (client) => {
+      inDdlTransaction(async (client) => {
         // MR-07 E3. Take the strong lock FIRST, before anything else in this transaction.
         //
         // `create trigger` needs ACCESS EXCLUSIVE on `audit_log`, and every other suite

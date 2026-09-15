@@ -11,6 +11,7 @@ import {
   mintAccessToken,
   rest,
   signIn,
+  inDdlTransaction,
 } from './auth.js';
 import { seedFixtures } from './fixtures.js';
 import type { FixtureUser, FixtureWorld } from './fixtures.js';
@@ -1258,7 +1259,7 @@ describe.skipIf(!reachable)('no function in public is reachable by anon', () => 
   it('demonstrates why: a function created with the defaults IS anon-executable', async () => {
     // The positive control for the test above. Without it, a green result could mean the
     // posture holds or could mean the query is broken.
-    await inRolledBackTransaction(async (client: Client) => {
+    await inDdlTransaction(async (client: Client) => {
       await client.query(
         'create function public.fix06_default_probe() returns int language sql as $$ select 1 $$',
       );

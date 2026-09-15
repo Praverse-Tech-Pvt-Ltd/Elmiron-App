@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import type { Client } from 'pg';
+import { inRolledBackTransaction } from './db.js';
 
 /**
  * Acting as a real user, two ways.
@@ -244,13 +245,38 @@ const DB_URL_FOR_LOCK =
   process.env['SUPABASE_DB_URL'] ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
 
 /**
+ * **Exported for a SECOND use: serialising schema-changing tests — MR-36 B2.**
+ *
+ * The deadlock in `BE-W92` was finally named with both sides, from the server log, in MR-36:
+ *
+ * ```
+ * Process A: create policy mr07_d2_mirror_... on public.mr07_d2_mirror_...
+ *            waits for AccessExclusiveLock on auth.users
+ * Process B: INSERT INTO "identities" (...)        <- GoTrue, minting a fixture user
+ *            waits for RowExclusiveLock on auth.identities, blocked by A
+ * ```
+ *
+ * Both sides are named and both are ours: the DDL comes from a test, and the insert comes from
+ * `createAuthUser` in another spec file's `beforeAll`. **The two must simply never be in flight
+ * together**, and this lock is already the thing that decides when a GoTrue mint may run.
+ *
+ * So the DDL tests take the same lock. Nothing new is invented, no constant is tuned, and the
+ * exclusion is exact: while a schema-changing test holds this, `createAuthUser` cannot be in
+ * flight, so the second half of the cycle cannot exist.
+ *
+ * **What this deliberately does NOT claim.** It does not explain WHY `create policy` on a table
+ * in `public` comes to contend on `auth.users` at all. Three mechanisms have been proposed for
+ * this defect and refuted, including one reasoned from the schema that named a relation which
+ * appeared in none of the samples. This is contention REMOVAL, justified by both sides being
+ * named, and it is judged by the rate afterwards rather than by the story.
+ *
  * Short-lived rather than a module-level singleton, deliberately. A held connection would
  * have to be torn down by something, and an un-closed pg client keeps vitest's process
  * alive past the last test — trading a visible failure for a hang. One connection, taken
  * and dropped around a serialised section, is at most `workers` connections in flight
  * where the old shape was `workers × 8`.
  */
-const withIdentityLock = async <T>(fn: () => Promise<T>): Promise<T> => {
+export const withIdentityLock = async <T>(fn: () => Promise<T>): Promise<T> => {
   const { Client } = await import('pg');
   const lock = new Client({ connectionString: DB_URL_FOR_LOCK });
   await lock.connect();
@@ -361,3 +387,21 @@ export const asOwner = async <T>(client: Client, fn: () => Promise<T>): Promise<
     await client.query(`set local role ${previous}`);
   }
 };
+
+/**
+ * A rolled-back transaction that ALSO holds the identity lock — MR-36 B2.
+ *
+ * For tests that issue DDL. See `withIdentityLock` above for the measured deadlock this
+ * exists to remove: a test's `create policy` and GoTrue's identity insert, each blocking
+ * the other on `auth.users` / `auth.identities`.
+ *
+ * The lock is taken on its own connection, not on the transaction's. That is not incidental:
+ * a session holding an advisory lock while waiting on a heavyweight lock can itself close a
+ * cycle, and advisory locks ARE visible to the deadlock detector. The lock-holding connection
+ * here waits for nothing, so it cannot be part of one.
+ *
+ * Use it only where a test actually changes the schema. Every use serialises against every
+ * fixture mint in the suite, so applying it broadly would trade a flake for a slow run.
+ */
+export const inDdlTransaction = async (fn: (client: Client) => Promise<void>): Promise<void> =>
+  withIdentityLock(async () => inRolledBackTransaction(fn));

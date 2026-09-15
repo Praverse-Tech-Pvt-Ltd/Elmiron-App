@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
+import { inDdlTransaction } from './auth.js';
 
 /**
  * MR-12 Part B — the SQL half of "audit every dispatch site, not just the one that broke".
@@ -34,7 +35,7 @@ describe.skipIf(!reachable)('emit_sync_event refuses a table it has no branch fo
    * every plausible next candidate for this trigger.
    */
   it('raises rather than filing an unknown table under beat_plan', async () => {
-    await inRolledBackTransaction(async (client) => {
+    await inDdlTransaction(async (client) => {
       await client.query(
         `create table public.scratch_dispatch_thing (id uuid primary key, mr_id uuid not null)`,
       );

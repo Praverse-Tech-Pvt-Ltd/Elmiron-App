@@ -3023,3 +3023,63 @@ nobody had said how often, which is what makes it indistinguishable from a real 
 **One thing it is NOT:** it is not caused by a test creating its own schema or database. The new
 `organisation-backfill.spec.ts` creates a scratch DATABASE precisely so its DDL shares no catalog
 with the shared test database — and the deadlock rate is the same with it present or absent.
+
+### `BE-W92`, named at last: DDL in a test vs GoTrue minting a user — and the rate, before and after
+
+**MR-36 B. Both sides of the cycle are now named, from the server log, with the statements.**
+
+```
+Process A: create policy mr07_d2_mirror_<uuid>_select_scope on public.mr07_d2_mirror_<uuid>
+           waits for AccessExclusiveLock on auth.users (16458)
+Process B: INSERT INTO "identities" (...)          <- GoTrue, minting a fixture user
+           waits for RowExclusiveLock on auth.identities (17258), blocked by A
+```
+
+Six samples in one session, every one of them this shape: a **test issuing DDL** on one side and
+**GoTrue creating an identity** on the other. A seventh had `drop trigger zzz_break_audit on
+public.audit_log` in place of the `create policy` — same shape, different DDL, which is what
+established that the DDL is the variable and not the particular statement.
+
+OIDs were resolved against the live catalogue, not carried over from an earlier session's notes.
+
+**The mitigation: DDL tests take the identity advisory lock.** `createAuthUser` has held
+`pg_advisory_lock(0x5eed1de7)` since MR-12, so that lock already decides when a GoTrue mint may
+run. `inDdlTransaction` in `tests/auth.ts` takes the same lock, on its own connection, so a
+schema change and an identity mint can never be in flight together. Nothing new was invented and
+no constant was tuned — MR-12 chose a lock over `maxWorkers: N` precisely because a tuned
+constant needs re-tuning when the 34th suite arrives.
+
+**The rates, with their denominators.**
+
+| Configuration | Runs | Runs with a deadlock | Rate |
+| --- | --- | --- | --- |
+| **Before** (MR-35) | 7 | 2 | **~29%** |
+| After, DDL partly wrapped | 14 | 0 test failures, **1 in the server log** | — |
+| **After, all DDL wrapped** | **21** | **1** | **~5%** |
+
+Against a true rate of 2-in-7, seeing at most one failure in 21 runs has probability **≈0.008**.
+The reduction is real. **It is not a cure, and the entry says so:** roughly one push in twenty
+can still go red spuriously, where it used to be closer to one in four.
+
+**Two things this does NOT claim.**
+
+1. **It does not explain why `create policy` on a table in `public` contends on `auth.users` at
+   all.** Three mechanisms have been proposed for this defect and refuted, one of them reasoned
+   from the schema and naming a relation that appeared in none of the samples. This is
+   contention removal justified by both sides being named, judged by a rate.
+2. **It does not explain the residue.** One deadlock survived with every DDL site wrapped, with
+   an identity insert on the other side — so an identity can still be minted while a DDL test
+   holds the lock, and how is not established. `signIn` (`/auth/v1/token`) is not behind the
+   lock and is the obvious suspect, but it is used twice, in one file, and suspicion is not a
+   measurement.
+
+**The measurement trap this sits on top of.** The first pass wrapped five call sites found by
+grepping for `create table|create policy|alter table`, and **14 runs showed zero test
+failures** — which looked like a cure. The server log showed a deadlock in the same window, on
+`drop trigger`, a shape the grep never looked for. **Read the server log, not just the test
+output**: a deadlock that loses the race to a rollback is invisible to vitest and is the same
+defect.
+
+```bash
+docker logs --since 60m supabase_db_Elmiron-App 2>&1 | grep -A4 "deadlock detected"
+```
