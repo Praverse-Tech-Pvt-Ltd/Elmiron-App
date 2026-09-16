@@ -1464,3 +1464,77 @@ the tenant boundary, and the whole manager console except the coaching route.
 |---|---|---|---|
 | **`BE-W94`** | **`complete_upload.p_recorded_at` is the device's word with no bounds.** `capture_consent` bounds `captured_at` in both directions — it refuses a future capture (`MR-05 B1` added a configurable forward tolerance) and refuses one older than the server will accept on the device's word. `recorded_at` has neither, so a recording may claim any date, past or future | **Registered, not fixed.** It feeds no decision: `purge_after` is `now()`, and nothing reads `recordings.recorded_at`. It is a compliance-adjacent timestamp — when a doctor was recorded — carrying less protection than its sibling on the consent ledger, and the fix is the bounds `capture_consent` already has | open |
 | **`p_bitrate_kbps`, `p_bytes_received`** | Client-asserted, and nothing depends on either — a `CHECK` range and a progress bar respectively | Tidiness. Recorded in `docs/gotchas.md` with what reads them, so the next sweep does not re-open them | not a work item |
+
+### Added by MR-38 C — one of the three was unblocked, and a correction to MR-37 D1
+
+**MR-37 D1 said three console items were "newly unblocked", on the strength of running each
+dependency's own recorded check command. One was. Two were not, and the checks are why.**
+
+| Item | MR-37 said | MR-38 found | Outcome |
+|---|---|---|---|
+| **`FE-W10`** | unblocked, 1 half-day | **Correct.** | **DONE** |
+| **`FE-W12`** | unblocked, `BE-W13` closed | **Blocked, twice over** | not started |
+| **`FE-W13`** | unblocked, `BE-W14`/`BE-W15` closed | **`BE-W14` and `BE-W15` are NOT closed** | not started |
+
+#### `FE-W13` — the dependency check passed for the wrong reason
+
+`BE-W14`'s recorded verification has two clauses. MR-37 ran the first and stopped:
+
+> `grep -c "auditLog" packages/core/src/field/endpoints.ts` → `≥1`; **an RLS test proves a
+> non-admin gets `permission denied`, not an empty list**
+
+The grep returns 2. **Both matches are unrelated to an audit-log read path** — one is a prose
+comment, and one is the `auditLogId` field on the *analysis overrides* response, which exists so
+a caller can point at its own read in the trail. The second clause, which is the one that means
+anything, has nothing behind it.
+
+Measured directly instead of grepped:
+
+| | |
+| --- | --- |
+| Functions in `public` matching `%audit%` or `%retention%` | **`write_audit_row`, `stamp_audio_retention`** — both writers |
+| Read path for either | **none** |
+| `AuditLog…Schema` / `Retention…Schema` in `endpoints.ts` | **none** |
+| Mock route for `/audit…` or `/retention…` | **none** |
+
+**So `BE-W14` (3 half-days) and `BE-W15` (2) are open, and `FE-W13` is blocked behind both.**
+
+**The lesson is the one this repo already has twice:** a check that can pass for a reason
+unrelated to the thing it checks is not a check. `grep -c "auditLog" → ≥1` is satisfied by any
+file that says the words. It belongs with MR-37's refusal-message sweep and the `pnpm --filter
+@elmiron/api` exit-0 in the same family — **and it was trusted by the session that wrote the
+rule about not trusting it.**
+
+#### `FE-W12` — blocked on two things, neither of which is a workaround away
+
+**1. There is no client method for the GET.** `ListAnalysisOverridesResponseSchema` is defined in
+`packages/core/src/field/endpoints.ts` and **consumed by nothing** — the only references are its
+own definition and the built `.d.ts`. `createApiClient` has `createAnalysisOverride` (the POST)
+and no read. `BE-W13` is genuinely closed *by its own check* — the RPC
+`public.list_analysis_overrides` exists and the mock serves the route — but nothing in between
+lets `apps/console` call it through the shared client. **The gap sits between two items and
+neither owns it.**
+
+**2. Its recorded check cannot be satisfied by this workspace.** It asks for *"a console test
+[that] asserts a previously-saved override renders"*. The console has no renderer.
+`apps/console/vitest.config.ts` says so in its own comment: the pages are React Server
+Components, *"exercising those needs a browser or a Next test harness, and neither exists yet,
+so what is tested is the arithmetic the pages present."* Adding one is a dependency, which this
+project requires asking about first.
+
+**Not worked around, deliberately.** The available substitute — put the fetch in a lib function,
+test the shaping in node, and assert the page's source mentions it — would satisfy a weaker
+claim while reporting `FE-W12` done. That is the shape this project has refused eleven times.
+
+#### What this leaves
+
+```
+FE-W10  DONE
+FE-W12  needs: a `listAnalysisOverrides` client method (small, contract work)
+                AND a decision about a console render harness (a dependency ask)
+FE-W13  needs: BE-W14 (3) + BE-W15 (2) first -- both open, both unstarted
+BE-W89  unsized, and still the last engineering item before the device gates
+```
+
+**The sized engineering column is 1 half-day done and 6 half-days newly revealed**, not the
+6 half-days of console work MR-37 recorded as ready.
