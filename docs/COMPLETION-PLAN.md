@@ -1457,3 +1457,10 @@ no stated purpose.
 **What survives either way:** consent capture and the ledger, visits, check-in/check-out,
 samples, mileage, beat plans, the offline sync layer, retention of everything that is not audio,
 the tenant boundary, and the whole manager console except the coaching route.
+
+### Added by MR-38 B4 — registered from the client-asserts-what-the-server-observed sweep
+
+| Item | What it is | Verdict | |
+|---|---|---|---|
+| **`BE-W94`** | **`complete_upload.p_recorded_at` is the device's word with no bounds.** `capture_consent` bounds `captured_at` in both directions — it refuses a future capture (`MR-05 B1` added a configurable forward tolerance) and refuses one older than the server will accept on the device's word. `recorded_at` has neither, so a recording may claim any date, past or future | **Registered, not fixed.** It feeds no decision: `purge_after` is `now()`, and nothing reads `recordings.recorded_at`. It is a compliance-adjacent timestamp — when a doctor was recorded — carrying less protection than its sibling on the consent ledger, and the fix is the bounds `capture_consent` already has | open |
+| **`p_bitrate_kbps`, `p_bytes_received`** | Client-asserted, and nothing depends on either — a `CHECK` range and a progress bar respectively | Tidiness. Recorded in `docs/gotchas.md` with what reads them, so the next sweep does not re-open them | not a work item |

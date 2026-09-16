@@ -3264,3 +3264,69 @@ did not exist — `complete_upload` never checked that an object was stored — 
 tests had been finalising uploads whose bytes were never written**. No grep would have found
 that: the control was absent, so there was no message to search for. **A sweep for controls that
 never fired cannot see a control that was never written.**
+
+### The "client asserts what the server observed" sweep — there is no fourth instance
+
+**MR-38 B.** `capture_consent`, `record_check_in` and `complete_upload` were each a client
+asserting a fact the server had already observed, and each fix removed a forgery surface rather
+than adding a check. Three for three is a strong prior, so the whole surface was swept for the
+fourth.
+
+**There isn't one.** That is the finding, and it is recorded with its denominator so the sweep is
+not run again.
+
+#### The denominator
+
+| | |
+| --- | --- |
+| RPCs callable by `authenticated` | **47** |
+| Client-supplied parameters across them | **121** |
+| Of those, a number or an identifier | **70** |
+| Of those, a pure number | **24** |
+
+#### How the 24 numeric parameters classify
+
+| Class | Count | Why it is not the class |
+| --- | --- | --- |
+| **The client genuinely witnesses it** | 6 | `p_latitude`, `p_longitude`, `p_accuracy_metres` on check-in and check-out. GPS, and the same trust `captured_at` carries |
+| **A pure helper's own arguments** | 4 | `distance_metres(p_lat_a …)` computes; it records nothing |
+| **The server CANNOT measure it** | 3 | `p_duration_seconds` in all three upload RPCs. **Verified, not assumed:** `storage.objects.metadata` carries `size`, `contentLength`, `mimetype`, `eTag`, `cacheControl`, `lastModified`, `httpStatusCode` — **and no duration.** Measuring it would mean decoding the audio |
+| **A reservation, not an observation** | 2 | `p_size_bytes` on `begin_upload` / `issue_recording_upload_grant`. The bytes do not exist yet, and MR-37 closed the hole where the finalised size could exceed the reservation |
+| **A bounded caller preference** | 6 | four `p_limit`s, all `least(greatest(…))`; `p_stale_sync_hours`; `p_fallback` |
+| **Already fixed** | 1 | `complete_upload.p_size_bytes` — MR-37 B |
+| **This shape, but feeds no decision** | 2 | `p_bitrate_kbps`, `p_bytes_received` — registered below |
+
+#### The false positive, and it is the reason to spot-check
+
+**Five RPCs take `p_mr_id` while the server holds `auth.uid()`, and all five are
+`SECURITY DEFINER`.** That reads exactly like the class, and like a tenancy hole:
+`my_upload_queue`, `sync_queue_status`, `list_sync_rejections`, `daily_mileage`, `list_analyses`.
+
+**They are all correct.** Reading the full predicate rather than the grep line shows every one
+scopes first and filters second:
+
+```sql
+where g.mr_id in (select public.visible_user_ids())
+  and (p_mr_id is null or g.mr_id = p_mr_id)
+```
+
+`visible_user_ids()` derives from `auth.uid()`. **The parameter narrows within an
+already-authorised set** — a manager filtering to one of their MRs — and cannot widen it. A grep
+for the parameter finds the second line; only the first line decides anything.
+
+**Two further apparent hits were prior instances of this same correction, already applied.**
+`check_outs.duration_seconds` is computed server-side from the check-in
+(`extract(epoch from (p_occurred_at - v_check_in.occurred_at))`), and `capture_consent` derives
+`v_active_then` through `active_consent_text_at()` alongside the version the client claims.
+
+#### Registered — this shape, no decision behind it
+
+| Parameter | What reads it | Verdict |
+| --- | --- | --- |
+| `complete_upload.p_bitrate_kbps` | **Nothing.** Stored behind a `CHECK` range and never read | Tidiness. Derivable as `size × 8 ÷ duration`, but duration is itself the client's |
+| `record_upload_progress.p_bytes_received` | **One reader:** `my_upload_queue`'s progress percentage. The other two functions only write it | Tidiness. A wrong value gives the MR a wrong progress bar for their own upload |
+| `complete_upload.p_recorded_at` | **Nothing** — `purge_after` is `now()`, not this | **Registered as `BE-W94`.** The device's word with **no bounds at all**, where the consent ledger's `captured_at` has both |
+
+**The rule this leaves behind:** the class is *"the server could know and chose to be told"*. A
+value the server genuinely cannot observe — audio duration — is not in it however much it looks
+like it, and the only way to tell is to go and look at what the server actually holds.
