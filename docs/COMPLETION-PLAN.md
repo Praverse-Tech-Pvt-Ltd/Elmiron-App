@@ -1370,3 +1370,90 @@ name that costs you nothing and gets worse every day it is not given.**
 |---|---|---|
 | **`FE-W48`** | **The client and the server disagree about what an absent capture source means.** `record_check_in(p_source ... default 'automatic')`; `outbox.ts:701` sends `payload.source ?? 'manual'`. `check_ins.source` and `check_outs.source` are persisted `capture_source` columns, so the disagreement lands in a record of where an MR was | **Unreachable today.** The one enqueue site (`capture/visit.ts:148`) always sets `'manual'` explicitly, so the `??` never fires. It becomes live the day a GPS check-in path exists — which is exactly when a wrong provenance would matter. Fixing it now means choosing which default is right, and that is a product question: does an absent source mean "the device did it" or "the person did it"? | open |
 | **Sweep 4's method** | Text-matching refusal messages against the suite cannot tell a tested control from an untested one — 210 SQLSTATE assertions are invisible to it | Recorded in `docs/gotchas.md` as a method that does not work, with the spot-check evidence. A sound version needs per-function coverage | not a work item |
+
+### Added by MR-37 D — the engineering column, sequenced; and what a cut AI layer costs
+
+#### D1 — the ordered sequence, and three items are no longer blocked
+
+**Each row was re-checked against its own verification command, not read off the table above.**
+That matters here: MR-36 recorded `FE-W12` as *needing `BE-W13`* and `FE-W13` as *needing
+`BE-W14` and `BE-W15`*. **All three of those dependencies are now closed**, so all three console
+items are startable today.
+
+| Verified just now | Result |
+| --- | --- |
+| `BE-W13` — overrides read path | **CLOSED.** `public.list_analysis_overrides` exists; the mock serves both halves |
+| `BE-W14` / `BE-W15` — audit and retention read paths | **CLOSED.** Both appear in `packages/core/src/field/endpoints.ts` |
+| `BE-W47` — overrides backend | **CLOSED.** `analysis_overrides` table exists |
+| `FE-W10` | **OPEN.** Its own check still returns 1 |
+| `FE-W12` | **OPEN.** The console coaching page has no `overrides` reference at all |
+| `FE-W13` | **OPEN.** `apps/console/src/app/admin/` holds only `page.tsx` |
+
+**The sequence:**
+
+```
+FE-W10  remove the false "manager console is not here" card      (1 half-day, NOTHING BLOCKS IT)
+   |      one file; a truthfulness defect in a product whose pitch is truthfulness
+   v
+FE-W12  overrides panel consumes the GET                          (2)  BE-W13 closed
+   v
+FE-W13  console audit + retention screens                         (3)  BE-W14/15 closed
+   v
+BE-W89  beat-plan chain                                           (UNSIZED — see below)
+```
+
+**6 half-days = 3 working days of sized engineering**, one worker, no rework. `FE-W10` first
+because it is one file and it is the only item on this page that makes the product *lie*.
+
+`FE-W12` and `FE-W13` are ordered after it by cost, not by dependency — they are independent of
+each other and could run in parallel by two people.
+
+**`BE-W89` stays unsized on purpose.** `sync_pull` emits `visit`, `doctor`, `beat_plan` and
+`clinic_address` and has **no `beat_plan_entry` entity at all**, so the screen has no data path
+rather than a thin one. Sizing it means first deciding what the entity is, and a number put on
+it before that decision would be invented.
+
+**What "feature-complete minus the device gates" means, precisely.** After `FE-W10`, `FE-W12`,
+`FE-W13` and `BE-W89`, the remaining MR v1 work is all either a device gate (`FE-G1`/`FE-G2`,
+blocked on the handset, seven weeks outstanding) or one of the human decisions on
+`docs/blocked-on-you.md`. **The last engineering item before that line is `BE-W89`.**
+
+#### D2 — what is CUT if the AI layer is cut
+
+**So the cost is visible before the decision, not after.** The 30 September deadline forces this
+question whether or not anyone wants to answer it.
+
+**Cut outright — these exist only to serve the AI layer:**
+
+| Surface | What goes |
+| --- | --- |
+| Field screens | `(tabs)/coaching.tsx`, `analysis/[id].tsx`, `reply/[analysisId].tsx`, and the coaching tab in `(tabs)/_layout.tsx` |
+| Console | **`FE-W12` — the whole 2 half-days**, and the coaching route it lives on |
+| Schema | `analyses`, `analysis_overrides`, `transcripts_raw`, `transcripts_redacted` |
+| Contract | `TranscriptV0`, and with it `CONTRACT_I3_DEADLINE` — **cutting the AI layer RESOLVES the 30 September deadline**, which is the one thing that makes this decision cheaper than it looks |
+| Already-spent work | `BE-W13`, `BE-W47`, `BE-W56`, `BE-W14`'s analysis half — closed, and sunk |
+
+**The sequence after a cut: `FE-W10` (1) → `FE-W13` (3) → `BE-W89`.** Four sized half-days
+instead of six.
+
+**In question, and this is the half that is easy to miss — the ENTIRE AUDIO PATH.**
+
+Audio is captured so it can be transcribed. Remove transcription and nothing else in MR v1 reads
+a recording. What is built on that assumption:
+
+- `recordings`, `voice_notes`, `upload_grants` and the resumable upload machinery;
+- the retention worker, its watchdog, `audio_purge_is_stalled()` and the intake-stops-if-retention-stops control;
+- the per-MR storage ceiling — **fixed this session (MR-37 B)**, and pointless if nothing is stored;
+- the **90-day deletion promise**, items 4.4 and 5.11, and the storage half of `BE-W11`;
+- `docs/restore-runbook.md`'s entire step-3 reconciliation, which exists because a restored
+  database references audio that may not exist.
+
+**This is NOT a recommendation to cut the audio path with the AI layer.** Consent-recorded audio
+may still be wanted as evidence rather than as input. **It is a statement that the question has
+never been asked**, and that answering *"cut the AI layer"* without answering *"and does audio
+capture survive it?"* leaves the largest and most compliance-heavy subsystem in the product with
+no stated purpose.
+
+**What survives either way:** consent capture and the ledger, visits, check-in/check-out,
+samples, mileage, beat plans, the offline sync layer, retention of everything that is not audio,
+the tenant boundary, and the whole manager console except the coaching route.
