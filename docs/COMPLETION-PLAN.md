@@ -1696,3 +1696,94 @@ register rather than to fix the item named.
 | Item | What it is | Status |
 |---|---|---|
 | **`BE-W101`** | **An admin of one organisation can read another's consent ledger.** `list_consent_records` and `read_consent_record` both PROVEN open, with a positive control. Six more functions share the `or v_role = 'admin'` shape, three of them writes | **OPEN — escalated to the top of `docs/blocked-on-you.md`. Not fixed this session, deliberately** |
+
+### Added by MR-40 B — `BE-W102`: a refused read is not in the audit trail
+
+| Item | What it is | Status |
+|---|---|---|
+| **`BE-W102`** | **Every `SECURITY DEFINER` read that audits inside its own transaction records nothing when it refuses.** 7 read paths. The refusal raises, and the raise rolls back the audit row that would have named the caller | **Registered, not built** |
+
+#### B1 — the count, and why it is a property of the pattern rather than of one function
+
+**Seven.** Every function in `public` that writes its own `audit_log` row and then returns data:
+
+| Function | |
+| --- | --- |
+| `list_consent_records` | consent ledger |
+| `read_consent_record` | consent ledger |
+| `list_analyses` | AI analyses |
+| `list_analysis_overrides` | AI analyses |
+| `read_analysis` | AI analyses |
+| `list_audit_log` | **the audit trail itself** (MR-39) |
+| `retention_status` | audio retention figures (MR-39) |
+
+*(An eighth function writes to `audit_log` — `write_audit_row` — but it is the trigger helper,
+not a read path.)*
+
+**MR-39 recorded this as a property of `BE-W14`. It is not.** It is a property of
+**audit-then-return inside one transaction**, and all seven do it. A refusal raised *before* the
+insert writes nothing; a refusal raised *after* it writes a row that the raise then rolls back.
+Both leave the same nothing.
+
+#### B3 — the consequence, stated for whoever assesses this system
+
+**Nobody probing these paths leaves a trace in the audit trail.** Not someone rattling the handle
+on `read_consent_record` with ids they do not own; not a non-admin repeatedly calling
+`list_audit_log`; not anyone testing the nine RLS-forced tables through their read functions.
+
+**For an audit trail, a failed attempt is usually more interesting than a successful one.** A
+successful read is a person doing their job. A hundred refused ones is a person finding out what
+they can reach — and that is exactly the pattern the trail cannot show.
+
+**One thing that IS recorded, and it matters given `BE-W101`:** a *successful* cross-tenant read
+is fully audited. The row is written before the data is returned, so the trail names the admin,
+the time, and the reason they typed. `BE-W101` is a confidentiality failure, not an invisible
+one.
+
+#### B4 — where the attempt IS recorded: "here, but not in the audit trail"
+
+**Not "nowhere".** Measured on the local stack rather than assumed:
+
+| Setting | Value |
+| --- | --- |
+| `log_min_error_statement` | **`error`** |
+| `log_statement` | `ddl` |
+| `log_destination` | `stderr` |
+| `logging_collector` | `off` |
+
+A refusal was forced and **found in the Postgres log**, with the failing statement beside it:
+
+```
+ERROR:  only an admin may read the audit log
+HINT:   The audit trail names every actor in the organisation. Ask an admin.
+STATEMENT: select public.list_audit_log(...)
+```
+
+**Three reasons that is not a substitute for the trail, and they should be stated together:**
+
+1. **It probably does not identify WHO.** `log_statement = ddl` does not log ordinary statements,
+   so the only thing logged is the *erroring* one — the RPC call. The caller's identity lives in
+   `request.jwt.claims`, set by a **separate** statement that is therefore not logged. The log
+   says an attempt happened and what was asked; it does not reliably say who asked.
+2. **It is not tenant-scoped, not queryable by the console, and not append-only.** `audit_log`
+   has a rejection trigger and RLS forced; the server log has neither and is not something an
+   auditor of one customer can be given.
+3. **It has a retention window set by the platform, not by this system's policy** — and on
+   Supabase-hosted production it goes to their log service, not to a file this project controls.
+   That window is **not** `audio_retention_days()` and has never been established.
+
+#### B2 — what escaping it would cost
+
+**Not built, and the options are not equal.**
+
+| Approach | Cost |
+| --- | --- |
+| **Autonomous transaction** | PostgreSQL has none. It would mean `dblink` or a background worker — **a new extension and a second connection per refused call**, on the write path of every read. This schema has no autonomous transaction anywhere, and inventing one for this is a mechanism built for one case |
+| **`dblink`** | A dependency, and therefore an ask. It also opens a connection *as somebody*, which is a new privilege surface on the exact functions whose privileges are in question |
+| **Log the refusal at another layer** | PostgREST or an edge function could record the 42501 with the JWT it already holds — **which is the one layer that knows the actor** — but that is a component this project does not currently operate, and it moves part of the audit trail outside the database that guarantees the rest of it |
+| **Do nothing, and say so** | What is chosen here. The gap is written down with its count and its consequence so an assessor is told rather than left to discover it |
+
+**The honest recommendation, for whoever decides:** if refused attempts must be in the trail,
+the cheapest correct answer is the third — record them where the actor is already known — and it
+should be decided alongside `BE-W101`, because the two are the same question asked twice: *who
+may reach what, and what do we know afterwards?*
