@@ -15480,3 +15480,213 @@ left, each for a stated reason:
    the signal; the failure count was zero.
 4. **Stopping is the result when the check cannot be met.** `FE-W12` could have been "finished"
    against a weaker test in an hour.
+
+
+### MR-39 — the audit read path
+
+**The rule that counts are read "from each runner's own line" was half a rule, and the half it
+was missing is the half that hid a suite from MR-38. Then the two read paths that MR-38 proved
+did not exist were built.**
+
+#### CI
+
+| | |
+| --- | --- |
+| Run | `35085549263` — **`success`** |
+| Workflow | `CI` |
+| Event | `push` |
+| SHA | `401310255baed78e4b6c0d5eb83248bbe73b9938` |
+
+**Read with `git rev-parse HEAD`, not recalled, and it equals HEAD.** This section is committed
+after that run, so HEAD moves by one and that commit is pushed at the end of the session.
+
+#### A1 — a suite that never ran can no longer be reported as green
+
+**The old rule could not see it.** `Tests: 237 passed, 237 total` with **zero failures** is
+internally consistent and wrong: the cases inside a suite that failed to *collect* are not
+counted anywhere, so every test-level number agrees with every other one.
+
+`scripts/test-counts.mjs` now reads `numFailedTestSuites` and `numRuntimeErrorTestSuites` from
+both runners and **exits 1 when either is non-zero, regardless of the case counts.** Two further
+faults were found in the same file while there:
+
+- **`numFailedTests` was captured into a variable and never read.** A reporter that prints a
+  failure count it does not act on reports failures as green. It now fails on it.
+- **`TOTAL` summed *discovered* cases**, which is why the record said for six sessions to read
+  the runners rather than this script. It now sums **passing** cases, and `handoff.md`'s pointer
+  is updated to match.
+
+The suites column shows only the **bad** count: this file's own comment records that
+`numTotalTestSuites` is not comparable across runners — vitest counts `describe` blocks, jest
+counts files — and a column whose meaning changes per row is the defect the script exists to
+close.
+
+**A2 — the control, run both ways.** A file importing a module that does not exist was added to
+`packages/ui`, reproducing the shape exactly:
+
+```
+Test Suites: 1 failed, 21 passed, 22 total
+Tests:       243 passed, 243 total
+```
+
+**With the file present the reporter exits 1**, naming the workspace and runner. **With it
+removed it exits 0.** Measured as exit codes rather than read off a pipe, because `$?` after a
+pipe is the last command's status.
+
+**And the control corrected the fix.** Jest counts a suite that threw during collection in
+**both** `numFailedTestSuites` and `numRuntimeErrorTestSuites`, so the first version of the
+column reported one bad suite as "2 BAD". It takes the **max**, not the sum — measured against
+the control rather than reasoned about.
+
+#### A3 — the rate, with its denominator
+
+| Session | Runs | Occurrences |
+| --- | --- | --- |
+| MR-38 | 7 | **1** |
+| MR-39 | 8 | **0** |
+| **Combined** | **15** | **1** |
+
+**Eight clean runs does not retire the 1-in-7 estimate** — if the true rate were 1 in 7, eight
+clean runs has probability ≈0.30. The honest reading is **about 1 in 15**, and a single
+occurrence cannot bound it more tightly. **Registered, not chased**: the A1 guard means it no
+longer needs a mechanism to be caught.
+
+#### A4 — the caveat on every count already in the record
+
+**Every test total recorded before this change was read from the `Tests:` line alone and could
+not have seen a suite that never ran, so all of them carry an error bar of unknown size — no
+historical count is being corrected, because one occurrence in fifteen says they are very
+probably right and re-deriving twenty sessions would cost more than the uncertainty is worth.**
+
+#### B — the audit and retention read paths
+
+**What reading an append-only log implies.** `audit_log` has RLS enabled **and forced** with **no
+SELECT policy at all**, so the read must be `SECURITY DEFINER` and **the entire boundary is in
+the function body** — there is no policy to fall back on. It only SELECTs and INSERTs, so
+`audit_log_reject_mutation` is untouched. And **reading the trail is itself auditable**, so
+`list_audit_log` writes its own row *before* gathering data: the read is self-referential on
+purpose, and nobody reads the audit log without appearing in it.
+
+**Stated rather than left to be discovered:** a *refused* read is **not** audited. The refusal
+raises, which rolls back the audit row written in the same transaction. Recording it would need
+an autonomous transaction, which this schema has nowhere else.
+
+**Tenancy without a tenant column.** `audit_log` has no `organisation_id`; a row's tenant is its
+**actor's**. Scope is `actor_id in (select public.visible_user_ids())` with **no
+`or v_role = 'admin'` escape** — `list_consent_records` has one, written before BE-W76, and
+copying it into a new function would reopen the boundary the console is the first surface to
+exercise in anger. Rows with a null actor have no tenant, are excluded, and are **counted** in
+`systemRowsHidden` so a short page reads as scoped rather than as empty.
+
+**The 90 became one number.** It was a bare `interval '90 days'` inside `stamp_audio_retention`.
+A read path returning its own `90` would have agreed **by luck** and drifted the first time
+either moved. It is now `public.audio_retention_days()`, called by the trigger *and* the read
+path, and there is exactly one `90` in the database.
+
+#### B5 — both clauses run, and named
+
+> **Clause 1 — REPLACED.** The recorded one was `grep -c "auditLog" endpoints.ts → ≥1`, which
+> MR-37 ran and which passed for a reason unrelated to what it checks: the two matches were a
+> prose comment and the `auditLogId` field on the *analysis overrides* response. **A grep
+> locates; it does not decide.**
+>
+> The replacement requires the three schema names to be **exported**, to be **zod schemas**, and
+> to **reject a malformed payload** — an exported name that parses anything is not a contract.
+> **Run: PASS.**
+
+> **Clause 2 — run as written.** *"An RLS test proves a non-admin gets `permission denied`, not
+> an empty list."* **Run: PASS** — `audit-read-path.spec.ts`, 13 tests.
+
+> **`BE-W15`'s extra clause — run as written.** *"A test asserting the figure shown is
+> server-sourced."* **Run: PASS** — the test compares `retentionDays` against
+> `audio_retention_days()` **and** asserts `stamp_audio_retention()`'s body calls that same
+> function.
+
+#### B6 — the full matrix, every cell with its control
+
+| Caller | Result | The control that makes it mean something |
+| --- | --- | --- |
+| **admin, own organisation** | **sees the row** | This is the control for every row below. Without it, each refusal could be a function that refuses everybody |
+| **admin, ANOTHER organisation** | **does not see the row** | **The same row IS visible to the admin who owns it**, asserted in the same test. An absence proves nothing without something that would have been present — and the page is separately asserted non-empty, so it is scoped rather than broken |
+| **field_manager** | **`42501`**, not an empty list | The admin cell above proves the function returns data to somebody |
+| **mr** | **`42501`**, not an empty list | As above |
+| **anon** | **`42501` from the GRANT**, before the body runs | As above |
+| *(retention)* **field_manager / mr / anon** | **`42501` / `42501` / `42501`** | Both tenants' admins get an answer, so neither count is an empty function returning zero |
+
+**The `anon` cell is a correction made by measuring.** The test first asserted `28000` from the
+body's `auth.uid() is null` check. **`anon` never gets there** — EXECUTE is granted to
+`authenticated` only, so PostgreSQL refuses first. That is the *stronger* refusal, because the
+function does not run and so cannot leak through a bug in its own scoping, and it is asserted as
+what happens rather than as what the body would have done.
+
+**B7 — two-sided mutation, each failing exactly its own cells:** removing the tenant scoping
+fails the cross-organisation test **and nothing else**; making a non-admin receive an empty list
+instead of a refusal fails **exactly the two refusal tests** — which is precisely the defect
+`BE-W14`'s recorded check names.
+
+`verify:rollbacks` passes with the schema empty. Both migrations have byte-accurate rollbacks.
+
+**`BE-W95` registered, found while writing the contract.** `list_analysis_overrides` shapes rows
+with `to_jsonb(o)` and emits `analysis_id`, `finding_id`, `overridden_by_user_id`, `created_at`,
+while `AnalysisOverrideSchema` declares camelCase and the mock's fixtures are typed to the
+schema. **The database and the contract disagree about the shape of the same endpoint** — the
+FIX-03 drift that migration's own comment says it closed. Nothing caught it because **nothing
+consumes that read**. The two new functions build their keys explicitly and do not join it.
+
+#### C — ran, and stopped without starting the work
+
+**`FE-W13` is no longer blocked.** Part B removed its blocker.
+
+**Its recorded check carries the same defect B5 was about, and the evidence is a run:**
+`grep -c "90" <screen> → 0` returns **2** today, and **both matches are prose comments explaining
+why the number is not printed.** The check therefore **fails on a screen behaving correctly** and
+would **pass on a screen that rendered the figure** from any expression without those digits.
+
+**What it actually requires:** clause 1 cannot mean a render test — `apps/console` has no
+renderer and adding one is a dependency ask — so it means the convention `queue.test.ts` follows,
+testing the arithmetic the pages present. Clause 2 should assert the rendered figure **changes
+when the stubbed `retentionDays` changes**, which cannot pass by accident.
+
+**Not started, and the reason is ROOM, not blockage.** Those are different and the record should
+not blur them: the previous twelve stops were blockages; this one is not.
+
+#### Counts — by workspace AND runner, from BOTH lines
+
+Read with `node scripts/test-counts.mjs`, which now exits 1 if any suite failed to run.
+
+| Workspace | Runner | Passed | Failed | Suites |
+| --- | --- | --- | --- | --- |
+| `@fieldforce/core` | vitest | 28 | 0 | ok |
+| `@fieldforce/ui` | vitest | 4 | 0 | ok |
+| `@fieldforce/ui` | jest | 243 | 0 | ok |
+| `@fieldforce/ui-tokens` | vitest | 54 | 0 | ok |
+| `@fieldforce/console` | vitest | 14 | 0 | ok |
+| `@fieldforce/field` | vitest | 502 | 0 | ok |
+| `@fieldforce/field` | jest | 128 | 0 | ok |
+| `@fieldforce/api` | vitest | **688** | 0 | ok |
+| `@fieldforce/mock` | vitest | **43** | 0 | ok |
+
+**1,704 passing, zero failing, and no suite failed to run** — the last clause is the one that is
+new. `lint`, `typecheck` and `format:check` all exit 0. The schema is at **59 migrations**.
+
+#### Where this session stopped
+
+**At the end of Part C, having run C's analysis and deliberately not started its work.**
+
+1. **`FE-W13` is next**, unblocked, 3 half-days — **replace its clause-2 check before starting.**
+2. **`FE-W12` is still blocked** — no `listAnalysisOverrides` client method, and its check asks
+   for a render assertion in a workspace with no renderer.
+3. **`BE-W95` is registered, not fixed.**
+4. **The `packages/ui` load flake is registered at ~1 in 15**, and no longer needs chasing to be
+   caught.
+
+**Four things a reader should carry forward.**
+
+1. **A count that cannot see a suite is not a count.** The rule said "from each runner's own
+   line" and meant one of the two lines that runner prints.
+2. **A grep clause in a recorded check is a defect in the check.** This session found a second
+   one — `grep -c "90" → 0` — in the very next item, after replacing the first.
+3. **An absence needs something that would have been present.** Every refusal in the B6 matrix is
+   paired with a cell proving the target was reachable by somebody.
+4. **"Blocked" and "out of room" are different words.** Twelve stops were the first; this one is
+   the second, and conflating them would have made the next session distrust both.

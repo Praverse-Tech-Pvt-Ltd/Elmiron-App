@@ -427,3 +427,56 @@ and 44. **That conflict needs resolving before somebody resolves it silently.**
 | Session | Where the narrative is |
 | --- | --- |
 | MR-38 — the fourth instance | `PROJECT-OVERVIEW.md` → `### MR-38 — the fourth instance` |
+
+---
+
+## After MR-39 — 16 September 2026
+
+**Counts are read from BOTH of a runner's lines now, and `test-counts.mjs` enforces it.**
+
+| | |
+| --- | --- |
+| **Counting** | `node scripts/test-counts.mjs` — **exits 1 if any suite failed to RUN**, regardless of the case counts, and its TOTAL is now PASSING rather than discovered. The old advice to avoid this script no longer applies |
+| **`BE-W14`** | **CLOSED.** `public.list_audit_log(p_limit, p_before_id, p_reason)` — admin-only, tenant-bounded, and it audits its own read |
+| **`BE-W15`** | **CLOSED.** `public.retention_status(p_reason)`, and the retention period is now `public.audio_retention_days()` — **one number, read by the trigger and the read path** |
+| **`BE-W95`** | **NEW.** The overrides endpoint's shape disagrees between database and contract |
+| **`FE-W13`** | **UNBLOCKED, not started.** 3 half-days, and **replace its clause-2 check first** |
+| **Tests** | **1,704 passing, zero failing, no suite failed to run** |
+
+### If you are adding a read path to the console
+
+Both new functions are the template, and the three things they had to answer:
+
+1. **`audit_log` has RLS enabled, forced, and NO SELECT POLICY.** A read must be
+   `SECURITY DEFINER`, which means **the whole boundary is in the function body** — there is no
+   policy to fall back on if the scoping is wrong.
+2. **Scope with `visible_user_ids()` and DO NOT add an `or v_role = 'admin'` escape.**
+   `list_consent_records` has one, written before BE-W76. Copying it into a new function reopens
+   the tenant boundary.
+3. **A non-admin is REFUSED (`42501`), never given an empty list.** An empty list claims there is
+   nothing to see; a refusal claims something about who is asking. `anon` does not even reach the
+   body — EXECUTE is granted to `authenticated` only, so PostgreSQL refuses first.
+
+### Two checks in the plan were defective, and both were found by RUNNING them
+
+- **`BE-W14`**: `grep -c "auditLog" endpoints.ts → ≥1` matched a prose comment and an unrelated
+  field. Replaced with a condition requiring the schemas to be exported, to be zod schemas, and
+  to **reject a malformed payload**.
+- **`FE-W13`**: `grep -c "90" <screen> → 0` returns **2** today, and both are comments explaining
+  why the number is *not* printed. It fails on a correct screen and passes on a wrong one.
+
+**Treat a grep in a recorded check as a defect in the check.** A grep locates; it does not decide.
+
+### The `packages/ui` load flake
+
+Now at **1 occurrence in 15** full `pnpm -r test` runs (MR-38: 1/7, MR-39: 0/8). Eight clean runs
+does **not** retire a 1-in-7 estimate — that has probability ≈0.30. **It no longer needs chasing
+to be caught:** `test-counts.mjs` refuses on it.
+
+**And a caveat worth knowing:** every test total recorded before MR-39 was read from the `Tests:`
+line alone and could not have seen a suite that never ran. They carry an error bar. Nothing is
+being re-derived.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-39 — the audit read path | `PROJECT-OVERVIEW.md` → `### MR-39 — the audit read path` |

@@ -908,3 +908,66 @@ failing**.
 once in seven runs.** The tell is the totals, not the failures: `Test Suites: 2 failed` with
 `Tests: 237 passed, 237 total` and **zero failures**. Run the workspace alone and it passes
 243/243.
+
+## MR-39 — 16 September 2026: the console's two read paths exist, and FE-W13 is next
+
+### `FE-W13` is unblocked
+
+`BE-W14` and `BE-W15` landed. The console now has everything it needs to build the audit and
+retention screens:
+
+| | |
+| --- | --- |
+| RPCs | `public.list_audit_log(p_limit, p_before_id, p_reason)`, `public.retention_status(p_reason)` |
+| Contracts | `AuditLogEntrySchema`, `ListAuditLogResponseSchema`, `RetentionStatusSchema` in `packages/core` |
+| Client | `client.listAuditLog({ reason })`, `client.getRetentionStatus({ reason })` |
+| Mock | Both routes, driven through `createApiClient` in the mock's own contract suite so they cannot drift from the schemas |
+
+**`reason` is required by the server on both**, and it is recorded *with* the read. A screen that
+wants these figures has to say why it is asking — that is not a form validation, it is the
+server refusing without one.
+
+### Read this before starting: its recorded check is defective
+
+> `Console suite covers both screens; no hard-coded retention figure`
+> `(grep -c "90" <screen> → 0 outside a server-sourced binding)`
+
+**Run it today and it returns `2`.** Both matches are prose comments in `admin/page.tsx`
+explaining why the figure is *not* printed. So the check **fails on a screen that is behaving
+correctly**, and would **pass on a screen that rendered the figure** from any expression not
+containing those digits.
+
+**What it actually requires:**
+
+- **Clause 1 cannot mean a render test.** `apps/console` has no renderer — the pages are React
+  Server Components and `vitest.config.ts` says exercising them needs a browser or a Next
+  harness, neither of which exists. Adding one is a **dependency ask**. The workspace convention
+  is `queue.test.ts`'s: test the arithmetic the page presents, in a lib function the page
+  consumes.
+- **Clause 2 should assert the rendered figure CHANGES when the stubbed `retentionDays`
+  changes.** That cannot pass by accident, where `grep → 0` passes the moment somebody writes
+  `Ninety`.
+
+### The figure the screen will print is the figure the database enforces
+
+The admin screen currently refuses to print the retention period, and it was right to:
+*"printing that here would be this console asserting a policy value it has not been told."*
+
+It can print it now. `retentionDays` comes from `public.audio_retention_days()` — and that same
+function is what `stamp_audio_retention()` uses to set `purge_after`. **One number, two
+readers.** Before this, the period was a bare `interval '90 days'` inside the trigger, and any
+figure the console showed would have matched it by luck.
+
+### What the screens must not do
+
+`list_audit_log` is **admin-only and refuses a non-admin with `42501`, never an empty list**.
+Do not soften that in the client: a screen that catches the refusal and renders "no entries"
+would turn a statement about *who is asking* into a false statement about *what exists*. Let the
+refusal reach the user with its own hint — both functions carry one.
+
+### Counts
+
+`@fieldforce/console` vitest **14**, unchanged — no console code changed this session.
+`@fieldforce/field` vitest **502**, jest **128**, unchanged. Monorepo **1,704 passing, zero
+failing, and no suite failed to run** — that last clause is new, and `scripts/test-counts.mjs`
+now enforces it.

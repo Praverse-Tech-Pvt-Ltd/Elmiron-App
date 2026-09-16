@@ -1359,3 +1359,73 @@ the shaping in node, assert the page source mentions the call — would have rep
 **Decision: report it blocked and stop.** The estimate was 2 half-days on the assumption the GET
 was consumable; it is not, and the honest column is *1 half-day done and 6 newly revealed*
 rather than *6 ready*.
+
+## 16 September 2026 — MR-39
+
+### A count is read from both of a runner's lines, not one
+
+`Tests: 237 passed, 237 total` with `Test Suites: 2 failed` is internally consistent and wrong:
+the cases in a suite that failed to *collect* are counted nowhere, so every test-level number
+agrees with every other one while six tests silently do not exist.
+
+**Decision: the reporter fails on a non-zero suite failure regardless of the case counts**, and
+the standing rule is corrected to name both lines. `scripts/test-counts.mjs` also now fails on
+`numFailedTests`, which it had been capturing into a variable and never reading — a reporter
+that prints a failure count it does not act on reports failures as green.
+
+**The generalisable half:** when a tool reports several numbers about the same run, ask which of
+them can be *right while the run is wrong*. Here it was all of them but one.
+
+### A grep in a recorded check is a defect in the check
+
+Two were found this session, both by running them rather than by reading them.
+
+`BE-W14`'s `grep -c "auditLog" endpoints.ts → ≥1` matched a prose comment and the `auditLogId`
+field on an unrelated response. `FE-W13`'s `grep -c "90" <screen> → 0` returns **2** today, and
+both matches are comments explaining why the number is *not* printed — it **fails on a screen
+behaving correctly** and would **pass on one rendering the figure** from any expression without
+those digits.
+
+**Decision: a check whose command can pass or fail for a reason unrelated to the property is
+replaced, not re-run.** `BE-W14`'s replacement requires the schemas to be **exported**, to be
+**zod schemas**, and to **reject a malformed payload** — an exported name that parses anything is
+not a contract.
+
+**Grep locates; it does not decide.** That is now a standing rule because this project has now
+been misled by the same shape three times.
+
+### A SECURITY DEFINER read against a policy-less table puts the whole boundary in one body
+
+`audit_log` has RLS enabled *and* forced with **no SELECT policy at all**. There is therefore no
+policy to fall back on, and a scoping mistake inside `list_audit_log` is not caught by anything
+downstream.
+
+**Decisions taken because of that:**
+
+- **No `or v_role = 'admin'` escape.** `list_consent_records` has one, written before BE-W76.
+  Copying it into a new function would reopen the tenant boundary the console is the first
+  surface to exercise in anger.
+- **A non-admin is refused, never given an empty list.** An empty list claims there is nothing to
+  see; a refusal claims something about who is asking, and only one of those is true.
+- **The read audits itself, before gathering data.** Reading the trail appends to the trail. And
+  the limit is recorded: a *refused* read is **not** audited, because the refusal rolls back the
+  row written in the same transaction.
+- **Rows with a null actor are excluded and COUNTED.** They have no tenant, and a short page
+  should read as scoped rather than as empty.
+
+### A figure the console prints must be the figure the database enforces
+
+The retention period was a bare `interval '90 days'` inside `stamp_audio_retention`. A read path
+returning its own `90` would have agreed **by luck** and drifted the first time either moved.
+
+**Decision: one number, two readers.** `public.audio_retention_days()` is called by the trigger
+and by `retention_status()`, and the test asserts both — the value *and* that the trigger's body
+calls the function. That is why the console may now print it, having been right to refuse before.
+
+### "Blocked" and "out of room" are different words
+
+`FE-W13` is unblocked by this session's Part B and was not started, because a 3-half-day build at
+the end of a long session produces a half-built screen.
+
+**Decision: say which it is.** Twelve previous stops were blockages. Recording this one the same
+way would have taught the next session to distrust both.
