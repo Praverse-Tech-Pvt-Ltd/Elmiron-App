@@ -1610,3 +1610,62 @@ endpoint** — which is the FIX-03 drift that migration's own comment says it cl
 
 **Nothing caught it because nothing consumes the read** (MR-38 B). The two new functions build
 their keys explicitly in camelCase rather than with `to_jsonb`, so they do not join it.
+
+### Added by MR-39 C — FE-W13 is UNBLOCKED but not started, and its check needs replacing first
+
+**`FE-W13` is no longer blocked.** `BE-W14` and `BE-W15` landed in Part B: the RPCs exist, the
+contracts are published from `packages/core`, `createApiClient` has `listAuditLog` and
+`getRetentionStatus`, and the mock serves both routes against those schemas.
+
+**It was not started, and the reason is room rather than blockage.** Those are different and
+the record should not blur them — twelve previous stops were blockages, this one is not.
+`FE-W13` is 3 half-days: two React Server Component screens, the data layer behind them, tests
+and mutations. Starting it at the end of a session that has already shipped two migrations, two
+contracts and sixteen tests would produce a half-built screen and a worse record than an honest
+line saying it is next.
+
+#### C1 — its recorded check has the same defect B5 was about, and here is the evidence
+
+> Console suite covers both screens; no hard-coded retention figure
+> (`grep -c "90" <screen>` → `0` outside a server-sourced binding)
+
+**Run against the screen as it stands today, that grep returns `2`.** Both matches are prose:
+
+```
+:29  * printing the design's illustrative "41 recordings purged" and "90 days" as
+:139   design shows 90 days; printing that here would be this console asserting a policy
+```
+
+**Both are comments explaining why the number is NOT printed.** So the check **fails on a screen
+that is behaving correctly**, and it would **pass on a screen that rendered the figure** from any
+expression that does not contain the digits `90`. A grep for a number cannot tell a hard-coded
+figure from a sentence about one — which is exactly the `BE-W14` failure one item over.
+
+#### What `FE-W13` actually requires
+
+**Clause 1, "console suite covers both screens", cannot mean a render test.** `apps/console` has
+no renderer: the pages are React Server Components and `apps/console/vitest.config.ts` states in
+its own comment that exercising them needs a browser or a Next harness and that neither exists.
+Adding one is a dependency and therefore an ask. The workspace's established convention is the
+one `queue.test.ts` follows — **test the arithmetic the pages present**, in a lib function the
+page consumes. That is achievable and is what this clause should be read as requiring.
+
+**Clause 2 must be replaced with something that constrains what matched.** A sound version:
+
+- the retention figure rendered by the screen comes from `getRetentionStatus().retentionDays`,
+  asserted by a test that changes the stubbed value and sees the rendered string change;
+- no numeric literal appears in the retention figure's rendering position.
+
+The first half is the one that matters. It cannot pass by accident, where `grep -c "90" → 0`
+passes the moment somebody writes `Ninety` or computes the digits.
+
+#### The sequence now
+
+```
+FE-W10  DONE (MR-38)
+FE-W13  UNBLOCKED, 3 half-days -- NEXT. Replace its clause-2 check before starting.
+FE-W12  still blocked: no `listAnalysisOverrides` client method, and its check
+        asks for a render assertion in a workspace with no renderer
+BE-W89  unsized; still the last engineering item before the device gates
+BE-W95  new -- the overrides endpoint's shape disagrees between database and contract
+```
