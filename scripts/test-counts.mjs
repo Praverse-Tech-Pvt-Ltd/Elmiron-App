@@ -132,6 +132,18 @@ const countFor = (dir, runner) => {
     passed: report.numPassedTests ?? 0,
     failed: report.numFailedTests ?? 0,
     skipped: (report.numPendingTests ?? 0) + (report.numTodoTests ?? 0),
+    // MR-39 A1. **The numbers the `Tests:` line cannot see.**
+    //
+    // A suite that fails to COLLECT contributes zero cases and zero failures, so every
+    // test-level number stays clean while the suite silently does not exist. MR-38 hit
+    // exactly this: `Tests: 237 passed, 237 total` with `Test Suites: 2 failed`, and the
+    // only evidence was the total being 6 lower than usual -- which nothing was comparing.
+    //
+    // Both runners emit these; `numRuntimeErrorTestSuites` is jest-only and is read
+    // defensively rather than assumed, because vitest omits it entirely.
+    totalSuites: report.numTotalTestSuites ?? 0,
+    failedSuites: report.numFailedTestSuites ?? 0,
+    errorSuites: report.numRuntimeErrorTestSuites ?? 0,
     // `testResults` is one entry per FILE in both runners. `numTotalTestSuites` is not
     // comparable across them -- vitest counts `describe` blocks there and jest counts
     // files -- so reading it would have reported api as 139 "files" against 26 real ones.
@@ -175,6 +187,26 @@ for (const { dir, pkg } of workspaceDirs()) {
       // A skipped suite is not a green one — this repo's own standing rule.
       gaps.push(`${manifest.name} / ${runner} reported ${result.skipped} SKIPPED case(s)`);
     }
+
+    // **MR-39 A1. A SUITE THAT NEVER RAN, WHICH NO TEST-LEVEL NUMBER CAN SEE.**
+    //
+    // Checked before `failed`, because this is the one that looks green: the cases inside
+    // a suite that did not collect are not counted anywhere, so `tests`, `passed` and
+    // `failed` are all consistent with each other and all wrong together.
+    if (result.failedSuites > 0 || result.errorSuites > 0) {
+      gaps.push(
+        `${manifest.name} / ${runner}: ${String(result.failedSuites)} suite(s) FAILED and ` +
+          `${String(result.errorSuites)} errored out of ${String(result.totalSuites)} -- the ` +
+          `case counts are from the suites that DID run and cannot be trusted`,
+      );
+    }
+
+    // And a plain failing test, which the old version captured into `result.failed` and
+    // then never looked at. A reporter that prints a failure count it does not act on is
+    // a reporter that reports failures as green.
+    if (result.failed > 0) {
+      gaps.push(`${manifest.name} / ${runner} reported ${String(result.failed)} FAILING case(s)`);
+    }
   }
 }
 
@@ -182,14 +214,34 @@ if (process.argv.includes('--json')) {
   console.log(JSON.stringify({ rows, gaps }, null, 2));
 } else {
   const w = (s, n) => String(s).padEnd(n);
-  console.log(`\n${w('workspace', 26)}${w('runner', 20)}${w('tests', 8)}${w('files', 8)}`);
-  console.log('-'.repeat(62));
+  // MR-39 A1. `passed` and a SUITE column, both deliberately.
+  //
+  // The old table printed DISCOVERED cases and no suite column at all, which is why the
+  // record has said for six sessions to read the runners rather than this script. A
+  // discovered count and a passed count are the same number right up until they are not,
+  // and the suite column is the only one that can see a suite that never ran.
+  console.log(
+    `\n${w('workspace', 24)}${w('runner', 9)}${w('passed', 8)}${w('failed', 8)}${w('suites', 10)}${w('files', 7)}`,
+  );
+  console.log('-'.repeat(66));
   for (const r of rows) {
-    console.log(`${w(r.workspace, 26)}${w(r.runner, 20)}${w(r.tests, 8)}${w(r.files, 8)}`);
+    // Only the BAD count. `numTotalTestSuites` is not comparable across runners -- vitest
+    // counts `describe` blocks there and jest counts files, as the comment on `files`
+    // above records -- so printing it side by side would be a column whose meaning
+    // changes per row. The bad count means the same thing in both.
+    // MAX, not sum. Jest counts a suite that threw during collection in BOTH
+    // `numFailedTestSuites` and `numRuntimeErrorTestSuites`, so adding them reports one
+    // bad suite as two -- measured against the MR-39 A2 control, which produced
+    // "1 failed, 1 errored" for a single file.
+    const bad = Math.max(r.failedSuites ?? 0, r.errorSuites ?? 0);
+    const suites = r.totalSuites === undefined ? '-' : bad === 0 ? 'ok' : `${String(bad)} BAD`;
+    console.log(
+      `${w(r.workspace, 24)}${w(r.runner, 9)}${w(r.passed ?? 0, 8)}${w(r.failed ?? 0, 8)}${w(suites, 10)}${w(r.files ?? 0, 7)}`,
+    );
   }
-  const total = rows.reduce((n, r) => n + r.tests, 0);
-  console.log('-'.repeat(62));
-  console.log(`${w('TOTAL', 46)}${w(total, 8)}\n`);
+  const total = rows.reduce((n, r) => n + (r.passed ?? 0), 0);
+  console.log('-'.repeat(66));
+  console.log(`${w('TOTAL PASSING', 33)}${w(total, 8)}\n`);
 }
 
 if (gaps.length > 0) {

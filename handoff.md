@@ -28,7 +28,7 @@ does not govern this file.
 | **`FE-G1` / `FE-G2`** | **Blocked by the handset alone.** Background location is *unwritten*, not untested, and neither gate needs it. Seven weeks outstanding |
 | **The clock** | No screen in `apps/field` takes *now* **or** a local calendar field from the handset. Both halves are lint-enforced |
 | **Recovery** | The runbook has now been executed once. Its reconciliation works; **step 2 has no mechanism behind it** — no PITR, no dump script, no off-machine copy (`BE-W11`) |
-| **Tests** | Read them from the runners, never from `test-counts.mjs` |
+| **Tests** | `node scripts/test-counts.mjs` -- fixed in MR-39 A1 to report PASSING cases and to exit 1 on any suite that failed to run. The old advice to avoid it no longer applies |
 
 **The three blockers that are not engineering**, in `docs/blocked-on-you.md`, which is the
 file to read next:

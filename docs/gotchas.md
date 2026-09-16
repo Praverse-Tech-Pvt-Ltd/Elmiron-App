@@ -3372,3 +3372,73 @@ not *"intermittent"* and not *"fixed"*.
 **Not fixed, and deliberately not chased.** It belongs beside `BE-W92`: an environmental flake
 in the test harness with a measured rate and no mechanism. What this entry adds is the rate and
 the shape to recognise it by — which is precisely what `BE-W92` lacked for five sessions.
+
+### Counts are read from the `Tests:` line AND the `Test Suites:` line — MR-39 A1
+
+**The rule this repository had was half a rule.** "Counts from each runner's own line" meant the
+`Tests:` line, and **a suite that never runs contributes zero cases and zero failures**, so every
+test-level number stays internally consistent while the suite silently does not exist.
+
+MR-38 hit it and did not notice until the totals were compared:
+
+```
+Test Suites: 2 failed, 19 passed, 21 total
+Tests:       237 passed, 237 total          <- zero failures
+```
+
+**Nothing in the `Tests:` line is wrong.** 237 really did pass. The six that were missing were
+never counted at all, and the only visible evidence was a total six lower than the day before —
+which nothing was comparing.
+
+**`scripts/test-counts.mjs` now refuses.** It reads `numFailedTestSuites` and
+`numRuntimeErrorTestSuites` from both runners' JSON reports and exits 1 when either is non-zero,
+**regardless of the case counts**. It also now fails on `numFailedTests`, which the previous
+version captured into a variable and never looked at — a reporter that prints a failure count it
+does not act on reports failures as green.
+
+The `TOTAL` line is now **passing** cases, not discovered ones. That is why the record has said
+for six sessions to read the runners rather than this script; it no longer applies.
+
+**The control, run both ways (MR-39 A2).** A file importing a module that does not exist was
+added to `packages/ui`, reproducing the shape exactly —
+
+```
+Test Suites: 1 failed, 21 passed, 22 total
+Tests:       243 passed, 243 total
+```
+
+— and the reporter **exited 1** naming the workspace and runner. With the file removed it exits
+**0**. Two-sided.
+
+**One thing the control corrected in the fix itself:** jest counts a suite that threw during
+collection in **both** `numFailedTestSuites` and `numRuntimeErrorTestSuites`, so the first
+version of the summary column reported one bad suite as "2 BAD". It takes the **max**, not the
+sum, and that was measured against the control rather than reasoned about.
+
+#### The rate of the underlying fault — 1 in 15, and the interval is wide
+
+The suite-never-ran event itself (`Cannot find module './pure'` from inside
+`@testing-library/react-native`'s own `dist`, under a parallel `pnpm -r test`) has now been
+measured twice:
+
+| Session | Runs | Occurrences |
+| --- | --- | --- |
+| MR-38 | 7 | **1** |
+| MR-39 | 8 | **0** |
+| **Combined** | **15** | **1** |
+
+**Eight clean runs does not retire the 1-in-7 estimate.** If the true rate were 1 in 7, eight
+clean runs has probability ≈0.30 — unremarkable. The honest reading is *"about 1 in 15, and a
+single occurrence cannot bound it more tightly than that"*.
+
+**Registered, not chased.** No mechanism is claimed, and the `A1` guard means it no longer needs
+one to be caught: whatever the rate is, the report now refuses instead of printing a number.
+
+#### A4 — what this means for every count already in the record
+
+**Every test total recorded before MR-39 was read from the `Tests:` line alone and could not have
+seen a suite that never ran, so all of them carry an error bar of unknown size.** No historical
+count is being corrected — one occurrence in fifteen runs says the totals are very probably
+right, and re-deriving twenty sessions of numbers to prove it would cost more than the
+uncertainty is worth. **A reader needs to know the numbers have an error bar, not a rewritten
+history.**
