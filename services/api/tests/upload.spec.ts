@@ -583,6 +583,10 @@ describe.skipIf(!reachable)('finalising an upload', () => {
     await asUserTx(world.users.puneMr, async (client) => {
       const { visitId } = await consentedVisit(client);
       const grant = await beginUpload(client, visitId);
+      // MR-37 B2. The bytes must EXIST before they can be finalised: `complete_upload` now
+      // reads the size Storage observed rather than believing the caller. Written as the
+      // service role because the grant is uncommitted, so the RLS policy cannot see it.
+      await uploadAsService(grant.storage_key);
       const recordingId = randomUUID();
 
       await client.query('select public.complete_upload($1, $2, $3, $4, $5, $6)', [
@@ -615,6 +619,7 @@ describe.skipIf(!reachable)('finalising an upload', () => {
     await asUserTx(world.users.puneMr, async (client) => {
       const { visitId } = await consentedVisit(client);
       const grant = await beginUpload(client, visitId);
+      await uploadAsService(grant.storage_key);
       const recordingId = randomUUID();
 
       const args = [grant.id, recordingId, 240, 4096, new Date().toISOString(), 28];
@@ -629,15 +634,25 @@ describe.skipIf(!reachable)('finalising an upload', () => {
   });
 
   it('refuses a finalised size that does not fit the session it was granted', async () => {
+    // MR-37 B2. REWRITTEN, and the rewrite is the point.
+    //
+    // This used to pass a 65_536 in the call against a 1024-byte grant — a CLAIM that did not
+    // fit. It proved that the server checked the caller's arithmetic, which is not the same as
+    // checking the upload. `complete_upload` now reads the size Storage observed, so the only
+    // way to exceed a grant is to actually store more than it allows: a 32-byte object against
+    // a grant of 16.
     await expect(
       asUserTx(world.users.puneMr, async (client) => {
         const { visitId } = await consentedVisit(client);
-        const grant = await beginUpload(client, visitId, 'recording', 1024);
+        const grant = await beginUpload(client, visitId, 'recording', 16);
+        await uploadAsService(grant.storage_key);
         return client.query('select public.complete_upload($1, $2, $3, $4, $5, $6)', [
           grant.id,
           randomUUID(),
           240,
-          65_536,
+          // Deliberately a number that WOULD have fitted. It is ignored, and the refusal below
+          // comes from the 32 bytes that are really there.
+          8,
           new Date().toISOString(),
           28,
         ]);
@@ -649,6 +664,7 @@ describe.skipIf(!reachable)('finalising an upload', () => {
     await asUserTx(world.users.puneMr, async (client) => {
       const { visitId } = await consentedVisit(client);
       const grant = await beginUpload(client, visitId);
+      await uploadAsService(grant.storage_key);
       const recordingId = randomUUID();
 
       await client.query('select public.complete_upload($1, $2, $3, $4, $5, $6)', [
@@ -874,6 +890,163 @@ describe.skipIf(!reachable)('bounded by more than its own size', () => {
     ).rejects.toThrow(/storage ceiling/);
   });
 
+  // ===========================================================================
+  // MR-37 B2/B4 — the size is the SERVER's, and `liveBytes` is no longer inert
+  // ===========================================================================
+
+  it('stores the size Storage observed, not the one the caller asserted', async () => {
+    await asUserTx(world.users.puneMr, async (client) => {
+      const { visitId } = await consentedVisit(client);
+      const grant = await beginUpload(client, visitId);
+      await uploadAsService(grant.storage_key);
+
+      const recordingId = randomUUID();
+      await client.query('select public.complete_upload($1, $2, $3, $4, $5, $6)', [
+        grant.id,
+        recordingId,
+        240,
+        // The number the field app actually sends today — `FE-W46`'s fabricated literal.
+        1,
+        new Date().toISOString(),
+        28,
+      ]);
+
+      await client.query('reset role');
+      const row = await client.query<{ size_bytes: string }>(
+        'select size_bytes from public.recordings where id = $1',
+        [recordingId],
+      );
+      // 32 is SYNTHETIC_AUDIO's length — what Storage received and recorded. Asserting the
+      // CONTENT: a test that only checked `size_bytes <> 1` would pass on any wrong number.
+      expect(Number(row.rows[0]?.size_bytes)).toBe(SYNTHETIC_AUDIO.length);
+    });
+  });
+
+  it('refuses to finalise an upload whose bytes were never stored', async () => {
+    // The precondition the old version did not assert. It wrote a row claiming bytes that did
+    // not exist, and five tests in this file were doing exactly that without noticing.
+    await expect(
+      asUserTx(world.users.puneMr, async (client) => {
+        const { visitId } = await consentedVisit(client);
+        const grant = await beginUpload(client, visitId);
+        return client.query('select public.complete_upload($1, $2, $3, $4, $5, $6)', [
+          grant.id,
+          randomUUID(),
+          240,
+          4096,
+          new Date().toISOString(),
+          28,
+        ]);
+      }),
+    ).rejects.toThrow(/nothing has been stored/);
+  });
+
+  it('counts an MR’s STORED library against the ceiling, not just what is in flight', async () => {
+    // `FE-W46`, the half MR-36 registered and MR-37 closed.
+    //
+    // This is the test that could not have passed before. With a client-asserted size the app
+    // sent `1`, so two finalised recordings contributed TWO bytes to `liveBytes` and an MR with
+    // a gigabyte of audio read as having stored almost nothing. The ceiling still refused an
+    // oversized REQUEST — `reservedBytes` and the requested size are real — so it looked like a
+    // working control. What was inert was the accumulated library.
+    //
+    // THE CEILING IS DERIVED FROM A MEASURED BASELINE, and that is not incidental. The first
+    // version of this test used a fixed ceiling of 100 and PASSED AGAINST THE MUTANT: other
+    // tests in this file commit recordings for the same MR, so `liveBytes` was already past
+    // 100 and the very first grant was refused — the right answer for the wrong reason. The
+    // ceiling is now set so that only the two objects stored HERE can decide it.
+    const stored = 2 * SYNTHETIC_AUDIO.length;
+    await expect(
+      asUserTx(world.users.puneMr, async (client) => {
+        await client.query('reset role');
+        const before = await client.query<{
+          audio_storage_bytes: { liveBytes: number; reservedBytes: number };
+        }>('select public.audio_storage_bytes($1) as audio_storage_bytes', [world.users.puneMr.id]);
+        const baseline = Number(before.rows[0]?.audio_storage_bytes.liveBytes);
+        // RESERVED counts too, and leaving it out is why the first two versions of this test
+        // passed against the mutant: other tests in this file leave open grants committed for
+        // this MR, so the ceiling was already breached before this test stored anything and the
+        // very first `beginUpload` threw the right message for the wrong reason.
+        const reserved = Number(before.rows[0]?.audio_storage_bytes.reservedBytes);
+
+        // Headroom for what this test stores, plus half of the request it then makes. So:
+        //   observed sizes  -> baseline + 64 + 64 > ceiling  -> REFUSED
+        //   asserted `1`s   -> baseline +  2 + 64 < ceiling  -> allowed, and the test fails
+        const ceiling = baseline + reserved + stored + 32;
+        await client.query(
+          `insert into public.app_thresholds (key, value, unit, note)
+           values ('audio_storage_ceiling_bytes', $1::text::jsonb, 'bytes', 'MR-37 B4')`,
+          [String(ceiling)],
+        );
+        await asUser(client, world.users.puneMr);
+
+        for (let i = 0; i < 2; i += 1) {
+          const { visitId } = await consentedVisit(client);
+          const grant = await beginUpload(client, visitId, 'recording', 32);
+          await uploadAsService(grant.storage_key);
+          await client.query('select public.complete_upload($1, $2, $3, $4, $5, $6)', [
+            grant.id,
+            randomUUID(),
+            240,
+            // The fabricated literal the field app sends. Ignored, which is the point.
+            1,
+            new Date().toISOString(),
+            28,
+          ]);
+        }
+
+        await client.query('reset role');
+        const after = await client.query<{ audio_storage_bytes: { liveBytes: number } }>(
+          'select public.audio_storage_bytes($1) as audio_storage_bytes',
+          [world.users.puneMr.id],
+        );
+        const grew = Number(after.rows[0]?.audio_storage_bytes.liveBytes) - baseline;
+        // The precondition for the refusal below, asserted rather than assumed: the library
+        // grew by the bytes that were really stored, not by the two that were claimed.
+        if (grew !== stored) {
+          throw new Error(`liveBytes grew by ${String(grew)} bytes, expected ${String(stored)}`);
+        }
+        await asUser(client, world.users.puneMr);
+
+        const { visitId } = await consentedVisit(client);
+        return client.query('select public.begin_upload($1, $2, $3, $4)', [
+          visitId,
+          'recording',
+          64,
+          240,
+        ]);
+      }),
+    ).rejects.toThrow(/storage ceiling/);
+  });
+
+  it('gives the MR the remedy with the refusal, not just the limit', async () => {
+    // A refusal an MR cannot act on is a dead end. `begin_upload` carries its own hint, and
+    // this asserts the hint reaches the caller rather than only the message.
+    const failure = await asUserTx(world.users.puneMr, async (client) => {
+      await client.query('reset role');
+      await client.query(
+        `insert into public.app_thresholds (key, value, unit, note)
+         values ('audio_storage_ceiling_bytes', '16'::jsonb, 'bytes', 'MR-37 B4')`,
+      );
+      const { visitId } = await consentedVisit(client);
+      await asUser(client, world.users.puneMr);
+      try {
+        await client.query('select public.begin_upload($1, $2, $3, $4)', [
+          visitId,
+          'recording',
+          4096,
+          240,
+        ]);
+        return null;
+      } catch (error: unknown) {
+        return error as { message?: string; hint?: string };
+      }
+    });
+
+    expect(failure?.message).toMatch(/storage ceiling/);
+    expect(failure?.hint).toMatch(/Finish or abandon what is queued/);
+  });
+
   it('refuses new audio once the retention worker has demonstrably stopped', async () => {
     // The control that cannot be switched off. The scheduler and its watchdog both
     // live outside the database; this is on the write path. If retention has
@@ -962,6 +1135,7 @@ describe.skipIf(!reachable)('the upload queue', () => {
     await asUserTx(world.users.puneMr, async (client) => {
       const { visitId } = await consentedVisit(client);
       const grant = await beginUpload(client, visitId);
+      await uploadAsService(grant.storage_key);
       const recordingId = randomUUID();
 
       const response = await push(client, [recordingItem(grant.id, recordingId)]);

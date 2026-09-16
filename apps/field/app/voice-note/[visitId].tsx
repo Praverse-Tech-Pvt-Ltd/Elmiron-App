@@ -154,6 +154,9 @@ export default function VoiceNoteRoute(): ReactNode {
           // duration in bytes-per-second at the preset's bitrate is NOT invented —
           // a minimum of 1 keeps the schema's `positive()` satisfiable and the
           // real size lands with the upload.
+          // `FE-W46`, closed server-side in MR-37 B2: `complete_upload` takes the size Storage
+          // OBSERVED and ignores this one, so the fabricated literal no longer reaches a row or
+          // the ceiling that sums them. Still not a measurement — see `visit/[id].tsx`.
           sizeBytes: 1,
           // **MR-29 A3 - ALLOWLIST: a RECORD of when this device acted.**
           // When the note was recorded on this handset. Same category as `captured_at`.

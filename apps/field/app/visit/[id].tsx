@@ -223,9 +223,15 @@ export default function VisitRoute(): ReactNode {
             durationSeconds: seconds,
             // The preset's own bitrate, not a guess: HIGH_QUALITY is 128 kbps.
             bitrateKbps: 128,
-            // Real bytes arrive with the upload, which is BE-W7 and has no client
-            // here. `positive()` needs a value; this is not a measurement and the
-            // upload replaces it.
+            // `FE-W46`, closed server-side in MR-37 B2. This is still not a measurement —
+            // the real count needs `expo-file-system`, which is a dependency and therefore an
+            // ask — but it no longer reaches anything. `complete_upload` now takes the size
+            // Storage OBSERVED (`storage.objects.metadata ->> 'size'`) and ignores this value,
+            // so `recordings.size_bytes` and the storage ceiling that sums it are real.
+            //
+            // `positive()` still needs a value here. Leaving it visibly false is deliberate:
+            // an estimate like `bitrateKbps * seconds / 8` would look like a measurement and
+            // the next reader would stop checking.
             sizeBytes: 1,
             recordedAt: startedAt,
           }),
