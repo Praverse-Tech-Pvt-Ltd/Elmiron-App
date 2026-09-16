@@ -1,5 +1,76 @@
 # Blocked on you — 14 August 2026
 
+> # ❓ THE QUESTION THE 30 SEPTEMBER DATE IS ACTUALLY ASKING
+>
+> ## Does the MR app record audio at all, if there is no AI layer?
+>
+> **This is above the deadline below because it is the larger question, and the deadline is
+> only what forces it.** The 30 September date is about a *schema*. This is about whether the
+> single largest and most compliance-heavy subsystem in the product should exist.
+>
+> **Nobody has ever asked it.** It is not in `mr-app-plan.md`, it is not a work item, and it is
+> not on this page until now.
+>
+> ### What is true today, verified rather than assumed
+>
+> **Nothing in MR v1 consumes a recording.** Not one thing. This is not an inference from the
+> roadmap — the code says so, deliberately, in two places:
+>
+> - `apps/field/app/analysis/[id].tsx` — *"**No citation gets a play control.** … A play button
+>   that did nothing would tell the MR a recording was ever made."*
+> - `apps/field/src/coaching/content.ts` — *"Why no quote can be played, and it is not hidden …
+>   **There is nothing to play here.**"*
+>
+> The console does not read audio either; its admin screen only *describes* retention. So the
+> complete list of things that touch a recording is: **the code that uploads it, and the code
+> that deletes it.** An MR cannot play back their own voice note. Nobody can.
+>
+> ### The three consequences, stated plainly
+>
+> **1. A voice note nobody can read is a file.** It is captured with consent, stored encrypted,
+> counted against a storage ceiling, carried through a retention schedule, reconciled after a
+> restore — and never once opened. Every one of those mechanisms is real engineering that
+> exists to protect a payload no reader has.
+>
+> **2. The corpus justification is circular, and this is the part worth reading twice.** The
+> recorded reason to collect this audio is that off-the-shelf ASR fails on Hinglish —
+> `docs/mr-app-plan.md` measures it: *"Whisper large-v2 zero-shot … **52.0% Mixed Error Rate**"*
+> on code-switched Hindi-English, dropping roughly half the words at exactly the moments that
+> matter. The conclusion drawn was that a fine-tuned model is needed, which needs a corpus,
+> which is why the app records.
+>
+> **But the model is the AI layer.** If the AI layer is cut, the corpus has no consumer — and
+> the corpus was the reason to record. *We record in order to train the model that justifies
+> recording.* Cut the model and the loop does not have an exit; it has a gap where the purpose
+> used to be.
+>
+> **3. Under DPDP, the purpose is the weak part — not the consent, and not the security.** The
+> consent flow is built, the ledger is append-only, the audio is encrypted, purged on schedule
+> and the purge is itself logged. **None of that is the exposure.** DPDP asks what the personal
+> data is *for*. Today the answer is "transcription and coaching". Cut that and the honest
+> answer becomes "we are keeping it in case we build something that reads it" — which is a
+> purpose a signatory has to affirmatively accept, in writing, knowing that is what they are
+> accepting.
+>
+> ### What we need from you
+>
+> **Answer this before, or at the same time as, the 30 September decision — not after.** They
+> are the same decision wearing two sizes, and answering the small one first means the large one
+> gets made by default.
+>
+> - **If audio survives a cut**, say what for. That sentence becomes the DPDP purpose, and the
+>   retention machinery, the storage ceiling and the 90-day promise all keep their reason to
+>   exist.
+> - **If it does not**, the removal is large and it is clean: `recordings`, `voice_notes`,
+>   `upload_grants`, the resumable upload machinery, the retention worker and its watchdog, the
+>   storage ceiling, and the restore runbook's entire step-3 reconciliation. `docs/COMPLETION-PLAN.md`
+>   → *"what a cut AI layer costs"* lists it.
+>
+> **Engineering has no view on which answer is right, and cannot have one.** What it can say is
+> that the question exists, that it has never been asked, and that a date two weeks away is
+> about to answer it by accident.
+
+
 > # 📅 TWO DATED DEADLINES, AND NEITHER WARNS YOU FIRST
 >
 > **Both break CI on a fixed date. Neither is an engineering task. Both are yours.**
