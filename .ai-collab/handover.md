@@ -480,3 +480,64 @@ being re-derived.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-39 — the audit read path | `PROJECT-OVERVIEW.md` → `### MR-39 — the audit read path` |
+
+---
+
+## After MR-40 — 16 September 2026
+
+> ### 🔴 READ `docs/blocked-on-you.md` FIRST. An admin of one organisation can read another's consent ledger.
+
+| | |
+| --- | --- |
+| **`BE-W101`** | **PROVEN OPEN.** `list_consent_records` and `read_consent_record` both return another tenant's records to an admin. **Six more functions share the shape, three of them WRITES.** Not fixed — it is a decision, not a patch |
+| **`BE-W102`** | **NEW.** A refused read is recorded nowhere in the audit trail — 7 read paths, not 1. The attempt IS in the Postgres log, but probably without the actor |
+| **Register** | **Two duplicate ids fixed.** `BE-W94`→`BE-W96`, `BE-W95`→`BE-W100`. Both were mine |
+| **Checks** | 14 of 137 recorded checks are grep-based: **1 inverted, 1 stale, 9 weak**. Replaced, not re-run |
+| **`FE-W13`** | Unblocked, check replaced, **not started — room, not blockage** |
+| **Tests** | **1,707 passing, zero failing, no suite failed to run** |
+
+### `BE-W101` — what you need to know before touching any read function
+
+```sql
+where (v_role = 'admin' or c.captured_by_mr_id in (select public.visible_user_ids()))
+```
+
+**The `or` short-circuits before the scoped half runs.** `BE-W76` scoped `visible_user_ids()` and
+the six `*_admin_all` policies — **a body that bypasses `visible_user_ids()` entirely is covered
+by neither**, and these are `SECURITY DEFINER` against tables with RLS **forced and no policy**,
+so the function body *is* the boundary.
+
+**Do not add this shape to a new function.** `list_audit_log` and `retention_status` (MR-39) were
+written without it deliberately, and they are the template.
+
+**Timing:** production runs this code (first 19 migrations) but has no second tenant yet. It
+becomes live when reference data arrives, which `§6.1` dates at **~22 September**.
+
+**Order to check the untested six:** the three WRITES first — `approve_call_report`,
+`create_analysis_override`, `reinstate_sync_item`. A cross-tenant read is a confidentiality
+failure; `approve_call_report` decides whether another company's call report is approved.
+
+### Two testing lessons this session paid for
+
+**1. A suite's title is not a test.** `rls.spec.ts:1133` is titled
+`'list_consent_records is scoped and audited'`. It tests the reason requirement, the audit row,
+and scoping for an **MR**. It never crosses a tenant — and the boundary was open the whole time.
+
+**2. `it.fails` is the right way to record a known-open defect.** It states the **correct**
+property and marks it as not holding. A characterisation test asserting the defect reads as
+approval, and the next person to fix the function would have to delete an assertion that looks
+deliberate. With `it.fails`, **closing the escape turns the tests red** and forces a deliberate
+update.
+
+### If you are writing a recorded check
+
+**Grep locates; it does not decide.** 14 of 137 checks are grep-based and only 2 are sound. The
+test: *can this command pass on a file that merely contains the words, or fail on a file that
+contains the right explanation?* If either, it is not a check.
+
+`FE-W13`'s `grep -c "90" → 0` returns **2** today — both comments explaining why the number is
+*not* printed. It fails on a correct screen and passes on a wrong one.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-40 — the refused read | `PROJECT-OVERVIEW.md` → `### MR-40 — the refused read` |

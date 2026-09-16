@@ -1429,3 +1429,71 @@ the end of a long session produces a half-built screen.
 
 **Decision: say which it is.** Twelve previous stops were blockages. Recording this one the same
 way would have taught the next session to distrust both.
+
+## 16 September 2026 — MR-40
+
+### A boundary that lives in a function body is not covered by a policy audit
+
+`BE-W76` scoped `visible_user_ids()` and the six `*_admin_all` RLS policies, and that was
+reasonable — it is where a tenant boundary normally lives. **It is not where this one leaked.**
+Eight `SECURITY DEFINER` functions carry `where (v_role = 'admin' or … visible_user_ids())`, and
+the `or` short-circuits before the scoped half runs. No policy runs behind them, because the
+tables have RLS **forced with no policy at all**.
+
+**Decision: a tenant-boundary audit must enumerate FUNCTION BODIES as well as policies**, and the
+two `SECURITY DEFINER` reads added in MR-39 were deliberately written without the escape.
+
+**Why the existing test did not catch it.** `FIX-04`'s matrix tested `list_consent_records`
+**before** `BE-W76`, when an admin's emptiness came from territory scoping incidentally rather
+than from a tenant boundary deliberately. **A test that passed for a reason since removed is not
+a test that still passes** — and nothing re-examined it when the reason was replaced.
+
+### Record a known-open defect with `it.fails`, not with a characterisation test
+
+`BE-W101` is open and was deliberately not fixed. The two probes state the **correct** property
+and are marked as not currently holding.
+
+**Decision: never assert the defective behaviour as if it were the specification.** A
+characterisation test reads as approval of the defect, and the next person to fix the function
+has to delete an assertion that looks deliberate. `it.fails` inverts that: **closing the escape
+makes the tests fail**, which forces whoever fixes it to come and update them on purpose.
+
+It also keeps CI green on a known-open defect without hiding it, which is the only honest way to
+leave one in the tree.
+
+### A duplicate id is a register that has stopped being one
+
+Two ids were assigned twice, one session apart, **both by me**: `BE-W94` and `BE-W95`. The brief
+named one; sweeping all 129 ids found the second.
+
+**Decision: when an id collision is reported, sweep the register rather than fix the item named.**
+And spot-check the sweep — 12 of the 14 candidates were the same item at different stages, which
+a naive reading would have reported as twelve more collisions.
+
+### A recorded check must constrain WHAT matched
+
+Third time this has been earned, so it is now a rule rather than an observation. 14 of 137
+recorded checks are grep-based; **2 are sound**.
+
+The sharpest instance: `BE-W60`'s check — *"`grep -rl list_consent_records` returns a file"* —
+**passes**, a suite exists, and that suite is titled `'list_consent_records is scoped and
+audited'`. The function it names was proven open by this same session. The check asked whether a
+file mentions the function. A file does.
+
+**Decision: replace a defective check, never re-run it.** A defective check re-run is a defective
+answer obtained twice.
+
+### The gap in the audit trail is a property of the pattern, not of one function
+
+MR-39 recorded "a refused read is not audited" as a note on `BE-W14`. It is true of **all seven**
+read paths that audit-then-return inside one transaction.
+
+**Decision: register it once, with the count and the cost of each escape route, and build
+nothing.** PostgreSQL has no autonomous transaction; `dblink` is a dependency *and* a new
+privilege surface on exactly the functions whose privileges are in question; and logging at the
+PostgREST layer is the one place the actor is already known but moves part of the trail outside
+the database that guarantees the rest.
+
+**And the answer to "is it recorded anywhere" is "here, but not in the audit trail", not
+"nowhere".** That was measured — `log_min_error_statement = error` puts the refusal in the
+Postgres log — and the three reasons it is not a substitute are written down with it.

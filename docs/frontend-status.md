@@ -971,3 +971,49 @@ refusal reach the user with its own hint — both functions carry one.
 `@fieldforce/field` vitest **502**, jest **128**, unchanged. Monorepo **1,704 passing, zero
 failing, and no suite failed to run** — that last clause is new, and `scripts/test-counts.mjs`
 now enforces it.
+
+## MR-40 — 16 September 2026: no frontend code changed, and one thing the console must not do
+
+**A backend and register session.** No file under `apps/field`, `packages/ui` or `apps/console`
+was touched. Frontend counts unchanged: `@fieldforce/field` vitest **502**, jest **128**;
+`@fieldforce/ui` vitest **4**, jest **243**; `@fieldforce/console` vitest **14**.
+
+### `FE-W13` is unblocked, its check is replaced, and it was not started
+
+The blocker went in MR-39. This session replaced its **inverted** recorded check:
+
+> `grep -c "90" <screen>` → `0`
+
+**returns 2 today**, and both matches are prose comments in `admin/page.tsx` explaining why the
+figure is *not* printed. It **fails on a correct screen and passes on a wrong one**.
+
+**Replaced with:** the rendered retention figure must **change when the stubbed `retentionDays`
+changes**. That cannot pass by accident; `grep → 0` passes the moment somebody writes `Ninety`.
+
+**Not started, and the reason is ROOM, not blockage.** Two React Server Component screens, a data
+layer, tests and mutations at the end of a session that became a compliance escalation is how a
+half-built screen gets shipped.
+
+### It is NOT blocked by `BE-W101`, and that was checked
+
+This session proved an admin of one organisation can read another's consent ledger
+(`list_consent_records`, `read_consent_record`). **The two functions FE-W13's screens consume —
+`list_audit_log` and `retention_status` — do not carry the escape**, verified against the
+catalogue rather than assumed. They were written without it in MR-39.
+
+So the screens can be built safely. What they must not do:
+
+- **Do not soften a `42501` into an empty state.** Both functions refuse a non-admin rather than
+  returning an empty page, deliberately: an empty list claims there is nothing to see, a refusal
+  claims something about who is asking. A screen that catches the refusal and renders "no
+  entries" converts a true statement into a false one.
+- **Do not print a retention figure the client knows.** `retentionDays` comes from
+  `public.audio_retention_days()`, which is also what stamps `purge_after`. The admin screen was
+  right to refuse to print the design's number; it may print the server's.
+
+### One thing worth knowing about the audit screen you will build
+
+A **refused** read is not in the audit trail — `BE-W102`, seven read paths. The screen will show
+successful reads only, and that is not a rendering choice; it is a property of the data. If the
+screen ever implies "this is every access attempt", it will be overclaiming. **Successful
+accesses** is the honest label.

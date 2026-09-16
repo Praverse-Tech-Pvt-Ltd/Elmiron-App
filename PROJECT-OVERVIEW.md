@@ -15690,3 +15690,204 @@ new. `lint`, `typecheck` and `format:check` all exit 0. The schema is at **59 mi
    paired with a cell proving the target was reachable by somebody.
 4. **"Blocked" and "out of room" are different words.** Twelve stops were the first; this one is
    the second, and conflating them would have made the next session distrust both.
+
+
+### MR-40 — the refused read
+
+**Part A was meant to be a register tidy-up and two reads. The second read found that an admin
+of one organisation can read another's consent ledger, which is what this session became.**
+
+#### CI
+
+| | |
+| --- | --- |
+| Run | `35086717424` — **`success`** |
+| Workflow | `CI` |
+| Event | `push` |
+| SHA | `cc3febe53e2a5742db520417a932f626045e7a8c` |
+
+**Read with `git rev-parse HEAD`, and it equalled HEAD.** Nothing was held at the start of this
+session — clean tree, nothing unpushed — so A1 was a confirmation rather than a push. The
+session's own commits are pushed at the end and their run is reported with them.
+
+#### A2 — the register had two duplicate ids, and both were mine
+
+A register with two of the same id stops being one register. All **129** ids carrying a
+definition row were swept; **14** had differing descriptions, and spot-checking showed **12 were
+the same item at different stages** — `FE-W44` registered then fixed, `BE-W11` open then proven.
+
+**Two were genuine collisions:**
+
+| Id | Original | Mine | Renumbered |
+| --- | --- | --- | --- |
+| `BE-W94` | *"Does an out-of-geofence check-in start the visit?"* (MR-25) | `p_recorded_at` is unbounded (MR-38) | **`BE-W96`** |
+| `BE-W95` | A second consent answer does not supersede the first (MR-25, tied to `5.14`) | The overrides casing drift (MR-39) | **`BE-W100`** |
+
+**The brief named one. The sweep found the second** — which is why it said to check the register
+rather than to fix the item named. The originals keep their ids. `PROJECT-OVERVIEW.md` is
+append-only, so its MR-38 and MR-39 sections still carry the old numbers; **this is the
+correction of record.**
+
+#### A3 — the admin escape is OPEN, on the consent ledger
+
+**Measured with a positive control, not reasoned about from a `where` clause:**
+
+| Probe | Result |
+| --- | --- |
+| `list_consent_records()` as admin of **A**, with a record belonging to **B** | **B's record is in the page** |
+| `read_consent_record(B's id)` as admin of **A** | **returns the row — all 14 columns** |
+| **Positive control:** the same record read by **B's own admin** | appears, as it should |
+
+The control is what makes the other two mean anything: the record was created, was readable by
+its owner, and was **also** readable by a stranger.
+
+**Why nothing caught it.** `where (v_role = 'admin' or c.captured_by_mr_id in (select
+public.visible_user_ids()))` — the `or` short-circuits before the scoped half runs. `BE-W76`
+scoped `visible_user_ids()` and the six `*_admin_all` policies; **a body that bypasses
+`visible_user_ids()` entirely is covered by neither.** These are `SECURITY DEFINER` against
+`consent_records`, one of the nine tables with RLS **forced and no policy**, so the function body
+*is* the boundary and there is nothing behind it. `FIX-04`'s matrix tested this function **before
+`BE-W76`**, when an admin's emptiness came from territory scoping incidentally — **a test that
+passed for a reason since removed is not a test that still passes.**
+
+**Exposure, stated precisely.** Both functions are in the **first 19 migrations**, so production
+runs this code — but production has **no second tenant to cross into**, because
+`user_profiles.organisation_id` is in the pending 37. **The defect becomes live when reference
+data and a second tenant arrive, which `§6.1` dates at ~22 September.** And a *successful*
+cross-tenant read **is** audited: the row is written before the data is returned, so the trail
+names the admin and their reason. It is a confidentiality failure, not an invisible one.
+
+**Per-site verdicts — seven more share the shape, three of them WRITE.** Listed as untested
+rather than assumed, because grep locates and does not decide:
+
+| Function | Kind | Verdict |
+| --- | --- | --- |
+| `list_consent_records` | read | **PROVEN OPEN** |
+| `read_consent_record` | read | **PROVEN OPEN** |
+| `approve_call_report` | **WRITE** | shape-identical, untested |
+| `create_analysis_override` | **WRITE** | shape-identical, untested |
+| `reinstate_sync_item` | **WRITE** | shape-identical, untested |
+| `read_analysis` | read | shape-identical, untested |
+| `list_analyses` | read | shape-identical, untested |
+| `list_analysis_overrides` | read | shape-identical, untested |
+
+**Not fixed, because A3 said to stop and report if it was open.** Registered as **`BE-W101`** and
+escalated to the top of `docs/blocked-on-you.md`. The two probes use `it.fails`, which states the
+**correct** property and records that it does not hold — not a characterisation test asserting
+the defect, which reads as approval and would make the eventual fixer delete an assertion that
+looks deliberate. **CI stays green on a known-open defect, and the moment somebody closes the
+escape these two turn red and force a deliberate update.**
+
+#### B — the refused-read gap is systemic, and the attempt IS recorded somewhere
+
+**B1: seven, not one.** MR-39 recorded this as a property of `BE-W14`. It is a property of
+**audit-then-return inside one transaction**: `list_consent_records`, `read_consent_record`,
+`list_analyses`, `list_analysis_overrides`, `read_analysis`, `list_audit_log`,
+`retention_status`. A refusal raised *before* the insert writes nothing; one raised *after* it
+writes a row the raise rolls back. Both leave the same nothing.
+
+**B3:** nobody probing these paths leaves a trace in the trail. **For an audit trail a failed
+attempt is usually more interesting than a successful one** — a successful read is somebody doing
+their job; a hundred refused ones is somebody finding out what they can reach.
+
+**B4 — "here, but not in the audit trail", measured rather than assumed.**
+`log_min_error_statement = error`, and a forced refusal was **found in the Postgres log** with its
+failing statement beside it. Three reasons that is not a substitute:
+
+1. **It probably does not identify WHO.** `log_statement = ddl`, so only the *erroring* statement
+   is logged — the RPC call. The caller's identity is in `request.jwt.claims`, set by a
+   **separate** statement that is not logged.
+2. **It is not tenant-scoped, not queryable by the console, and not append-only.** `audit_log`
+   has a rejection trigger and RLS forced; the server log has neither and cannot be handed to one
+   customer's auditor.
+3. **Its retention window is the platform's, not this system's policy**, and has never been
+   established.
+
+**B2:** registered as **`BE-W102`**, **not built**, with four escape routes costed — PostgreSQL
+has no autonomous transaction; `dblink` is a dependency *and* a new privilege surface on exactly
+the functions whose privileges are in question; logging at the PostgREST layer is the one place
+the actor is already known but moves part of the trail outside the database that guarantees the
+rest; and doing nothing is what was chosen, written down so an assessor is told rather than left
+to discover it.
+
+#### C — the recorded-check sweep
+
+| | |
+| --- | --- |
+| Register rows with a verification cell | **137** |
+| Grep-based | **14** |
+| **Sound** | 2 |
+| **Weak** | 9 |
+| **INVERTED** | **1** (`FE-W13`) |
+| **STALE** | **1** (`BE-W73`) |
+| Already replaced in MR-39 | 1 (`BE-W14`) |
+
+**The spot-check changed two verdicts**, and the last sweep that skipped this step was 75% false
+positives:
+
+- **`FE-W13`** — `grep -c "90" → 0` **returns 2**, both prose comments explaining why the figure
+  is *not* printed. **Inverted.**
+- **`BE-W73`** — *"across all **33** migrations returns nothing"* **returns 2 files**, and there
+  are **59**. The premise is false because MR-28 deliberately fixed the finding. **Stale, not
+  inverted** — classified apart because the fix differs: mark it resolved, do not write a new
+  check.
+- **`BE-W60`** — `grep -rl list_consent_records tests/*.spec.ts returns a file` **passes**. A
+  suite exists. It is titled **`'list_consent_records is scoped and audited'`** — and A3 proved
+  that same function is open. `rls.spec.ts:1133` tests the reason and the audit row, and scoping
+  only for an MR. **It never crosses a tenant.**
+
+**That last row is the thesis in one line: the check asked whether a file mentions the function.
+A file does.**
+
+**C4 — replaced, not re-run.** A defective check re-run is a defective answer obtained twice.
+`FE-W13`'s becomes *the rendered figure changes when the stubbed value changes*; `BE-W60`'s
+becomes *there is a test that crosses a tenant, with a positive control* — which
+`admin-escape.spec.ts` now is; `FE-W17`, `BE-W18` and `BE-W57` get conditions about named things
+rather than absences in unbounded searches; `BE-W73` is marked resolved.
+
+#### D — did not run
+
+**FE-W13 was not started.** Its blocker is gone, its check is now replaced, and **it is not
+blocked by `BE-W101`** — verified: `list_audit_log` and `retention_status`, the two functions its
+screens consume, have **no admin escape**, having been written without one in MR-39.
+
+#### Counts — by workspace AND runner, from BOTH lines
+
+| Workspace | Runner | Passed | Failed | Suites |
+| --- | --- | --- | --- | --- |
+| `@fieldforce/core` | vitest | 28 | 0 | ok |
+| `@fieldforce/ui` | vitest | 4 | 0 | ok |
+| `@fieldforce/ui` | jest | 243 | 0 | ok |
+| `@fieldforce/ui-tokens` | vitest | 54 | 0 | ok |
+| `@fieldforce/console` | vitest | 14 | 0 | ok |
+| `@fieldforce/field` | vitest | 502 | 0 | ok |
+| `@fieldforce/field` | jest | 128 | 0 | ok |
+| `@fieldforce/api` | vitest | **691** | 0 | ok |
+| `@fieldforce/mock` | vitest | 43 | 0 | ok |
+
+**1,707 passing, zero failing, and no suite failed to run.** `lint`, `typecheck` and
+`format:check` all exit 0. 59 migrations.
+
+#### Where this session stopped — and it was ROOM, not blockage
+
+**Stopped after Part C, with Part D deliberately not started. The reason is ROOM.**
+
+`FE-W13` is unblocked, its check is replaced, and nothing stands in its way. Two RSC screens, a
+data layer, tests and mutations at the end of a session that turned into a compliance escalation
+is how a half-built screen gets shipped.
+
+**The distinction matters and the register should carry it:** twelve prior stops were blockages —
+something was genuinely in the way. MR-39's was room. **This one is room.** Conflating them
+teaches the next session to distrust both.
+
+**Four things a reader should carry forward.**
+
+1. **`BE-W101` is the most serious open finding in this register.** An admin of one organisation
+   can read another's consent ledger, proven, with six more functions sharing the shape and three
+   of them writes. It becomes live at the same date `§6.1` already names.
+2. **A test suite's title is not a test.** `'list_consent_records is scoped and audited'` tested
+   the audit half and an MR's scoping, and the tenant boundary was open the whole time.
+3. **A duplicate id is a register that has stopped being one** — and I created both of them, one
+   session apart, without noticing either.
+4. **"Blocked" and "out of room" are different words**, and this is the second consecutive
+   session where the honest answer was the second one.
