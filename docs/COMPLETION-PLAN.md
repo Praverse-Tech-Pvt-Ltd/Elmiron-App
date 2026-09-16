@@ -1787,3 +1787,72 @@ STATEMENT: select public.list_audit_log(...)
 the cheapest correct answer is the third — record them where the actor is already known — and it
 should be decided alongside `BE-W101`, because the two are the same question asked twice: *who
 may reach what, and what do we know afterwards?*
+
+### Added by MR-40 C — the recorded-check sweep, with its denominator
+
+**The prior was 2-for-2**: `BE-W14`'s grep passed on a prose comment, `FE-W13`'s returns 2 on a
+correct screen. So every recorded check was swept rather than the two that were named.
+
+| | |
+| --- | --- |
+| Register rows carrying a verification cell | **137** |
+| Of those, **grep-based** | **14** |
+| Sound | **2** |
+| Weak — passes for a reason adjacent to the property | **9** |
+| **INVERTED** — fails on correct code, passes on wrong code | **1** |
+| **STALE** — the premise it asserts is no longer true | **1** |
+| Already replaced (MR-39) | **1** |
+
+#### C3 — spot-checked before reporting, and the spot-check changed two verdicts
+
+The last sweep that skipped this step was 75% false positives. Three were run:
+
+| Check | Expected | Actual |
+| --- | --- | --- |
+| `FE-W13`: `grep -c "90" <screen>` → `0` | pass on a correct screen | **returns `2`** — both prose comments explaining why the figure is *not* printed. **INVERTED** |
+| `BE-W73`: *"`grep "update public.visits"` across all **33** migrations returns nothing"* | — | **returns 2 files**, and there are **59** migrations. The premise is false: `20260911000300_check_in_starts_the_visit` deliberately advances the status. **STALE, not inverted** — the finding was fixed and the row was never updated |
+| `BE-W60`: `grep -rl list_consent_records tests/*.spec.ts` returns a file | — | **returns two.** The check **passes** |
+
+**`BE-W60` is the one worth reading twice.** Its check passes; a suite exists; the suite is even
+titled **`'list_consent_records is scoped and audited'`** — and MR-40 A3 proved that function
+lets an admin read another organisation's consent ledger. Reading `rls.spec.ts:1133` shows why:
+it tests the **reason** requirement and the **audit row**, and scoping only for an *MR*. **It
+never crosses a tenant.** The check asked whether a file mentions the function. A file does.
+
+**That is the whole thesis of this sweep in one row: grep locates, it does not decide.**
+
+#### C2 — the classification
+
+| Id | Check | Verdict |
+|---|---|---|
+| `BE-W19` | exact URI string in `config.toml` **plus** `docker exec … printenv` | **Sound** — two clauses, one of them runtime |
+| `BE-W24` | `verify:rollbacks` **plus** `grep -ci "elmiron"` → `0` | **Sound** — the real clause carries it |
+| `FE-W13` | `grep -c "90" <screen>` → `0` | **INVERTED** |
+| `BE-W73` | `grep "update public.visits"` across "33 migrations" | **STALE** |
+| `BE-W60` | `grep -rl list_consent_records` returns a file | **Weak** — proven inadequate above |
+| `FE-W17` | `grep -ci "keep your own count"` → `0` | **Weak** — grep is the only clause; passes if the directory is deleted or renamed |
+| `BE-W18` | `grep -c "4010" apps/field/src/` → `0` "for write paths" | **Weak** — `4010` matches any occurrence of those digits, and "for write paths" is not expressible in grep |
+| `BE-W57` | `grep -rn "sync/queue"` → no caller | **Weak** — an absence that also passes when the search path is wrong |
+| `FE-W10` | phrase → `0`, **plus** `pnpm test` → `10 passed` | **Weak but paired** — and MR-38 added a suite with two positive controls |
+| `FE-W11` | phrase → no match, **plus** "a new dated section states what it replaced" | **Weak but paired** |
+| `FE-W14` | phrase → `0`, **plus** a test on the "sent" claim | **Weak but paired** |
+| `FE-W18` | `grep -c "Date.now()"` → `0`, **plus** a replay test | **Weak but paired** — and MR-29's lint rule now enforces it structurally |
+| `BE-W9` | exact version token → `≥1`, **plus** "additions only" | **Weak but paired** |
+| `BE-W14` | *(was)* `grep -c "auditLog"` → `≥1` | **Replaced in MR-39** — the replacement requires the schemas to be exported, to be zod schemas, and to reject a malformed payload |
+
+#### C4 — the replacements
+
+**Replaced rather than re-run.** A defective check re-run is a defective answer obtained twice.
+
+| Id | Replaced with |
+|---|---|
+| **`FE-W13`** | The rendered retention figure must **change when the stubbed `retentionDays` changes**. That cannot pass by accident; `grep → 0` passes the moment somebody writes `Ninety`. Plus: the screen's data comes from `getRetentionStatus`, asserted by the test that stubs it |
+| **`BE-W60`** | `list_consent_records` must have a test that **crosses a tenant**: an admin of organisation A, a consent record belonging to B, and an assertion the record is absent — **with a positive control proving B's own admin sees it.** `services/api/tests/admin-escape.spec.ts` is that test, and it currently records the property as NOT holding (`BE-W101`) |
+| **`FE-W17`** | The samples screen must render the server's count for the period, asserted against a stubbed value — not "the phrase is absent" |
+| **`BE-W18`** | `apps/field`'s write paths must resolve their base URL from `apiBaseUrl`, asserted by a test that changes it and observes the request target. The port number is an implementation detail and a digit string is not a property |
+| **`BE-W57`** | `API_PATHS` must not contain `sync/queue` **and** `services/mock` must not route it — two assertions about named things, rather than an absence of matches in an unbounded search |
+| **`BE-W73`** | **Marked resolved rather than replaced.** Its premise was a finding, and MR-28's `check_in_starts_the_visit` fixed it. The row describes a state that no longer exists |
+
+**The rule this leaves behind, now earned three times:** a recorded check must constrain **what**
+matched, not **that** something matched. If the command can pass on a file that merely contains
+the words — or fail on a file that contains the right explanation — it is not a check.
