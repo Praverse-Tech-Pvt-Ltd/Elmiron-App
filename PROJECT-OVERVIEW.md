@@ -15005,3 +15005,249 @@ thing on the page is a name that costs nothing and gets worse every day it is no
 4. **Check the premise before doing the work it implies.** Twice this session a stated premise
    was wrong: four sentinels that "have not moved" (two had), and a bundle that needed copying
    off (a push made it moot).
+
+
+### MR-37 — the deadline and the ceiling
+
+**The ask was "before the dependency, check whether the server already knows". It did — and the
+answer had been sitting in `storage.objects.metadata` since the storage layer was built.**
+
+#### CI
+
+| | |
+| --- | --- |
+| Run | `35075011258` — **`success`** |
+| Workflow | `CI` |
+| Event | `push` |
+| SHA | `3c17d2dba186088c7d6a2f28f226e7f0cf835c7f` |
+
+**That SHA equalled HEAD and `origin/main` when the run completed**, covering Parts A through D.
+This section is committed after it, so HEAD moves by one commit and that commit is pushed at the
+end of the session — the same honest caveat as MR-36, stated rather than glossed.
+
+`Migration drift` failed on the same SHA. **That is the deliberate red of §6.1** and it is now
+one worse by design: production is **38** migrations behind, because this session added one.
+
+#### A — the 30 September deadline is real, and it gives no warning
+
+**State: the third one. The build goes red on 30 September.** Established by measurement:
+
+| Check | Result |
+| --- | --- |
+| `TranscriptV1Schema` exported anywhere | **No.** The only occurrences of "TranscriptV1" are the test's own failure message, a comment in the published `.d.ts`, and its doc block |
+| Test removed or amended | **No.** `CONTRACT_I3_DEADLINE` is `2026-09-30T23:59:59+05:30`, unchanged since BE-W6 wrote it |
+| Passes today | **Yes**, 3/3 — the deadline has not passed |
+| Runs in CI | **Yes**, `ci.yml:83` |
+
+**It does not warn, and this project built the opposite mechanism for the same class of problem
+and wrote the reasoning into it.** `check:decision-debt` has **three** states — clear, warn,
+fail — because *"a red build arriving unannounced on the day is treated as an obstacle to get
+past, where a warning three weeks earlier is treated as a question."*
+
+`CONTRACT_I3_DEADLINE` has **two**. `expect(hasV1 || !expired)` is green until
+**2026-09-30T18:29:59Z** and red after it, with no notice of any kind.
+
+**So the escalation at the top of `blocked-on-you.md` IS the warning**, and it says so. It now
+carries both dated deadlines together — 30 September (I3, **14 days**, no warning) and
+6 November (`5.9`, 51 days, warns from 16 October) — with the two honest resolutions, the third
+that is honest if owned (extend the date and name who agreed it), and the one that is not:
+shipping a placeholder `TranscriptV1` to make CI green, which works around the guard the test
+exists to be and buys nothing, because the AI/ML chain cannot start until the PV/DPDP signatory
+exists.
+
+**Not resolved, deliberately.** It is a decision and it sits beside `5.9` and the fiduciary name.
+
+*A small correction: the brief said fifteen days. It is fourteen — the date rolled to
+16 September between the brief and this session.*
+
+#### B1 — yes, the server already knows, and the dependency was never needed
+
+`storage.objects.metadata` carries a `size` key, written by Storage from the request it actually
+received. **Measured: 118 of 118 objects on the local stack have it.** `apply_sync_item` says so
+in its own comment — *"the bytes are already in storage; this is the finalisation"* — so the row
+exists by the time `complete_upload` runs.
+
+**The byte count was never the client's to supply.** `complete_upload` now reads it and ignores
+`p_size_bytes`. A client-asserted byte count is forgeable, and the ceiling it feeds is a limit on
+that same client — the correction `capture_consent` and `record_check_in` were both rewritten
+around, applied a third time.
+
+**No client has to ship.** The signature is unchanged, so every grant and caller keeps working;
+the field app keeps sending its fabricated `1` and it now reaches nothing. Both call sites say
+so, and say why the literal is left visibly false: `bitrateKbps × seconds / 8` would look like a
+measurement and the next reader would stop checking.
+
+It also asserts a precondition the old version never had — **if nothing is stored at the grant's
+key, there is nothing to finalise.** Five existing tests had been finalising uploads whose bytes
+were never written, and passed, because nothing looked.
+
+**A correction to MR-36.** That session recorded *"the ceiling cannot fire"*. **Too strong.**
+`begin_upload` refuses when `liveBytes + reservedBytes + requested > ceiling`, and the last two
+terms were always real — `upload.spec.ts` has had a test for an oversized *request* since BE-W8.
+What was inert is **`liveBytes`**: an MR's accumulated library read as a row count, so the
+ceiling behaved as a per-session limit rather than the per-MR storage limit it is written to be.
+**Measure the phenomenon, not its symptom.**
+
+#### B4 — the proof the ceiling fires, and the two false passes on the way to it
+
+Four new tests. The one that matters seeds two real 32-byte objects, asserts `liveBytes` grew by
+**64 and not 2**, and then asserts the next request is refused.
+
+**It took three versions to make that test discriminate, and both failures are recorded in it:**
+
+1. **A fixed ceiling of 100 passed against the mutant.** Other tests in the file commit
+   recordings for the same MR, so the ceiling was already breached and the very first grant threw
+   the right message for the wrong reason.
+2. **Deriving the ceiling from a measured `liveBytes` baseline was still not enough** —
+   `reservedBytes` counts too, and neighbouring tests leave open grants committed.
+
+The ceiling is now `baseline + reserved + stored + 32`, so **only the bytes this test stores can
+decide it.**
+
+**B5 — two-sided, each mutation failing exactly its own control:**
+
+| Mutation | Result |
+| --- | --- |
+| Store the claim again | 2 fail — one reporting *"liveBytes grew by 2 bytes, expected 64"*, the defect stated in the message |
+| Remove the object-exists precondition | 1 fails, falling through to *"null value in column `size_bytes`"* — a constraint naming a **column** instead of the **problem**, which is why the explicit refusal earns its place |
+
+`verify:rollbacks` passes **57/57** with the schema empty.
+
+#### C — the four sweeps, with counts, including the empty ones
+
+**Every rule this project wrote down was earned at one site and applied at that site.**
+`TerritoryZone.source` produced *"count the call sites that read the discriminant"*, the store
+was fixed, and eleven screens went unswept for five sessions.
+
+| Sweep | Denominator | Found | Action |
+| --- | --- | --- | --- |
+| **1. Discriminants with zero readers** | 8 object unions + 17 string-literal aliases | **0 genuine** | Recorded as empty |
+| **2. Sentinels for "I don't know"** | 20 candidates | **1 registered, 0 live** | `FE-W48` registered |
+| **3. Guards without preconditions** | 14 scripts, 11 of them guards | **1** | **Fixed** |
+| **4. Controls that have never fired** | 302 `raise exception` sites | **method unsound** | Recorded as a method that does not work; 1 genuine gap **fixed** |
+
+**Sweep 1's two apparent zero-reader hits were both false positives, and that is the useful
+half.** `OverrideDecision` is a callback payload consumed outside `packages/ui`. `OemFamily` is
+dispatched by **keyed lookup** — exhaustive by construction, *stronger* than a comparison, and
+invisible to an `===` grep. The first version of the sweep was worse than useless: it attributed
+every `.kind ===` in the repo to every union and reported 42 for all eight.
+
+**Sweep 2's most interesting result was a decision to change nothing.**
+`${parts['hour'] ?? '00'}` in `clockIn` renders `00:00` — a plausible wall-clock time — if a part
+is missing. But `partsIn` *requests* `hour` and `minute`, and both failure modes **throw** rather
+than yielding partial parts. No conforming runtime reaches it. Adding a `--:--` branch would be
+exactly the defect that same file warns about and had its `24:00` normalisation removed for.
+**Reachability first, then the fix.**
+
+**Registered as `FE-W48`:** `record_check_in` defaults an absent capture source to
+**`automatic`**; `outbox.ts:701` sends **`?? 'manual'`**. Two meanings for the same absence on
+opposite sides of the wire, landing in a persisted column about where an MR was. Unreachable
+today — one enqueue site, always explicit — and live the day a GPS path exists.
+
+**Sweep 3 found the one that mattered.** `seed-one-mr.mjs` had **no localhost guard**, while
+`seed-day` and `seed-synthetic` have both refused a non-localhost target since they were written
+— and it is the seeder that mints an `auth.users` identity and a `user_profiles` row, the table
+the tenant boundary is expressed in. **Both URLs are now checked**, because the identity is
+created over HTTP *before* the database connection opens and a `--db-url` guard alone would have
+refused after the user already existed. Mutating the wiring away makes the test report
+`'fetch failed'` — proof it really attempted the remote call.
+
+**Sweep 4's method failed and the failure is the record.** A naive message match claimed 233 of
+302 refusals untested. **Three of four spot-checks were false positives** — `"append-only"`
+appears in **14** test files — and **210 SQLSTATE literals** in the suite explain why: most
+refusals are asserted by `errcode`, invisible to text matching. Recorded so nobody re-runs it.
+
+**One spot-check was genuine and is fixed:** the territory self-parent and cycle refusals have
+had **zero** tests since BE-W1, while four files insert territories *with* a `parent_id`. The
+tree is what `visible_territory_ids` walks — a cycle there is an infinite walk or a silently
+truncated one, and both decide what an MR can see. Three tests now, mutated by disabling
+`territories_reject_cycle`: both refusals fail, the ordinary parent/child control passes.
+
+**And the sweep produced its own counter-example.** Part B added a control that **did not
+exist**, and five tests had been relying on its absence. **A sweep for controls that never fired
+cannot see a control that was never written.**
+
+#### D1 — the sequence, and three items are no longer blocked
+
+**Each row re-checked against its own verification command rather than read off the table — and
+that changed the answer.** `BE-W13`, `BE-W14`, `BE-W15` and `BE-W47` are all **closed**, so the
+three console items MR-36 listed as blocked are startable today.
+
+```
+FE-W10  the false "manager console is not here" card   (1 half-day, NOTHING BLOCKS IT)
+   v
+FE-W12  overrides panel consumes the GET               (2)   BE-W13 closed
+   v
+FE-W13  console audit + retention screens              (3)   BE-W14/15 closed
+   v
+BE-W89  beat-plan chain                                (UNSIZED, and deliberately)
+```
+
+**6 half-days of sized engineering.** `FE-W10` first because it is one file and the only item on
+the page that makes the product *lie*. `FE-W12` and `FE-W13` are ordered by cost, not dependency
+— independent, parallelisable. `BE-W89` stays unsized because `sync_pull` has **no
+`beat_plan_entry` entity at all**: the screen has no data path rather than a thin one, and a
+number put on it before that decision would be invented. **It is the last engineering item before
+MR v1 is feature-complete minus the device gates.**
+
+#### D2 — what a cut AI layer costs
+
+**Cut outright:** the coaching, analysis and reply screens and the coaching tab; **`FE-W12`
+entirely, all 2 half-days**; `analyses`, `analysis_overrides`, `transcripts_raw`,
+`transcripts_redacted`; and `TranscriptV0` — **so cutting the AI layer RESOLVES the 30 September
+deadline**, which is the one thing that makes this decision cheaper than it looks. `BE-W13`,
+`BE-W47` and `BE-W56` are closed and sunk. The sequence becomes `FE-W10` → `FE-W13` → `BE-W89`,
+four sized half-days instead of six.
+
+**And the half that is easy to miss: the ENTIRE AUDIO PATH comes into question.** Audio is
+captured so it can be transcribed, and nothing else in MR v1 reads a recording. On the table:
+`recordings`, `voice_notes`, `upload_grants` and the resumable upload machinery; the retention
+worker, its watchdog and the intake-stops-if-retention-stops control; **the per-MR storage
+ceiling fixed in this session's Part B**; the 90-day deletion promise and the storage half of
+`BE-W11`; and the runbook's entire step-3 reconciliation.
+
+**This is not a recommendation to cut audio with it** — consent-recorded audio may be wanted as
+evidence rather than as input. **It is that nobody has asked**, and answering *"cut the AI
+layer"* without answering *"does audio capture survive it?"* leaves the largest and most
+compliance-heavy subsystem in the product with no stated purpose.
+
+#### Counts — by workspace AND runner, from each runner's own line
+
+| Workspace | Runner | Result |
+| --- | --- | --- |
+| `@fieldforce/core` | vitest | 21 passed |
+| `@fieldforce/ui-tokens` | vitest | 54 passed |
+| `@fieldforce/ui` | vitest | 4 passed |
+| `@fieldforce/ui` | jest | 243 passed, 243 total |
+| `@fieldforce/console` | vitest | 10 passed |
+| `@fieldforce/mock` | vitest | 40 passed |
+| `@fieldforce/field` | vitest | 502 passed |
+| `@fieldforce/field` | jest | 128 passed, 128 total |
+| `@fieldforce/api` | vitest | **675 passed** — was 662; +4 upload, +6 seed guard, +3 territory cycle |
+
+**1,677 passing, zero skipped, zero failing.** `lint`, `typecheck` and `format:check` all exit 0.
+The schema is at **57 migrations**.
+
+#### Where this session stopped
+
+**At the end of Part D, with every part complete.** Three things are deliberately left:
+
+1. **The I3 deadline is not resolved.** It is a decision, and Part A was explicit that it should
+   not be resolved by engineering.
+2. **`FE-W48` is registered, not fixed** — unreachable today, and fixing it means choosing which
+   default is right, which is a product question.
+3. **`BE-W89` is unsized**, because sizing it requires deciding an entity that does not exist.
+
+**Four things a reader should carry forward.**
+
+1. **Ask the server before asking for a dependency.** `FE-W46` was registered as blocked on
+   `BE-W7` across three sessions. The byte count was in `storage.objects.metadata` the whole
+   time, and the fix needed no client change at all.
+2. **"Cannot fire" and "has an inert term" are different claims.** MR-36 said the first; the
+   truth was the second, and only reading the formula term by term separated them.
+3. **A test that passes against the mutant is not a test.** The ceiling test passed against its
+   own mutant twice before the third version discriminated — once because of committed rows from
+   neighbouring tests, once because `reservedBytes` was left out of the baseline.
+4. **A sweep that finds nothing is worth its denominator.** Two of the four sweeps found nothing
+   real; both are recorded with counts so the next session does not spend a morning rediscovering
+   that.

@@ -290,3 +290,72 @@ item on the page is the fiduciary name, which costs nothing and compounds daily.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-36 — restoring the signal | `PROJECT-OVERVIEW.md` → `### MR-36 — restoring the signal` |
+
+---
+
+## After MR-37 — 16 September 2026
+
+**Read the top of `docs/blocked-on-you.md` first. There are now TWO dated deadlines and the
+nearer one gives no warning.**
+
+| | |
+| --- | --- |
+| **30 September** | `CONTRACT_I3_DEADLINE` — **14 days**, and the test has **no warning state**. Green until 2026-09-30T18:29:59Z, red after. Verified: no `TranscriptV1Schema` exists anywhere and the date has never been moved |
+| **`FE-W46`** | **Closed, server-side.** `complete_upload` now stores the size Storage OBSERVED. No client change was needed |
+| **`FE-W48`** | **New.** Client and server disagree about what an absent capture source means (`manual` vs `automatic`). Unreachable today |
+| **`seed:mr`** | **Now refuses a non-localhost target**, like its two siblings always have |
+| **Schema** | **57 migrations** — one added this session |
+| **Tests** | **1,677 passing, zero skipped, zero failing** |
+
+### The rule that earned its place this session
+
+**Before asking for a dependency, ask whether the server already knows the fact.**
+
+`FE-W46` was registered as blocked on `BE-W7` for three sessions, on the reasoning that the real
+byte count needed `expo-file-system`. It did not. The bytes reach Storage before finalisation and
+Storage records what arrived in `storage.objects.metadata ->> 'size'` — 118 of 118 objects carry
+it. The fix is one migration, no client change, and it makes the number unforgeable as a
+side-effect.
+
+### If you are writing a test that has to fail against a mutant
+
+**The ceiling test in `upload.spec.ts` passed against its own mutant twice.** Both causes are
+worth knowing because they are properties of this suite, not of that test:
+
+1. **Other tests in the same file COMMIT rows for the same fixture MR.** A fixed threshold was
+   already breached before the test stored anything, so it threw the right message for the wrong
+   reason. Derive thresholds from a measured baseline.
+2. **`reservedBytes` counts too** — neighbouring tests leave open grants committed. A baseline
+   that reads only `liveBytes` is not a baseline.
+
+### Four rule-sweeps were run across the repo, and their counts are in `docs/gotchas.md`
+
+Two found nothing real. **That is recorded with denominators on purpose**, so nobody spends a
+morning rediscovering it:
+
+- discriminants with zero readers — **0 genuine** of 8 unions + 17 aliases;
+- sentinels — 20 candidates, **1 registered, 0 live**;
+- guards without preconditions — **1, fixed** (`seed-one-mr`);
+- controls that never fired — **the method is unsound**, 302 sites, and 210 SQLSTATE assertions
+  are invisible to a message match. One genuine gap found by spot-check and fixed.
+
+**An `===` grep does not see keyed dispatch**, and a sweep for controls that never fired cannot
+see a control that was never written — Part B added one that did not exist, and five tests had
+been relying on its absence.
+
+### Engineering, sequenced — and three items are no longer blocked
+
+`BE-W13`, `BE-W14`, `BE-W15` and `BE-W47` are all **closed**, which MR-36's table did not know.
+
+```
+FE-W10 (1 half-day, nothing blocks it)  ->  FE-W12 (2)  ->  FE-W13 (3)  ->  BE-W89 (unsized)
+```
+
+`FE-W10` first: one file, and the only item on the page that makes the product lie.
+`docs/COMPLETION-PLAN.md` also now carries **what gets cut if the AI layer is cut** — including
+that it would resolve the 30 September deadline, and that it puts the entire audio path in
+question.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-37 — the deadline and the ceiling | `PROJECT-OVERVIEW.md` → `### MR-37 — the deadline and the ceiling` |

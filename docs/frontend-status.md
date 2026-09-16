@@ -770,3 +770,65 @@ with no visible effect — it is **persisted** to `recordings.size_bytes` / `voi
 and **summed** by `audio_storage_bytes()`, so the per-MR storage ceiling is inert. Still blocked
 on `BE-W7`: a real byte count needs `expo-file-system`, which is a dependency and therefore an
 ask, and `bitrate × duration` would be an estimate wearing the shape of a measurement.
+
+## MR-37 — 16 September 2026: `FE-W46` closed without a client change
+
+### The byte count was the server's all along
+
+`FE-W46` — `sizeBytes: 1`, fabricated at `visit/[id].tsx:229` and `voice-note/[visitId].tsx:157`
+— has been registered as blocked on `BE-W7` for three sessions. The reasoning was that a real
+count needs `expo-file-system`, which is a dependency and therefore an ask.
+
+**The client never needed to supply it.** The bytes reach Supabase Storage before the row is
+finalised, and Storage records what arrived in `storage.objects.metadata ->> 'size'` — measured,
+118 of 118 objects carry that key. `complete_upload` now reads it and ignores the value the
+client sends.
+
+**Nothing in `apps/field` had to change, and nothing did except two comments.** The literal `1`
+is still there because the contract's `positive()` needs a value, and both sites now say:
+
+- it is **ignored** — `recordings.size_bytes` and the storage ceiling that sums it are real;
+- it is **deliberately left visibly false**, because `bitrateKbps × durationSeconds / 8` would
+  look like a measurement and the next reader would stop checking.
+
+**What this changes for an MR:** the per-MR audio storage ceiling now counts their stored
+library, not a row count. Before, an MR with a gigabyte of audio read as having stored a handful
+of bytes and could never be stopped by the limit.
+
+### A correction to what MR-36 recorded
+
+MR-36 said the ceiling *"cannot fire"*. That is too strong and has been corrected. `begin_upload`
+refuses when `liveBytes + reservedBytes + requested > ceiling`; the last two terms were always
+real. **Only `liveBytes` was inert**, so the ceiling worked as a per-session limit and failed as
+the per-MR one.
+
+### The frontend sweeps, and the one that said "change nothing"
+
+Two of the four MR-37 rule-sweeps ran over `apps/field` and `packages/ui`:
+
+- **Discriminants with zero readers: 0 genuine**, across 8 object unions and 17 string-literal
+  aliases. Both apparent hits were false positives — `OverrideDecision` is a callback payload
+  consumed outside `packages/ui`, and `OemFamily` is dispatched by **keyed lookup**, which an
+  `===` grep cannot see and which is stronger than a comparison.
+- **Sentinels: 20 candidates, 0 live.** Six name the absence honestly (`?? 'Doctor not in your
+  list'`, `?? 'unknown role'`), eight are config or paging defaults, and five are unreachable
+  type-appeasement.
+
+**`clockIn` is the one worth knowing about.** `${parts['hour'] ?? '00'}` renders `00:00` for an
+unreadable clock — textbook sentinel — and it was **left alone**, because `partsIn` requests
+`hour` and `minute` explicitly and both failure modes throw rather than returning partial parts.
+Adding a `--:--` branch would have been the defect that same file warns about and had its `24:00`
+normalisation deleted for. **Reachability first, then the fix.**
+
+### Registered: `FE-W48`
+
+`outbox.ts:701` sends `source: payload.source ?? 'manual'`; `record_check_in` defaults an absent
+source to `'automatic'`. Two meanings for the same absence on opposite sides of the wire, landing
+in `check_ins.source` — a record of where an MR was. **Unreachable today**: the one enqueue site,
+`capture/visit.ts:148`, always sets it explicitly. It becomes live the day a GPS check-in path
+exists, which is exactly when a wrong provenance would matter.
+
+### Counts
+
+`@fieldforce/field` vitest **502**, jest **128** — unchanged; no field code changed this session
+beyond two comments. Monorepo **1,677 passing, zero skipped, zero failing**.

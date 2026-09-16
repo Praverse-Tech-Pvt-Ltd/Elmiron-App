@@ -1242,3 +1242,60 @@ reader would stop checking.
 consequence is bigger than "a wrong number": it is persisted and summed by
 `audio_storage_bytes()`, so the per-MR storage ceiling **cannot fire**. A control that exists,
 runs, and measures nothing is the `BE-W6` shape again.
+
+## 16 September 2026 — MR-37
+
+### Ask whether the SERVER already knows, before asking for a dependency
+
+`FE-W46` was registered as blocked on `BE-W7` across three sessions, on the reasoning that a real
+byte count needed `expo-file-system` and that adding it is an ask. **The server had the number the
+whole time.** The bytes reach Storage before finalisation — `apply_sync_item` says so in its own
+comment — and Storage records what arrived in `storage.objects.metadata ->> 'size'`. Measured:
+118 of 118 objects carry it.
+
+**Decision: `complete_upload` reads the observed size and ignores `p_size_bytes`.** The signature
+is unchanged, so no client has to ship for it to take effect.
+
+**The generalisable half, now a standing rule:** a client-asserted fact that the server can
+observe is not merely redundant, it is **forgeable** — and here the number fed a ceiling that
+limits that same client. This is the third time the same correction has been made
+(`capture_consent`, `record_check_in`, now `complete_upload`). If the server knows, the server
+decides.
+
+### "Cannot fire" and "has an inert term" are different claims
+
+MR-36 recorded that the storage ceiling *"cannot fire"*. Reading the formula term by term shows
+that is too strong: `begin_upload` refuses when `liveBytes + reservedBytes + requested > ceiling`,
+and the last two terms were always real — there has been a test for an oversized request since
+BE-W8. **What was inert is `liveBytes`.** The ceiling worked as a per-session limit and failed as
+the per-MR storage limit it is written to be.
+
+**Decision: corrected in place in the migration's own header and in `PROJECT-OVERVIEW.md`, rather
+than left as the stronger and more quotable claim.** Overstating a defect sets the next session up
+to measure against a false baseline — the same error MR-35 made by calling a mitigation a cure.
+
+### A rule is not applied until it is swept
+
+Four rules were each swept across the whole repository rather than at the site that produced them,
+and **the counts are recorded even where they are zero**, so nobody re-runs them.
+
+**Decision: an empty sweep is a result and gets a denominator.** Two of the four found nothing
+real. Without the count, the next session cannot tell "swept and clean" from "never swept".
+
+**And one sweep is recorded as a method that does not work.** Matching refusal messages against
+the suite claimed 233 of 302 controls untested; three of four spot-checks were false positives,
+because 210 SQLSTATE assertions are invisible to a text match. **A method that produces a
+confident wrong number is worse than no method, and deleting it quietly would let somebody
+rebuild it.**
+
+### Reachability decides whether a fallback is a defect
+
+`${parts['hour'] ?? '00'}` renders a plausible wall-clock time for an unreadable clock, which is
+the sentinel shape exactly. **It was left alone**, because `partsIn` requests `hour` and `minute`
+and both failure modes throw rather than returning partial parts: no conforming runtime reaches
+it.
+
+**Decision: establish reachability before adding a branch.** `territory-day.ts` already had its
+`24:00` normalisation removed for precisely this reason, and its comment names the defect — *"a
+guard no runtime reaches, carrying a comment that says it is needed"*. Adding one back would have
+been that defect, introduced by the rule meant to prevent it.
