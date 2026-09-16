@@ -1299,3 +1299,63 @@ it.
 `24:00` normalisation removed for precisely this reason, and its comment names the defect — *"a
 guard no runtime reaches, carrying a comment that says it is needed"*. Adding one back would have
 been that defect, introduced by the rule meant to prevent it.
+
+## 16 September 2026 — MR-38
+
+### A check that can pass for an unrelated reason is not a check
+
+**MR-37 D1 declared three console items newly unblocked, having run each dependency's own
+recorded verification command. Two of the three were wrong.** `BE-W14`'s check is
+`grep -c "auditLog" packages/core/src/field/endpoints.ts → ≥1`, and it returns 2 — **a prose
+comment and the `auditLogId` field on the analysis overrides response.** Neither has anything to
+do with an audit-log read path, which does not exist: the only `public` functions matching
+`%audit%` or `%retention%` are `write_audit_row` and `stamp_audio_retention`, both writers.
+
+**Decision: a verification command that a file can satisfy by merely containing the words is not
+a verification.** The second clause of that same row — *"an RLS test proves a non-admin gets
+`permission denied`, not an empty list"* — is the real check, and running the cheap half and
+stopping is what produced the wrong answer.
+
+This belongs with `pnpm --filter @elmiron/api` exiting 0 while matching no projects, and with
+MR-37's refusal-message sweep that reported 233 untested controls of which three in four
+spot-checks were false. **It was trusted by the session that wrote the rule about not trusting
+it**, which is the part worth remembering.
+
+### A negative sweep result is a result, and gets its denominator
+
+`capture_consent`, `record_check_in` and `complete_upload` were three instances of one shape — a
+client asserting a fact the server had observed — so the whole surface was swept for the fourth.
+**There is no fourth.** 47 RPCs, 121 client-supplied parameters, 70 numbers or identifiers, 24
+pure numbers, and every one is excluded for a stated reason.
+
+**Decision: record the denominator and the classification, not just "nothing found".** Otherwise
+the next session cannot tell "swept and clean" from "never swept", and the prior was strong
+enough that somebody would look again.
+
+**And the exclusion that mattered was measured, not reasoned.** `p_duration_seconds` looks
+exactly like the class. `storage.objects.metadata` carries `size`, `contentLength`, `mimetype`,
+`eTag`, `cacheControl`, `lastModified` and `httpStatusCode` — **and no duration.** The server
+cannot know it without decoding the audio, so it is not in the class however much it looks like
+it.
+
+### Reuse a mechanism by shape when you cannot reuse it by import
+
+The `CONTRACT_I3` deadline needed `5.9`'s three-state warning. The obvious move — extend
+`check:decision-debt` — is forbidden: `FIX-08 B2`'s `scripts-convention.spec.ts` fails the build
+if anything in `services/api/scripts/` imports `packages/core`, because no workflow builds
+workspace dependencies before running those scripts directly.
+
+**Decision: reuse the shape at the site that already holds the fact.** Same 21 days, same
+non-failing warning, same `::warning::` annotation — implemented in the test that can check the
+*runtime* export rather than in a script that could only grep source for a symbol. **Reuse means
+the mechanism, not necessarily the module.**
+
+### Stopping is the result when the recorded check cannot be met
+
+`FE-W12` needs a `packages/core` client method that does not exist, and its recorded check asks
+for a console test asserting a **render** in a workspace with no renderer. The substitute — test
+the shaping in node, assert the page source mentions the call — would have reported it done.
+
+**Decision: report it blocked and stop.** The estimate was 2 half-days on the assumption the GET
+was consumable; it is not, and the honest column is *1 half-day done and 6 newly revealed*
+rather than *6 ready*.

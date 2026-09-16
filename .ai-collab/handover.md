@@ -359,3 +359,71 @@ question.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-37 — the deadline and the ceiling | `PROJECT-OVERVIEW.md` → `### MR-37 — the deadline and the ceiling` |
+
+---
+
+## After MR-38 — 16 September 2026
+
+**The 30 September deadline now warns, and it is warning today.** `pnpm --filter
+@fieldforce/core test` prints a `::warning::` annotation with the days remaining. It stops
+warning and starts failing at `2026-09-30T18:29:59Z`.
+
+| | |
+| --- | --- |
+| **The bigger question** | **Top of `docs/blocked-on-you.md`, above the deadline:** does the MR app record audio at all if there is no AI layer? Verified: **nothing in MR v1 consumes a recording** — no playback anywhere, by design, documented in the code itself |
+| **The sweep** | **No fourth instance.** 47 RPCs, 121 client parameters, 24 pure numbers — none feeds a decision the server could have derived |
+| **`FE-W10`** | **DONE.** The console no longer claims two screens it ships are forbidden |
+| **`FE-W12`, `FE-W13`** | **Blocked**, and MR-37 was wrong to call them unblocked — see below |
+| **`BE-W94`** | New. `complete_upload.p_recorded_at` is the device's word with no bounds |
+| **Tests** | **1,688 passing, zero skipped, zero failing** |
+
+### MR-37's "newly unblocked" was wrong about two of three, and the check is why
+
+**`BE-W14` and `BE-W15` are NOT closed**, so `FE-W13` is still blocked. `BE-W14`'s recorded check
+is two clauses and only the first was run:
+
+```
+grep -c "auditLog" packages/core/src/field/endpoints.ts -> >=1     <- passed, for the wrong reason
+an RLS test proves a non-admin gets permission denied              <- nothing behind it
+```
+
+The grep's two matches are a prose comment and the `auditLogId` field on the *overrides*
+response. Measured directly: the only `public` functions matching `%audit%` or `%retention%` are
+**`write_audit_row` and `stamp_audio_retention` — both writers.** No read path, no schema, no
+mock route.
+
+**If a check's command could pass on a file that merely says the words, it is not a check.**
+
+### Before you start `FE-W12`
+
+Two things are missing and neither is a workaround away:
+
+1. **There is no client method for `GET /analyses/:id/overrides`.**
+   `ListAnalysisOverridesResponseSchema` exists in `packages/core` and is **consumed by
+   nothing**. The RPC and the mock route both exist, so `BE-W13` is closed by its own check —
+   the gap is between the two items and neither owns it.
+2. **Its recorded check needs a renderer the console does not have.** `apps/console` pages are
+   React Server Components; `vitest.config.ts` says exercising them needs a browser or a Next
+   harness and neither exists. Adding one is a **dependency ask**.
+
+### Two flakes now have denominators
+
+- **`BE-W92`** — the api-suite deadlock, ~1 in 21 after MR-36's mitigation.
+- **NEW: `packages/ui` jest suites can fail to LOAD under `pnpm -r test`** — `Cannot find module
+  './pure'` from inside `@testing-library/react-native`'s own `dist`. **1 in 7 observed.**
+
+**Recognise it by the totals, not the failures:** `Test Suites: 2 failed` with
+`Tests: 237 passed, 237 total` and **zero failures** — a suite that never ran reports no
+failures and a smaller total. Re-run the workspace alone; it passes 243/243. **Do not reinstall
+on one occurrence.**
+
+### Still open and needing a decision, not work
+
+**`FE-W11`.** `FE-W10` unblocks it, but its recorded check requires editing
+`docs/frontend-status.md` in place (`grep "E1/E2 held by"` → no match), while the standing
+instruction is that the file takes appends only. The same false claim is live at lines 34, 43
+and 44. **That conflict needs resolving before somebody resolves it silently.**
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-38 — the fourth instance | `PROJECT-OVERVIEW.md` → `### MR-38 — the fourth instance` |

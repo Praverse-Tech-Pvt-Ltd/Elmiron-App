@@ -15251,3 +15251,232 @@ The schema is at **57 migrations**.
 4. **A sweep that finds nothing is worth its denominator.** Two of the four sweeps found nothing
    real; both are recorded with counts so the next session does not spend a morning rediscovering
    that.
+
+
+### MR-38 — the fourth instance
+
+**There isn't one. The sweep's answer is a negative, and the session's real finding is that a
+check MR-37 ran and trusted was passing for a reason unrelated to what it checked.**
+
+#### CI
+
+| | |
+| --- | --- |
+| Run | `35079692527` — **`success`** |
+| Workflow | `CI` |
+| Event | `push` |
+| SHA | `63d03b71ba830778aae1ae45c8b2ae4635956504` |
+
+**Obtained from `git rev-parse HEAD`, not recalled, and it equals HEAD.** MR-37 wrote a
+fabricated full SHA into this file's draft — twelve characters known and the tail invented — and
+caught it only because the invented tail happened to be checked. **An invented identifier is
+worse than a missing one, because it looks verifiable.** This one was read out of the repository.
+
+This section is committed after that run, so HEAD moves by one commit and that commit is pushed
+at the end of the session.
+
+#### A1 — the deadline now warns, and it is warning today
+
+It had **two** states where `5.9`'s mechanism has three, in the same repository, for the same
+class of problem. It now has three, and the warning is live — **verified by running it, not by
+arithmetic**:
+
+```
+::warning title=Decision due::CONTRACT I3 -- the transcript schema -- is due on 2026-09-30
+(15 day(s) left). After that this test fails the build.
+```
+
+**The mechanism is reused, not rebuilt.** 21 days, taken from
+`20260907001000_ucpmp_cap_decision_warning.sql`'s `warn_days`; a warning that does **not** fail
+the build, for the reason that migration records; and the same `::warning::` GitHub annotation
+`check:decision-debt` emits, so it reaches the run summary rather than a log nobody opens on a
+green build.
+
+**It is deliberately NOT implemented by extending `check:decision-debt`**, and that was checked
+rather than assumed: `FIX-08 B2`'s `scripts-convention.spec.ts` fails the build if anything in
+`services/api/scripts/` imports `packages/core`, because no workflow builds workspace
+dependencies before running those scripts. The fact this turns on — whether `TranscriptV1Schema`
+is *really* exported — is a runtime property of `packages/core`. Checking it in the test reads
+the actual export; checking it in the script would have meant grepping source for a symbol.
+
+**`daysRemaining` uses `ceil`, mirroring the UCPMP status function exactly.** That is why this
+says 15 where MR-37 said 14: MR-37 took the floor, the project's own convention is `ceil`.
+Recorded so the two records do not read as contradicting each other.
+
+The evaluator is pure and takes `now` as an argument, so all three states are asserted at fixed
+dates — the technique `decision-debt.spec.ts` uses by backdating a row rather than waiting for
+November. Both boundaries tested from both sides. **Two-sided mutation:** removing the warn
+branch fails 4 tests including *"is WARNING right now"*; removing the `hasV1` escape fails
+exactly the positive control asserting `TranscriptV1` is the way out.
+
+**A2: no `TranscriptV1Schema` was created.**
+
+#### A3 — the question, at the top of the page, above the deadline
+
+> ## Does the MR app record audio at all, if there is no AI layer?
+
+It is above the deadline because the deadline is only what forces it. **Every claim in it was
+verified rather than repeated.**
+
+- **Nothing in MR v1 consumes a recording**, and the code says so deliberately in two places:
+  `analysis/[id].tsx` — *"**No citation gets a play control.** … A play button that did nothing
+  would tell the MR a recording was ever made"* — and `coaching/content.ts` — *"**There is
+  nothing to play here.**"* The console does not read audio either. **The complete list of
+  things that touch a recording is the code that uploads it and the code that deletes it.** An
+  MR cannot play back their own voice note. Nobody can.
+- **A voice note nobody can read is a file.** Captured with consent, encrypted, counted against a
+  storage ceiling, carried through a retention schedule, reconciled after a restore — and never
+  once opened.
+- **The corpus justification is circular.** `docs/mr-app-plan.md` measures why the audio is
+  collected: *"Whisper large-v2 zero-shot … **52.0% Mixed Error Rate**"* on code-switched
+  Hindi-English. The conclusion was that a fine-tuned model is needed, which needs a corpus,
+  which is why the app records. **But the model is the AI layer.** Cut it and the loop has no
+  exit — only a gap where the purpose used to be.
+- **Under DPDP the purpose is the weak part, not the consent and not the security.** Those are
+  built, logged and encrypted. What is missing if the AI layer goes is the answer to what the
+  data is *for*.
+
+#### B — the sweep, and the fourth instance does not exist
+
+**The prior was 3-for-3**: `capture_consent`, `record_check_in` and `complete_upload` were each a
+client asserting a fact the server had already observed.
+
+| | |
+| --- | --- |
+| RPCs callable by `authenticated` | **47** |
+| Client-supplied parameters | **121** |
+| A number or an identifier | **70** |
+| A pure number | **24** |
+
+**How the 24 classify:** 6 the client genuinely witnesses (GPS on check-in and check-out); 4 a
+pure helper's own arguments; **3 the server cannot measure**; 2 a reservation rather than an
+observation; 6 bounded caller preferences; 1 already fixed in MR-37; **2 of this shape with no
+decision behind them**.
+
+**The server cannot measure audio duration, and that was verified rather than assumed.**
+`storage.objects.metadata` carries `size`, `contentLength`, `mimetype`, `eTag`, `cacheControl`,
+`lastModified`, `httpStatusCode` — **and no duration.** Measuring it would mean decoding the
+audio. So `p_duration_seconds` looks like the class and is not in it.
+
+**B4: nothing to fix.** No client-supplied value feeds a ceiling, a retention clock or a refusal
+that the server could have derived. **B6's mutation requirement is vacuous because nothing was
+fixed, and manufacturing a change to satisfy it would be the opposite of the point.**
+
+**B5 — the spot-check earned its place.** Five RPCs take `p_mr_id` while the server holds
+`auth.uid()`, and **all five are `SECURITY DEFINER`** — which reads exactly like the class and
+like a tenancy hole. Reading the full predicate instead of the grep line shows every one scopes
+first and filters second:
+
+```sql
+where g.mr_id in (select public.visible_user_ids())
+  and (p_mr_id is null or g.mr_id = p_mr_id)
+```
+
+`visible_user_ids()` derives from `auth.uid()`; the parameter narrows **within** an
+already-authorised set and cannot widen it. A grep finds the second line; only the first decides
+anything. Two further apparent hits were prior instances of this same correction already applied:
+`check_outs.duration_seconds` is computed server-side from the check-in, and `capture_consent`
+derives `v_active_then` through `active_consent_text_at()` alongside the claimed version.
+
+**Registered as `BE-W94`:** `complete_upload.p_recorded_at` is the device's word with **no bounds
+at all**, where the consent ledger's `captured_at` has both. It feeds no decision — `purge_after`
+is `now()` and nothing reads `recorded_at` — so it is registered rather than fixed, but it is a
+compliance-adjacent timestamp carrying less protection than its sibling. `p_bitrate_kbps` and
+`p_bytes_received` are recorded as tidiness **with what reads them** — a `CHECK` range and a
+progress bar — so the next sweep does not re-open them.
+
+#### C — one of the three was unblocked, and the other two were not
+
+**`FE-W10` — DONE.** The console carried a card reading *"The manager console is not here"*,
+saying `§3.6` forbids the coaching queue and the analysis review. **Both halves were false by the
+end of the same day**, and that was verified before deleting anything — removing a *truthful*
+card would have been the worse error. `docs/fe-w3-spec.md` records a **second reversal on
+3 September**, put and answered separately, which reopened `E1` and `E2` and says *"Both are now
+built, in `apps/console`."* They are.
+
+The guard is source-level because the console has no renderer, and it carries a precondition and
+**two** positive controls: it found at least three `page.tsx` files; `E1` and `E2` are actually
+present (**if they were not, the card was TRUE and deleting it was the defect**); and the admin
+page still renders its real content, so removing the card by emptying the file fails. Two-sided
+mutation, each failing exactly one test.
+
+**`FE-W13` — STILL BLOCKED, and this corrects MR-37.** `BE-W14`'s recorded check has two clauses
+and MR-37 ran the first and stopped:
+
+> `grep -c "auditLog" packages/core/src/field/endpoints.ts` → `≥1`; **an RLS test proves a
+> non-admin gets `permission denied`, not an empty list**
+
+The grep returns 2 and **both matches are unrelated to an audit read path** — a prose comment,
+and the `auditLogId` field on the *analysis overrides* response. Measured directly instead: the
+only `public` functions matching `%audit%` or `%retention%` are **`write_audit_row` and
+`stamp_audio_retention`, both writers**; there is no read path, no `AuditLog…Schema` or
+`Retention…Schema`, and no mock route for either. **`BE-W14` (3) and `BE-W15` (2) are open.**
+
+**`FE-W12` — BLOCKED on two things.** `ListAnalysisOverridesResponseSchema` is defined in
+`packages/core` and **consumed by nothing**; `createApiClient` has the POST and no read.
+`BE-W13` is genuinely closed *by its own check* — the RPC and the mock route both exist — but
+nothing lets `apps/console` call it through the shared client, and **that gap sits between two
+items with neither owning it.** And its recorded check asks for *"a console test [that] asserts
+a previously-saved override renders"*; the console has no renderer, by its own
+`vitest.config.ts`'s statement, and adding one is a dependency ask.
+
+**Not worked around, deliberately.** Putting the fetch in a lib function, testing the shaping in
+node and asserting the page source mentions it would satisfy a weaker claim while reporting
+`FE-W12` done. `C3` says stop instead.
+
+**So the engineering column is 1 half-day done and 6 half-days newly revealed**, not the
+6 half-days of console work MR-37 recorded as ready.
+
+#### A flake found and given a denominator
+
+One full-suite run reported `Test Suites: 2 failed` with **`Tests: 237 passed, 237 total` and
+zero failures** — a suite that never ran, not one that failed, and the only failure shape that
+looks green at a glance. The unresolvable modules are inside
+`@testing-library/react-native`'s own `dist`; `packages/ui` alone passes 243/243 immediately
+afterwards.
+
+**Rate: 1 in 7 full runs.** Six consecutive clean runs followed it, and **six clean runs is not
+evidence it is gone** — against a true rate of 1-in-7 that has probability ≈0.40. Recorded in
+`docs/gotchas.md` with the shape to recognise it by. No mechanism is claimed.
+
+#### Counts — by workspace AND runner, from each runner's own line
+
+| Workspace | Runner | Result |
+| --- | --- | --- |
+| `@fieldforce/core` | vitest | **28 passed** — was 21; +7 deadline states |
+| `@fieldforce/ui-tokens` | vitest | 54 passed |
+| `@fieldforce/ui` | vitest | 4 passed |
+| `@fieldforce/ui` | jest | 243 passed, 243 total |
+| `@fieldforce/console` | vitest | **14 passed** — was 10; +4 `FE-W10` guard |
+| `@fieldforce/mock` | vitest | 40 passed |
+| `@fieldforce/field` | vitest | 502 passed |
+| `@fieldforce/field` | jest | 128 passed, 128 total |
+| `@fieldforce/api` | vitest | 675 passed |
+
+**1,688 passing, zero skipped, zero failing.** `lint`, `typecheck` and `format:check` all exit 0.
+
+#### Where this session stopped
+
+**At the end of Part C, with C stopped deliberately rather than completed.** Four things are
+left, each for a stated reason:
+
+1. **`FE-W12` and `FE-W13` are not started**, because they are blocked — one behind a missing
+   client method and a missing renderer, one behind two open backend items.
+2. **`FE-W11` is not done**, though `FE-W10` unblocks it. It was not among C1's three, and its
+   recorded check requires `docs/frontend-status.md` to be **edited in place** while this
+   session's instruction is that the file takes appends only. The same false claim is live at
+   lines 34, 43 and 44 of that file and needs a decision, not a silent resolution.
+3. **`BE-W94` is registered, not fixed** — it feeds no decision.
+4. **The `packages/ui` load flake is not chased** — a rate and a shape, no mechanism.
+
+**Four things a reader should carry forward.**
+
+1. **A check that can pass for an unrelated reason is not a check.** `grep -c "auditLog" → ≥1`
+   is satisfied by any file that says the words, and it was trusted by the session that wrote
+   the rule about not trusting exactly this.
+2. **A negative sweep result is worth its denominator.** There is no fourth instance, and the
+   next session should not spend a morning looking for one.
+3. **A suite that never runs reports zero failures.** `237 passed, 237 total` was the whole of
+   the signal; the failure count was zero.
+4. **Stopping is the result when the check cannot be met.** `FE-W12` could have been "finished"
+   against a weaker test in an hour.

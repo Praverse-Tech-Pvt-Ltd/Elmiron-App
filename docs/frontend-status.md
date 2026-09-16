@@ -832,3 +832,79 @@ exists, which is exactly when a wrong provenance would matter.
 
 `@fieldforce/field` vitest **502**, jest **128** — unchanged; no field code changed this session
 beyond two comments. Monorepo **1,677 passing, zero skipped, zero failing**.
+
+## MR-38 — 16 September 2026: the console stops denying two screens it ships
+
+### `FE-W10` — done, and it was verified before it was deleted
+
+`apps/console/src/app/admin/page.tsx` carried a card headed **"The manager console is not
+here"**, saying `§3.6` forbids the coaching queue and the analysis review, and that *"the
+3 September decision reopened only the MR's own screens"*.
+
+**Both halves were false by the end of the same day.** `docs/fe-w3-spec.md` records a **second
+reversal on 3 September**, put and answered separately from the first, which reopened `E1` and
+`E2` and states: *"Both are now built, in `apps/console`."* They are —
+`src/app/coaching/page.tsx` and `src/app/coaching/[analysisId]/page.tsx`.
+
+**That was checked before anything was removed.** If `E1` and `E2` had not existed, the card
+would have been **true** and deleting it would have been the defect. The check is now a test, so
+it stays checked.
+
+**The guard is source-level, and it says why.** The console has no renderer —
+`apps/console/vitest.config.ts` states in its own comment that the pages are React Server
+Components, that exercising them needs a browser or a Next harness, and that neither exists.
+Adding one is a dependency and therefore an ask. Because a source assertion is the weaker kind,
+it carries **a precondition and two positive controls**:
+
+| | |
+| --- | --- |
+| Precondition | It found at least three `page.tsx` files — a wrong directory or a rename cannot make the assertions pass against an empty list |
+| Control 1 | `E1` and `E2` are actually present — the reason the removal was correct |
+| Control 2 | The admin page still renders its real content — so removing the card by **emptying the file** fails |
+
+Two-sided mutation, each failing exactly one test: restoring the false heading fails the negative
+assertion; changing the admin page's real content fails the deletion control.
+
+The orphaned `Figure` import the change created was removed. It is still used in
+`coaching/page.tsx` and still exported from `lib/ui.tsx`.
+
+### `FE-W12` is blocked, and it is worth knowing why before picking it up
+
+**1. There is no client method for the GET.** `ListAnalysisOverridesResponseSchema` is defined in
+`packages/core/src/field/endpoints.ts` and **consumed by nothing** — the only references are its
+own definition and the built `.d.ts`. `createApiClient` has `createAnalysisOverride` (the POST)
+and no read. The RPC `public.list_analysis_overrides` exists and the mock serves the route, so
+`BE-W13` is closed *by its own check*; **the gap sits between the two items and neither owns
+it.**
+
+**2. Its recorded check cannot be met here.** It asks for *"a console test [that] asserts a
+previously-saved override renders"*. There is no renderer.
+
+**Not worked around.** The available substitute — fetch in a lib function, test the shaping in
+node, assert the page source mentions it — would report `FE-W12` done against a weaker claim.
+
+### `FE-W11` needs a decision, not work
+
+`FE-W10` unblocks it, and its recorded check requires **this file** to be edited in place:
+`grep -n "E1/E2 held by" docs/frontend-status.md` → no match. The standing instruction is that
+this file takes **appends only**.
+
+**The false claim is live right now at lines 34, 43 and 44 of this file** — it says `E1`/`E2` are
+"held by §3.6" and that the 3 September reversal "covered the MR's own screens only". Both are
+wrong for the reason above. **This section does not correct those lines**, because doing so
+silently is exactly what the append-only rule exists to prevent. It flags them so the next
+session resolves the conflict deliberately.
+
+### Counts
+
+`@fieldforce/console` vitest **14** (was 10). `@fieldforce/field` vitest **502**, jest **128** —
+unchanged; no field code changed this session. Monorepo **1,688 passing, zero skipped, zero
+failing**.
+
+### One harness flake to recognise
+
+`packages/ui`'s jest suites can fail to **load** under a full `pnpm -r test` —
+`Cannot find module './pure'` from inside `@testing-library/react-native`'s own `dist`. **Seen
+once in seven runs.** The tell is the totals, not the failures: `Test Suites: 2 failed` with
+`Tests: 237 passed, 237 total` and **zero failures**. Run the workspace alone and it passes
+243/243.
