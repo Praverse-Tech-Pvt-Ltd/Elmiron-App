@@ -1462,7 +1462,7 @@ the tenant boundary, and the whole manager console except the coaching route.
 
 | Item | What it is | Verdict | |
 |---|---|---|---|
-| **`BE-W94`** | **`complete_upload.p_recorded_at` is the device's word with no bounds.** `capture_consent` bounds `captured_at` in both directions — it refuses a future capture (`MR-05 B1` added a configurable forward tolerance) and refuses one older than the server will accept on the device's word. `recorded_at` has neither, so a recording may claim any date, past or future | **Registered, not fixed.** It feeds no decision: `purge_after` is `now()`, and nothing reads `recordings.recorded_at`. It is a compliance-adjacent timestamp — when a doctor was recorded — carrying less protection than its sibling on the consent ledger, and the fix is the bounds `capture_consent` already has | open |
+| **`BE-W96`** | **`complete_upload.p_recorded_at` is the device's word with no bounds.** `capture_consent` bounds `captured_at` in both directions — it refuses a future capture (`MR-05 B1` added a configurable forward tolerance) and refuses one older than the server will accept on the device's word. `recorded_at` has neither, so a recording may claim any date, past or future | **Registered, not fixed.** It feeds no decision: `purge_after` is `now()`, and nothing reads `recordings.recorded_at`. It is a compliance-adjacent timestamp — when a doctor was recorded — carrying less protection than its sibling on the consent ledger, and the fix is the bounds `capture_consent` already has | open |
 | **`p_bitrate_kbps`, `p_bytes_received`** | Client-asserted, and nothing depends on either — a `CHECK` range and a progress bar respectively | Tidiness. Recorded in `docs/gotchas.md` with what reads them, so the next sweep does not re-open them | not a work item |
 
 ### Added by MR-38 C — one of the three was unblocked, and a correction to MR-37 D1
@@ -1545,7 +1545,7 @@ BE-W89  unsized, and still the last engineering item before the device gates
 |---|---|---|
 | **`BE-W14`** audit read path | **CLOSED** | Both clauses, named below |
 | **`BE-W15`** retention read path | **CLOSED** | Both clauses, plus the server-sourced-figure test |
-| **`BE-W95`** | **NEW** — the database and the contract disagree about the shape of `GET /analyses/:id/overrides` | Registered, not fixed |
+| **`BE-W100`** | **NEW** — the database and the contract disagree about the shape of `GET /analyses/:id/overrides` | Registered, not fixed |
 
 #### The recorded check, and why clause 1 was replaced
 
@@ -1600,7 +1600,7 @@ exercise in anger. Rows with a **null actor** have no tenant and are excluded, c
 number became `public.audio_retention_days()` and both the trigger and the read path call it.
 There is now exactly one `90` in the database.
 
-#### `BE-W95` — registered while building the contract
+#### `BE-W100` — registered while building the contract
 
 `list_analysis_overrides` shapes its rows with `to_jsonb(o)` and therefore emits `analysis_id`,
 `finding_id`, `overridden_by_user_id`, `created_at`. `AnalysisOverrideSchema` in `packages/core`
@@ -1667,5 +1667,32 @@ FE-W13  UNBLOCKED, 3 half-days -- NEXT. Replace its clause-2 check before starti
 FE-W12  still blocked: no `listAnalysisOverrides` client method, and its check
         asks for a render assertion in a workspace with no renderer
 BE-W89  unsized; still the last engineering item before the device gates
-BE-W95  new -- the overrides endpoint's shape disagrees between database and contract
+BE-W100 new -- the overrides endpoint's shape disagrees between database and contract
 ```
+
+### Added by MR-40 A — an id collision, and a tenant-boundary defect
+
+#### A2 — the register had TWO duplicate ids, and both were mine
+
+A register with two of the same id stops being one register. Swept all 129 ids that have a
+definition row; 14 had differing descriptions, and spot-checking showed 12 were the **same item
+at different stages** (`FE-W44` registered then fixed, `BE-W11` open then proven, and so on).
+
+**Two were genuine collisions, and I created both:**
+
+| Id | Original | Mine | Renumbered to |
+|---|---|---|---|
+| `BE-W94` | *"Does an out-of-geofence check-in start the visit?"* (MR-25) | `complete_upload.p_recorded_at` is unbounded (MR-38) | **`BE-W96`** |
+| `BE-W95` | A second consent answer does not supersede the first (MR-25, tied to `5.14`) | The overrides endpoint's casing drift (MR-39) | **`BE-W100`** |
+
+The originals keep their ids; mine moved. Renumbered in the register, in `docs/gotchas.md`, in
+`20260916000200`'s comment, in the mock and in the mock's contract suite. `PROJECT-OVERVIEW.md`
+is append-only, so its MR-38 and MR-39 sections still carry the old numbers — that is what the
+MR-40 section records the correction for.
+
+**The reviewer knew about one. The sweep found the second** — which is why A2 said to check the
+register rather than to fix the item named.
+
+| Item | What it is | Status |
+|---|---|---|
+| **`BE-W101`** | **An admin of one organisation can read another's consent ledger.** `list_consent_records` and `read_consent_record` both PROVEN open, with a positive control. Six more functions share the `or v_role = 'admin'` shape, three of them writes | **OPEN — escalated to the top of `docs/blocked-on-you.md`. Not fixed this session, deliberately** |

@@ -126,7 +126,7 @@ begin
   -- `createdAt`, and the mock's fixtures are typed to the schema. The database and the
   -- contract disagree about the shape of the same endpoint, which is the FIX-03 drift
   -- that migration's own comment says it closed. Registered in COMPLETION-PLAN as
-  -- BE-W95; not repeated here.
+  -- BE-W100; not repeated here.
   select coalesce(jsonb_agg(entry order by (entry ->> 'id')::bigint desc), '[]'::jsonb)
     into v_rows
     from (

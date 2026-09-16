@@ -1,4 +1,86 @@
 # Blocked on you — 14 August 2026
+> # 🔴 AN ADMIN OF ONE ORGANISATION CAN READ ANOTHER'S CONSENT LEDGER
+>
+> **Measured, not reasoned about. `BE-W101`, found 16 September 2026 (MR-40 A3).**
+>
+> **What was proven.** An admin of organisation A, calling the ordinary console read paths, gets
+> organisation B's consent records:
+>
+> | Probe | Result |
+> | --- | --- |
+> | `list_consent_records()` as admin of A, with a consent record belonging to B | **B's record is in the page** |
+> | `read_consent_record(B's id)` as admin of A | **returns the row — all 14 columns** |
+> | *Positive control:* the same record read by **B's own admin** | appears, as it should — so the target was reachable and the function does return data |
+>
+> The control matters: without it, an absence or a presence proves nothing. The rival record was
+> created, it was readable by its owner, and it was **also** readable by a stranger.
+>
+> ### Why nothing caught this
+>
+> ```sql
+> where (v_role = 'admin' or c.captured_by_mr_id in (select public.visible_user_ids()))
+> ```
+>
+> The `or` **short-circuits before the scoped half is evaluated**. `BE-W76` scoped two things —
+> `visible_user_ids()` itself, and the six `*_admin_all` RLS policies. **A function body that
+> bypasses `visible_user_ids()` entirely is covered by neither.** And because these functions are
+> `SECURITY DEFINER`, no policy runs behind them to catch it: `consent_records` is one of the nine
+> tables with RLS **forced and no policy at all**, so the function body *is* the boundary.
+>
+> `FIX-04`'s matrix did test this function — **before `BE-W76`**, when an admin's emptiness came
+> from territory scoping incidentally rather than from a tenant boundary deliberately. **A test
+> that passed for a reason since removed is not a test that still passes.**
+>
+> ### What is and is not exposed today
+>
+> - **This is in the FIRST 19 migrations** (`20260811000300`, `20260811000400`), so **production
+>   is running this code.**
+> - **Production has no second tenant to cross into.** `user_profiles.organisation_id` arrives in
+>   the pending 37, so there is exactly one organisation there and nothing to leak between.
+> - **Therefore the defect becomes live at the moment reference data and a second tenant arrive —
+>   which `§6.1` dates at ~22 September.** It is scheduled to start mattering on the same day the
+>   sequencing item below is.
+> - **A cross-tenant read IS recorded.** These reads succeed, and the function writes its audit
+>   row *before* returning — so the trail names the admin, the time and the reason they gave.
+>   That is the one mitigating fact and it is worth having: the exposure is a confidentiality
+>   failure, not an invisible one.
+>
+> ### Seven more sites share the shape, and three of them WRITE
+>
+> Located by matching the same `or v_role = 'admin'` construct across every `SECURITY DEFINER`
+> function. **Shape-identical is not proven** — grep locates, it does not decide — so these are
+> listed as untested, in the order they should be checked:
+>
+> | Function | Kind | Status |
+> | --- | --- | --- |
+> | `list_consent_records` | read | **PROVEN OPEN** |
+> | `read_consent_record` | read | **PROVEN OPEN** |
+> | `approve_call_report` | **WRITE** | shape-identical, untested |
+> | `create_analysis_override` | **WRITE** | shape-identical, untested |
+> | `reinstate_sync_item` | **WRITE** | shape-identical, untested |
+> | `read_analysis` | read | shape-identical, untested |
+> | `list_analyses` | read | shape-identical, untested |
+> | `list_analysis_overrides` | read | shape-identical, untested |
+>
+> **The three writes are the ones to look at first.** A cross-tenant read is a confidentiality
+> failure; a cross-tenant write is an integrity one, and `approve_call_report` decides whether
+> another company's call report is approved.
+>
+> ### What we need from you
+>
+> **This was not fixed in this session, deliberately.** It is a compliance-boundary change across
+> eight functions, it needs the three write paths measured before any of them is edited, and the
+> right fix is a decision rather than a patch: **does an admin have any legitimate cross-tenant
+> read at all?** If the answer is no — and `MR-06`'s ratified position is that an admin is a
+> *tenant* administrator, with platform access a separate audited break-glass path that is out of
+> v1 scope — then the `or v_role = 'admin'` escape should simply be deleted from all eight, and
+> the console's screens re-tested against the boundary.
+>
+> **What is safe to say now:** nothing needs doing before ~22 September, and everything needs
+> doing before it. Two tests in `services/api/tests/admin-escape.spec.ts` state the correct
+> property and are marked as not currently holding, so **the moment somebody closes the escape
+> they turn red and force a deliberate update** rather than passing silently.
+
 
 > # ❓ THE QUESTION THE 30 SEPTEMBER DATE IS ACTUALLY ASKING
 >

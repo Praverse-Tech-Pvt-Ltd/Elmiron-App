@@ -534,7 +534,7 @@ describe('the published API client works against the mock', () => {
  * **That is the MR-03 lesson, and `list_analysis_overrides` is the counter-example living in
  * this repository right now** — it emits `to_jsonb(row)` snake_case while
  * `AnalysisOverrideSchema` declares camelCase, and nothing caught it because nothing consumed
- * the read. Registered as `BE-W95`.
+ * the read. Registered as `BE-W100`.
  */
 describe('the audit and retention read paths', () => {
   it('returns an audit page that parses as ListAuditLogResponse', async () => {

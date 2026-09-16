@@ -3325,7 +3325,7 @@ for the parameter finds the second line; only the first line decides anything.
 | --- | --- | --- |
 | `complete_upload.p_bitrate_kbps` | **Nothing.** Stored behind a `CHECK` range and never read | Tidiness. Derivable as `size × 8 ÷ duration`, but duration is itself the client's |
 | `record_upload_progress.p_bytes_received` | **One reader:** `my_upload_queue`'s progress percentage. The other two functions only write it | Tidiness. A wrong value gives the MR a wrong progress bar for their own upload |
-| `complete_upload.p_recorded_at` | **Nothing** — `purge_after` is `now()`, not this | **Registered as `BE-W94`.** The device's word with **no bounds at all**, where the consent ledger's `captured_at` has both |
+| `complete_upload.p_recorded_at` | **Nothing** — `purge_after` is `now()`, not this | **Registered as `BE-W96`.** The device's word with **no bounds at all**, where the consent ledger's `captured_at` has both |
 
 **The rule this leaves behind:** the class is *"the server could know and chose to be told"*. A
 value the server genuinely cannot observe — audio duration — is not in it however much it looks
