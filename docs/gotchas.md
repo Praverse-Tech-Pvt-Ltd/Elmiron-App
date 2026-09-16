@@ -3442,3 +3442,37 @@ count is being corrected — one occurrence in fifteen runs says the totals are 
 right, and re-deriving twenty sessions of numbers to prove it would cost more than the
 uncertainty is worth. **A reader needs to know the numbers have an error bar, not a rewritten
 history.**
+
+### A red CI on a docs-only commit: compare the PARENT's job, not the diff
+
+**MR-39, on the session's final commit.** `ebd41a5` — five markdown files, 449 insertions, **zero
+code** — went red. The failing job was `migrations · Gate 0 RLS suite · rollbacks`, and the
+failing *step* was **`Start Supabase and apply migrations`**:
+
+```
+failed to start docker container "supabase_db_Elmiron-App"
+Error: failed to start containers
+```
+
+**The stack never came up, so nothing in the repository ran.** A red build whose failing step is
+*setup* is telling you about the runner, not about the change.
+
+**The diagnosis took one command, and it was not reading the diff.** The identical job had
+**succeeded on the parent commit** `4013102`, which contains every migration, contract, client
+method, mock route and test from the session. The delta between the two was documentation.
+
+```bash
+gh run view <parent-run-id> --json jobs --jq '.jobs[] | "\(.name): \(.conclusion)"'
+git diff --stat <parent> <head>
+```
+
+`gh run rerun <id> --failed` then passed.
+
+**The rule:** before reading a diff to explain a red build, establish **which step** failed and
+**whether the parent passed the same job**. A setup step that fails has not evaluated your
+change at all — and on a docs-only commit, an hour spent staring at markdown is an hour spent on
+the wrong system. This is *"before enumerating why an action failed, establish it was
+attempted"*, one layer up: the tests were not attempted.
+
+**One re-run is not a rate**, and no mechanism is claimed. Recorded for the shape, not the
+frequency.
