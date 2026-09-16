@@ -3330,3 +3330,45 @@ for the parameter finds the second line; only the first line decides anything.
 **The rule this leaves behind:** the class is *"the server could know and chose to be told"*. A
 value the server genuinely cannot observe — audio duration — is not in it however much it looks
 like it, and the only way to tell is to go and look at what the server actually holds.
+
+### `packages/ui`'s jest suites can fail to LOAD under `pnpm -r test` — 1 in 7 observed
+
+**MR-38, seen once while running the full suite.** Two suites failed with no test failing:
+
+```
+packages/ui test: Test Suites: 2 failed, 19 passed, 21 total
+packages/ui test: Tests:       237 passed, 237 total
+  ● Test suite failed to run
+    Cannot find module './pure' from '@testing-library/react-native/dist/index.js'
+    Cannot find module './event-builder' from '@testing-library/react-native/dist/fire-event.js'
+```
+
+**Read the two numbers together.** `237 passed, 237 total` with **zero failures** and a lower
+total than the usual 243 — that is a suite that never ran, not a suite that failed. A count
+alone would have shown 237 and looked like a smaller suite.
+
+**It is not the code.** The unresolvable modules are *inside*
+`@testing-library/react-native`'s own `dist`, and `packages/ui` run on its own passes
+**243/243** immediately afterwards. The likely mechanism is two jest processes —
+`packages/ui` and `apps/field` both use that library — resolving the same package
+concurrently under pnpm's isolated layout. **That is a hypothesis and it is not measured;
+no mechanism is claimed.**
+
+**The rate, with its denominator: 1 in 7 full `pnpm -r test` runs.** Six consecutive clean runs
+followed the failure. **Six clean runs is not evidence it is gone** — against a true rate of
+1-in-7, six clean runs has probability ≈0.40. The honest statement is *"seen once in seven"*,
+not *"intermittent"* and not *"fixed"*.
+
+**What to do if you hit it**
+
+1. **Check the suite TOTALS, not just the failure count.** `Tests: N passed, N total` with
+   `Test Suites: 2 failed` is this, and it is the only shape that looks green at a glance.
+2. **Re-run the workspace on its own** (`pnpm --filter @fieldforce/ui test`). If it passes
+   243/243, this is what you saw.
+3. **Do not reinstall on the strength of one occurrence.** Nothing has been established about
+   the cause, and a reinstall that "fixes" it would be the `"it stopped happening"` error with
+   a fresh denominator of one.
+
+**Not fixed, and deliberately not chased.** It belongs beside `BE-W92`: an environmental flake
+in the test harness with a measured rate and no mechanism. What this entry adds is the rate and
+the shape to recognise it by — which is precisely what `BE-W92` lacked for five sessions.
