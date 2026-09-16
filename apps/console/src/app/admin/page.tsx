@@ -4,7 +4,6 @@ import { createApiClient } from '@fieldforce/core';
 import {
   Body,
   Card,
-  Figure,
   Heading,
   Label,
   MissingNote,
@@ -149,19 +148,6 @@ export default async function Admin(): Promise<ReactNode> {
           </Card>
         </div>
       </div>
-
-      <Card>
-        <Heading>The manager console is not here</Heading>
-        <Body muted>
-          Phase 4&apos;s coaching queue and analysis review both put an AI analysis of a named
-          employee in front of their manager. §3.6 forbids that and the 3 September decision
-          reopened only the MR&apos;s own screens. See docs/fe-w3-spec.md.
-        </Body>
-        <div>
-          <Figure>1</Figure>{' '}
-          <Label>of 6 Phase 4 screens is a console screen that may be built</Label>
-        </div>
-      </Card>
     </div>
   );
 }
