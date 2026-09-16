@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { requireDatabase, withClient } from './db.js';
+import { DB_URL, requireDatabase, withClient } from './db.js';
 import { SERVICE_ROLE_KEY, API_URL } from './auth.js';
-import { parseSeedMrArgs, seedOneMr, verifySignIn } from '../scripts/seed-one-mr.mjs';
+import {
+  assertLocalhostOnly,
+  parseSeedMrArgs,
+  seedOneMr,
+  verifySignIn,
+} from '../scripts/seed-one-mr.mjs';
 import type { SeededUser } from '../scripts/seed-one-mr.d.mts';
 
 /**
@@ -95,5 +100,77 @@ describe.skipIf(!reachable)('seeding one user end to end', () => {
     // trigger — so re-runnability depends on this and not on cleanup.
     const [first, second] = await Promise.all([seedOneMr(stack), seedOneMr(stack)]);
     expect(first.email).not.toBe(second.email);
+  });
+});
+
+/**
+ * MR-37 C3 — the guard this seeder did not have.
+ *
+ * Found by sweeping the rule "every guard asserts its own preconditions" ACROSS the repo
+ * rather than at the site that produced it. `seed:day` and `seed:synthetic` have refused a
+ * non-localhost target since they were written; this one, which mints an `auth.users`
+ * identity and a `user_profiles` row, did not.
+ *
+ * Pure, so the refusal is asserted without a remote database to refuse.
+ */
+describe('seed:mr refuses to run anywhere but localhost', () => {
+  it('allows the three local forms', () => {
+    // The positive control. Without it a function that threw unconditionally would satisfy
+    // every assertion below.
+    expect(() => {
+      assertLocalhostOnly(
+        'database URL',
+        'postgresql://postgres:postgres@127.0.0.1:54322/postgres',
+      );
+    }).not.toThrow();
+    expect(() => {
+      assertLocalhostOnly('API URL', 'http://localhost:54321');
+    }).not.toThrow();
+    expect(() => {
+      assertLocalhostOnly('API URL', 'http://[::1]:54321');
+    }).not.toThrow();
+  });
+
+  it('refuses a remote database, and says what it would have written', () => {
+    expect(() => {
+      assertLocalhostOnly('database URL', 'postgresql://u:p@db.abcdefgh.supabase.co:5432/postgres');
+    }).toThrow(/refuses to run against database URL host "db\.abcdefgh\.supabase\.co"/u);
+    // Assert the CONTENT: a refusal that does not say what was nearly done teaches nobody
+    // why the rule exists.
+    expect(() => {
+      assertLocalhostOnly('database URL', 'postgresql://u:p@db.abcdefgh.supabase.co:5432/postgres');
+    }).toThrow(/auth identity/u);
+  });
+
+  it('refuses a remote API URL too, because the identity is minted before the database opens', () => {
+    expect(() => {
+      assertLocalhostOnly('API URL', 'https://abcdefgh.supabase.co');
+    }).toThrow(/refuses to run against API URL host/u);
+  });
+
+  it('refuses a URL it cannot parse rather than falling through', () => {
+    expect(() => {
+      assertLocalhostOnly('database URL', 'not a url');
+    }).toThrow(/could not parse the database URL/u);
+  });
+});
+
+describe('seed:mr is WIRED to its guard, not merely shipped with one', () => {
+  it('refuses a remote API URL before it creates anything', async () => {
+    // The wiring, which a pure test of `assertLocalhostOnly` cannot reach. No remote target is
+    // needed: if the guard is called the refusal happens first, and if it is not, the fetch to
+    // a non-existent host fails with a different error. The assertion distinguishes them.
+    await expect(
+      seedOneMr({ apiUrl: 'https://abcdefgh.supabase.co', dbUrl: DB_URL }),
+    ).rejects.toThrow(/refuses to run against API URL host/u);
+  });
+
+  it('refuses a remote database URL before it creates anything', async () => {
+    await expect(
+      seedOneMr({
+        apiUrl: API_URL,
+        dbUrl: 'postgresql://u:p@db.abcdefgh.supabase.co:5432/postgres',
+      }),
+    ).rejects.toThrow(/refuses to run against database URL host/u);
   });
 });

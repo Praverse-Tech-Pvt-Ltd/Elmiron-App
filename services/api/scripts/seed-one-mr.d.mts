@@ -49,3 +49,15 @@ export declare const verifySignIn: (
   password: string,
   stack: StackOptions,
 ) => Promise<string>;
+
+/**
+ * MR-37 C3. Refuses a non-localhost target for either URL.
+ *
+ * `seed:day` and `seed:synthetic` have both refused one since they were written; this seeder
+ * did not, and it is the one that mints an `auth.users` identity and a `user_profiles` row —
+ * a fabricated person inside a real tenant, in the table the tenant boundary is expressed in.
+ *
+ * Both URLs are checked because the identity is created over HTTP before the database
+ * connection is opened.
+ */
+export declare const assertLocalhostOnly: (label: string, url: string) => void;

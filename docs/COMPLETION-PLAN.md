@@ -1363,3 +1363,10 @@ individually; anything not listed was not checked.
 
 **The cheapest engineering item left is one half-day. The most expensive thing on this page is a
 name that costs you nothing and gets worse every day it is not given.**
+
+### Added by MR-37 C3 — registered from the rule sweeps
+
+| Item | What it is | Why registered rather than fixed |
+|---|---|---|
+| **`FE-W48`** | **The client and the server disagree about what an absent capture source means.** `record_check_in(p_source ... default 'automatic')`; `outbox.ts:701` sends `payload.source ?? 'manual'`. `check_ins.source` and `check_outs.source` are persisted `capture_source` columns, so the disagreement lands in a record of where an MR was | **Unreachable today.** The one enqueue site (`capture/visit.ts:148`) always sets `'manual'` explicitly, so the `??` never fires. It becomes live the day a GPS check-in path exists — which is exactly when a wrong provenance would matter. Fixing it now means choosing which default is right, and that is a product question: does an absent source mean "the device did it" or "the person did it"? | open |
+| **Sweep 4's method** | Text-matching refusal messages against the suite cannot tell a tested control from an untested one — 210 SQLSTATE assertions are invisible to it | Recorded in `docs/gotchas.md` as a method that does not work, with the spot-check evidence. A sound version needs per-function coverage | not a work item |

@@ -3166,3 +3166,101 @@ expect(screen.getByText('...')).toBeTruthy();
 
 Every `src/routes/*.test.tsx` already awaits it. That was the clue and it took a probe to see:
 copying an existing test's shape exactly is faster here than reasoning about the API.
+
+### The four rule-sweeps, run across the repo — with counts, including the empty ones
+
+**MR-37 C.** Every rule this project has written down was earned at one site and then applied at
+that site. `TerritoryZone.source` produced *"count the call sites that read the discriminant"*,
+the store was fixed, and **eleven screens went unswept for five sessions**. The JDK fact was
+corrected in one of six places. **Applying a rule once is not applying it.**
+
+So each rule was swept across the whole repository. **The counts are recorded so nobody runs
+these again next month to rediscover the same nothing.**
+
+#### 1. Discriminants with zero readers — 0 found, and the sweep had to be widened twice
+
+| Shape swept | Count | Zero-reader |
+| --- | --- | --- |
+| `type X = {…} \| {…}` object unions | 8 | **0** |
+| `type X = 'a' \| 'b'` string-literal aliases used as a field | 17 | **0 genuine** |
+
+Two aliases showed zero `=== 'value'` reads and **both were false positives**, which is the
+useful half:
+
+- **`OverrideDecision`** — a callback payload (`onLog(decision, reason)`) consumed outside
+  `packages/ui`. Nothing in the package should be comparing it.
+- **`OemFamily`** — dispatched by **keyed lookup** (`oem-content.ts`: `unknown: UNKNOWN`), not
+  by comparison. That is a *stronger* form of reading than `===`, because it is exhaustive by
+  construction, and it is invisible to this sweep.
+
+**The lesson for the next person running it: an `===` grep does not see keyed dispatch.** And
+the first version of the sweep was worse than useless — it attributed every `.kind ===` in the
+repo to every union and reported `42` for all eight.
+
+#### 2. Sentinels standing in for "I don't know" — 20 candidates, 1 registered, 0 live
+
+`?? <literal>` / `|| <literal>` where the literal is a valid in-range value. Triaged by the only
+question that matters: **does the substituted value render to an MR as if it were an answer, or
+reach a record?**
+
+| Verdict | Count | Examples |
+| --- | --- | --- |
+| Names the absence honestly | 6 | `?? 'Doctor not in your list'`, `?? 'unknown role'`, `?? 'The server refused this.'` |
+| Unreachable type-appeasement | 5 | `parts['hour'] ?? '00'` in `territory-day.ts` |
+| Benign config/paging defaults | 8 | `limit ?? 200`, the dev API base URL |
+| **Registered** | **1** | `outbox.ts:701` — `source: payload.source ?? 'manual'` |
+
+**The `clockIn` case is the one worth explaining, because the answer was to change nothing.**
+`${parts['hour'] ?? '00'}` renders `00:00` — a perfectly plausible wall-clock time — if a part
+is missing. But `partsIn` *requests* `hour` and `minute` explicitly, and the failure modes are
+throws: an invalid `timeZone` throws at `Intl.DateTimeFormat` construction, an invalid date
+throws in `formatToParts`. **No conforming runtime reaches the fallback.** Adding a `--:--`
+branch there would be precisely the defect this same file warns about in its own comment — *"a
+guard no runtime reaches, carrying a comment that says it is needed"* — which is why its
+`24:00` normalisation was removed. **Reachability first, then the fix.**
+
+**The registered one is a disagreement, not a bug.** `check_ins.source` is a
+`capture_source` enum; `record_check_in` defaults an absent source to **`automatic`**, and the
+client defaults it to **`manual`**. Two different meanings for the same absence, on opposite
+sides of the wire, and the client's wins because it is sent explicitly. **Unreachable today** —
+the single enqueue site always sets `'manual'` — so it is latent, and it becomes live the day a
+GPS check-in path exists.
+
+#### 3. Guards that do not assert their preconditions — 1 found and FIXED
+
+14 scripts swept; 11 are guards. **`seed-one-mr.mjs` had no localhost guard**, while
+`seed-day.mjs` and `seed-synthetic.mjs` have refused a non-localhost target since they were
+written — and it is the seeder with the widest blast radius: it mints an `auth.users` identity
+through GoTrue and inserts an organisation, a territory and a **`user_profiles`** row, which is
+the table the tenant boundary is expressed in.
+
+**Both URLs are now checked, and the order is the point:** the identity is created over HTTP
+*before* the database connection opens, so a guard on `--db-url` alone would have refused after
+the user already existed.
+
+#### 4. Controls that have never fired — the method FAILED, and that is the finding
+
+**302 `raise exception` sites** in the migrations. A naive match of each message against the
+suite reported **233 with no test**. That number is wrong and the method is unsound:
+
+- spot-checking four of them, **three were false positives** — `"append-only"` appears in **14**
+  test files, `"is not yours"` in 3, `"requires a reason"` in 4;
+- **210 SQLSTATE literals** appear in the suite, so a large share of refusals are asserted by
+  `errcode` and are invisible to any message match.
+
+**Recorded so nobody re-runs it.** A sound version needs per-function coverage, not text
+matching.
+
+**One spot-check was genuine and is now fixed.** `"territory % cannot be its own parent"` and
+`"cannot be a descendant of itself"` had **zero** tests since BE-W1 — four files insert
+territories *with* a `parent_id`, so the happy path was well covered and the refusal was
+reachable only in principle. It matters because the territory tree is what
+`visible_territory_ids` walks, and a cycle there is either an infinite walk or a silently
+truncated one — both decide what an MR can see. Three tests now, mutated by disabling
+`territories_reject_cycle`: both refusals fail, the ordinary parent/child control passes.
+
+**And the sweep found its own best example the other way round.** MR-37 B added a control that
+did not exist — `complete_upload` never checked that an object was stored — and **five existing
+tests had been finalising uploads whose bytes were never written**. No grep would have found
+that: the control was absent, so there was no message to search for. **A sweep for controls that
+never fired cannot see a control that was never written.**

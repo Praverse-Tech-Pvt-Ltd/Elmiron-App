@@ -339,3 +339,62 @@ describe.skipIf(!reachable)('custom_access_token_hook', () => {
     });
   });
 });
+
+/**
+ * MR-37 C1/C3 — a control that had never fired.
+ *
+ * Found by sweeping "controls that have never fired" across the repo rather than at the site
+ * that produced the rule. `20260811000100_commercial_schema.sql` has refused a self-parenting
+ * territory and a cycle since BE-W1; nothing had ever attempted either. Tests insert
+ * territories WITH a `parent_id` in four files, so the happy path is well covered and the
+ * refusal was reachable only in principle.
+ *
+ * It matters because the territory tree is what `visible_territory_ids` walks: a cycle there
+ * is either an infinite walk or a silently truncated one, and both decide what an MR can see.
+ */
+describe.skipIf(!reachable)('the territory tree refuses to contain a cycle', () => {
+  const newTerritory = async (client: Client, parent: string | null): Promise<string> => {
+    const id = randomUUID();
+    await client.query(
+      `insert into public.territories (id, name, code, parent_id, organisation_id)
+       values ($1, $2, $3, $4, (select id from public.organisations limit 1))`,
+      [id, `mr37-${id.slice(0, 8)}`, `MR37${id.slice(0, 6)}`, parent],
+    );
+    return id;
+  };
+
+  it('allows an ordinary parent and child, so the refusals below are not blanket', async () => {
+    // The positive control. Without it, a trigger that refused every insert would satisfy both
+    // assertions that follow.
+    await inRolledBackTransaction(async (client) => {
+      const parent = await newTerritory(client, null);
+      const child = await newTerritory(client, parent);
+      const { rows } = await client.query<{ parent_id: string }>(
+        'select parent_id from public.territories where id = $1',
+        [child],
+      );
+      expect(rows[0]?.parent_id).toBe(parent);
+    });
+  });
+
+  it('refuses a territory that is its own parent', async () => {
+    await expect(
+      inRolledBackTransaction(async (client) => {
+        const id = await newTerritory(client, null);
+        await client.query('update public.territories set parent_id = $1 where id = $1', [id]);
+      }),
+    ).rejects.toThrow(/cannot be its own parent/u);
+  });
+
+  it('refuses a cycle that closes through a grandparent', async () => {
+    // The one-hop case above is the easy half. This is the one a walk would loop on.
+    await expect(
+      inRolledBackTransaction(async (client) => {
+        const a = await newTerritory(client, null);
+        const b = await newTerritory(client, a);
+        const c = await newTerritory(client, b);
+        await client.query('update public.territories set parent_id = $1 where id = $2', [c, a]);
+      }),
+    ).rejects.toThrow(/descendant of itself/u);
+  });
+});

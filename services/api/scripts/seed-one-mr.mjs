@@ -92,6 +92,47 @@ export const parseSeedMrArgs = (argv) => {
  * "Invalid login credentials" at the sign-in screen. `email_confirm: true` because
  * a local stack has no mail delivery and an unconfirmed user cannot sign in.
  */
+const LOCALHOST_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
+
+/**
+ * MR-37 C3. Pure, so the refusal is testable without a real remote target.
+ *
+ * **Why this was missing and why that matters.** `seed:day` and `seed:synthetic` have both
+ * refused a non-localhost target since they were written. This one did not, and it is the
+ * seeder with the widest blast radius: it mints an `auth.users` identity through GoTrue and
+ * inserts an organisation, a territory and a `user_profiles` row. Pointed at a deployment it
+ * puts a fabricated person inside a real tenant -- and `user_profiles` is what the tenant
+ * boundary is expressed in.
+ *
+ * **BOTH URLs are checked, and the order is the reason.** The identity is created over HTTP
+ * BEFORE the database connection is opened, so a guard on `--db-url` alone would refuse after
+ * the user already existed. `handover.md` documented the remote-URL hazard three times and
+ * every mitigation was a rule for a human to follow; a guard that is not enforced in code is
+ * not a guard.
+ *
+ * @param {string} label which URL this is, for the message
+ * @param {string} url
+ * @throws {Error} if the URL's host is not localhost
+ */
+export const assertLocalhostOnly = (label, url) => {
+  let host;
+  try {
+    // Node's URL.hostname keeps the brackets on an IPv6 literal (e.g. "[::1]").
+    host = new URL(url).hostname.replace(/^\[|\]$/gu, '');
+  } catch {
+    throw new Error(`seed:mr refuses to run: could not parse the ${label} "${url}".`);
+  }
+
+  if (!LOCALHOST_HOSTS.has(host)) {
+    throw new Error(
+      `seed:mr refuses to run against ${label} host "${host}". It creates an auth identity, ` +
+        'an organisation, a territory and a user profile, which must never reach a ' +
+        'deployment. Only 127.0.0.1, ::1 or localhost are allowed. If you genuinely need a ' +
+        'user on a remote database, create it by hand and own it.',
+    );
+  }
+};
+
 export const createAuthUser = async (email, password, { apiUrl, serviceRoleKey }) => {
   const response = await fetch(`${apiUrl}/auth/v1/admin/users`, {
     method: 'POST',
@@ -120,6 +161,11 @@ export const seedOneMr = async (options = {}) => {
   const dbUrl = options.dbUrl ?? process.env.SUPABASE_DB_URL ?? DEFAULT_DB_URL;
   const serviceRoleKey =
     options.serviceRoleKey ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? DEFAULT_SERVICE_ROLE_KEY;
+
+  // MR-37 C3. Both targets, before either is touched. The identity is created over HTTP
+  // below, so refusing only on `dbUrl` would refuse after the user already existed.
+  assertLocalhostOnly('API URL', apiUrl);
+  assertLocalhostOnly('database URL', dbUrl);
 
   // The auth user first: user_profiles has an FK onto auth.users, so the profile
   // cannot exist before the identity it belongs to.
