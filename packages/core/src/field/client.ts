@@ -30,6 +30,8 @@ import {
   SyncPushRequestSchema,
   SyncPushResponseSchema,
   WithdrawConsentRequestSchema,
+  ListAuditLogResponseSchema,
+  RetentionStatusSchema,
 } from './endpoints.js';
 import type {
   CreateCallReportRequest,
@@ -66,6 +68,8 @@ import type {
   SyncPushRequest,
   SyncPushResponse,
   WithdrawConsentRequest,
+  ListAuditLogResponse,
+  RetentionStatus,
 } from './endpoints.js';
 import {
   CallReportSchema,
@@ -355,6 +359,41 @@ export const createApiClient = (options: ApiClientOptions) => {
         `${API_PATHS.consentRecords}${toQueryString(params as Record<string, QueryValue>)}`,
         ListConsentRecordsResponseSchema,
       ),
+
+    /**
+     * `BE-W14` — the console's view of `audit_log`.
+     *
+     * Admin-only and tenant-bounded IN THE DATABASE, not here: `public.list_audit_log` is
+     * `SECURITY DEFINER` against a table with no SELECT policy, so the whole boundary is in
+     * its body and this client cannot widen it. A non-admin gets `permission denied`, not an
+     * empty page — the two are different claims and only one is true.
+     *
+     * `reason` is required by the server and is recorded WITH the read: asking who looked at
+     * the trail is answered from the trail.
+     */
+    listAuditLog: (input: {
+      readonly limit?: number;
+      readonly beforeId?: number;
+      readonly reason: string;
+    }): Promise<ListAuditLogResponse> =>
+      request('POST', API_PATHS.auditLog, ListAuditLogResponseSchema, {
+        p_limit: input.limit ?? 100,
+        p_before_id: input.beforeId ?? null,
+        p_reason: input.reason,
+      }),
+
+    /**
+     * `BE-W15` — the retention figures, including the period the database actually enforces.
+     *
+     * `retentionDays` is `public.audio_retention_days()`, which is also what stamps
+     * `purge_after`. The console may print it precisely because it is not a second copy of
+     * the design's number — which is why the admin screen refused to print one before this
+     * existed.
+     */
+    getRetentionStatus: (input: { readonly reason: string }): Promise<RetentionStatus> =>
+      request('POST', API_PATHS.retentionStatus, RetentionStatusSchema, {
+        p_reason: input.reason,
+      }),
 
     listAnalyses: (params: Partial<ListAnalysesRequest> = {}): Promise<ListAnalysesResponse> =>
       request(

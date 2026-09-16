@@ -641,6 +641,43 @@ const routes: Route[] = [
     }),
   },
   {
+    // BE-W14. POST, because `list_audit_log` takes a REQUIRED reason and a reason does not
+    // belong in a URL that lands in a proxy log -- the reason is itself recorded.
+    //
+    // Shaped from `ListAuditLogResponseSchema`, which is shaped from the function, rather
+    // than from this file's own idea of an audit row. That is the MR-03 lesson: a mock with
+    // its own shape is a second contract, and `list_analysis_overrides` is what happens
+    // when the two drift (BE-W95).
+    method: 'POST',
+    pattern: API_PATHS.auditLog,
+    handler: (ctx) => ({
+      body: {
+        data: ctx.scenario === 'empty' ? [] : fx.auditLog,
+        readAt: fx.auditLog[0]?.occurredAt ?? '2026-08-10T16:30:00+05:30',
+        auditLogId: 9001,
+        // Non-zero on purpose: a mock that always says zero would let a console ship that
+        // never renders the "rows withheld" case.
+        systemRowsHidden: ctx.scenario === 'empty' ? 0 : 2,
+      },
+    }),
+  },
+  {
+    // BE-W15. `retentionDays` is the number the DATABASE enforces, not the design's.
+    method: 'POST',
+    pattern: API_PATHS.retentionStatus,
+    handler: (ctx) => ({
+      body: {
+        retentionDays: 90,
+        liveCount: ctx.scenario === 'empty' ? 0 : 52,
+        overdueCount: 0,
+        destroyedCount: ctx.scenario === 'empty' ? 0 : 477,
+        purgeStalled: false,
+        readAt: fx.auditLog[0]?.occurredAt ?? '2026-08-10T16:30:00+05:30',
+        auditLogId: 9002,
+      },
+    }),
+  },
+  {
     method: 'GET',
     pattern: API_PATHS.myShiftWindow,
     handler: (ctx) => ({

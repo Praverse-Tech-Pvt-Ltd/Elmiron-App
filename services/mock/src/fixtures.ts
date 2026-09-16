@@ -1,5 +1,6 @@
 import type {
   Analysis,
+  AuditLogEntry,
   AnalysisOverride,
   BeatPlan,
   CallReport,
@@ -772,5 +773,37 @@ export const overdueCallReports: OverdueCallReport[] = [
     mrId: IDS.mr,
     visitId: IDS.visitDone,
     submittedAt: '2026-08-08T10:26:00+05:30',
+  },
+];
+
+/**
+ * BE-W14. Typed to `AuditLogEntry`, so this fixture cannot drift from the shape
+ * `public.list_audit_log()` returns without the compiler saying so.
+ *
+ * Two rows on purpose: one `select` carrying a reason (an admin reading a consent record,
+ * which is the shape that has to be legible in a console) and one `insert` with none.
+ */
+export const auditLog: AuditLogEntry[] = [
+  {
+    id: 4102,
+    actorId: IDS.manager,
+    actorRole: 'field_manager',
+    action: 'select',
+    tableName: 'consent_records',
+    rowId: IDS.consentGranted,
+    occurredAt: T(16, 12),
+    requestId: 'req-mock-4102',
+    reason: 'Checking the notice version shown before the Pune visit.',
+  },
+  {
+    id: 4101,
+    actorId: IDS.mr,
+    actorRole: 'mr',
+    action: 'insert',
+    tableName: 'visits',
+    rowId: IDS.visitDone,
+    occurredAt: T(9, 5),
+    requestId: null,
+    reason: null,
   },
 ];

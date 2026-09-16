@@ -1538,3 +1538,75 @@ BE-W89  unsized, and still the last engineering item before the device gates
 
 **The sized engineering column is 1 half-day done and 6 half-days newly revealed**, not the
 6 half-days of console work MR-37 recorded as ready.
+
+### Added by MR-39 B — BE-W14 and BE-W15 are closed, and the check that let them look closed is replaced
+
+| Item | State | Verified by |
+|---|---|---|
+| **`BE-W14`** audit read path | **CLOSED** | Both clauses, named below |
+| **`BE-W15`** retention read path | **CLOSED** | Both clauses, plus the server-sourced-figure test |
+| **`BE-W95`** | **NEW** — the database and the contract disagree about the shape of `GET /analyses/:id/overrides` | Registered, not fixed |
+
+#### The recorded check, and why clause 1 was replaced
+
+`BE-W14`'s check was two clauses. MR-37 ran the first and stopped, and it passed **for a reason
+unrelated to what it checks**:
+
+> `grep -c "auditLog" packages/core/src/field/endpoints.ts` → `≥1`
+
+The two matches were a prose comment and the `auditLogId` field on the *analysis overrides*
+response. **A grep locates; it does not decide.** Replaced with a condition that constrains what
+matched:
+
+```bash
+node -e "const c=require('./packages/core/dist/index.js');
+  const need=['AuditLogEntrySchema','ListAuditLogResponseSchema','RetentionStatusSchema'];
+  if (need.some(n => typeof c[n]?.parse !== 'function')) process.exit(1);
+  try { c.ListAuditLogResponseSchema.parse({data:[],readAt:'nope',auditLogId:0}); process.exit(1); } catch {}"
+```
+
+It requires the names to be **exported**, to be **zod schemas**, and to **reject a malformed
+payload** — an exported name that parses anything is not a contract. **Run: PASS.**
+
+> **Clause 2:** *"an RLS test proves a non-admin gets `permission denied`, not an empty list."*
+> **Run: PASS** — `services/api/tests/audit-read-path.spec.ts`, 13 tests.
+
+`BE-W15`'s extra clause — *"a test asserting the figure shown is server-sourced"* — **Run:
+PASS.** The test compares `retention_status().retentionDays` against
+`public.audio_retention_days()` **and** asserts `stamp_audio_retention()`'s body calls that same
+function, so the figure the console prints and the figure the trigger enforces cannot drift.
+
+#### What the design had to answer
+
+**Reading an append-only log is itself an auditable act.** `list_audit_log` writes its own row
+**before** gathering data, so the read is self-referential on purpose: nobody reads the trail
+without appearing in it. It only SELECTs and INSERTs, so `audit_log_reject_mutation` is
+untouched.
+
+**What is NOT audited, stated rather than left to be found:** a *refused* read. The refusal
+raises, which rolls back the audit row written in the same transaction, so a non-admin rattling
+the handle leaves no trace. Recording it would need an autonomous transaction, which this schema
+has nowhere else.
+
+**Tenancy without an `organisation_id`.** `audit_log` has no tenant column; a row's tenant is its
+**actor's**. Scope is `actor_id in (select public.visible_user_ids())` with **no
+`or v_role = 'admin'` escape** — `list_consent_records` has one, written before BE-W76, and
+copying it into a new function would reopen the boundary the console is the first surface to
+exercise in anger. Rows with a **null actor** have no tenant and are excluded, counted in
+`systemRowsHidden` so a short page reads as scoped rather than as empty.
+
+**One number for the retention period.** It was a bare `interval '90 days'` inside
+`stamp_audio_retention`. A read path returning its own `90` would have agreed **by luck**, so the
+number became `public.audio_retention_days()` and both the trigger and the read path call it.
+There is now exactly one `90` in the database.
+
+#### `BE-W95` — registered while building the contract
+
+`list_analysis_overrides` shapes its rows with `to_jsonb(o)` and therefore emits `analysis_id`,
+`finding_id`, `overridden_by_user_id`, `created_at`. `AnalysisOverrideSchema` in `packages/core`
+declares `analysisId`, `findingId`, `overriddenByUserId`, `createdAt`, and the mock's fixtures
+are typed to the schema. **The database and the contract disagree about the shape of the same
+endpoint** — which is the FIX-03 drift that migration's own comment says it closed.
+
+**Nothing caught it because nothing consumes the read** (MR-38 B). The two new functions build
+their keys explicitly in camelCase rather than with `to_jsonb`, so they do not join it.

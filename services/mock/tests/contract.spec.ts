@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ZodType } from 'zod';
 import {
   AnalysisOverrideSchema,
+  ListAuditLogResponseSchema,
   AnalysisSchema,
   ApiErrorResponseSchema,
   ApiRequestError,
@@ -518,5 +519,61 @@ describe('the published API client works against the mock', () => {
 
     await expect(client.listVisits()).rejects.toBeInstanceOf(ApiRequestError);
     await expect(client.listVisits()).rejects.toMatchObject({ code: 'permission_denied' });
+  });
+});
+
+/**
+ * `BE-W14` / `BE-W15` — MR-39 B4.
+ *
+ * The mock's two new routes are shaped from the contract, and the contract is shaped from
+ * the database functions. This is the binding that keeps the three in step: the route is
+ * driven through `createApiClient`, which parses the response with the very schema
+ * `packages/core` publishes, so a mock that invented its own shape fails here rather than in
+ * a console six weeks later.
+ *
+ * **That is the MR-03 lesson, and `list_analysis_overrides` is the counter-example living in
+ * this repository right now** — it emits `to_jsonb(row)` snake_case while
+ * `AnalysisOverrideSchema` declares camelCase, and nothing caught it because nothing consumed
+ * the read. Registered as `BE-W95`.
+ */
+describe('the audit and retention read paths', () => {
+  it('returns an audit page that parses as ListAuditLogResponse', async () => {
+    const client = createApiClient({ baseUrl, getAccessToken: () => 'mock-token' });
+
+    const page = await client.listAuditLog({ reason: 'Checking who read the consent ledger.' });
+
+    // Asserting the CONTENT, not just that it parsed: an empty page would satisfy the schema
+    // and prove nothing about the shape of a row.
+    expect(page.data.length).toBeGreaterThan(0);
+    const [first] = page.data;
+    expect(first?.actorRole).toBeDefined();
+    expect(first?.tableName.length).toBeGreaterThan(0);
+    expect(page.auditLogId).toBeGreaterThan(0);
+    // Non-zero on purpose in the mock: a console that never sees this case never renders it.
+    expect(page.systemRowsHidden).toBeGreaterThan(0);
+  });
+
+  it('returns retention figures whose period is a number, not a rendered string', async () => {
+    const client = createApiClient({ baseUrl, getAccessToken: () => 'mock-token' });
+
+    const status = await client.getRetentionStatus({ reason: 'Quarterly retention review.' });
+
+    expect(typeof status.retentionDays).toBe('number');
+    expect(status.retentionDays).toBeGreaterThan(0);
+    expect(status.purgeStalled).toBe(false);
+    expect(status.auditLogId).toBeGreaterThan(0);
+  });
+
+  it('answers the empty scenario without inventing rows', async () => {
+    // Driven through `call`, like every other scenario test here: `createApiClient` has no
+    // header hook, and the scenario is selected by the `x-mock-scenario` request header.
+    const { body } = await call('/rpc/list_audit_log', {
+      method: 'POST',
+      body: { p_reason: 'Nothing to see.' },
+      scenario: 'empty',
+    });
+    const page = ListAuditLogResponseSchema.parse(body);
+    expect(page.data).toEqual([]);
+    expect(page.systemRowsHidden).toBe(0);
   });
 });

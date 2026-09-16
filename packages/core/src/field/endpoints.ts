@@ -6,7 +6,7 @@ import {
   LanguageTagSchema,
   UuidSchema,
 } from '../shared/primitives.js';
-import { TerritorySchema, UserProfileSchema } from '../shared/identity.js';
+import { RoleSchema, TerritorySchema, UserProfileSchema } from '../shared/identity.js';
 import {
   BeatPlanSchema,
   BeatPlanStatusSchema,
@@ -574,6 +574,73 @@ export type SyncPullResponse = z.infer<typeof SyncPullResponseSchema>;
 // Paths
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// BE-W14 / BE-W15 — the audit and retention read paths
+// ---------------------------------------------------------------------------
+
+/**
+ * One row of `audit_log`, as `public.list_audit_log()` returns it.
+ *
+ * **Taken from the function, not invented.** The keys are built explicitly in camelCase by
+ * that function rather than with `to_jsonb(row)` — which is what `list_analysis_overrides`
+ * does, and why the database emits `analysis_id` where `AnalysisOverrideSchema` declares
+ * `analysisId`. Registered as `BE-W95`; this pair does not repeat it.
+ *
+ * `ipAddress` is deliberately absent. It is in the table for an investigator with database
+ * access, and a console screen is not that.
+ */
+export const AuditLogEntrySchema = z.object({
+  id: z.number().int().positive(),
+  actorId: UuidSchema,
+  actorRole: RoleSchema.nullable(),
+  action: z.enum(['insert', 'update', 'delete', 'select']),
+  tableName: z.string().min(1),
+  rowId: z.string().nullable(),
+  occurredAt: IsoDateTimeSchema,
+  requestId: z.string().nullable(),
+  reason: z.string().nullable(),
+});
+export type AuditLogEntry = z.infer<typeof AuditLogEntrySchema>;
+
+/**
+ * `GET` the audit log — admin-only, tenant-bounded, and audited by its own act.
+ *
+ * `auditLogId` is the row THIS read wrote. Reading the trail appends to the trail, so a
+ * caller can point at its own read in it.
+ *
+ * `systemRowsHidden` counts rows with no actor. They have no profile and therefore no
+ * organisation, so they cannot be shown to one tenant without being shown to all — the
+ * count is here so a short page reads as scoped rather than as empty.
+ */
+export const ListAuditLogResponseSchema = z.object({
+  data: z.array(AuditLogEntrySchema),
+  readAt: IsoDateTimeSchema,
+  auditLogId: z.number().int().positive(),
+  systemRowsHidden: z.number().int().nonnegative(),
+});
+export type ListAuditLogResponse = z.infer<typeof ListAuditLogResponseSchema>;
+
+/**
+ * The retention figures, as `public.retention_status()` returns them.
+ *
+ * `retentionDays` comes from `public.audio_retention_days()`, which is also what
+ * `stamp_audio_retention()` uses to set `purge_after` — one number, two readers. That is
+ * what lets the console print it: the figure it shows is the figure the database enforces,
+ * not a copy of the design's.
+ *
+ * The counts are per-organisation, scoped through `visible_user_ids()`.
+ */
+export const RetentionStatusSchema = z.object({
+  retentionDays: z.number().int().positive(),
+  liveCount: z.number().int().nonnegative(),
+  overdueCount: z.number().int().nonnegative(),
+  destroyedCount: z.number().int().nonnegative(),
+  purgeStalled: z.boolean(),
+  readAt: IsoDateTimeSchema,
+  auditLogId: z.number().int().positive(),
+});
+export type RetentionStatus = z.infer<typeof RetentionStatusSchema>;
+
 export const API_PATHS = {
   me: '/me',
   territories: '/territories',
@@ -622,6 +689,8 @@ export const API_PATHS = {
   approveCallReportsBulk: '/rpc/approve_call_reports_bulk',
   overdueCallReports: '/rpc/overdue_call_reports',
   myShiftWindow: '/rpc/my_shift_window',
+  auditLog: '/rpc/list_audit_log',
+  retentionStatus: '/rpc/retention_status',
 } as const;
 
 export const EntityResponseSchemas = {
