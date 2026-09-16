@@ -1,5 +1,51 @@
 # Blocked on you — 14 August 2026
 
+> # 📅 TWO DATED DEADLINES, AND NEITHER WARNS YOU FIRST
+>
+> **Both break CI on a fixed date. Neither is an engineering task. Both are yours.**
+>
+> | Date | What breaks | Days left as of 16 Sep 2026 |
+> | --- | --- | --- |
+> | **30 September 2026, 23:59 IST** | `CONTRACT_I3_DEADLINE` — the `TranscriptV0` placeholder expires | **14** |
+> | **6 November 2026** | `5.9` — the UCPMP sample cap decision (warns from 16 October) | 51 |
+>
+> ### The 30 September one has NO warning period, and that is the difference
+>
+> `5.9`'s mechanism (`check:decision-debt`) has **three states** — clear, warn, fail — and the
+> reason is written into it: *"a red build arriving unannounced on the day is treated as an
+> obstacle to get past, where a warning three weeks earlier is treated as a question."*
+>
+> **`CONTRACT_I3_DEADLINE` has two.** `packages/core/src/field/transcript-v0.expiry.test.ts`
+> asserts `hasV1 || !expired`. It is green today and it turns red at **2026-09-30T18:29:59Z**
+> with no notice of any kind. It runs in CI on every push (`ci.yml:83`).
+>
+> **This entry is the warning the mechanism does not give you.** Verified 16 September: no
+> `TranscriptV1Schema` is exported anywhere in the repository, and the deadline has never been
+> moved.
+>
+> ### The two honest resolutions, and a third that is not one
+>
+> 1. **A real `TranscriptV1`** — which needs the measured word error rate on real Hinglish
+>    MR-doctor audio and the vendor decision that follows from it. Both are owned by AI/ML and
+>    both are past due since week 2.
+> 2. **Formally cut the AI layer**, and remove the test with the reason recorded in the commit.
+>    That is a legitimate outcome and it is a decision, not a deletion.
+>
+> **Not a resolution: shipping a placeholder `TranscriptV1` to make CI green.** That is working
+> around the guard the test exists to be — its own header says *"a placeholder that works is a
+> placeholder that stays"*. And it would buy nothing: **the AI/ML chain cannot start anyway
+> until the PV/DPDP signatory exists** (items 4.1 and 4.4, open since week 1).
+>
+> **Extending the date is the third path and it is honest if you own it.** The test says how:
+> change one line and name the person who agreed the new date in the commit message. What is not
+> honest is letting it go red and then extending it in a hurry to unblock a build.
+>
+> **What it costs to do nothing:** from 1 October, every push to `main` has a red `CI`. This
+> repository already knows where that leads — red became routine on 22 August, the workflows
+> were disabled on 23 August **with no reason recorded**, and production auto-paused unnoticed
+> for two weeks. See `docs/gotchas.md`.
+
+
 > # ⚠ ONE QUERY, AND NOBODY HAS RUN IT
 >
 > **If you have production credentials, run this before you read anything else on this page.
