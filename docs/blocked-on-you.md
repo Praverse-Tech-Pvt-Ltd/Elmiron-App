@@ -45,31 +45,47 @@
 >   That is the one mitigating fact and it is worth having: the exposure is a confidentiality
 >   failure, not an invisible one.
 >
-> ### Seven more sites share the shape, and three of them WRITE
+> ### ALL EIGHT SITES ARE PROVEN OPEN — MR-41 A3, 17 September 2026
 >
-> Located by matching the same `or v_role = 'admin'` construct across every `SECURITY DEFINER`
-> function. **Shape-identical is not proven** — grep locates, it does not decide — so these are
-> listed as untested, in the order they should be checked:
+> MR-40 located eight bodies carrying the construct and proved two of them. **MR-41 measured the
+> other six. Every one is open, including all three WRITES.**
 >
-> | Function | Kind | Status |
-> | --- | --- | --- |
-> | `list_consent_records` | read | **PROVEN OPEN** |
-> | `read_consent_record` | read | **PROVEN OPEN** |
-> | `approve_call_report` | **WRITE** | shape-identical, untested |
-> | `create_analysis_override` | **WRITE** | shape-identical, untested |
-> | `reinstate_sync_item` | **WRITE** | shape-identical, untested |
-> | `read_analysis` | read | shape-identical, untested |
-> | `list_analyses` | read | shape-identical, untested |
-> | `list_analysis_overrides` | read | shape-identical, untested |
+> Located from the **catalogue** — `pg_get_functiondef` over `pg_proc where prosecdef` — rather
+> than from grep, because grep locates and does not decide. That query returns exactly these
+> eight, plus `visible_user_ids` and `visible_territory_ids`, where the same branch is the
+> scoping itself and is tenant-bounded by `BE-W76`.
 >
-> **The three writes are the ones to look at first.** A cross-tenant read is a confidentiality
-> failure; a cross-tenant write is an integrity one, and `approve_call_report` decides whether
-> another company's call report is approved.
+> | Function | Kind | Verdict | What was measured |
+> | --- | --- | --- | --- |
+> | `list_consent_records` | read | **PROVEN OPEN** | A's admin finds B's consent record in the page |
+> | `read_consent_record` | read | **PROVEN OPEN** | returns B's row by id |
+> | `read_analysis` | read | **PROVEN OPEN** | returns another organisation's analysis |
+> | `list_analyses` | read | **PROVEN OPEN** | lists another organisation's MR's analyses |
+> | `list_analysis_overrides` | read | **PROVEN OPEN** | returns another organisation's override |
+> | `approve_call_report` | **WRITE** | **PROVEN OPEN** | **accepted** another organisation's call report |
+> | `create_analysis_override` | **WRITE** | **PROVEN OPEN** | **accepted** against another organisation's analysis |
+> | `reinstate_sync_item` | **WRITE** | **PROVEN OPEN** | **accepted** a dead-lettered item belonging to another organisation |
+>
+> **Every probe is two-sided, and that is what makes it a measurement.**
+>
+> - **Positive control** — the same target read by someone entitled to it (the owning admin, or
+>   the analysis's own MR) appears. The row existed and the function does return data.
+> - **Negative control** — the same call, same target, by a **non-admin in the attacker's own
+>   tenant** is refused: *"only a field_manager or admin may decide a call report"*, and the
+>   consent list comes back **without** the rival row. The probe can say *no*.
+>
+> So the boundary that fails is specifically the `v_role = 'admin'` branch. It is not the query,
+> not the fixture and not the harness.
+>
+> **The three writes were measured inside transactions that were rolled back**, so nothing was
+> persisted. An admin of one company can **approve another company's call report**, override its
+> analysis, and reinstate its rejected sync item. A cross-tenant read is a confidentiality
+> failure; these are integrity failures.
 >
 > ### What we need from you
 >
 > **This was not fixed in this session, deliberately.** It is a compliance-boundary change across
-> eight functions, it needs the three write paths measured before any of them is edited, and the
+> eight functions, the three write paths are now measured (MR-41) and all three are open, and the
 > right fix is a decision rather than a patch: **does an admin have any legitimate cross-tenant
 > read at all?** If the answer is no — and `MR-06`'s ratified position is that an admin is a
 > *tenant* administrator, with platform access a separate audited break-glass path that is out of

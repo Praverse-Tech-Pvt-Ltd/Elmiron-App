@@ -1695,7 +1695,7 @@ register rather than to fix the item named.
 
 | Item | What it is | Status |
 |---|---|---|
-| **`BE-W101`** | **An admin of one organisation can read another's consent ledger.** `list_consent_records` and `read_consent_record` both PROVEN open, with a positive control. Six more functions share the `or v_role = 'admin'` shape, three of them writes | **OPEN — escalated to the top of `docs/blocked-on-you.md`. Not fixed this session, deliberately** |
+| **`BE-W101`** | **An admin of one organisation can read AND WRITE another organisation's data.** **MR-41 A3 measured all eight sites and every one is open** — `list_consent_records`, `read_consent_record`, `read_analysis`, `list_analyses`, `list_analysis_overrides`, and the three WRITES `approve_call_report`, `create_analysis_override`, `reinstate_sync_item`. MR-40 proved the first two and listed six as untested; none is untested now. Sites enumerated from the **catalogue** (`pg_get_functiondef` over `pg_proc where prosecdef`), not grep | **OPEN — escalated to the top of `docs/blocked-on-you.md`. Not fixed, deliberately: it is a decision, not a patch.** Verification, and it is two-sided at every site: a **positive control** (the owning admin, or the analysis's own MR, sees the target) and a **negative control** (the same call by a non-admin in the attacker's own tenant is refused — *"only a field_manager or admin may decide a call report"*), so the branch that fails is `v_role = 'admin'` and not the query. The three writes were exercised inside transactions that were **rolled back**; nothing was persisted |
 
 ### Added by MR-40 B — `BE-W102`: a refused read is not in the audit trail
 
