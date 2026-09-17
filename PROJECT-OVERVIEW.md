@@ -16503,3 +16503,224 @@ defined the conditional stop is the brief that has now been discharged.
 3. **A permanent red is a broken alarm.** The drift workflow and the `blocked-on-you` banner were
    both correct every day and therefore useless every day. Both now distinguish the known accepted
    state from the thing they exist to catch, and the accepted state carries a date and a trigger.
+
+### MR-43 — decisions that already existed
+
+**One register row had been resolved since 17 August and did not know it. One decision had three
+names. And three times this session my own sweep was the unreliable instrument, not the thing it
+was sweeping.**
+
+#### A1 — CI
+
+| | |
+| --- | --- |
+| Run | `35206914311` — **`success`** |
+| Workflow | `CI` |
+| Event | `push` |
+| SHA | `e34cae4f524cb2a68d61293dce8c9dd34e3da98e` |
+
+Both jobs green, and `Migration drift` (`35206914345`) green for the first time, carrying the
+`::notice::` MR-42 C1 built. **Read with `git rev-parse HEAD`, and it equalled HEAD.** Nothing was
+held — clean tree, HEAD equal to `origin/main`.
+
+#### A2 — the denominator
+
+| | |
+| --- | --- |
+| `docs/blocked-on-you.md` numbered items | **28** |
+| `docs/blocked-on-you.md` section-6 items (`6.1`–`6.3`) | **3** |
+| **Human-facing items total** | **31** |
+| …which are **distinct asks** | **27** |
+| `docs/COMPLETION-PLAN.md` rows with a decision/defer marker | **5** |
+
+**Four are the same ask under two ids** — 1.5 ≡ 5.1, 2.4 ≡ 5.3, 4.3 ≡ 5.7, 4.4 ≡ 5.11 — because
+section 5 transcribed the review conversation without reconciling it against sections 1–4.
+
+#### A3 — three hits, quoted
+
+**2.2, the package ID — RESOLVED, and the row was factually wrong.** It said *"Currently the
+placeholder `com.praversetech.elmironmr`"*. The decision:
+
+> **`O2` — the name in permanent identifiers: EXECUTED, commit `f34ceef` (17 Aug 2026).**
+> *"Package id `com.praversetech.fieldforce`, scheme `praversefieldforce`, scope `@fieldforce/*`."*
+
+Verified against the code, not the claim: `app.json` holds `com.praversetech.fieldforce`, and the
+string `elmironmr` appears **nowhere** in code or config. **`f34ceef` is the commit this
+repository's checkout guard has asserted as an ancestor in every session since.**
+
+**4.1, PV/privacy — both engineering answers already recorded** (BE-W7, 16 August):
+
+> *"`reported_text` kept on the adverse-event record — **Decision:** keep it, and flag it hard."*
+> *"An adverse-event report survives a consent withdrawal — **Decision:** it survives … **This is
+> a default, not a ruling** — flagged for the sign-off."*
+
+**No engineering work is waiting.** The sign-off that turns two defaults into rulings is.
+
+**5.2, 5.6, 5.8 — `C5`, `C4`, `C3` each exist and each records that the human item remains.**
+Correctly open, now cross-referenced.
+
+#### A5 — canonical ids
+
+**`C1` was called three things**: `C1` here, *"MR-06 section 3"* in `20260908000800`'s exception
+hint, *"MR-07 §3"* in the MR-42 brief. **Searching for the third returns nothing**, so a reader
+following it concludes the decision does not exist — and waits. That cost two sessions.
+
+A new dated section in `.ai-collab/decisions.md` gives each decision **one id — its heading — and
+makes every other label a pointer**, mapping the aliases for `C1`–`C5` and `O2`.
+
+**And a correction to `O2` itself.** Its *"Outstanding"* line says backend must add
+`praversefieldforce://auth-callback` to `additional_redirect_urls`. **Both halves are wrong**: the
+scheme was superseded by `FE-R1a` to the reverse-DNS form, and `config.toml` already holds
+`com.praversetech.fieldforce://auth-callback`. What actually remains is a **dashboard change on
+the hosted project**, filed as `blocked-on-you.md` **1.6**.
+
+**The shape: a task note inside a decision record ages independently of the decision.** The
+decision was right and stayed right; the task beside it went stale twice over and nothing was
+watching it.
+
+#### A6 — stale alarms, both directions
+
+| Alarm | State |
+| --- | --- |
+| **1.1** *"5 commits unpushed. CI has never run on any frontend code"* | **False.** Struck through |
+| **1.2** *"org admin grants write access"* | **False.** Struck through |
+| **2.2** *"Currently the placeholder `com.praversetech.elmironmr`"* | **False since 17 August** |
+| *"Production is **37** migrations behind"* | **41.** 19 of 60, from today's drift run. Corrected in both files |
+| `O2`'s *"Outstanding"* line | Wrong twice over; corrected and refiled |
+
+**`blocked-on-you.md` is read by the person with the least context in the project.** That makes it
+the worst page to carry four dead alarms — the same failure as the drift workflow's permanent red,
+and only one of the two had been noticed.
+
+#### B — the audit sequence gap
+
+**B2: nothing in this system asserts or relies on contiguity.** Swept across the migrations, the
+tests, the scripts and the client. `list_audit_log` paginates with `l.id < p_before_id`, which
+relies on **monotonicity** and is gap-safe.
+
+**One claim did exist, and it was mine.** MR-42's own write-up said *"a table whose whole promise
+is that it is gap-free by construction"*. **The table never promised that and could not.**
+Corrected in `.ai-collab/handover.md`; this section is the correction of record for
+`PROJECT-OVERVIEW.md`, which is append-only.
+
+**B1: the reason is now on the column**, via `20260917000200_audit_log_id_gaps.sql` — monotonic,
+not contiguous, why, that **a gap is not a deleted row**, and what does guarantee the ledger
+instead. The person who meets nineteen missing ids will be looking at the table, possibly without
+this repository open, at the moment the obvious reading is the wrong one.
+
+**Asserted on content, not presence.** Mutated two ways and both killed — the comment **replaced
+with `'Primary key.'`** fails, as well as the comment removed. The suite also demonstrates the
+property rather than taking it from the manual: `nextval` advances across a rollback, with a
+positive control that no row was committed.
+
+#### C — safe only because it delegates
+
+**C2's population, and my first two enumerations were both wrong:**
+
+| Pass | Method | Found |
+|---|---|---|
+| MR-42 | string match | 1 |
+| MR-43, first | catalogue: *"calls something using `visible_user_ids`"* | 1 — **still wrong** |
+| MR-43, corrected | catalogue: *"no scoping of its own, calls something with EITHER kind"* | **4** |
+
+**The second pass missed delegation to a SELF-SCOPED function**, which is a different way of
+being scoped and just as load-bearing. `issue_recording_upload_grant` is a one-line wrapper over
+`begin_upload` and was invisible to it. **The same mistake as the grep, one level up: I narrowed
+the definition and then trusted the count.**
+
+| Function | Delegates to | Treatment |
+|---|---|---|
+| `approve_call_reports_bulk` | `approve_call_report` | **Tested** |
+| `active_consent_text` | `current_user_organisation_id` | **Tested** |
+| `issue_recording_upload_grant` | `begin_upload` | **`BE-W104`, registered with its reason** |
+| `is_admin` | `effective_role` | Reason registered: no target, no boundary to cross |
+
+**C1's mutant had to be made twice.** The first was crude — it wrote to a column that does not
+exist, so the function raised and **both** tests went red. That proves sensitivity, not precision.
+The second replaced the delegation with **the same write, inlined**: rows into
+`call_report_approvals` with no scope check. It killed **exactly one** test — the cross-tenant one
+— while the positive control still passed. **A mutant that breaks everything tells you the test
+runs; a mutant that breaks only the boundary tells you the test is about the boundary.**
+
+#### D — the fifteen scripts, each proven by running it
+
+`enable-lock-logging` was **already guarded** — MR-42 B4, opt-in class, re-proven here. The
+brief's premise is one session stale.
+
+| Outcome | Count |
+|---|---|
+| **REFUSE, naming the host** | **10** |
+| refuse earlier, different reason (`seed:reference` needs `--data`, `backup:verify` needs `--artefact`) | 2 |
+| **CONNECTS — by design** (`check:migration-drift` IS the production drift detector) | 1 |
+| modules with no entry point | 2 |
+
+Run against `db.mr43-not-a-real-host.supabase.co`, never the real host.
+
+**One genuine gap: `check:decision-debt`** inherited `SUPABASE_DB_URL` with no guard and **fails
+CI on a date** — a build decision could have been taken against production's thresholds when the
+repository's own are what it checks. Guarded, proven both ways.
+
+**And my first classifier misreported three of them** — `seed:mr` (says *"against API URL host"*,
+narrower pattern than population), `backup:database` (throws, so its message sat below a stack
+trace I truncated), `backup:verify` (same truncation). **"Grep locates, it does not decide"
+applies to the sweep that checks the greps.**
+
+**D3:** `retention-ops.spec.ts` now parses `run:` steps instead of matching file text — proven
+two-sided: `purge:audio` in a **comment passes** (the case that used to fail), in a **`run:` step
+fails**. The extractor is hand-rolled because **`js-yaml` is not a declared dependency and adding
+one is an ASK**, and it carries its own control so it cannot pass by returning `""`.
+`scripts-convention.spec.ts` had already solved this deliberately. **One spec had the defect; the
+other had the answer, two files apart.**
+
+#### E — answered, not started
+
+**The register sequences `BE-W89` first**: *"The sequence after a cut: `FE-W10` (1) → `FE-W13`
+(3) → `BE-W89`"*, and `FE-W13` landed in MR-41.
+
+**`FE-W12`'s blocker is two things, and only the second is the renderer:**
+
+1. **No client method for the GET.** `ListAnalysisOverridesResponseSchema` is *"consumed by
+   nothing"*; `createApiClient` has the POST and no read. **That is ordinary work, not a
+   dependency ask** — *"the gap sits between two items and neither owns it"*.
+2. **Its recorded check needs a renderer.** The console has none by design. **Adding one IS a
+   dependency ask**, and the answer to the brief's conditional is: **yes — ask before starting,
+   not after.**
+
+#### Counts — by workspace AND runner, from BOTH lines
+
+| Workspace | Runner | Passed | Failed | Suites / Files |
+| --- | --- | --- | --- | --- |
+| `@fieldforce/core` | vitest | 28 | 0 | 3 files |
+| `@fieldforce/ui` | vitest | 4 | 0 | 1 file |
+| `@fieldforce/ui` | jest | 246 | 0 | 22 suites |
+| `@fieldforce/ui-tokens` | vitest | 54 | 0 | 3 files |
+| `@fieldforce/console` | vitest | 28 | 0 | 4 files |
+| `@fieldforce/field` | vitest | 502 | 0 | 32 files |
+| `@fieldforce/field` | jest | 131 | 0 | 19 suites |
+| `@fieldforce/api` | vitest | **716** | 0 | **49 files** |
+| `@fieldforce/mock` | vitest | 43 | 0 | 1 file |
+
+**1,752 passing, zero failing, no suite failed to run.** Up 9 on MR-42. `typecheck`, `lint`,
+`format:check` and `verify:rollbacks --files-only` all exit 0, each read from its own exit code.
+
+#### Where this session stopped — ROOM
+
+**Parts A, B, C and D complete. Part E answered but not started, and the stop is ROOM.**
+
+- **Not a BLOCKAGE.** `BE-W89`'s first step — emit `beat_plan_entry` from `sync_pull` — is
+  reachable today.
+- **Not a CONDITIONAL STOP.** No condition in this brief fired.
+- **ROOM**, and specifically: `BE-W89`'s own register row says **"re-size before estimating"** and
+  its real chain is *beat-plan screen → approved plans to render → an approval action that
+  produces them → the manager console that hosts it*, none of which exists. Starting the first
+  link of that chain at the end of a four-part session is how a half-built chain gets shipped.
+
+**Three things a reader should carry forward.**
+
+1. **The sweep is an instrument, and instruments need calibrating.** Three times this session my
+   own enumeration was wrong — the delegation definition, the script classifier, and the pattern
+   that missed `seed:mr`. Each time the code was fine and the measurement was not.
+2. **A task note inside a decision record goes stale while the decision stays true.** `O2` was
+   right for a month and its "Outstanding" line was wrong for most of it.
+3. **A document's alarms need the same treatment as CI's.** Four dead alarms sat at the top of the
+   page written for the reader with the least context.

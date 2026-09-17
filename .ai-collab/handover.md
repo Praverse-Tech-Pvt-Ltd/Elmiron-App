@@ -706,3 +706,53 @@ clinical schema to separate.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-42 — closing the escape | `PROJECT-OVERVIEW.md` → `### MR-42 — closing the escape` |
+
+---
+
+## After MR-43 — 17 September 2026
+
+| | |
+| --- | --- |
+| **A** | 31 human-facing items swept (**27 distinct** — four are the same ask twice). **2.2 was resolved on 17 August and did not know it.** 4.1's engineering half was decided in August |
+| **A5** | **Canonical ids.** `C1` had three names; the third matched nothing. Aliases mapped for `C1`–`C5` and `O2` |
+| **B** | `audit_log.id` gaps explained **on the column**. Nothing relies on contiguity — except one sentence of mine, corrected |
+| **C** | **4** functions are safe only by delegation, not 1. `BE-W104` filed for the untested one |
+| **D** | 15 scripts proven by running them. **`check:decision-debt` was unguarded and fails CI on a date** — now guarded |
+| **E** | Answered, not started. **`BE-W89` is next in the register**; `FE-W12`'s second blocker IS the renderer, and that is a dependency ask |
+| **Tests** | **1,752 passing, zero failing, no suite failed to run** |
+| **Stop** | **ROOM** |
+
+### The one that matters most for the next session
+
+**`BE-W89` is next**, and its row says *"re-size before estimating"* for a reason: the chain is
+**beat-plan screen → approved plans → an approval action → the manager console**, and nothing
+writes `status = 'approved'` anywhere in this repository. It is not "add a missing entity".
+
+**`FE-W12` needs an ASK before it is started**, not after. Its two blockers are different in kind:
+the missing client method is ordinary work, but its recorded check needs a renderer the console
+does not have by design.
+
+### Three times my own sweep was the unreliable instrument
+
+1. **Delegation.** Defined it as *"calls something using `visible_user_ids`"* and got 1. Widened
+   to *"either kind of scoping"* and got **4**. `issue_recording_upload_grant` wraps `begin_upload`
+   and was invisible to the narrow definition.
+2. **The script classifier.** Reported three scripts wrong — `seed:mr` says *"against API URL
+   host"* (my pattern was narrower than the population), and `backup:database` / `backup:verify`
+   **throw**, so their messages sat below a stack trace I had truncated to three lines.
+3. **MR-42's own claim** that `audit_log` promises gap-free ids. It never did.
+
+**Each time the code was fine and the measurement was not.** *Grep locates, it does not decide* —
+including the grep that audits the greps.
+
+### Two documentation shapes worth recognising
+
+**A task note inside a decision record ages independently of the decision.** `O2` was right for a
+month; its "Outstanding" line named a superseded scheme and claimed work already done.
+
+**A document's alarms need the same treatment as CI's.** `blocked-on-you.md` — the page written
+for the reader with the least context — carried four alarms that were no longer true.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-43 — decisions that already existed | `PROJECT-OVERVIEW.md` → `### MR-43 — decisions that already existed` |

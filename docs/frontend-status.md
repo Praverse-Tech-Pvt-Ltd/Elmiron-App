@@ -1147,3 +1147,45 @@ data will already be tenant-scoped.
 **The console still has no real auth.** The admin screens render server-side with no token, which
 is why the refusal path has a rendering rather than being assumed away — and that rendering is
 now the expected outcome against any deployment.
+
+## MR-43 — 17 September 2026: backend and register, and the answer FE-W12 needs before it starts
+
+**No file under `apps/field`, `apps/console` or `packages/ui` changed.** Counts unchanged:
+`@fieldforce/field` vitest **502**, jest **131**; `@fieldforce/ui` vitest **4**, jest **246**;
+`@fieldforce/console` vitest **28**.
+
+### `FE-W12` — its two blockers are different in kind, and only one is a dependency ask
+
+Asked directly this session, and answered from the register rather than re-derived:
+
+1. **No client method for the GET.** `ListAnalysisOverridesResponseSchema` is defined in
+   `packages/core` and *"consumed by nothing"*; `createApiClient` has `createAnalysisOverride`
+   (the POST) and no read. `BE-W13` is closed by its own check — the RPC exists and the mock
+   serves the route — but nothing in between lets `apps/console` call it through the shared
+   client. **This is ordinary work.** *"The gap sits between two items and neither owns it."*
+2. **Its recorded check needs a renderer.** *"A console test asserts a previously-saved override
+   renders"*, and the console has no renderer by design — `vitest.config.ts` says so. **Adding
+   one IS a dependency ask under `.ai-collab/constraints.md`.**
+
+**So the answer to "is FE-W12 blocked on the renderer" is: half of it is, and that half must be
+asked about BEFORE the work starts, not after it is half-built.** The tempting substitute — put
+the fetch in a lib function, test the shaping in node, assert the page's source mentions it —
+would report `FE-W12` done against a weaker claim. That is the shape this project has refused
+eleven times, and the register says so in those words.
+
+### What the register sequences next is NOT a frontend item
+
+*"The sequence after a cut: `FE-W10` (1) → `FE-W13` (3) → `BE-W89`."* `FE-W13` landed in MR-41,
+so **`BE-W89` is next** — and its row says **"re-size before estimating"**, because the real chain
+is *beat-plan screen → approved plans to render → an approval action that produces them → the
+manager console that hosts it*. **Nothing in this repository ever writes
+`beat_plans.status = 'approved'`.** A frontend session that picks up the beat-plan screen without
+that chain will render an empty route.
+
+### One thing that changed underneath the console
+
+`active_consent_text` is now asserted to inherit the caller's tenant (MR-43 C). It is what decides
+**which consent notice a doctor is shown**, and it is safe only because it passes
+`current_user_organisation_id()` down. If that argument were ever dropped, a doctor could be shown
+another company's notice — a compliance record about who is processing their data. There is now a
+test that fails if it is.

@@ -1661,3 +1661,65 @@ action on the hosted project**, not a backend code change, and it belongs on
 ages independently of the decision. The decision was right and stayed right; the task note beside
 it went stale twice over and nothing was watching it. **A task does not belong inside a decision
 record** — the decision is permanent, the task is not.
+
+## 17 September 2026 — MR-43
+
+### A decision has ONE id, and every other label is a pointer
+
+`C1` was called `C1` here, *"MR-06 section 3"* in a migration hint, and *"MR-07 §3"* in a brief.
+The third matches nothing, so a reader following it concludes the decision is missing.
+
+**Decision: the canonical id of a decision is its heading in this file.** A migration comment, a
+brief or a register row cites that id. Aliases live in the canonical-ids section and nowhere else.
+Cost of not having this rule, measured: two sessions.
+
+### A task note does not belong inside a decision record
+
+`O2`'s *"Outstanding: backend must add `praversefieldforce://auth-callback`"* named a scheme
+`FE-R1a` had already superseded, and claimed work that `config.toml` had already done.
+
+**Decision: a decision record holds the ruling and its reasoning. Tasks arising from it are filed
+where tasks are tracked** — `docs/blocked-on-you.md` for a human, the register for engineering.
+The decision is permanent; the task is not, and the two age at different rates with nothing
+watching the second.
+
+### Contiguity is never an integrity check on a sequence-keyed table
+
+`audit_log_id_seq` moved 29337 → 29356 with zero rows committed, because sequences are
+non-transactional.
+
+**Decision: never assert `max(id) - min(id) + 1 = count(*)`, and never read a gap as a deletion.**
+On an append-only ledger that reading is wrong in the most alarming possible context. **The reason
+is recorded ON THE COLUMN**, not only in a narrative, because the person who meets a gap will be
+looking at the table. What guarantees the ledger is the statement-level trigger, forced RLS and
+audit-before-return — and the comment names all three, so a reader who loses one check is handed
+the real ones.
+
+### Safe-by-delegation is a property, and a property needs a test
+
+`approve_call_reports_bulk` has no scoping of its own and was never open.
+
+**Decision: when a function is correct only because it delegates, assert the inherited property at
+the DELEGATING function**, with a mutant that removes the delegation while keeping the write. A
+mutant that breaks everything proves the test runs; a mutant that breaks only the boundary proves
+the test is about the boundary.
+
+### Calibrate the sweep before believing its count
+
+Three enumerations were wrong this session — the delegation definition (1 instead of 4), the
+script classifier (3 misreports), and MR-42's claim about gap-free ids.
+
+**Decision: a sweep reports its METHOD alongside its count, and the method gets a control.** *Grep
+locates, it does not decide* already applies to recorded checks; it applies equally to the query
+that audits them. A narrowed definition produces a confident, wrong, small number — which is worse
+than an obviously incomplete one.
+
+### A document's alarms need the same treatment as CI's
+
+`docs/blocked-on-you.md` opened with four alarms that were no longer true, including one resolved
+in August.
+
+**Decision: sweep the escalation document for stale alarms whenever the thing it describes
+changes**, and strike items through with their evidence rather than deleting them. A permanent red
+in CI and a dead alarm on the page written for the least-informed reader are the same defect; only
+one of them had been noticed.
