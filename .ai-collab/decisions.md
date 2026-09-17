@@ -1599,3 +1599,65 @@ compliance control working.
 unless it is opted into deliberately** (`ELMIRON_ALLOW_REMOTE_TARGET=1`, set in a reviewed
 workflow file), rather than refusing deployments outright. Copying the seeds' localhost-only guard
 onto them would have switched the retention promise off — the guard would have become the outage.
+
+---
+
+## 17 September 2026 — MR-43 A5: CANONICAL IDS. One decision, one name.
+
+**`BE-W101` waited two sessions for a decision that had been taken on 9 September. The decision
+was not missing — its NAME was.** The same ruling was called three things in three places:
+
+| Where | What it was called |
+| --- | --- |
+| this file | **`C1`** |
+| `20260908000800`'s exception hint | *"MR-06 section 3"* |
+| the MR-42 brief | *"MR-07 §3"* |
+
+Searching the repository for "MR-07" returns nothing in this file, so a reader following the
+brief's pointer concludes the decision does not exist — and waits.
+
+**The rule from here: a decision has ONE id, and every other label is a pointer to it.** The id
+is the heading in this file. If a migration comment, a brief or a register row needs to cite a
+decision, it cites that id.
+
+### The canonical ids, and their known aliases
+
+| Canonical | Subject | Known aliases to redirect |
+| --- | --- | --- |
+| **`C1`** | `admin` is a TENANT administrator; platform access is a separate audited break-glass path, out of MR v1 | *"MR-06 §3"*, *"MR-06 section 3"*, *"MR-07 §3"* |
+| **`C2`** | `not_met` on `visit_status` | the 8 September entry *"`visits.status` gains `not_met` with a required reason"* — the same ruling, recorded twice in this file |
+| **`C3`** | Audio is OUT of MR v1, on legal/compliance grounds, until a named PV/DPDP signatory exists | `blocked-on-you.md` **5.8** |
+| **`C4`** | Coaching is OUT of MR v1 | `blocked-on-you.md` **5.6**; *"§3.6"* |
+| **`C5`** | `BE-W69` / `pg_cron` keep-warm DECLINED; the honest fix is the paid plan | `blocked-on-you.md` **5.2** |
+| **`O2`** | The name in permanent identifiers — package id `com.praversetech.fieldforce` | `FE-R1`, `FE-R1a` (which superseded the SCHEME only), `blocked-on-you.md` **2.2** |
+| **`D-28.1` … `D-28.7`** | The MR-14 → MR-28 rulings | already unique; no aliases found |
+
+**Two of these aliases were actively misleading, not merely redundant:**
+
+1. **`C1` as "MR-07 §3"** — points at nothing. Cost: two sessions.
+2. **`O2`'s own "Outstanding" line** — see the correction below.
+
+### Correction to `O2`, appended rather than edited
+
+`O2` ends with:
+
+> *"**Outstanding from it: Backend must add** `praversefieldforce://auth-callback` **to
+> `additional_redirect_urls`**"*
+
+**Both halves of that are now wrong, and it has read as an open task ever since.**
+
+- **The scheme is not `praversefieldforce`.** `O2`'s own earlier sentence says `FE-R1a`
+  superseded it to the reverse-DNS form. The line quoted above was never updated.
+- **The work is done, locally.** `services/api/supabase/config.toml` holds
+  `"com.praversetech.fieldforce://auth-callback"` in `additional_redirect_urls`.
+
+**What genuinely remains is neither of those**: that file configures the LOCAL stack only, and
+its own comment says so — *"The same entry is needed on any HOSTED project … where it belongs in
+Authentication → URL Configuration → Redirect URLs."* So the outstanding item is a **dashboard
+action on the hosted project**, not a backend code change, and it belongs on
+`docs/blocked-on-you.md` rather than here.
+
+**Recorded as the shape, because it will recur:** an "Outstanding" line inside a decision entry
+ages independently of the decision. The decision was right and stayed right; the task note beside
+it went stale twice over and nothing was watching it. **A task does not belong inside a decision
+record** — the decision is permanent, the task is not.

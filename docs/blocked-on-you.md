@@ -247,9 +247,9 @@
 >
 > | Result | What it tells you |
 > | --- | --- |
-> | all three are `0` | §6.1 is a **sequencing item**. Deploy the 37 pending migrations before any reference data is loaded, and the whole problem goes away. The deploy takes seconds |
+> | all three are `0` | §6.1 is a **sequencing item**. Deploy the 41 pending migrations before any reference data is loaded, and the whole problem goes away. The deploy takes seconds |
 > | `territory_less > 0` or `consent_notices > 0` | The two backfills in the pending batch will **execute** rather than no-op. They are fixed as of MR-35, but they have still never run anywhere. Read `docs/restore-runbook.md` → Phase 0 before pushing |
-> | **anything is non-zero AND real customer data is present** | **§6.1 IS AN INCIDENT, NOT A SEQUENCING ITEM.** Production is 37 migrations behind, which means it has **no tenant boundary** — `BE-W76`. One organisation's admin can read another's data, and that is true right now, not at some future date |
+> | **anything is non-zero AND real customer data is present** | **§6.1 IS AN INCIDENT, NOT A SEQUENCING ITEM.** Production is **41** migrations behind (19 of 60 applied, measured by the drift run on 17 September), which means it has **no tenant boundary** — `BE-W76`. One organisation's admin can read another's data, and that is true right now, not at some future date |
 >
 > **Why this is at the top of the page.** Every judgement below about production rests on the
 > claim that it holds no reference data — and `docs/COMPLETION-PLAN.md:217` records that claim
@@ -273,11 +273,12 @@ Every open item that no agent can resolve, consolidated. Backend is stopped by d
 
 | # | Item | What it blocks | Notes |
 |---|---|---|---|
-| 1.1 | `gh auth login && gh auth setup-git`, then `git push origin main` | 5 commits unpushed. **CI has never run on any frontend code.** | `credential.helper=manager` serves a stale token and never consults `gh` — already in `docs/gotchas.md` |
-| 1.2 | If the 403 persists after 1.1 → **org admin grants write access** to `Praverse-Tech-Pvt-Ltd/Elmiron-App` | Same | Two different causes. Re-authenticating cannot fix a permissions problem. Don't let anyone burn hours on token plumbing if it's this one. |
+| ~~1.1~~ | **DONE — stale alarm, cleared MR-43 A6.** Pushing works and has worked every session; this page said *"5 commits unpushed, CI has never run on any frontend code"*. CI runs on every push and `@fieldforce/field` has 502 vitest + 131 jest tests green | — | Kept struck through rather than deleted: the gotchas entry about `credential.helper=manager` is still true and still useful |
+| ~~1.2~~ | **DONE — stale alarm, cleared MR-43 A6.** Write access exists; every session since has pushed to `main` | — | The distinction it drew — re-authentication cannot fix a permissions problem — is still the right first question if a 403 ever returns |
 | 1.3 | `eas login` — an Expo account | **Any APK build at all** | Free tier: 15 Android builds/month, 90+ min queue at peak |
 | 1.4 | Elevated PowerShell:<br>`New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name LongPathsEnabled -Value 1 -PropertyType DWORD -Force` | Metro and Gradle deep paths | `git config --global core.longpaths` is already set; this is the other half and needs admin |
 | 1.5 | **A physical Android device** | **FE-G1** | Get a Xiaomi, Oppo, Vivo or Realme — not a Pixel. Those ROMs kill background processes aggressively, hold large Indian market share, and background location dying silently is the most likely field failure on this product. It will not reproduce on an emulator. |
+| 1.6 | **Add `com.praversetech.fieldforce://auth-callback` to the HOSTED project's redirect allow-list** — Authentication → URL Configuration → Redirect URLs | Deep-link sign-in on any build pointed at the hosted project | **Filed MR-43 A5.** It was hiding inside a decision entry: `O2`'s "Outstanding" line, which named a scheme (`praversefieldforce://`) that `FE-R1a` had already superseded, and claimed work that is in fact **done locally** — `config.toml` has the reverse-DNS entry. A dashboard action is not a backend code change, and a task does not belong inside a permanent decision record |
 
 ---
 
@@ -286,7 +287,7 @@ Every open item that no agent can resolve, consolidated. Backend is stopped by d
 | # | Decision | Deadline | Why it can't wait |
 |---|---|---|---|
 | 2.1 | **Whose Play Console account ships this — yours or the client's?** | Before FE-W8 | Decides package ID, listing ownership, keystore custody, and what happens if the relationship ends |
-| 2.2 | **The package ID.** Currently the placeholder `com.praversetech.elmironmr` | Before first Play upload | **Permanent.** A different ID is a different app — new listing, zero installs, zero reviews. Also: it embeds a pharmaceutical brand name you may not own. `com.praversetech.fieldforce` costs nothing now. |
+| ~~2.2~~ | **DECIDED AND EXECUTED — `O2`, 17 August 2026. Cleared MR-43 A3/A6.** This row said *"Currently the placeholder `com.praversetech.elmironmr`"*. It is not: `app.json` holds `com.praversetech.fieldforce`, the scheme is the reverse-DNS form, and the string `elmironmr` appears **nowhere** in code or config | — | **The decision was in `.ai-collab/decisions.md` the whole time** — *"O2 — the name in permanent identifiers: EXECUTED, commit `f34ceef`"*. That is the same `f34ceef` this repository's checkout guard has asserted as an ancestor in every session. The trademark reasoning (ELMIRON® is a third party's mark) is kept there in full |
 | 2.3 | **Keystore custody** — EAS holds it, or enrol in Play App Signing | Before first Play upload | If access to the Expo account is ever lost, you cannot update an app already on the Play Store. No recovery path. *[Verify Play App Signing against current Play Console docs.]* |
 | 2.4 | **Transistorsoft release licence** | Before FE-W8, but check now | Believed required for Android release builds, free for debug. Unverified — check transistorsoft.com. A purchase order takes longer than a sprint. |
 
@@ -306,7 +307,7 @@ These predate the frontend entirely. Drafts are in `docs/escalations-week3.md`. 
 
 | # | Item | Open since | What it blocks |
 |---|---|---|---|
-| 4.1 | **PV and privacy sign-off.** Two specific questions: may `adverse_event_reports.reported_text` contain patient information, and does an adverse-event report survive a consent withdrawal? | Sprint 1 | Both are currently answered by a **default, not a decision**, and both are now baked into a deployed production schema. A different answer is a migration against live tables. |
+| 4.1 | **PV and privacy sign-off.** Two specific questions: may `adverse_event_reports.reported_text` contain patient information, and does an adverse-event report survive a consent withdrawal? | Sprint 1 | Both are currently answered by a **default, not a decision**, and both are now baked into a deployed production schema. A different answer is a migration against live tables. **MR-43 A3 — the pointer this row was missing.** Both questions already have recorded ENGINEERING answers in `.ai-collab/decisions.md` (BE-W7, 16 August 2026): *"`reported_text` kept on the adverse-event record — Decision: keep it, and flag it hard"*, and *"An adverse-event report survives a consent withdrawal — Decision: it survives"*, the second explicitly labelled **"This is a default, not a ruling"**. So **no engineering work is waiting on this** — the schema is built and documented. What is waiting is the sign-off that turns two defaults into rulings. |
 | 4.2 | **Contract I3 — STT vendor decision and measured Hinglish WER on real audio** | Sprint 2 | The entire AI layer. **CI goes red on 30 September** unless `TranscriptV1` exists. If the answer comes back bad, the pipeline is cut — so every week of delay is a week of risk that work gets built and deleted. |
 | 4.3 | **Per-territory working hours from the client** | Sprint 3 | Capture refuses without them. The org-default window expires 60 days after being configured, then refuses again — by design. |
 | 4.4 | **Supabase DPA question:** does a deleted storage object survive in S3 versioning, a soft-delete window, or a sub-processor's backup? | Sprint 7 | Decides whether the 90-day retention claim is literally true. Not answerable from the API. Needed before the pilot. |

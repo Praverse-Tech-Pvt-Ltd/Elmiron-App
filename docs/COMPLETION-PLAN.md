@@ -1354,7 +1354,7 @@ individually; anything not listed was not checked.
 | --- | --- | --- |
 | **`FE-W41` + `5.9`** — the UCPMP cap | **The cap value.** One unit of work, not two | `5.9` **build-fails CI on 6 November**, warning from 16 October. The samples screen currently says the app does not count samples against the cap, which is true *only while no cap exists*. Configure the cap without the copy and the screen contradicts the server |
 | **`FE-W46`** — fabricated `sizeBytes: 1` | **`BE-W7`**, the upload path, which has no client | Worse than recorded: the value is **persisted** to `recordings.size_bytes` / `voice_notes.size_bytes` and **summed** by `audio_storage_bytes()`, so the per-MR storage ceiling is inert. See the MR-36 C block |
-| **The deploy** — 37 migrations | **One `SELECT` and then `supabase db push`** | The pre-flight query at the top of `blocked-on-you.md`. Reference data is dated ~22 Sep and must not land first |
+| **The deploy** — **41** migrations (19 of 60 applied; count corrected MR-43 A6, measured from the 17 September drift run) | **One `SELECT` and then `supabase db push`** | The pre-flight query at the top of `blocked-on-you.md`. Reference data is dated ~22 Sep and must not land first |
 | **`BE-W11`** — the backup | **A destination** | Built and proven; protects nothing until somebody says where the artefact may lawfully live |
 | **PITR** (`6.2`), **the plan** (`5.2`) | **A dashboard fact and a decision** | 6.2 cannot be re-made until 5.2 is answered |
 | **`5.13` / `BE-W93`** — the fiduciary name | **The registered name** | **Compounds daily.** `consent_records` is append-only, so every consent captured before the name exists is permanently defective and cannot be amended by design |
@@ -1988,3 +1988,64 @@ file**, so it cannot tell a `run:` step from the word appearing in a comment. It
 comment this session. **It would also pass on a workflow that invoked the purge through a
 variable.** The sound form asserts the parsed YAML's `run` steps, which is how MR-42 verified the
 `ELMIRON_ALLOW_REMOTE_TARGET` opt-in reached all three invocations.
+
+### Added by MR-43 A — the "needs a decision" sweep, with its denominator
+
+**The prior was one-for-one.** `BE-W101` sat as *needs a decision* for two sessions while `C1`
+had settled it on 9 September. **The missing thing was the pointer, not the decision.** So every
+row that claims to be waiting on a human was checked against `.ai-collab/decisions.md` and
+`.ai-collab/constraints.md`.
+
+#### A2 — the denominator
+
+| | |
+| --- | --- |
+| `docs/blocked-on-you.md` — numbered table items | **28** |
+| `docs/blocked-on-you.md` — section-6 items (`6.1`, `6.2`, `6.3`) | **3** |
+| **Total human-facing items** | **31** |
+| `docs/COMPLETION-PLAN.md` rows carrying a decision/defer marker | **5** (`FE-W40`, `FE-W42`, `BE-W98`, `FE-W47`, and the MR-33 restore section) |
+
+**The register also holds four duplicate pairs** — the same ask under two ids, because section 5
+transcribed the review conversation without reconciling it against sections 1–4:
+**1.5 ≡ 5.1** (physical handset), **2.4 ≡ 5.3** (Transistorsoft), **4.3 ≡ 5.7** (per-territory
+hours), **4.4 ≡ 5.11** (Supabase DPA). So 31 items are **27 distinct asks**.
+
+#### A3 — where the decision already exists. Three hits, one of them fully resolved.
+
+| Item | Decision that already existed | What it changes |
+| --- | --- | --- |
+| **2.2 — the package ID** | **`O2`** — *"the name in permanent identifiers: EXECUTED, commit `f34ceef`"* | **RESOLVED, and the row was factually wrong.** It said *"Currently the placeholder `com.praversetech.elmironmr`"*. `app.json` holds `com.praversetech.fieldforce`, the scheme is the reverse-DNS form, and `elmironmr` appears **nowhere** in code or config. `f34ceef` is the commit this repository's checkout guard asserts as an ancestor **every session** |
+| **4.1 — PV/privacy sign-off** | **BE-W7, 16 August**: *"`reported_text` kept on the adverse-event record — **Decision:** keep it, and flag it hard"* and *"An adverse-event report survives a consent withdrawal — **Decision:** it survives … **This is a default, not a ruling**"* | **No engineering work is waiting.** Both answers are implemented and documented. What is waiting is the sign-off that converts two defaults into rulings — which is what the row already said, and it is now cross-referenced |
+| **5.2 / 5.6 / 5.8** | **`C5`**, **`C4`**, **`C3`** | **Confirmed still open, correctly.** Each decision exists and each *records* that the human item remains: `C5` says the honest fix is the paid plan; `C4` gives coaching two independent reasons for being out; `C3` makes audio conditional on a named signatory |
+
+**The honest score: one item was resolved and did not know it; one had its engineering half
+already decided; the rest are genuinely waiting on money, legal, content or a device.** The
+one-for-one prior did not repeat — but it did not need to, because the sweep cost an hour and the
+one hit had been sitting there since 17 August.
+
+#### A4 — re-marked, not started
+
+`2.2`, `1.1` and `1.2` are struck through with their evidence; `4.1` carries the pointer to the
+two BE-W7 decisions. **No fix was started.** Knowing which rows are not actually waiting is the
+output.
+
+#### A6 — stale alarms, swept in both directions
+
+| Alarm | State |
+| --- | --- |
+| **1.1** *"5 commits unpushed. CI has never run on any frontend code"* | **False.** Every session pushes; `@fieldforce/field` has 502 + 131 tests green in CI |
+| **1.2** *"org admin grants write access"* | **False.** Every session since has pushed to `main` |
+| **2.2** *"Currently the placeholder `com.praversetech.elmironmr`"* | **False since 17 August** |
+| *"Production is **37** migrations behind"* | **41.** 19 of 60 applied, measured by today's drift run. Corrected here and in `COMPLETION-PLAN.md` |
+| `O2`'s *"Outstanding: add `praversefieldforce://auth-callback`"* | **Wrong twice** — the scheme was superseded by `FE-R1a`, and the reverse-DNS entry is already in `config.toml`. The real remaining action is a **hosted dashboard change**, now filed as **1.6** |
+| The `BE-W101` red banner | Already cleared in MR-42 |
+
+**The shape, and it is the same one the drift workflow had:** a document's alarms are not
+re-evaluated when the thing they describe changes, so a page that was accurate becomes a page
+where the reader cannot tell which warnings are live. **`blocked-on-you.md` is read by the person
+with the least context in the project** — that is exactly the wrong page to carry four dead
+alarms.
+
+**One quotation left deliberately stale:** `blocked-on-you.md:513` quotes a past section title,
+*"Applying 37 migrations to a database at 19 — the rehearsed procedure"*. It is a quotation of a
+historical document and is correct as a quotation.
