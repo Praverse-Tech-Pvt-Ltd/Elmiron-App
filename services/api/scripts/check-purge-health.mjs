@@ -1,4 +1,5 @@
 import { Client } from 'pg';
+import { assertTargetAllowed } from './target-guard.mjs';
 
 /**
  * The retention watchdog.
@@ -91,6 +92,16 @@ export const evaluatePurgeHealth = (health, options = {}) => {
 
 export const checkPurgeHealth = async (overrides = {}) => {
   const config = { ...DEFAULTS, ...overrides };
+
+  // MR-42 B1 / `BE-W103`. BEFORE the connection is opened, so the refusal is the guard
+  // and not a DNS failure that happens to look like one.
+  assertTargetAllowed({
+    command: 'check:purge-health',
+    label: 'database URL',
+    url: config.dbUrl,
+    consequence:
+      'It reads the purge health of whichever database it is pointed at, and reports that as the health of this system.',
+  });
   const client = new Client({ connectionString: config.dbUrl });
   await client.connect();
 

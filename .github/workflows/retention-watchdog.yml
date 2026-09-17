@@ -82,6 +82,11 @@ jobs:
       - name: Check audio retention health
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          # MR-42 B1 / `BE-W103`. This script now refuses a non-local target unless it
+          # is opted into. This is the deliberate opt-in:
+          # it lives in a reviewed file, whereas a shell that inherited a stale
+          # SUPABASE_DB_URL does not have it, which is the accident the guard is for.
+          ELMIRON_ALLOW_REMOTE_TARGET: '1'
           # BE-W8 addendum: deliberately loose and DECOUPLED from the database's
           # own stall check (public.audio_purge_is_stalled(), backlog-size-based).
           # This is a secondary "has the worker gone completely silent" signal --

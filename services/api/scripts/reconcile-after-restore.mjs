@@ -1,4 +1,5 @@
 import { Client } from 'pg';
+import { assertTargetAllowed } from './target-guard.mjs';
 import { randomUUID } from 'node:crypto';
 import { deleteStorageObject } from './storage.mjs';
 
@@ -113,6 +114,16 @@ const objectExists = async (config, storageKey) => {
 export const reconcileAfterRestore = async (overrides = {}) => {
   const config = { ...DEFAULTS, ...overrides };
   const runId = overrides.runId ?? randomUUID();
+
+  // MR-42 B1 / `BE-W103`. BEFORE the connection is opened, so the refusal is the guard
+  // and not a DNS failure that happens to look like one.
+  assertTargetAllowed({
+    command: 'reconcile:restore',
+    label: 'database URL',
+    url: config.dbUrl,
+    consequence:
+      'With --apply it DELETES storage objects that the restored database no longer references.',
+  });
 
   const client = new Client({ connectionString: config.dbUrl });
   await client.connect();

@@ -117,6 +117,11 @@ jobs:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # MR-42 B1 / `BE-W103`. `purge:audio` and `check:purge-health` now refuse a
+          # non-local target unless it is opted into. This is the deliberate opt-in:
+          # it lives in a reviewed file, whereas a shell that inherited a stale
+          # SUPABASE_DB_URL does not have it, which is the accident the guard is for.
+          ELMIRON_ALLOW_REMOTE_TARGET: '1'
         run: pnpm --filter @fieldforce/api purge:audio
 
       # The worker records failures rather than throwing, so that one unreachable
@@ -126,4 +131,5 @@ jobs:
         if: always()
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          ELMIRON_ALLOW_REMOTE_TARGET: '1' # MR-42 B1 -- see the note above.
         run: pnpm --filter @fieldforce/api check:purge-health

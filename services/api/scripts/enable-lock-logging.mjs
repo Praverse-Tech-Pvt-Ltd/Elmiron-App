@@ -50,12 +50,24 @@
  */
 
 import { Client } from 'pg';
+import { assertTargetAllowed } from './target-guard.mjs';
 
 const ADMIN_URL =
   process.env['SUPABASE_ADMIN_DB_URL'] ??
   'postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres';
 
 const run = async () => {
+  // MR-42 B4 / `BE-W103`. Found by enumerating every script that takes a URL, not from a
+  // list. This runs `alter database ... set`, which is a DATABASE-WIDE configuration
+  // change, and it inherits its target from SUPABASE_ADMIN_DB_URL. `pnpm db:instrument`
+  // calls it as part of db:start, so the local case must stay silent -- and it does.
+  assertTargetAllowed({
+    command: 'db:instrument',
+    label: 'admin database URL',
+    url: ADMIN_URL,
+    consequence: 'It changes database-wide settings with `alter database ... set`.',
+  });
+
   const client = new Client({ connectionString: ADMIN_URL });
   await client.connect();
   try {
