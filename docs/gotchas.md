@@ -3581,3 +3581,51 @@ whose whole promise is that it is gap-free by construction"*. **That sentence wa
 table never promised that and never could. The claim to check was in the record the session
 itself had just written, which is why MR-43 B2 swept for contiguity assumptions and found exactly
 one: its own.
+
+## 17 September 2026 — the catalogue answers the query you wrote, not the question you had
+
+**`GREP LOCATES, IT DOES NOT DECIDE` was the rule. The catalogue is a better search surface with
+the same failure mode, and being better is what makes it dangerous:** a `pg_proc` query returns a
+precise, authoritative, wrong-shaped answer, and it looks like a measurement rather than a search.
+
+**Spot-checking the output does not test the definition.** Every row you check was selected by
+the definition you are trying to test, so the check can only find rows that should not have been
+included — never the ones that were never considered. **An instrument needs its own control, and
+the control is a DIFFERENT DEFINITION.**
+
+### Three worked examples, all self-caught, all from one week
+
+**1. Delegation, first pass (MR-43).** Defined as *"calls something that uses
+`visible_user_ids`"* → **1**. It missed `issue_recording_upload_grant`, a one-line wrapper over a
+**self-scoped** function. Widened to *"either kind of scoping"* → **4**.
+
+**2. Delegation, re-run under a third definition (MR-44).** Structural instead of textual — *"a
+SQL function whose whole body is one call to another public function"* → **11**, of which 6 were
+scoped themselves (over-inclusion) and **3 were genuinely unscoped wrappers none of the earlier
+definitions could see**, because their delegate is not scoped either. Union: **7**, not 4.
+
+**3. The script classifier (MR-43 D2).** Matched *"refuses to run against host"* and misreported
+three of fifteen: `seed:mr` says *"against **API URL** host"*, and `backup:database` /
+`backup:verify` **throw**, so their message sat below a stack trace the classifier truncated.
+
+**In all three the code was fine and the measurement was not.**
+
+### What to do instead
+
+- **Run the sweep twice, under definitions that differ in KIND** — textual versus structural,
+  inclusion versus exclusion. If the populations agree, the number means something. If they
+  disagree, the disagreement is the finding.
+- **Choose the definition against the RISK, not against convenience.** "Safe only by delegation"
+  is about *what breaks if the delegate changes*, so a function that calls a scoping helper is a
+  **delegator**, not something independently scoped — which is exactly where the two textual
+  definitions parted company.
+- **Report the definition alongside the count.** A population of 4 with no stated definition
+  cannot be checked by the next reader, and it will be quoted as a fact.
+- **Treat over-inclusion as cheap and under-inclusion as expensive.** A broad definition hands
+  you rows to reject; a narrow one hands you a confident small number and no way to know what it
+  never looked at.
+
+### The tell
+
+**A sweep that returns a round, small, satisfying number and that you did not have to reject
+anything from.** Every one of the three above returned exactly that.

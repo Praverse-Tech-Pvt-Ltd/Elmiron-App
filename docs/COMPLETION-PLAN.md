@@ -2177,3 +2177,97 @@ in a comment, because a hand-rolled extractor that silently returned `""` would 
 *"The RUN lines, not any mention: … matching prose would have this test asserting the position of
 a sentence."* It also carries a positive control on the step count. **One spec had the defect;
 the other had the answer, two files apart.**
+
+### Added by MR-44 C — the instrument's own control
+
+**MR-43 reported four functions "safe only by delegation". Four was never a property of the
+system; it was a property of the query.** Re-running the sweep under different definitions is
+the mutation practice applied to an instrument rather than to code — and it is the only way to
+test a DEFINITION, because spot-checking the output only tests the rows the definition already
+returned.
+
+#### C1 — three definitions, three populations
+
+| Definition | "Scoped" means | Population |
+|---|---|---|
+| **1** (MR-43's corrected one) | body references `visible_user_ids` / `visible_territory_ids` / `auth.uid()` | **4** |
+| **2** | the above **plus** `current_user_organisation_id` / `effective_role` / `is_admin` | **2** |
+| **3** (structural, not textual) | a SQL-language function whose whole body is **one** call to another `public` function | **11** |
+
+**They disagree about most of their members, and each disagreement is informative.**
+
+- **Definition 2 loses `active_consent_text` and `is_admin`** — it counts calling a
+  caller-identity helper as *being scoped*. But `active_consent_text` is safe **precisely
+  because** it passes `current_user_organisation_id()` down to `active_consent_text_at`;
+  calling that helper does not make it independently scoped, it makes it a delegator.
+  **Definition 2 is wrong for the risk being asked about**, and it is the more natural query to
+  write.
+- **Definition 3 OVER-includes: 6 of its 11 are scoped themselves** — `coverage`,
+  `my_upload_queue`, `list_sync_rejections`, `overdue_call_reports`, `sync_queue_status`,
+  `current_user_visible_territory_ids`.
+- **And Definition 3 found THREE that Definition 1 missed entirely**: `audio_purge_health`,
+  `org_default_shift_window_status`, `threshold_number`. All are SQL wrappers that are not
+  scoped themselves. Definition 1 missed them because their delegate is not scoped **either** —
+  so "calls something scoped" never matched.
+
+**The union, after removing Definition 3's over-inclusions, is SEVEN.** Not four.
+
+| Item | Detail |
+|---|---|
+| **`BE-W105`** | **Three more functions are unscoped SQL wrappers, found only by the structural definition.** `threshold_number(p_key, p_territory_id, p_fallback)` takes a **territory id from the caller** and wraps `threshold(...)`; `org_default_shift_window_status()` and `audio_purge_health()` read org- or system-wide state. None references `auth.uid()` or a `visible_*` helper, and neither does its delegate — which is why the "calls something scoped" definition could not see them | `services/api/supabase/migrations` | — | **OPEN** | 1 | For each: either a test that a caller cannot read another tenant's value through it — `threshold_number` with another territory's id, with a positive control on their own — or a registered reason why the value is genuinely tenant-agnostic. **The reason must name what the value IS**, because "it looked like config" is what left these three outside three separate sweeps |
+
+#### C2 — the rule this earns
+
+Recorded in `docs/gotchas.md`. **The catalogue is a better search surface than grep with exactly
+the same failure mode: it answers the query you wrote, not the question you had.** An instrument
+needs its own control, and spot-checking the output does not provide one — every row you check
+was selected by the definition you are trying to test.
+
+### Added by MR-44 D — two one-liners
+
+#### D1 — `js-yaml`: both sessions were right, and the record did not say why
+
+**The fact, measured:** `require.resolve('js-yaml')` succeeds from the repository root **and**
+from `services/api`, resolving to `node_modules/js-yaml`. It is declared in **no** workspace
+`package.json`. It is a hoisted transitive dependency.
+
+**MR-42 B1 used it in an ad-hoc shell command** to re-parse five workflow files and confirm
+`defaults` had landed as a top-level key. **MR-43 D3 declined to import it in a committed test**
+and hand-rolled a `run:` extractor instead.
+
+**Neither was wrong, and the distinction is the line:**
+
+> **Using an undeclared package in a throwaway verification is not adding a dependency. Importing
+> one in committed code is — and the difference is whether its disappearance breaks the build.**
+
+A hoisted transitive is not a contract. It is present because something else wants it today, and
+it leaves on the `pnpm install` where that something else drops it or moves to a different major.
+A shell command that stops working is an inconvenience discovered immediately by the person
+running it. A committed test that stops resolving is a red build for a reason unrelated to any
+change in the diff — and in `services/api` specifically, `scripts-convention.spec.ts` exists to
+keep that workspace runnable **with no build step**, which is the same concern one level down.
+
+**So the rule, for the next time:** verify with whatever is on the machine; **import only what the
+workspace declares.** If a committed test genuinely needs YAML parsing, declaring `js-yaml` is an
+ASK under `.ai-collab/constraints.md` and should be made as one — it is a small and reasonable
+ask, and MR-43's hand-rolled extractor is a fair price to avoid making it in passing.
+
+#### D2 — `FE-W12`'s renderer: the ask, made now rather than mid-build
+
+`FE-W12`'s two blockers differ in kind. The missing `listAnalysisOverrides` client method is
+ordinary work. **Its recorded check is not:** *"a console test asserts a previously-saved override
+renders"*, and `apps/console` has **no renderer by design** —
+`vitest.config.ts` says the pages are React Server Components and that *"exercising those needs a
+browser or a Next test harness, and neither exists yet"*.
+
+**Filed as `blocked-on-you.md` 2.5 so the answer arrives before somebody starts.** What is being
+asked for, what it would cost, and the recommendation are all in that entry. The short version:
+
+| Option | What it buys | What it costs |
+|---|---|---|
+| **Playwright against `next dev`** | Real RSC rendering — the only option that exercises what ships | A dev dependency **plus browser binaries**, CI minutes, and a **THIRD test runner** beside vitest and jest |
+| `react-dom/server` in vitest | No new runner | Async server components are only partly supported; it would assert a rendering path that is not the one users get |
+| **Keep presenters + source checks** | No new anything | `FE-W13` shipped this way in MR-41 and it is honest — but it cannot satisfy `FE-W12`'s check **as written** |
+
+**The recommendation is the third, with the check rewritten** — and that is itself a decision,
+because it changes what `FE-W12` promises rather than how it is tested.
