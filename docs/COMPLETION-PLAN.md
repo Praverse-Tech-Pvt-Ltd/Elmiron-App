@@ -2049,3 +2049,51 @@ alarms.
 **One quotation left deliberately stale:** `blocked-on-you.md:513` quotes a past section title,
 *"Applying 37 migrations to a database at 19 — the rehearsed procedure"*. It is a quotation of a
 historical document and is correct as a quotation.
+
+### Added by MR-43 C — safe only because it delegates
+
+**`approve_call_reports_bulk` was never open, and nothing protected that.** It has no scoping of
+its own; it is correct because it calls `approve_call_report` once per id. Inline the loop, add a
+fast path, or widen what the delegate accepts, and the tenant boundary leaves with it — silently.
+**That is exactly how `BE-W101` got in.**
+
+#### C2 — the population, and the first two enumerations were both wrong
+
+| Pass | Method | Found |
+|---|---|---|
+| MR-42 | string match | **1** |
+| MR-43, first | catalogue: *"calls something that uses `visible_user_ids`"* | **1** — and still wrong |
+| MR-43, corrected | catalogue: *"has no scoping of its own and calls something that has EITHER kind"* | **4** |
+
+**The second pass missed delegation to a SELF-SCOPED function**, which is a different way of
+being scoped and just as load-bearing. `issue_recording_upload_grant` is a one-line wrapper over
+`begin_upload` and was invisible to it.
+
+| Function | Delegates to | Boundary inherited | Treatment |
+|---|---|---|---|
+| `approve_call_reports_bulk` | `approve_call_report` | the tenant boundary, on a **WRITE** | **Tested** — `delegation.spec.ts` |
+| `active_consent_text` | `current_user_organisation_id` | the caller's own tenant | **Tested** — `delegation.spec.ts` |
+| `issue_recording_upload_grant` | `begin_upload` | the caller's own visits | **Registered, not tested — `BE-W104`** |
+| `is_admin` | `effective_role` | none | **Registered reason: there is nothing to cross** |
+
+#### C3 — the two registered reasons, so neither is a silent skip
+
+| Item | Detail |
+|---|---|
+| **`BE-W104`** | **`issue_recording_upload_grant` is safe only by delegation and is untested.** A one-line SQL wrapper: `select * from public.begin_upload(p_visit_id, 'recording', …)`. If anyone ever inlines it, the "is this your visit" check goes with it | `services/api/supabase/migrations` (`begin_upload`) | — | **OPEN** | 0.5 | An MR must not obtain a recording grant for **another MR's visit**, with a positive control proving they obtain one for their own. **Not done in this session for a stated reason:** audio is OUT of MR v1 under decision `C3`, and `begin_upload`'s positive control needs a consent record, a live notice and a quarantine-free visit — so the control costs more than the assertion, and a test whose positive control is skipped is the shape this register keeps rejecting. It is cheap once the audio path is live |
+
+**`is_admin` is deliberately not tested and that is not an oversight.** It takes no target and
+returns a boolean about the caller: there is no row to reach and no boundary to cross, so there
+is no property of the form *"A must not see B's thing"* to assert. Its correctness is the role
+predicate itself, which `rls.spec.ts` covers.
+
+#### The verification, mutated two-sided
+
+The first mutant was crude — it wrote to a column that does not exist, so the function raised and
+**both** tests went red, which proves sensitivity but not precision. The second replaced the
+delegation with **the same write, inlined**: rows into `call_report_approvals` with no scope
+check. That killed **exactly one** test — the cross-tenant one — while the positive control
+still passed.
+
+**That is the shape a delegation test has to have.** A mutant that breaks everything tells you
+the test runs; a mutant that breaks only the boundary tells you the test is about the boundary.
