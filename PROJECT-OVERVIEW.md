@@ -16075,3 +16075,168 @@ were room, and this is a third kind — **a conditional stop the brief itself de
 condition that turned out to be true.** Recording it as "room" would suggest the work was
 deferred by judgment; recording it as "blockage" would suggest something failed. Neither is what
 happened.
+
+### MR-41 (continued) — B and C ran after all
+
+**The section above says Parts B and C did not run. That was true when it was written and is
+false now: the operator read the A3 report and said "do B, then C".** `PROJECT-OVERVIEW.md` is
+append-only and CI-enforced, so this corrects it by appending rather than by editing — which is
+the behaviour the guard exists to produce.
+
+`BE-W101` is unchanged by any of this: still open at all eight sites, still not fixed, still a
+decision rather than a patch.
+
+#### B1 — `set -o pipefail`, in both places a pipe actually runs
+
+**The before-state, measured:** `false | tail -1` exits **0**. So does
+`grep x /no/such/file | tail -1`.
+
+| Surface | Mechanism |
+| --- | --- |
+| All five GitHub workflows | `defaults: run: shell: bash` — GitHub's bare default is `bash -e {0}` with **no pipefail**; `shell: bash` is `bash --noprofile --norc -eo pipefail {0}` |
+| The session shell | `.claude/shell-init.sh` holding `set -o pipefail`, loaded via `BASH_ENV` in `.claude/settings.json` |
+
+**Not cosmetic in this repository.** `ci.yml` pipes `git diff … | awk` to compute the deletion
+count that the `PROJECT-OVERVIEW` append-only guard fails on, and `backup.yml` pipes `ls … |
+head -1` to choose the artefact it then verifies. **A guard whose input command failed silently
+reports the empty answer, and the empty answer is the passing one in both cases** — `0 deletions`
+and `no artefact` each look like success.
+
+**The control, two-sided:**
+
+| | Before | After |
+| --- | --- | --- |
+| `false \| tail -1` | `0` | **`1`** |
+| `grep x /no/such/file \| tail -1` | `0` | **`2`** |
+| `echo ok \| tail -1` | `0` | **`0`** — unchanged, so the mechanism does not break working commands |
+
+All five workflow files were parsed with `js-yaml` afterwards to confirm `defaults` landed as a
+**top-level key** rather than inside `on:`.
+
+#### B2 — the root `.env` premise was half wrong, and the table is proven
+
+**Correction first, because the table means nothing without it:**
+
+| Variable | Points at |
+| --- | --- |
+| `SUPABASE_URL` | `https://pgfdbzoapmleqtoezhoa.supabase.co` — **HOSTED** |
+| `SUPABASE_DB_URL` | `127.0.0.1:54322` — **LOCAL** |
+| `SUPABASE_REMOTE_DB_URL` | hosted, and a **separate variable nothing above reads** |
+
+So the hosted *database* address is not in the variable the destructive scripts read. The hosted
+*REST* endpoint is, and two unguarded scripts read exactly that one. **And nothing in the repo
+loads the root `.env` into these scripts at all** — none uses `dotenv`, `pnpm` does not populate
+`process.env`, and the one thing proven to read that file is the **Supabase CLI**, established by
+its refusal to parse it while it carried a UTF-8 BOM.
+
+**Every row below was produced by running the command. A NON-RESOLVING hostname was used rather
+than the real hosted one, deliberately: a guard test that fails is a guard test that connects to
+production.** With a host that cannot resolve, a missing guard produces a DNS error instead of a
+live session.
+
+| Command | Guard fires? | Evidence |
+| --- | --- | --- |
+| `seed:day` | **YES** | *"refuses to run against host … Only 127.0.0.1, ::1 or localhost are allowed"*, exit 1 |
+| `seed:mr` | **YES** | *"…creates an auth identity … which must never reach a deployment"*, exit 1 |
+| `seed:synthetic` | **YES** | *"…hundreds of thousands of invented rows … There is no --force"*, exit 1 |
+| `verify:rollbacks` | **YES** | *"…destructive by design and only ever allowed against 127.0.0.1"*, exit 1 |
+| `purge:audio` | **NO** | `getaddrinfo ENOTFOUND` — it tried to connect. **This one DELETES storage objects** |
+| `check:purge-health` | **NO** | `getaddrinfo ENOTFOUND` |
+| `reconcile:restore` | **NO** | `getaddrinfo ENOTFOUND` |
+| `seed:reference` | **not reached** | Refuses earlier, for a different reason: *"requires --data"* |
+| `db:reset` | **n/a** | Supabase CLI behaviour, not a repo guard. **Not executed** — observing it would have destroyed the local demo tenants |
+
+Registered as **`BE-W103`**. Its recorded check requires a **refusal naming the host**, not merely
+a non-zero exit: `ENOTFOUND` is what a missing guard looks like, and is indistinguishable from a
+guard whenever the host happens not to resolve.
+
+#### B3 and B4 — the two register entries
+
+**`FE-W49`** — the banner inset, with the check written as **arithmetic on the distance that
+reaches the title** plus a zero-inset positive control and a per-edge distinctness control. The
+class is in `gotchas.md`: **hoisting something to a root for coverage moves it out of whatever the
+root's children inherit.** Coverage and inheritance pull in opposite directions, and nothing
+type-checks the loss.
+
+**The mock-dead instrument** is in `gotchas.md` too: kill the other source and see whether the
+screen still works. `HANDOVER-2026-09-08`'s §3 table is corrected by append — **Today is REAL,
+established by ELIMINATION**, the pull now has a caller, and **the remaining nine rows are marked
+as inspection-dated 8 September: claims, not facts.**
+
+#### C — `FE-W13` IS BUILT
+
+**C1 first, as instructed: the check was replaced before anything was built against it.** The old
+one, `grep -c "90" <screen>` → `0`, returns **2** — `admin/page.tsx:29` and `:139`, both prose
+explaining why the figure is *not* printed. It failed on a correct screen and passed on a wrong
+one.
+
+**What was built.** Two presenters — `src/lib/retention.ts` and `src/lib/audit.ts` — plus the
+wiring in `admin/page.tsx`. **The arithmetic is in modules rather than in the page because the
+console has no renderer**, which `vitest.config.ts` states in its own comment; adding one is a
+dependency and this project requires asking first. That is the same split `queue.ts` already
+keeps, and it is what makes the check assertable at all.
+
+**The replacement check, satisfied at two levels:**
+
+1. **Unit** — `retentionSentence` must print the server's `retentionDays` and must **differ**
+   between two server values, with a **zero-case positive control** requiring **no digits at all**
+   when the server supplies nothing. Mutants: hard-coding `90` kills the first; falling back to
+   the design's `90` on failure kills the second. **Both were run and both died.**
+2. **End-to-end, which is the one that matters** — the mock's `retentionDays` was changed from
+   **90 to 45**, and the rendered page at `/admin` then read *"Audio is kept for 45 days"* with
+   **no "90 days" anywhere**. Restored afterwards.
+
+**The end-to-end guard asserts its own precondition, and that is not decoration.** The first
+attempt showed the page still saying 90 — because a stale mock process still held port 4010 and
+was serving 90. **Without the precondition check that reads exactly like "the page ignores the
+server".** The mock was killed by PID, restarted, the precondition (`"retentionDays":45` on the
+wire) was confirmed, and only then was the page asserted.
+
+**What the audit panel is not allowed to claim, asserted rather than commented:** its heading is
+**"Successful reads"** and its caveat names `BE-W102` — a refused read is not in the trail, so the
+panel must not present itself as a list of attempts. A **refusal renders as a refusal**, never as
+an empty list, because `list_audit_log` raises `42501` rather than returning an empty page and
+collapsing the two converts a true statement into a false one. `systemRowsHidden` renders as
+*"2 row(s) are not shown"*, so a scoped page is distinguishable from an empty one.
+
+**Two of my own errors on the way, both caught by the thing they were aimed at.** An `emptyTrailNote`
+assertion used a regex lookahead that could not express "these words may appear only inside the
+disclaimer" and failed against correct output; it was replaced with the property stated directly.
+And the first pass of the rendered-page assertions used `grep -E` with `row(s)` — which matches
+`rows` — and reported two correct lines as ABSENT. **A check that fails on correct output is the
+exact defect this session's Part A was about.**
+
+#### Counts — by workspace AND runner, from BOTH lines
+
+| Workspace | Runner | Passed | Failed | Suites / Files |
+| --- | --- | --- | --- | --- |
+| `@fieldforce/core` | vitest | 28 | 0 | 3 files |
+| `@fieldforce/ui` | vitest | 4 | 0 | 1 file |
+| `@fieldforce/ui` | jest | 246 | 0 | 22 suites |
+| `@fieldforce/ui-tokens` | vitest | 54 | 0 | 3 files |
+| `@fieldforce/console` | vitest | **28** | 0 | **4 files** |
+| `@fieldforce/field` | vitest | 502 | 0 | 32 files |
+| `@fieldforce/field` | jest | 131 | 0 | 19 suites |
+| `@fieldforce/api` | vitest | 691 | 0 | 46 files |
+| `@fieldforce/mock` | vitest | 43 | 0 | 1 file |
+
+**1,727 passing, zero failing, no suite failed to run.** Console **14 → 28**. `typecheck`, `lint`
+and `format:check` all exit 0, each read from its own exit code rather than from the shape of its
+output.
+
+#### Where this session stopped — ROOM, and the earlier verdict stands as written
+
+**Part C completed, so this stop is ROOM: the work asked for is done and the remaining register
+items are new ones.**
+
+That does **not** revise the verdict in the section above. That stop was real, it was the A3 rule
+firing, and it ended when the operator read the report and chose to continue — which is what a
+conditional stop is for. **Two stops, two different kinds, and the register now carries both
+rather than flattening them into one.**
+
+**What is owed next, in the order the register would take it:**
+
+1. **`BE-W101`** — still the most serious open item here, now proven at eight sites with three
+   writes. It needs a decision on whether an admin has any legitimate cross-tenant read at all.
+2. **`BE-W103`** — three unguarded destructive scripts, one of which deletes.
+3. **`FE-W12`** — still blocked: no `listAnalysisOverrides` client method, and no renderer.

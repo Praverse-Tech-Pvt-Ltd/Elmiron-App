@@ -4,6 +4,7 @@ import { createApiClient } from '@fieldforce/core';
 import {
   Body,
   Card,
+  Figure,
   Heading,
   Label,
   MissingNote,
@@ -13,6 +14,15 @@ import {
   headerCell,
 } from '../../lib/ui';
 import { dateFrom, versionRows } from '../../lib/versions';
+import {
+  AUDIT_CAVEAT,
+  AUDIT_HEADING,
+  auditRows,
+  emptyTrailNote,
+  hiddenRowsNote,
+  refusedNote,
+} from '../../lib/audit';
+import { purgeNotice, retentionFigures, retentionSentence } from '../../lib/retention';
 
 /**
  * Phase 4 E3 — consent versions, audit and retention.
@@ -23,15 +33,32 @@ import { dateFrom, versionRows } from '../../lib/versions';
  * no transcript, no analysis and no AI output at all — it is a compliance surface
  * — so it was never blocked.
  *
- * **One of its three panels has data and two do not.** The consent-version table
- * is real, read from the ledger. There is no audit-log path and no retention path
- * in `API_PATHS`, so those panels say what is missing and name it, rather than
- * printing the design's illustrative "41 recordings purged" and "90 days" as
- * though the server had said them.
+ * **All three panels now have data — `FE-W13`, MR-41 C2.** Two of them said *"Not
+ * built … no path in `API_PATHS` exposes it"* for four sessions. That stopped being
+ * true when `BE-W14` and `BE-W15` landed the read paths in MR-39:
+ * `API_PATHS.auditLog` and `API_PATHS.retentionStatus` exist, and the client has
+ * `listAuditLog` and `getRetentionStatus`. **A panel that says "not built" about a
+ * path that now exists is the same defect `FE-W10` was raised for**, one file over.
  *
- * Rendered on the server with no token: `/consent-text-versions` and
- * `/consent-records` are what the mock serves unauthenticated today. Real auth is
- * the console's own open question and is not invented here.
+ * ### The two things this screen must not do
+ *
+ * **It must not print a retention figure of its own.** It prints
+ * `retentionDays`, which is `public.audio_retention_days()` — the same function
+ * that stamps `purge_after`. One number, two readers. The panel refused the
+ * design's illustrative 90 before this existed and would refuse it again; what it
+ * shows now is the figure the database enforces, and `retention.ts` has no
+ * fallback for exactly that reason.
+ *
+ * **It must not soften a refusal into an empty state.** `list_audit_log` raises
+ * `42501` for a non-admin rather than returning an empty page, deliberately: an
+ * empty list claims there is nothing to see, a refusal claims something about who
+ * is asking. The two are rendered as different sentences, and the decision lives
+ * in `audit.ts` where a `.test.ts` can hold it.
+ *
+ * Rendered on the server with no token, as before: real console auth is this
+ * app's own open question and is not invented here. Against a deployment that
+ * means these two reads are refused — which is why the refusal has a rendering
+ * rather than being assumed away.
  */
 // Bracket access, not dot: this repo sets `noPropertyAccessFromIndexSignature`.
 // The field app is the opposite case and says so — Expo rewrites `process.env.X`
@@ -39,20 +66,33 @@ import { dateFrom, versionRows } from '../../lib/versions';
 // the strict form is both allowed and correct.
 const baseUrl = process.env['NEXT_PUBLIC_API_BASE_URL'] ?? 'http://127.0.0.1:4010';
 
+/**
+ * Both read paths REQUIRE a reason and write it to the trail before returning, so
+ * this string is not decoration — it is what an auditor reads next to this
+ * console's own row. It names the screen, because "why did the console read the
+ * audit log" has exactly one honest answer: somebody opened the page that shows it.
+ */
+const READ_REASON = 'console admin screen — compliance panel render';
+
 export const dynamic = 'force-dynamic';
 
 export default async function Admin(): Promise<ReactNode> {
   const client = createApiClient({ baseUrl, getAccessToken: () => Promise.resolve(null) });
 
-  const [versions, records] = await Promise.all([
+  const [versions, records, audit, retention] = await Promise.all([
     client.listConsentTextVersions().catch(() => null),
     client.listConsentRecords().catch(() => null),
+    client.listAuditLog({ reason: READ_REASON, limit: 25 }).catch(() => null),
+    client.getRetentionStatus({ reason: READ_REASON }).catch(() => null),
   ]);
 
   const rows =
     versions === null
       ? []
       : versionRows(versions.items, records?.items ?? [], new Date().toISOString());
+
+  const trail = audit === null ? [] : auditRows(audit);
+  const hidden = audit === null ? null : hiddenRowsNote(audit);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1320 }}>
@@ -119,26 +159,73 @@ export default async function Admin(): Promise<ReactNode> {
       <div style={{ display: 'flex', gap: tokens.space.md, alignItems: 'stretch' }}>
         <div style={{ flex: 1.4, display: 'flex' }}>
           <Card>
-            <Heading>Audit log</Heading>
-            <MissingNote>
-              Not built. The audit log exists — `audit_log` is append-only and written by trigger on
-              every table this console touches — but no path in `API_PATHS` exposes it, so there is
-              nothing to read. The design&apos;s panel would otherwise be four invented lines.
-            </MissingNote>
+            <Heading>{AUDIT_HEADING}</Heading>
+            {/*
+              The caveat sits above the table rather than under it. `BE-W102`: a refused
+              read is not in the trail at all, so a reader who takes this for a list of
+              attempts has been misled by the time they reach a footnote.
+            */}
+            <Body muted>{AUDIT_CAVEAT}</Body>
+
+            {audit === null ? <MissingNote>{refusedNote()}</MissingNote> : null}
+
+            {audit !== null && trail.length === 0 ? <Body muted>{emptyTrailNote()}</Body> : null}
+
+            {trail.length > 0 ? (
+              <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={headerCell}>When</th>
+                    <th style={headerCell}>Who</th>
+                    <th style={headerCell}>What</th>
+                    <th style={headerCell}>Reason given</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trail.map((row) => (
+                    <tr key={row.id}>
+                      <td style={cell}>{dateFrom(row.occurredAt)}</td>
+                      <td style={cell}>{row.actorRole}</td>
+                      <td style={cell}>{row.what}</td>
+                      <td style={cell}>{row.reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : null}
+
+            {hidden === null ? null : <Body muted>{hidden}</Body>}
+
             <Body muted>
-              When it lands it carries the promise the field app already makes on its transparency
-              screen: every read of an MR&apos;s data is logged and shown to that MR.
+              This carries the promise the field app already makes on its transparency screen: every
+              read of an MR&apos;s data is logged and shown to that MR.
             </Body>
           </Card>
         </div>
         <div style={{ flex: 1, display: 'flex' }}>
           <Card>
             <Heading>Retention</Heading>
-            <MissingNote>
-              Not built. The retention schedule is server-side and no endpoint returns it. The
-              design shows 90 days; printing that here would be this console asserting a policy
-              value it has not been told.
-            </MissingNote>
+            <Body muted>{retentionSentence(retention)}</Body>
+
+            {retention === null ? (
+              <MissingNote>{refusedNote()}</MissingNote>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: tokens.space.md, flexWrap: 'wrap' }}>
+                  {retentionFigures(retention).map((figure) => (
+                    <div key={figure.label} style={{ minWidth: 120 }}>
+                      <Label>{figure.label}</Label>
+                      <Figure>{figure.value}</Figure>
+                      <Body muted>{figure.note}</Body>
+                    </div>
+                  ))}
+                </div>
+                {purgeNotice(retention) === null ? null : (
+                  <MissingNote>{purgeNotice(retention)}</MissingNote>
+                )}
+              </>
+            )}
+
             <Label>What is already true</Label>
             <Body muted>
               Audio is purged automatically and the purge is itself logged. Changing the period

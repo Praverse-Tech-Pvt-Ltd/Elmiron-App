@@ -666,3 +666,51 @@ same as caused by it.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-41 — the missing answers | `PROJECT-OVERVIEW.md` → `### MR-41 — the missing answers` |
+
+---
+
+## After MR-41 B and C — 17 September 2026
+
+**The block above says B and C did not run. The operator read the A3 report and said "do B, then
+C", so they did.** `BE-W101` is unchanged: still open at all eight sites, still not fixed.
+
+| | |
+| --- | --- |
+| **B1** | `set -o pipefail` — `defaults: run: shell: bash` in all five workflows, and `.claude/shell-init.sh` via `BASH_ENV` for the session shell. `false \| tail` now exits **1**, was 0 |
+| **B2** | **`BE-W103`** — `purge:audio`, `check:purge-health`, `reconcile:restore` have **no host guard**. Proven by running them. `purge:audio` **deletes** |
+| **B3 / B4** | **`FE-W49`** registered; two gotchas entries — the root-hoisting class, and the mock-dead instrument |
+| **C** | **`FE-W13` BUILT.** Console vitest **14 → 28** |
+| **Tests** | **1,727 passing, zero failing, no suite failed to run** |
+
+### The correction that matters most for the next reader
+
+**`HANDOVER-2026-09-08` §3's module/screen table is dated and mostly unverified.** Only two rows
+have been re-established: **Today is REAL** (by elimination — mock dead, screen still correct) and
+**the pull has a caller**. The other nine are inspection-dated 8 September and should be read as
+claims. `FE-W32`'s recorded check is the standard they need to meet.
+
+### Three method notes
+
+**1. Assert the precondition of a guard, or the guard lies to you.** The `FE-W13` end-to-end check
+appeared to show the rendered page ignoring the server's retention value. It was a stale mock
+holding port 4010 and serving the old number. The guard now confirms `"retentionDays":45` on the
+wire **before** asserting the page.
+
+**2. Test a destructive guard against a host that cannot resolve.** Pointing `seed:day` at the real
+hosted URL to see whether it refuses is a test whose failure mode is a live production connection.
+A non-resolving hostname makes a missing guard show up as `ENOTFOUND` instead.
+
+**3. `ENOTFOUND` is what a missing guard looks like.** So `BE-W103`'s recorded check requires a
+**refusal naming the host**, not a non-zero exit. Any script fails against a host that does not
+exist.
+
+### Two of my own checks were wrong this session, in the way Part A was about
+
+A regex lookahead that could not express *"these words may appear only inside the disclaimer"*,
+and `grep -E "row(s)"` — which matches `rows` — reporting two correct lines as ABSENT. **Both
+failed on correct output.** Neither reached the register; both are recorded here because the
+session's own subject was checks that cannot tell right from wrong.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-41 B and C | `PROJECT-OVERVIEW.md` → `### MR-41 (continued) — B and C ran after all` |

@@ -1059,3 +1059,59 @@ a wrong one.
 `FE-W13`'s screens consume — `list_audit_log` and `retention_status` — remain **clear**: they
 were written without the escape in MR-39, and the catalogue sweep this session confirms neither
 carries the `v_role = 'admin'` branch. **The screens are still safe to build.**
+
+## MR-41 C — `FE-W13` IS BUILT (correcting the entry above, which was written before Part C ran)
+
+**The section above says `FE-W13` was not started. That was true when written; the operator then
+said "do B, then C".** Console vitest **14 → 28**, 4 files.
+
+### The check was replaced BEFORE anything was built against it
+
+The old one — `grep -c "90" <screen>` → `0` — returns **2**, at `admin/page.tsx:29` and `:139`,
+both prose explaining why the figure is *not* printed. **It failed on a correct screen and passed
+on a wrong one**, so building against it would have meant building against a check that could not
+tell the two apart.
+
+### What was built, and why the arithmetic is not in the page
+
+`src/lib/retention.ts` and `src/lib/audit.ts` hold every decision; `admin/page.tsx` binds them.
+
+**That split is forced by a recorded constraint, not chosen for taste.** The console's pages are
+React Server Components and `vitest.config.ts` says exercising those needs a browser or a Next
+harness, neither of which exists — adding one is a dependency and this project requires asking
+first. `queue.ts` already keeps the same split. **A presenter in a `.ts` module is the only part
+of an RSC screen this repo can currently assert.**
+
+### The replacement check, at two levels
+
+1. **Unit** — the sentence must carry the server's `retentionDays`, must **differ** between two
+   server values, and must print **no digits at all** when the server supplies none. Mutants:
+   hard-coded `90` kills the first; a fallback to the design's `90` kills the third. Both run,
+   both died.
+2. **End-to-end** — the mock's `retentionDays` changed **90 → 45**, and the rendered `/admin`
+   page then read *"Audio is kept for 45 days"* with no *"90 days"* anywhere.
+
+**The end-to-end guard asserts its own precondition.** The first attempt appeared to show the page
+ignoring the server; it was a stale mock still holding port 4010 and serving 90. The precondition
+— `"retentionDays":45` observed on the wire — is what turned a false conclusion into a restart.
+
+### What the audit panel is not allowed to claim
+
+Asserted in `audit.test.ts`, not left as a comment:
+
+- **Heading is "Successful reads"**, and the caveat names `BE-W102`: a refused read is not in the
+  trail, so this panel is not a list of attempts and must not read like one.
+- **A refusal renders as a refusal**, never as an empty list. `list_audit_log` raises `42501`
+  rather than returning an empty page; collapsing the two converts a true statement into a false
+  one.
+- **The empty state never says "no attempts"** except inside the sentence that denies it — tested
+  by position, not by a regex lookahead.
+- **`systemRowsHidden` renders** (*"2 row(s) are not shown"*), so a scoped page is
+  distinguishable from an empty one.
+
+### Still open on the console
+
+**`FE-W12` remains blocked** and nothing here changed that: no `listAnalysisOverrides` client
+method, and no renderer. **`FE-W49`** (the banner inset) is fixed and now registered. The console
+still has **no real auth** — these two panels render server-side with no token, which is why the
+refusal path has a rendering rather than being assumed away.
