@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+  BeatPlanEntrySchema,
   BeatPlanRecordSchema,
   ClinicAddressSchema,
   PulledConsentTextVersionSchema,
@@ -51,6 +52,7 @@ interface StoredShape {
   readonly visit: readonly unknown[];
   readonly doctor: readonly unknown[];
   readonly beat_plan: readonly unknown[];
+  readonly beat_plan_entry: readonly unknown[];
   readonly clinic_address: readonly unknown[];
   readonly consent_text_version: readonly unknown[];
 }
@@ -147,6 +149,7 @@ const serialise = (store: LocalStore): StoredShape => ({
   visit: [...store.visit.values()],
   doctor: [...store.doctor.values()],
   beat_plan: [...store.beat_plan.values()],
+  beat_plan_entry: [...store.beat_plan_entry.values()],
   clinic_address: [...store.clinic_address.values()],
   consent_text_version: [...store.consent_text_version.values()],
 });
@@ -168,6 +171,12 @@ const deserialise = (raw: unknown): LocalStore | null => {
     !Array.isArray(shape.visit) ||
     !Array.isArray(shape.doctor) ||
     !Array.isArray(shape.beat_plan) ||
+    // MR-44 / `BE-W89`. Same mechanism as the notices below, and it is what makes the
+    // new entity actually reach an existing handset. The pull's cursor is a SNAPSHOT,
+    // so entries that already existed keep their original `xmin` and an incremental
+    // sweep would never send them. A store written before this key existed fails here,
+    // the cursor is cleared with it, and the next pull is a full re-sync that does.
+    !Array.isArray(shape.beat_plan_entry) ||
     !Array.isArray(shape.clinic_address) ||
     // MR-26 B1. A store written before the notices joined the pull has no such key, so it
     // fails here and `loadPulledStore` clears the cursor with it -- P1's rule, that records
@@ -181,6 +190,7 @@ const deserialise = (raw: unknown): LocalStore | null => {
   const visit = new Map(next.visit);
   const doctor = new Map(next.doctor);
   const beatPlan = new Map(next.beat_plan);
+  const beatPlanEntry = new Map(next.beat_plan_entry);
   const clinicAddress = new Map(next.clinic_address);
   const consentTextVersion = new Map(next.consent_text_version);
 
@@ -199,6 +209,11 @@ const deserialise = (raw: unknown): LocalStore | null => {
     if (!parsed.success) return null;
     beatPlan.set(parsed.data.id, parsed.data);
   }
+  for (const row of shape.beat_plan_entry) {
+    const parsed = BeatPlanEntrySchema.safeParse(row);
+    if (!parsed.success) return null;
+    beatPlanEntry.set(parsed.data.id, parsed.data);
+  }
   for (const row of shape.clinic_address) {
     const parsed = ClinicAddressSchema.safeParse(row);
     if (!parsed.success) return null;
@@ -214,6 +229,7 @@ const deserialise = (raw: unknown): LocalStore | null => {
     visit,
     doctor,
     beat_plan: beatPlan,
+    beat_plan_entry: beatPlanEntry,
     clinic_address: clinicAddress,
     consent_text_version: consentTextVersion,
   };

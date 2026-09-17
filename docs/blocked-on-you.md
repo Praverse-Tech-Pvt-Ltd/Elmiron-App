@@ -277,7 +277,7 @@ Every open item that no agent can resolve, consolidated. Backend is stopped by d
 | ~~1.2~~ | **DONE — stale alarm, cleared MR-43 A6.** Write access exists; every session since has pushed to `main` | — | The distinction it drew — re-authentication cannot fix a permissions problem — is still the right first question if a 403 ever returns |
 | 1.3 | `eas login` — an Expo account | **Any APK build at all** | Free tier: 15 Android builds/month, 90+ min queue at peak |
 | 1.4 | Elevated PowerShell:<br>`New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name LongPathsEnabled -Value 1 -PropertyType DWORD -Force` | Metro and Gradle deep paths | `git config --global core.longpaths` is already set; this is the other half and needs admin |
-| 1.5 | **A physical Android device** | **FE-G1** | Get a Xiaomi, Oppo, Vivo or Realme — not a Pixel. Those ROMs kill background processes aggressively, hold large Indian market share, and background location dying silently is the most likely field failure on this product. It will not reproduce on an emulator. |
+| ~~1.5~~ | **→ see 5.1.** Reconciled MR-44 A2; 5.1 names the four OEMs and why a Pixel proves nothing. *(was: A physical Android device)* | **FE-G1** | Get a Xiaomi, Oppo, Vivo or Realme — not a Pixel. Those ROMs kill background processes aggressively, hold large Indian market share, and background location dying silently is the most likely field failure on this product. It will not reproduce on an emulator. |
 | 1.6 | **Add `com.praversetech.fieldforce://auth-callback` to the HOSTED project's redirect allow-list** — Authentication → URL Configuration → Redirect URLs | Deep-link sign-in on any build pointed at the hosted project | **Filed MR-43 A5.** It was hiding inside a decision entry: `O2`'s "Outstanding" line, which named a scheme (`praversefieldforce://`) that `FE-R1a` had already superseded, and claimed work that is in fact **done locally** — `config.toml` has the reverse-DNS entry. A dashboard action is not a backend code change, and a task does not belong inside a permanent decision record |
 
 ---
@@ -289,7 +289,7 @@ Every open item that no agent can resolve, consolidated. Backend is stopped by d
 | 2.1 | **Whose Play Console account ships this — yours or the client's?** | Before FE-W8 | Decides package ID, listing ownership, keystore custody, and what happens if the relationship ends |
 | ~~2.2~~ | **DECIDED AND EXECUTED — `O2`, 17 August 2026. Cleared MR-43 A3/A6.** This row said *"Currently the placeholder `com.praversetech.elmironmr`"*. It is not: `app.json` holds `com.praversetech.fieldforce`, the scheme is the reverse-DNS form, and the string `elmironmr` appears **nowhere** in code or config | — | **The decision was in `.ai-collab/decisions.md` the whole time** — *"O2 — the name in permanent identifiers: EXECUTED, commit `f34ceef`"*. That is the same `f34ceef` this repository's checkout guard has asserted as an ancestor in every session. The trademark reasoning (ELMIRON® is a third party's mark) is kept there in full |
 | 2.3 | **Keystore custody** — EAS holds it, or enrol in Play App Signing | Before first Play upload | If access to the Expo account is ever lost, you cannot update an app already on the Play Store. No recovery path. *[Verify Play App Signing against current Play Console docs.]* |
-| 2.4 | **Transistorsoft release licence** | Before FE-W8, but check now | Believed required for Android release builds, free for debug. Unverified — check transistorsoft.com. A purchase order takes longer than a sprint. |
+| ~~2.4~~ | **→ see 5.3**, which is broader: it carries the alternative resolution, shipping foreground-only check-in. Reconciled MR-44 A2. *(was: Transistorsoft release licence)* | Before FE-W8, but check now | Believed required for Android release builds, free for debug. Unverified — check transistorsoft.com. A purchase order takes longer than a sprint. |
 
 ---
 
@@ -309,7 +309,7 @@ These predate the frontend entirely. Drafts are in `docs/escalations-week3.md`. 
 |---|---|---|---|
 | 4.1 | **PV and privacy sign-off.** Two specific questions: may `adverse_event_reports.reported_text` contain patient information, and does an adverse-event report survive a consent withdrawal? | Sprint 1 | Both are currently answered by a **default, not a decision**, and both are now baked into a deployed production schema. A different answer is a migration against live tables. **MR-43 A3 — the pointer this row was missing.** Both questions already have recorded ENGINEERING answers in `.ai-collab/decisions.md` (BE-W7, 16 August 2026): *"`reported_text` kept on the adverse-event record — Decision: keep it, and flag it hard"*, and *"An adverse-event report survives a consent withdrawal — Decision: it survives"*, the second explicitly labelled **"This is a default, not a ruling"**. So **no engineering work is waiting on this** — the schema is built and documented. What is waiting is the sign-off that turns two defaults into rulings. |
 | 4.2 | **Contract I3 — STT vendor decision and measured Hinglish WER on real audio** | Sprint 2 | The entire AI layer. **CI goes red on 30 September** unless `TranscriptV1` exists. If the answer comes back bad, the pipeline is cut — so every week of delay is a week of risk that work gets built and deleted. |
-| 4.3 | **Per-territory working hours from the client** | Sprint 3 | Capture refuses without them. The org-default window expires 60 days after being configured, then refuses again — by design. |
+| ~~4.3~~ | **→ see 5.7**, which is broader: it includes the reference data §6.1 is sequenced around. Reconciled MR-44 A2. *(was: Per-territory working hours from the client)* | Sprint 3 | Capture refuses without them. The org-default window expires 60 days after being configured, then refuses again — by design. |
 | 4.4 | **Supabase DPA question:** does a deleted storage object survive in S3 versioning, a soft-delete window, or a sub-processor's backup? | Sprint 7 | Decides whether the 90-day retention claim is literally true. Not answerable from the API. Needed before the pilot. |
 
 ---
@@ -348,7 +348,7 @@ and none is blocked on this codebase.
 | 5.9 | **The UCPMP cap value and dimension — AND whether `input` counts against it** | Client | — | **A BUILD-FAILING DEADLINE OF 6 NOVEMBER is already wired**, warning from **16 October**. `check:decision-debt` fails CI on that date. Do not invent a value to clear it — set the real one, or file a migration moving the deadline with its reason. **MR-16 B4 adds a second half to the same question:** `enforce_ucpmp_sample_cap` sums `quantity` over `samples_and_inputs` filtered by `doctor_id`, `item_name` and the month **and does NOT filter on `kind`** — so a `sample` and an `input` count against the same ceiling. UCPMP treats them as different things, so this is probably wrong, and **no test can tell either way**: every fixture in the repository holds `kind = 'sample'`, so the accumulation predicate is unfalsifiable on that column. Deliberately NOT split into its own item — it is the same person's answer as the cap value, and splitting it is how one of the two gets answered and the other does not |
 | 5.12 | **Which consent-notice LANGUAGE an MR is shown first** | Client | — | **MR-22 B2.** The consent screen defaults to the first offerable version's language, and `displayed_language` is derived SERVER-side from the version the client sends — so this default decides a field on a compliance record. With one language in every fixture it was deterministic by accident; MR-16 added `hi-IN` and it became a function of however the server sorted the rows. MR-22 made the order deterministic (by language code, newest live version first within a language) and **labelled that rule as arbitrary rather than dressing it up as a preference**. The engineering is settled; the product question is not: should the default follow the doctor's recorded preference, the territory, the MR's own setting, or a fixed company order? An MR can already change it on screen, so this is about the FIRST thing a doctor sees, not about what is possible |
 | 5.10 | **`consent_max_sync_lag_hours` (72h) and `consent_future_tolerance_seconds` (120s)** | Client | — | Both **UNVERIFIED** — they are defaults nobody has confirmed. The second now also bounds how far a device clock may run ahead on a visit, so its name is wrong as well as its value unconfirmed |
-| 5.11 | **The Supabase storage-deletion DPA question** | Operator | **Sprint 7** | Whether the 90-day retention claim is literally true. **Drafted since sprint seven and never sent.** Not answerable from the API |
+| ~~5.11~~ | **→ see 4.4**, which states the actual question rather than the topic. Reconciled MR-44 A2 — the one pair where sections 1–4 hold the better row. *(was: The Supabase storage-deletion DPA question)* | Operator | **Sprint 7** | Whether the 90-day retention claim is literally true. **Drafted since sprint seven and never sent.** Not answerable from the API |
 | 5.14 | **Is a doctor's second answer on the same visit a WITHDRAWAL of the first, or a separate answer?** | Client | — | **BE-W95 / MR-24 B.** MR-24 found that a doctor's decline after a consent was **silently discarded** — the app said "accepted", and `consent_records` still held one row saying `consented`. That is fixed: the decline is now its own row. What is NOT decided is what it MEANS. `is_withdrawal` is false and `supersedes_consent_record_id` is null, because the client sends neither, so both rows stand and a reader must infer the current answer from `captured_at`. The columns and `cascade_consent_withdrawal()` already exist — the mechanism is built and nothing drives it. **The consequences differ:** a WITHDRAWAL reaches back to recordings already made under the first answer; a separate answer does not. Engineering cannot pick between those |
 | 5.15 | **What does an MR see when they act on state the server has not yet confirmed — a pending marker, nothing, or a warning?** | Client | — | **FE-W39 / MR-26 A2. NARROWED — the previous version of this item asked you to resolve the whole offline problem, and most of that was ours.** MR-25 filed it as a product trade-off between working offline and never displaying unconfirmed state. That framing was wrong: the honesty rule is about **asserting facts**, not about gating actions on a live round trip, and the pulled store exists so the client can act on state it already holds. The mechanics are engineering and are being done. **What is genuinely yours is one sentence of copy:** once a queued check-in makes check-out reachable, what does the screen say? A pending marker cannot be read as a false claim; "nothing" is only admissible if no copy anywhere asserts confirmation. Engineering's default without an answer is the pending marker |
 
@@ -736,3 +736,60 @@ and each has a decision hanging off it:
 **Why ask rather than test.** Every one of these is a property of the platform's
 implementation and contract. A scratch database on this machine cannot observe any of them,
 and an experiment against production would be the incident it is meant to prepare for.
+
+---
+
+## Reconciled 17 September 2026 (MR-44 A2) — one id per ask
+
+**Section 5 transcribed the review conversation without reconciling it against sections 1–4.**
+That is where the duplicates came from, and the human-facing count has been inflated by them for
+weeks: **31 numbered items, 27 distinct asks.**
+
+**The canonical id is whichever row states the ask most COMPLETELY — not whichever came first,
+and not uniformly section 5.** Two of these four are not duplicates at all: they are a subset and
+a superset, and collapsing them onto the smaller row would have lost half an ask.
+
+| Canonical | Pointer | Why that one is canonical |
+| --- | --- | --- |
+| **5.1** | ~~1.5~~ → see 5.1 | Same ask. 5.1 names the four OEMs and says why a Pixel proves nothing; 1.5 says *"A physical Android device"* |
+| **5.3** | ~~2.4~~ → see 5.3 | **Superset.** 5.3 is *"Transistorsoft licence, **or a decision to ship foreground-only check-in**"* — it carries an alternative resolution that 2.4 does not |
+| **5.7** | ~~4.3~~ → see 5.7 | **Superset.** 5.7 is *"**Reference data** and per-territory shift hours"*; 4.3 is the shift hours alone |
+| **4.4** | ~~5.11~~ → see 4.4 | **The other direction.** 4.4 states the actual question — *"does a deleted storage object survive in S3 versioning, a soft-delete window, or a sub-processor's backup?"* — where 5.11 only names the topic |
+
+**The correction this makes to MR-43's own write-up:** it called all four *"the same ask under two
+ids"*. Two of them were not. **Had the reconciliation followed that summary instead of re-reading
+the rows, `5.3`'s foreground-only alternative and `5.7`'s reference-data half would have been
+deleted as redundant** — and reference data is the thing `§6.1` is sequenced around.
+
+**The count stands at 27 distinct asks**, and the four pointer rows are struck through in place
+rather than deleted, so an old link still lands somewhere that explains itself.
+
+## A3 — a decision record must not carry a to-do list
+
+**`O2` was right for a month and its "Outstanding" line was wrong for most of it.** The line said
+backend must add `praversefieldforce://auth-callback` to `additional_redirect_urls`. The scheme
+had been superseded by `FE-R1a`; the reverse-DNS entry was already in `config.toml`. **Two
+separate rots, in a sentence sitting inside the most authoritative artefact in the repository.**
+
+**The rule: what was DECIDED is durable. What REMAINS is status, and status rots fastest exactly
+where it is least questioned.** A decision record is read as settled — that is its whole function
+— so a task note inside one inherits an authority it has not earned and is the last thing anybody
+re-checks.
+
+**Where each belongs:**
+
+| Kind | Home |
+| --- | --- |
+| the ruling and its reasoning | `.ai-collab/decisions.md` — permanent, append-only in practice |
+| a task for a human | `docs/blocked-on-you.md`, numbered |
+| a task for engineering | `docs/COMPLETION-PLAN.md`, with a recorded check |
+
+**This is the third instance of one shape, and naming it is the point:**
+
+- **`blocked-on-you.md`** led with a red banner for a defect fixed in MR-42.
+- **The drift workflow** was red on every commit for a state everybody already knew.
+- **`O2`** carried a to-do that had been done and renamed.
+
+**All three were correct when written, none was re-evaluated when the world moved, and each sat in
+a place whose authority discouraged checking.** A stale alarm and a stale to-do are the same
+defect as a permanent red in CI — only the last one had a workflow run to make it visible.

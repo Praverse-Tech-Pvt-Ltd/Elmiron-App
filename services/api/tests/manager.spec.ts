@@ -265,14 +265,27 @@ describe.skipIf(!reachable)('team activity and coverage', () => {
 
   it('counts a missed visit as a planned doctor who was not seen', async () => {
     await asUserTx(world.users.westManager, async (client) => {
-      const rows = await client.query<{ mr_id: string; missed_visit_count: number }>(
-        `select mr_id, missed_visit_count from public.coverage(current_date, current_date)
+      const rows = await client.query<{
+        mr_id: string;
+        planned_visit_count: number;
+        missed_visit_count: number;
+      }>(
+        `select mr_id, planned_visit_count, missed_visit_count
+           from public.coverage(current_date, current_date)
           where mr_id = $1`,
         [world.users.puneMr.id],
       );
-      // The fixture beat plan has no entries, so nothing is missed. The point of the
-      // assertion is the shape: a number, per MR, per day, and not a ratio.
-      expect(rows.rows[0]?.missed_visit_count).toBe(0);
+      // MR-44. This assertion USED TO BE VACUOUS and said so: *"the fixture beat plan has
+      // no entries, so nothing is missed"*. `coverage` counts planned doctors from
+      // `beat_plan_entries`, and that table was empty in the fixtures, so
+      // `missed_visit_count` could only ever be 0 — the dimension was single-valued and
+      // the function could have returned a constant and passed.
+      //
+      // `BE-W89` added entries to the world, so it is now falsifiable. BOTH halves are
+      // pinned, because a missed count is a SUBTRACTION and asserting only the result
+      // cannot tell 2-planned-minus-1-seen from 1-planned-minus-0-seen.
+      expect(rows.rows[0]?.planned_visit_count).toBe(2);
+      expect(rows.rows[0]?.missed_visit_count).toBe(1);
     });
   });
 

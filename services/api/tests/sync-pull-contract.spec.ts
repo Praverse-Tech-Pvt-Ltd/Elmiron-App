@@ -141,6 +141,11 @@ describe.skipIf(!reachable)('C4 — what the payload actually contains', () => {
     // enum being left behind when the migration landed.
     expect(Object.keys(payloads).sort()).toEqual([
       'beat_plan',
+      // MR-44 (`BE-W89`). The plan's stops. Same story, third time: the migration landed and
+      // THIS assertion is what said so, before the contract enum had been touched. The
+      // entity exists because `beat_plan_entries` had rows that never reached the client, so
+      // `buildDayRoute` mapped an empty `entries` to an empty route.
+      'beat_plan_entry',
       'clinic_address',
       // MR-26 B1. The consent NOTICE, so consent can be captured with no signal. It arrived
       // here first as a FAILURE of this assertion, which is the assertion working: the

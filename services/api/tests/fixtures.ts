@@ -115,6 +115,17 @@ export interface FixtureWorld {
   consentRecords: { pune: string; south: string };
   analyses: { pune: string; south: string };
   beatPlans: { pune: string };
+  /**
+   * MR-44 / `BE-W89`. TWO entries, and both facts about them are load-bearing.
+   *
+   * They are COMMITTED fixture rows because `sync_pull` deliberately cannot see rows from
+   * its own uncommitted transaction — a test that inserted them inline would assert an
+   * absence that proves nothing.
+   *
+   * There are two of them, on the same plan, so ORDERING has something to order. One row
+   * is ordered correctly by every implementation, including a broken one.
+   */
+  beatPlanEntries: { first: string; second: string };
 }
 
 const FIXTURE_PASSWORD = 'gate0-fixture-password-9f2b';
@@ -209,6 +220,7 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
     consentRecords: { pune: randomUUID(), south: randomUUID() },
     analyses: { pune: randomUUID(), south: randomUUID() },
     beatPlans: { pune: randomUUID() },
+    beatPlanEntries: { first: randomUUID(), second: randomUUID() },
   };
 
   await withClient(async (client: Client) => {
@@ -327,6 +339,35 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
       `insert into public.beat_plans (id, mr_id, territory_id, plan_date, status)
        values ($1, $2, $3, current_date, 'submitted')`,
       [world.beatPlans.pune, puneMr.id, territories.pune],
+    );
+
+    // MR-44 / `BE-W89`. The entries the plan has always been allowed to have and never
+    // carried into the pull.
+    //
+    // TWO doctors, because `beat_plan_entries_unique_doctor` is `UNIQUE (beat_plan_id,
+    // doctor_id)` — one entry per doctor per plan, which is the correct domain rule. The
+    // second entry therefore uses the SOUTH doctor, and that is a deliberate consequence
+    // worth knowing rather than a fixture convenience: it is an entry whose doctor the Pune
+    // MR cannot see, so the pull carries the entry and not the doctor. `buildDayRoute` maps
+    // entries to stops through doctors, so that combination is exactly the case the screen
+    // has to survive. Registered as `FE-W51`.
+    //
+    // `planned_sequence` is inserted 2-then-1 so a test that reads the DOMAIN order off the
+    // insertion order cannot pass by accident.
+    await client.query(
+      `insert into public.beat_plan_entries
+         (id, beat_plan_id, doctor_id, clinic_address_id, planned_sequence) values
+         ($1, $3, $5, $7, 2),
+         ($2, $3, $4, $6, 1)`,
+      [
+        world.beatPlanEntries.second,
+        world.beatPlanEntries.first,
+        world.beatPlans.pune,
+        world.doctors.pune,
+        world.doctors.south,
+        world.clinicAddresses.pune,
+        world.clinicAddresses.south,
+      ],
     );
 
     // BE-W3. One window on the root, inherited by every territory beneath it, and

@@ -389,6 +389,7 @@ describe('the records and the cursor move together', () => {
       visit: new Map(),
       doctor: new Map([[ASHA.id, ASHA]]),
       beat_plan: new Map(),
+      beat_plan_entry: new Map(),
       clinic_address: new Map(),
       consent_text_version: new Map(),
     });

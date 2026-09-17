@@ -1,5 +1,6 @@
 import {
   SyncPullResponseSchema,
+  fromBeatPlanEntryRow,
   fromBeatPlanRow,
   fromClinicAddressRow,
   fromPulledConsentTextVersionRow,
@@ -8,6 +9,7 @@ import {
   refusalForSqlState,
 } from '@fieldforce/core';
 import type {
+  BeatPlanEntry,
   BeatPlanRecord,
   ClinicAddress,
   PulledConsentTextVersion,
@@ -47,6 +49,16 @@ export type PullChange =
   | { readonly kind: 'upsert'; readonly entity: 'doctor'; readonly record: DoctorRecord }
   | { readonly kind: 'upsert'; readonly entity: 'beat_plan'; readonly record: BeatPlanRecord }
   /**
+   * MR-44 / `BE-W89`. The plan's STOPS, its own entity for the same reason
+   * `clinic_address` is: the payload is the row, and nesting them would mean an entry
+   * edit only syncs when something bumps the PLAN's `updated_at`.
+   */
+  | {
+      readonly kind: 'upsert';
+      readonly entity: 'beat_plan_entry';
+      readonly record: BeatPlanEntry;
+    }
+  /**
    * MR-11 / BE-W87. Its own entity, because a doctor payload is the row and nothing else.
    * The aggregate `Doctor.clinicAddresses` is assembled from these on the client.
    */
@@ -70,7 +82,13 @@ export type PullChange =
     }
   | {
       readonly kind: 'remove';
-      readonly entity: 'visit' | 'doctor' | 'beat_plan' | 'clinic_address' | 'consent_text_version';
+      readonly entity:
+        | 'visit'
+        | 'doctor'
+        | 'beat_plan'
+        | 'beat_plan_entry'
+        | 'clinic_address'
+        | 'consent_text_version';
       readonly id: string;
       /**
        * Why it is going. `deleted` means the record is gone; `out_of_scope` means it still
@@ -149,6 +167,12 @@ const mapChange = (change: SyncPullResponse['changes'][number]): PullChange => {
       return { kind: 'upsert', entity: 'doctor', record: fromDoctorRow(change.payload) };
     case 'beat_plan':
       return { kind: 'upsert', entity: 'beat_plan', record: fromBeatPlanRow(change.payload) };
+    case 'beat_plan_entry':
+      return {
+        kind: 'upsert',
+        entity: 'beat_plan_entry',
+        record: fromBeatPlanEntryRow(change.payload),
+      };
     case 'clinic_address':
       return {
         kind: 'upsert',
@@ -284,6 +308,12 @@ export type LocalStore = {
   readonly doctor: ReadonlyMap<string, DoctorRecord>;
   readonly beat_plan: ReadonlyMap<string, BeatPlanRecord>;
   /**
+   * MR-44 / `BE-W89`. Held separately and joined to a plan on read, exactly as
+   * `clinic_address` is joined to a doctor. `BeatPlanRecord` omits `entries` because a
+   * row cannot carry them, so the aggregate is assembled here rather than on the wire.
+   */
+  readonly beat_plan_entry: ReadonlyMap<string, BeatPlanEntry>;
+  /**
    * MR-11 / BE-W87. Held separately and joined to a doctor on read, because that is how
    * the server sends them and inventing an aggregate here would put back the coupling the
    * separate entity exists to avoid.
@@ -304,6 +334,7 @@ export const emptyStore = (): LocalStore => ({
   visit: new Map(),
   doctor: new Map(),
   beat_plan: new Map(),
+  beat_plan_entry: new Map(),
   clinic_address: new Map(),
   consent_text_version: new Map(),
 });
@@ -313,6 +344,7 @@ export const applyChanges = (store: LocalStore, changes: readonly PullChange[]):
     visit: new Map(store.visit),
     doctor: new Map(store.doctor),
     beat_plan: new Map(store.beat_plan),
+    beat_plan_entry: new Map(store.beat_plan_entry),
     clinic_address: new Map(store.clinic_address),
     consent_text_version: new Map(store.consent_text_version),
   };
@@ -339,6 +371,9 @@ export const applyChanges = (store: LocalStore, changes: readonly PullChange[]):
         break;
       case 'beat_plan':
         next.beat_plan.set(change.record.id, change.record);
+        break;
+      case 'beat_plan_entry':
+        next.beat_plan_entry.set(change.record.id, change.record);
         break;
       case 'clinic_address':
         next.clinic_address.set(change.record.id, change.record);

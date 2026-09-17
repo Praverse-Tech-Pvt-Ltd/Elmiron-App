@@ -8,6 +8,7 @@ import {
 } from '../shared/primitives.js';
 import { RoleSchema, TerritorySchema, UserProfileSchema } from '../shared/identity.js';
 import {
+  BeatPlanEntrySchema,
   BeatPlanSchema,
   BeatPlanStatusSchema,
   CallReportSchema,
@@ -24,7 +25,14 @@ import {
   TerritoryShiftWindowSchema,
   VisitSchema,
 } from './entities.js';
-import type { CheckIn, CheckOut, ClinicAddress, MileageDay, Visit } from './entities.js';
+import type {
+  BeatPlanEntry,
+  CheckIn,
+  CheckOut,
+  ClinicAddress,
+  MileageDay,
+  Visit,
+} from './entities.js';
 import { ConsentOutcomeSchema, ConsentRecordSchema, ConsentTextVersionSchema } from './consent.js';
 import type { ConsentTextVersion } from './consent.js';
 import { RecordingSchema, TranscriptSchema, VoiceNoteSchema } from './capture.js';
@@ -471,6 +479,19 @@ export type SyncPushResponse = z.infer<typeof SyncPushResponseSchema>;
 export const SyncPullEntitySchema = z.enum([
   'visit',
   'beat_plan',
+  // MR-44 (`BE-W89`). The plan's STOPS. `BeatPlanRecordSchema` is
+  // `BeatPlanSchema.omit({ entries: true })` because the entity did not travel, while
+  // `beat_plan_entries` genuinely held rows and `buildDayRoute` maps `plan.entries` to
+  // stops — so the screen would have rendered an empty route, and MR-14 left it on the
+  // mock rather than ship that.
+  //
+  // A separate entity rather than a nested field, for the same reason `clinic_address`
+  // is: the cursor is `(updated_at, id)`, and a nested payload would only sync an entry
+  // edit if something bumped the PLAN's `updated_at`.
+  //
+  // The table had no `updated_at` at all until MR-44 added one. That, not the enum, was
+  // the re-size.
+  'beat_plan_entry',
   'doctor',
   'clinic_address',
   // MR-26 B1. The consent NOTICE, so a doctor can be asked with no signal. Server-issued,
@@ -1058,6 +1079,39 @@ export type BeatPlanRow = z.infer<typeof BeatPlanRowSchema>;
 /** `BeatPlan` minus the entries a row cannot carry. */
 export const BeatPlanRecordSchema = BeatPlanSchema.omit({ entries: true });
 export type BeatPlanRecord = z.infer<typeof BeatPlanRecordSchema>;
+
+/**
+ * MR-44 (`BE-W89`). The plan's STOPS, as `sync_pull` emits them.
+ *
+ * `to_jsonb(e)` on `public.beat_plan_entries`, so the keys are the column names. The row
+ * gained `updated_at` in MR-44 — the pull orders and pages on `(updated_at, id)` and the
+ * table had no such column, which is why this entity could not travel before.
+ *
+ * `clinic_address_id` is nullable here and in `BeatPlanEntrySchema`, because the FK is
+ * `ON DELETE SET NULL`: an address can be removed while the stop remains. A stop with no
+ * address is a doctor to see with no place named, which the screen must render as such
+ * rather than dropping.
+ */
+export const BeatPlanEntryRowSchema = z.object({
+  id: UuidSchema,
+  beat_plan_id: UuidSchema,
+  doctor_id: UuidSchema,
+  clinic_address_id: UuidSchema.nullable(),
+  planned_sequence: z.number().int().nonnegative(),
+  updated_at: IsoDateTimeSchema,
+});
+export type BeatPlanEntryRow = z.infer<typeof BeatPlanEntryRowSchema>;
+
+export const fromBeatPlanEntryRow = (row: unknown): BeatPlanEntry => {
+  const parsed = BeatPlanEntryRowSchema.parse(row);
+  return BeatPlanEntrySchema.parse({
+    id: parsed.id,
+    beatPlanId: parsed.beat_plan_id,
+    doctorId: parsed.doctor_id,
+    clinicAddressId: parsed.clinic_address_id,
+    plannedSequence: parsed.planned_sequence,
+  });
+};
 
 export const fromBeatPlanRow = (row: unknown): BeatPlanRecord => {
   const parsed = BeatPlanRowSchema.parse(row);
