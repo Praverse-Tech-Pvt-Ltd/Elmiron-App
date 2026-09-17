@@ -608,3 +608,61 @@ contains the right explanation?* If either, it is not a check.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-40 — the refused read | `PROJECT-OVERVIEW.md` → `### MR-40 — the refused read` |
+
+---
+
+## After MR-41 — 17 September 2026
+
+> ### 🔴 `BE-W101` IS OPEN AT ALL EIGHT SITES, AND THREE OF THEM ARE WRITES.
+> ### An admin of one organisation can APPROVE ANOTHER COMPANY'S CALL REPORT.
+
+| | |
+| --- | --- |
+| **`BE-W101`** | **Escalated.** MR-40 proved 2 sites and listed 6 untested. MR-41 measured all six: **every one open**, including `approve_call_report`, `create_analysis_override`, `reinstate_sync_item`. Still **not fixed** — it is a decision, not a patch |
+| **Stop** | **Neither blockage nor room** — the brief's own A3 rule fired. Parts B and C did not run |
+| **Owed** | **B3**: the banner fix has no register row. B1, B2, B4 and C untouched |
+| **Tests** | **1,713 passing, zero failing, no suite failed to run** (up 6) |
+
+### What MR-41 added to `BE-W101`
+
+**The six "shape-identical, untested" rows are gone.** Each was measured, two-sided:
+
+- **Positive control** — the owning admin, or the analysis's own MR, sees the target. It exists
+  and the function does return data.
+- **Negative control** — the same call by a **non-admin in the attacker's own tenant** is
+  refused (*"only a field_manager or admin may decide a call report"*), and the consent list
+  comes back without the rival row.
+
+So the failing branch is `v_role = 'admin'`, specifically — not the query, the fixture or the
+harness. **The three writes were run inside transactions that were rolled back; nothing
+persisted.**
+
+### Two method notes worth keeping
+
+**1. Enumerate from the catalogue, not from grep.** The eight sites came from
+`pg_get_functiondef` over `pg_proc where prosecdef`. That also surfaced `visible_user_ids` and
+`visible_territory_ids` carrying the same branch — where it is the scoping itself and is
+tenant-bounded by `BE-W76`. A grep would have listed ten and decided nothing about the split.
+
+**2. A rolled-back transaction turns a write into a probe.** `approve_call_report` could not be
+tested by reading it. Calling it inside `begin … rollback` answered the question and left the
+database as it was — which is how the three write sites went from untested to proven in one
+pass.
+
+### One thing that could not be undone
+
+The consent record minted as the read fixture **cannot be deleted**:
+`consent_records is append-only: DELETE is not permitted by any role`. That guard works. One
+probe row therefore persists in the LOCAL demo database. It is not in any deployed environment.
+
+### One transient, unexplained
+
+The first full `scripts/test-counts.mjs` run reported `@fieldforce/api` **690/1, 2 suites BAD**.
+It did not reproduce — API alone then passed 691/46 and the next full run was clean. **1 failure
+in 4 API runs today.** The failing test is **not named**: the counter does not print it. Recorded
+as unexplained, not as resolved, and *consistent with* MR-35's 2-in-7 deadlock flake is not the
+same as caused by it.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-41 — the missing answers | `PROJECT-OVERVIEW.md` → `### MR-41 — the missing answers` |

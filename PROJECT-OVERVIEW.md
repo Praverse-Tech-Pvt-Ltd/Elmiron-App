@@ -15891,3 +15891,187 @@ teaches the next session to distrust both.
    session apart, without noticing either.
 4. **"Blocked" and "out of room" are different words**, and this is the second consecutive
    session where the honest answer was the second one.
+
+### MR-41 — the missing answers
+
+**Part A asked five questions. Four already had recorded answers, and the fifth — whether the
+admin escape crosses the tenant boundary — was open at two sites when this session started and
+is open at ALL EIGHT now, three of them writes. The brief's own A3 rule fired.**
+
+#### A1 — CI
+
+| | |
+| --- | --- |
+| Run | `35198562720` — **`success`** |
+| Workflow | `CI` |
+| Event | `push` |
+| SHA | `6197987a3a995ec4e63d38ffa1eeaf815db27abd` |
+
+Both jobs green: `typecheck · lint · format · unit tests` and
+`migrations · Gate 0 RLS suite · rollbacks`. **Read with `git rev-parse HEAD`, and it equalled
+HEAD.** The commit pushed was the banner-inset fix described under B3 below, made and committed
+before this brief arrived.
+
+#### A2 — MR-40's Parts A3, B and C DID run, and the report did not close on Part A
+
+**The brief's premise is false, and the register is the evidence rather than my recollection.**
+`PROJECT-OVERVIEW.md` carries `### MR-40 — the refused read` at line 15695, **199 lines**, with
+these headings present: `#### A3 — the admin escape is OPEN, on the consent ledger`,
+`#### B — the refused-read gap is systemic`, `#### C — the recorded-check sweep`,
+`#### D — did not run`, the counts table, and `#### Where this session stopped`.
+
+What MR-40 recorded, quoted:
+
+- **A3** — *"`list_consent_records()` as admin of A, with a record belonging to B — **B's record
+  is in the page**"*, with the positive control *"the same record read by B's own admin —
+  appears, as it should"*. Registered `BE-W101`.
+- **B** — *"**B1: seven, not one.**"* and *"**B4 — 'here, but not in the audit trail', measured
+  rather than assumed.**"* Registered `BE-W102`.
+- **C** — 137 register rows with a verification cell, 14 grep-based, *"**Sound** 2 / **Weak** 9 /
+  **INVERTED** 1 (`FE-W13`) / **STALE** 1 (`BE-W73`)"*.
+
+**The part that genuinely did not run was D** (`FE-W13`), and MR-40 said so under its own
+heading. A part that did not run is not a part that passed — and the converse holds too: three
+parts that ran are not three parts that did not.
+
+#### A3 — OPEN AT ALL EIGHT SITES, AND THREE OF THEM WRITE
+
+MR-40 proved two sites and listed six as *shape-identical, untested*. **This session measured
+the other six. Every one is open.**
+
+Sites enumerated from the **catalogue** — `pg_get_functiondef` over `pg_proc where prosecdef` —
+not from grep. That returns exactly these eight, plus `visible_user_ids` and
+`visible_territory_ids`, where the same branch **is** the scoping and is tenant-bounded by
+`BE-W76`.
+
+| Function | Kind | Verdict | What was measured |
+| --- | --- | --- | --- |
+| `list_consent_records` | read | **PROVEN OPEN** | A's admin finds B's consent record in the page |
+| `read_consent_record` | read | **PROVEN OPEN** | returns B's row by id |
+| `read_analysis` | read | **PROVEN OPEN** | returns another organisation's analysis |
+| `list_analyses` | read | **PROVEN OPEN** | lists another organisation's MR's analyses |
+| `list_analysis_overrides` | read | **PROVEN OPEN** | returns another organisation's override |
+| `approve_call_report` | **WRITE** | **PROVEN OPEN** | **accepted** another organisation's call report |
+| `create_analysis_override` | **WRITE** | **PROVEN OPEN** | **accepted** against another organisation's analysis |
+| `reinstate_sync_item` | **WRITE** | **PROVEN OPEN** | **accepted** a dead-lettered item of another organisation |
+
+**The cell, two-sided at every site.** Run directly against the local stack with the three DEMO
+tenants, independently of `admin-escape.spec.ts`, so it is a measurement and not a citation of
+one:
+
+| Probe | Result |
+| --- | --- |
+| `list_consent_records` as admin of **A**, record owned by **B** | **contains B's record = `true`** |
+| `read_consent_record(B's id)` as admin of **A** | **`A ROW`** |
+| **Positive control** — the same record as **B's own admin** | **contains = `true`**, as it should |
+| **Negative control** — the same call as **A's MR**, a non-admin | **contains = `false`** |
+
+The negative control is what localises the defect: the identical query, identical target and
+identical fixture returns nothing to a non-admin and everything to an admin, so **the branch
+that fails is `v_role = 'admin'` — not the query, the fixture or the harness.** On the write side
+the same pairing holds: `approve_call_report` was **accepted** for a cross-tenant admin and
+refused for an MR with *"only a field_manager or admin may decide a call report"*.
+
+**The three writes were exercised inside transactions that were rolled back.** Nothing was
+persisted. One row was not reversible — the consent record minted as the read fixture, because
+**`consent_records is append-only: DELETE is not permitted by any role`**, which is the guard
+doing its job. That row remains in the LOCAL demo database only.
+
+**Why this is worse than MR-40 recorded.** A cross-tenant read is a confidentiality failure. An
+admin of one company **approving another company's call report** is an integrity failure, and
+`approve_call_report` is the one the register already named as the first to check.
+
+`BE-W101` updated in the register and at the top of `docs/blocked-on-you.md`. **Not fixed, for
+the reason A3 gives: it is a compliance-boundary defect and the fix is a decision, not a patch.**
+
+#### A4 — seven, and "here, but not in the audit trail"
+
+**Seven**, re-derived from the catalogue rather than accepted: the `SECURITY DEFINER` functions
+whose body both inserts into `public.audit_log` and takes a `p_reason` are exactly
+`list_analyses`, `list_analysis_overrides`, `list_audit_log`, `list_consent_records`,
+`read_analysis`, `read_consent_record`, `retention_status`. That is MR-40's list, item for item.
+
+**Where an attempt IS recorded: the Postgres log — not PostgREST, not GoTrue, and not the audit
+trail.** MR-40 measured this rather than reasoning about it: `log_min_error_statement = error`
+puts the failing statement in the server log. It is not a substitute, for three recorded reasons
+— the caller's identity is set by a *separate* statement that `log_statement = ddl` does not log,
+so it probably does not say **who**; the log is not tenant-scoped, not queryable by the console
+and not append-only, so it cannot be handed to one customer's auditor; and its retention window
+is the platform's rather than this system's policy. **"Nowhere" would have been the wrong
+answer.**
+
+#### A5 — the sweep, spot-checked before reporting
+
+Denominator and split as recorded by MR-40: **137** register rows carrying a verification cell,
+**14** grep-based — **2 sound, 9 weak, 1 INVERTED (`FE-W13`), 1 STALE (`BE-W73`)**, and 1 already
+replaced in MR-39 (`BE-W14`).
+
+**Three spot-checks re-run this session, and all three reproduce:**
+
+| Check | Claim | Re-measured |
+| --- | --- | --- |
+| `FE-W13` | `grep -c "90" <screen>` → `0` | **returns `2`** — `admin/page.tsx:29` and `:139`, both prose explaining why the figure is *not* printed. **INVERTED confirmed** |
+| `BE-W73` | *"across all **33** migrations returns nothing"* | **returns 2 files**, and there are **59** migrations. **STALE confirmed** |
+| `BE-W60` | `grep -rl list_consent_records` returns a file | passes — and A3 above proves that same function open at both sites. **Weak confirmed** |
+
+The denominator itself is MR-40's count carried forward; what this session re-derived is the
+three verdicts the split turns on.
+
+#### B and C — DID NOT RUN
+
+**Not started: B1 (`set -o pipefail`), B2 (the root `.env` destructive-command table), B3 (the
+banner register entry), B4 (the mock-dead instrument), and all of C (`FE-W13`).**
+
+The reason is **A3's own instruction** — *"IF IT IS OPEN, STOP AND REPORT — that is a
+compliance-boundary defect and it changes what this session is."* It is open at eight sites
+including three writes, which is more than was known when the brief was written.
+
+**B3 is the one owed.** The banner fix is committed and CI-green but carries no register row, so
+the finding it represents — *hoisting something to a root for coverage moves it out of whatever
+the root's children inherit* — is currently recorded only in a commit message and two source
+comments.
+
+#### Counts — by workspace AND runner, from BOTH lines
+
+| Workspace | Runner | Passed | Failed | Suites / Files |
+| --- | --- | --- | --- | --- |
+| `@fieldforce/core` | vitest | 28 | 0 | 3 files |
+| `@fieldforce/ui` | vitest | 4 | 0 | 1 file |
+| `@fieldforce/ui` | jest | **246** | 0 | 22 suites |
+| `@fieldforce/ui-tokens` | vitest | 54 | 0 | 3 files |
+| `@fieldforce/console` | vitest | 14 | 0 | 2 files |
+| `@fieldforce/field` | vitest | 502 | 0 | 32 files |
+| `@fieldforce/field` | jest | **131** | 0 | 19 suites |
+| `@fieldforce/api` | vitest | 691 | 0 | 46 files |
+| `@fieldforce/mock` | vitest | 43 | 0 | 1 file |
+
+**1,713 passing, zero failing, no suite failed to run.** Up 6 from MR-40's 1,707 — the three
+`TopInset` tests and the three banner-inset tests.
+
+**One transient, reported rather than smoothed over.** The FIRST full run of
+`scripts/test-counts.mjs` reported `@fieldforce/api` at **690 passed / 1 failed / 2 suites BAD**.
+It did not reproduce: the API suite alone then passed 691/46, and the second full counter run was
+clean. **Rate: 1 failure in 4 API runs today.** I cannot name the failing test — the counter's
+output does not print it, and by the time that was noticed the run was gone. That is *consistent
+with* the pre-existing deadlock flake MR-35 measured at 2-in-7, but **consistent with is not
+attributed to**, and it is recorded here as unexplained rather than as resolved.
+
+#### Where this session stopped — and it was NEITHER blockage NOR room
+
+**Stopped after Part A. The stop is neither of the two words the standing rule offers, and
+calling it one of them would be false.**
+
+- **Not a BLOCKAGE.** Nothing was in the way. The stack was up, the tenants existed, and B1
+  through B4 are all reachable work.
+- **Not ROOM.** There was room. The session had budget for Part B.
+
+**It is the A3 rule firing.** The brief said to stop if the escape was open, because that changes
+what the session is — and it is open at every site, including three writes nobody had measured
+before today. Reporting that, and re-grading the register and the escalation to match, is what
+the session became.
+
+The distinction matters for the same reason MR-40's did: twelve prior stops were blockages, two
+were room, and this is a third kind — **a conditional stop the brief itself defined, on a
+condition that turned out to be true.** Recording it as "room" would suggest the work was
+deferred by judgment; recording it as "blockage" would suggest something failed. Neither is what
+happened.

@@ -1017,3 +1017,45 @@ A **refused** read is not in the audit trail — `BE-W102`, seven read paths. Th
 successful reads only, and that is not a rendering choice; it is a property of the data. If the
 screen ever implies "this is every access attempt", it will be overclaiming. **Successful
 accesses** is the honest label.
+
+## MR-41 — 17 September 2026: no new frontend work, and one entry still owed
+
+**A backend and register session.** No file under `apps/field`, `apps/console` or `packages/ui`
+was changed by MR-41 itself. The counts moved only because the banner fix committed just before
+this brief landed is now included: `@fieldforce/ui` jest **243 → 246**, `@fieldforce/field` jest
+**128 → 131**. `@fieldforce/field` vitest **502**, `@fieldforce/ui` vitest **4**,
+`@fieldforce/console` vitest **14** — all unchanged.
+
+### The banner inset shipped, and its register row did NOT
+
+`packages/ui/src/TopInset.tsx` is new and `ZoneCaveatBanner` now uses it. CI green on
+`6197987`. **What is missing is the `FE-W` row for it**, which was Part B3 and did not run.
+
+Until that lands, the finding exists only in a commit message and two source comments. The
+finding itself is worth more than the fix:
+
+> **Hoisting something to a root for coverage moves it out of whatever the root's children
+> inherit.** `Screen` applies the safe-area insets once so that every screen is correct by
+> default. `ZoneCaveatBanner` was mounted above `<Stack>` precisely so one banner could qualify
+> all eleven screens that render a date — and that position is exactly what put it outside
+> `Screen`. **Coverage and inheritance pulled in opposite directions**, and the result was the
+> FE-Build-2b defect reappearing on the same screen it was first found on.
+
+**The recorded check, when it is written, must constrain the content:** the padding that reaches
+the banner's title must equal the token padding **plus the device inset**, with a zero-inset
+positive control proving the number comes from the device. *"A wrapper is present"* would pass on
+a wrapper that pads by nothing.
+
+### `FE-W13` — still not started, and its check is still INVERTED
+
+Not touched by MR-41. Re-measured this session and the defect reproduces exactly:
+`grep -c "90" apps/console/src/app/admin/page.tsx` **returns 2**, at lines 29 and 139, and both
+are prose explaining why the figure is *not* printed. It fails on a correct screen and passes on
+a wrong one.
+
+### One thing the console team should know before building the audit screen
+
+`BE-W101` is now proven open at **all eight** sites, three of them writes. The two functions
+`FE-W13`'s screens consume — `list_audit_log` and `retention_status` — remain **clear**: they
+were written without the escape in MR-39, and the catalogue sweep this session confirms neither
+carries the `v_role = 'admin'` branch. **The screens are still safe to build.**

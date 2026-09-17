@@ -1497,3 +1497,49 @@ the database that guarantees the rest.
 **And the answer to "is it recorded anywhere" is "here, but not in the audit trail", not
 "nowhere".** That was measured — `log_min_error_statement = error` puts the refusal in the
 Postgres log — and the three reasons it is not a substitute are written down with it.
+
+## 17 September 2026 — MR-41
+
+### Enumerate a code pattern from the catalogue, not from grep
+
+The eight `SECURITY DEFINER` bodies carrying `v_role = 'admin'` were listed with
+`pg_get_functiondef` over `pg_proc where prosecdef`, not with `grep` over the migrations.
+
+**Decision: when the question is "which functions in the running database have this shape",
+ask the database.** Two things fall out that grep cannot give: the migrations are a *history*
+and the catalogue is the *current state*, so a body later replaced is counted once and
+correctly; and the same query surfaced `visible_user_ids` and `visible_territory_ids` carrying
+the identical branch, where it **is** the scoping and is tenant-bounded — a distinction grep
+locates but cannot make.
+
+### A rolled-back transaction turns a write into a probe
+
+Three of the eight sites are writes and had gone untested for two sessions because testing them
+appeared to mean performing a cross-tenant write.
+
+**Decision: call the write inside `begin … rollback` and read whether it was ACCEPTED or
+refused.** `approve_call_report` was accepted for an admin of another tenant and refused for a
+non-admin in the attacker's own tenant, and the database was unchanged afterwards. The three
+write sites went from *shape-identical, untested* to **proven open** in one pass.
+
+**The negative control is what makes it a measurement.** Accepted-for-admin alone is compatible
+with the function accepting everything; refused-for-MR on the identical call and target localises
+the failure to the `v_role = 'admin'` branch.
+
+### A stop can be a third kind — and conflating it with the other two teaches the wrong lesson
+
+MR-41's brief said: stop if the escape is open, because that changes what the session is. It was
+open at all eight sites.
+
+**Decision: record that as neither BLOCKAGE nor ROOM.** Nothing was in the way, and there was
+budget left. It was a **conditional stop the brief itself defined, on a condition that turned out
+to be true.** Calling it "room" would read as deferred by judgment; calling it "blockage" would
+read as something failing. The register now carries three words rather than two.
+
+### A false premise in a brief is answered from the record, not from memory
+
+MR-41 A2 asserted that MR-40's Parts A3, B and C may never have run. They did.
+
+**Decision: answer a premise about the repo by quoting the repo** — the section, its line number,
+its length and its headings — rather than by recalling the session. The standing rule already
+says anything the reviewer asserts is hearsay; the corollary is that anything *I* recall is too.
