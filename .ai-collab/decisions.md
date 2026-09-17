@@ -1543,3 +1543,59 @@ MR-41 A2 asserted that MR-40's Parts A3, B and C may never have run. They did.
 **Decision: answer a premise about the repo by quoting the repo** — the section, its line number,
 its length and its headings — rather than by recalling the session. The standing rule already
 says anything the reviewer asserts is hearsay; the corollary is that anything *I* recall is too.
+
+## 17 September 2026 — MR-42
+
+### Remove the escape, do not replace it with a predicate
+
+Eight `SECURITY DEFINER` bodies carried `(v_role = 'admin' or X in (select visible_user_ids()))`.
+
+**Decision: delete the disjunct; add nothing.** `visible_user_ids()` has been the tenant boundary
+since `BE-W76`, so the surviving half already grants a tenant admin every row in their own
+organisation — exactly what `C1` describes. A second organisation predicate in eight bodies would
+be a second copy of a rule that has one home, and that duplication is how these eight drifted
+away from the helper to begin with.
+
+### A migration asserts its own postcondition, from the catalogue
+
+**Decision: a migration that closes a class of defect ends with a `DO` block that re-derives the
+class from `pg_proc` and raises if any instance survives.** It fails the deploy rather than
+leaving a boundary half-closed, and because it enumerates rather than listing, it catches a site
+the migration never heard of. The identical assertion also lives in the test suite: one fails a
+build, the other fails a deploy.
+
+### "Needs a decision" is a claim to check, not a state to wait in
+
+`BE-W101` sat as *needs a decision* for two sessions. The decision existed — `C1`, 9 September.
+
+**Decision: when a register row says it needs a decision, search `.ai-collab/decisions.md` before
+accepting that, and record the pointer in the row.** The missing thing was the pointer, not the
+answer. The brief's own citation ("MR-07 §3") matched nothing in that file, which is how a real
+decision comes to look absent.
+
+### A permanent red is a broken alarm
+
+The drift workflow was red on every commit reporting a known accepted state, and
+`docs/blocked-on-you.md` led with a red banner for a defect that had been fixed.
+
+**Decision: a check that reports a known accepted state gets three states, not two** — accepted
+(green, with a notice naming the state, a date and the trigger that ends it), expired (red, saying
+the acceptance lapsed), and the real finding (red, at any date). **And the acceptance must be
+proven unable to swallow the real finding**, on the same date, with the same shape.
+
+### The refusal has to name what it refused
+
+**Decision: a guard's recorded check asserts the refusal NAMES THE HOST, never that the exit code
+is non-zero.** `getaddrinfo ENOTFOUND` is precisely what a missing guard looks like, so a test
+satisfied by any failure would have passed before the guard existed. It caught a `SyntaxError` of
+mine posing as a guard the same hour it was written.
+
+### Guard the accident, not the capability
+
+`purge:audio` and `check:purge-health` run against production on a schedule; that is the
+compliance control working.
+
+**Decision: for a script that may legitimately touch a deployment, refuse a non-local target
+unless it is opted into deliberately** (`ELMIRON_ALLOW_REMOTE_TARGET=1`, set in a reviewed
+workflow file), rather than refusing deployments outright. Copying the seeds' localhost-only guard
+onto them would have switched the retention promise off — the guard would have become the outage.

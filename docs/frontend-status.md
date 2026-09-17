@@ -1115,3 +1115,35 @@ Asserted in `audit.test.ts`, not left as a comment:
 method, and no renderer. **`FE-W49`** (the banner inset) is fixed and now registered. The console
 still has **no real auth** — these two panels render server-side with no token, which is why the
 refusal path has a rendering rather than being assumed away.
+
+## MR-42 — 17 September 2026: backend session, and one thing the console gains
+
+**No file under `apps/field`, `apps/console` or `packages/ui` changed.** Frontend counts
+unchanged: `@fieldforce/field` vitest **502**, jest **131**; `@fieldforce/ui` vitest **4**, jest
+**246**; `@fieldforce/console` vitest **28**.
+
+### What changed underneath the console, and it matters for `FE-W13`
+
+**`BE-W101` is closed.** An admin of one organisation can no longer read or write another's data
+through the eight `SECURITY DEFINER` paths.
+
+**The two functions `FE-W13`'s screens consume — `list_audit_log` and `retention_status` — are
+unaffected**, because they never carried the escape: MR-39 wrote them without it deliberately.
+The admin screen built in MR-41 C needs no change.
+
+**What did change, for the better:** the audit panel's own honesty claim is now true in a
+stronger sense. It says *"Successful reads"* and names `BE-W102` — that a refused read is not in
+the trail. Refusals from the eight fixed functions are now **more likely**, because a cross-tenant
+admin read that previously succeeded (and was therefore audited) now raises `42501` (and is
+therefore not). **The panel's caveat is doing more work than it was yesterday**, which is an
+argument for keeping it prominent rather than moving it to a footnote.
+
+### Still open on the console
+
+**`FE-W12` remains blocked** — no `listAnalysisOverrides` client method, and no renderer. Note
+that `list_analysis_overrides` was one of the eight sites fixed, so when `FE-W12` is built its
+data will already be tenant-scoped.
+
+**The console still has no real auth.** The admin screens render server-side with no token, which
+is why the refusal path has a rendering rather than being assumed away — and that rendering is
+now the expected outcome against any deployment.

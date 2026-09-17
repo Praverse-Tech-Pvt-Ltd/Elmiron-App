@@ -90,4 +90,28 @@ jobs:
       - name: Compare applied migrations against this repository
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: pnpm --filter @fieldforce/api check:migration-drift
+        # MR-42 C1. THE ACCEPTANCE DATE.
+        #
+        # Production has applied the first 19 migrations and `main` has 60, because the schema
+        # has not been deployed. This check has therefore been RED ON EVERY COMMIT, reporting a
+        # state everybody already knows. A red that is correct every day is indistinguishable
+        # from a red that is broken -- and the finding this job exists for, somebody hand-running
+        # `supabase db push` against production, would arrive as one more red on the pile.
+        #
+        # So the same three states `backup.yml` gives `BE-W11`:
+        #
+        #   no drift                      green
+        #   clean trailing shortfall,     GREEN with a ::notice:: naming the state and this date
+        #     before the date
+        #   the same, after the date      RED -- the acceptance lapsed, not the schema
+        #   anything else                 RED -- real drift, at any date
+        #
+        # An out-of-band version or an interleaved gap is NEVER accepted, whatever the date.
+        #
+        # THE DEPLOY IS THE TRIGGER, not this date: once the schema is pushed the job goes green
+        # on its own and this flag can be deleted. The date only bounds how long the accepted
+        # state may sit unexamined. It is set past the ~22 September reference-data date that
+        # `docs/COMPLETION-PLAN.md` section 6.1 already names, with margin for it slipping.
+        run: >-
+          pnpm --filter @fieldforce/api check:migration-drift
+          --accept-undeployed-until 2026-10-31

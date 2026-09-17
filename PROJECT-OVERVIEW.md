@@ -16240,3 +16240,266 @@ rather than flattening them into one.**
    writes. It needs a decision on whether an admin has any legitimate cross-tenant read at all.
 2. **`BE-W103`** — three unguarded destructive scripts, one of which deletes.
 3. **`FE-W12`** — still blocked: no `listAnalysisOverrides` client method, and no renderer.
+
+### MR-42 — closing the escape
+
+**`BE-W101` is closed at all eight sites. It was never a decision — the answer had been in
+`.ai-collab/decisions.md` since 9 September, and two sessions waited for it.**
+
+#### A1 — CI
+
+| | |
+| --- | --- |
+| Run | `35202606537` — **`success`** |
+| Workflow | `CI` |
+| Event | `push` |
+| SHA | `d7995f447e594b1b2316240b92047df42f8f9a2d` |
+
+Both jobs green. **Read with `git rev-parse HEAD`, and it equalled HEAD.** Nothing was held at
+the start of this session — clean tree, HEAD equal to `origin/main`.
+
+#### A correction to the brief, before anything rests on it
+
+The brief cited *"`.ai-collab/decisions.md`'s MR-07 entry"*. **There is no `MR-07` string in that
+file.** The decision is real and says exactly what the brief says it says — it is **`C1`**, under
+*"Reviewer decisions transcribed from the review conversation — 9 September 2026"*:
+
+> *"The `admin` role administers **one organisation**. It is not a platform operator and must
+> never be treated as one. Platform access … is a **separate, audited break-glass path** and is
+> **out of MR v1 scope**."*
+
+`20260908000800`'s own exception hint cites it as **"MR-06 section 3"**. Same substance, two
+different labels, neither of them MR-07. Recorded so the next reader searching for "MR-07" does
+not conclude the decision is missing.
+
+#### A2 — the fix removes the disjunct rather than adding a predicate
+
+```sql
+where (v_role = 'admin' or <actor column> in (select public.visible_user_ids()))
+```
+
+**`visible_user_ids()` already IS the tenant boundary.** `BE-W76` scoped it to
+`where p.organisation_id = v_org`, so for an admin it returns every user in their own
+organisation and nobody else — which is precisely the access C1 describes. The `v_role = 'admin'`
+disjunct therefore grants nothing legitimate; it only short-circuits past the check. **Removing
+it is the whole fix.**
+
+Writing a second organisation predicate into eight bodies would have been a second copy of a rule
+that already has one home — the shape this repository has been bitten by repeatedly, and how
+these eight drifted from the helper in the first place. **One boundary, one definition, eight
+callers.**
+
+`20260917000100_close_the_admin_escape.sql`, generated from the **catalogue's current
+definitions** so that nothing added by a later migration was silently reverted, with exactly one
+replacement asserted per function.
+
+#### A3 — `visible_user_ids` and `visible_territory_ids` are deliberately untouched
+
+**Their `if v_role = 'admin' then` branch IS the scoping** — it is where the organisation bound
+is applied — and `BE-W76` bounded it. A catalogue sweep for `v_role = 'admin'` surfaces both of
+them; they are correct and must stay. Stated in the migration header, in the test's comment and
+here, because that sweep is now automated and will surface them on every run.
+
+The escape's shape is `v_role = 'admin' or`. The two helpers use `if v_role = 'admin' then`,
+which does not match — and the test's positive control asserts that non-match explicitly, so the
+pattern cannot quietly widen.
+
+#### A4 — the eight sites, three controls each, after the fix
+
+| Site | Kind | ATTACKER admin of A | POSITIVE owner's admin | NEGATIVE A's non-admin |
+| --- | --- | --- | --- | --- |
+| `list_consent_records` | read | **BLOCKED** | SEES | BLOCKED |
+| `read_consent_record` | read | **BLOCKED** | SEES | BLOCKED |
+| `read_analysis` | read | **BLOCKED** | SEES | BLOCKED |
+| `list_analyses` | read | **BLOCKED** | SEES | BLOCKED |
+| `list_analysis_overrides` | read | **BLOCKED** `42501` | SEES | BLOCKED `42501` |
+| `approve_call_report` | **WRITE** | **BLOCKED** `42501` | SEES | BLOCKED `42501` |
+| `create_analysis_override` | **WRITE** | **BLOCKED** `42501` | SEES | BLOCKED `42501` |
+| `reinstate_sync_item` | **WRITE** | **BLOCKED** `42501` | SEES | BLOCKED `42501` |
+
+**The POSITIVE column is the one that proves the fix is a fix rather than a wall.** The owning
+organisation's own admin still reads and still writes — tenant administration is intact, which is
+exactly what C1 asks for. Without it, a function that refused everybody would have produced the
+same attacker column.
+
+**WRITE RESIDUE, measured before relying on it.** The three write probes ran inside transactions
+that were rolled back: **0 rows committed to `audit_log`**. But `audit_log_id_seq` advanced
+**29337 → 29356**. Sequences are non-transactional, so a rolled-back write probe against an
+append-only trail leaves **gaps in the audit id sequence**. Nothing false is recorded — but a
+table whose whole promise is that it is gap-free by construction now has nineteen missing ids,
+and an auditor will ask. Worth knowing before the next person tests a write this way.
+
+#### A5 — G-RLS-C restated, not re-graded
+
+**It did not regress. It passed on an incomplete sample, and that is a different sentence.** Its
+`function` path called `search_doctors(null, null, 200)` and nothing else — one function, chosen
+rather than enumerated.
+
+**The population, from the catalogue:**
+
+| | |
+| --- | --- |
+| `SECURITY DEFINER` functions in `public` | **83** |
+| `EXECUTE` granted to `authenticated` | **57** |
+| of those, referencing `visible_user_ids`/`visible_territory_ids` | 23 |
+| of those, **not** | 34 |
+
+(The brief said eighty-eight. The catalogue returns 83 today; the measured number is the one
+recorded.)
+
+**The enumeration found a NINTH reachable path that the string match could never have found.**
+`approve_call_reports_bulk` carries **no scoping of its own at all** and does not contain the
+escape string — it is safe only because it delegates per id to `approve_call_report`. Measured
+after the fix: attacker `decidedCount=0 notDecided=1`; the owning organisation's admin
+`decidedCount=1 notDecided=0`. **A grep over eight bodies would have shipped believing the job
+was done.**
+
+#### A6 — does G-RLS-C pass, on the enumerated population?
+
+**On the tenant boundary it now does, and it is asserted over the population rather than a
+sample.** `admin-escape.spec.ts` requires that **no** `SECURITY DEFINER` body in `public`
+contains the escape, enumerated from `pg_proc`, with a positive control that creates one in a
+rolled-back transaction and requires the query to find it. The migration makes the same assertion
+at deploy time. One fails a build, the other fails a deploy.
+
+**Said precisely, because the gate deserves it: the eight sites and the ninth delegating path are
+proven; the population-level claim is that no body carries the escape construct.** That is not
+the same as every one of the 57 callable functions having been individually probed cross-tenant,
+and this record does not claim it. **G-RLS-X remains ABSENT**, as it was: there is no clinical
+schema to separate.
+
+#### B — `BE-W103`, and a deliberate deviation from the brief
+
+**B1 did not do what the brief said, and the reason is a recorded constraint.** The brief said to
+guard these three the way `seed:day` is guarded — localhost-only. **`retention.yml` and
+`retention-watchdog.yml` run `purge:audio` and `check:purge-health` against production on a
+schedule**, and `BE-W7` built them because *"a control nobody runs is not a control"*. A
+localhost-only assertion would have switched the 90-day retention promise off.
+
+The seeds are different in kind: each writes invented rows or drops the schema, so no target but
+a laptop makes sense for them. **Here the risk is not touching a deployment — it is touching one
+by accident**, from a shell holding a stale `SUPABASE_DB_URL`.
+`docs/backend-prompt-w8.md` §53 had already asked exactly this and left it open. This is the
+answer: a deployment target is allowed, **but only deliberately**, via
+`ELMIRON_ALLOW_REMOTE_TARGET=1` set in the two reviewed workflow files.
+
+**Proven three-sided, with a NON-RESOLVING host — never the real one, because a guard test that
+fails is a guard test that connects to production:**
+
+| Condition | Result |
+| --- | --- |
+| non-local, no opt-in | **REFUSED, naming the host**, exit 1 — all four scripts |
+| non-local, opt-in set | guard stands aside, reaches DNS — **production retention still runs** |
+| localhost, no opt-in | runs, exit 0 — development unaffected |
+
+**B2 earned itself within the hour.** My first `check-purge-health.mjs` edit had an unescaped
+apostrophe and died with a `SyntaxError`, **exit 1** — and the check, which demands the refusal
+*name the host*, correctly refused to call that a pass. A test satisfied by a non-zero exit would
+have certified a broken file.
+
+**B4 — enumerated, and it corrected me twice.** Fifteen scripts take a database, API or storage
+URL; the brief named three. **My own first enumeration was a grep, and it was wrong:**
+`seed-reference-data` looked unguarded and in fact carries a *stronger* guard — with `--apply` it
+refuses to inherit the target at all and demands `--db-url` on the command line. Proven by
+running it. The genuinely unguarded script nobody had listed was **`enable-lock-logging.mjs`**,
+which has no package script of its own, inherits `SUPABASE_ADMIN_DB_URL`, and runs
+`alter database … set`. Now guarded. `backup:database` and `check:migration-drift` target a
+deployment **by design** and are left alone.
+
+#### C — the drift workflow's daily red
+
+**It was red on every commit, reporting that production has applied 19 of 60 migrations because
+the schema is not deployed. A red that is correct every day is indistinguishable from a red that
+is broken** — and the finding this job exists for, a hand-run `supabase db push`, would have
+arrived as one more red on the pile.
+
+Restructured into the three states `backup.yml` gives `BE-W11`:
+
+| State | Outcome |
+| --- | --- |
+| no drift | green |
+| clean trailing shortfall, before the date | **green, with a `::notice::`** naming the state and the date |
+| the same, after the date | **red** — the acceptance lapsed, not the schema |
+| anything else | **red — real drift, at any date** |
+
+**The deploy is the trigger, not the date.** Once the schema is pushed the job goes green on its
+own and the flag can be deleted; the date only bounds how long the accepted state may sit
+unexamined. It is `2026-10-31`, set past the ~22 September reference-data date `§6.1` already
+names, with margin.
+
+**C2 — the control, and it is the reason the green is trustworthy.** Accepting a state is only
+safe if the acceptance cannot swallow a real finding. `classifyRun` is pure and
+`migration-drift.spec.ts` asserts that on the **same date**, with the **same trailing-shortfall
+shape**, the run is still **`real-drift`** when a version was applied that has no file here — and
+when the gaps are interleaved, and when the shortfall is `foreign-versions`, and when no
+acceptance was granted at all. **The thing the job exists to catch is red on the day the known
+state is green.** The human surface is the workflow annotation: `::notice title=BE-W40 schema not
+deployed yet` versus `::error title=BE-W40 REAL DRIFT`, which are different titles on different
+coloured runs.
+
+#### D — two register fixes
+
+**D1: `BE-W60` was the only weak row passing over something open**, and what it passed over is now
+closed. Its check asked whether a file mentions `list_consent_records`; a file did, and the suite
+it found never crossed a tenant. **That is worse than the inverted check, which at least fails
+loudly — this one certified the defect.** Replaced with the cross-tenant assertion plus the
+population clause.
+
+**The other eight do not have that property — but three of them simply do not pass at all
+today**: `BE-W18`'s `grep -c "4010"` matches seven files including the legitimate configurable
+default; `FE-W17`'s phrase is present in `src/capture/samples.ts`; `BE-W57`'s `sync/queue` is
+still routed by `services/mock`. The remaining five are phrase-absences **paired with a real
+test**, and the paired clause is what carries them. **A check that fails misleads nobody; it just
+is not doing work. `BE-W60` was the dangerous shape and the sweep found exactly one of it.**
+
+**One new instance, found by tripping it.** `retention-ops.spec.ts` asserts the watchdog workflow
+must not match `/purge:audio/` — a real property — but as a **text match over the file**, so it
+cannot tell a `run:` step from a comment. It failed on a comment this session, and it would pass
+on a workflow that invoked the purge through a variable. The sound form asserts the parsed YAML's
+`run` steps, which is how the `ELMIRON_ALLOW_REMOTE_TARGET` opt-in was verified to reach all
+three invocations.
+
+**D2: `BE-W101` re-marked as a FIX, closed, with the pointer to `C1`** — in the register and at
+the top of `docs/blocked-on-you.md`, which had been leading with a red banner for a defect that
+is now closed. That banner was the same failure as the drift workflow's: a permanent red nobody
+can act on.
+
+#### Counts — by workspace AND runner, from BOTH lines
+
+| Workspace | Runner | Passed | Failed | Suites / Files |
+| --- | --- | --- | --- | --- |
+| `@fieldforce/core` | vitest | 28 | 0 | 3 files |
+| `@fieldforce/ui` | vitest | 4 | 0 | 1 file |
+| `@fieldforce/ui` | jest | 246 | 0 | 22 suites |
+| `@fieldforce/ui-tokens` | vitest | 54 | 0 | 3 files |
+| `@fieldforce/console` | vitest | 28 | 0 | 4 files |
+| `@fieldforce/field` | vitest | 502 | 0 | 32 files |
+| `@fieldforce/field` | jest | 131 | 0 | 19 suites |
+| `@fieldforce/api` | vitest | **707** | 0 | **47 files** |
+| `@fieldforce/mock` | vitest | 43 | 0 | 1 file |
+
+**1,743 passing, zero failing, no suite failed to run.** Up 16 on MR-41 — two catalogue
+assertions, seven target-guard assertions and seven drift-state assertions. `typecheck`, `lint`,
+`format:check` and `verify:rollbacks --files-only` all exit 0, each read from its own exit code.
+
+#### Where this session stopped — ROOM
+
+**Every part completed: A, B, C and D. The stop is ROOM.**
+
+Not a blockage — nothing was in the way. Not the conditional stop MR-41 recorded either: **that
+stop's condition was "the escape is open", and this session is what closed it.** The brief that
+defined the conditional stop is the brief that has now been discharged.
+
+**Three things a reader should carry forward.**
+
+1. **The answer was already in the repository.** `BE-W101` sat as "needs a decision" for two
+   sessions while `C1` had settled it on 9 September. **The register's own pointer was missing,
+   not the decision.** That is the cheapest possible failure to repeat and the easiest to prevent:
+   when a row says "needs a decision", search the decisions file before waiting.
+2. **A catalogue enumeration found a path a string match could not.**
+   `approve_call_reports_bulk` has no scoping of its own and never contained the escape string.
+   Eight sites were the answer to "what matches this text"; nine was the answer to "what can cross
+   the boundary".
+3. **A permanent red is a broken alarm.** The drift workflow and the `blocked-on-you` banner were
+   both correct every day and therefore useless every day. Both now distinguish the known accepted
+   state from the thing they exist to catch, and the accepted state carries a date and a trigger.

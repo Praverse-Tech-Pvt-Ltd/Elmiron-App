@@ -647,3 +647,60 @@ session's own subject was checks that cannot tell right from wrong.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-41 B and C | `PROJECT-OVERVIEW.md` → `### MR-41 (continued) — B and C ran after all` |
+
+---
+
+## After MR-42 — 17 September 2026
+
+> ### ✅ `BE-W101` IS CLOSED. All eight sites, plus a ninth the enumeration found.
+
+| | |
+| --- | --- |
+| **`BE-W101`** | **CLOSED** — `20260917000100_close_the_admin_escape.sql`. Re-measured at every site, three controls each. **It was never a decision**: `.ai-collab/decisions.md` **C1** settled it on 9 September |
+| **`BE-W103`** | **CLOSED** — `target-guard.mjs`. Refuses a non-local target **by name** unless `ELMIRON_ALLOW_REMOTE_TARGET=1` |
+| **Drift workflow** | No longer red every day. Three states, a dated acceptance, and the deploy as the trigger |
+| **`BE-W60`** | Replaced — it was certifying the defect |
+| **Tests** | **1,743 passing, zero failing, no suite failed to run** |
+| **Stop** | **ROOM** — every part completed |
+
+### The fix, in one line, so nobody re-derives it
+
+**The `v_role = 'admin' or` disjunct was removed, not replaced.** `visible_user_ids()` has been
+the tenant boundary since `BE-W76` (`where p.organisation_id = v_org`), so the surviving half
+already grants a tenant admin exactly the access `C1` describes. **Do not add an organisation
+predicate to a function body** — that is a second copy of a rule with one home, and it is how
+these eight drifted in the first place.
+
+### Two things that will surface on the next catalogue sweep
+
+1. **`visible_user_ids` and `visible_territory_ids` still contain `v_role = 'admin'`, and that is
+   CORRECT.** Their branch *is* the scoping. The escape's shape is `v_role = 'admin' or`; theirs
+   is `if v_role = 'admin' then`. The test's positive control asserts that non-match explicitly.
+2. **`approve_call_reports_bulk` has no scoping of its own** and is safe only because it delegates
+   per id to `approve_call_report`. It never matched the escape string. If anyone ever inlines
+   that loop, the boundary leaves with it.
+
+### Three method notes this session paid for
+
+**1. A grep enumeration is still a grep.** My own "which scripts are unguarded" pass was a grep
+and it was wrong — `seed-reference-data` looked unguarded and in fact carries a *stronger* guard
+(it refuses to inherit the target at all). Proven by running it, not by reading it.
+
+**2. A rolled-back write probe leaves residue on an append-only table.** 0 rows committed, but
+`audit_log_id_seq` moved 29337 → 29356. Sequences are non-transactional. Nineteen missing ids in
+a table whose promise is that it has no gaps.
+
+**3. A refusal must name the host.** `getaddrinfo ENOTFOUND` is what a *missing* guard looks like,
+so any test satisfied by a non-zero exit certifies nothing. This caught my own `SyntaxError`
+masquerading as a guard within the hour.
+
+### What is NOT claimed
+
+The population-level assertion is that **no `SECURITY DEFINER` body contains the escape
+construct**. That is not the same as all 57 callable functions having been individually probed
+cross-tenant, and the record does not say it is. **G-RLS-X remains ABSENT** — there is still no
+clinical schema to separate.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-42 — closing the escape | `PROJECT-OVERVIEW.md` → `### MR-42 — closing the escape` |

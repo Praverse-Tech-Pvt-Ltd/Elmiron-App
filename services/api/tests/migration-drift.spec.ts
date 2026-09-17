@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  classifyRun,
   classifyShortfall,
   compareMigrations,
   evaluatePreconditions,
@@ -167,5 +168,106 @@ describe('BE-W40 — how the applied set falls short', () => {
 
   it('names a version the database has that this repository does not', () => {
     expect(classifyShortfall(files, ['1', '2', '99'])).toBe('foreign-versions');
+  });
+});
+
+/**
+ * MR-42 C1/C2 — the three states, and the control that makes the green one trustworthy.
+ *
+ * The job was red on every commit, reporting that production has applied 19 of 60 migrations
+ * because the schema is not deployed. **A red that is correct every day is indistinguishable
+ * from a red that is broken**, so the known state is now green-with-a-notice and only the two
+ * genuine failures are red.
+ *
+ * **C2 is the reason this file matters more than the workflow change.** Accepting a state is
+ * only safe if the acceptance cannot swallow a real finding, so the controls below are not
+ * decoration: each asserts that something which LOOKS similar is still refused.
+ */
+/** A drifted result with nothing applied out of band — the clean trailing-shortfall shape. */
+const clean = { drifted: true, appliedWithoutFile: [] as readonly string[] };
+
+describe('MR-42 C1 — three states, not two', () => {
+  it('is green for the known pre-deploy state before the date', () => {
+    expect(
+      classifyRun({
+        result: clean,
+        shortfall: 'partial-prefix',
+        today: '2026-09-17',
+        acceptUntil: '2026-10-31',
+      }),
+    ).toBe('accepted-not-deployed');
+  });
+
+  it('is red once the acceptance date has passed, and says the deferral lapsed', () => {
+    expect(
+      classifyRun({
+        result: clean,
+        shortfall: 'partial-prefix',
+        today: '2026-11-01',
+        acceptUntil: '2026-10-31',
+      }),
+    ).toBe('deferral-expired');
+  });
+
+  it('is green when there is no drift at all', () => {
+    expect(
+      classifyRun({
+        result: { drifted: false, appliedWithoutFile: [] },
+        shortfall: 'complete',
+        today: '2026-09-17',
+        acceptUntil: '2026-10-31',
+      }),
+    ).toBe('no-drift');
+  });
+});
+
+describe('MR-42 C2 — the accepted state is distinguishable from a real finding', () => {
+  it('REFUSES a version applied with no file here, on the very same day', () => {
+    // The control that matters. Same date, same trailing-shortfall shape, one difference:
+    // something was applied out of band. If acceptance swallowed this, the check would be
+    // certifying the exact thing it exists to catch -- a hand-run `supabase db push`.
+    expect(
+      classifyRun({
+        result: { drifted: true, appliedWithoutFile: ['20260899000100'] },
+        shortfall: 'partial-prefix',
+        today: '2026-09-17',
+        acceptUntil: '2026-10-31',
+      }),
+    ).toBe('real-drift');
+  });
+
+  it('REFUSES an interleaved gap, which is not a deploy that stopped', () => {
+    expect(
+      classifyRun({
+        result: clean,
+        shortfall: 'interleaved',
+        today: '2026-09-17',
+        acceptUntil: '2026-10-31',
+      }),
+    ).toBe('real-drift');
+  });
+
+  it('REFUSES foreign versions', () => {
+    expect(
+      classifyRun({
+        result: clean,
+        shortfall: 'foreign-versions',
+        today: '2026-09-17',
+        acceptUntil: '2026-10-31',
+      }),
+    ).toBe('real-drift');
+  });
+
+  it('accepts NOTHING when no acceptance was granted', () => {
+    // Removing the flag from the workflow must restore the old behaviour exactly, so that
+    // the acceptance is opt-in rather than the default.
+    expect(
+      classifyRun({
+        result: clean,
+        shortfall: 'partial-prefix',
+        today: '2026-09-17',
+        acceptUntil: null,
+      }),
+    ).toBe('real-drift');
   });
 });

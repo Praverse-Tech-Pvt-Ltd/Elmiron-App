@@ -1695,7 +1695,7 @@ register rather than to fix the item named.
 
 | Item | What it is | Status |
 |---|---|---|
-| **`BE-W101`** | **An admin of one organisation can read AND WRITE another organisation's data.** **MR-41 A3 measured all eight sites and every one is open** — `list_consent_records`, `read_consent_record`, `read_analysis`, `list_analyses`, `list_analysis_overrides`, and the three WRITES `approve_call_report`, `create_analysis_override`, `reinstate_sync_item`. MR-40 proved the first two and listed six as untested; none is untested now. Sites enumerated from the **catalogue** (`pg_get_functiondef` over `pg_proc where prosecdef`), not grep | **OPEN — escalated to the top of `docs/blocked-on-you.md`. Not fixed, deliberately: it is a decision, not a patch.** Verification, and it is two-sided at every site: a **positive control** (the owning admin, or the analysis's own MR, sees the target) and a **negative control** (the same call by a non-admin in the attacker's own tenant is refused — *"only a field_manager or admin may decide a call report"*), so the branch that fails is `v_role = 'admin'` and not the query. The three writes were exercised inside transactions that were **rolled back**; nothing was persisted |
+| **`BE-W101`** | **CLOSED in MR-42** — the cross-tenant admin escape is removed from all eight `SECURITY DEFINER` bodies by `20260917000100_close_the_admin_escape.sql`. MR-40 proved two sites; MR-41 proved the remaining six, three of them WRITES. **It was never a decision**: `.ai-collab/decisions.md` **C1** (9 September 2026) already settled that `admin` is a TENANT administrator and that platform access is a separate audited break-glass path, out of MR v1 | **CLOSED.** All eight measured after the fix, three controls each — attacker BLOCKED, the owning organisation's own admin still SEES, a non-admin in the attacker's tenant BLOCKED. A ninth reachable path, `approve_call_reports_bulk`, was found by enumerating the catalogue and is closed transitively. Regression is held by two copies of one assertion: `admin-escape.spec.ts` fails a BUILD and the migration's own postcondition guard fails a DEPLOY |
 
 ### Added by MR-40 B — `BE-W102`: a refused read is not in the audit trail
 
@@ -1863,7 +1863,7 @@ the words — or fail on a file that contains the right explanation — it is no
 
 | Item | Detail |
 |---|---|
-| **`BE-W103`** | **`purge:audio`, `check:purge-health` and `reconcile:restore` carry no localhost assertion.** Pointed at a non-local host they do not refuse — they proceed to connect and fail only on DNS. `purge:audio` **deletes storage objects**; `reconcile:restore` reconciles after a restore. The four seeds and `verify:rollbacks` DO refuse. Found by MR-41 B2 | `services/api/scripts/purge-expired-audio.mjs`, `check-purge-health.mjs`, `reconcile-after-restore.mjs` | — | **OPEN** | 1 | Each script must refuse a non-local host **before opening a connection**, asserted by running it with `SUPABASE_DB_URL` pointed at a non-local hostname and requiring a **refusal naming the host** — not a connection error. The distinction is the whole point: `getaddrinfo ENOTFOUND` is what a missing guard looks like, and it is indistinguishable from a guard when the host happens not to resolve |
+| **`BE-W103`** | **CLOSED in MR-42** — `services/api/scripts/target-guard.mjs`. `purge:audio`, `check:purge-health`, `reconcile:restore` and `enable-lock-logging` refuse a non-local target **by name** unless `ELMIRON_ALLOW_REMOTE_TARGET=1`. **Not localhost-only**: the first two run against production on a schedule and a localhost guard would switch the retention control off | **CLOSED.** Proven three-sided with a NON-RESOLVING host: refused-and-names-the-host / opt-in stands aside / localhost runs freely. The check demands the host be named, because `ENOTFOUND` is what a missing guard looks like |
 
 **PROVEN, not reasoned about.** Every row below was produced by running the command with
 `SUPABASE_DB_URL` (and where relevant `SUPABASE_URL`) pointed at
@@ -1918,3 +1918,73 @@ active incident.
 pads by nothing, which is the same class as `BE-W60`'s *"a file mentions the function"*. The
 number has to come from the device, and the only way to assert that is to change the device's
 number and require the rendered distance to change with it.
+
+### Added by MR-42 D — two register fixes, and what the weak-row re-examination found
+
+#### D2 — `BE-W101` was never a decision, and it is now CLOSED
+
+| Item | Detail |
+|---|---|
+| **`BE-W101`** | **CLOSED — `20260917000100_close_the_admin_escape.sql`.** The cross-tenant admin escape is removed from all eight `SECURITY DEFINER` bodies | **It was recorded as needing a decision. It did not.** `.ai-collab/decisions.md` **C1**, transcribed 9 September 2026, had already settled it: *"The `admin` role administers ONE organisation. It is not a platform operator and must never be treated as one"*, and platform access is *"a separate, audited break-glass path"* that is *"out of MR v1 scope"*. `20260908000800`'s own exception hint says the same to anyone who trips it, citing **MR-06 section 3**. That covers `reinstate_sync_item`, which reads like platform support and is precisely what C1 refused to fold into the tenant role. **Two sessions waited for an answer that was already in the repository** |
+
+**The pointer, so nobody hunts for it again:** the decision is `C1` in `.ai-collab/decisions.md`
+under *"Reviewer decisions transcribed from the review conversation — 9 September 2026"*. It is
+**not** labelled MR-07, and searching for that label finds nothing.
+
+**Verification, and it is the same assertion in two places on purpose:**
+`services/api/tests/admin-escape.spec.ts` asserts that **no** `SECURITY DEFINER` body in `public`
+contains the construct, enumerated from the catalogue, with a positive control that creates one
+in a rolled-back transaction and requires the query to find it — and to **not** flag
+`visible_user_ids`, whose `if v_role = 'admin' then` must not match. The migration makes the same
+assertion about itself at deploy time. **One fails a build, the other fails a deploy.**
+
+#### `BE-W103` — CLOSED, and the enumeration found more than the brief listed
+
+| Item | Detail |
+|---|---|
+| **`BE-W103`** | **CLOSED — `services/api/scripts/target-guard.mjs`.** `purge:audio`, `check:purge-health`, `reconcile:restore` and `enable-lock-logging` now refuse a non-local target **by name** unless `ELMIRON_ALLOW_REMOTE_TARGET=1` | **NOT a localhost-only guard, deliberately.** `retention.yml` and `retention-watchdog.yml` run the first two **against production on a schedule**; copying the seeds' guard would switch the 90-day retention control off, which is the opposite of what `BE-W7` built. The risk is an *accidental* deployment target, so a deployment is allowed **only deliberately** — the answer to the question `docs/backend-prompt-w8.md` §53 left open. Verification: `services/api/tests/target-guard.spec.ts`, and the refusal must **name the host**, because `getaddrinfo ENOTFOUND` is what a missing guard looks like and any script "fails" against a host that does not resolve |
+
+**The enumeration corrected the brief twice.** Fifteen scripts take a database, API or storage
+URL — not three. And **my own first enumeration was a grep, and it was wrong**:
+`seed-reference-data` looked unguarded and in fact carries a **stronger** guard than the one
+added here, refusing with `--apply` to inherit the target at all and demanding `--db-url` on the
+command line. Proven by running it. The genuinely unguarded one nobody had listed was
+`enable-lock-logging.mjs` — no package script of its own, inherits `SUPABASE_ADMIN_DB_URL`, and
+runs `alter database … set`.
+
+**Left unguarded on purpose:** `backup:database` and `check:migration-drift` target a deployment
+**by design**, from workflows that exist to do exactly that.
+
+#### D1 — the weak rows re-examined: does any of them PASS over something open?
+
+**`BE-W60` was the only one, and what it passed over is now closed.** Its check —
+*"`grep -rl list_consent_records tests/*.spec.ts` returns a file"* — passed while both sites of
+that function were open, and a suite titled *"list_consent_records is scoped and audited"*
+existed that never crossed a tenant. **That is worse than the inverted check, which at least
+fails loudly: this one certified the defect.**
+
+| Id | Replaced with |
+|---|---|
+| **`BE-W60`** | **`list_consent_records` must have a test that CROSSES A TENANT and the record must be ABSENT** — an admin of organisation A, a consent record belonging to B — **with a positive control proving B's own admin sees it and a negative control proving a non-admin in A's tenant does not.** `admin-escape.spec.ts` is that test and it now passes for the right reason. **Plus the population clause:** no `SECURITY DEFINER` body in `public` may contain the escape, enumerated from `pg_proc`, with a control proving the query can see one |
+
+**The other eight, re-examined. None of them is currently passing over something open — but not
+because they are good checks.** Three of them do not pass at all today:
+
+| Id | Recorded check | State today |
+|---|---|---|
+| `BE-W18` | `grep -c "4010" apps/field/src/` → `0` | **Fails.** Seven files match, `config.ts:39` among them — and that one is the legitimate configurable default. A digit string is not a property |
+| `FE-W17` | `grep -ci "keep your own count"` → `0` | **Fails.** The phrase is in `src/capture/samples.ts` |
+| `BE-W57` | `grep -rn "sync/queue"` → no caller | **Fails.** `services/mock` still routes it (`server.ts:852`) and the contract spec still asserts it |
+| `FE-W10`, `FE-W11`, `FE-W14`, `FE-W18`, `BE-W9` | phrase-absence **paired with a real test** | The paired clause carries them; the grep clause remains decoration |
+
+**A check that fails is not the same failure mode as one that passes wrongly.** A failing check
+misleads nobody; it just is not doing work. `BE-W60` was the dangerous shape, and the sweep found
+exactly one of it.
+
+**One NEW instance of the shape, found by tripping it this session.** `retention-ops.spec.ts`
+asserts `retention-watchdog.yml` must **not** match `/purge:audio/` — a real property, since a
+watchdog sharing a job with the thing it watches dies with it. But it is a **text match over the
+file**, so it cannot tell a `run:` step from the word appearing in a comment. It failed on a
+comment this session. **It would also pass on a workflow that invoked the purge through a
+variable.** The sound form asserts the parsed YAML's `run` steps, which is how MR-42 verified the
+`ELMIRON_ALLOW_REMOTE_TARGET` opt-in reached all three invocations.

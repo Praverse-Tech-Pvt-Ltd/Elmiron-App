@@ -1,7 +1,26 @@
 # Blocked on you — 14 August 2026
-> # 🔴 AN ADMIN OF ONE ORGANISATION CAN READ ANOTHER'S CONSENT LEDGER
+> # ✅ RESOLVED — `BE-W101` IS CLOSED (MR-42, 17 September 2026)
 >
-> **Measured, not reasoned about. `BE-W101`, found 16 September 2026 (MR-40 A3).**
+> **Nothing is asked of you here any more. This section is kept for the record.**
+>
+> The cross-tenant admin escape is removed from all eight `SECURITY DEFINER` bodies by
+> `20260917000100_close_the_admin_escape.sql`. Every site was re-measured after the fix with
+> three controls — an admin of another tenant **BLOCKED**, the owning organisation's own admin
+> still **SEES** (so tenant administration did not lose access), and a non-admin in the
+> attacker's tenant **BLOCKED**.
+>
+> **It never needed a decision from you.** `.ai-collab/decisions.md` **C1**, transcribed
+> 9 September 2026, had already settled that `admin` is a TENANT administrator and that
+> platform access is a separate audited break-glass path, out of MR v1. Two sessions waited on
+> an answer that was already in the repository — which is why the register row now carries the
+> pointer.
+>
+> Regression is held in two places: a build-time assertion over the whole catalogue in
+> `admin-escape.spec.ts`, and the migration's own postcondition guard at deploy time.
+>
+> ---
+>
+> **What follows is the finding as it stood, 16 September 2026 (MR-40 A3).**
 >
 > **What was proven.** An admin of organisation A, calling the ordinary console read paths, gets
 > organisation B's consent records:

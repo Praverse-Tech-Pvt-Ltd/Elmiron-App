@@ -69,3 +69,18 @@ export declare const classifyShortfall: (
   fileVersions: readonly string[],
   appliedVersions: readonly string[],
 ) => 'complete' | 'partial-prefix' | 'interleaved' | 'foreign-versions';
+
+/**
+ * MR-42 C1. WHICH of three states a run is in, so a red means something.
+ *
+ * `foreign-versions` and `interleaved` are never accepted, at any date: those are the findings
+ * the check exists for.
+ */
+export declare const classifyRun: (facts: {
+  result: { drifted: boolean; appliedWithoutFile: readonly string[] };
+  shortfall: 'complete' | 'partial-prefix' | 'interleaved' | 'foreign-versions';
+  /** `YYYY-MM-DD`, UTC. */
+  today: string;
+  /** `YYYY-MM-DD`, or `null` when no acceptance was granted. */
+  acceptUntil: string | null;
+}) => 'no-drift' | 'accepted-not-deployed' | 'deferral-expired' | 'real-drift';

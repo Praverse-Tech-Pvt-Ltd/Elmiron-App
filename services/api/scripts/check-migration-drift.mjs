@@ -146,6 +146,50 @@ export const evaluatePreconditions = ({ migrationFileCount, appliedCount, public
  * @param {readonly string[]} appliedVersions sorted
  * @returns {'complete' | 'partial-prefix' | 'interleaved' | 'foreign-versions'}
  */
+/**
+ * MR-42 C1 — WHICH of three states this run is in, so a red means something.
+ *
+ * **The problem this solves.** Production has applied the first 19 migrations and `main` has
+ * 60, because the schema has not been deployed yet. That is a KNOWN, ACCEPTED state, and the
+ * check has reported it as a failure on every commit for weeks. **A red that is correct every
+ * day is indistinguishable from a red that is broken**, and the thing it would need to shout
+ * about — somebody hand-running `supabase db push` against production — arrives as one more
+ * red on a pile of reds. 22 August is what that looks like when it happens.
+ *
+ * So, the same three states `backup.yml` uses for `BE-W11`, with the deferral as a dated,
+ * attributable record rather than an absence:
+ *
+ * - `no-drift` — everything applied. Green.
+ * - `accepted-not-deployed` — the ONLY shortfall is a trailing run of unapplied migrations,
+ *   nothing was applied that has no file here, and the accept-by date has not passed. Green,
+ *   with a notice naming the state and the date. **The deploy is the trigger that ends it.**
+ * - `deferral-expired` — the same shape, but the date has passed. Red, and the red means the
+ *   deferral lapsed rather than the schema broke.
+ * - `real-drift` — anything else. Red.
+ *
+ * **`foreign-versions` and `interleaved` are NEVER accepted, at any date.** A version applied
+ * with no file here means somebody pushed out of band; an interleaved gap means versions were
+ * applied individually. Those are the findings this check exists for, and accepting them
+ * because a date has not passed would be the check certifying the thing it is watching for.
+ *
+ * Pure, so all four states are asserted without arranging a database.
+ *
+ * @param {{ result: { drifted: boolean, appliedWithoutFile: readonly string[] },
+ *           shortfall: 'complete' | 'partial-prefix' | 'interleaved' | 'foreign-versions',
+ *           today: string, acceptUntil: string | null }} facts
+ * @returns {'no-drift' | 'accepted-not-deployed' | 'deferral-expired' | 'real-drift'}
+ */
+export const classifyRun = ({ result, shortfall, today, acceptUntil }) => {
+  if (!result.drifted) return 'no-drift';
+
+  // Out-of-band application is never acceptable, whatever the date says.
+  if (result.appliedWithoutFile.length > 0) return 'real-drift';
+  if (shortfall !== 'partial-prefix') return 'real-drift';
+
+  if (acceptUntil === null) return 'real-drift';
+  return today > acceptUntil ? 'deferral-expired' : 'accepted-not-deployed';
+};
+
 export const classifyShortfall = (fileVersions, appliedVersions) => {
   const files = [...fileVersions].sort();
   const applied = [...appliedVersions].sort();
@@ -230,6 +274,18 @@ const main = async () => {
     ),
   );
 
+  // MR-42 C1. Which of the three states, decided by a pure function so it is asserted in
+  // `migration-drift.spec.ts` rather than only observed in a workflow run.
+  const shortfallNow = classifyShortfall(fileVersions, appliedVersions);
+  const acceptIndex = process.argv.indexOf('--accept-undeployed-until');
+  const acceptUntil = acceptIndex === -1 ? null : (process.argv[acceptIndex + 1] ?? null);
+  const state = classifyRun({
+    result,
+    shortfall: shortfallNow,
+    today: new Date().toISOString().slice(0, 10),
+    acceptUntil,
+  });
+
   if (!result.drifted) {
     console.log(`\nNo drift. ${String(fileVersions.length)} migration(s), all applied.`);
     return;
@@ -269,6 +325,41 @@ const main = async () => {
       );
     }
   }
+  // MR-42 C1. Three outcomes, so a red now means one of exactly two things and says which.
+  if (state === 'accepted-not-deployed') {
+    console.log(
+      '::notice title=BE-W40 schema not deployed yet::Production has applied the first ' +
+        String(appliedVersions.length) +
+        ' of ' +
+        String(fileVersions.length) +
+        ' migrations, in order, with nothing applied that has no file here. This is the known ' +
+        'pre-deploy state, ACCEPTED until ' +
+        String(acceptUntil) +
+        '. THE DEPLOY ENDS IT: once the schema is pushed this goes green on its own.',
+    );
+    console.log(
+      'Accepted -- not green by accident. An out-of-band version or an interleaved gap is ' +
+        'still red today, and this acceptance expires on its own date.',
+    );
+    return;
+  }
+
+  if (state === 'deferral-expired') {
+    console.error(
+      '::error title=BE-W40 acceptance expired::The undeployed-schema state was accepted until ' +
+        String(acceptUntil) +
+        ' and that date has passed. THIS IS NOT NEW DRIFT -- the shape is still a clean ' +
+        'trailing shortfall. Either deploy, or move the date in ' +
+        '.github/workflows/migration-drift.yml in a commit that says why.',
+    );
+  } else {
+    console.error(
+      '::error title=BE-W40 REAL DRIFT::This is NOT the known pre-deploy state. Either a ' +
+        'version was applied that has no file in this repository, or the gaps are not a ' +
+        'trailing run. Read the detail above before applying anything on top.',
+    );
+  }
+
   process.exitCode = 1;
 };
 
