@@ -114,6 +114,8 @@ export { Spinner } from './Spinner';
 export { Stepper } from './Stepper';
 export type { StepperProps } from './Stepper';
 export type { SpinnerProps } from './Spinner';
+export { TopInset } from './TopInset';
+export type { TopInsetProps } from './TopInset';
 export { TransparencyScreen } from './TransparencyScreen';
 export type {
   TransparencyEntry,

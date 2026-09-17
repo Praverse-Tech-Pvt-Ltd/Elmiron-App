@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Banner } from '@fieldforce/ui';
+import { Banner, TopInset } from '@fieldforce/ui';
 import { usePulledStore } from '../sync/pulled-store';
 import { zoneCaveat } from './territory-day';
 
@@ -20,6 +20,20 @@ import { zoneCaveat } from './territory-day';
  *
  * It renders nothing at all when the zone is the territory's own, so the normal case carries no
  * cost and no noise.
+ *
+ * ### Why this one banner is wrapped in `TopInset` and no other `Banner` is
+ *
+ * `packages/ui/Screen` applies the device insets once, so that a new screen is correct by
+ * default — and that works because every screen renders inside it. **This banner does not.**
+ * `app/_layout.tsx` mounts it above `<Stack>`, which is what makes it cover all eleven screens
+ * and is also what puts it outside the only place the inset is added. Mounted there bare it
+ * drew **underneath the status bar**: on a Pixel 10 (API 36) the clock rendered through the
+ * word "Times" and sat on top of the attention glyph.
+ *
+ * The inset is **not** in `Banner` itself, because around twenty screens render a `Banner` from
+ * inside `Screen` and have already been offset once — putting it there would push every one of
+ * them down by a status bar a second time. This is the only `Banner` in the tree with nothing
+ * above it.
  */
 export const ZoneCaveatBanner = (): ReactNode => {
   const { zone } = usePulledStore();
@@ -29,5 +43,9 @@ export const ZoneCaveatBanner = (): ReactNode => {
   // `attention` rather than `critical`: the dates shown are not confirmed wrong, they are
   // unconfirmed. Overstating it would train the MR to dismiss the banner that means "your
   // work is not saved".
-  return <Banner tone="attention" title="Times may be wrong" detail={caveat} />;
+  return (
+    <TopInset>
+      <Banner tone="attention" title="Times may be wrong" detail={caveat} />
+    </TopInset>
+  );
 };
