@@ -3540,3 +3540,44 @@ recorded check already asks for.
 **Generalised:** to establish where an observed behaviour comes from, remove a candidate source and
 repeat the observation. Applies to a mock server, a cache, a feature flag, a fallback path and an
 environment variable.
+
+## 17 September 2026 — contiguity is never an integrity check on a sequence-keyed table
+
+**Any rolled-back transaction anywhere consumes ids permanently, so gaps are normal operation —
+including in a table whose whole promise is that nothing can be removed from it.**
+
+MR-42 probed three write paths inside transactions that were rolled back. **Zero rows committed.
+`audit_log_id_seq` still moved 29337 → 29356.** Nineteen ids exist in no row and never will.
+
+**Why sequences behave this way, so it is not mistaken for a bug.** `nextval()` is deliberately
+non-transactional: two concurrent transactions must never receive the same value, and a rollback
+cannot hand a number back while a peer may still be using it. Gap-free would require serialising
+every writer on the sequence. **Every database with a sequence has this property**; it is not a
+Postgres quirk and not a Supabase one.
+
+**The rule: never assert `max(id) - min(id) + 1 = count(*)`, and never treat a gap as evidence of
+deletion.** On `audit_log` that reading is not just wrong, it is alarming in the worst possible
+context — an append-only ledger whose value is that nothing can be removed, read by somebody
+investigating whether something was.
+
+**What actually guarantees the ledger**, and what to point an auditor at instead:
+
+- the **statement-level trigger** that refuses UPDATE, DELETE and TRUNCATE for every role,
+  including `service_role` — BYPASSRLS roles do not see RLS policies at all, which is why it is a
+  trigger and not a policy;
+- **RLS forced with no policy**, so the function body is the only way in;
+- **audit-before-return**: the row is written before the data is handed over, so a successful read
+  cannot be unlogged.
+
+**Ordering by id is fine.** `list_audit_log` paginates with `l.id < p_before_id`, a keyset cursor.
+That relies on **monotonicity**, which holds, not on contiguity, which does not.
+
+**The reason is recorded on the column itself** (`20260917000200_audit_log_id_gaps.sql`), not only
+here: the person who meets a gap will be looking at the table, possibly without this repository
+open, at the moment the obvious reading is the wrong one.
+
+**And the direction this was found from is worth keeping.** MR-42's own write-up said *"a table
+whose whole promise is that it is gap-free by construction"*. **That sentence was wrong** — the
+table never promised that and never could. The claim to check was in the record the session
+itself had just written, which is why MR-43 B2 swept for contiguity assumptions and found exactly
+one: its own.

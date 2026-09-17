@@ -688,7 +688,9 @@ and it was wrong — `seed-reference-data` looked unguarded and in fact carries 
 
 **2. A rolled-back write probe leaves residue on an append-only table.** 0 rows committed, but
 `audit_log_id_seq` moved 29337 → 29356. Sequences are non-transactional. Nineteen missing ids in
-a table whose promise is that it has no gaps.
+a table whose promise is that nothing can be REMOVED from it. **Corrected MR-43 B2: the table
+never promised gap-free ids and could not** — sequences are non-transactional. The promise is the
+append-only trigger, not contiguity.
 
 **3. A refusal must name the host.** `getaddrinfo ENOTFOUND` is what a *missing* guard looks like,
 so any test satisfied by a non-zero exit certifies nothing. This caught my own `SyntaxError`
