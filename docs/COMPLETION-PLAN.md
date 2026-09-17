@@ -2097,3 +2097,83 @@ still passed.
 
 **That is the shape a delegation test has to have.** A mutant that breaks everything tells you
 the test runs; a mutant that breaks only the boundary tells you the test is about the boundary.
+
+### Added by MR-43 D — the fifteen scripts, each proven by running it
+
+#### D1 — `enable-lock-logging` was already guarded, one session ago
+
+The brief's premise is stale. **MR-42 B4 guarded it**, with the opt-in shape and not
+localhost-only. Re-proven here: `SUPABASE_ADMIN_DB_URL` pointed at a non-resolving host gives
+*"db:instrument refuses to run against host …"*, exit 1.
+
+**Which class:** the **opt-in** class, with `purge:audio`, `check:purge-health` and
+`reconcile:restore` — not the localhost-only class of the seeds. `pnpm db:instrument` runs it as
+part of `db:start`, so the local case must stay silent, and it does.
+
+#### D2 — the table, and MY CLASSIFIER WAS WRONG THREE TIMES
+
+**Every row below was produced by running the command against
+`db.mr43-not-a-real-host.supabase.co`** — never the real host, because a guard test that fails is
+a guard test that connects to production.
+
+| Script | Outcome |
+|---|---|
+| `verify:rollbacks` | **REFUSES, names the host** |
+| `seed:day` | **REFUSES, names the host** |
+| `seed:mr` | **REFUSES, names the host** |
+| `seed:synthetic` | **REFUSES, names the host** |
+| `purge:audio` | **REFUSES, names the host** |
+| `check:purge-health` | **REFUSES, names the host** |
+| `reconcile:restore` | **REFUSES, names the host** |
+| `backup:database` | **REFUSES, names the host** |
+| `db:instrument` (`enable-lock-logging`) | **REFUSES, names the host** |
+| `check:decision-debt` | **REFUSES, names the host — guarded in this session** |
+| `seed:reference` | refuses EARLIER, different reason: `--data` is required, so its host guard is never reached |
+| `backup:verify` | refuses EARLIER, different reason: `--artefact` is required |
+| `check:migration-drift` | **CONNECTS — unguarded BY DESIGN.** It is the production drift detector; guarding it would disable the thing it exists to do |
+| `storage.mjs` | module, no entry point |
+| `target-guard.mjs` | module, no entry point |
+
+**Fifteen. One genuine gap found: `check:decision-debt`**, which inherited `SUPABASE_DB_URL` with
+no guard at all and **fails CI on a date** — so a build decision could have been taken against
+production's thresholds when the repository's own are what it checks. Now guarded, proven both
+ways: it refuses a non-local host by name, and exits 0 against localhost.
+
+**And the part worth keeping: my first classifier misreported THREE of these.**
+
+| Script | I reported | Truth | Why the instrument was wrong |
+|---|---|---|---|
+| `seed:mr` | "refuses for another reason" | **guarded** | It says *"against **API URL** host"*, not *"against host"* — my pattern was narrower than the population |
+| `backup:database` | "other" | **guarded, and most strongly** — it refuses a non-local target *"that was not named on the command line"* | It `throw`s, so the message sat below a stack trace and I read only the first three lines |
+| `backup:verify` | "other" | refuses earlier, for a different reason | the same truncation |
+
+**A classifier is an instrument, and an instrument gets calibrated.** The rule this repository
+already has — *grep locates, it does not decide* — applies to the sweep that checks the greps.
+The corrected matcher searches the **whole** output for a refusal naming the host, and the table
+above is from that run.
+
+#### D3 — the workflow assertion parses now, and one spec had already solved it
+
+`retention-ops.spec.ts` matched `/purge:audio/` against the whole FILE. It could not tell a
+`run:` step from a comment — **it went red on a comment MR-42 added**, and it would equally have
+passed a workflow that invoked the purge through a variable. Wrong in both directions.
+
+Replaced with a `runSteps()` extractor that collects `run:` scalars and block scalars.
+**Hand-rolled on purpose: `js-yaml` is not a declared dependency of this workspace, and adding
+one is an ASK under `.ai-collab/constraints.md`.** The extractor is not trusted on sight — it
+carries its own control asserting that it includes what sits in a `run:` and excludes what sits
+in a comment, because a hand-rolled extractor that silently returned `""` would make every
+`not.toMatch` built on it vacuous.
+
+**Proven two-sided against the real workflow:**
+
+| Mutation | Result |
+|---|---|
+| `purge:audio` added in a **comment** | **passes** — this is the case that used to fail |
+| `purge:audio` in an actual **`run:` step** | **fails** — the property still holds |
+
+**The other spec that reads a workflow had already solved this, deliberately.**
+`scripts-convention.spec.ts` anchors on `run: pnpm --filter …` and says why in its own comment:
+*"The RUN lines, not any mention: … matching prose would have this test asserting the position of
+a sentence."* It also carries a positive control on the step count. **One spec had the defect;
+the other had the answer, two files apart.**

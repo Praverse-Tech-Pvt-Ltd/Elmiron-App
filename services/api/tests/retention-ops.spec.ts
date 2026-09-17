@@ -78,6 +78,68 @@ describe('the purge is actually scheduled', () => {
   const workflow = (name: string): string =>
     readFileSync(new URL(`../../../.github/workflows/${name}`, import.meta.url), 'utf8');
 
+  /**
+   * Every `run:` value in a workflow, concatenated — MR-43 D3.
+   *
+   * **Why this exists.** The assertion below used to match `/purge:audio/` against the whole
+   * FILE, which cannot tell a `run:` step from the word appearing in a comment. MR-42 added a
+   * comment mentioning `purge:audio` to the watchdog and this suite went red on prose. It would
+   * also have passed a workflow that invoked the purge through a variable — wrong in both
+   * directions, which is the definition of a check that is not one.
+   *
+   * **Why it is hand-rolled rather than a YAML parser.** `js-yaml` is not a declared dependency
+   * of this workspace, and adding one is an ASK under `.ai-collab/constraints.md`. This reads
+   * only what the assertions need: the `run:` scalars and block scalars. It is deliberately
+   * small, and the test directly below proves it discriminates — because a hand-rolled
+   * extractor that silently returned "" would make every assertion built on it vacuous.
+   */
+  const runSteps = (yaml: string): string => {
+    const lines = yaml.split(/\r?\n/u);
+    const out: string[] = [];
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i] ?? '';
+      const m = /^(\s*)run:\s*(.*)$/u.exec(line);
+      if (m === null) continue;
+      const indent = (m[1] ?? '').length;
+      const rest = (m[2] ?? '').trim();
+      if (rest !== '' && !/^[|>]/u.test(rest)) {
+        out.push(rest);
+        continue;
+      }
+      // A block or folded scalar: every following line indented further than the key.
+      for (let j = i + 1; j < lines.length; j += 1) {
+        const body = lines[j] ?? '';
+        if (body.trim() === '') continue;
+        if ((/^\s*/u.exec(body)?.[0] ?? '').length <= indent) break;
+        out.push(body.trim());
+      }
+    }
+    return out.join('\n');
+  };
+
+  it('the run-step extractor discriminates — the control for every assertion below', () => {
+    // Without this, a `runSteps` that returned an empty string would make the `not.toMatch`
+    // assertions pass for all time and the `toMatch` ones fail loudly enough to be "fixed"
+    // by weakening them. Both halves are asserted: what it must include, and what it must not.
+    const sample = [
+      'jobs:',
+      '  a:',
+      '    steps:',
+      '      # purge:audio in a comment',
+      '      - name: x',
+      '        run: pnpm purge:audio',
+      '      - name: y',
+      '        run: |',
+      '          echo hi',
+    ].join('\n');
+    const extracted = runSteps(sample);
+
+    expect(extracted).toMatch(/pnpm purge:audio/u);
+    expect(extracted).toMatch(/echo hi/u);
+    // The YAML comment is outside any run: value and must not survive.
+    expect(extracted).not.toMatch(/in a comment/u);
+  });
+
   // A test that only checks a job is registered proves nothing about whether it
   // works — but a worker that works and is never run proves nothing either, and that
   // was exactly the BE-W6 state.
@@ -89,7 +151,8 @@ describe('the purge is actually scheduled', () => {
     // Five fields, or it is not a cron expression and GitHub will ignore it.
     expect((cron ?? '').trim().split(/\s+/)).toHaveLength(5);
 
-    expect(yaml).toMatch(/purge:audio/);
+    // The RUN steps, not the file: a mention in a comment is not an invocation.
+    expect(runSteps(yaml)).toMatch(/purge:audio/u);
   });
 
   it('watches the purge from a separate workflow, so one cannot silence the other', () => {
@@ -99,9 +162,11 @@ describe('the purge is actually scheduled', () => {
     expect(cron, 'retention-watchdog.yml declares no cron schedule').toBeDefined();
     expect((cron ?? '').trim().split(/\s+/)).toHaveLength(5);
 
-    expect(watchdog).toMatch(/check:purge-health/);
+    expect(runSteps(watchdog)).toMatch(/check:purge-health/u);
     // A watchdog that shares a job with the thing it watches dies with it.
-    expect(watchdog).not.toMatch(/purge:audio/);
+    // A watchdog that shares a job with the thing it watches dies with it. Asserted over
+    // the run steps, so the workflow may still EXPLAIN the purge in a comment.
+    expect(runSteps(watchdog)).not.toMatch(/purge:audio/u);
   });
 
   it('fails rather than skips when no database is configured', () => {

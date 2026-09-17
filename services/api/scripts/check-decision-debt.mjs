@@ -1,4 +1,5 @@
 import { Client } from 'pg';
+import { assertTargetAllowed } from './target-guard.mjs';
 
 /**
  * BE-W21 — the forcing function on the UCPMP cap decision.
@@ -86,6 +87,18 @@ export const evaluateDecisionDebt = (status) => {
 
 export const checkDecisionDebt = async (overrides = {}) => {
   const config = { ...DEFAULTS, ...overrides };
+  // MR-43 D2 / `BE-W103`. Found by running every script against a non-resolving host rather
+  // than by reading them: this one inherited SUPABASE_DB_URL with no guard at all. It is a
+  // read, so the harm is a build decision taken against the wrong database rather than a
+  // write -- but it FAILS CI on a date, and failing the build on production's thresholds
+  // when the repository's own are what it is checking would be a hard defect to see.
+  assertTargetAllowed({
+    command: 'check:decision-debt',
+    label: 'database URL',
+    url: config.dbUrl,
+    consequence: 'It decides whether the build fails on recorded decision debt.',
+  });
+
   const client = new Client({ connectionString: config.dbUrl });
   await client.connect();
 
