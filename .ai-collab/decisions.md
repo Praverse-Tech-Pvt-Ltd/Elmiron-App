@@ -1723,3 +1723,60 @@ in August.
 changes**, and strike items through with their evidence rather than deleting them. A permanent red
 in CI and a dead alarm on the page written for the least-informed reader are the same defect; only
 one of them had been noticed.
+
+## 17 September 2026 — MR-44
+
+### Generate a `create or replace` from the CATALOGUE, never from the migration that created it
+
+Taking `emit_sync_event` from `20260908000300` would have reverted `20260909000100`'s exhaustive
+version — silently, because `create or replace` succeeds.
+
+**Decision: any migration that replaces an existing function generates its body from
+`pg_get_functiondef`, applies a minimal edit, and asserts the edit applied exactly once.** A
+migration file records what the schema WAS at one moment; the catalogue records what it IS. The
+same mistake on the entity constraint failed loudly against live rows, which is the only reason
+the function half was caught at all.
+
+### A decision record holds rulings, not tasks
+
+**Decision: tasks arising from a decision are filed where tasks live** — `blocked-on-you.md` for a
+human, the register for engineering — **never inside the decision entry.** The decision is
+permanent and is re-read as settled; a task note inside it inherits that authority and is the last
+thing anybody re-checks. `O2` was right for a month while its "Outstanding" line was wrong twice
+over.
+
+### Reconcile duplicate register rows on COMPLETENESS, not on age
+
+**Decision: when two rows describe one ask, the canonical one is whichever states it most fully.**
+Two of MR-44's four pairs were subset/superset rather than duplicates; collapsing onto the older
+row would have deleted `5.3`'s foreground-only alternative and `5.7`'s reference-data half — and
+reference data is what `§6.1` is sequenced around.
+
+### A sweep's population is a property of its definition
+
+Three definitions of "safe only by delegation" gave 4, 2 and 11 members.
+
+**Decision: run a sweep under at least two definitions that differ in KIND — textual versus
+structural — and report the definition beside the count.** Choose the definition against the RISK
+rather than convenience: the more natural query counted a delegator as independently scoped and
+lost half the population. Over-inclusion is cheap; under-inclusion hands you a confident small
+number with no way to know what it never looked at.
+
+### An undeclared package may be used to VERIFY and never to IMPORT
+
+`js-yaml` resolves from the root and from `services/api`, and is declared in no workspace
+`package.json`.
+
+**Decision: a hoisted transitive may be used in a throwaway command and must not be imported by
+committed code.** The difference is whether its disappearance breaks the build. Declaring it is an
+ASK — a small and reasonable one — but it must be made rather than assumed by hoisting.
+
+### Refused: marking a plan approved so a filter passes
+
+`BE-W89`'s screen filters on `status === 'approved'` and nothing in this system ever writes that
+value.
+
+**Decision: the filter changes, not the data.** A plan marked approved that no manager approved is
+a false record, in a product whose differentiator is that it does not make those. The screen will
+render the plan with its real status shown honestly — *"Submitted — not yet approved"* — and the
+approval action stays out of v1 with the console.

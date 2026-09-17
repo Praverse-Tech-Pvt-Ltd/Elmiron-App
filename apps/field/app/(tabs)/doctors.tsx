@@ -33,16 +33,21 @@ export default function Doctors(): ReactNode {
   /**
    * **"On plan" is not offered, and that is a finding rather than a simplification.**
    *
-   * The chip filters by today's approved beat plan, which means `BeatPlan.entries`.
-   * `sync_pull` emits `visit`, `doctor`, `beat_plan` and `clinic_address` and has no
-   * `beat_plan_entry` entity, so `BeatPlanRecord` is `BeatPlan` with `entries` omitted --
-   * the rows exist in `public.beat_plan_entries` and simply never reach the client.
+   * The chip filters by today's beat plan, which means `BeatPlan.entries`.
+   *
+   * **MR-44 (`BE-W89`) changed half of this and the half it did not change is the half that
+   * still blocks the chip.** `sync_pull` now DOES emit `beat_plan_entry`, and
+   * `apps/field/src/sync/pull.ts` holds the entries in the store -- so the rows reach the
+   * client. What has not happened is the READ: this screen and `app/beat-plan.tsx` are both
+   * still on `createClientForScenario()`, and nothing outside the sync layer reads
+   * `store.beat_plan_entry` yet.
    *
    * Offering the chip anyway would filter against an empty set and show NO DOCTORS, which
    * is indistinguishable from "none of your doctors are on today's plan". That is the
    * client presenting its own gap as a fact about the day, which is the one thing this
-   * screen's own header says it must never do about a denial. So the chip is absent until
-   * the entity exists. Registered as BE-W89 -- see PROJECT-OVERVIEW.md, MR-14 B9.
+   * screen's own header says it must never do about a denial. So the chip stays absent until
+   * this screen reads the pulled store -- NOT until the entity exists, which it now does.
+   * `BE-W89` -- see PROJECT-OVERVIEW.md, MR-14 B9 and MR-44 B.
    */
   /**
    * **A denial and a dropped connection are different screens.**

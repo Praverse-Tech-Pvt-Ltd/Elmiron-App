@@ -138,12 +138,15 @@ describe('app/doctors.tsx — how the client presents a server decision', () => 
   });
 
   it('does not offer "On plan", because the pull cannot answer it', async () => {
-    // MR-14 B9. `sync_pull` has no `beat_plan_entry` entity, so `BeatPlanRecord` omits
-    // `entries` and the client cannot know who is on today's plan. The chip would filter
-    // against an empty set and show NO DOCTORS — the client presenting its own gap as a
-    // fact about the day, which is the same failure as rendering a denial as an empty
-    // list. Asserted so that adding the entity is a change to this test rather than a
-    // chip quietly reappearing with nothing behind it.
+    // MR-14 B9, updated by MR-44 B. **This comment's original reason is no longer true and
+    // the assertion is still right**, which is exactly what it was written to force: it said
+    // "adding the entity is a change to this test rather than a chip quietly reappearing",
+    // and the entity was added.
+    //
+    // `sync_pull` NOW emits `beat_plan_entry` and the store holds it. But this screen still
+    // reads `createClientForScenario()`, so it has no access to those entries — the chip
+    // would still filter against an empty set and show NO DOCTORS, the client presenting its
+    // own gap as a fact about the day. The blocker moved from the SERVER to the READ.
     mockStore.mockReturnValue(pulled());
     await render(<Doctors />);
     expect(screen.getByText('All')).toBeTruthy();

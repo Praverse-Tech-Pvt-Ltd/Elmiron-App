@@ -1189,3 +1189,46 @@ that chain will render an empty route.
 `current_user_organisation_id()` down. If that argument were ever dropped, a doctor could be shown
 another company's notice — a compliance record about who is processing their data. There is now a
 test that fails if it is.
+
+## MR-44 — 17 September 2026: the pull carries the plan's stops, and the screen still does not read them
+
+**No screen changed.** `@fieldforce/field` vitest **502**, jest **131**; `@fieldforce/ui` vitest
+**4**, jest **246**; `@fieldforce/console` vitest **28** — all unchanged.
+
+### What the frontend gained, and what it has not done with it
+
+`sync_pull` now emits **`beat_plan_entry`**. `apps/field/src/sync/pull.ts` maps it, `LocalStore`
+holds a `beat_plan_entry` slice, and persistence round-trips it.
+
+**Nothing outside `src/sync/` reads that slice.** `app/beat-plan.tsx:35` and
+`app/(tabs)/doctors.tsx` are both still on `createClientForScenario()`.
+
+### The blocker on the "On plan" chip MOVED, and two comments had to say so
+
+Both `doctors.tsx` and `doctors-route.test.tsx` justified the chip's absence with *"`sync_pull` …
+has no `beat_plan_entry` entity"*. **That is now false.** The chip is still correctly absent —
+this screen reads the mock, so it has no access to the entries, and offering it would filter
+against an empty set and show NO DOCTORS, which is the client presenting its own gap as a fact
+about the day.
+
+**The test comment predicted this** — *"asserted so that adding the entity is a change to this
+test rather than a chip quietly reappearing with nothing behind it"*. The assertion held, the
+reason rotted, and only a human reading it would notice.
+
+### What remains, sized
+
+**~2 half-days.** Convert `beat-plan.tsx` off the mock to `usePulledStore()`, join entries to the
+plan, render **"Submitted — not yet approved"** honestly, assert the approved wording **cannot**
+appear for a submitted plan, and move the dates to the territory zone — this screen is one of the
+eleven that renders a date and still carries an `eslint-disable` saying exactly that.
+
+**Do not mark plans approved to make the existing filter pass.** Refused: a plan marked approved
+that no manager approved is a false record.
+
+### One fixture consequence worth knowing before you build
+
+`beat_plan_entries_unique_doctor` is `UNIQUE (beat_plan_id, doctor_id)`, so the test world's two
+entries use two different doctors — and the second is the SOUTH doctor, whom the Pune MR cannot
+see. **The pull therefore carries an entry whose doctor is not in the store.** `buildDayRoute`
+maps entries to stops through doctors, so that is precisely the case the screen has to survive.
+Registered as `FE-W51`.

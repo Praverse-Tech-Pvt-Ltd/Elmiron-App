@@ -16724,3 +16724,217 @@ other had the answer, two files apart.**
    right for a month and its "Outstanding" line was wrong for most of it.
 3. **A document's alarms need the same treatment as CI's.** Four dead alarms sat at the top of the
    page written for the reader with the least context.
+
+### MR-44 — BE-W89 re-sized
+
+**The re-size was a missing column, not a missing arm. And three guards caught three mistakes of
+mine — each one written, by an earlier session, for exactly the mistake it caught.**
+
+#### A1 — CI, and what the checkout guard actually proves
+
+| | |
+| --- | --- |
+| Run | `35210556994` — **`success`** |
+| Workflow | `CI` |
+| Event | `push` |
+| SHA | `9b139999b5b66fbc8286f139b3af95d6a1f14b6a` |
+
+**Read with `git rev-parse HEAD`, and it equalled HEAD.** `Migration drift` (`35210557081`) also
+green, carrying the `::notice::` MR-42 C1 built. Nothing was held.
+
+**What `f34ceef` being an ancestor proves beyond the guard passing** — read from git, not recall:
+it is *"FE-R1: remove a third party's trademark from the permanent identifiers"*, 17 August 2026,
+53 files. So the guard is not "am I in the right repository" — **it proves this working tree
+descends from the executed `O2` decision**, with the ELMIRON® mark out of the package id,
+scheme and scope. A clone that predates it, or a branch that reverted it, fails. **It is a content
+check wearing an ancestry check's clothes** — and it is the same decision MR-43 A3 found the
+register had not noticed was executed.
+
+#### A2 — the four duplicates, reconciled on COMPLETENESS
+
+**The canonical id is whichever row states the ask most completely — not the earlier one, and not
+uniformly section 5.** Two of the four are not duplicates at all:
+
+| Canonical | Pointer | Why |
+| --- | --- | --- |
+| **5.1** | ~~1.5~~ | Same ask; 5.1 names the four OEMs and why a Pixel proves nothing |
+| **5.3** | ~~2.4~~ | **Superset** — it carries the alternative, shipping foreground-only check-in |
+| **5.7** | ~~4.3~~ | **Superset** — it includes the reference data `§6.1` is sequenced around |
+| **4.4** | ~~5.11~~ | **The other direction** — 4.4 states the question; 5.11 names only the topic |
+
+**MR-43's own summary called all four "the same ask under two ids". Two were not.** Had the
+reconciliation followed that summary instead of re-reading the rows, `5.3`'s foreground-only
+alternative and `5.7`'s reference-data half would have been deleted as redundant. **27 distinct
+asks stands; four rows are struck through in place.**
+
+#### A3 — a decision record must not carry a to-do list
+
+`O2` was right for a month and its *"Outstanding"* line was wrong for most of it: a superseded
+scheme, and work `config.toml` had already done. **What was DECIDED is durable; what REMAINS is
+status, and status rots fastest exactly where it is least questioned.** A decision record is read
+as settled — that is its function — so a task note inside one inherits authority it has not
+earned. **Third instance of one shape:** the `blocked-on-you` banner, the drift workflow's daily
+red, and now this.
+
+#### B1 — the re-size, and what the register missed
+
+**`beat_plan_entries` had no `updated_at`.** Columns were `id`, `beat_plan_id`, `doctor_id`,
+`clinic_address_id`, `planned_sequence`. `sync_pull`'s `candidates` CTE orders and pages on
+`(updated_at, id)`. **So this was never "add a union-all arm"** — it needed a column on an
+existing table plus the trigger that maintains it.
+
+What was already right: **the RLS**. `beat_plan_entries_select_via_plan` scopes through the plan's
+`mr_id` and `visible_user_ids()`. `sync_pull` is SECURITY INVOKER and its arms carry no predicate
+for that reason — which is why the new arm must not grow one.
+
+**What (b) misses, stated plainly:** no approval action and no manager console, so
+`beat_plans.status` never becomes `approved` anywhere in this system. The `approved` branch of any
+rendering stays unreachable by real data. That is a consequence of (b), not a defect in it.
+
+#### B2 — (b) is sound, and that was checked
+
+**Only ONE consumer reads `status === 'approved'`** — the screen's own filter at
+`beat-plan.tsx:47` — plus one test fixture. No RPC, no policy, no other screen. **Nothing
+downstream needs approval to exist**, so no conditional stop.
+
+#### B3 — built, with three guards firing on three mistakes of mine
+
+| Mistake | Guard that caught it |
+| --- | --- |
+| Took `emit_sync_event` and the entity constraint from the migration that **created** them; both had been replaced since | The `ALTER` **failed against live rows**, loudly. Had it not, my `create or replace` would have silently reverted `20260909000100`'s exhaustive version |
+| Left `packages/core`'s entity enum behind | **`sync-pull-contract.spec.ts`**, which pins the set exactly — its own comment says it did this before, and it did it again within a minute |
+| Two fixture entries for the same doctor | **`beat_plan_entries_unique_doctor`** — `UNIQUE (beat_plan_id, doctor_id)`, the correct domain rule |
+
+**A migration file records what the schema WAS. The catalogue records what it IS. For `create or
+replace`, only the second is safe** — everything in the final migration is generated from the
+catalogue. The failed `ALTER` also left the local database briefly without that constraint,
+because the `drop … if exists` had already succeeded; restored immediately.
+
+**And a fourth: `manager.spec.ts`'s coverage assertion broke, and it had been VACUOUS by its own
+admission** — *"the fixture beat plan has no entries, so nothing is missed"*. `missed_visit_count`
+could only ever be 0. It now pins **planned = 2 and missed = 1**, because a missed count is a
+subtraction and asserting only the result cannot tell 2−1 from 1−0.
+
+**Persistence follows the recorded precedent rather than a new mechanism.** A store written before
+the key existed fails validation, the cursor is cleared with it, and the next pull is a full
+re-sync. That matters here specifically: **the cursor is a SNAPSHOT**, so pre-existing entry rows
+keep their original `xmin` and an incremental sweep would never send them. Bumping the stored
+version instead would have dropped records while keeping the cursor — the exact failure that file
+was written to fix, as its own header says.
+
+#### B4, B5 — NOT DONE, and the screen is why
+
+**The screen is still on the mock.** `beat-plan.tsx:35` is `createClientForScenario()`, and
+nothing outside `src/sync/` reads `store.beat_plan_entry`. So the honest sentence *"Submitted —
+not yet approved"*, the assertion that approved wording cannot appear for a submitted plan, and
+the territory-zone dates are **not started**. They are ~2 half-days and they are the remaining
+half of (b).
+
+#### B6 — the table, with the method marked
+
+| Row | Status | Established by |
+| --- | --- | --- |
+| The pull | **carries `beat_plan_entry`** | Measured against the live database as a seeded MR. **ELIMINATION is not claimed** |
+| Beat plan screen | **STILL MOCK** | **INSPECTION**, 17 September |
+| Doctors screen | **STILL MOCK**, chip still absent | **INSPECTION** — but the REASON changed |
+| Today | REAL | ELIMINATION (MR-41) |
+
+**Two comments had to change because the blocker moved from the server to the read.**
+`doctors.tsx` and `doctors-route.test.tsx` both said *"`sync_pull` … has no `beat_plan_entry`
+entity"*. That is now false; the chip is still correctly absent because the screen reads the mock.
+**The test comment predicted this exactly** — *"asserted so that adding the entity is a change to
+this test rather than a chip quietly reappearing"* — and that is what happened. **A test that
+survives the change it was written to detect is only useful if somebody updates the reason.**
+
+#### B7 — two mutants, each killing one test
+
+| Mutant | Kills |
+| --- | --- |
+| tombstone records a null scope | **only** the tombstone-scope test |
+| emitted order reversed | **only** the ordering test |
+
+**The ordering mutant took two attempts, and the first is the instructive one.** Reversing
+`order by updated_at, id` in the `changed` CTE changed nothing — because a **second** ordering
+builds the emitted array further down. I checked the actual output rather than concluding the test
+was vacuous: the mutant had applied, and I had mutated the *selection* order rather than the
+*transport* order.
+
+#### C1 — the instrument's own control: three definitions, three populations
+
+| Definition | Population |
+|---|---|
+| **1** — textual: `visible_*` or `auth.uid()` (MR-43's) | **4** |
+| **2** — textual, widened to any caller-identity helper | **2** |
+| **3** — structural: a SQL function whose whole body is one call to another `public` function | **11** |
+
+**Four was never a property of the system; it was a property of the query.**
+
+- **Definition 2 loses `active_consent_text` and `is_admin`**, because it counts *calling* a
+  caller-identity helper as *being scoped*. But `active_consent_text` is safe **precisely
+  because** it passes `current_user_organisation_id()` down — that makes it a delegator. **The
+  more natural query is the wrong one for the risk.**
+- **Definition 3 over-includes** — 6 of its 11 are scoped themselves — **and finds three that
+  Definition 1 could never see**: `audio_purge_health`, `org_default_shift_window_status`,
+  `threshold_number`, whose delegate is not scoped either, so "calls something scoped" never
+  matched.
+
+**Union after removing over-inclusions: SEVEN.** Registered as **`BE-W105`**, with
+`threshold_number` named first because it takes a **territory id from the caller**.
+
+#### D1 — `js-yaml`: both sessions were right
+
+**Measured:** it resolves from the root and from `services/api`, and is declared in **no**
+workspace `package.json` — a hoisted transitive.
+
+> **Using an undeclared package in a throwaway verification is not adding a dependency. Importing
+> one in committed code is — and the difference is whether its disappearance breaks the build.**
+
+#### D2 — the renderer ask, filed
+
+**`blocked-on-you.md` 2.5.** Playwright against `next dev` is the only option that exercises what
+ships, and costs a dev dependency, browser binaries, CI minutes and a **third runner**.
+`react-dom/server` avoids the runner but only partly supports async server components.
+**Engineering recommends neither: keep the presenter pattern `FE-W13` shipped with and rewrite
+`FE-W12`'s check** — a decision, not a workaround, because it changes what `FE-W12` promises.
+
+#### Counts — by workspace AND runner, from BOTH lines
+
+| Workspace | Runner | Passed | Failed | Suites / Files |
+| --- | --- | --- | --- | --- |
+| `@fieldforce/core` | vitest | 28 | 0 | 3 files |
+| `@fieldforce/ui` | vitest | 4 | 0 | 1 file |
+| `@fieldforce/ui` | jest | 246 | 0 | 22 suites |
+| `@fieldforce/ui-tokens` | vitest | 54 | 0 | 3 files |
+| `@fieldforce/console` | vitest | 28 | 0 | 4 files |
+| `@fieldforce/field` | vitest | 502 | 0 | 32 files |
+| `@fieldforce/field` | jest | 131 | 0 | 19 suites |
+| `@fieldforce/api` | vitest | **723** | 0 | **50 files** |
+| `@fieldforce/mock` | vitest | 43 | 0 | 1 file |
+
+**1,759 passing, zero failing, no suite failed to run.** `typecheck`, `lint`, `format:check` and
+`verify:rollbacks --files-only` all exit 0, each read from its own exit code.
+
+#### Where this session stopped — ROOM
+
+**A, B1/B2/B3/B6/B7, C and D complete. B4 and B5 not started.**
+
+- **Not a BLOCKAGE** — the screen conversion is reachable; nothing is in the way.
+- **Not a CONDITIONAL STOP** — B2's condition did not fire. (b) is sound and was checked.
+- **ROOM.** The server half, the contract, the client store and the persistence are a complete,
+  tested, reviewable slice. The screen conversion is the next slice, and starting it at the end of
+  this one is how a half-converted screen ships — which is the exact judgement MR-14 made when it
+  left this screen on the mock rather than render an empty route.
+
+**`BE-W89` IS NOT CLOSED**, and the register row says so with the remaining work sized at ~2
+half-days.
+
+**Three things to carry forward.**
+
+1. **The guards in this repository are load-bearing and they earned it today.** A constraint that
+   failed loudly, a contract pin, a unique index and an exhaustive switch each caught a distinct
+   mistake of mine within an hour.
+2. **A test can survive the change it was written to detect.** `doctors-route.test.tsx` still
+   passes and its stated reason had become false. The assertion was right, the comment was the
+   thing that needed changing, and nothing automated would have said so.
+3. **A sweep's count is a property of its definition.** Run it twice, under definitions that
+   differ in kind, and report the definition beside the number.

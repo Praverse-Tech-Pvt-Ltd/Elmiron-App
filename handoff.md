@@ -821,3 +821,55 @@ for the reader with the least context — carried four alarms that were no longe
 | Session | Where the narrative is |
 | --- | --- |
 | MR-43 — decisions that already existed | `PROJECT-OVERVIEW.md` → `### MR-43 — decisions that already existed` |
+
+---
+
+## After MR-44 — 17 September 2026
+
+| | |
+| --- | --- |
+| **`BE-W89`** | **RE-SIZED AND HALF DONE. NOT CLOSED.** Server half complete and tested; the SCREEN half is not started (~2 half-days) |
+| **The re-size** | `beat_plan_entries` had **no `updated_at`**. The pull orders and pages on `(updated_at, id)` — it was never "add a union-all arm" |
+| **Option (b)** | Sound, and checked: **only ONE consumer** reads `status === 'approved'` |
+| **`BE-W105`** | **NEW.** Three more unscoped SQL wrappers, found only by a structurally different sweep definition |
+| **Register** | Four duplicate pairs reconciled on COMPLETENESS; `blocked-on-you` 2.5 files the renderer ask |
+| **Tests** | **1,759 passing, zero failing, no suite failed to run** |
+| **Stop** | **ROOM** |
+
+### What is left on BE-W89, so it is not mistaken for done
+
+`beat-plan.tsx:35` and `doctors.tsx` both still read `createClientForScenario()`. **Nothing
+outside `src/sync/` reads `store.beat_plan_entry`**, and `BeatPlanRecordSchema` still omits
+`entries`. The honest sentence — *"Submitted — not yet approved"* — is unwritten.
+
+**Do not mark plans approved to make the filter pass.** That was refused: a plan marked approved
+that no manager approved is a false record.
+
+### Four guards fired on four mistakes of mine, in one hour
+
+1. **The entity constraint failed against live rows** — I had taken it from the migration that
+   CREATED it, and `20260908001500` had widened it since. The same mistake would have silently
+   reverted `20260909000100`'s exhaustive `emit_sync_event`. **A migration file records what the
+   schema WAS; the catalogue records what it IS.**
+2. **`sync-pull-contract.spec.ts`** caught `packages/core`'s enum left behind — its own comment
+   says it did exactly this before.
+3. **`beat_plan_entries_unique_doctor`** caught two fixture entries for the same doctor.
+4. **`manager.spec.ts`'s coverage assertion** broke — and it had been **vacuous by its own
+   admission**. It now pins planned=2 AND missed=1, because a missed count is a subtraction.
+
+### A test can survive the change it was written to detect
+
+`doctors-route.test.tsx` asserts the "On plan" chip is absent, and said so because *"`sync_pull`
+has no `beat_plan_entry` entity"*. **That reason is now false and the assertion is still right** —
+the chip is blocked by the READ, not the server. Its own comment predicted this. **Nothing
+automated would have told anyone the reason had rotted.**
+
+### Sweep counts are properties of definitions
+
+Three definitions of "safe only by delegation" gave **4, 2 and 11**. Union after removing
+over-inclusions: **7**. Run a sweep twice, under definitions that differ in KIND, and report the
+definition beside the count.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-44 — BE-W89 re-sized | `PROJECT-OVERVIEW.md` → `### MR-44 — BE-W89 re-sized` |
