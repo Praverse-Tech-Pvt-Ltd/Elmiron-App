@@ -3476,3 +3476,67 @@ attempted"*, one layer up: the tests were not attempted.
 
 **One re-run is not a rate**, and no mechanism is claimed. Recorded for the shape, not the
 frequency.
+
+## 17 September 2026 — hoisting something to a root for coverage moves it OUT of what the root's children inherit
+
+**Coverage and inheritance pull in opposite directions, and the move that buys one costs the
+other silently.**
+
+`packages/ui/Screen` applies the device safe-area insets **once**, deliberately, so that a new
+screen is correct by default — *"a per-screen `SafeAreaView` leaves the next new screen broken by
+default, which is how this defect arrived"*. Every screen renders inside it, so every screen is
+inset.
+
+`ZoneCaveatBanner` warns that the dates on screen may be in the wrong timezone. Eleven screens
+render a date, so MR-36 mounted it **once, above `<Stack>`**, rather than editing eleven screens
+— *"eleven separate warnings would be eleven places for the twelfth screen to be forgotten"*.
+That reasoning was right.
+
+**And it put the banner outside `Screen`.** On a Pixel 10 (API 36, where Android enforces
+edge-to-edge) the status-bar clock rendered straight through the banner's title and sat on top of
+its attention glyph — the FE-Build-2b defect, on the same sign-in screen, reappearing in the one
+component that bypasses the fix for it.
+
+**The rule: when you hoist something above a container for coverage, enumerate what that
+container was giving its children, and re-provide it.** The hoist is usually correct — the cost is
+that the moved thing silently leaves a set of defaults, and nothing type-checks that. Ask what the
+level you left was doing *for* you, not just what it was doing.
+
+**The tell:** a component whose whole purpose is to apply to everything is, by construction, not
+inside anything.
+
+**Do not solve it by pushing the concern down into the shared component.** `Banner` has around
+twenty callers, all inside `Screen` and all already inset; putting the inset there would push
+every one of them down by a status bar a second time. The fix went into a new primitive
+(`TopInset`) used by the one element that has nothing above it.
+
+---
+
+## 17 September 2026 — provenance by elimination: kill the other source and see if the screen still works
+
+**Twenty sessions answered "is this screen real or mock?" by reading call paths. One `pkill`
+settles it in seconds.**
+
+`docs/HANDOVER-2026-09-08.md` recorded the Today screen as MOCK-backed, with a two-column table
+built by inspecting which client each screen constructs. That table was right when written and had
+gone stale, and reading it again would not have revealed that — a call path that *looks* like the
+mock and a call path that *is* the mock read identically.
+
+**The instrument: stop the mock server, then use the screen.** The mock on `:4010` was not running
+at all, and the Today screen still rendered `Dr Vikram Rao (DEMO)` and `Main clinic, Pune` — names
+that `select ... from public.visits join public.doctors` returns from Postgres. **Data that arrives
+with the mock dead did not come from the mock.** No code was read to establish that.
+
+**Why it is stronger than reading the call path.** It tests the running composition rather than the
+source: it survives a wrapper, a fallback, a cached bundle and a stale doc, and it cannot be fooled
+by a screen that constructs a mock client and never calls it. It is the same argument as the
+negative control in a boundary probe — *establish the thing can fail before believing it passed.*
+
+**Its limits, so it is not over-claimed.** It proves *not the mock*. It does not prove *which*
+server, and a screen rendering from a hydrated cache will pass it once. Pair it with a value that
+only the real source has — a row id you can then `select` — which is exactly what `FE-W32`'s
+recorded check already asks for.
+
+**Generalised:** to establish where an observed behaviour comes from, remove a candidate source and
+repeat the observation. Applies to a mock server, a cache, a feature flag, a fallback path and an
+environment variable.

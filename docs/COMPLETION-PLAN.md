@@ -1856,3 +1856,65 @@ never crosses a tenant.** The check asked whether a file mentions the function. 
 **The rule this leaves behind, now earned three times:** a recorded check must constrain **what**
 matched, not **that** something matched. If the command can pass on a file that merely contains
 the words — or fail on a file that contains the right explanation — it is not a check.
+
+### Added by MR-41 B — two mechanisms and two register entries
+
+#### `BE-W103` — three destructive scripts have NO host guard, and one of them DELETES
+
+| Item | Detail |
+|---|---|
+| **`BE-W103`** | **`purge:audio`, `check:purge-health` and `reconcile:restore` carry no localhost assertion.** Pointed at a non-local host they do not refuse — they proceed to connect and fail only on DNS. `purge:audio` **deletes storage objects**; `reconcile:restore` reconciles after a restore. The four seeds and `verify:rollbacks` DO refuse. Found by MR-41 B2 | `services/api/scripts/purge-expired-audio.mjs`, `check-purge-health.mjs`, `reconcile-after-restore.mjs` | — | **OPEN** | 1 | Each script must refuse a non-local host **before opening a connection**, asserted by running it with `SUPABASE_DB_URL` pointed at a non-local hostname and requiring a **refusal naming the host** — not a connection error. The distinction is the whole point: `getaddrinfo ENOTFOUND` is what a missing guard looks like, and it is indistinguishable from a guard when the host happens not to resolve |
+
+**PROVEN, not reasoned about.** Every row below was produced by running the command with
+`SUPABASE_DB_URL` (and where relevant `SUPABASE_URL`) pointed at
+`db.mr41-not-a-real-host.supabase.co`.
+
+**A non-resolving hostname was used deliberately, rather than the real hosted one.** A guard test
+that fails is a guard test that connects to production. With a host that cannot resolve, a
+missing guard produces a DNS error instead of a live session — the failure mode of the
+*experiment* is safe.
+
+| Command | Reads | Guard fires? | Evidence |
+|---|---|---|---|
+| `seed:day` | `SUPABASE_DB_URL` | **YES** | *"seed:day refuses to run against host … Only 127.0.0.1, ::1 or localhost are allowed."* exit 1 |
+| `seed:mr` | `SUPABASE_DB_URL` | **YES** | *"…creates an auth identity, an organisation, a territory and a user profile, which must never reach a deployment."* exit 1 |
+| `seed:synthetic` | `SUPABASE_DB_URL` | **YES** | *"…hundreds of thousands of invented rows … There is no --force."* exit 1 |
+| `verify:rollbacks` | `SUPABASE_DB_URL` | **YES** | *"…destructive by design and only ever allowed against 127.0.0.1, ::1 or localhost."* exit 1 |
+| `purge:audio` | `SUPABASE_URL`, `SUPABASE_DB_URL` | **NO** | `getaddrinfo ENOTFOUND` — it tried to connect |
+| `check:purge-health` | `SUPABASE_DB_URL` | **NO** | `getaddrinfo ENOTFOUND` — it tried to connect |
+| `reconcile:restore` | `SUPABASE_URL`, `SUPABASE_DB_URL` | **NO** | `getaddrinfo ENOTFOUND` — it tried to connect |
+| `seed:reference` | — | **not reached** | Refuses earlier and for a different reason: *"requires --data <path to reference JSON>"*. Its host guard is untested because it cannot run without data at all |
+| `db:reset` | the Supabase CLI | **n/a — not a repo guard** | `supabase db reset` targets the local stack unless `--linked` is passed. That is CLI behaviour, not something this repository asserts, and it was **not** executed: running it to observe the guard would have destroyed the local demo tenants |
+
+#### The root `.env` — the premise needed correcting before the table meant anything
+
+**The brief said the root `.env` points at the hosted project. Half of it does, and the half that
+matters for these scripts does not.**
+
+| Variable | Points at |
+|---|---|
+| `SUPABASE_URL` | **`https://pgfdbzoapmleqtoezhoa.supabase.co` — HOSTED** |
+| `SUPABASE_DB_URL` | **`127.0.0.1:54322` — LOCAL** |
+| `SUPABASE_REMOTE_DB_URL` | hosted, and it is a **separate variable** nothing above reads |
+
+So the hosted database address is not sitting in the variable the destructive scripts read. **The
+hosted REST endpoint is**, and `purge:audio` and `reconcile:restore` read exactly that one while
+carrying no host guard.
+
+**And nothing in the repository loads the root `.env` into these scripts.** No script uses
+`dotenv`; they read `process.env` directly, and `pnpm` does not populate it. The one thing
+established to read the root `.env` is the **Supabase CLI** — proven by its refusal to parse the
+file at all while the file carried a UTF-8 BOM. The exposure is therefore a shell that has
+exported the file, not the scripts themselves — which makes `BE-W103` a guard gap rather than an
+active incident.
+
+#### `FE-W49` — hoisting for coverage moved a banner outside the inset
+
+| Item | Detail |
+|---|---|
+| **`FE-W49`** | **`ZoneCaveatBanner` drew underneath the status bar.** `packages/ui/Screen` applies the device insets once so every screen is correct by default; `app/_layout.tsx` mounts this banner **above `<Stack>`** so that one banner qualifies all eleven screens that render a date — and that position is exactly what puts it outside `Screen`. On a Pixel 10 (API 36) the clock rendered through the title and covered the attention glyph. **Same defect as FE-Build-2b, on the same screen, via the one component that bypasses the fix** | `packages/ui/src/TopInset.tsx` (new), `apps/field/src/today/ZoneCaveatBanner.tsx` | — | **FIXED — `6197987`** | 0.5 | **Arithmetic on the distance that reaches the title, not the presence of a wrapper.** The summed `paddingTop` between the title text and the root must equal `tokens.space.md + insets.top`, with (a) a **zero-inset positive control** requiring exactly `tokens.space.md`, so a hard-coded status-bar height fails, and (b) a **per-edge distinctness control** requiring `paddingLeft`/`paddingRight` to stay at `tokens.space.md` under insets of 3 and 7, so an implementation that pads all four edges fails. Mutated three ways — `paddingTop: 0`, `paddingTop: 47`, `padding: insets.top` — each killing exactly one test in each of the two suites |
+
+**Why the check is written that way.** *"A safe-area wrapper is present"* passes on a wrapper that
+pads by nothing, which is the same class as `BE-W60`'s *"a file mentions the function"*. The
+number has to come from the device, and the only way to assert that is to change the device's
+number and require the rendered distance to change with it.

@@ -37,6 +37,23 @@ on:
     - cron: '40 6 * * *'
   workflow_dispatch:
 
+# MR-41 B1 -- `set -o pipefail`, as a mechanism rather than a reminder.
+#
+# GitHub's default for `run:` is `bash -e {0}`, which has NO pipefail: in `a | b`, the step's
+# exit status is `b`'s, so a failing `a` is invisible. `shell: bash` is
+# `bash --noprofile --norc -eo pipefail {0}`, which is the same shell WITH it.
+#
+# This is not hypothetical here. `ci.yml` pipes `git diff | awk` to compute the count the
+# append-only guard fails on, and `backup.yml` pipes `ls | head -1` to choose the artefact it
+# verifies. A guard whose input command failed silently reports the empty answer as the safe
+# one -- the `0 deletions` case and the `no artefact` case both look like success.
+#
+# It has cost two sessions already, on gradle and then on supabase, and the second was hit by
+# the person who had written the entry about the first.
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: migration-drift
   cancel-in-progress: false
