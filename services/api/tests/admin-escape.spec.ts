@@ -93,17 +93,19 @@ describe.skipIf(!reachable)('MR-40 A3 — the admin escape in list_consent_recor
     });
   });
 
-  // `it.fails` states the CORRECT property and records that it does not currently hold.
+  // **These two were `it.fails` from MR-40 until MR-42 closed the escape, and the mechanism
+  // worked exactly as designed.**
   //
-  // Not `expect(...).toBe(theWrongThing)`: a characterisation test that asserts the defect
-  // reads as approval of it, and the next person to fix the function would have to delete an
-  // assertion that looks deliberate. This way the property is written down as it should be,
-  // CI stays green on a known-open defect, and **the moment somebody closes the escape these
-  // two turn red** — because `it.fails` fails when the test passes — which forces the fixer
-  // to come here and invert them on purpose.
+  // They always stated the CORRECT property. `it.fails` recorded that it did not yet hold —
+  // rather than `expect(...).toBe(theWrongThing)`, which reads as approval of the defect and
+  // would have made the eventual fixer delete an assertion that looked deliberate. CI stayed
+  // green on a known-open defect without hiding it, and the moment the function was fixed
+  // these turned RED, because `it.fails` fails when the test passes. That red is what forced
+  // this deliberate update.
   //
-  // REGISTERED AS `BE-W101`. Do not "fix" these tests; fix the function.
-  it.fails('read_consent_record: an admin of A must NOT read B’s record by id', async () => {
+  // `BE-W101` is CLOSED by `20260917000100_close_the_admin_escape.sql`. They are ordinary
+  // assertions now. Do not weaken them: they are the two sites that were proven open.
+  it('read_consent_record: an admin of A must NOT read B’s record by id', async () => {
     // The single-row sibling, tested to establish whether the shape generalises rather than
     // inferring it from seven identical `where` clauses. Grep locates; it does not decide.
     await asUserTx(world.users.admin, async (client) => {
@@ -119,7 +121,7 @@ describe.skipIf(!reachable)('MR-40 A3 — the admin escape in list_consent_recor
     });
   });
 
-  it.fails('an admin of organisation A must NOT see organisation B’s consent record', async () => {
+  it('an admin of organisation A must NOT see organisation B’s consent record', async () => {
     await asUserTx(world.users.admin, async (client) => {
       const id = randomUUID();
       await rivalConsentRecord(client, id);
@@ -132,3 +134,53 @@ describe.skipIf(!reachable)('MR-40 A3 — the admin escape in list_consent_recor
     });
   });
 });
+
+/**
+ * MR-42 A2/A5 — the boundary asserted over the whole POPULATION, not over a sample.
+ *
+ * The eight sites were found by matching one string. A ninth path — `approve_call_reports_bulk`
+ * — carries no scoping of its own at all and never matched it; it is safe only because it
+ * delegates per id to `approve_call_report`. **A string match cannot find the function nobody
+ * has written yet**, which is the failure mode G-RLS-C had: its `function` path tested
+ * `search_doctors` and nothing else, a sample of one where the catalogue holds 83.
+ *
+ * So this asks the catalogue instead, and it is the same assertion the migration makes about
+ * itself at deploy time. Duplicated on purpose: the migration guard fails a DEPLOY, this fails
+ * a BUILD, and the two catch the regression at different moments.
+ */
+describe.skipIf(!reachable)(
+  'MR-42 — no SECURITY DEFINER body short-circuits the tenant scope',
+  () => {
+    const OFFENDERS = `select coalesce(string_agg(p.proname, ', ' order by p.proname), '') as offenders
+       from pg_proc p
+       join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.prosecdef
+        and pg_get_functiondef(p.oid) like '%v_role = ''admin'' or%'`;
+
+    it('finds none, across every SECURITY DEFINER function in public', async () => {
+      await inRolledBackTransaction(async (client) => {
+        const { rows } = await client.query<{ offenders: string }>(OFFENDERS);
+        expect(rows[0]?.offenders).toBe('');
+      });
+    });
+
+    it('and the query can SEE one — the positive control', async () => {
+      // Without this, an empty result is indistinguishable from a query that matches nothing
+      // ever: a typo in the LIKE pattern would make the assertion above pass for all time.
+      // `visible_user_ids` uses `if v_role = 'admin' then`, which deliberately does NOT match,
+      // so this control also proves the pattern is narrow enough to leave those two alone.
+      await inRolledBackTransaction(async (client) => {
+        await client.query('reset role');
+        await client.query(`create function public.mr42_escape_probe() returns int
+         language plpgsql security definer as $probe$
+         declare v_role text; v_x boolean;
+         begin v_x := (v_role = 'admin' or 1 = 1); return 1; end; $probe$`);
+
+        const { rows } = await client.query<{ offenders: string }>(OFFENDERS);
+        expect(rows[0]?.offenders).toContain('mr42_escape_probe');
+        expect(rows[0]?.offenders).not.toContain('visible_user_ids');
+      });
+    });
+  },
+);
