@@ -20,6 +20,8 @@ const visit = (over: Partial<Visit> = {}): Visit =>
     scheduledFor: '2026-08-10T10:00:00+05:30',
     startedAt: null,
     completedAt: null,
+    // MR-48. The server's day for this visit (`visit_day()`), which Today now reads.
+    visitDay: '2026-08-10',
     receivedAt: '2026-08-10T08:00:00+05:30',
     createdAt: '2026-08-10T08:00:00+05:30',
     updatedAt: '2026-08-10T08:00:00+05:30',
@@ -65,13 +67,6 @@ const doctor = (over: Partial<Doctor> = {}): Doctor =>
  */
 const DAY = '2026-08-10';
 
-/**
- * MR-15 A2. The zone is now an argument, so these cases say which day boundary they mean
- * instead of inheriting the handset's. The fixtures are all `+05:30`, so IST is the frame
- * they were written in.
- */
-const IST = { timeZone: 'Asia/Kolkata', source: 'territory' } as const;
-
 describe('MR-12 D3 — a not-met visit is attended, not undone', () => {
   it('counts not_met separately from completed, and neither as the other', () => {
     const summary = summariseDay(
@@ -86,7 +81,6 @@ describe('MR-12 D3 — a not-met visit is attended, not undone', () => {
       ],
       [doctor()],
       DAY,
-      IST,
     );
     expect(summary.planned).toBe(3);
     expect(summary.done, 'a not-met visit was counted as completed').toBe(1);
@@ -106,7 +100,6 @@ describe('MR-12 D3 — a not-met visit is attended, not undone', () => {
       ],
       [doctor()],
       DAY,
-      IST,
     );
     expect(summary.next).toBeNull();
   });
@@ -122,7 +115,6 @@ describe('what the day counts', () => {
       ],
       [doctor()],
       DAY,
-      IST,
     );
     expect(summary.done).toBe(2);
     expect(summary.planned).toBe(3);
@@ -138,7 +130,6 @@ describe('what the day counts', () => {
       ],
       [doctor()],
       DAY,
-      IST,
     );
     expect(summary.done).toBe(1);
     expect(summary.planned).toBe(1);
@@ -162,7 +153,6 @@ describe('which visit is next', () => {
       ],
       [doctor()],
       DAY,
-      IST,
     );
     expect(summary.next?.visitId).toBe('66666666-6666-4666-8666-666666666602');
   });
@@ -187,7 +177,6 @@ describe('which visit is next', () => {
       ],
       [doctor()],
       DAY,
-      IST,
     );
     expect(summary.next?.visitId).toBe('66666666-6666-4666-8666-666666666602');
   });
@@ -206,26 +195,25 @@ describe('which visit is next', () => {
       ],
       [doctor()],
       DAY,
-      IST,
     );
     expect(summary.next?.visitId).toBe('66666666-6666-4666-8666-666666666602');
   });
 
   it('is null when the day is finished', () => {
-    const summary = summariseDay([visit({ status: 'completed' })], [doctor()], DAY, IST);
+    const summary = summariseDay([visit({ status: 'completed' })], [doctor()], DAY);
     expect(summary.next).toBeNull();
     expect(summary.done).toBe(1);
   });
 
   it('names the doctor and the clinic from the address the visit points at', () => {
-    const summary = summariseDay([visit()], [doctor()], DAY, IST);
+    const summary = summariseDay([visit()], [doctor()], DAY);
     expect(summary.next?.doctorName).toBe('Dr Rohini Kulkarni');
     expect(summary.next?.clinic).toBe('Sunrise Clinic, Prabhadevi');
   });
 
   it('says so plainly when the doctor is not in the list it was given', () => {
     // Rendering a blank name would look like a loading state that never resolves.
-    const summary = summariseDay([visit()], [], DAY, IST);
+    const summary = summariseDay([visit()], [], DAY);
     expect(summary.next?.doctorName).toBe('Doctor not in your list');
     expect(summary.next?.clinic).toBeNull();
   });
@@ -248,13 +236,12 @@ describe('the times shown are the server’s', () => {
       ],
       [doctor()],
       DAY,
-      IST,
     );
     expect(summary.startedAt).toBe('2026-08-10T08:55:00+05:30');
   });
 
   it('has no start time before the first visit begins', () => {
-    expect(summariseDay([visit({ startedAt: null })], [doctor()], DAY, IST).startedAt).toBeNull();
+    expect(summariseDay([visit({ startedAt: null })], [doctor()], DAY).startedAt).toBeNull();
   });
 
   it('reads the clock off the timestamp instead of reinterpreting its offset', () => {
@@ -289,11 +276,11 @@ describe('the day is scoped to the day', () => {
           id: '66666666-6666-4666-8666-666666666602',
           status: 'planned',
           scheduledFor: `${YESTERDAY}T09:00:00+05:30`,
+          visitDay: YESTERDAY,
         }),
       ],
       [doctor()],
       DAY,
-      IST,
     );
     expect(summary.planned).toBe(1);
     expect(summary.done).toBe(1);
@@ -308,11 +295,11 @@ describe('the day is scoped to the day', () => {
           id: '66666666-6666-4666-8666-666666666602',
           status: 'planned',
           scheduledFor: `${YESTERDAY}T07:30:00+05:30`,
+          visitDay: YESTERDAY,
         }),
       ],
       [doctor()],
       DAY,
-      IST,
     );
     expect(summary.next).toBeNull();
     expect(summary.planned).toBe(0);
@@ -328,7 +315,6 @@ describe('the day is scoped to the day', () => {
       ],
       [doctor()],
       DAY,
-      IST,
     );
     expect(summary.planned).toBe(2);
     expect(summary.done).toBe(1);
@@ -345,11 +331,11 @@ describe('the day is scoped to the day', () => {
           status: 'completed',
           scheduledFor: null,
           startedAt: `${DAY}T11:00:00+05:30`,
+          visitDay: DAY,
         }),
       ],
       [doctor()],
       DAY,
-      IST,
     );
     expect(summary.done).toBe(1);
   });
@@ -365,35 +351,108 @@ describe('the day is scoped to the day', () => {
           status: 'planned',
           scheduledFor: null,
           startedAt: null,
+          visitDay: null,
         }),
       ],
       [doctor()],
       DAY,
-      IST,
     );
     expect(summary.planned).toBe(0);
     expect(summary.next).toBeNull();
   });
 
-  it('files an early-morning IST visit on the IST day, not the UTC one', () => {
-    // MR-15 A2. This case used to assert `deviceDay()`, which read the HANDSET. That
-    // function is gone: the day now comes from the server's clock in the territory's zone.
-    // 05:00 IST on the 10th is 23:30 UTC on the 9th, so a UTC boundary files it under the
-    // wrong day -- and 05:30 IST is exactly where a UTC day cuts an Indian working
-    // morning.
+  it('follows the SERVER’s day at 18:45Z, where UTC and IST disagree — either way', () => {
+    // MR-48. 18:45Z on the 9th is 00:15 IST on the 10th. Which date that is belongs to
+    // `visit_day()`, in the MR's territory zone. Today must follow the server's answer and
+    // never re-decide it from the instant: the same visit is today's when the server says the
+    // 10th, and not when it says the 9th (the UTC fallback).
+    const at = '2026-08-09T18:45:00+00:00';
+    const onThe = (visitDay: string): number =>
+      summariseDay(
+        [visit({ id: '66666666-6666-4666-8666-666666666605', scheduledFor: at, visitDay })],
+        [doctor()],
+        DAY,
+      ).planned;
+    expect(onThe('2026-08-10')).toBe(1);
+    expect(onThe('2026-08-09')).toBe(0);
+  });
+});
+
+/**
+ * MR-48 — `FE-W57`, the case the Pixel 10 found. An MR checked in on the 21st to a visit
+ * scheduled for the 16th saw "Nothing planned for today · 0 of 0", and since Today's
+ * next-visit card is the only way into a visit, check-out was unreachable.
+ */
+describe('a visit in progress is always on Today, whatever its date', () => {
+  const EARLIER = '2026-08-05';
+
+  it('SHOWS an in-progress visit whose day is an earlier one, and offers it as next', () => {
     const summary = summariseDay(
       [
         visit({
-          id: '66666666-6666-4666-8666-666666666605',
-          status: 'planned',
-          scheduledFor: '2026-08-09T23:30:00+00:00',
-          startedAt: null,
+          id: '66666666-6666-4666-8666-666666666606',
+          status: 'in_progress',
+          scheduledFor: `${EARLIER}T10:00:00+05:30`,
+          startedAt: `${EARLIER}T10:05:00+05:30`,
+          visitDay: EARLIER,
         }),
       ],
       [doctor()],
-      '2026-08-10',
-      IST,
+      DAY,
     );
+    expect(summary.next?.visitId).toBe('66666666-6666-4666-8666-666666666606');
     expect(summary.planned).toBe(1);
+  });
+
+  it('shows it even when the server has not sent its day', () => {
+    const summary = summariseDay(
+      [
+        visit({
+          id: '66666666-6666-4666-8666-666666666607',
+          status: 'in_progress',
+          visitDay: null,
+        }),
+      ],
+      [doctor()],
+      DAY,
+    );
+    expect(summary.next?.visitId).toBe('66666666-6666-4666-8666-666666666607');
+  });
+
+  it('a COMPLETED visit from an earlier day stays off Today — only in-progress is exempt', () => {
+    const summary = summariseDay(
+      [
+        visit({
+          id: '66666666-6666-4666-8666-666666666609',
+          status: 'completed',
+          scheduledFor: `${EARLIER}T10:00:00+05:30`,
+          completedAt: `${EARLIER}T10:40:00+05:30`,
+          visitDay: EARLIER,
+        }),
+      ],
+      [doctor()],
+      DAY,
+    );
+    expect(summary.done).toBe(0);
+    expect(summary.planned).toBe(0);
+  });
+
+  it('NEGATIVE CONTROL: a PLANNED visit from an earlier day stays off Today', () => {
+    // Without this, "show everything" would pass the two cases above — and send the MR to a
+    // clinic for yesterday's visit, MR-14's defect.
+    const summary = summariseDay(
+      [
+        visit({
+          id: '66666666-6666-4666-8666-666666666608',
+          status: 'planned',
+          scheduledFor: `${EARLIER}T10:00:00+05:30`,
+          visitDay: EARLIER,
+        }),
+      ],
+      [doctor()],
+      DAY,
+    );
+    expect(summary.next).toBeNull();
+    expect(summary.planned).toBe(0);
   });
 });

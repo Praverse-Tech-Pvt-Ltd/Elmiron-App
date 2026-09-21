@@ -101,7 +101,7 @@ const MrToday = (): ReactNode => {
   const summary =
     today === null
       ? null
-      : summariseDay(visitsFromStore(store), doctorsFromStore(store), today, zone);
+      : summariseDay(visitsFromStore(store), doctorsFromStore(store), today);
   const startedAt = summary?.startedAt ?? null;
   const next = summary?.next ?? null;
 

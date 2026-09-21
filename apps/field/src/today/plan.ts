@@ -1,6 +1,4 @@
 import type { Doctor, Visit } from '@fieldforce/core';
-import { dayIn } from './territory-day';
-import type { TerritoryZone } from './territory-day';
 
 /**
  * The day, reduced to what B1 puts on screen.
@@ -89,18 +87,20 @@ const countsTowardTheDay = (visit: Visit): boolean => visit.status !== 'cancelle
  * `+00:00`. So the slice produced a UTC date and compared it against a device-local one,
  * two different frames, and it only looked right because the emulator is set to IST.
  *
- * The comparison is now between two TERRITORY days: the visit's instant read in the
- * territory's zone, against today read the same way from the server's clock.
+ * **MR-48 — `FE-W57`. The day is the SERVER's, and a visit in progress is always today's.**
+ * MR-15 A2 reckoned the day here from `scheduledFor ?? startedAt` in the territory zone. That
+ * was a third copy of the rule `visit_day()` now decides once, and it disagreed: on the Pixel
+ * 10 an MR checked in on the 21st to a visit scheduled for the 16th saw *"Nothing planned for
+ * today · 0 of 0"*, and because this screen's next-visit card is the ONLY way into a visit,
+ * **check-out was unreachable** — the MR-24 defect by another route.
  *
- * **A visit with no date is not claimed for today.** An unscheduled visit falls back to
- * `startedAt`, which is server-stamped; with neither, nothing says it belongs to this day,
- * and asserting that it does would be presenting an absence as a fact. It is not lost —
- * it is simply not part of today's count.
+ * The decision (MR-48 brief): Today shows the visits whose server day is today, AND always
+ * shows a visit that is `in_progress`, whatever its date — the visit the MR is standing inside
+ * is the one thing this screen must never hide. A visit whose day the server has not sent
+ * (`visitDay === null`) is not claimed for today unless it is in progress.
  */
-const onDay = (visit: Visit, day: string, zone: TerritoryZone): boolean => {
-  const stamp = visit.scheduledFor ?? visit.startedAt;
-  return stamp !== null && dayIn(stamp, zone) === day;
-};
+const onDay = (visit: Visit, day: string): boolean =>
+  visit.status === 'in_progress' || visit.visitDay === day;
 
 /**
  * **`deviceDay()` was here and is deliberately gone — MR-15 A2.**
@@ -179,9 +179,8 @@ export const summariseDay = (
   visits: readonly Visit[],
   doctors: readonly Doctor[],
   day: string,
-  zone: TerritoryZone,
 ): DaySummary => {
-  const counted = visits.filter((visit) => countsTowardTheDay(visit) && onDay(visit, day, zone));
+  const counted = visits.filter((visit) => countsTowardTheDay(visit) && onDay(visit, day));
   const byId = new Map(doctors.map((doctor) => [doctor.id, doctor]));
 
   // `in_progress` comes before `planned`: a visit the MR is standing inside is the
