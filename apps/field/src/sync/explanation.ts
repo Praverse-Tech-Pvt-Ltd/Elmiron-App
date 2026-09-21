@@ -1,6 +1,7 @@
 import { refusalForSqlState } from '@fieldforce/core';
 import type { RefusalCode, SyncRejectionCode } from '@fieldforce/core';
 import type { RejectionRecord } from './reducer';
+import type { PullFailure } from './pulled-store';
 
 /**
  * What the MR is shown about a refusal.
@@ -216,3 +217,21 @@ export const presentRejection = (record: RejectionRecord): RejectionPresentation
     receivedAt: record.receivedAt,
   };
 };
+
+/**
+ * MR-48 / `FE-W56`. **An expired sign-in is not a refusal and not a lost signal.**
+ *
+ * PostgREST answers an expired token with 401 `PGRST303` and a malformed one with `PGRST301`
+ * (measured); `refusals.ts` maps both to `not_authenticated`. On the Pixel 10 the Doctors screen
+ * rendered that as *"The server refused this sync (PGRST303)"*, and the visit and samples
+ * screens would have said *"The app could not reach the server"* -- one invents a decision, the
+ * other a network fault. The MR's remedy is neither waiting nor calling a manager: it is to sign
+ * in again. Every screen that renders a pull failure checks this FIRST, so the wording is one.
+ */
+export const sessionExpired = (failure: PullFailure | null): boolean =>
+  failure !== null && failure.kind === 'refused' && failure.refusal.code === 'not_authenticated';
+
+export const SESSION_EXPIRED = {
+  title: 'Your sign-in has expired',
+  detail: 'Sign out and sign in again from Me to bring this up to date.',
+} as const;

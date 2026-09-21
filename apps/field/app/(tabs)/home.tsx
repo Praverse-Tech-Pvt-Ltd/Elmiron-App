@@ -13,6 +13,7 @@ import { summariseDay } from '../../src/today/plan';
 import { clockIn, dayMonthIn } from '../../src/today/territory-day';
 import type { TerritoryZone } from '../../src/today/territory-day';
 import type { DayOrigin, PullFailure } from '../../src/sync/pulled-store';
+import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
 
 /**
  * **`FE-W40` B5. Why there is no day — and an EXPIRED anchor gets its own sentence.**
@@ -147,17 +148,19 @@ const MrToday = (): ReactNode => {
   const failure =
     pullFailure === null
       ? null
-      : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
-        ? {
-            title: 'You do not have access to this plan',
-            detail: 'The server refused this request for your account.',
-          }
-        : nothingToShow
+      : sessionExpired(pullFailure)
+        ? SESSION_EXPIRED
+        : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
           ? {
-              title: 'Could not load your day',
-              detail: dayDetail(dayOrigin, zone, pullFailure),
+              title: 'You do not have access to this plan',
+              detail: 'The server refused this request for your account.',
             }
-          : null;
+          : nothingToShow
+            ? {
+                title: 'Could not load your day',
+                detail: dayDetail(dayOrigin, zone, pullFailure),
+              }
+            : null;
 
   return (
     <TodayScreen

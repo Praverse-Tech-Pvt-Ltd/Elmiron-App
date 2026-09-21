@@ -8,6 +8,7 @@ import { beatPlanView, onPlanDoctorIds } from '../../src/today/beat-plan-view';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { FILTER_LABELS, buildDoctorRows, lastSeenLabel, rankDoctors } from '../../src/doctors/list';
 import type { DoctorFilter } from '../../src/doctors/list';
+import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
 
 /**
  * B8 — the doctor list, searchable.
@@ -72,18 +73,20 @@ export default function Doctors(): ReactNode {
   const failure =
     pullFailure === null
       ? null
-      : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
-        ? {
-            title: 'You do not have access to this list',
-            detail: 'The server refused this request for your account.',
-          }
-        : {
-            title: 'Could not load doctors',
-            detail:
-              pullFailure.kind === 'refused'
-                ? `The server refused this sync (${pullFailure.refusal.sqlState}).`
-                : 'The app could not reach the server. It will try again when you come back to it.',
-          };
+      : sessionExpired(pullFailure)
+        ? SESSION_EXPIRED
+        : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
+          ? {
+              title: 'You do not have access to this list',
+              detail: 'The server refused this request for your account.',
+            }
+          : {
+              title: 'Could not load doctors',
+              detail:
+                pullFailure.kind === 'refused'
+                  ? `The server refused this sync (${pullFailure.refusal.sqlState}).`
+                  : 'The app could not reach the server. It will try again when you come back to it.',
+            };
   const loading = status === 'loading';
 
   // `Date.now()` is read once per data change rather than per render: a list whose

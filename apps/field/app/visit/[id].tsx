@@ -42,6 +42,7 @@ import { unavailableReason } from '../../src/capture/preconditions';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { clockIn } from '../../src/today/territory-day';
+import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
 
 /**
  * B4 / B5 / B6 — one visit, from arriving to leaving.
@@ -370,15 +371,17 @@ export default function VisitRoute(): ReactNode {
           failure ??
           (pullFailure === null
             ? null
-            : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
-              ? {
-                  title: 'You do not have access to this visit',
-                  detail: 'The server refused this request for your account.',
-                }
-              : {
-                  title: 'Could not load this visit',
-                  detail: 'The app could not reach the server. It will try again.',
-                })
+            : sessionExpired(pullFailure)
+              ? SESSION_EXPIRED
+              : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
+                ? {
+                    title: 'You do not have access to this visit',
+                    detail: 'The server refused this request for your account.',
+                  }
+                : {
+                    title: 'Could not load this visit',
+                    detail: 'The app could not reach the server. It will try again.',
+                  })
         }
         loading={loading}
         onAction={advance}

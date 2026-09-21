@@ -28,7 +28,7 @@ import {
   offerableVersions,
 } from '../../src/consent/record';
 import { consentQueueItem, sendOrQueue } from '../../src/sync/outbox';
-import { refusalTextFor } from '../../src/sync/explanation';
+import { SESSION_EXPIRED, refusalTextFor, sessionExpired } from '../../src/sync/explanation';
 
 /**
  * Phase 3 — the handoff, as a route.
@@ -332,26 +332,28 @@ export default function ConsentRoute(): ReactNode {
           // `not_permitted` is deliberately still unconditional: that is a server DECISION
           // about this MR's access, not a silence, and an MR who has lost access to a visit
           // must be told even while a cached copy sits in the store.
-          (pullFailure !== null &&
-          pullFailure.kind === 'refused' &&
-          pullFailure.refusal.code === 'not_permitted'
-            ? {
-                title: 'You do not have access to this visit',
-                detail: 'The server refused this request for your account.',
-              }
-            : // Only when the VISIT itself is missing. Keyed on the notices instead, this
-              // said "Could not load this visit" while holding the visit -- the caught-by-test
-              // version of the very defect B3 is about. With the visit present and no notices,
-              // `blockedReason(notice, failed)` has the accurate sentence and a next step:
-              // "the consent notice could not be loaded ... you can ask once you have signal".
-              pullFailure !== null && (visit === null || doctor === null)
+          (sessionExpired(pullFailure)
+            ? SESSION_EXPIRED
+            : pullFailure !== null &&
+                pullFailure.kind === 'refused' &&
+                pullFailure.refusal.code === 'not_permitted'
               ? {
-                  title: 'Could not load this visit',
-                  detail: 'The app could not reach the server. It will try again.',
+                  title: 'You do not have access to this visit',
+                  detail: 'The server refused this request for your account.',
                 }
-              : settled
-                ? blockedReason(notice, failed)
-                : null)
+              : // Only when the VISIT itself is missing. Keyed on the notices instead, this
+                // said "Could not load this visit" while holding the visit -- the caught-by-test
+                // version of the very defect B3 is about. With the visit present and no notices,
+                // `blockedReason(notice, failed)` has the accurate sentence and a next step:
+                // "the consent notice could not be loaded ... you can ask once you have signal".
+                pullFailure !== null && (visit === null || doctor === null)
+                ? {
+                    title: 'Could not load this visit',
+                    detail: 'The app could not reach the server. It will try again.',
+                  }
+                : settled
+                  ? blockedReason(notice, failed)
+                  : null)
         }
         busy={busy}
         loading={!settled || status === 'loading'}

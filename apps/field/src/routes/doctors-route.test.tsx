@@ -108,6 +108,24 @@ describe('app/doctors.tsx — how the client presents a server decision', () => 
     expect(screen.queryByText('No doctors in your territory yet.')).toBeNull();
   });
 
+  it('names an EXPIRED sign-in as one — not a refusal, not a lost signal (FE-W56)', async () => {
+    // Seen on the Pixel 10: "The server refused this sync (PGRST303)". PostgREST answers an
+    // expired token with 401 PGRST303; the server refused nothing, and the remedy is to sign in.
+    mockStore.mockReturnValue(
+      pulled({
+        status: 'failed',
+        failure: {
+          kind: 'refused',
+          refusal: { code: 'not_authenticated', sqlState: 'PGRST303', actionable: true },
+        },
+      }),
+    );
+    await render(<Doctors />);
+    expect(await screen.findByText('Your sign-in has expired')).toBeTruthy();
+    expect(screen.queryByText(/refused/u)).toBeNull();
+    expect(screen.queryByText(/could not reach/u)).toBeNull();
+  });
+
   it('distinguishes an empty territory from a refused one', async () => {
     // Same screen, different server answer, different words. If these two collapsed into
     // one state the MR could not tell "you have none" from "you may not look".

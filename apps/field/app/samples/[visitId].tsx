@@ -14,7 +14,7 @@ import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { blankLine, CAP_NOTE, errorsFor, sampleRequest } from '../../src/capture/samples';
 import { sampleQueueItem, sendOrQueue } from '../../src/sync/outbox';
-import { refusalTextFor } from '../../src/sync/explanation';
+import { SESSION_EXPIRED, refusalTextFor, sessionExpired } from '../../src/sync/explanation';
 import { dayMonthIn } from '../../src/today/territory-day';
 
 /**
@@ -114,17 +114,19 @@ export default function SamplesRoute(): ReactNode {
     failure ??
     (pullFailure === null
       ? null
-      : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
-        ? {
-            title: 'You do not have access to this visit',
-            detail: 'The server refused this request for your account.',
-          }
-        : lacksWhatItNeeds
+      : sessionExpired(pullFailure)
+        ? SESSION_EXPIRED
+        : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
           ? {
-              title: 'Could not load this visit',
-              detail: 'The app could not reach the server. It will try again.',
+              title: 'You do not have access to this visit',
+              detail: 'The server refused this request for your account.',
             }
-          : null);
+          : lacksWhatItNeeds
+            ? {
+                title: 'Could not load this visit',
+                detail: 'The app could not reach the server. It will try again.',
+              }
+            : null);
 
   const record = (): void => {
     // MR-20 B2. See `preconditions.ts`: `busy` is silent on purpose, a missing visit or

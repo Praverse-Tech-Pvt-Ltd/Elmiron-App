@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
 import { BY_SQLSTATE } from '@fieldforce/core';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
+import { ANON_KEY, API_URL, mintAccessToken } from './auth.js';
 
 /**
  * FIX-13 B — the error contract and the database must agree, in both directions.
@@ -105,12 +106,48 @@ describe.skipIf(!reachable)('every SQLSTATE the database raises reaches the clie
     });
   });
 
+  /**
+   * MR-48 / `FE-W56`. **Codes the GATEWAY raises, measured, not listed.** An expired or malformed
+   * sign-in never reaches a function body: PostgREST answers it with its own code before the
+   * database is involved, so `pg_proc` cannot see it. Following this file's own instruction --
+   * "fix the derivation, do not delete the assertion" -- the derivation asks PostgREST, once per
+   * run, with an expired token and a malformed one, and counts what comes back. A static list of
+   * `PGRST` codes here would be the stale kind of entry B2 exists to catch.
+   */
+  const gatewayRaised = async (): Promise<string[]> => {
+    const expired = mintAccessToken(
+      { id: '00000000-0000-4000-8000-000000000001', role: 'mr', isActive: true, territoryId: null },
+      -3600,
+    );
+    const codes: string[] = [];
+    for (const token of [expired, 'not.a.token']) {
+      const response = await fetch(`${API_URL}/rest/v1/rpc/sync_pull`, {
+        method: 'POST',
+        headers: {
+          apikey: ANON_KEY,
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ p_cursor: null, p_entities: ['doctor'], p_limit: 1 }),
+      });
+      const body = (await response.json()) as { code?: unknown };
+      if (typeof body.code === 'string') codes.push(body.code);
+    }
+    return codes;
+  };
+
+  it('the gateway derivation measures what it claims: PGRST303 expired, PGRST301 malformed', async () => {
+    // The derivation's own positive control. If PostgREST changes its codes, this fails
+    // rather than B2 quietly passing on an empty measurement.
+    expect(await gatewayRaised()).toEqual(['PGRST303', 'PGRST301']);
+  });
+
   it('B2: no code is declared by the contract and raised by nothing', async () => {
     // The other direction, and it is not symmetry for its own sake. A mapping for a
     // refusal that cannot happen is decoration, and decoration makes the real entries
     // harder to trust: a reader who finds one dead row stops believing the rest.
     await inRolledBackTransaction(async (client) => {
-      const raised = new Set(await raisedSqlStates(client));
+      const raised = new Set([...(await raisedSqlStates(client)), ...(await gatewayRaised())]);
       const orphaned = Object.keys(BY_SQLSTATE).filter((state) => !raised.has(state));
       // If this fails: either the code stopped being raised and the mapping should go,
       // or it is raised somewhere this derivation cannot see -- in which case fix the

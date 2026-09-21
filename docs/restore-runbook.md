@@ -637,3 +637,63 @@ afterwards. It is a **floor**, not an estimate:
   between this rehearsal and the real thing.
 - **Production's data shape is unknown.** Phase 0 exists precisely because the one fact that
   decides whether this deploy succeeds has never been looked at.
+
+---
+
+## The deploy ORDER — MR-48, 21 September 2026
+
+**The section above is the rehearsed procedure for the migrations themselves (MR-34), written
+when 37 were pending. This section is the order around it, and it is not optional.** Measured on
+21 September: production has applied the first **19** migrations, ending at
+`20260817000200_purge_backlog_stall_detection.sql`; the repository has **64**, so **45** are
+pending, not 37. Re-read the drift run's list on the day — do not trust this count either.
+
+### 1. Pre-flight SELECT
+
+Run *Phase 0* above — one SELECT — and *Phase 1*.
+
+**Skipped:** if production has a user with no territory, `20260908000800` stops the deploy part-way
+(a crash with one organisation, a refusal with several), leaving it half-applied with no tenant
+boundary. `supabase db push` is not transactional across migrations.
+
+### 2. Configure shift hours — BEFORE the migrations
+
+Set `org_default_shift_window` (or per-territory rows in `territory_shift_windows`) to the working
+hours, in `Asia/Kolkata`. **Both tables already exist in production**: `territory_shift_windows`
+arrived in `20260812000100` and `app_thresholds` in `20260815000100`, both inside the 19. Writing
+either needs the owner's connection — MR-46 B1 measured that no signed-in role can.
+
+**Skipped:**
+
+- **The manager's coverage report moves visits.** MR-47's `coverage()` counts each MR's day in the
+  territory's zone and, with none configured, in **UTC, labelled `fallback_utc`** — a visit
+  finished between 00:00 and 05:30 IST lands on the previous day. The MR's own screen already
+  does this; the deploy would make the report agree with it on the wrong boundary.
+- **Every check-in and check-out is refused.** The shift-window check in `record_check_in` /
+  `record_check_out` raises `45002 shift_window_not_configured` when no window resolves.
+- **The MR's app shows every date and time in UTC**, with the zone caveat banner.
+
+### 3. Deploy the pending migrations
+
+*Phases 2–4* above: dry run, count, apply at the prompt (no `--yes`), then verify from the
+database — the drift check with `drifted: false` and nothing in either list.
+
+**Skipped:** production has `sync_pull` and `sync_push` — they arrived in `20260813000200`, inside
+the 19 — but not their later versions. A build from `main` sends check-in coordinates nested, which
+production's `apply_sync_item` reads flat until `20260911000200` (the insert fails with *"null value
+in column latitude"*, as that migration records), and its pull carries no `visit_day`, so the
+route counts no visit on any day.
+
+### 4. THEN load reference data
+
+`pnpm --filter @fieldforce/api seed:reference -- --data <the organisation's JSON> --apply --db-url "<pooler url>"`
+(the form the script's own header gives)
+— real names, territories, doctors and consent text. Without `--apply` it only prints what it would do.
+
+**Run before step 3, it fails — cleanly.** It writes `consent_text_versions.organisation_id`,
+a column added by `20260908001200_consent_text_versions_tenant.sql`, which production does not
+have. The seed runs in ONE transaction (`begin` … `rollback` on error), so nothing is written —
+but the operator has lost the slot and may be tempted to "fix" the seed instead of the order.
+
+**Skipped altogether:** there is nothing for a real MR to see — no territory, no doctor, no consent
+notice to show a doctor — and the consent screen refuses to ask without a notice.

@@ -36,6 +36,21 @@ import { blockReason, elapsedLabel, voiceNoteRequest } from '../../src/capture/r
  * was wrong: typed as `VoiceNote` it compiled cleanly and failed the moment a real
  * device ran it.
  */
+/**
+ * MR-48 / `FE-W54`. **The visit this note would be filed against is not here.**
+ *
+ * This screen still reads the visit from the mock, so a real visit id finds nothing and
+ * `visit` stays null. `save()` then returned on its first line: the MR pressed "Save this note"
+ * and nothing happened, with nothing said -- MR-20's silent button, on the one screen that holds
+ * the MR's own voice. Measured on the Pixel 10. It is said now, as soon as it is known and again
+ * on Save, and it states the one true thing about the audio: it stays on the phone (`FE-W53`).
+ */
+const VISIT_NOT_HERE = {
+  title: 'This note cannot be saved',
+  detail:
+    'The visit is not on this phone, so there is nothing to save the note against. The recording stays on this phone and is not sent.',
+} as const;
+
 export default function VoiceNoteRoute(): ReactNode {
   const { visitId } = useLocalSearchParams<{ visitId: string }>();
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -89,6 +104,9 @@ export default function VoiceNoteRoute(): ReactNode {
       if (stopped()) return;
       const found = visits.items.find((candidate) => candidate.id === visitId) ?? null;
       setVisit(found);
+      // Never over another failure: a microphone that will not open is the more immediate
+      // remedy, and this one is said again on Save regardless.
+      if (found === null) setFailure((held) => held ?? VISIT_NOT_HERE);
       setDoctor(
         found === null
           ? null
@@ -139,7 +157,11 @@ export default function VoiceNoteRoute(): ReactNode {
   };
 
   const save = (): void => {
-    if (busy || visit === null || captured === null) return;
+    if (busy || captured === null) return;
+    if (visit === null) {
+      setFailure(VISIT_NOT_HERE);
+      return;
+    }
     setBusy(true);
 
     void createClientForScenario()

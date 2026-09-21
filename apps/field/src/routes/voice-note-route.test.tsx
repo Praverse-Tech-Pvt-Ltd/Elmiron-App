@@ -90,3 +90,46 @@ describe('app/voice-note/[visitId].tsx — each failure carries its own remedy',
     expect(screen.queryByText('Could not load this visit')).toBeNull();
   });
 });
+
+describe('app/voice-note/[visitId].tsx — FE-W54, a save that cannot happen is said', () => {
+  it('says the note cannot be saved when the visit is not on this phone', async () => {
+    // Measured on the Pixel 10: a real visit id is not in the mock's list, and "Save this note"
+    // did nothing at all, with nothing said.
+    base();
+    mockListVisits.mockResolvedValue({ items: [] });
+
+    await render(<VoiceNoteRoute />);
+
+    expect(await screen.findByText('This note cannot be saved')).toBeTruthy();
+    expect(screen.getByText(/The recording stays on this phone and is not sent/u)).toBeTruthy();
+  });
+
+  it('POSITIVE CONTROL: says nothing of the kind when the visit IS here', async () => {
+    base();
+    mockListVisits.mockResolvedValue({
+      items: [
+        {
+          id: 'visit-1',
+          mrId: 'm',
+          doctorId: 'd',
+          beatPlanId: null,
+          clinicAddressId: null,
+          status: 'in_progress',
+          notMetReason: null,
+          scheduledFor: null,
+          startedAt: null,
+          completedAt: null,
+          visitDay: null,
+          receivedAt: '2026-09-21T06:00:00.000Z',
+          createdAt: '2026-09-21T06:00:00.000Z',
+          updatedAt: '2026-09-21T06:00:00.000Z',
+        },
+      ],
+    });
+
+    await render(<VoiceNoteRoute />);
+
+    expect(await screen.findByText('Hold to record')).toBeTruthy();
+    expect(screen.queryByText('This note cannot be saved')).toBeNull();
+  });
+});
