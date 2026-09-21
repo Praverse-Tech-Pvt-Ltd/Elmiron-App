@@ -697,3 +697,24 @@ but the operator has lost the slot and may be tempted to "fix" the seed instead 
 
 **Skipped altogether:** there is nothing for a real MR to see — no territory, no doctor, no consent
 notice to show a doctor — and the consent screen refuses to ask without a notice.
+
+### Addendum to step 1 — who has signed in (MR-49 E2)
+
+Run this beside the Phase 0 query. It answers the question the operator and the signatory need
+before the notice fix ships: **has anyone outside the team signed in, and so been shown the false
+privacy notice** (`blocked-on-you` 2.6)?
+
+```bash
+psql "<direct url>" -At -c "select 'signed_in_ever=' || count(*) filter (where last_sign_in_at is not null) || ' signed_in_outside_test_domains=' || count(*) filter (where last_sign_in_at is not null and email not like '%@example.test') || ' most_recent_sign_in=' || coalesce(max(last_sign_in_at)::text, 'none') from auth.users;"
+```
+
+| Result | What it means |
+| --- | --- |
+| `signed_in_outside_test_domains=0` | Nobody outside the synthetic `@example.test` accounts has signed in. The false notice has reached no real rep |
+| `signed_in_outside_test_domains>0` | **Real accounts have signed in.** List them (`select email, last_sign_in_at from auth.users where last_sign_in_at is not null and email not like '%@example.test'`) — each saw the false notice at first run, and the list is what the signatory needs |
+
+**What it cannot tell you, stated:** `last_sign_in_at` is each user's LATEST sign-in, so it shows
+that someone signed in, not when first; it counts the console as well as the field app, so a
+manager's sign-in is not a rep's; and a test account on a real domain would count as real. Measured
+locally, 21 September: `signed_in_ever=66 signed_in_outside_test_domains=0`.
+
