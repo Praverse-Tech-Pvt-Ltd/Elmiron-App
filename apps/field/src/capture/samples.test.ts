@@ -8,6 +8,7 @@ import {
   lineError,
   parseDeclaredValue,
   sampleRequest,
+  samplesDateLabel,
 } from './samples';
 
 const line = (over: Partial<SampleLine> = {}): SampleLine => ({
@@ -95,5 +96,30 @@ describe('the cap note', () => {
     // that implies the app is holding the UCPMP line.
     expect(CAP_NOTE).toMatch(/does not count/u);
     expect(CAP_NOTE).toMatch(/manager/u);
+  });
+});
+
+/**
+ * MR-49 B3 -- the date an MR confirms on a samples record is the SERVER's day for the visit,
+ * never the schedule and never a zone reckoned on the phone. Tested where both boundaries bite.
+ */
+describe('samplesDateLabel -- FE-W58 (1), at the month and 18:30Z boundaries', () => {
+  it('MONTH BOUNDARY: scheduled 30 September, happened 1 October -> "1 Oct", not "30 Sep"', () => {
+    expect(samplesDateLabel({ visitDay: '2026-10-01' })).toBe('1 Oct');
+  });
+
+  it('18:45Z on 30 September is 00:15 IST on 1 October: follows the server either way', () => {
+    // An India-time territory: visit_day() says the 1st. A territory on the UTC fallback: the 30th.
+    // The label is whichever the server sent -- it does not re-decide it from the instant.
+    expect(samplesDateLabel({ visitDay: '2026-10-01' })).toBe('1 Oct');
+    expect(samplesDateLabel({ visitDay: '2026-09-30' })).toBe('30 Sep');
+  });
+
+  it('says "this visit" when the server has not sent the day, rather than falling back to the schedule', () => {
+    expect(samplesDateLabel({ visitDay: null })).toBe('this visit');
+  });
+
+  it('says "today" when the visit itself is not on the phone', () => {
+    expect(samplesDateLabel(null)).toBe('today');
   });
 });

@@ -1,6 +1,7 @@
 import { CreateSampleAndInputRequestSchema } from '@fieldforce/core';
 import type { CreateSampleAndInputRequest } from '@fieldforce/core';
 import type { SampleLine } from '@fieldforce/ui';
+import { dayMonthFrom } from '../doctors/profile';
 
 /**
  * C5's arithmetic and validation, away from the renderer.
@@ -121,3 +122,19 @@ export const sampleRequest = (draft: SampleRequestDraft): CreateSampleAndInputRe
  */
 export const CAP_NOTE =
   'This app does not count your samples against the UCPMP cap — nothing in it has been given your limit or your month to date. Keep your own count, and check with your manager before you go near it.';
+
+/**
+ * MR-49 B / `FE-W58` (1). **The date an MR confirms on a samples record is the visit's day, from
+ * the server.**
+ *
+ * This was `dayMonthIn(visit.scheduledFor ?? visit.receivedAt, zone)`: the SCHEDULE. At a visit
+ * scheduled for 30 September and happening on 1 October, the MR confirmed samples "30 Sep" on a
+ * UCPMP-relevant record. `visit.visitDay` is `visit_day()`'s answer -- the day the visit actually
+ * happened in the MR's territory zone (MR-47) -- sent on the pull. It is a plain date, so
+ * `dayMonthFrom` formats it without reckoning a zone.
+ *
+ * With no server day (a visit the pull has not described yet) the label says so rather than
+ * falling back to the schedule, which is the copy this replaces.
+ */
+export const samplesDateLabel = (visit: { readonly visitDay: string | null } | null): string =>
+  visit === null ? 'today' : visit.visitDay === null ? 'this visit' : dayMonthFrom(visit.visitDay);

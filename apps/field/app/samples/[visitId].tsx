@@ -12,10 +12,15 @@ import { QUEUE_UNREADABLE } from '../../src/sync/async-storage-store';
 import { unavailableReason } from '../../src/capture/preconditions';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
-import { blankLine, CAP_NOTE, errorsFor, sampleRequest } from '../../src/capture/samples';
+import {
+  blankLine,
+  CAP_NOTE,
+  errorsFor,
+  sampleRequest,
+  samplesDateLabel,
+} from '../../src/capture/samples';
 import { sampleQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { SESSION_EXPIRED, refusalTextFor, sessionExpired } from '../../src/sync/explanation';
-import { dayMonthIn } from '../../src/today/territory-day';
 
 /**
  * C5 — the samples binding.
@@ -52,7 +57,7 @@ export default function SamplesRoute(): ReactNode {
    * No `loading` state of its own any more: the provider owns it, and a second one here
    * could disagree with it.
    */
-  const { store, status, zone, failure: pullFailure } = usePulledStore();
+  const { store, status, failure: pullFailure } = usePulledStore();
   const visit = visitsFromStore(store).find((candidate) => candidate.id === visitId) ?? null;
   const doctor =
     visit === null
@@ -234,7 +239,12 @@ export default function SamplesRoute(): ReactNode {
           // `scheduledFor` is the visit's own date, and `dayMonthIn` reads it in the
           // territory's zone. An MR confirming what they handed over at THIS visit, on a
           // record that is UCPMP-relevant, gets the visit's date.
-          visit === null ? 'today' : dayMonthIn(visit.scheduledFor ?? visit.receivedAt, zone)
+          //
+          // MR-49 B -- CORRECTED. The schedule is not the day the samples are handed over: a
+          // visit scheduled 30 September and happening on 1 October read "30 Sep". The label
+          // is now the server's day for the visit (`visitDay`, `visit_day()`). See
+          // `samplesDateLabel`.
+          samplesDateLabel(visit)
         }
         doctorName={doctor?.fullName ?? 'This visit'}
         failure={shownFailure}
