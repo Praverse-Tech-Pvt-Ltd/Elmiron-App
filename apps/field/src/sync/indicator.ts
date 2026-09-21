@@ -54,3 +54,28 @@ export const indicatorStateFor = (load: QueueLoad): UiSyncQueueState => {
   // rather than parsing, which keeps the offset the server sent.
   return { kind: 'idle', at: latest === undefined ? null : clockFrom(latest) };
 };
+
+/**
+ * MR-49 / `FE-W61`. What the Me screen says above "Sign out" when this MR still has work on the
+ * phone, or `null` when there is none.
+ *
+ * Unsent is `queued`, `in_flight` or `failed` -- everything the server has not taken. The claim is
+ * exactly what the per-user queue now guarantees: it stays under this MR's account, it goes the
+ * next time THEY sign in here, and nobody else who signs in on this phone sees or sends it.
+ */
+export const unsentBeforeSignOut = (
+  items: readonly { readonly status: string }[],
+): { title: string; detail: string } | null => {
+  const count = items.filter(
+    (item) => item.status === 'queued' || item.status === 'in_flight' || item.status === 'failed',
+  ).length;
+  if (count === 0) return null;
+  return {
+    title:
+      count === 1
+        ? '1 thing has not been sent yet'
+        : `${String(count)} things have not been sent yet`,
+    detail:
+      'They stay on this phone under your account and send the next time you sign in here. Nobody else who signs in on this phone will see or send them.',
+  };
+};

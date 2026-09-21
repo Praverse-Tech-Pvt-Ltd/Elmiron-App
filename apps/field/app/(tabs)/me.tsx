@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import { Banner, Button, Screen, SettingsScreen } from '@fieldforce/ui';
 import { useSession } from '../../src/session';
 import { settingsGroups } from '../../src/settings/content';
+import { QUEUE_UNREADABLE, loadQueueState } from '../../src/sync/async-storage-store';
+import { unsentBeforeSignOut } from '../../src/sync/indicator';
 
 /**
  * C4 — route binding. The entries and their honest states live in
@@ -13,6 +15,26 @@ export default function Me(): ReactNode {
   const router = useRouter();
   const { signOut } = useSession();
   const [signOutFailed, setSignOutFailed] = useState(false);
+  /**
+   * MR-49 / `FE-W61`. What this MR has not sent, read BEFORE they sign out. Their queue now
+   * stays under their account when they do; this is where they are told so, rather than the
+   * work being kept -- or, before MR-49, handed to the next person -- without a word.
+   */
+  const [unsent, setUnsent] = useState<{ title: string; detail: string } | null>(null);
+  useEffect(() => {
+    let live = true;
+    void loadQueueState().then((load) => {
+      if (!live) return;
+      setUnsent(
+        load.kind === 'unreadable'
+          ? { title: 'This app could not read your queue', detail: QUEUE_UNREADABLE }
+          : unsentBeforeSignOut(load.state.items),
+      );
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   return (
     <Screen scrollable>
@@ -42,6 +64,10 @@ export default function Me(): ReactNode {
         an MR looks at most — and the one that ends their session was the same
         weight as the one that starts their work.
       */}
+      {unsent === null ? null : (
+        <Banner tone="attention" title={unsent.title} detail={unsent.detail} />
+      )}
+
       {signOutFailed ? (
         <Banner
           tone="critical"

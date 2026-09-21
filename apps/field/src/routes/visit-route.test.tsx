@@ -67,6 +67,7 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ id: '55555555-5555-4555-8555-555555555501' }),
 }));
 
+import { setQueueOwner } from '../sync/async-storage-store';
 import VisitRoute from '../../app/visit/[id]';
 
 const visit = VisitSchema.parse({
@@ -100,6 +101,8 @@ const doctor = DoctorSchema.parse({
 });
 
 const loaded = (): void => {
+  // MR-49 / FE-W61. A queued write belongs to a signed-in MR; with no owner nothing can queue.
+  setQueueOwner('22222222-2222-4222-8222-222222222202');
   mockStore.mockReturnValue({
     store: {
       visit: new Map([[visit.id, visit]]),
@@ -121,6 +124,38 @@ const loaded = (): void => {
   mockCreateCheckIn.mockClear();
   mockRefresh.mockClear();
 };
+
+/**
+ * MR-49 / `FE-W62`. Offline, with the visit in the store, the screen showed only "Could not
+ * load this visit" and no check-in -- measured on the Pixel 10. A failed background refresh
+ * leaves the data STALE, not absent.
+ */
+describe('app/visit/[id].tsx — FE-W62, a failed refresh does not hide a visit the phone holds', () => {
+  const offline = (store: Record<string, unknown> | null = null): void => {
+    loaded();
+    const held = mockStore() as Record<string, unknown>;
+    mockStore.mockReturnValue({
+      ...held,
+      ...(store === null ? {} : { store: { ...(held['store'] as object), ...store } }),
+      status: 'failed',
+      failure: { kind: 'unreachable' },
+    });
+  };
+
+  it('still offers check-in when the pull failed but the visit is on the phone', async () => {
+    offline();
+    await render(<VisitRoute />);
+    expect(await screen.findByText('I am here — check in')).toBeTruthy();
+    expect(screen.queryByText('Could not load this visit')).toBeNull();
+  });
+
+  it('POSITIVE CONTROL: says it could not load when the visit is NOT on the phone', async () => {
+    offline({ visit: new Map() });
+    await render(<VisitRoute />);
+    expect(await screen.findByText('Could not load this visit')).toBeTruthy();
+    expect(screen.queryByText('I am here — check in')).toBeNull();
+  });
+});
 
 describe('app/visit/[id].tsx — defect 12, the stage after a SENT check-in', () => {
   it('asks the SERVER again once the check-in has been accepted', async () => {

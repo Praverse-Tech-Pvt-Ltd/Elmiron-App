@@ -834,3 +834,45 @@ describe('FE-W44 — an unreadable queue is never overwritten', () => {
     expect(store.current().items).toHaveLength(1);
   });
 });
+
+/**
+ * MR-49 / `FE-W61`. The client sends under whoever is signed in NOW, so a flush that outlives its
+ * user must stop before sending that user's next item as someone else -- and must not write the
+ * previous user's state anywhere.
+ */
+describe('FE-W61 — a flush stops when the signed-in user changes', () => {
+  const second: CreateCheckInRequest = { ...body, id: '77777777-7777-4777-8777-777777777702' };
+
+  const twoQueued = async (): Promise<ReturnType<typeof inMemory>> => {
+    const store = inMemory();
+    await sendOrQueue(() => Promise.reject(new Error('offline')), checkInQueueItem(body), store);
+    await sendOrQueue(() => Promise.reject(new Error('offline')), checkInQueueItem(second), store);
+    return store;
+  };
+
+  it('sends nothing more once the owner changes, and writes nothing', async () => {
+    const store = await twoQueued();
+    const before = store.current();
+    let who = 'rep-a';
+    const createCheckIn = vi.fn(() => {
+      who = 'rep-b'; // rep A signs out and rep B signs in while the first send is in flight
+      return Promise.resolve({});
+    });
+    const result = await flushOutbox({ createCheckIn } as unknown as ApiClient, store, () => who);
+    expect(createCheckIn).toHaveBeenCalledTimes(1);
+    expect(result.ownerChanged).toBe(true);
+    expect(store.current()).toBe(before);
+  });
+
+  it('POSITIVE CONTROL: with the same owner throughout, both are sent', async () => {
+    const store = await twoQueued();
+    const createCheckIn = vi.fn(() => Promise.resolve({}));
+    const result = await flushOutbox(
+      { createCheckIn } as unknown as ApiClient,
+      store,
+      () => 'rep-a',
+    );
+    expect(createCheckIn).toHaveBeenCalledTimes(2);
+    expect(result.ownerChanged).toBeUndefined();
+  });
+});

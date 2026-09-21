@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { AppState } from 'react-native';
+import { useSession } from '../session';
 import { flushOutbox } from './outbox';
 import { createPushClient } from './push-client';
 
@@ -29,7 +30,16 @@ import { createPushClient } from './push-client';
  * condition they already know they are in.
  */
 export const OutboxFlusher = ({ children }: { readonly children: ReactNode }): ReactNode => {
+  /**
+   * MR-49 / `FE-W61`. **Also on every change of signed-in user.** The queue is per user now, and
+   * the Me screen tells an MR signing out that their unsent work "sends the next time you sign in
+   * here". This effect ran once on mount and on foreground only, so after a sign-in without an
+   * app restart that sentence was false until the phone was backgrounded -- found on the Pixel
+   * 10. Keyed on the user id, it runs when they sign in. With no one signed in there is no queue.
+   */
+  const userId = useSession().session?.user.id ?? null;
   useEffect(() => {
+    if (userId === null) return undefined;
     const attempt = (): void => {
       void flushOutbox(createPushClient()).catch(() => {
         // Nothing to report. The queue is unchanged and remains visible.
@@ -47,7 +57,7 @@ export const OutboxFlusher = ({ children }: { readonly children: ReactNode }): R
     return () => {
       subscription.remove();
     };
-  }, []);
+  }, [userId]);
 
   return children;
 };

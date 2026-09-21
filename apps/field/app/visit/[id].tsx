@@ -378,10 +378,19 @@ export default function VisitRoute(): ReactNode {
                     title: 'You do not have access to this visit',
                     detail: 'The server refused this request for your account.',
                   }
-                : {
-                    title: 'Could not load this visit',
-                    detail: 'The app could not reach the server. It will try again.',
-                  })
+                : // MR-49 / `FE-W62`. A failed background refresh is not "this screen has no
+                  // data". This branch was unconditional, and `VisitScreen` renders ONLY the
+                  // banner when given a failure -- so offline, with the visit in the store, the
+                  // MR saw "Could not load this visit" and no check-in: the offline queue was
+                  // unreachable in exactly the case it exists for. Measured on the Pixel 10.
+                  // The consent screen has had this rule since MR-26 B1; the two server
+                  // DECISIONS above stay unconditional.
+                  visit === null || doctor === null
+                  ? {
+                      title: 'Could not load this visit',
+                      detail: 'The app could not reach the server. It will try again.',
+                    }
+                  : null)
         }
         loading={loading}
         onAction={advance}
