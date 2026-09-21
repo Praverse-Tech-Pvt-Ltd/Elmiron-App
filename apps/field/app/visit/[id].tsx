@@ -35,6 +35,8 @@ import {
   recordingRequest,
 } from '../../src/capture/recording';
 import { checkInQueueItem, checkOutQueueItem, sendOrQueue } from '../../src/sync/outbox';
+import { describeWitnessed, witnessedConsentFor } from '../../src/consent/witnessed';
+import type { WitnessedConsent } from '../../src/consent/witnessed';
 import { QUEUE_UNREADABLE, loadQueueState } from '../../src/sync/async-storage-store';
 import type { QueueLoad } from '../../src/sync/async-storage-store';
 import { emptyQueue } from '../../src/sync/reducer';
@@ -122,6 +124,22 @@ export default function VisitRoute(): ReactNode {
   // invisible and the MR presses the button again.
   const [queueLoad, setQueueLoad] = useState<QueueLoad>({ kind: 'loaded', state: emptyQueue });
   const queue = queueLoad.kind === 'loaded' ? queueLoad.state : emptyQueue;
+  /**
+   * MR-49 C / `FE-W55`. The doctor's answer as THIS PHONE witnessed it, for this MR and this visit
+   * only. Not the server's ledger (MR-12 Q4 keeps that out of the pull, and the audited read is not
+   * used), and it decides nothing -- it replaces "ask the doctor first", which was false after an
+   * answer on this phone.
+   */
+  const [witnessed, setWitnessed] = useState<WitnessedConsent | null>(null);
+  useEffect(() => {
+    let live = true;
+    void witnessedConsentFor(id).then((found) => {
+      if (live) setWitnessed(found);
+    });
+    return () => {
+      live = false;
+    };
+  }, [id]);
   const refreshQueue = useCallback(() => {
     void loadQueueState().then(setQueueLoad);
   }, []);
@@ -430,7 +448,13 @@ export default function VisitRoute(): ReactNode {
         {...(block === null && !recorderState.isRecording
           ? { onStartRecording: startRecording }
           : {})}
-        recordingBlockedReason={block === null ? null : blockReason(block)}
+        recordingBlockedReason={
+          block === null
+            ? null
+            : block.kind === 'never_asked'
+              ? describeWitnessed(witnessed, queue.items, (iso) => clockIn(iso, zone))
+              : blockReason(block)
+        }
         onRecordSamples={() => {
           router.push(`/samples/${visit?.id ?? id}`);
         }}

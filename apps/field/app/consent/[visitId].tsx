@@ -28,6 +28,7 @@ import {
   offerableVersions,
 } from '../../src/consent/record';
 import { consentQueueItem, sendOrQueue } from '../../src/sync/outbox';
+import { recordWitnessedConsent } from '../../src/consent/witnessed';
 import { SESSION_EXPIRED, refusalTextFor, sessionExpired } from '../../src/sync/explanation';
 
 /**
@@ -281,6 +282,18 @@ export default function ConsentRoute(): ReactNode {
           setRefusal({ title: 'This was NOT saved', detail: QUEUE_UNREADABLE });
           return;
         }
+
+        // MR-49 C / `FE-W55`. The device witnessed this answer: record THAT, scoped to this MR
+        // and this visit, so the visit screen can say what happened on this phone instead of
+        // telling the MR to ask again. Only a sent or queued answer reaches here -- a refusal
+        // and an unwritable queue returned above. A failure to keep the note must not stop the
+        // MR leaving; the answer itself is already sent or queued.
+        await recordWitnessedConsent({
+          visitId: visit.id,
+          outcome: body.outcome,
+          capturedAt: body.capturedAt,
+          syncItemId: body.id,
+        }).catch(() => undefined);
 
         // Straight back to the visit, and with no confirmation screen in
         // between: the doctor has answered and the phone is about to change hands.
