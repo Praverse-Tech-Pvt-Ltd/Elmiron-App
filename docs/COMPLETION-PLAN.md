@@ -2334,3 +2334,57 @@ beside the territory zone the app uses everywhere else.
 remains: **the "On plan" chip on the Doctors screen.** It is no longer blocked by anything — the
 entity travels and the screen reads the store — it simply has not been built. It should reuse
 `todaysPlan` from `beat-plan-view.ts` rather than grow a second definition of "today's plan".
+
+### Added by MR-45 C — BE-W105 was not "safe by delegation", and the problem is the table
+
+`BE-W105` registered three functions — `threshold_number`, `org_default_shift_window_status`,
+`audio_purge_health` — as candidates "safe only by delegation" that the textual sweep had missed.
+**MR-45 measured them, and the premise was wrong: none of them inherits any safety.** Their
+delegates are unscoped too, which is exactly why "calls something scoped" never matched them.
+
+#### C1 — measured, two-sided, and PROVEN for one
+
+**`threshold_number` / `threshold` — an MR of one organisation can read another organisation's
+configuration.** `threshold(p_key, p_territory_id)` returns `app_thresholds.value` for **any
+territory id the caller passes**, with no tenant check, and `EXECUTE` is granted to
+`authenticated`. With a value configured only for organisation B's territory, inside a rolled-back
+transaction:
+
+| Caller | Asks for | Returns |
+| --- | --- | --- |
+| **ATTACKER** — org A's MR | org B's territory | **`42`**, through `threshold_number` AND through `threshold` directly |
+| Positive control — org B's own MR | its own territory | `42` |
+| Negative control — org A's MR | its own territory | `NULL` |
+
+The negative control is what makes it a measurement: the row is territory-specific and the probe
+can say no. **The first attacker attempt did not run at all** — a label containing an apostrophe
+broke the SQL literal — and it was re-run rather than read as a result, because an error is not an
+answer.
+
+**`audio_purge_health()` — a cross-tenant aggregate, by INSPECTION.** It counts `recordings`,
+`voice_notes` and `upload_grants` with no organisation filter, and any authenticated caller may run
+it. Counts, not content — but any MR of any company receives every company's recording volumes.
+
+**`org_default_shift_window_status()` — the table has no organisation scope, by INSPECTION.** It
+reads `threshold('org_default_shift_window')`, and `app_thresholds.scope` is constrained to
+`global` or `territory`. **There is no `organisation` scope.** An "org default" is therefore one
+global row shared by every tenant.
+
+| Item | Detail |
+|---|---|
+| **`BE-W106`** | **`app_thresholds` has no organisation scope, and its read path is not tenant-bounded.** Three consequences, one cause: (1) **PROVEN** — `threshold()`/`threshold_number()` return another organisation's territory-scoped value to any authenticated caller who names the territory; (2) by inspection — a `global` row is shared by every tenant, so the "org default" shift window and every other org-level setting is actually platform-wide; (3) by inspection — `audio_purge_health()` aggregates across tenants and is callable by any MR | `public.app_thresholds`, `threshold`, `threshold_number`, `org_default_shift_window_status`, `audio_purge_health` | — | **OPEN — a DESIGN decision before it is a fix.** Should configuration be organisation-scoped (a third `scope`, or an `organisation_id` column)? Should an MR be able to call a system-health function at all, or should it be `service_role` only, as the watchdog workflow already uses it? Once decided, verification is the MR-42 pattern: attacker / owning-org positive control / same-tenant negative control, plus a catalogue assertion over every function that reads `app_thresholds`. **Severity, stated plainly:** configuration values and object COUNTS, not personal data — lower than `BE-W101` was. But it is the same class: a tenant boundary with nothing behind it |
+
+**`BE-W105` is therefore closed as mis-framed and replaced by `BE-W106`.** Of its seven, the four
+that genuinely are safe by delegation or have no target remain as MR-43 left them
+(`approve_call_reports_bulk` and `active_consent_text` tested; `issue_recording_upload_grant` →
+`BE-W104`; `is_admin` has nothing to cross). The other three were never safe.
+
+**The lesson is the one MR-44 wrote down, arriving from the other side.** The sweep that found these
+three was right to find them. The *label* it put on them — "safe only by delegation" — was a
+hypothesis, and the only way to test a hypothesis about a boundary is to try to cross it.
+
+#### C2 — not done, and the brief defined why
+
+`FE-W12`'s first half is to be done **only if** the renderer ask (`blocked-on-you` 2.5) has been
+answered. **It has not** — nothing in the record answers it. So it was left, as the brief's own
+condition requires.
