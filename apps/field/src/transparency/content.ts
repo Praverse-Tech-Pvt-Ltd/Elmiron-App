@@ -22,10 +22,13 @@ import type { TransparencyEntry } from '@fieldforce/ui';
  * - **Reports and samples** — `apply_sync_item`'s `call_report` and `sample_and_input`
  *   branches. Managers read reports through `visible_user_ids()`. Nothing deletes either,
  *   so no retention period is promised for them.
- * - **Voice notes and consultation recordings** — audio is captured on the phone; the
- *   metadata goes to the mock and the bytes go nowhere (no upload client). So they are
- *   "kept on this phone", and the 90-day purge, which covers server audio only, is not
- *   promised for them either.
+ * - **Voice notes** — audio is captured on the phone; the metadata goes to the mock and the
+ *   bytes go nowhere (no upload client). So they are "kept on this phone", and the 90-day
+ *   purge, which covers server audio only, is not promised for them. **MR-47, measured on the
+ *   Pixel 10:** a note the MR discards with "Start again" stays in `cache/Audio` too (`FE-W53`).
+ * - **Consultation recordings — `not-yet`, and truly so (MR-47).** MR-46 marked this row
+ *   active from code. On the device the record control never appears, before or after the
+ *   doctor consents: the visit screen's consent list is a hard-coded empty array.
  * - **Never** — the manifest requests no camera, SMS, contacts, call-log or usage-stats
  *   permission. The old "anything at all once your shift ends" was dropped: the server
  *   refuses a check-in or check-out outside the shift window, but accepts reports and
@@ -65,13 +68,13 @@ export const TRANSPARENCY_ENTRIES: readonly TransparencyEntry[] = [
   },
   {
     title: 'Your voice notes',
-    detail: 'Recorded and kept on this phone. Not sent to anyone in this build.',
+    detail:
+      'Recorded and kept on this phone, including a note you start again. Not sent to anyone in this build.',
     state: 'active',
   },
   {
     title: 'Recordings — only if a doctor agrees',
-    detail:
-      "Made only after the doctor's consent is recorded, and kept on this phone. Not sent to anyone in this build. If they say no, nothing happens to you.",
-    state: 'active',
+    detail: 'If they say no, nothing happens to you.',
+    state: 'not-yet',
   },
 ];

@@ -90,16 +90,25 @@ describe('FE-W52 — the transparency notice says what the code does', () => {
     expect(times?.state).toBe('active');
   });
 
-  it('marks nothing not-yet: every capture this notice names is live in this build', () => {
-    // A `not-yet` row renders "this app cannot do this today". Every row below is a write
-    // path that exists; adding a row for something unbuilt should fail here and be argued.
-    expect(current.entries.filter((e) => e.state === 'not-yet')).toEqual([]);
+  it('marks only consultation recordings not-yet: the one capture the app cannot make today', () => {
+    // A `not-yet` row renders "this app cannot do this today". MR-47 measured on the Pixel 10
+    // that a consultation recording cannot start, before or after consent; every other row is a
+    // write path that exists. A second `not-yet` row should fail here and be argued.
+    expect(current.entries.filter((e) => e.state === 'not-yet').map((e) => e.title)).toEqual([
+      'Recordings — only if a doctor agrees',
+    ]);
   });
 
   it('promises no retention period the code does not enforce', () => {
     // The 90-day purge covers server audio only; reports and on-phone audio are never deleted.
     const all = [current.preamble, current.never, ...current.entries.map((e) => e.detail)];
     expect(all.filter((s) => /\b\d+ days?\b|then deleted/i.test(s))).toEqual([]);
+  });
+
+  it('says a discarded voice note stays on the phone — measured, FE-W53', () => {
+    const note = current.entries.find((e) => /voice notes/i.test(e.title));
+    expect(note?.detail).toMatch(/start again/i);
+    expect(note?.detail).toMatch(/kept on this phone/i);
   });
 
   it('no longer says nothing is recorded once the shift ends — reports and samples are', () => {
