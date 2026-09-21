@@ -1780,3 +1780,49 @@ value.
 a false record, in a product whose differentiator is that it does not make those. The screen will
 render the plan with its real status shown honestly — *"Submitted — not yet approved"* — and the
 approval action stays out of v1 with the console.
+
+## 21 September 2026 — MR-45
+
+### A value check compares the rendered value to the SERVER's, not to "something rendered"
+
+The converted beat plan rendered, counted and looked right: *"3 planned · 1 done"*. A `select`
+showed the "done" visit was five days old.
+
+**Decision: when a screen leaves the mock, its values are checked against a query of what the
+server holds, at values chosen to expose a defect** — an order that differs from alphabetical and
+insertion order, an instant where the UTC and territory dates differ. A screen that renders proves
+nothing about what it rendered.
+
+### When the client must decide a server concept, it uses the server's rule
+
+The route had to decide which visits count as done today. `coverage()` already decides that, for
+the manager: `(completed_at at time zone 'Asia/Kolkata')::date`.
+
+**Decision: reuse the server's definition rather than invent one**, so the MR's screen and the
+manager's report cannot disagree about the same fact. Where the server's rule is itself
+questionable (it hard-codes the zone), record it rather than silently diverge.
+
+### Elimination outranks inspection — including of the record you wrote
+
+MR-44 recorded the Doctors screen as mock, by inspection. With the mock dead, it rendered.
+
+**Decision: a real-versus-fixture row is marked with its method, and an inspection row is treated
+as a claim.** Elimination is one command and settles it. A row I wrote with confidence the session
+before was the one that was wrong.
+
+### A cited identifier must exist before it is cited
+
+MR-44 wrote "registered as `FE-W50`" and "registered as `FE-W51`" into a migration, a fixture and a
+status document. Neither row existed.
+
+**Decision: an id is created in the register first and cited second.** Citing an unregistered id
+is inventing it.
+
+### A sweep's label is a hypothesis about a boundary, and is tested by crossing it
+
+`BE-W105` called three functions "safe only by delegation". One of them hands any caller another
+organisation's configuration.
+
+**Decision: a finding that a function is safe is not recorded until a cross-tenant probe with both
+controls has failed to cross it.** Finding the function is the sweep's job; deciding what it is
+requires trying.

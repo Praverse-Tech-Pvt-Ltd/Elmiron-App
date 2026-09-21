@@ -1232,3 +1232,44 @@ entries use two different doctors — and the second is the SOUTH doctor, whom t
 see. **The pull therefore carries an entry whose doctor is not in the store.** `buildDayRoute`
 maps entries to stops through doctors, so that is precisely the case the screen has to survive.
 Registered as `FE-W51`.
+
+## MR-45 — 21 September 2026: the beat plan is off the mock, and it tells the truth about its status
+
+**Counts:** `@fieldforce/field` vitest **524** (33 files, +22), jest **139** (20 suites, +8);
+`@fieldforce/ui` jest **250** (+4), vitest **4**; `@fieldforce/console` vitest **28**.
+
+### What changed on screen
+
+`app/beat-plan.tsx` now reads the pulled store. It shows **today's plan by the server's territory
+date**, in the server's `planned_sequence`, with its status stated: **"Submitted — not yet
+approved"**. Nothing marks a plan approved; the approval action is out of v1.
+
+Three empty states, now distinct: **no plan**, **stops still syncing**, **plan has no stops**. The
+old single empty state said *"No beat plan came through"* even when a plan had.
+
+Stop times use `clockIn(zone)`. The character slice `clockFromOrNull` and its lint disable are gone
+from this screen.
+
+**Consent per stop is no longer shown** — the pull does not carry consent records, so it says
+nothing rather than something it cannot know. That is a real loss against the mock, recorded rather
+than papered over.
+
+### A defect the mock hid, found on the Pixel 10
+
+Past visits were counted as **done today**: the route matched a visit to a stop by doctor alone,
+and the pulled store holds the MR's whole history. Fixed by filtering to the plan's day using the
+server's `coverage()` rule, so the MR's route and the manager's report agree.
+
+### The Doctors screen was already real
+
+MR-44's record called it mock. With the mock dead it rendered the server's doctors — **established by
+elimination.** Two comments that said otherwise are corrected. The **"On plan" chip is now unblocked**
+(the entity travels and the screen reads the store); it simply has not been built. Reuse `todaysPlan`
+from `src/today/beat-plan-view.ts`.
+
+### Found and not fixed — `FE-W52`
+
+**The transparency screen tells every MR their check-ins and location are not recorded. They are.**
+`src/transparency/content.ts` still marks every capture row `not-yet`. The wording needs a decision
+(`blocked-on-you` 2.6): the location row promises continuous tracking the app does not do either, so
+a plain flip would overstate in the other direction.

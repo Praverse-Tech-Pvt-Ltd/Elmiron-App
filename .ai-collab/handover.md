@@ -808,3 +808,48 @@ definition beside the count.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-44 — BE-W89 re-sized | `PROJECT-OVERVIEW.md` → `### MR-44 — BE-W89 re-sized` |
+
+---
+
+## After MR-45 — 21 September 2026
+
+| | |
+| --- | --- |
+| **CI on `397dc65`** | **Confirmed green** — `35214533954`, workflow `CI`, event `push`. The first query returned twenty scheduled runs and no CI |
+| **`BE-W89`** | **Client half DONE.** `app/beat-plan.tsx` is on the pulled store, shows *"Submitted — not yet approved"*. Only the "On plan" chip remains (~0.5 half-day) |
+| **Defect found** | Past visits counted as **done today** — the route matched visits by doctor alone. Fixed by the server's own day rule |
+| **`FE-W52`** | **NEW, COMPLIANCE.** The MR's privacy notice says check-ins and location are not recorded. They are. `blocked-on-you` 2.6 |
+| **`BE-W106`** | **NEW, PROVEN.** An MR of one company can read another company's configuration. `app_thresholds` has no organisation scope. `blocked-on-you` 2.7 |
+| **Tests** | **1,793 passing, zero failing** — every runner's own lines |
+| **Stop** | C2 **conditional** (renderer ask unanswered); C1 **ROOM** (fix needs a model decision) |
+
+### The two findings that matter most, neither of which was the task
+
+**`FE-W52` is a false statement to every MR about their own data.** The transparency screen says
+check-in times and location are *"Not yet — this app cannot do this today"*. They are recorded, with
+coordinates. Do not flip the flag blindly: the location row promises continuous tracking the app
+does not do either. The wording needs a decision.
+
+**`BE-W106` is a tenant boundary with nothing behind it** — lower severity than `BE-W101`
+(configuration and counts, not personal data) but the same class.
+
+### Two corrections to MY OWN MR-44 record
+
+1. **The Doctors screen is REAL and already was.** MR-44 called it mock and rewrote two comments
+   saying so. Established otherwise by elimination; both comments corrected.
+2. **`FE-W50` and `FE-W51` were cited as "registered" and had no rows.** Now registered. `FE-W50`
+   is explicitly NOT device-verified — this run started from `pm clear`.
+
+### Environment, for the next session
+
+The Pixel 10 is `Pixel_10`, booted standalone. **After `pm clear`, onboarding appears** —
+notifications, battery, transparency — before Today. **The sign-in fields sit lower since MR-41's
+banner inset**; tap from a fresh screenshot, not from old coordinates. Deep link to a screen:
+`adb shell am start -a android.intent.action.VIEW -d "com.praversetech.fieldforce://beat-plan"`.
+
+A beat plan for 21 September (`a4500000-…-0001`, submitted, Vikram → Asha → Meera) exists in the
+LOCAL demo tenant only.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-45 — BE-W89's client half | `PROJECT-OVERVIEW.md` → `### MR-45 — BE-W89's client half` |

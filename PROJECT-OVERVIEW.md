@@ -16938,3 +16938,168 @@ half-days.
    thing that needed changing, and nothing automated would have said so.
 3. **A sweep's count is a property of its definition.** Run it twice, under definitions that
    differ in kind, and report the definition beside the number.
+
+### MR-45 — BE-W89's client half
+
+**The beat plan left the mock after six weeks. Checking its rendered values against the server,
+rather than checking that something rendered, found a defect the mock had hidden the whole time.
+Elimination corrected two claims in my own MR-44 record. And the sweep carried in from MR-44 turned
+out to have mislabelled what it found.**
+
+#### A1 — CI on the commit that was never confirmed
+
+| | |
+| --- | --- |
+| Run | `35214533954` — **`success`**, both jobs |
+| Workflow | **`CI`** |
+| Event | `push` |
+| SHA | `397dc6532bb75c5337b6b5d0afb8dbbbefd7b465` |
+
+**Read with `git rev-parse HEAD`, and it equalled HEAD.** A2 did not apply.
+
+**The trap the brief named, met at once:** the first query for runs on `397dc65` returned twenty
+rows, **every one a scheduled `Audio retention`, `Audio retention watchdog` or `Migration drift`
+run, all green, and none of them CI.** The `CI` run was found only by querying that workflow by
+name. A green result on the right SHA is not a green CI.
+
+The checkout guard passed on the first command, and was needed: the session context handed in shows
+`HEAD` at `c7b6a82`. That was a stale snapshot, not a second checkout — established by the guard,
+not assumed.
+
+#### A3 — the environment
+
+Port exclusions do not cover 54321–54324 (nearest `50000–50059`). Docker, `db:start` exit 0 with
+`db:instrument` — whose MR-42 target guard stood aside for localhost as designed. `seed:day`
+refused because the demo tenants exist, which is its guard working. Pixel 10 booted standalone,
+Android 16. Four reverse ports. Metro detached via `Start-Process`. Location set latitude-first.
+**Signed in and reached Today before touching a screen.**
+
+The first sign-in missed, and the cause is worth one line: MR-41's banner inset had moved every
+field down, and I tapped the old coordinates. The app had not failed — `pidof` and the crash buffer
+said so before anything else was concluded.
+
+#### B — the screen, and what it says
+
+`app/beat-plan.tsx` reads the pulled store; every decision lives in `src/today/beat-plan-view.ts`.
+**The screen had no route-level test before this session** — only its component did — so its
+binding had never been exercised. It has eight now.
+
+**B2 — the absence assertion.** For every non-approved status, `planStatusLine` is asserted **not**
+to match `/\bapproved by\b/` or `/^approved/`; a positive control asserts the approved plan DOES get
+*"Approved by your manager"*, so a function that never said "approved" cannot pass. At render level,
+the submitted plan shows *"Submitted — not yet approved"* and `/approved by/` is asserted absent.
+
+**B3 — values at the exposing boundary.** 18:45Z on 20 September is 00:15 IST on the 21st:
+
+| At 18:45Z | IST | UTC fallback |
+| --- | --- | --- |
+| `territoryToday` | `2026-09-21` | `2026-09-20` |
+| today's plan, from the same two | **Monday's** | **Sunday's** |
+| a stop started then renders | **`00:15`** (and `18:45` asserted absent) | — |
+| a visit finished then counts for the 21st | **yes** | **no** |
+
+**And the value check found a real defect, on the device.** The first render said *"3 planned · 1
+done"*, Dr Meera Iyer ticked at *15:19 · 40 min*. Nobody had been visited that day. Postgres: that
+visit started at 15:19 IST and ran 40 minutes — **on 16 September**, under the 16th's plan.
+`buildDayRoute` matched visits to stops by **doctor alone**; the mock only ever served today's
+visits, so it never showed. **Which past visit leaked was arbitrary.** The fix filters visits to
+the plan's day by **the server's own rule** — `coverage()` uses `(completed_at at time zone
+'Asia/Kolkata')::date` — so the MR's route and the manager's coverage report agree. The device then
+read *"3 planned · 0 done"*. **The zone conversion was right; the join was wrong, and only
+comparing the rendered value to the server's could show it.**
+
+**B4 — three empties.** `no-plan` (settled, none), `syncing` (plan here, stops not, pull NOT
+settled), `no-stops` (plan here, none, settled). **Settled means the store's `status`, not
+`entries.length === 0`** — the existing address heuristic cannot tell "not arrived" from "has
+none". The component's only empty state had said *"No beat plan came through"*; with a notice
+showing, that sentence is asserted absent.
+
+#### B5 — the table, with elimination marked
+
+| Capability | Module | Screen | Established by |
+| --- | --- | --- | --- |
+| **Beat plan** | REAL | **REAL, as of MR-45** | **ELIMINATION** — mock dead; rendered *Vikram → Asha → Meera*, submitted, 0 done, exactly what Postgres held. The order was chosen to differ from both alphabetical and insertion order |
+| **Doctors** | REAL | **REAL, and already was** | **ELIMINATION** — mock dead; the server's doctors and visit ages rendered |
+| Today | REAL | REAL | ELIMINATION (MR-41) |
+| The rest | — | — | inspection-dated 8 September |
+
+**The Doctors row corrects MY OWN MR-44 record.** That table said *"STILL MOCK"*, and I rewrote two
+comments to say the screen *"still reads `createClientForScenario()`"* — in a file whose line 29
+calls `usePulledStore()`, beside a test that mocks it. **An inspection that looked at the wrong
+thing produced a confident wrong row and two wrong comments; elimination took one tap.** Both
+corrected.
+
+#### B6 — mutants, each killing exactly one test
+
+| Mutant | Kills |
+| --- | --- |
+| a visit's day reckoned in UTC instead of the territory zone | **only** *"counts a visit finished at 18:45Z on the 20th as the 21st in IST"* |
+| an empty plan always reported as `no-stops`, never `syncing` | **only** *"says the stops are syncing when the plan is here and the pull has not settled"* |
+
+#### Register rows that were owed, and one that is new and serious
+
+**`FE-W50` and `FE-W51` were cited by MR-44 as "registered" and had no rows.** Identifiers invented
+by citation. Now registered with their real state — and **`FE-W50` is explicitly NOT claimed as
+device-verified**: this run began with `pm clear`, so it exercised a full pull from an empty store,
+never the old-stored-shape rejection that `FE-W50` depends on. I had drafted it as "verified" and
+caught it before it landed.
+
+**`FE-W52` — COMPLIANCE: the MR's privacy notice understates what the app records.** It says
+check-in times and location are *"Not yet — this app cannot do this today"*. Both are recorded —
+check-ins reach Supabase through `sync_push` **with coordinates**. Found on the Pixel 10 at sign-in.
+Filed as `blocked-on-you` 2.6: **not a flag flip**, because the location row promises tracking
+"Start day to End day" and the app only records position at check-in.
+
+#### C — `BE-W105` was mislabelled, and one half is proven
+
+**C1.** The three functions `BE-W105` called "safe only by delegation" are not safe: their delegates
+are unscoped too. **Proven, two-sided:** an MR of organisation A read organisation B's
+territory-scoped setting (`42`) through `threshold_number` and `threshold`; B's own MR saw `42`
+(positive); A's MR on its own territory saw `NULL` (negative). **The cause is the table:**
+`app_thresholds.scope` is `global` or `territory` — **there is no organisation scope** — so an "org
+default" is platform-wide, and `audio_purge_health()` hands any MR every company's recording counts
+(both by inspection). Registered as **`BE-W106`**, filed as `blocked-on-you` 2.7 because the fix is
+a model decision. **Configuration and counts, not personal data — lower severity than `BE-W101`, the
+same class.**
+
+**C2.** Not done: the renderer ask it depends on has not been answered. **A conditional stop the
+brief defined.**
+
+#### Counts — each runner's own lines
+
+| Workspace | Runner | Tests | Suites / Files |
+| --- | --- | --- | --- |
+| `@fieldforce/core` | vitest | 28 | 3 files |
+| `@fieldforce/ui` | vitest | 4 | 1 file |
+| `@fieldforce/ui` | jest | **250** | 22 suites |
+| `@fieldforce/ui-tokens` | vitest | 54 | 3 files |
+| `@fieldforce/console` | vitest | 28 | 4 files |
+| `@fieldforce/field` | vitest | **524** | **33 files** |
+| `@fieldforce/field` | jest | **139** | **20 suites** |
+| `@fieldforce/api` | vitest | 723 | 50 files |
+| `@fieldforce/mock` | vitest | 43 | 1 file |
+
+**1,793 passing, zero failing, every runner exit 0** — read from each runner's `Tests:` and
+`Test Suites:` / `Test Files` lines, not from `test-counts.mjs`. Up 34. `typecheck`, `lint`,
+`format:check`, `verify:rollbacks --files-only` all exit 0.
+
+#### Where this session stopped — two kinds, recorded separately
+
+- **C2 is a CONDITIONAL STOP THE BRIEF DEFINED** — do it only if the renderer ask is answered, and it
+  is not.
+- **C1 stopped at measurement, and that is ROOM.** Nothing blocked a fix. But the fix depends on
+  whether configuration should be organisation-scoped at all, and building a third `scope` or an
+  `organisation_id` column before that is answered would be choosing the model by accident.
+
+**`BE-W89` is not closed:** the "On plan" chip on the Doctors screen remains, now unblocked,
+~0.5 half-day, and it should reuse `todaysPlan` rather than grow a second definition of today.
+
+**Three things to carry forward.**
+
+1. **Check the rendered VALUE against the server's, and choose values that would expose a defect.**
+   The route rendered, counted and looked right; only comparing *"1 done"* with a `select` showed
+   that nobody had been seen.
+2. **Elimination beats inspection, including of your own record.** One tap overturned a row and two
+   comments I had written with confidence the session before.
+3. **A sweep's label is a hypothesis.** "Safe only by delegation" was a guess about three functions;
+   trying to cross the boundary proved one of them was never safe.
