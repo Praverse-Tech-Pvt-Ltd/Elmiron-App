@@ -83,3 +83,54 @@ describe('a refused route', () => {
     expect(screen.queryByText('No route for today')).toBeNull();
   });
 });
+
+describe('MR-45 BE-W89 — the plan says what state it is in', () => {
+  it('shows the status line under the heading', async () => {
+    await render(
+      <BeatPlanScreen
+        done={0}
+        planned={3}
+        statusLine="Submitted — not yet approved"
+        stops={stops}
+      />,
+    );
+    expect(screen.getByText('Submitted — not yet approved')).toBeTruthy();
+    // The route still renders beneath it: a status is information about the plan, not a
+    // replacement for it.
+    expect(screen.getByText('Dr A. Menon')).toBeTruthy();
+  });
+
+  it('shows no status line when there is no plan to describe', async () => {
+    await render(<BeatPlanScreen done={0} planned={0} stops={[]} />);
+    expect(screen.queryByText(/approved/iu)).toBeNull();
+  });
+});
+
+describe('MR-45 BE-W89 B4 — a plan whose stops are still arriving', () => {
+  const syncing = {
+    title: 'Your stops are still syncing',
+    detail: 'Your plan arrived; its stops have not yet.',
+  };
+
+  it('says the stops are syncing', async () => {
+    await render(
+      <BeatPlanScreen
+        done={0}
+        notice={syncing}
+        planned={0}
+        statusLine="Submitted — not yet approved"
+        stops={[]}
+      />,
+    );
+    expect(screen.getByText('Your stops are still syncing')).toBeTruthy();
+  });
+
+  it('does NOT also say no plan came through — the absence is the point', async () => {
+    // The defect this screen was held on the mock for: the only empty state was "No beat
+    // plan came through", which is false when a plan DID come through and its stops have
+    // not. A presence check on the notice would pass while this sentence sat beneath it.
+    await render(<BeatPlanScreen done={0} notice={syncing} planned={0} stops={[]} />);
+    expect(screen.queryByText('No route for today')).toBeNull();
+    expect(screen.queryByText(/No beat plan came through/u)).toBeNull();
+  });
+});

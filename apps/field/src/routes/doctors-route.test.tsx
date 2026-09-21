@@ -143,10 +143,15 @@ describe('app/doctors.tsx — how the client presents a server decision', () => 
     // "adding the entity is a change to this test rather than a chip quietly reappearing",
     // and the entity was added.
     //
-    // `sync_pull` NOW emits `beat_plan_entry` and the store holds it. But this screen still
-    // reads `createClientForScenario()`, so it has no access to those entries — the chip
-    // would still filter against an empty set and show NO DOCTORS, the client presenting its
-    // own gap as a fact about the day. The blocker moved from the SERVER to the READ.
+    // MR-45 CORRECTION. MR-44 wrote here that this screen "still reads
+    // `createClientForScenario()`". It does not — this very test mocks `usePulledStore` to
+    // drive it, which is the evidence that was sitting in the file. MR-45 confirmed it by
+    // ELIMINATION: mock dead, screen still renders the server's doctors.
+    //
+    // So the chip is no longer blocked by a missing entity or a missing read. It is absent
+    // because nobody has built it yet, and it should reuse `todaysPlan` from
+    // `src/today/beat-plan-view.ts` rather than grow a second definition of "today's plan".
+    // This assertion stays until then, so the chip cannot reappear without a deliberate test.
     mockStore.mockReturnValue(pulled());
     await render(<Doctors />);
     expect(screen.getByText('All')).toBeTruthy();

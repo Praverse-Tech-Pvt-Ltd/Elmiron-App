@@ -35,19 +35,23 @@ export default function Doctors(): ReactNode {
    *
    * The chip filters by today's beat plan, which means `BeatPlan.entries`.
    *
-   * **MR-44 (`BE-W89`) changed half of this and the half it did not change is the half that
-   * still blocks the chip.** `sync_pull` now DOES emit `beat_plan_entry`, and
-   * `apps/field/src/sync/pull.ts` holds the entries in the store -- so the rows reach the
-   * client. What has not happened is the READ: this screen and `app/beat-plan.tsx` are both
-   * still on `createClientForScenario()`, and nothing outside the sync layer reads
-   * `store.beat_plan_entry` yet.
+   * **MR-45 correction: the reason this comment gave in MR-44 was FALSE.** It said this screen
+   * was "still on `createClientForScenario()`". It is not, and was not then: it reads
+   * `usePulledStore()` a few lines above. MR-45 established that by ELIMINATION -- with the
+   * mock dead, this screen still renders the server's doctors and their visit ages. MR-44
+   * had asserted the opposite by inspection, and inspected the wrong thing.
    *
-   * Offering the chip anyway would filter against an empty set and show NO DOCTORS, which
-   * is indistinguishable from "none of your doctors are on today's plan". That is the
-   * client presenting its own gap as a fact about the day, which is the one thing this
-   * screen's own header says it must never do about a denial. So the chip stays absent until
-   * this screen reads the pulled store -- NOT until the entity exists, which it now does.
-   * `BE-W89` -- see PROJECT-OVERVIEW.md, MR-14 B9 and MR-44 B.
+   * **What actually remains is smaller, and it is now only a decision to build it.**
+   * `sync_pull` carries `beat_plan_entry` (MR-44), this screen reads the store, and as of
+   * MR-45 `app/beat-plan.tsx` reads `store.beat_plan_entry` for today's plan through
+   * `todaysPlan` in `src/today/beat-plan-view.ts`. The chip needs that same selection, so it
+   * uses the plan the route screen uses rather than a second definition of "today's plan".
+   *
+   * **Until it is built, it stays absent rather than half-built.** Offering it with the wrong
+   * plan, or before the stops have arrived, would filter against an empty set and show NO
+   * DOCTORS -- indistinguishable from "none of your doctors are on today's plan", the client
+   * presenting its own gap as a fact about the day. `BE-W89` -- PROJECT-OVERVIEW.md, MR-14 B9,
+   * MR-44 B and MR-45 B5.
    */
   /**
    * **A denial and a dropped connection are different screens.**

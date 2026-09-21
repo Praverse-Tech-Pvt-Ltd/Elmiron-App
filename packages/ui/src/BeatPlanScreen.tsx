@@ -36,6 +36,24 @@ export interface BeatPlanScreenProps {
   readonly loading?: boolean;
   readonly failure?: { readonly title: string; readonly detail: string } | null;
   readonly onOpenDoctor?: (doctorId: string) => void;
+  /**
+   * MR-45 (`BE-W89`). The plan's state, in the MR's words — *"Submitted — not yet
+   * approved"*. Null when there is no plan to describe.
+   *
+   * It is a prop rather than derived here because the wording is a claim about a server
+   * record, and that decision is made and asserted in the field app's `beat-plan-view.ts`.
+   */
+  readonly statusLine?: string | null;
+  /**
+   * MR-45 (`BE-W89`). A condition that REPLACES the "no route" card — a plan whose stops are
+   * still syncing, or a plan with none.
+   *
+   * **This exists because the only empty state used to be "No beat plan came through"**, which
+   * is false when a plan did come through and its stops have not arrived yet. That is the
+   * defect this screen was left on the mock for six weeks to avoid. Info tone, never critical:
+   * syncing is a normal state, and §02 forbids dressing one as an error.
+   */
+  readonly notice?: { readonly title: string; readonly detail: string } | null;
 }
 
 const styles = StyleSheet.create({
@@ -74,6 +92,8 @@ export const BeatPlanScreen = ({
   loading = false,
   failure = null,
   onOpenDoctor,
+  statusLine = null,
+  notice = null,
 }: BeatPlanScreenProps): ReactNode => {
   if (failure !== null) {
     return (
@@ -94,11 +114,16 @@ export const BeatPlanScreen = ({
           rather than computed from positions this app does not take.
         */}
         <Label muted>{`${String(planned)} planned · ${String(done)} done`}</Label>
+        {statusLine === null ? null : <Label>{statusLine}</Label>}
       </View>
 
       {loading ? <Spinner label="Getting today's route" /> : null}
 
-      {!loading && stops.length === 0 ? (
+      {!loading && notice !== null ? (
+        <Banner detail={notice.detail} title={notice.title} tone="info" />
+      ) : null}
+
+      {!loading && notice === null && stops.length === 0 ? (
         <Card>
           <BodyText>No route for today</BodyText>
           <Label muted>
