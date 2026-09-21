@@ -946,3 +946,36 @@ LOCAL demo tenant only.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-48 — the third copy | `PROJECT-OVERVIEW.md` → `### MR-48 — the third copy` |
+
+---
+
+## After MR-49 — 21 September 2026
+
+| | |
+| --- | --- |
+| **CI on `752ac00`** | Confirmed green — `35578184965`, workflow `CI`, event `push`, SHA = HEAD at session start |
+| **Local drift** | None — 64/64 at start and end |
+| **`FE-W61`** | **FIXED, before and after on the Pixel 10.** Before: rep B's app sent rep A's queued writes as B; the server refused them; A's work was lost. After: per-user queue; B sees and sends nothing of A's; A's writes sent as A when A signs back in |
+| **`FE-W62`** | **FIXED, device-verified** — offline, the visit screen hid a visit it held, so offline check-in was impossible |
+| **`BE-W108`** | **NEW, COMPLIANCE, not fixed** — the UCPMP cap's month is the UTC month; 00:00–05:30 IST on the 1st counts in the previous month. A decision in `blocked-on-you` |
+| **`FE-W55`, `FE-W59`, `FE-W60`** | DONE, device-verified — witnessed consent answer; "Continue" and "Checked in"; the plan's stops counted |
+| **Samples date** | Now the server's day for the visit ("21 Sep" for a visit scheduled the 17th) |
+| **New** | `FE-W63` (queued check-in announced as check-out), `FE-W64` (visit screen renders a visit it does not hold, by deep link), `FE-W65` (second way into an in-progress visit — decision) |
+| **Voice notes** | Not switched off — option (a) still unapproved |
+| **Tests** | **1,866 passing, zero failing, up 32** |
+
+### For the next session
+
+- **To go offline on the emulator, remove the `adb reverse` for 54321 and COLD-START the app** —
+  an open connection survives the removal, and the first "offline" write goes out.
+- The emulator snapshot resumes the previous session's app process and a stale clock: force-stop the
+  app first, and do not trust device times against the server's.
+- Location for check-in: re-add the test providers after every emulator boot (`cmd location
+  providers add-test-provider` + `set-test-provider-enabled`), then inject latitude-first.
+- The dev warning toast swallows taps near the bottom of the screen; dismiss it (its ✕) first.
+- The old shared queue key `sync.queue.v1` is still on the Pixel 10 with two items; it is never read.
+- Services stopped at the end of this session.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-49 — the shared queue | `PROJECT-OVERVIEW.md` → `### MR-49 — the shared queue` |

@@ -973,3 +973,43 @@ the moment phones are shared.
   with it reaches production.
 - Whether anyone has signed in to production is a question for production's `auth.users`, which
   MR-48 did not read.
+
+## MR-49 — 21 September 2026
+
+### BE-W108 — whose timezone is a UCPMP month? (a compliance count)
+
+**Measured:** the UCPMP sample cap counts by when the sample was GIVEN (`occurred_at`), which is
+right — but it bounds the month with `date_trunc('month', occurred_at)` in the database's session
+timezone, **UTC**. A sample handed over between **00:00 and 05:30 IST on the 1st of a month counts
+in the previous month's cap.** 19:00Z on 30 September (00:30 IST on 1 October) truncates to
+September.
+
+Not changed, because the answer is an enforcement rule:
+
+| Option | Effect |
+| --- | --- |
+| India time, always | Matches a code written for India; simplest; wrong only if the product ever runs a territory elsewhere |
+| The doctor's territory's zone | Correct everywhere hours are configured; **falls back to UTC where they are not** (MR-47's `day_zone_for`), which is today's defect again |
+| The MR's territory's zone | Same fallback problem, and a cap belongs to the doctor, not the MR |
+
+**Recommendation: India time, always, stated in the function** — the cap is a UCPMP (Indian) rule,
+and a configuration gap must not move a compliance count.
+
+### Voice notes — still not decided
+
+Option (a) or (b) (`blocked-on-you` → MR-47) is still unapproved, so MR-49 did not switch voice
+notes off.
+
+### FE-W65 — a second way into a visit in progress?
+
+Today's next-visit card is the only way into a visit; a filter defect in MR-48 stranded a checked-in
+MR. The Beat plan stop and the doctor profile could also open an in-progress visit. Registered, not
+built: it is a navigation decision, and a doctor with two visits makes "which visit" a real question.
+
+### Shared phones — what changed
+
+A rep's unsent work now stays under their own account when they sign out, is sent the next time
+**they** sign in, and is never shown to or sent by anyone else on that phone. Measured before the
+fix on the Pixel 10: the next rep's app sent the previous rep's queued check-in and consent answer
+under its own sign-in; the server refused both, so nothing false was recorded — but the previous
+rep's work was lost.

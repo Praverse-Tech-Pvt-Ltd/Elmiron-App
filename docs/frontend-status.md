@@ -1351,3 +1351,30 @@ again".
   plan"* (`FE-W60`).
 - The visit screen still says *"Ask the doctor first"* after the doctor answered (`FE-W55`, a
   decision).
+
+## MR-49 — 21 September 2026: shared phones, offline check-in, and a truthful Today
+
+**Counts:** `@fieldforce/field` vitest **564** (35 files, +24), jest **152** (21 suites, +5);
+`@fieldforce/ui` jest **253** (+3).
+
+### What changed on screen
+
+- **Offline check-in works.** With no connection, the visit screen shows the visit and the check-in
+  button instead of *"Could not load this visit"* — as long as the visit is on the phone.
+- **Me, before sign-out:** *"N things have not been sent yet. They stay on this phone under your
+  account and send the next time you sign in here. Nobody else who signs in on this phone will see or
+  send them."*
+- **A second rep on the same phone** sees an empty queue, not the first rep's work.
+- **Visit screen, consent line:** what this phone witnessed — *"The doctor agreed to recording, on
+  this phone at 13:54"* (or *"said no"*, with *"Waiting to send."* while queued) — or *"This phone does
+  not have the doctor's answer for this visit."* Replaces *"Ask the doctor first"*.
+- **Samples:** the date is the day the visit happened, from the server, not its schedule.
+- **Today:** an in-progress visit reads *"Checked in 13:34"* and *"Continue the visit to …"*; the count
+  includes the plan's stops; with stops left and no visit to walk to, *"1 more stop on today's
+  plan"* — never *"You went to every visit on the plan"*.
+
+### Seen on the device, not changed
+
+- A queued check-in is announced as *"This check-out cannot be sent yet"* (`FE-W63`).
+- Opened by deep link, a visit the phone does not hold renders as *"This visit · Not started"*
+  (`FE-W64`).

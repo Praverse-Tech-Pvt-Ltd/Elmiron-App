@@ -17600,3 +17600,149 @@ points at the production project.** Production's `auth.users` was not read.
    navigation defect, not a display one, because Today is the only door.
 3. **A guard failing on your change is the guard working.** B2 said *"fix the derivation, do not
    delete the assertion"* — and the fix made it measure the gateway instead of trusting a list.
+
+### MR-49 — the shared queue
+
+**On one phone, the next rep's app sent the previous rep's offline work under its own sign-in. The
+server refused it, so nothing false was recorded, but the work was lost and the ledger now names the
+wrong rep. Measuring that meant going offline, which showed that offline check-in was impossible
+too. Both fixed and re-run on the Pixel 10. The UCPMP cap counts in the wrong month for five and a
+half hours at every month boundary.**
+
+#### Checkout guard, CI, drift, environment
+
+`@fieldforce/api` · `Praverse-Tech-Pvt-Ltd/Elmiron-App` · `f34ceef` is an ancestor. HEAD `752ac00`
+on arrival, level with `origin/main`. **CI:** run `35578184965`, workflow **`CI`**, event `push`,
+**success**, SHA `752ac00b9442b34b9d97241052c01e772082bf50` = HEAD. Supabase restored from backup;
+**local drift: 64 files, 64 applied, `drifted: false`**, both lists empty — and again at the end.
+
+The emulator resumed from a snapshot with **last session's JavaScript still running**, and its clock
+**~2 h 40 min behind** the host. That showed MR-48's `FE-W56` fix working for the first time on a real
+expired session (*"Your sign-in has expired · Sign out and sign in again from Me"*), and it is why
+times on the device read earlier than the server's receipts.
+
+#### A — FE-W61, the shared queue: before and after, on the Pixel 10
+
+Rep A = `demo-1ed65c8a-mr` (`b95aa032`), rep B = `demo-1ae08971-mr` (`15bdcba4`), visit
+`0809df1c` (A's, `planned`). "Offline" = the `adb reverse` for 54321 removed.
+
+**Found first: `FE-W62` — offline, the visit screen hid the visit.** Any failed background pull made
+the screen show only *"Could not load this visit"*, although A's stored list held `0809df1c` as
+`planned`; `VisitScreen` returns the banner alone. **Offline check-in was impossible** — the case the
+queue exists for. The MR-26 B1 rule (stale is not absent), already on the consent screen, now applies
+here; verified on the device before continuing.
+
+| | BEFORE the fix | AFTER the fix |
+| --- | --- | --- |
+| A queues offline | `check_in` + `consent_record` under **`sync.queue.v1`** — one key for everyone | both under **`sync.queue.v1.b95aa032…`** |
+| A's Me screen before sign-out | nothing said | *"2 things have not been sent yet. They stay on this phone under your account and send the next time you sign in here. Nobody else who signs in on this phone will see or send them."* |
+| B signs in; B's queue screen | *"2 things won't go · Stuck: check_in and consent_record"*, **"Try again now"** | *"Everything is sent · Nothing is waiting"* |
+| What the server did | B's app sent both **as B**; **REFUSED** — `not_your_record`, *"visit 0809df1c… is not yours"*. Visit still `planned`; **two rejected `sync_items` with `mr_id` = B** | **nothing** — no item sent as B |
+| A signs back in | — | the flusher (now also run on sign-in) sent both **as A**: `check_in` accepted, `consent_record` accepted; visit `in_progress`; ledger *"declined by b95aa032"* |
+
+**A2 did not trigger** — nothing was accepted as B. The before-state was still wrong three ways: B
+was shown A's work, the ledger holds rejections attributed to B, and A's check-in and the doctor's
+decline were lost unannounced.
+
+**A5 mutants**, each killing one: reading the shared key with no owner; the mid-flush owner check
+removed; the flusher's deps back to `[]`; its null-user guard removed; the visit failure made
+unconditional again. Keying every user to the shared key is caught by two.
+
+#### B — the samples date
+
+**B1: the cap counts by `occurred_at` — when the sample was given — not the schedule.** B2's defect,
+as framed, does not exist.
+
+**But measured: the cap's month is the UTC month.** `date_trunc('month', occurred_at)` runs in the
+session timezone, `UTC`, with no override. 19:00Z on 30 September — **00:30 IST on 1 October** —
+truncates to **September**. A sample given 00:00–05:30 IST on the 1st counts in last month's cap.
+**Reported first, registered `BE-W108`, not changed** — whose timezone a UCPMP month is decides an
+enforcement rule; the recommendation (India time, always) is in `blocked-on-you`.
+
+**B3:** the screen dated the record by the visit's **schedule**; it now prints the server's day
+(`visitDay`). Boundary values:
+
+| Case | Label |
+| --- | --- |
+| scheduled 30 Sep, happened 1 Oct (server says `2026-10-01`) | **1 Oct** (was "30 Sep") |
+| 18:45Z on 30 Sep — India-time territory (server: the 1st) | **1 Oct** |
+| the same instant — UTC-fallback territory (server: the 30th) | **30 Sep** |
+| no server day | "this visit" — not the schedule |
+
+On the device: visit `0809df1c`, scheduled the 17th, in progress on the 21st —
+*"Dr Vikram Rao (DEMO) · 21 Sep"*.
+
+#### C — FE-W55, what this phone witnessed
+
+No audited read; MR-12 Q4 untouched. The consent screen records the answer it captured — outcome,
+device time, sync item id — under `consent.witnessed.v1.<userId>`, only when sent or queued. On the
+Pixel 10, visit `0809df1c`:
+
+| Moment | The screen said |
+| --- | --- |
+| no answer witnessed yet | *"This phone does not have the doctor's answer for this visit."* |
+| a yes, sent | *"The doctor agreed to recording, on this phone at 13:54."* |
+| a no, sent | *"The doctor said no to recording, on this phone at 13:54."* |
+| a yes, captured with no connection | *"… at 13:55. Waiting to send."* → after the flush and re-entering: the plain sentence |
+| rep B on this phone | no witnessed key for B; A's is `consent.witnessed.v1.b95aa032…` only |
+
+**One false start, recorded:** the first "offline" answer went out — removing the tunnel does not close
+a connection already open — so the queued case was produced by cold-starting with the tunnel down.
+**And one line went stale while the screen was open**: "waiting to send" stayed until the screen was
+re-entered, because the visit screen reads its queue on mount — existing behaviour, not new.
+
+#### D — Today
+
+| | Before | After, on the Pixel 10 |
+| --- | --- | --- |
+| `FE-W59` in-progress card | *"Scheduled 13:00 · Start the visit"* | *"Checked in 13:34 · Continue the visit to Dr Vikram Rao (DEMO)"* |
+| `FE-W60` the count | visit rows only — *"You went to every visit on the plan"* after 1 of 3 | plan stops counted — *"1 of 3"*, then *"1 more stop on today's plan … 2 of 3"* |
+
+D3: `FE-W65` registered — whether the Beat plan stop and the doctor profile should also open an
+in-progress visit. Not built.
+
+#### E — voice notes and the pre-flight
+
+**E1 — CONDITIONAL STOP THE BRIEF DEFINED:** option (a) not approved; nothing switched off. **E2:** the
+runbook's step 1 now counts production's signed-in users and those outside `@example.test`, with the
+query's limits stated. Run locally: `signed_in_ever=66 signed_in_outside_test_domains=0`.
+
+#### Also registered
+
+`FE-W63` (a queued check-in announced as *"This check-out cannot be sent yet"*), `FE-W64` (by deep
+link, the visit screen renders a visit it does not hold). Both seen on the device.
+
+#### Counts — each runner's own lines
+
+| Workspace | Runner | Tests | Suites / Files |
+| --- | --- | --- | --- |
+| `@fieldforce/core` | vitest | 32 | 4 files |
+| `@fieldforce/ui` | vitest | 4 | 1 file |
+| `@fieldforce/ui` | jest | **253** | 22 suites |
+| `@fieldforce/ui-tokens` | vitest | 54 | 3 files |
+| `@fieldforce/console` | vitest | 28 | 4 files |
+| `@fieldforce/field` | vitest | **564** | **35 files** |
+| `@fieldforce/field` | jest | **152** | **21 suites** |
+| `@fieldforce/api` | vitest | 736 | 52 files |
+| `@fieldforce/mock` | vitest | 43 | 1 file |
+
+**1,866 passing, zero failing, up 32.** `typecheck`, `lint`, `format:check` exit 0, and format was
+checked before every commit this session.
+
+#### Where it stopped
+
+**No BLOCKAGE.**
+
+- **B2 — the defect as framed does not exist; a different one does**, reported first and registered
+  (`BE-W108`) — the fix is an enforcement decision.
+- **E1 — CONDITIONAL STOP THE BRIEF DEFINED**: option (a) not approved.
+- Everything else in A–E was done and, where the brief asked, confirmed on the device.
+
+**Three things to carry forward.**
+
+1. **To measure the offline queue you must first be able to go offline in the app.** The first
+   attempt found `FE-W62`: offline check-in had been impossible.
+2. **"Refused" is not "harmless".** The server refused rep A's work sent as rep B — and the result
+   was lost work and a ledger that names the wrong rep.
+3. **A promise on screen needs the mechanism behind it.** "Sends the next time you sign in" was false
+   until the flusher ran on sign-in; the device showed it before a user could.

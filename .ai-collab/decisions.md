@@ -1918,3 +1918,35 @@ by a static list.
 Making the visit screen say what the server says about consent means an audited read per open,
 against the reasoning MR-12 Q4 recorded. **Decision: such a change is raised with its options, not
 made silently.**
+
+## 21 September 2026 — MR-49
+
+### Everything a device stores about a rep is keyed by the rep
+
+The offline queue was one key for everyone; the next rep's app sent the previous rep's work under its
+own sign-in. **Decision: any per-user state on the device — queue, pulled store, witnessed consent —
+is keyed by the signed-in user id, and with no user signed in there is nothing to read or write.**
+Legacy unkeyed data is never read, because it cannot be attributed.
+
+### "Refused" is not "harmless"
+
+The server refused rep A's writes sent as rep B, so nothing false was recorded — but A's work was
+lost and the ledger names B. **Decision: a server refusal is not accepted as the safety net for a
+client that sends the wrong user's work; the client must not send it.**
+
+### A promise on screen has its mechanism tested
+
+The sign-out banner says unsent work "sends the next time you sign in here". The flusher did not run
+on sign-in, and only the device showed it. **Decision: a screen sentence that promises a future
+action ships with a test of the trigger that performs it.**
+
+### The device's own witnessed facts are shown as such
+
+For consent, no audited read and no reversal of MR-12 Q4. **Decision: where the server's answer is
+deliberately not on the device, the screen states what the device itself witnessed — labelled "on
+this phone" — or states that it has nothing, and never implies either answer.**
+
+### A compliance count's clock is stated, not inherited
+
+The UCPMP cap took its month from the session timezone. **Decision (proposed, `BE-W108`): any
+period boundary on a compliance count names its zone explicitly in the function.**
