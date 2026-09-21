@@ -1861,3 +1861,33 @@ entirely**, and the per-company question is answered by a separate, scoped funct
 MR-45's day filter was described as the server's rule; it was a copy that already differed.
 **Decision: the phrase is reserved for a client that reads the server's answer.** A client
 re-implementation is recorded as a copy, with how it differs.
+
+## 21 September 2026 — MR-47
+
+### A finding made by reading code is a hypothesis about the device
+
+MR-46 registered `FE-W53` — declined consultation audio may stay on the phone — from code. On the
+Pixel 10 no consultation recording can start at all; the audio that does stay is the MR's own voice
+notes. **Decision: a finding about what exists on a device is registered as "by inspection" and is
+not acted on — no dependency added, no deletion built — until the device has been listed.**
+
+### Know how a function runs before revoking what it calls
+
+The BE-W106 lesson was "revoke whole-database helpers from signed-in users". Applied to the day-rule
+helpers it broke `sync_pull`, which is `SECURITY INVOKER`. **Decision: before revoking EXECUTE on a
+helper, list its callers and each caller's `prosecdef`. Where an invoker needs it, grant it and
+scope the helper to the caller's `visible_user_ids()`, refusing with 42501 — never answering for an
+id the caller cannot see.**
+
+### One day rule, and the server sends it
+
+The route, the report and Today each reckoned a visit's day. **Decision: a visit's day is
+`visit_day()`, sent on the pull; a client that needs it reads `visitDay` and never re-derives it.**
+Today's third copy is `FE-W57`, pending a product answer on what "today" means there.
+
+### A green run is read, not glanced at
+
+The production drift run is green while printing `drifted: true` (19 of 63). It is a recorded,
+dated acceptance, not an accident — **and it means no session's migration since 7 September is in
+production.** **Decision: every session that reasons about production reads that run's output, not
+its status.**

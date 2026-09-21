@@ -881,3 +881,36 @@ LOCAL demo tenant only.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-46 — the false notice | `PROJECT-OVERVIEW.md` → `### MR-46 — the false notice` |
+
+---
+
+## After MR-47 — 21 September 2026
+
+| | |
+| --- | --- |
+| **CI on `3949cc8`** | Confirmed green — `35569428635`, workflow `CI`, event `push`, SHA = HEAD at session start |
+| **Local drift** | None — 63/63 on arrival, 64/64 after this session's migration |
+| **Production** | **19 of 64 migrations applied.** The drift workflow is green by a dated acceptance (until 31 October), not because production matches. Nothing since 7 September is deployed |
+| **Watchdog (A)** | Not broken. Runs as the owner-level pooler login (by the record); fails loudly (42501, exit 1) under a role without the grant — measured |
+| **`FE-W53`** | **Corrected.** Consultation recording cannot start at all (hard-coded empty consent list). What stays on the phone is **voice notes**, in `cache/Audio`, through "Start again", restart and sign-out. Options (a)/(b) in `blocked-on-you` → MR-47 |
+| **`BE-W107`** | **DONE.** `visit_day()` on the server; `coverage()` and the pull use it; the report carries its zone and a `fallback_utc` label |
+| **New** | `FE-W54` (voice-note save silently does nothing from a real visit), `FE-W55` (told to ask a doctor who has answered), `FE-W56` (expired sign-in shown as a refusal), `FE-W57` (Today's third copy of the day rule) |
+| **2.6** | **Not approved. The false notice is still live.** Branch corrected (`17260f2`) |
+| **Tests** | **1,820 passing on `main`, zero failing, up 9** — every runner's own lines |
+
+### For the next session
+
+- **Before MR-47's migration reaches production, configure shift hours** — otherwise every
+  unconfigured territory's coverage report moves 00:00–05:30 IST visits a day earlier.
+- On the Pixel 10: `adb emu geo fix` is not enough for a check-in. Use
+  `appops set 2000 android:mock_location allow` and `cmd location providers
+  set-test-provider-location <fused|gps|network> --location <lat>,<lon>` (latitude FIRST), in a
+  loop while pressing. Recorded in MR-20; it cost time again.
+- **Hot reload can write a stored store the release path never would.** To test the stored-shape
+  path, force-stop, put the old shape back through `run-as`, and cold-start.
+- Git Bash rewrites `/data/...` paths for `adb push`; set `MSYS_NO_PATHCONV=1`.
+- Services at the end: Supabase, Metro, the mock (:4010) and the Pixel 10 **up** unless stopped.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-47 — the audio on the phone | `PROJECT-OVERVIEW.md` → `### MR-47 — the audio on the phone` |

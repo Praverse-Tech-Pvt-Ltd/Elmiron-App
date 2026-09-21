@@ -1298,3 +1298,33 @@ is promised.
 - `FE-W53`: nothing deletes audio from the phone, including a recording the doctor declined.
 - `BE-W107`: the route's "which day is this visit" rule is a copy of `coverage()`'s. It differs for
   MRs with no configured shift hours (UTC vs IST).
+
+## MR-47 — 21 September 2026: the route takes its day from the server
+
+**Counts:** `@fieldforce/field` vitest **536** (34 files, +4), jest **142** (20 suites).
+
+### What changed on screen
+
+**Beat plan / "On plan".** A visit is on a plan's day when the SERVER says so — `visit.visitDay`,
+sent by the pull from `visit_day()`, the function the manager's report counts by. The screen no
+longer reckons a day from an instant. A visit whose day the server has not sent (a direct write
+response, before the next pull) is on no plan's day.
+
+**First launch after updating:** the stored list is rebuilt once (*"Your list has been rebuilt"*),
+because stored visits from before this build have no server day. Verified on the Pixel 10.
+
+### Measured on the Pixel 10, not changed
+
+- **Consultation recording is unreachable** — the record control never appears, before or after
+  consent (`FE-W53`, corrected). After the doctor answers, the screen still says *"Ask the doctor
+  first"* (`FE-W55`).
+- **Voice notes stay in `cache/Audio`** through "Start again", restart and sign-out; **"Save this
+  note" does nothing from a real visit** because that screen still reads the mock (`FE-W54`).
+- **Today disagrees with the route** about a visit started today but scheduled earlier (`FE-W57`).
+- An expired sign-in read *"The server refused this sync (PGRST303)"* (`FE-W56`).
+
+### Transparency notice
+
+Still the false version on `main`. The corrected draft is on `mr-46/fe-w52-notice-pending-approval`
+(`17260f2`): recordings `not-yet`, voice notes "kept on this phone, including a note you start
+again".

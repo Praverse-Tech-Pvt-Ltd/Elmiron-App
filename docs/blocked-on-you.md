@@ -867,3 +867,58 @@ runtime from parts would not appear. **Grep located these; it did not decide the
 **The shape of the decision, as measured:** seven settings are plausibly per-company and all seven
 are today one row shared by every company; the rest are the same for everyone by nature. Nobody can
 currently change any of them without a migration.
+
+## MR-47 — 21 September 2026: the audio on the phone, and the notice still waiting
+
+### 2.6 — the false notice is STILL LIVE (21 September 2026)
+
+No approved wording has been recorded. **Every MR who opens the transparency screen is still told
+the app records nothing new about them.** The draft on `mr-46/fe-w52-notice-pending-approval` was
+**corrected by MR-47** before approval — read this version, not MR-46's:
+
+- **Recordings — only if a doctor agrees** is now `not-yet` ("this app cannot do this today"). MR-46
+  had marked it active from code; on the Pixel 10 a consultation recording cannot be started at
+  all, before or after the doctor agrees.
+- **Your voice notes** now says *"Recorded and kept on this phone, including a note you start
+  again."* Measured: a discarded note stays in the app's storage.
+
+### The audio question — what is actually on the phone, and the two options
+
+**Measured on the Pixel 10 (`FE-W53`, corrected):**
+
+- **No consultation audio can exist.** The record control never appears — after a decline, and
+  after a consent, both captured on the phone and both stored on the server.
+- **Voice notes do exist**, in the app's private cache: `cache/Audio/recording-<uuid>.m4a`,
+  about 55 KB for 4 seconds. The file is written while the MR records, **before** "Save".
+- **Nothing deletes them.** "Start again" leaves the file. A force-stop and relaunch leaves it.
+  **Signing out leaves it** — the next person to sign in on that phone inherits it. They go only
+  when the app's data is cleared, the app is uninstalled, or Android clears the cache under storage
+  pressure (the last is Android's decision, not the app's; its timing is not something this app
+  controls or can promise).
+- **"Save this note" does nothing from a real visit** (`FE-W54`) — the screen still reads the visit
+  from the mock — so in practice every voice note is a kept-but-unsaved file.
+
+**The options, as asked. Neither adds `expo-file-system` in this session.**
+
+| | (a) Voice-note recording off, behind a flag | (b) Recording stays; discarded audio deleted |
+| --- | --- | --- |
+| What changes | A build flag hides "Record a voice note" and the route refuses to record. Consultation recording is already unreachable | Add `expo-file-system` (a native module — needs a new app binary, not an over-the-air update). Delete the file on "Start again", on leaving without saving, and sweep `cache/Audio` for orphans at launch. Fix `FE-W54` first, or every note is effectively discarded |
+| Cost | ~0.5 half-day with tests and a device check. No dependency | Dependency approval, ~1.5–2 half-days, a rebuilt binary, and a device check of every path above |
+| Files already on phones | **Stay.** Removing them needs a file API — which is option (b)'s dependency | Removed by the launch sweep |
+| Saved notes | None can be made | Still kept indefinitely: there is no upload client, so a saved note has nowhere to go |
+| **The notice** | Voice notes → `not-yet`. Recordings stay `not-yet`. **But** if any phone already holds notes, "not recorded" is false for it — the row needs a clause such as *"notes recorded before [date] may still be on this phone"* | Voice notes stay `active`: *"Kept on this phone until they can be sent; a note you start again is deleted. Not sent to anyone in this build."* No retention period can be promised for kept notes |
+
+**Recommendation:** (a) now, because it removes a live privacy gap for the cost of a flag, and (b)
+only when the upload client exists — deletion without upload still leaves every saved note on the
+phone for ever.
+
+### Before deploying MR-47's migration: configure shift hours
+
+`coverage()` no longer hard-codes India time. For an MR whose territory has **no configured
+hours**, the manager's report now counts days in **UTC** and labels them `fallback_utc` — the same
+answer the MR's own screen already gives. **`org_default_shift_window` is null locally, and the record
+(`territory-day.ts`, this file) says production has no hours configured — not measured by MR-47**,
+so on deploy every MR's report would move visits finished between 00:00 and
+05:30 IST to the previous day. **Setting `org_default_shift_window` (or per-territory hours) to
+India time first makes the change invisible for Indian territories.** Production is still at 19 of
+64 migrations, accepted until 31 October, so nothing reaches it until that deploy.
