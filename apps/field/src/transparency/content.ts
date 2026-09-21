@@ -1,55 +1,77 @@
 import type { TransparencyEntry } from '@fieldforce/ui';
 
 /**
- * A9 — "Everything, before you ask." The five rows, taken from Phase 2's own copy.
+ * A9 — "Everything, before you ask."
  *
  * ---
- * **SOURCING.** Unlike `src/onboarding/notifications.ts`, which was written before
- * `docs/design/` existed and had to derive its wording, these titles and details are
- * transcribed from `docs/design/phase2-first-run-and-the-day.dc.html` §A9. The
- * design is in the repository now and this file should be diffed against it, not
- * rewritten from memory.
+ * **MR-46 — `FE-W52`. THIS WORDING IS A DRAFT AWAITING THE OPERATOR (`blocked-on-you` 2.6).**
+ *
+ * The version it replaces told every MR that the app "records nothing new about you" and
+ * marked check-ins and location `not-yet`. Both have been recorded since MR-18: check-in and
+ * check-out reach `record_check_in` / `record_check_out` through `sync_push`, and each row
+ * stores latitude, longitude, accuracy, distance from the clinic and inside/outside the
+ * geofence. Call reports and samples reach Supabase too.
+ *
+ * Every sentence below was checked against the code, not against the design:
+ *
+ * - **Location** — `src/capture/location.ts` takes a fix only when `takeFix` is called, and
+ *   its only recording caller is check-in / check-out in `app/visit/[id].tsx`. The
+ *   onboarding "Turn location on" button also reads a position, and discards it. No
+ *   watcher, no background permission in the manifest. So: at check-in and check-out, and
+ *   NOT between visits. The old "Start day to End day" would overstate it the other way.
+ * - **Reports and samples** — `apply_sync_item`'s `call_report` and `sample_and_input`
+ *   branches. Managers read reports through `visible_user_ids()`. Nothing deletes either,
+ *   so no retention period is promised for them.
+ * - **Voice notes and consultation recordings** — audio is captured on the phone; the
+ *   metadata goes to the mock and the bytes go nowhere (no upload client). So they are
+ *   "kept on this phone", and the 90-day purge, which covers server audio only, is not
+ *   promised for them either.
+ * - **Never** — the manifest requests no camera, SMS, contacts, call-log or usage-stats
+ *   permission. The old "anything at all once your shift ends" was dropped: the server
+ *   refuses a check-in or check-out outside the shift window, but accepts reports and
+ *   samples at any hour.
+ *
+ * The design doc (`docs/design/phase2-first-run-and-the-day.dc.html` §A9) is no longer the
+ * source for this copy. It describes a product; this describes the build.
  * ---
- *
- * **Every capture row is `not-yet`, and that is the honest state of this build.**
- *
- * - Location: the app takes no position fix at all. Whether it may is an open
- *   policy question — `fe-w3-spec.md` §4 forbids code written against an assumed
- *   answer, so there is nothing to describe.
- * - Check-in and check-out times: the contract has the endpoints; no screen calls
- *   them yet.
- * - Voice notes and recordings: FE-W4.
- *
- * A screen that listed these as things happening now would be describing a
- * capability this app does not have, on the one screen whose entire value is that
- * it does not overstate. When each lands, its row flips to `active` — and that flip
- * is the point of the field.
  */
 export const NEVER_RECORDED =
-  'Your personal calls, messages, other apps, your camera, or anything at all once your shift ends.';
+  'Your personal calls, messages, other apps or camera. Where you are between visits.';
 
 export const TRANSPARENCY_PREAMBLE =
-  'Right now this app records nothing new about you. It reads your plan and your doctor list, and that is all. Below is what it will record when those parts are built, and what it will never record.';
+  'This app records your work visits: when you check in and check out, where you were at those two moments, and what you report. It does not follow you between visits. Each item is below.';
 
 export const TRANSPARENCY_ENTRIES: readonly TransparencyEntry[] = [
   {
-    title: 'Where you are, during your shift',
-    detail: 'Start day to End day. Never outside those hours.',
-    state: 'not-yet',
+    title: 'Where you are — only when you check in or check out',
+    detail:
+      'Your position at the moment you press check-in and check-out, and how far that is from the clinic. Nothing between visits, and nothing in the background.',
+    state: 'active',
   },
   {
     title: 'Which doctors you saw, and when',
-    detail: 'Check-in and check-out times.',
-    state: 'not-yet',
+    detail: "Check-in and check-out times, and whether you were inside the clinic's area.",
+    state: 'active',
   },
   {
-    title: 'Your voice notes and reports',
-    detail: 'Kept 90 days, then deleted.',
-    state: 'not-yet',
+    title: 'Your call reports',
+    detail: 'What you write after a visit. Your manager can read them.',
+    state: 'active',
+  },
+  {
+    title: 'Samples and inputs you give',
+    detail: 'The item, the quantity, its value, the doctor and the time.',
+    state: 'active',
+  },
+  {
+    title: 'Your voice notes',
+    detail: 'Recorded and kept on this phone. Not sent to anyone in this build.',
+    state: 'active',
   },
   {
     title: 'Recordings — only if a doctor agrees',
-    detail: 'If they say no, nothing happens to you.',
-    state: 'not-yet',
+    detail:
+      "Made only after the doctor's consent is recorded, and kept on this phone. Not sent to anyone in this build. If they say no, nothing happens to you.",
+    state: 'active',
   },
 ];
