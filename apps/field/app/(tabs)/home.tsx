@@ -99,9 +99,7 @@ const MrToday = (): ReactNode => {
   // is no day to summarise, and the handset must not supply one -- so the screen shows
   // its loading state rather than a day computed from the wrong clock.
   const summary =
-    today === null
-      ? null
-      : summariseDay(visitsFromStore(store), doctorsFromStore(store), today);
+    today === null ? null : summariseDay(visitsFromStore(store), doctorsFromStore(store), today);
   const startedAt = summary?.startedAt ?? null;
   const next = summary?.next ?? null;
 
