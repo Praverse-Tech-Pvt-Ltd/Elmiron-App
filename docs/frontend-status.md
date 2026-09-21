@@ -1328,3 +1328,26 @@ because stored visits from before this build have no server day. Verified on the
 Still the false version on `main`. The corrected draft is on `mr-46/fe-w52-notice-pending-approval`
 (`17260f2`): recordings `not-yet`, voice notes "kept on this phone, including a note you start
 again".
+
+## MR-48 — 21 September 2026: Today shows the visit you are in
+
+**Counts:** `@fieldforce/field` vitest **540** (34 files, +4), jest **147** (20 suites, +5).
+
+### What changed on screen
+
+- **Today** shows the visits whose server day is today, **and always a visit in progress**. An MR
+  checked in to a visit scheduled for an earlier day now sees it, taps it, and can check out —
+  before this they could not reach check-out at all. Driven on the Pixel 10 to a recorded check-out.
+- **An expired sign-in** now reads *"Your sign-in has expired — sign out and sign in again from
+  Me"* on Today, Doctors, a doctor's profile, a visit, samples and consent. Before: *"The server
+  refused this sync (PGRST303)"*, or *"could not reach the server"*.
+- **Voice note from a real visit:** *"This note cannot be saved — the visit is not on this phone …
+  the recording stays on this phone and is not sent."* Before: Save did nothing, silently.
+
+### Seen on the device, not changed
+
+- Today's card for an in-progress visit says *"Scheduled 13:00"* and *"Start the visit"* (`FE-W59`).
+- After checking out of one of three planned stops, Today says *"You went to every visit on the
+  plan"* (`FE-W60`).
+- The visit screen still says *"Ask the doctor first"* after the doctor answered (`FE-W55`, a
+  decision).

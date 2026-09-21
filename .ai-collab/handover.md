@@ -914,3 +914,35 @@ LOCAL demo tenant only.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-47 — the audio on the phone | `PROJECT-OVERVIEW.md` → `### MR-47 — the audio on the phone` |
+
+---
+
+## After MR-48 — 21 September 2026
+
+| | |
+| --- | --- |
+| **CI on `b532916`** | Confirmed green — `35574115358`, workflow `CI`, event `push`, SHA = HEAD at session start |
+| **Local drift** | None — 64/64 at start and end |
+| **`FE-W57`** | **DONE, device-verified.** Before: a checked-in MR could not reach check-out. After: Today offers the in-progress visit and check-out is recorded on the server |
+| **`FE-W54`** | DONE, device-verified — the voice-note screen says when a note cannot be saved |
+| **`FE-W56`** | DONE, tests only — an expired sign-in reads "Your sign-in has expired" on all six screens |
+| **`FE-W55`** | **Needs a decision** — options in `blocked-on-you` → MR-48 |
+| **Voice notes** | Not switched off (option (a) not approved). Another rep does NOT see them; the files are on disk |
+| **New** | `FE-W58` (date labels that re-derive a visit's day), `FE-W59` (in-progress card says "Scheduled"/"Start"), `FE-W60` (Today says the plan is done when it is not), `FE-W61` (offline queue survives sign-out — by code) |
+| **Deploy order** | In `docs/restore-runbook.md` → *"The deploy ORDER"*: pre-flight, hours, 45 migrations, then reference data |
+| **Tests** | **1,834 passing, zero failing, up 14** — every runner's own lines |
+
+### For the next session
+
+- **`FE-W60` is the next thing a pilot MR will notice**: Today tells them the plan is done when two
+  stops are unvisited. It needs the plan's stops, which the pull carries.
+- **`FE-W61` should be measured before phones are shared**: queue a write offline as one rep, sign
+  in as another, and see what the server records.
+- After editing the app while Metro runs, **cold-start before trusting a device reading** — a
+  half-edited file left Metro serving the old bundle once this session.
+- `pnpm format:check` must be read BEFORE `git commit` in the same command, not after.
+- Services stopped at the end of this session.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-48 — the third copy | `PROJECT-OVERVIEW.md` → `### MR-48 — the third copy` |

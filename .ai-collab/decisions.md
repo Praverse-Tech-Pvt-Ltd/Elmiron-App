@@ -1891,3 +1891,30 @@ The production drift run is green while printing `drifted: true` (19 of 63). It 
 dated acceptance, not an accident — **and it means no session's migration since 7 September is in
 production.** **Decision: every session that reasons about production reads that run's output, not
 its status.**
+
+## 21 September 2026 — MR-48
+
+### Today never hides the visit the MR is standing inside
+
+Today shows visits whose server day is today, and always any visit in progress. **Decision (the
+operator's, applied by MR-48):** the one thing a screen that is the only door into a visit must not
+do is hide the visit the MR is in — it made check-out unreachable on the Pixel 10.
+
+### A sweep is searched two ways, and the second is the test of the first
+
+The name-and-behaviour search for the day rule found one decider; the data-flow search (every read
+of a visit's instants) found two more copies. **Decision: a sweep for copies of a rule reports both
+methods and whether the second changed the list.**
+
+### Codes from the gateway are measured, not listed
+
+`PGRST303` and `PGRST301` come from PostgREST, not a function body. The error contract's guard
+failed on them, and its own comment said to fix the derivation. **Decision: a code raised outside
+the database joins the derivation by being MEASURED each run** — a request that produces it — never
+by a static list.
+
+### An audited read is a product cost, not an implementation detail
+
+Making the visit screen say what the server says about consent means an audited read per open,
+against the reasoning MR-12 Q4 recorded. **Decision: such a change is raised with its options, not
+made silently.**

@@ -922,3 +922,54 @@ so on deploy every MR's report would move visits finished between 00:00 and
 05:30 IST to the previous day. **Setting `org_default_shift_window` (or per-territory hours) to
 India time first makes the change invisible for Indian territories.** Production is still at 19 of
 64 migrations, accepted until 31 October, so nothing reaches it until that deploy.
+
+## MR-48 — 21 September 2026
+
+### Voice notes — option (a) or (b) is still yours, and MR-48 did not pick
+
+No approval of either option is recorded, so voice notes were **not** switched off. What MR-48
+measured narrows the severity:
+
+- **A different rep signing in on the same phone does NOT see the previous rep's voice notes.**
+  On the Pixel 10, after sign-out and sign-in as a second rep, the queue read *"Everything is
+  sent"* and the voice-note screen opened at 00:00. The two files were still in `cache/Audio`.
+  **They are on disk, not shown.** Reaching them needs device-level access to the app's private
+  storage — here, `run-as` on a debug build.
+- **The previous rep's whole pulled list stays on the phone too** — visits, doctors, plans — under
+  their own user key, likewise not shown to the next rep.
+
+### FE-W55 — "say what the server says" needs a choice
+
+The visit screen tells the MR to ask a doctor who has already answered, because the app holds no
+consent records. The only way a rep can read the server's answer is `list_consent_records()`,
+which writes an **audit row on every read**. MR-12 Q4 kept consent out of the pull for exactly that
+audit volume. The options:
+
+| | What the screen gets | Cost |
+| --- | --- | --- |
+| An audited read when a visit screen opens | The server's answer, always | One `audit_log` row per visit-screen open — the load Q4 avoided, smaller (per open, not per sync) |
+| Reverse Q4: consent in the pull | The server's answer, offline too | The audit volume Q4 measured (~3,000 rows a day) |
+| Neither: stop claiming | *"This phone does not have the doctor's answer"* instead of *"ask the doctor first"* | No audit load; the screen is honest but still cannot record |
+
+Recording itself is unreachable in this build (`consents` is empty), so the last option loses
+nothing that works today.
+
+### FE-W61 — the offline queue survives sign-out (by reading code)
+
+Queued writes are kept under one key for every user, and nothing clears them at sign-out. A
+check-in queued offline by one rep would be sent by the next rep's app under the next rep's
+sign-in. **Not reproduced on the device; what the server does with it is not measured.** Relevant
+the moment phones are shared.
+
+### E2 — has a real rep signed in anywhere?
+
+**Nothing on this machine shows one, and production cannot be answered from here.**
+
+- The local database's 7,162 users are all `@example.test`.
+- The field app's local config points at `127.0.0.1`; there is no `eas.json`, so this repository
+  holds no configuration for distributing a build.
+- The register records the pilot gate **G-PILOT as not met** and the cutover (`BE-W46`) as not done.
+- **But the repository-root `.env` points at the production project** — a build or a script run
+  with it reaches production.
+- Whether anyone has signed in to production is a question for production's `auth.users`, which
+  MR-48 did not read.

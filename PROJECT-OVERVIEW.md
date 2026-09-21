@@ -17456,3 +17456,147 @@ was executed, once in a rolled-back transaction and once for real, and re-applie
    test said so.
 3. **A green check can be printing `drifted: true`.** Read the output, not the colour — the brief's
    own rule, and it turned up production 44 migrations behind.
+
+### MR-48 — the third copy
+
+**The checked-in MR could not check out. Today hid the visit they were standing inside, and
+Today's card is the only way into a visit. Fixed and driven to a recorded check-out on the Pixel
+10. A second search for copies of the day rule found what the first missed, and the error
+contract's own guard caught me mapping codes nothing in the database raises.**
+
+#### Checkout guard, CI, drift
+
+`@fieldforce/api` · `Praverse-Tech-Pvt-Ltd/Elmiron-App` · `f34ceef` is an ancestor. HEAD
+`b532916` on arrival, level with `origin/main`. **CI:** run `35574115358`, workflow **`CI`**, event
+`push`, **success**, SHA `b532916968c5b13021839aae3bb356bd046c4b27` = HEAD. Supabase still running
+from MR-47; **local drift: 64 files, 64 applied, `drifted: false`**, both lists empty — again at the
+end.
+
+#### A — every copy of the day rule, found two ways
+
+**Method 1, by behaviour** — anything converting an instant to a date (`dayIn`, `dayMonthIn`,
+`territoryToday`, ISO slicing, `Intl`/`Date` day accessors), kept where fed a visit's time.
+**Method 2, by data flow** — every read of a visit's `scheduledFor`, `startedAt`, `completedAt`,
+`receivedAt`, wherever it goes: 52 reads in 21 files. **Method 2 changed the list.**
+
+| Site | What it does | Found by | Verdict |
+| --- | --- | --- | --- |
+| `src/today/plan.ts` `onDay` | **decides which visits Today shows**, from `scheduledFor ?? startedAt` | both | **a copy — fixed in B** |
+| `app/samples/[visitId].tsx:235` | date on a **UCPMP-relevant** samples record, from `scheduledFor ?? receivedAt` | both | label copy, schedule-first — `FE-W58` |
+| `app/analysis/[id].tsx:175`, `app/report/[visitId].tsx:52` | `dayMonthFrom()` **slices the ISO string** — the date is whatever offset it carries | **method 2 only** | label copy, no zone; right today only because both screens read the mock's `+05:30` — `FE-W58` |
+| `app/doctor/[id].tsx:93` | `dayMonthIn(completedAt, zone)` | both | agrees with `visit_day()` by construction; recorded, not faulted |
+| `src/doctors/list.ts`, `src/doctors/profile.ts` | days **since** the last visit, in milliseconds | **method 2 only** | a different question (elapsed time), not which day |
+| `src/today/day-end.ts` | counts whatever list it is given | method 2 | no day rule; its screen still reads the mock |
+| `apps/console`, `packages/*` | no visit dates | both | none |
+
+#### B — Today, and the checked-in MR
+
+**B1, on the Pixel 10 before the fix: check-out was UNREACHABLE.** Signed in as
+`demo-1ed65c8a-mr`, checked in at 11:38 IST to visit `b0d7f3e0` (scheduled 16 September,
+`visit_day()` = 21 September). Today read *"Nothing planned for today · 0 of 0"*, and none of its
+cards led anywhere. Doctors → Dr Asha showed history only. The Beat plan screen (by deep link) listed
+Asha as *"Next stop · 11:38"* — and tapping her opened her **profile**. By code:
+`home.tsx:208` is the only navigation into a visit. **The MR-24 defect by a different route.**
+
+**B2.** Today shows visits whose server day (`visit.visitDay`) is today, **and always a visit in
+progress**, whatever its date. `summariseDay` no longer takes a zone.
+
+**B3 values:**
+
+| Case | Result |
+| --- | --- |
+| in progress, server day an earlier date | **shown, offered as next, opens that visit** |
+| in progress, server day not sent (`null`) | shown |
+| **planned**, earlier day | not shown (negative control — MR-14's defect) |
+| **completed**, earlier day | not shown — only in-progress is exempt |
+| 18:45Z, server says the 10th | on the 10th's Today |
+| 18:45Z, server says the 9th | not on the 10th's Today |
+
+Mutants: requiring a sent day for the exemption kills only the `null` case; widening the exemption
+to anything not planned kills only the completed case. Re-deriving from the schedule is caught by
+two tests.
+
+**B4, on the Pixel 10 after the fix:** Today read *"Started 11:38 · Next visit Dr Asha · 0 of 1"*;
+the button opened the visit; *"Leaving — check out"* checked out. **Server:** `completed` at
+07:07:50Z, `visit_day` 2026-09-21, one `check_outs` row, geofence `inside`.
+
+**Two more things the device showed, registered:** `FE-W59` — the card calls the in-progress visit
+*"Scheduled 13:00"* (the 16th's time, no date) and offers to *"Start"* it; `FE-W60` — after
+checking out, Today said *"You went to every visit on the plan"* while the Beat plan screen said
+*"3 planned · 1 done"*. Today counts visit rows; the plan's other stops have none.
+
+#### C — voice notes
+
+**C1, on the Pixel 10: on disk, not shown.** Signed out, signed in as `demo-1ae08971-mr`: the queue
+read *"Everything is sent"*; the voice-note screen on that rep's visit opened at 00:00. Both
+earlier files — `recording-b1c4c655-….m4a` (55,801 bytes) and `recording-252de88a-….m4a` (56,608)
+— were still in `cache/Audio`. The previous rep's pulled list is also still on the phone, under its
+own key, not shown.
+
+**C2/C3 — CONDITIONAL STOP THE BRIEF DEFINED.** Option (a) is not approved; nothing was switched off.
+
+**Found by reading code, not on the device: `FE-W61`.** The offline queue is one key
+(`sync.queue.v1`) for every user and `clearQueue()` has no callers — a queued write from one rep
+would be sent under the next rep's sign-in.
+
+#### D — three small defects
+
+| | Outcome | Established by |
+| --- | --- | --- |
+| **D1 `FE-W55`** | **Not done — a decision.** The server's answer is reachable only through `list_consent_records()`, an audited read; MR-12 Q4 kept consent out of the pull for that audit cost. Options in `blocked-on-you` | — |
+| **D2 `FE-W56`** | **Done.** Measured: expired token → 401 `PGRST303`, malformed → 401 `PGRST301`. Both → `not_authenticated`; six screens say *"Your sign-in has expired"* first. The error contract's B2 guard **failed** on the new codes — nothing in `pg_proc` raises them — and its derivation now **measures the gateway** each run instead of listing codes. Mutants: three, one kill each | tests only — not produced on the device |
+| **D3 `FE-W54`** | **Done.** *"This note cannot be saved … The recording stays on this phone and is not sent"*, on load and on Save, never over a microphone failure. Mutants: removing it and always showing it each kill one | **the Pixel 10**, after a cold start |
+
+#### E — the deploy order
+
+**E1**, in `docs/restore-runbook.md` → *"The deploy ORDER"*: **1.** pre-flight SELECT (Phase 0) —
+skipped, a territory-less user half-applies the deploy; **2.** shift hours, **before** the
+migrations — both tables are already in production's 19; skipped, the coverage report moves
+00:00–05:30 IST visits a day and every check-in is refused `45002`; **3.** the **45** pending
+migrations (not 37 — 64 minus 19) — skipped, a current build's check-in fails on production's flat
+coordinate read; **4.** THEN reference data — run earlier it fails cleanly in one transaction,
+because `consent_text_versions.organisation_id` arrives in `20260908001200`. **I wrote one claim
+wrong and corrected it before commit:** that production lacks `sync_pull`/`sync_push` — it has
+them, from `20260813000200`, just not their later versions.
+
+**E2 — nothing on this machine shows a real rep, and production cannot be answered from here.**
+Local users: 7,162, all `@example.test`. The field app's local config points at `127.0.0.1`; no
+`eas.json`. The register: G-PILOT not met, `BE-W46` not done. **But the repository-root `.env`
+points at the production project.** Production's `auth.users` was not read.
+
+#### Counts — each runner's own lines
+
+| Workspace | Runner | Tests | Suites / Files |
+| --- | --- | --- | --- |
+| `@fieldforce/core` | vitest | **32** | **4 files** |
+| `@fieldforce/ui` | vitest | 4 | 1 file |
+| `@fieldforce/ui` | jest | 250 | 22 suites |
+| `@fieldforce/ui-tokens` | vitest | 54 | 3 files |
+| `@fieldforce/console` | vitest | 28 | 4 files |
+| `@fieldforce/field` | vitest | **540** | 34 files |
+| `@fieldforce/field` | jest | **147** | 20 suites |
+| `@fieldforce/api` | vitest | **736** | 52 files |
+| `@fieldforce/mock` | vitest | 43 | 1 file |
+
+**1,834 passing, zero failing, up 14.** `typecheck`, `lint`, `format:check` exit 0.
+
+**One process failure, recorded:** `d891169` was committed with `format:check` failing on
+`home.tsx` — I read the check's exit after the commit had run. Fixed in `2b45c4d`, before push.
+
+#### Where it stopped
+
+**No BLOCKAGE.**
+
+- **C2/C3 — CONDITIONAL STOP THE BRIEF DEFINED**: option (a) not approved.
+- **D1 — ROOM**, as a decision: fixing it well means choosing against a recorded constraint's
+  reasoning, which is not engineering's to do silently.
+- Everything else in A–E was done.
+
+**Three things to carry forward.**
+
+1. **A second search is a test of the first.** By name and by behaviour found one decider; by data
+   flow found two more copies that slice ISO strings.
+2. **"The screen shows nothing" can mean "the MR cannot leave".** Today hiding a visit was a
+   navigation defect, not a display one, because Today is the only door.
+3. **A guard failing on your change is the guard working.** B2 said *"fix the derivation, do not
+   delete the assertion"* — and the fix made it measure the gateway instead of trusting a list.
