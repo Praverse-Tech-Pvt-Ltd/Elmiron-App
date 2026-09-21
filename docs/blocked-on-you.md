@@ -796,3 +796,74 @@ re-checks.
 **All three were correct when written, none was re-evaluated when the world moved, and each sat in
 a place whose authority discouraged checking.** A stale alarm and a stale to-do are the same
 defect as a permanent red in CI — only the last one had a workflow run to make it visible.
+
+## MR-46 — 21 September 2026: 2.6 and 2.7, with what you need to decide them
+
+### 2.6 — every MR who has used the app was shown a false privacy notice
+
+**A fact for the operator and the signatory, not a finding to schedule.** Every MR who has opened
+the transparency screen — it is the last step of first run, and reachable from Today at any time —
+was told:
+
+- *"Right now this app records nothing new about you."* It records check-ins and check-outs with
+  coordinates, distance from the clinic and inside/outside the geofence; call reports; and samples.
+- that where they are and when they checked in were *"Not yet — this app cannot do this today"*.
+  Both have been recorded since MR-18.
+
+**It is still live.** The corrected wording is ready and tested on branch
+`mr-46/fe-w52-notice-pending-approval` and has **not** been merged, because the sentence the MR
+reads is yours to approve. **Approve it (or edit it) and it ships in one merge.** Draft:
+
+| Row | Draft wording | Why this and not something stronger |
+| --- | --- | --- |
+| Preamble | *This app records your work visits: when you check in and check out, where you were at those two moments, and what you report. It does not follow you between visits. Each item is below.* | |
+| Location | *Where you are — only when you check in or check out.* Your position at the moment you press check-in and check-out, and how far that is from the clinic. Nothing between visits, and nothing in the background. | The old row promised "Start day to End day", which overstates the other way |
+| Visits | *Which doctors you saw, and when.* Check-in and check-out times, and whether you were inside the clinic's area. | The geofence result is stored on every check-in and check-out row |
+| Reports | *Your call reports.* What you write after a visit. Your manager can read them. | No retention period: nothing deletes reports |
+| Samples | *Samples and inputs you give.* The item, the quantity, its value, the doctor and the time. | Not mentioned at all before |
+| Voice notes | *Your voice notes.* Recorded and kept on this phone. Not sent to anyone in this build. | "Kept 90 days" held for server audio only; these never reach the server |
+| Recordings | *Recordings — only if a doctor agrees.* Made only after the doctor's consent is recorded, and kept on this phone. Not sent to anyone in this build. If they say no, nothing happens to you. | |
+| Never | *Your personal calls, messages, other apps or camera. Where you are between visits.* | "Anything at all once your shift ends" was false: reports and samples are accepted at any hour |
+
+**Two things the wording cannot fix, for you to know before approving:** (1) nothing deletes
+audio from the phone, including a recording the doctor declined — `FE-W53`; (2) whether a retention
+period should be promised for reports is a policy choice, and the draft promises none.
+
+### 2.7 — the settings, measured, as input to the model decision
+
+**Engineering has not decided the model.** What MR-46 measured:
+
+- **Nobody but the database owner can write a setting.** A tenant admin is refused INSERT, UPDATE
+  and DELETE on `app_thresholds`, as is an MR (both `permission denied`; the admin CAN read the row,
+  so the refusal is about writing; the owner's insert of the same row succeeds, so the row is
+  valid). No function writes the table. **So there is no cross-tenant integrity breach**, and the
+  question is only who should see and set what.
+- **`audio_purge_health()` is fixed** (no decision needed): revoked from every signed-in role.
+
+Every setting in the table. **"Kind" is engineering's reading, offered as input — it is the part
+you are deciding.**
+
+| Setting | Read by | Kind (proposed) | Written by, today |
+| --- | --- | --- | --- |
+| `consent_future_tolerance_seconds` | `capture_consent`, `validate_consent_capture`, `validate_consent_withdrawal`, `validate_visit` | product-wide integrity bound | owner (migration) only |
+| `consent_max_sync_lag_hours` | `capture_consent`, `validate_consent_capture`, `validate_consent_withdrawal` | product-wide integrity bound | owner only |
+| `ucpmp_sample_cap_quantity` | `enforce_ucpmp_sample_cap`, `sample_cap_status`, `ucpmp_cap_decision_status`; `check-decision-debt.mjs`; `packages/core` `entities.ts` | **statutory** (UCPMP) — the same for every company, if the code sets one | owner only |
+| `ucpmp_sample_cap_decision_due` | `ucpmp_cap_decision_status`; `check-decision-debt.mjs` | product-wide (our own decision deadline) | owner only |
+| `org_default_shift_window` | `is_within_shift`, `resolve_shift_window`, `org_default_shift_window_status`, `team_exceptions`, `validate_app_threshold`; `seed-reference-data.mjs` | **per-company choice** — its name says so, and today it is one global row, currently `null` | owner only |
+| `consent_deviation` | `team_exceptions` | per-company choice (manager alert tuning) | owner only |
+| `consent_min_captures` | `team_exceptions` | per-company choice | owner only |
+| `consent_min_team_size` | `team_exceptions` | per-company choice | owner only |
+| `rejection_min_items` | `team_exceptions` | per-company choice | owner only |
+| `rejection_rate_threshold` | `team_exceptions` | per-company choice | owner only |
+| `sync_stale_hours` | `team_exceptions` | per-company choice | owner only |
+| `audio_storage_ceiling_bytes` | `begin_upload` | product-wide (capacity) — or per-company if storage is billed per company | owner only |
+| `purge_batch_limit` | `audio_purge_is_stalled`; `purge-expired-audio.mjs` | product-wide (operations) | owner only |
+| `purge_backlog_multiplier` | `audio_purge_is_stalled` | product-wide (operations) | owner only |
+| `purge_max_silence_hours` | `audio_purge_is_stalled` | product-wide (operations) | owner only |
+
+"Read by" is the functions whose definitions name the key, and the files that do; a key built at
+runtime from parts would not appear. **Grep located these; it did not decide them.**
+
+**The shape of the decision, as measured:** seven settings are plausibly per-company and all seven
+are today one row shared by every company; the rest are the same for everyone by nature. Nobody can
+currently change any of them without a migration.

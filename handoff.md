@@ -918,3 +918,31 @@ LOCAL demo tenant only.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-45 — BE-W89's client half | `PROJECT-OVERVIEW.md` → `### MR-45 — BE-W89's client half` |
+
+---
+
+## After MR-46 — 21 September 2026
+
+| | |
+| --- | --- |
+| **CI on `4821964`** | Confirmed green — `35565430658`, workflow `CI`, event `push`, SHA = HEAD at session start |
+| **`FE-W52`** | **PREPARED, NOT SHIPPED.** Branch `mr-46/fe-w52-notice-pending-approval` (`2ab65f7`). **The false notice is live until `blocked-on-you` 2.6 is answered** — six of eight claims false or partly false |
+| **`BE-W106`** | **Half fixed.** `audio_purge_health()` revoked from every signed-in role (`20260921000100`). **B1: no write breach** — only the owner can write `app_thresholds`. The config half waits on 2.7, with the settings table beside it |
+| **`BE-W89`** | **CLOSED.** "On plan" chip built; established by tests only, not on a device |
+| **New** | `FE-W53` (declined recording audio never deleted from the phone, by inspection), `BE-W107` (the route's day rule is a copy of `coverage()`'s and already differs) |
+| **Tests** | **1,811 passing on `main`, zero failing, up 18** — every runner's own lines. The branch adds 8 |
+| **Stop** | A2 **conditional** (no approved wording); C2 **ROOM** (registered as `BE-W107`) |
+
+### For the next session
+
+- **Merging the notice branch is the first thing to do once 2.6 is answered.** It is one commit and
+  rebases cleanly onto `main` as of this session.
+- **The local stack restored from backup and was missing three migrations from its history.**
+  `pnpm exec supabase --workdir services/api migration up --local` applied them. Check before
+  trusting a restored stack.
+- The Supabase CLI is not on PATH in Git Bash; use `pnpm exec supabase`.
+- Services at the end of this session: Supabase **up**; Metro and the Pixel 10 **not started**.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-46 — the false notice | `PROJECT-OVERVIEW.md` → `### MR-46 — the false notice` |

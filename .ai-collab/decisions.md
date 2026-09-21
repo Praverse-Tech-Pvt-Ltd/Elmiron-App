@@ -1826,3 +1826,38 @@ organisation's configuration.
 **Decision: a finding that a function is safe is not recorded until a cross-tenant probe with both
 controls has failed to cross it.** Finding the function is the sweep's job; deciding what it is
 requires trying.
+
+## 21 September 2026 — MR-46
+
+### When one line of a user-facing claim is false, every line is checked
+
+2.6 named two false rows in the privacy notice. Checking all eight found six false or partly false.
+
+**Decision: a notice, consent text or any other statement to a user is verified whole, claim by
+claim against the code, once any one line of it is found false.** The defect that produced one false
+line — a claim true when written and never re-checked — does not stop at one line.
+
+### A statement to a user waits for the operator; the change does not
+
+The corrected notice is ready but unapproved. **Decision: prepare it on a branch, pushed and tested,
+and record that the false version is live** — rather than either shipping unapproved wording or
+leaving the work undone. The approval then costs one merge.
+
+### An ACL claim in a comment is checked against the ACL
+
+`20260916000300` said `audio_purge_health()` was "granted to nobody". It was granted to every
+signed-in user. **Decision: a comment asserting who can execute or read something is not written
+without the `has_*_privilege` query that shows it**, and one found without that query is treated as
+hearsay.
+
+### "Restrict to admins" is not a tenant fix here
+
+`admin` is a tenant role (C1). **Decision: a whole-database view is revoked from signed-in roles
+entirely**, and the per-company question is answered by a separate, scoped function — as
+`retention_status()` already does.
+
+### A client that "uses the server's rule" calls it
+
+MR-45's day filter was described as the server's rule; it was a copy that already differed.
+**Decision: the phrase is reserved for a client that reads the server's answer.** A client
+re-implementation is recorded as a copy, with how it differs.

@@ -17103,3 +17103,160 @@ brief defined.**
    comments I had written with confidence the session before.
 3. **A sweep's label is a hypothesis.** "Safe only by delegation" was a guess about three functions;
    trying to cross the boundary proved one of them was never safe.
+
+### MR-46 — the false notice
+
+**The privacy notice was false in six places, not two. The settings table turned out to be
+write-safe, and a function said to be "granted to nobody" was granted to everybody. The day rule
+MR-45 called "the server's" is a copy that already differs. BE-W89 is closed.**
+
+#### A1 — CI, by workflow name
+
+| | |
+| --- | --- |
+| Run | `35565430658` — **`success`** |
+| Workflow | **`CI`** |
+| Event | `push` |
+| SHA | `48219644db048d9587e0e3e885d2cd08d39f4cc8` — **equal to HEAD** (`git rev-parse HEAD`) |
+
+Nothing was held. Checkout guard: `@fieldforce/api` · `Praverse-Tech-Pvt-Ltd/Elmiron-App` ·
+`f34ceef` is an ancestor. **The environment was not up** — MR-45's services had been stopped at
+the operator's request — so Supabase was started, and it restored from its backup. **`migration up`
+then applied three 17 September migrations as well as this session's**: the restored stack's history
+did not list them. All three applied cleanly and the admin-escape migration's own postcondition
+guard passed; recorded because it means a local backup can lag the migration history silently.
+
+#### A — `FE-W52`: every claim in the notice, checked against the code
+
+**No wording was approved in `blocked-on-you` 2.6, so A2's second branch applies:** the change is
+prepared on `mr-46/fe-w52-notice-pending-approval` (`2ab65f7`), pushed, and **not merged. The false
+version is live until the operator answers.**
+
+| Claim on screen | Verdict | Evidence |
+| --- | --- | --- |
+| *"Right now this app records nothing new about you"* | **FALSE** | `apply_sync_item` writes check-ins, check-outs, call reports, samples and consent records |
+| Location — *"Start day to End day"*, `not-yet` | **FALSE both ways** — recorded, but only at check-in and check-out | `takeFix` has no watcher; its recording caller is `visit/[id].tsx` only; no background-location permission. `record_check_in`/`record_check_out` store lat, long, accuracy, distance, geofence |
+| Check-in and check-out times, `not-yet` | **FALSE** | `check_ins` / `check_outs`, since MR-18 |
+| Voice notes and reports, `not-yet`, *"Kept 90 days, then deleted"* | **FALSE for reports** (sent, never deleted); **partly false for voice notes** (recorded, kept on the phone, never uploaded; the 90-day purge covers server audio only) | `createCallReport` via `sync_push`; `voice-note/[visitId].tsx` uses the mock client and has no upload; `purge-expired-audio.mjs` is bucket `audio` only |
+| Recordings — *"only if a doctor agrees"*, `not-yet` | **`not-yet` is false** (recorded on the phone); **"only if a doctor agrees" is TRUE** | `startRecording` returns unless `authorisingConsent` is non-null; the server re-checks |
+| *"If they say no, nothing happens to you"* | **not contradicted by code** | nothing penalises a declined consent |
+| Never: *"your personal calls, messages, other apps, your camera"* | **TRUE** | no camera, SMS, contacts, call-log or usage-stats permission (read from the local generated `android/` manifest, which is not tracked) |
+| Never: *"or anything at all once your shift ends"* | **FALSE** | the server refuses check-in/out outside the shift window, but `call_report` and `sample_and_input` have no shift check |
+
+**Also found, not a notice claim: `FE-W53`.** A recording the doctor withdraws is described in
+code as discarded; nothing deletes the file. By inspection only.
+
+**A4, on content:** 8 tests; both detectors first fire on the verbatim false version (positive
+control). Mutants: the preamble reverted to *"records nothing"* kills only *"does not deny
+recording location"*; *"Start day to End day"* in the location row kills only *"does not claim
+continuous tracking"*. **A5** is in `blocked-on-you` with the draft wording laid out for approval.
+
+#### B1 — who can write `app_thresholds`: nobody but the owner
+
+| Actor | INSERT | UPDATE | DELETE | Read |
+| --- | --- | --- | --- | --- |
+| Database owner (positive control) | **succeeds** — the row is valid | — | — | — |
+| Company A's **admin** (attacker) | `permission denied` | `permission denied` | `permission denied` | **reads it** — so the refusals are about writing |
+| Company A's **MR** (negative control) | `permission denied` | — | — | — |
+
+`authenticated` holds SELECT only, RLS is forced, and **no function writes the table** (the only
+function naming it is `threshold()`, a reader). `service_role` has no write grant either. **No
+cross-tenant integrity breach; not a stop.**
+
+#### B2 — the settings
+
+Fifteen keys, every one a `global` row written only by migrations. The full table — readers, a
+proposed kind, writers — is in `blocked-on-you.md` → *MR-46, 2.7*. In short: **seven look
+per-company and are shared by every company** (`org_default_shift_window` and six manager-alert
+tunings); the consent bounds and purge settings are product-wide; `ucpmp_sample_cap_quantity` is
+statutory. The model was not decided.
+
+#### B3/B4 — `audio_purge_health()`, fixed
+
+**Measured before:** an MR of a company with no recordings read `liveObjectCount = 56` — all 56
+belonging to other companies. **Why it survived:** `20260916000300` says twice that the function is
+*"granted to nobody"*; `20260815000300:869` grants it to `authenticated`. A claim written, never
+measured.
+
+**Fix: revoked from every signed-in role** (`20260921000100`), with a postcondition guard that also
+refuses losing it for the owner. Not "admins only": `admin` is a tenant role (`decisions.md` C1),
+so that is the same leak to a smaller audience. Not scoped: its callers are the watchdog and two
+specs, all connecting as the owner, and they need the whole database. The per-company view,
+`retention_status()`, already existed.
+
+**Proof, 7 cases.** Before the migration the four refusals — rival MR, rival admin, own MR, own
+admin — **failed** and the three controls passed; after, 7/7. Owning-company positive control: its
+admin still sees its recording through `retention_status()`. Rival negative control: the rival
+admin does not. Operator positive control: the owner still reads it. Mutant: also revoking
+`retention_status()` kills exactly the two `retention_status()` cases. The rollback was executed in
+a rolled-back transaction and re-opens the grant.
+
+#### C1 — the day rule is a copy
+
+**The client holds a copy, and it already differs.** MR-45 wrote that the route used "the same day
+rule the server's `coverage()` uses". `coverage()`: completed visits, `completed_at`, hard-coded
+`'Asia/Kolkata'`. Client: any visit, `completedAt ?? startedAt ?? scheduledFor`, the territory's
+zone — **UTC when no shift hours are configured**, which is every territory relying on
+`org_default_shift_window`, currently `null`. **The MR-27 precedent applies — the server sends the
+answer** — but the server's own rule hard-codes the zone, so the fix is one server function used by
+both `coverage()` and `sync_pull`. That changes the manager's report, so it is **registered as
+`BE-W107`, not done.** The false comment is corrected.
+
+#### D1 — "On plan", and `BE-W89` closed
+
+The chip is derived from `beatPlanView`, so it cannot disagree with the Beat plan screen about which
+plan is today's; it is **not offered** while loading, syncing, unreachable or with no plan today.
+
+| Exposing value | Result |
+| --- | --- |
+| a doctor only on **yesterday's** plan | **out** |
+| a doctor on today's plan with a visit **five days ago** | **in**, and the route counts **0 done** |
+| a doctor only on a **superseded** version of today's plan | **out** |
+| 18:45Z on the 20th | IST gives the 21st's plan; UTC gives the 20th's (yesterday's doctor alone) |
+| plan here, stops still syncing | chip **not offered** |
+
+Mutants: an empty chip while syncing kills only the syncing case; an empty chip with no plan kills
+only the no-plan case. At route level, always offering the chip kills the new syncing case **and**
+MR-14's no-plan case — whose stated reason (*"the pull cannot answer it"*) was no longer true; its
+assertion was right and its name is corrected. **Not driven on a device**: the chip is established
+by tests only, and the register row says so.
+
+#### Counts — each runner's own lines
+
+| Workspace | Runner | Tests | Suites / Files |
+| --- | --- | --- | --- |
+| `@fieldforce/core` | vitest | 28 | 3 files |
+| `@fieldforce/ui` | vitest | 4 | 1 file |
+| `@fieldforce/ui` | jest | 250 | 22 suites |
+| `@fieldforce/ui-tokens` | vitest | 54 | 3 files |
+| `@fieldforce/console` | vitest | 28 | 4 files |
+| `@fieldforce/field` | vitest | **532** | 33 files |
+| `@fieldforce/field` | jest | **142** | 20 suites |
+| `@fieldforce/api` | vitest | **730** | **51 files** |
+| `@fieldforce/mock` | vitest | 43 | 1 file |
+
+**1,811 passing on `main`, zero failing, up 18.** The branch adds 8 more (the notice tests), not
+counted here. `typecheck`, `lint`, `format:check` and `verify:rollbacks --files-only` (63 of 63)
+exit 0.
+
+#### Where it stopped
+
+**No stop was a BLOCKAGE, and all four parts were done.** Two things were deliberately not done,
+each for a reason the brief defined or the record requires:
+
+- **A2 — CONDITIONAL STOP THE BRIEF DEFINED.** No approved wording, so the change is prepared, not
+  shipped.
+- **C2 — ROOM, recorded as `BE-W107`.** Nothing blocked it; doing it well means changing the
+  manager's coverage report in the same change, which deserves its own session.
+
+**One rule broken, and recorded:** `BE-W107` was cited in a code comment before its register row
+existed — the exact error MR-45 recorded. Both landed in the same push, so no pushed commit cites
+an unregistered id, but the order was wrong.
+
+**Three things to carry forward.**
+
+1. **If one line of a notice is false, check them all.** 2.6 named two; there were six.
+2. **A comment that says "granted to nobody" is a claim about an ACL, and the ACL is one query
+   away.** It was wrong the day it was written, and it is why the leak survived a session that built the
+   correct alternative.
+3. **"Uses the server's rule" means calling it.** A copy that agrees today is a second rule.

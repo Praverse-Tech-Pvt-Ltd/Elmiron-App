@@ -1273,3 +1273,28 @@ from `src/today/beat-plan-view.ts`.
 `src/transparency/content.ts` still marks every capture row `not-yet`. The wording needs a decision
 (`blocked-on-you` 2.6): the location row promises continuous tracking the app does not do either, so
 a plain flip would overstate in the other direction.
+
+## MR-46 — 21 September 2026: "On plan", and the notice waits for approval
+
+**Counts:** `@fieldforce/field` vitest **532** (33 files, +8), jest **142** (20 suites, +3).
+
+### What changed on screen
+
+**Doctors → "On plan" chip.** Keeps the doctors on the plan the Beat plan screen shows for today,
+whatever its status. It is **not offered** while the pull is loading, while the plan's stops are
+still syncing, when the pull failed, or when there is no plan today, so it never shows "no doctors on
+your plan" about stops that have not arrived. Built on `onPlanDoctorIds` in
+`src/today/beat-plan-view.ts`. Tested only; not driven on a device.
+
+### What did NOT change on screen, and why
+
+**The transparency screen still shows the false notice.** The corrected wording is on branch
+`mr-46/fe-w52-notice-pending-approval`, waiting for `blocked-on-you` 2.6. Every row becomes
+`active`; location is described as recorded **at check-in and check-out only**; no retention period
+is promised.
+
+### Known and recorded
+
+- `FE-W53`: nothing deletes audio from the phone, including a recording the doctor declined.
+- `BE-W107`: the route's "which day is this visit" rule is a copy of `coverage()`'s. It differs for
+  MRs with no configured shift hours (UTC vs IST).
