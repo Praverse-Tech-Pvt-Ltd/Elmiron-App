@@ -456,3 +456,59 @@ describe('a visit in progress is always on Today, whatever its date', () => {
     expect(summary.planned).toBe(0);
   });
 });
+
+/**
+ * MR-49 D1 / `FE-W60`. On the Pixel 10, after one of three planned stops, Today said "You went to
+ * every visit on the plan". It counted visit rows; a plan stop with no visit row was invisible.
+ */
+describe('FE-W60 — the day counts the plan’s stops, not only its visit rows', () => {
+  const D2 = '33333333-3333-4333-8333-333333333302';
+  const D3 = '33333333-3333-4333-8333-333333333303';
+
+  it('one of three planned doctors seen: 3 planned, 1 done, 2 still on the plan, none next', () => {
+    const summary = summariseDay(
+      [visit({ status: 'completed' })],
+      [doctor()],
+      DAY,
+      new Set([doctor().id, D2, D3]),
+    );
+    expect(summary.planned).toBe(3);
+    expect(summary.done).toBe(1);
+    expect(summary.stillOnPlan).toBe(2);
+    expect(summary.next).toBeNull();
+  });
+
+  it('POSITIVE CONTROL: every planned doctor seen leaves nothing on the plan', () => {
+    const summary = summariseDay(
+      [visit({ status: 'completed' })],
+      [doctor()],
+      DAY,
+      new Set([doctor().id]),
+    );
+    expect(summary.stillOnPlan).toBe(0);
+    expect(summary.planned).toBe(1);
+  });
+
+  it('no plan is no stops — the visit-only day is unchanged', () => {
+    const summary = summariseDay([visit({ status: 'completed' })], [doctor()], DAY);
+    expect(summary.stillOnPlan).toBe(0);
+    expect(summary.planned).toBe(1);
+  });
+});
+
+describe('FE-W59 — the next visit says whether the MR is already inside it', () => {
+  it('an in-progress visit is marked in progress, with its check-in time', () => {
+    const summary = summariseDay(
+      [visit({ status: 'in_progress', startedAt: `${DAY}T10:05:00+05:30` })],
+      [doctor()],
+      DAY,
+    );
+    expect(summary.next?.inProgress).toBe(true);
+    expect(summary.next?.startedAt).toBe(`${DAY}T10:05:00+05:30`);
+  });
+
+  it('POSITIVE CONTROL: a planned visit is not', () => {
+    const summary = summariseDay([visit()], [doctor()], DAY);
+    expect(summary.next?.inProgress).toBe(false);
+  });
+});

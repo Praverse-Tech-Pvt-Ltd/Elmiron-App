@@ -10,6 +10,7 @@ import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { emptyQueue } from '../../src/sync/reducer';
 import type { QueueLoad } from '../../src/sync/async-storage-store';
 import { summariseDay } from '../../src/today/plan';
+import { beatPlanView, onPlanDoctorIds } from '../../src/today/beat-plan-view';
 import { clockIn, dayMonthIn } from '../../src/today/territory-day';
 import type { TerritoryZone } from '../../src/today/territory-day';
 import type { DayOrigin, PullFailure } from '../../src/sync/pulled-store';
@@ -99,8 +100,25 @@ const MrToday = (): ReactNode => {
   // A2. `today` is the server's instant in the territory's zone. Until it arrives there
   // is no day to summarise, and the handset must not supply one -- so the screen shows
   // its loading state rather than a day computed from the wrong clock.
+  //
+  // MR-49 D1 / `FE-W60`. The day also includes today's PLAN stops that have no visit yet --
+  // chosen by the same `beatPlanView` the Beat plan screen and the Doctors chip use, so there
+  // is one definition of "today's plan". `null` (not settled, or no plan) is no stops.
+  const planDoctorIds =
+    onPlanDoctorIds(
+      beatPlanView({
+        status,
+        today,
+        plans: [...store.beat_plan.values()],
+        entries: [...store.beat_plan_entry.values()],
+        visits: visitsFromStore(store),
+        doctors: doctorsFromStore(store),
+      }),
+    ) ?? new Set<string>();
   const summary =
-    today === null ? null : summariseDay(visitsFromStore(store), doctorsFromStore(store), today);
+    today === null
+      ? null
+      : summariseDay(visitsFromStore(store), doctorsFromStore(store), today, planDoctorIds);
   const startedAt = summary?.startedAt ?? null;
   const next = summary?.next ?? null;
 
@@ -174,6 +192,7 @@ const MrToday = (): ReactNode => {
       planned={summary?.planned ?? 0}
       done={summary?.done ?? 0}
       notMet={summary?.notMet ?? 0}
+      stillOnPlan={summary?.stillOnPlan ?? 0}
       next={
         next === null
           ? null
@@ -182,8 +201,16 @@ const MrToday = (): ReactNode => {
               clinic: next.clinic,
               // B4. "Not arrived yet" is not the same as "there is none".
               clinicPending: next.clinicPending,
-              scheduledLabel:
-                next.scheduledFor === null ? null : `Scheduled ${clockIn(next.scheduledFor, zone)}`,
+              // MR-49 D2 / `FE-W59`. A visit the MR is inside says when they checked in; the
+              // schedule of another day read as "Scheduled 13:00" for a visit under way.
+              scheduledLabel: next.inProgress
+                ? next.startedAt === null
+                  ? null
+                  : `Checked in ${clockIn(next.startedAt, zone)}`
+                : next.scheduledFor === null
+                  ? null
+                  : `Scheduled ${clockIn(next.scheduledFor, zone)}`,
+              inProgress: next.inProgress,
             }
       }
       sync={indicatorStateFor(queue)}

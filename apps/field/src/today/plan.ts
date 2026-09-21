@@ -44,6 +44,12 @@ export interface NextVisit {
   readonly clinicPending: boolean;
   /** Server-scheduled time, ISO. Null for an unplanned visit. */
   readonly scheduledFor: string | null;
+  /**
+   * MR-49 D2 / `FE-W59`. The MR is inside this visit: the card says "Continue" and shows when
+   * they checked in (`startedAt`, server-stamped), not the schedule.
+   */
+  readonly inProgress: boolean;
+  readonly startedAt: string | null;
 }
 
 export interface DaySummary {
@@ -63,6 +69,13 @@ export interface DaySummary {
   readonly next: NextVisit | null;
   /** The earliest `startedAt` the server stamped today, ISO. Null before the first. */
   readonly startedAt: string | null;
+  /**
+   * MR-49 D1 / `FE-W60`. Doctors on today's beat plan with no visit counted today. Included in
+   * `planned`: the plan is what the server says the day was, and a stop with no visit row is
+   * still on it. Without this Today counted visit rows only and, after one of three stops, said
+   * "You went to every visit on the plan".
+   */
+  readonly stillOnPlan: number;
 }
 
 /** `planned` and `cancelled` are both "not done"; only `cancelled` leaves the count. */
@@ -167,6 +180,8 @@ const nextVisitFrom = (visit: Visit, doctor: Doctor | undefined): NextVisit => {
     clinic: clinic.label,
     clinicPending: clinic.pending,
     scheduledFor: visit.scheduledFor,
+    inProgress: visit.status === 'in_progress',
+    startedAt: visit.startedAt,
   };
 };
 
@@ -179,8 +194,12 @@ export const summariseDay = (
   visits: readonly Visit[],
   doctors: readonly Doctor[],
   day: string,
+  /** Today's plan's doctors, from `onPlanDoctorIds(beatPlanView(...))`; empty when none. */
+  planDoctorIds: ReadonlySet<string> = new Set(),
 ): DaySummary => {
   const counted = visits.filter((visit) => countsTowardTheDay(visit) && onDay(visit, day));
+  const visited = new Set(counted.map((visit) => visit.doctorId));
+  const stillOnPlan = [...planDoctorIds].filter((doctorId) => !visited.has(doctorId)).length;
   const byId = new Map(doctors.map((doctor) => [doctor.id, doctor]));
 
   // `in_progress` comes before `planned`: a visit the MR is standing inside is the
@@ -199,7 +218,8 @@ export const summariseDay = (
     .sort();
 
   return {
-    planned: counted.length,
+    planned: counted.length + stillOnPlan,
+    stillOnPlan,
     done: counted.filter((visit) => visit.status === 'completed').length,
     notMet: counted.filter((visit) => visit.status === 'not_met').length,
     startedAt: startedTimes[0] ?? null,
