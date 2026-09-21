@@ -202,6 +202,8 @@ describe.skipIf(!reachable)('C4 — what the payload actually contains', () => {
       'started_at',
       'status',
       'updated_at',
+      // MR-47 / BE-W107. Not a column -- sync_pull adds the server's day for the visit.
+      'visit_day',
     ]);
     expect(Object.keys(payloads['doctor'] ?? {}).sort()).toEqual([
       'assigned_mr_id',

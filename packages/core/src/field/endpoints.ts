@@ -860,6 +860,11 @@ export const VisitRowSchema = z.object({
   scheduled_for: IsoDateTimeSchema.nullable(),
   started_at: IsoDateTimeSchema.nullable(),
   completed_at: IsoDateTimeSchema.nullable(),
+  /**
+   * MR-47 / `BE-W107`. Not a column: `sync_pull` adds it (`visit_day()`). Absent from a direct
+   * write response, which returns the table row.
+   */
+  visit_day: IsoDateSchema.nullable().optional(),
   received_at: IsoDateTimeSchema,
   created_at: IsoDateTimeSchema,
   updated_at: IsoDateTimeSchema,
@@ -1164,6 +1169,7 @@ export const fromVisitRow = (row: unknown): Visit => {
     scheduledFor: parsed.scheduled_for,
     startedAt: parsed.started_at,
     completedAt: parsed.completed_at,
+    visitDay: parsed.visit_day ?? null,
     receivedAt: parsed.received_at,
     createdAt: parsed.created_at,
     updatedAt: parsed.updated_at,

@@ -224,6 +224,8 @@ export const visits: Visit[] = [
     scheduledFor: T(10),
     startedAt: T(10, 4),
     completedAt: T(10, 21),
+    // MR-47 / BE-W107. The server's day for the visit, in the territory's zone (IST here).
+    visitDay: '2026-08-10',
     receivedAt: T(10, 22),
     createdAt: T(8),
     updatedAt: T(10, 21),
@@ -240,6 +242,8 @@ export const visits: Visit[] = [
     scheduledFor: T(11, 30),
     startedAt: T(11, 34),
     completedAt: T(11, 49),
+    // MR-47 / BE-W107. The server's day for the visit, in the territory's zone (IST here).
+    visitDay: '2026-08-10',
     receivedAt: T(11, 50),
     createdAt: T(8),
     updatedAt: T(11, 49),
@@ -255,6 +259,8 @@ export const visits: Visit[] = [
     scheduledFor: null,
     startedAt: T(15, 2),
     completedAt: null,
+    // MR-47 / BE-W107. The server's day for the visit, in the territory's zone (IST here).
+    visitDay: '2026-08-10',
     // Synced six hours after it happened. This gap is the reason both fields exist.
     receivedAt: T(21, 14),
     createdAt: T(15, 2),
@@ -723,6 +729,8 @@ export const coverage: CoverageRow[] = [
     plannedVisitCount: 8,
     actualVisitCount: 6,
     missedVisitCount: 2,
+    dayZone: 'Asia/Kolkata',
+    dayZoneSource: 'territory',
   },
   {
     mrId: IDS.mr,
@@ -730,6 +738,8 @@ export const coverage: CoverageRow[] = [
     plannedVisitCount: 7,
     actualVisitCount: 7,
     missedVisitCount: 0,
+    dayZone: 'Asia/Kolkata',
+    dayZoneSource: 'territory',
   },
 ];
 

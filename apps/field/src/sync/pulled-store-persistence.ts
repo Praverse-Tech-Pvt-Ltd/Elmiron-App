@@ -163,7 +163,7 @@ const serialise = (store: LocalStore): StoredShape => ({
  * does not parse is dropped and the whole load is refused, because a partially-restored day
  * is indistinguishable on screen from a complete one.
  */
-const deserialise = (raw: unknown): LocalStore | null => {
+export const deserialise = (raw: unknown): LocalStore | null => {
   if (typeof raw !== 'object' || raw === null) return null;
   const shape = raw as Partial<StoredShape>;
   if (shape.version !== 1) return null;
@@ -195,6 +195,12 @@ const deserialise = (raw: unknown): LocalStore | null => {
   const consentTextVersion = new Map(next.consent_text_version);
 
   for (const row of shape.visit) {
+    // MR-47 / `BE-W107`. A visit stored before the pull carried `visit_day` has no `visitDay`
+    // key. `VisitSchema` would default it to null and the load would succeed -- and the cursor
+    // would never send those visits again, so every one of them would be on no plan's day for
+    // ever. Refusing the load instead clears the cursor and takes a full re-sync, which fetches
+    // them with their day: the same mechanism as the array-key checks above.
+    if (typeof row !== 'object' || row === null || !('visitDay' in row)) return null;
     const parsed = VisitSchema.safeParse(row);
     if (!parsed.success) return null;
     visit.set(parsed.data.id, parsed.data);

@@ -100,7 +100,6 @@ export default function BeatPlanRoute(): ReactNode {
     entries: [...store.beat_plan_entry.values()],
     visits: visitsFromStore(store),
     doctors: doctorsFromStore(store),
-    zone,
   });
 
   const route = view.kind === 'route' ? view.route : null;

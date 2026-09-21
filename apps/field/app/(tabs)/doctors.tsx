@@ -53,10 +53,9 @@ export default function Doctors(): ReactNode {
           entries: [...store.beat_plan_entry.values()],
           visits,
           doctors,
-          zone,
         }),
       ),
-    [status, today, store, visits, doctors, zone],
+    [status, today, store, visits, doctors],
   );
   // If the chip goes away while selected (a refresh re-opens the pull), the list must not keep
   // filtering by a set the screen no longer offers.

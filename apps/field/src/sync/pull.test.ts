@@ -40,6 +40,8 @@ const REAL_VISIT_ROW = {
   not_met_reason: null,
   scheduled_for: null,
   clinic_address_id: null,
+  // MR-47 / BE-W107. Added by sync_pull, not a column. 19:02Z is 00:32 IST on the 8th.
+  visit_day: '2026-09-08',
 };
 
 const REAL_DOCTOR_ROW = {
@@ -121,7 +123,12 @@ describe('mapping a real payload', () => {
     expect(mapped[0]).toMatchObject({ kind: 'upsert', entity: 'visit' });
     // camelCase out, snake_case in. This assertion is the divergence, written down.
     expect(mapped[0]).toMatchObject({
-      record: { mrId: REAL_VISIT_ROW.mr_id, receivedAt: REAL_VISIT_ROW.received_at },
+      record: {
+        mrId: REAL_VISIT_ROW.mr_id,
+        receivedAt: REAL_VISIT_ROW.received_at,
+        // MR-47 / BE-W107. The server's day reaches the record, unchanged.
+        visitDay: '2026-09-08',
+      },
     });
     expect(mapped[1]).toMatchObject({ record: { fullName: 'Dr Pune Fixture' } });
     expect(mapped[2]).toMatchObject({ record: { planDate: '2026-09-07', version: 1 } });

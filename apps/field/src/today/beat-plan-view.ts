@@ -7,8 +7,6 @@ import type {
 } from '@fieldforce/core';
 import { buildDayRoute } from './route';
 import type { DayRoute } from './route';
-import { dayIn } from './territory-day';
-import type { TerritoryZone } from './territory-day';
 
 /**
  * `BE-W89`, client half — MR-45 B. What the beat-plan screen shows, decided here so it can be
@@ -110,20 +108,7 @@ export interface BeatPlanViewInput {
   readonly entries: readonly BeatPlanEntry[];
   readonly visits: readonly Visit[];
   readonly doctors: readonly Doctor[];
-  /** The territory's zone, so a visit's DAY is reckoned the way the plan's date is. */
-  readonly zone: TerritoryZone;
 }
-
-/**
- * The instant that decides which day a visit belongs to.
- *
- * `completedAt` first, because that is what the SERVER uses: `coverage()` assigns a visit to
- * `(completed_at at time zone 'Asia/Kolkata')::date`. A visit still in progress, or one that
- * never started, falls back to `startedAt` and then `scheduledFor`. A visit with none of them
- * has no day and cannot be on any route.
- */
-const visitInstant = (visit: Visit): string | null =>
-  visit.completedAt ?? visit.startedAt ?? visit.scheduledFor;
 
 /**
  * **The visits that belong to THIS plan's day — and only those.**
@@ -133,27 +118,17 @@ const visitInstant = (visit: Visit): string | null =>
  * DOCTOR alone. On the mock that was harmless, because the mock only ever served today's
  * visits. The pulled store holds the MR's whole history, so a doctor seen on 16 September
  * rendered as DONE on 21 September's route, and the header counted it — "3 planned · 1 done"
- * on a day nobody had been visited. Which past visit leaked was arbitrary: a later `planned`
- * row happened to outrank the others.
+ * on a day nobody had been visited.
  *
- * **MR-46 C1 — CORRECTED. This is a COPY of the server's rule, and it already differs.** MR-45
- * wrote here that the rule "is the SERVER's" and that the route and the manager's report "now
- * agree". `coverage()` counts only `status = 'completed'`, reckons the day from `completed_at`,
- * and hard-codes `'Asia/Kolkata'`. This counts any visit, falls back to `startedAt` and
- * `scheduledFor`, and uses the territory zone from the pull — UTC when no shift hours are
- * configured. They agree only for completed visits in an IST territory with configured hours.
- * The fix is for the server to send each visit's day, as consent precedence does (MR-27), and
- * for `coverage()` to use the same function: `BE-W107`.
+ * **MR-47 — `BE-W107`. The day is the SERVER's answer, not a copy of its rule.** MR-45 reckoned
+ * it here from `completedAt ?? startedAt ?? scheduledFor` in the territory zone; MR-46 found
+ * that was a second copy of `coverage()`'s rule and that the two already differed. The server
+ * now decides it once, in `visit_day()`, and sends it on every visit; the manager's report
+ * counts by the same function. A visit whose day the server has not sent (`null`: a direct
+ * write response, before the next pull) is on no plan's day.
  */
-const visitsOnPlanDay = (
-  visits: readonly Visit[],
-  planDate: string,
-  zone: TerritoryZone,
-): readonly Visit[] =>
-  visits.filter((visit) => {
-    const at = visitInstant(visit);
-    return at !== null && dayIn(at, zone) === planDate;
-  });
+const visitsOnPlanDay = (visits: readonly Visit[], planDate: string): readonly Visit[] =>
+  visits.filter((visit) => visit.visitDay === planDate);
 
 export const beatPlanView = (input: BeatPlanViewInput): BeatPlanView => {
   const { status, today } = input;
@@ -186,7 +161,7 @@ export const beatPlanView = (input: BeatPlanViewInput): BeatPlanView => {
     statusLine,
     route: buildDayRoute(
       { ...plan, entries },
-      visitsOnPlanDay(input.visits, plan.planDate, input.zone),
+      visitsOnPlanDay(input.visits, plan.planDate),
       input.doctors,
       [],
     ),

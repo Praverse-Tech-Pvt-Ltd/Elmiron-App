@@ -111,6 +111,16 @@ export const VisitSchema = z.object({
   scheduledFor: IsoDateTimeSchema.nullable(),
   startedAt: IsoDateTimeSchema.nullable(),
   completedAt: IsoDateTimeSchema.nullable(),
+  /**
+   * MR-47 / `BE-W107`. **The day this visit belongs to, decided by the SERVER** --
+   * `visit_day()`, the same function the manager's `coverage()` report counts by, in the MR's
+   * territory zone (UTC, labelled, when none is configured). The client never reckons a visit's
+   * day itself; that was a second copy of the rule, and it had already drifted.
+   *
+   * `null` when the server did not say: a direct write response carries the table row, not
+   * the pull's payload. A visit with no day is on no plan's day until the next pull says.
+   */
+  visitDay: IsoDateSchema.nullable().default(null),
   /** When the server took delivery. Server-stamped; a supplied value is discarded. */
   receivedAt: IsoDateTimeSchema,
   createdAt: IsoDateTimeSchema,
