@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DoctorSchema, VisitSchema } from '@fieldforce/core';
 
 /**
@@ -157,6 +158,35 @@ describe('app/visit/[id].tsx — FE-W62, a failed refresh does not hide a visit 
   });
 });
 
+/**
+ * MR-50 E2 / `FE-W64`. By direct link, the screen drew a visit the phone does not hold —
+ * "This visit · Not started · I am here — check in" — seen on the Pixel 10 in MR-49.
+ */
+describe('app/visit/[id].tsx — FE-W64, a visit the phone does not hold is said to be absent', () => {
+  const without = (status: string): void => {
+    loaded();
+    const held = mockStore() as Record<string, unknown>;
+    mockStore.mockReturnValue({
+      ...held,
+      store: { ...(held['store'] as object), visit: new Map() },
+      status,
+    });
+  };
+
+  it('says the visit is not on this phone once the pull has settled without it', async () => {
+    without('ready');
+    await render(<VisitRoute />);
+    expect(await screen.findByText('This visit is not on this phone')).toBeTruthy();
+    expect(screen.queryByText('I am here — check in')).toBeNull();
+  });
+
+  it('POSITIVE CONTROL: claims nothing while the pull is still loading', async () => {
+    without('loading');
+    await render(<VisitRoute />);
+    expect(screen.queryByText('This visit is not on this phone')).toBeNull();
+  });
+});
+
 describe('app/visit/[id].tsx — defect 12, the stage after a SENT check-in', () => {
   it('asks the SERVER again once the check-in has been accepted', async () => {
     // The server now holds a visit this screen's store says is `planned`. Only the server
@@ -193,5 +223,24 @@ describe('app/visit/[id].tsx — defect 12, the stage after a SENT check-in', ()
 
     expect(await screen.findByText(/Saved on this phone/u)).toBeTruthy();
     expect(mockRefresh).not.toHaveBeenCalled();
+  });
+
+  it('MR-50 E1 / FE-W63: names the queued write a CHECK-IN, though the stage has moved on', async () => {
+    // Seen on the Pixel 10 (MR-49 A1): the banner took its title from the stage at render, and a
+    // queued check-in moves the stage to `during`, so it read "This check-out cannot be sent yet".
+    // The case above queued a check-in for this same visit in the shared in-memory storage; start
+    // from an empty queue so the stage begins at `before`, as it did on the device.
+    await AsyncStorage.clear();
+    loaded();
+    mockCreateCheckIn.mockRejectedValue(new Error('Network request failed'));
+    await render(<VisitRoute />);
+    await screen.findByText(/Dr Asha Deshpande/u);
+
+    await fireEvent.press(screen.getByText('I am here — check in'));
+
+    expect(await screen.findByText('This check-in cannot be sent yet')).toBeTruthy();
+    expect(screen.queryByText('This check-out cannot be sent yet')).toBeNull();
+    // Not vacuous: the stage really did move — the check-out action is now what is offered.
+    expect(screen.getByText('Leaving — check out')).toBeTruthy();
   });
 });

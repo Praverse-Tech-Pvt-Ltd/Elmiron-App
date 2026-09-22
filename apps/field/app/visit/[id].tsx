@@ -54,6 +54,13 @@ import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
  * position after the request returns, which is the client half of the promise the
  * transparency screen makes.
  */
+/** MR-50 E2 / `FE-W64`. Said when a settled pull does not hold the visit asked for. */
+const VISIT_NOT_ON_PHONE = {
+  title: 'This visit is not on this phone',
+  detail:
+    'It is not in the visit list this phone holds for you, so there is nothing here to check in to.',
+} as const;
+
 export default function VisitRoute(): ReactNode {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -100,6 +107,11 @@ export default function VisitRoute(): ReactNode {
   const loading = status === 'loading';
   const [busy, setBusy] = useState(false);
   const [blocked, setBlocked] = useState<string | null>(null);
+  /**
+   * MR-50 E1 / `FE-W63`. The write the banner reports, fixed at the press. The stage moves the
+   * moment a check-in is queued, so reading it at render named the wrong write.
+   */
+  const [blockedWrite, setBlockedWrite] = useState<'check-in' | 'check-out'>('check-in');
   const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
 
   useEffect(() => {
@@ -279,6 +291,7 @@ export default function VisitRoute(): ReactNode {
     if (visit === null) return;
     setBusy(true);
     setBlocked(null);
+    setBlockedWrite(stage === 'before' ? 'check-in' : 'check-out');
 
     void (async () => {
       try {
@@ -382,13 +395,20 @@ export default function VisitRoute(): ReactNode {
       <VisitScreen
         actionLabel={actionLabelFor(stage)}
         blocked={blocked}
+        blockedWrite={blockedWrite}
         busy={busy}
         clinic={clinic === undefined ? null : `${clinic.label}, ${clinic.city}`}
         doctorName={doctor?.fullName ?? 'This visit'}
         failure={
           failure ??
           (pullFailure === null
-            ? null
+            ? // MR-50 E2 / `FE-W64`. The pull has SETTLED and this visit is not in it -- reached
+              // by a direct link to a visit this phone does not hold (MR-49 opened rep A's visit
+              // as rep B). The screen drew "This visit · Not started · I am here" with nothing
+              // behind it. Say so instead. Only once settled: while loading, nothing is claimed.
+              status === 'ready' && visit === null
+              ? VISIT_NOT_ON_PHONE
+              : null
             : sessionExpired(pullFailure)
               ? SESSION_EXPIRED
               : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'

@@ -56,6 +56,13 @@ export interface VisitScreenProps {
   readonly busy?: boolean;
   /** Why the visit cannot be advanced right now, in the MR's words. */
   readonly blocked?: string | null;
+  /**
+   * MR-50 E1 / `FE-W63`. **Which write the banner is about**, decided when the MR pressed — not
+   * read off the stage at render. A queued check-in advances the stage to `during` before this
+   * renders, so a stage-derived title announced the queued CHECK-IN as a check-out. Optional:
+   * without it the title falls back to the stage, as before.
+   */
+  readonly blockedWrite?: 'check-in' | 'check-out';
   /** "Checked in 11:56" — the server's clock, formatted by the caller. */
   readonly startedLabel?: string | null;
   /** "17 min" once the visit is finished. */
@@ -161,6 +168,7 @@ export const VisitScreen = ({
   onAction,
   busy = false,
   blocked = null,
+  blockedWrite,
   startedLabel = null,
   durationLabel = null,
   onWriteReport,
@@ -266,7 +274,7 @@ export const VisitScreen = ({
             may say so.
           */
           title={
-            stage === 'before'
+            (blockedWrite ?? (stage === 'before' ? 'check-in' : 'check-out')) === 'check-in'
               ? 'This check-in cannot be sent yet'
               : 'This check-out cannot be sent yet'
           }
