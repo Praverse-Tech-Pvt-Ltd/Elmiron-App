@@ -959,7 +959,8 @@ describe.skipIf(!reachable)('analysis_overrides is append-only', () => {
   const overrideId = async (client: Client): Promise<string> => {
     await asUser(client, world.users.westManager);
     const created = await client.query<{ id: string }>(
-      'select id from public.create_analysis_override($1, $2, $3)',
+      // MR-51 B1: the function returns the contract's jsonb, so the id is a key, not a column.
+      "select public.create_analysis_override($1, $2, $3) ->> 'id' as id",
       [world.analyses.pune, null, 'the row under test'],
     );
     await client.query('set local role postgres');
@@ -1035,11 +1036,11 @@ describe.skipIf(!reachable)('an override is bounded by the manager subtree', () 
   it('a manager may override an analysis inside their subtree', async () => {
     await inRolledBackTransaction(async (client: Client) => {
       await asUser(client, world.users.westManager);
-      const created = await client.query<{ analysis_id: string }>(
-        'select analysis_id from public.create_analysis_override($1, $2, $3)',
+      const created = await client.query<{ analysisId: string }>(
+        `select public.create_analysis_override($1, $2, $3) ->> 'analysisId' as "analysisId"`,
         [world.analyses.pune, null, 'inside the subtree'],
       );
-      expect(created.rows[0]?.analysis_id).toBe(world.analyses.pune);
+      expect(created.rows[0]?.analysisId).toBe(world.analyses.pune);
     });
   });
 

@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import type { ListAnalysisOverridesResponse } from '@fieldforce/core';
-import { OverridesPanel, loadOverrides } from './overrides-panel';
+import { OVERRIDES_READ_REASON, OverridesPanel, loadOverrides } from './overrides-panel';
 
 /**
  * `FE-W12`, MR-50 F2 — the check that blocked it: **a real render**. The register's verification
@@ -33,7 +33,11 @@ describe('FE-W12 — the overrides already logged render on the review screen', 
     const listAnalysisOverrides = vi.fn(() => Promise.resolve(saved));
     render(<OverridesPanel result={await loadOverrides({ listAnalysisOverrides }, ANALYSIS)} />);
 
-    expect(listAnalysisOverrides).toHaveBeenCalledWith({ analysisId: ANALYSIS });
+    // MR-51 B2: with the reason the server requires of an admin, so the read is not refused.
+    expect(listAnalysisOverrides).toHaveBeenCalledWith({
+      analysisId: ANALYSIS,
+      reason: OVERRIDES_READ_REASON,
+    });
     expect(screen.getByText('Overrides already logged (1)')).toBeTruthy();
     expect(
       screen.getByText('The doctor asked for the figure by message; deferring was right.'),

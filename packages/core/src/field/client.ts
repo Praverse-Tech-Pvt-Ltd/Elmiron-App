@@ -463,13 +463,15 @@ export const createApiClient = (options: ApiClientOptions) => {
     createAnalysisOverride: (
       id: string,
       input: CreateAnalysisOverrideRequest,
-    ): Promise<AnalysisOverride> =>
-      request(
-        'POST',
-        API_PATHS.analysisOverrides(id),
-        AnalysisOverrideSchema,
-        CreateAnalysisOverrideRequestSchema.parse(input),
-      ),
+    ): Promise<AnalysisOverride> => {
+      // MR-51 B1 / `BE-W110`: the RPC, not the mock-only `/analyses/:id/overrides`.
+      const body = CreateAnalysisOverrideRequestSchema.parse(input);
+      return request('POST', API_PATHS.createAnalysisOverride, AnalysisOverrideSchema, {
+        p_analysis_id: id,
+        p_finding_id: body.findingId ?? null,
+        p_reason: body.reason,
+      });
+    },
 
     /**
      * A consultation recording — Phase 3 D6.

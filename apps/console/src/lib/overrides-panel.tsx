@@ -15,11 +15,21 @@ import { Body, Card, Heading, Label, MissingNote } from './ui';
  */
 export type OverridesResult = ListAnalysisOverridesResponse | null;
 
+/**
+ * MR-51 B2. `list_analysis_overrides` writes an audit row before it answers and refuses an admin who
+ * gives no reason — so without one, every admin saw "could not be loaded" against the real server
+ * (the mock never asked). Sent on every read, whoever reads, the way the admin screen's
+ * `READ_REASON` is: the console does not decide which roles need one. It names the screen, because
+ * that is the honest answer to "why did the console read the override history".
+ */
+export const OVERRIDES_READ_REASON = 'console review screen — override history render';
+
 /** The fetch, kept separate so the screen's test can prove the panel depends on it. */
 export const loadOverrides = (
   client: Pick<ApiClient, 'listAnalysisOverrides'>,
   analysisId: string,
-): Promise<OverridesResult> => client.listAnalysisOverrides({ analysisId }).catch(() => null);
+): Promise<OverridesResult> =>
+  client.listAnalysisOverrides({ analysisId, reason: OVERRIDES_READ_REASON }).catch(() => null);
 
 /** `2026-09-22T06:15:00+00:00` → `2026-09-22 06:15 UTC`. The server's instant, not the viewer's clock. */
 const when = (iso: string): string => {

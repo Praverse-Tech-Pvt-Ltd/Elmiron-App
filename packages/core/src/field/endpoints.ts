@@ -696,7 +696,8 @@ export const API_PATHS = {
   analyses: '/analyses',
   analysis: (id: string) => `/analyses/${id}`,
   analysisResponse: (id: string) => `/analyses/${id}/response`,
-  analysisOverrides: (id: string) => `/analyses/${id}/overrides`,
+  /** MR-51 B1 / `BE-W110`. The override write — the RPC Supabase serves, camelCase since `20260922000200`. */
+  createAnalysisOverride: '/rpc/create_analysis_override',
   syncPush: '/rpc/sync_push',
   syncPull: '/sync/pull',
   syncQueueStatus: '/rpc/sync_queue_status',
