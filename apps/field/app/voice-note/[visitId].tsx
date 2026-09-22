@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import uuid from 'expo-modules-core/src/uuid';
@@ -9,79 +9,85 @@ import {
   useAudioRecorder,
   useAudioRecorderState,
 } from 'expo-audio';
-import type { Doctor, Visit } from '@fieldforce/core';
 import { Screen, VoiceNoteScreen } from '@fieldforce/ui';
-import { createClientForScenario } from '../../src/api';
-import { blockReason, elapsedLabel, voiceNoteRequest } from '../../src/capture/recording';
+import { blockReason, elapsedLabel } from '../../src/capture/recording';
+import { discardNote, keepNote, sweepUnsaved } from '../../src/capture/voice-note-files';
+import { cacheRoot, documentRoot, expoNoteFileSystem } from '../../src/capture/voice-note-fs';
+import { useSession } from '../../src/session';
+import { usePulledStore } from '../../src/sync/pulled-store';
+import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 
 /**
  * Phase 3 D7 — the voice note, with a real microphone behind it.
  *
  * **This is the MR recording themselves and nobody else.** No consent record is
  * required, no doctor is in it, and it fires on every visit including a declined
- * one — which is the reason a declined visit still produces coaching signal at
- * all. `onboarding/microphone.tsx` refuses to collapse this and a consultation
+ * one. `onboarding/microphone.tsx` refuses to collapse this and a consultation
  * recording into one sentence, and neither does this route.
  *
  * **The microphone is requested here, at the moment it is used.** The permission
- * screen explains why beforehand; this asks. A permission requested at sign-in,
- * before the MR has seen a single benefit, is the abandonment moment
- * `src/onboarding/permissions.ts` was written to avoid.
+ * screen explains why beforehand; this asks.
  *
- * **Nothing is uploaded, and the screen says so.** `createVoiceNote` answers with
- * an `UploadSession` — somewhere to put the bytes and a resumable offset — not a
- * filed note. The upload itself is `API_PATHS.uploadSession`, BE-W7, with no client
- * here yet, so the audio stays on the device and the MR is told that rather than
- * "sent". This response shape is also where the first version of the client method
- * was wrong: typed as `VoiceNote` it compiled cleanly and failed the moment a real
- * device ran it.
- */
-/**
- * MR-48 / `FE-W54`. **The visit this note would be filed against is not here.**
+ * ---
+ * **MR-50 D — kept, owned, and nothing left behind (`C9`).**
  *
- * This screen still reads the visit from the mock, so a real visit id finds nothing and
- * `visit` stays null. `save()` then returned on its first line: the MR pressed "Save this note"
- * and nothing happened, with nothing said -- MR-20's silent button, on the one screen that holds
- * the MR's own voice. Measured on the Pixel 10. It is said now, as soon as it is known and again
- * on Save, and it states the one true thing about the audio: it stays on the phone (`FE-W53`).
+ * - **The visit comes from the pulled store** (`FE-W54`). This screen read the mock, so a real
+ *   visit id found nothing and "Save this note" could not save. It now reads the same store as the
+ *   visit screen, and says the visit is not here only once the pull has settled without it.
+ * - **Save keeps the note on this phone, in the signed-in rep's folder** (`voice-note-files.ts`).
+ *   It is NOT sent: there is no upload client (`FE-W29`), and the screen says so rather than
+ *   "sent". The previous version posted metadata to the mock and reported a byte count the server
+ *   "expected" — a server that never saw it.
+ * - **Discarded audio is deleted**: "Start again", recording over an unsaved note, and leaving the
+ *   screen without saving. Leftovers in the recorder's cache are swept when the screen opens.
+ *   MR-47 measured on the emulator that none of this happened before.
+ * ---
  */
 const VISIT_NOT_HERE = {
   title: 'This note cannot be saved',
   detail:
-    'The visit is not on this phone, so there is nothing to save the note against. The recording stays on this phone and is not sent.',
+    'This visit is not on this phone, so there is nothing to save the note against. Nothing you record here is kept.',
 } as const;
+
+const KEPT =
+  'Saved on this phone, in your notes. It has not been sent — sending notes is not built into this app yet.';
 
 export default function VoiceNoteRoute(): ReactNode {
   const { visitId } = useLocalSearchParams<{ visitId: string }>();
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const state = useAudioRecorderState(recorder);
+  const { session } = useSession();
+  const userId = session?.user.id ?? null;
+  const { store, status } = usePulledStore();
 
-  const [visit, setVisit] = useState<Visit | null>(null);
-  const [doctor, setDoctor] = useState<Doctor | null>(null);
+  const visit = visitsFromStore(store).find((candidate) => candidate.id === visitId) ?? null;
+  const doctor =
+    visit === null
+      ? null
+      : (doctorsFromStore(store).find((candidate) => candidate.id === visit.doctorId) ?? null);
+
   const [granted, setGranted] = useState<boolean | null>(null);
   const [captured, setCaptured] = useState<{ uri: string; seconds: number } | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
 
+  /** The recorder file not yet kept — what leaving the screen must delete. */
+  const unsaved = useRef<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     const stopped = (): boolean => cancelled;
 
-    // **MR-29 B3. TWO OPERATIONS, TWO REMEDIES.** These were one `async` block under one
-    // `.catch` titled "Could not open the microphone", and the block did two unrelated
-    // things: it opened the microphone, and it fetched the visit and doctor over the
-    // network. So a failed FETCH was reported as a failed MICROPHONE.
-    //
-    // Found by pressing the button on the dev client with the mock server down. The MR
-    // read *"Could not open the microphone — fetch failed: java.io.IOException: unexpected
-    // end of stream on http://127.0.0.1:4010/..."* and the remedy they would act on —
-    // turn the microphone on in Settings — was for the wrong failure entirely.
-    //
-    // That is the rule `G-WRITE` closed on the refusal path, one screen along: every
-    // failure reaches the MR with ITS OWN remedy and never another's. Splitting the block
-    // is the whole fix; neither half depends on the other, which is why they could be
-    // merged without anyone noticing.
+    // Before anything records: audio nobody kept goes. A crash or a force-stop mid-recording
+    // leaves the recorder's working file behind, and so did every build before MR-50.
+    try {
+      sweepUnsaved(expoNoteFileSystem, cacheRoot());
+    } catch {
+      // A sweep that cannot run leaves the files where they were; it must not stop recording.
+    }
+
+    // MR-29 B3: the microphone and the visit are separate operations with separate remedies.
     void (async () => {
       const permission = await AudioModule.requestRecordingPermissionsAsync();
       if (stopped()) return;
@@ -98,36 +104,28 @@ export default function VoiceNoteRoute(): ReactNode {
       });
     });
 
-    void (async () => {
-      const client = createClientForScenario();
-      const [visits, doctors] = await Promise.all([client.listVisits(), client.listDoctors()]);
-      if (stopped()) return;
-      const found = visits.items.find((candidate) => candidate.id === visitId) ?? null;
-      setVisit(found);
-      // Never over another failure: a microphone that will not open is the more immediate
-      // remedy, and this one is said again on Save regardless.
-      if (found === null) setFailure((held) => held ?? VISIT_NOT_HERE);
-      setDoctor(
-        found === null
-          ? null
-          : (doctors.items.find((candidate) => candidate.id === found.doctorId) ?? null),
-      );
-    })().catch((error: unknown) => {
-      if (stopped()) return;
-      setFailure({
-        title: 'Could not load this visit',
-        detail: error instanceof Error ? error.message : 'Unknown failure',
-      });
-    });
-
     return () => {
       cancelled = true;
+      // Leaving without saving: the note was not kept, so it does not stay.
+      discardNote(expoNoteFileSystem, unsaved.current);
+      unsaved.current = null;
     };
-  }, [visitId]);
+  }, []);
+
+  // "Not on this phone" is a claim about the store, so only a settled pull may make it.
+  const visitMissing = status !== 'loading' && visit === null;
+
+  const forget = (): void => {
+    discardNote(expoNoteFileSystem, unsaved.current);
+    unsaved.current = null;
+    setCaptured(null);
+    setSaved(null);
+  };
 
   const start = (): void => {
     if (granted !== true) return;
-    setCaptured(null);
+    // Recording over an unsaved note replaces it; the old audio goes first.
+    forget();
     void (async () => {
       await recorder.prepareToRecordAsync();
       recorder.record();
@@ -146,7 +144,10 @@ export default function VoiceNoteRoute(): ReactNode {
       .stop()
       .then(() => {
         // `uri` is null until the recorder has actually written the file.
-        if (recorder.uri !== null) setCaptured({ uri: recorder.uri, seconds });
+        if (recorder.uri !== null) {
+          unsaved.current = recorder.uri;
+          setCaptured({ uri: recorder.uri, seconds });
+        }
       })
       .catch((error: unknown) => {
         setFailure({
@@ -158,51 +159,21 @@ export default function VoiceNoteRoute(): ReactNode {
 
   const save = (): void => {
     if (busy || captured === null) return;
-    if (visit === null) {
+    if (visit === null || userId === null) {
       setFailure(VISIT_NOT_HERE);
       return;
     }
     setBusy(true);
-
-    void createClientForScenario()
-      .createVoiceNote(
-        voiceNoteRequest({
-          id: uuid.v4(),
-          visitId: visit.id,
-          durationSeconds: captured.seconds,
-          // The device knows the duration; the byte count comes from the file the
-          // upload path will read. Until that path exists this is the one figure
-          // the contract needs that this route cannot measure honestly, so the
-          // duration in bytes-per-second at the preset's bitrate is NOT invented —
-          // a minimum of 1 keeps the schema's `positive()` satisfiable and the
-          // real size lands with the upload.
-          // `FE-W46`, closed server-side in MR-37 B2: `complete_upload` takes the size Storage
-          // OBSERVED and ignores this one, so the fabricated literal no longer reaches a row or
-          // the ceiling that sums them. Still not a measurement — see `visit/[id].tsx`.
-          sizeBytes: 1,
-          // **MR-29 A3 - ALLOWLIST: a RECORD of when this device acted.**
-          // When the note was recorded on this handset. Same category as `captured_at`.
-          // eslint-disable-next-line no-restricted-syntax -- allowlisted above
-          recordedAt: new Date().toISOString(),
-        }),
-      )
-      .then((session) => {
-        // The server answers with somewhere to put the bytes, not with a filed
-        // note. Nothing here uploads yet — `API_PATHS.uploadSession` is BE-W7 and
-        // has no client — so the MR is told the note is on the phone rather than
-        // filed. Saying "sent" over an unsent file is the one thing the queue
-        // screen's whole design exists to prevent.
-        setSaved(
-          `Kept on this phone. ${String(session.totalBytes)} bytes are expected by the server; uploading them is not in this build.`,
-        );
+    void keepNote(expoNoteFileSystem, documentRoot(), userId, captured.uri, uuid.v4())
+      .then(() => {
+        // Kept: leaving the screen must no longer delete it.
+        unsaved.current = null;
+        setSaved(KEPT);
       })
       .catch((error: unknown) => {
         setFailure({
-          title: 'Your note was not filed',
-          detail:
-            error instanceof Error
-              ? `${error.message} The recording is still on this phone.`
-              : 'The recording is still on this phone.',
+          title: 'Your note was not saved',
+          detail: error instanceof Error ? error.message : 'Unknown failure',
         });
       })
       .finally(() => {
@@ -225,19 +196,16 @@ export default function VoiceNoteRoute(): ReactNode {
         elapsed={elapsedLabel(
           state.isRecording ? state.durationMillis / 1000 : (captured?.seconds ?? 0),
         )}
-        failure={failure}
+        failure={failure ?? (visitMissing ? VISIT_NOT_HERE : null)}
         hint="Try covering — what they asked, what you promised, what to do next time."
         onHoldEnd={stop}
         onHoldStart={start}
-        onStartAgain={() => {
-          setCaptured(null);
-          setSaved(null);
-        }}
+        onStartAgain={forget}
         prompt="What should I put in the report?"
         recording={state.isRecording}
         saved={saved}
         subject={`Your note · ${doctor?.fullName ?? 'this visit'}`}
-        {...(captured === null ? {} : { onSave: save })}
+        {...(captured === null || saved !== null ? {} : { onSave: save })}
       />
     </Screen>
   );
