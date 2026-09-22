@@ -918,3 +918,129 @@ LOCAL demo tenant only.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-45 — BE-W89's client half | `PROJECT-OVERVIEW.md` → `### MR-45 — BE-W89's client half` |
+
+---
+
+## After MR-46 — 21 September 2026
+
+| | |
+| --- | --- |
+| **CI on `4821964`** | Confirmed green — `35565430658`, workflow `CI`, event `push`, SHA = HEAD at session start |
+| **`FE-W52`** | **PREPARED, NOT SHIPPED.** Branch `mr-46/fe-w52-notice-pending-approval` (`2ab65f7`). **The false notice is live until `blocked-on-you` 2.6 is answered** — six of eight claims false or partly false |
+| **`BE-W106`** | **Half fixed.** `audio_purge_health()` revoked from every signed-in role (`20260921000100`). **B1: no write breach** — only the owner can write `app_thresholds`. The config half waits on 2.7, with the settings table beside it |
+| **`BE-W89`** | **CLOSED.** "On plan" chip built; established by tests only, not on a device |
+| **New** | `FE-W53` (declined recording audio never deleted from the phone, by inspection), `BE-W107` (the route's day rule is a copy of `coverage()`'s and already differs) |
+| **Tests** | **1,811 passing on `main`, zero failing, up 18** — every runner's own lines. The branch adds 8 |
+| **Stop** | A2 **conditional** (no approved wording); C2 **ROOM** (registered as `BE-W107`) |
+
+### For the next session
+
+- **Merging the notice branch is the first thing to do once 2.6 is answered.** It is one commit and
+  rebases cleanly onto `main` as of this session.
+- **The local stack restored from backup and was missing three migrations from its history.**
+  `pnpm exec supabase --workdir services/api migration up --local` applied them. Check before
+  trusting a restored stack.
+- The Supabase CLI is not on PATH in Git Bash; use `pnpm exec supabase`.
+- Services at the end of this session: Supabase **up**; Metro and the Pixel 10 **not started**.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-46 — the false notice | `PROJECT-OVERVIEW.md` → `### MR-46 — the false notice` |
+
+---
+
+## After MR-47 — 21 September 2026
+
+| | |
+| --- | --- |
+| **CI on `3949cc8`** | Confirmed green — `35569428635`, workflow `CI`, event `push`, SHA = HEAD at session start |
+| **Local drift** | None — 63/63 on arrival, 64/64 after this session's migration |
+| **Production** | **19 of 64 migrations applied.** The drift workflow is green by a dated acceptance (until 31 October), not because production matches. Nothing since 7 September is deployed |
+| **Watchdog (A)** | Not broken. Runs as the owner-level pooler login (by the record); fails loudly (42501, exit 1) under a role without the grant — measured |
+| **`FE-W53`** | **Corrected.** Consultation recording cannot start at all (hard-coded empty consent list). What stays on the phone is **voice notes**, in `cache/Audio`, through "Start again", restart and sign-out. Options (a)/(b) in `blocked-on-you` → MR-47 |
+| **`BE-W107`** | **DONE.** `visit_day()` on the server; `coverage()` and the pull use it; the report carries its zone and a `fallback_utc` label |
+| **New** | `FE-W54` (voice-note save silently does nothing from a real visit), `FE-W55` (told to ask a doctor who has answered), `FE-W56` (expired sign-in shown as a refusal), `FE-W57` (Today's third copy of the day rule) |
+| **2.6** | **Not approved. The false notice is still live.** Branch corrected (`17260f2`) |
+| **Tests** | **1,820 passing on `main`, zero failing, up 9** — every runner's own lines |
+
+### For the next session
+
+- **Before MR-47's migration reaches production, configure shift hours** — otherwise every
+  unconfigured territory's coverage report moves 00:00–05:30 IST visits a day earlier.
+- On the Pixel 10: `adb emu geo fix` is not enough for a check-in. Use
+  `appops set 2000 android:mock_location allow` and `cmd location providers
+  set-test-provider-location <fused|gps|network> --location <lat>,<lon>` (latitude FIRST), in a
+  loop while pressing. Recorded in MR-20; it cost time again.
+- **Hot reload can write a stored store the release path never would.** To test the stored-shape
+  path, force-stop, put the old shape back through `run-as`, and cold-start.
+- Git Bash rewrites `/data/...` paths for `adb push`; set `MSYS_NO_PATHCONV=1`.
+- Services at the end: Supabase, Metro, the mock (:4010) and the Pixel 10 **up** unless stopped.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-47 — the audio on the phone | `PROJECT-OVERVIEW.md` → `### MR-47 — the audio on the phone` |
+
+---
+
+## After MR-48 — 21 September 2026
+
+| | |
+| --- | --- |
+| **CI on `b532916`** | Confirmed green — `35574115358`, workflow `CI`, event `push`, SHA = HEAD at session start |
+| **Local drift** | None — 64/64 at start and end |
+| **`FE-W57`** | **DONE, device-verified.** Before: a checked-in MR could not reach check-out. After: Today offers the in-progress visit and check-out is recorded on the server |
+| **`FE-W54`** | DONE, device-verified — the voice-note screen says when a note cannot be saved |
+| **`FE-W56`** | DONE, tests only — an expired sign-in reads "Your sign-in has expired" on all six screens |
+| **`FE-W55`** | **Needs a decision** — options in `blocked-on-you` → MR-48 |
+| **Voice notes** | Not switched off (option (a) not approved). Another rep does NOT see them; the files are on disk |
+| **New** | `FE-W58` (date labels that re-derive a visit's day), `FE-W59` (in-progress card says "Scheduled"/"Start"), `FE-W60` (Today says the plan is done when it is not), `FE-W61` (offline queue survives sign-out — by code) |
+| **Deploy order** | In `docs/restore-runbook.md` → *"The deploy ORDER"*: pre-flight, hours, 45 migrations, then reference data |
+| **Tests** | **1,834 passing, zero failing, up 14** — every runner's own lines |
+
+### For the next session
+
+- **`FE-W60` is the next thing a pilot MR will notice**: Today tells them the plan is done when two
+  stops are unvisited. It needs the plan's stops, which the pull carries.
+- **`FE-W61` should be measured before phones are shared**: queue a write offline as one rep, sign
+  in as another, and see what the server records.
+- After editing the app while Metro runs, **cold-start before trusting a device reading** — a
+  half-edited file left Metro serving the old bundle once this session.
+- `pnpm format:check` must be read BEFORE `git commit` in the same command, not after.
+- Services stopped at the end of this session.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-48 — the third copy | `PROJECT-OVERVIEW.md` → `### MR-48 — the third copy` |
+
+---
+
+## After MR-49 — 21 September 2026
+
+| | |
+| --- | --- |
+| **CI on `752ac00`** | Confirmed green — `35578184965`, workflow `CI`, event `push`, SHA = HEAD at session start |
+| **Local drift** | None — 64/64 at start and end |
+| **`FE-W61`** | **FIXED, before and after on the Pixel 10.** Before: rep B's app sent rep A's queued writes as B; the server refused them; A's work was lost. After: per-user queue; B sees and sends nothing of A's; A's writes sent as A when A signs back in |
+| **`FE-W62`** | **FIXED, device-verified** — offline, the visit screen hid a visit it held, so offline check-in was impossible |
+| **`BE-W108`** | **NEW, COMPLIANCE, not fixed** — the UCPMP cap's month is the UTC month; 00:00–05:30 IST on the 1st counts in the previous month. A decision in `blocked-on-you` |
+| **`FE-W55`, `FE-W59`, `FE-W60`** | DONE, device-verified — witnessed consent answer; "Continue" and "Checked in"; the plan's stops counted |
+| **Samples date** | Now the server's day for the visit ("21 Sep" for a visit scheduled the 17th) |
+| **New** | `FE-W63` (queued check-in announced as check-out), `FE-W64` (visit screen renders a visit it does not hold, by deep link), `FE-W65` (second way into an in-progress visit — decision) |
+| **Voice notes** | Not switched off — option (a) still unapproved |
+| **Tests** | **1,866 passing, zero failing, up 32** |
+
+### For the next session
+
+- **To go offline on the emulator, remove the `adb reverse` for 54321 and COLD-START the app** —
+  an open connection survives the removal, and the first "offline" write goes out.
+- The emulator snapshot resumes the previous session's app process and a stale clock: force-stop the
+  app first, and do not trust device times against the server's.
+- Location for check-in: re-add the test providers after every emulator boot (`cmd location
+  providers add-test-provider` + `set-test-provider-enabled`), then inject latitude-first.
+- The dev warning toast swallows taps near the bottom of the screen; dismiss it (its ✕) first.
+- The old shared queue key `sync.queue.v1` is still on the Pixel 10 with two items; it is never read.
+- Services stopped at the end of this session.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-49 — the shared queue | `PROJECT-OVERVIEW.md` → `### MR-49 — the shared queue` |

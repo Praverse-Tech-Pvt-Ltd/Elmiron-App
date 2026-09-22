@@ -1826,3 +1826,185 @@ organisation's configuration.
 **Decision: a finding that a function is safe is not recorded until a cross-tenant probe with both
 controls has failed to cross it.** Finding the function is the sweep's job; deciding what it is
 requires trying.
+
+## 21 September 2026 — MR-46
+
+### When one line of a user-facing claim is false, every line is checked
+
+2.6 named two false rows in the privacy notice. Checking all eight found six false or partly false.
+
+**Decision: a notice, consent text or any other statement to a user is verified whole, claim by
+claim against the code, once any one line of it is found false.** The defect that produced one false
+line — a claim true when written and never re-checked — does not stop at one line.
+
+### A statement to a user waits for the operator; the change does not
+
+The corrected notice is ready but unapproved. **Decision: prepare it on a branch, pushed and tested,
+and record that the false version is live** — rather than either shipping unapproved wording or
+leaving the work undone. The approval then costs one merge.
+
+### An ACL claim in a comment is checked against the ACL
+
+`20260916000300` said `audio_purge_health()` was "granted to nobody". It was granted to every
+signed-in user. **Decision: a comment asserting who can execute or read something is not written
+without the `has_*_privilege` query that shows it**, and one found without that query is treated as
+hearsay.
+
+### "Restrict to admins" is not a tenant fix here
+
+`admin` is a tenant role (C1). **Decision: a whole-database view is revoked from signed-in roles
+entirely**, and the per-company question is answered by a separate, scoped function — as
+`retention_status()` already does.
+
+### A client that "uses the server's rule" calls it
+
+MR-45's day filter was described as the server's rule; it was a copy that already differed.
+**Decision: the phrase is reserved for a client that reads the server's answer.** A client
+re-implementation is recorded as a copy, with how it differs.
+
+## 21 September 2026 — MR-47
+
+### A finding made by reading code is a hypothesis about the device
+
+MR-46 registered `FE-W53` — declined consultation audio may stay on the phone — from code. On the
+Pixel 10 no consultation recording can start at all; the audio that does stay is the MR's own voice
+notes. **Decision: a finding about what exists on a device is registered as "by inspection" and is
+not acted on — no dependency added, no deletion built — until the device has been listed.**
+
+### Know how a function runs before revoking what it calls
+
+The BE-W106 lesson was "revoke whole-database helpers from signed-in users". Applied to the day-rule
+helpers it broke `sync_pull`, which is `SECURITY INVOKER`. **Decision: before revoking EXECUTE on a
+helper, list its callers and each caller's `prosecdef`. Where an invoker needs it, grant it and
+scope the helper to the caller's `visible_user_ids()`, refusing with 42501 — never answering for an
+id the caller cannot see.**
+
+### One day rule, and the server sends it
+
+The route, the report and Today each reckoned a visit's day. **Decision: a visit's day is
+`visit_day()`, sent on the pull; a client that needs it reads `visitDay` and never re-derives it.**
+Today's third copy is `FE-W57`, pending a product answer on what "today" means there.
+
+### A green run is read, not glanced at
+
+The production drift run is green while printing `drifted: true` (19 of 63). It is a recorded,
+dated acceptance, not an accident — **and it means no session's migration since 7 September is in
+production.** **Decision: every session that reasons about production reads that run's output, not
+its status.**
+
+## 21 September 2026 — MR-48
+
+### Today never hides the visit the MR is standing inside
+
+Today shows visits whose server day is today, and always any visit in progress. **Decision (the
+operator's, applied by MR-48):** the one thing a screen that is the only door into a visit must not
+do is hide the visit the MR is in — it made check-out unreachable on the Pixel 10.
+
+### A sweep is searched two ways, and the second is the test of the first
+
+The name-and-behaviour search for the day rule found one decider; the data-flow search (every read
+of a visit's instants) found two more copies. **Decision: a sweep for copies of a rule reports both
+methods and whether the second changed the list.**
+
+### Codes from the gateway are measured, not listed
+
+`PGRST303` and `PGRST301` come from PostgREST, not a function body. The error contract's guard
+failed on them, and its own comment said to fix the derivation. **Decision: a code raised outside
+the database joins the derivation by being MEASURED each run** — a request that produces it — never
+by a static list.
+
+### An audited read is a product cost, not an implementation detail
+
+Making the visit screen say what the server says about consent means an audited read per open,
+against the reasoning MR-12 Q4 recorded. **Decision: such a change is raised with its options, not
+made silently.**
+
+## 21 September 2026 — MR-49
+
+### Everything a device stores about a rep is keyed by the rep
+
+The offline queue was one key for everyone; the next rep's app sent the previous rep's work under its
+own sign-in. **Decision: any per-user state on the device — queue, pulled store, witnessed consent —
+is keyed by the signed-in user id, and with no user signed in there is nothing to read or write.**
+Legacy unkeyed data is never read, because it cannot be attributed.
+
+### "Refused" is not "harmless"
+
+The server refused rep A's writes sent as rep B, so nothing false was recorded — but A's work was
+lost and the ledger names B. **Decision: a server refusal is not accepted as the safety net for a
+client that sends the wrong user's work; the client must not send it.**
+
+### A promise on screen has its mechanism tested
+
+The sign-out banner says unsent work "sends the next time you sign in here". The flusher did not run
+on sign-in, and only the device showed it. **Decision: a screen sentence that promises a future
+action ships with a test of the trigger that performs it.**
+
+### The device's own witnessed facts are shown as such
+
+For consent, no audited read and no reversal of MR-12 Q4. **Decision: where the server's answer is
+deliberately not on the device, the screen states what the device itself witnessed — labelled "on
+this phone" — or states that it has nothing, and never implies either answer.**
+
+### A compliance count's clock is stated, not inherited
+
+The UCPMP cap took its month from the session timezone. **Decision (proposed, `BE-W108`): any
+period boundary on a compliance count names its zone explicitly in the function.**
+
+## Operator decisions — 22 September 2026 (recorded in MR-50)
+
+**Unlike `C1`–`C6`, which were REVIEWER decisions taken on the operator's behalf, these four are the
+operator's own**, relayed in the MR-50 brief. They continue the same id series so there is one
+canonical place to cite them. The MR-50 brief referred to a table of decisions that did not reach the
+session; only the decisions the brief states in its own words are recorded here, and nothing is
+applied that is not in this list.
+
+### C7 — KEEP the AI layer
+
+**Decided.** The AI layer stays. **This answers the ship-or-cut question the 30 September
+`CONTRACT_I3_DEADLINE` existed to force** — `packages/core/src/field/transcript-v0.expiry.test.ts`
+and `docs/blocked-on-you.md` → *"TWO DATED DEADLINES"*.
+
+**It is not resolved by a placeholder schema.** `TranscriptV1` is designed as the real,
+vendor-agnostic contract (MR-50 B). What stays OPEN: the STT vendor choice and measured Hinglish error
+rate (`blocked-on-you` 4.2) — a bake-off needs labelled audio the project does not have yet.
+
+**Relation to `C3` and `C4`.** `C3` (audio out of MR v1 for legal reasons) is **not reversed**: its two
+blockers — the §2.4 adverse-event screening duty and the §8.6 PV/DPDP signatory — still stand before a
+recording reaches a real doctor. `C7` means engineering builds towards the AI layer; `C3` still decides
+when it may touch a real doctor. `C4`'s second reason ("no AI layer") no longer holds; its first
+(§3.6 unrecorded) does, so coaching stays out of v1 until §3.6 is written down.
+
+### C8 — The purpose of the audio
+
+**Decided, in the operator's words:** *recordings and voice notes are kept so the AI layer can
+support proper review and monitor that SOPs are followed.*
+
+**This answers the question open since MR-38** (`blocked-on-you` → *"Does the MR app record audio at
+all, if there is no AI layer?"*). It is the DPDP purpose. It also changes what the audio IS: review
+for SOP adherence is **monitoring of the rep**, not only a record of the doctor's consent — which is
+what `C8`'s requirements (below, and MR-50 A3) follow from.
+
+**What the purpose requires before any real recording is made** — registered, not blocking
+engineering:
+
+1. **The consent text shown to doctors names this purpose.** Today's notice says the team *"reviews
+   how they presented"*; it does not say SOP monitoring or AI processing.
+2. **The privacy notice to reps says their visits may be recorded and reviewed for SOP adherence** —
+   employee monitoring, stated as such (`FE-W52`, `blocked-on-you` 2.6).
+3. **The PV/DPDP signatory (§8.6) is still required before the recording feature reaches a real
+   doctor**, because transcripts create the adverse-event screening duty in §2.4.
+
+**Engineering may proceed on everything that does not touch a real doctor.**
+
+### C9 — Voice notes are KEPT (option b), and `expo-file-system` is approved
+
+**Decided.** Option (b) of `blocked-on-you` → *"Voice notes — option (a) or (b)"*: voice-note
+recording stays; discarded audio is deleted from the phone. **`expo-file-system` is approved** — the
+dependency option (b) required. The upload itself is not in scope yet (MR-50 D5).
+
+### C10 — `apps/console` gets a dev-only test renderer
+
+**Decided (reviewer's choice, approved).** `@testing-library/react` with a DOM environment for the
+console's existing runner (vitest), **dev-only** — nothing ships in the app bundle. This answers
+`blocked-on-you` 2.5 and unblocks `FE-W12`.

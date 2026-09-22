@@ -117,7 +117,13 @@
 > they turn red and force a deliberate update** rather than passing silently.
 
 
-> # ❓ THE QUESTION THE 30 SEPTEMBER DATE IS ACTUALLY ASKING
+> # ✅ RESOLVED 22 September 2026 — THE QUESTION THE 30 SEPTEMBER DATE WAS ASKING
+>
+> **Answered by the operator: the AI layer is KEPT (`C7`), and the audio's purpose is *"recordings
+> and voice notes are kept so the AI layer can support proper review and monitor that SOPs are
+> followed"* (`C8`).** Both in `.ai-collab/decisions.md`. What that purpose requires before any real
+> recording — consent text, the reps' notice, the signatory — is listed under `C8`. The text below is
+> kept as the record of the question.
 >
 > ## Does the MR app record audio at all, if there is no AI layer?
 >
@@ -188,13 +194,13 @@
 > about to answer it by accident.
 
 
-> # 📅 TWO DATED DEADLINES, AND NEITHER WARNS YOU FIRST
+> # 📅 TWO DATED DEADLINES — the 30 September one is RESOLVED (`C7`, MR-50 B); 6 November is still open
 >
 > **Both break CI on a fixed date. Neither is an engineering task. Both are yours.**
 >
 > | Date | What breaks | Days left as of 16 Sep 2026 |
 > | --- | --- | --- |
-> | **30 September 2026, 23:59 IST** | `CONTRACT_I3_DEADLINE` — the `TranscriptV0` placeholder expires | **14** |
+> | ~~**30 September 2026, 23:59 IST**~~ | ~~`CONTRACT_I3_DEADLINE`~~ — **RESOLVED 22 Sep: AI layer kept (`C7`); the test now checks the real `TranscriptV1` contract, not a date (MR-50 B)** | — |
 > | **6 November 2026** | `5.9` — the UCPMP sample cap decision (warns from 16 October) | 51 |
 >
 > ### The 30 September one has NO warning period, and that is the difference
@@ -289,7 +295,7 @@ Every open item that no agent can resolve, consolidated. Backend is stopped by d
 | 2.1 | **Whose Play Console account ships this — yours or the client's?** | Before FE-W8 | Decides package ID, listing ownership, keystore custody, and what happens if the relationship ends |
 | ~~2.2~~ | **DECIDED AND EXECUTED — `O2`, 17 August 2026. Cleared MR-43 A3/A6.** This row said *"Currently the placeholder `com.praversetech.elmironmr`"*. It is not: `app.json` holds `com.praversetech.fieldforce`, the scheme is the reverse-DNS form, and the string `elmironmr` appears **nowhere** in code or config | — | **The decision was in `.ai-collab/decisions.md` the whole time** — *"O2 — the name in permanent identifiers: EXECUTED, commit `f34ceef`"*. That is the same `f34ceef` this repository's checkout guard has asserted as an ancestor in every session. The trademark reasoning (ELMIRON® is a third party's mark) is kept there in full |
 | 2.3 | **Keystore custody** — EAS holds it, or enrol in Play App Signing | Before first Play upload | If access to the Expo account is ever lost, you cannot update an app already on the Play Store. No recovery path. *[Verify Play App Signing against current Play Console docs.]* |
-| 2.5 | **Does `apps/console` get a RENDERER, and therefore a third test runner?** | **`FE-W12`**, and every console screen after it | **Filed MR-44 D2, and the ask is made BEFORE the work rather than mid-build.** The console's pages are React Server Components and `vitest.config.ts` says exercising them *"needs a browser or a Next test harness, and neither exists yet"*. `FE-W12`'s recorded check — *"a console test asserts a previously-saved override renders"* — cannot be met without one. **Playwright against `next dev`** is the only option that exercises what actually ships; it costs a dev dependency **plus browser binaries**, CI minutes, and a **third runner** beside vitest and jest. `react-dom/server` in vitest avoids the runner but only partly supports async server components, so it would assert a rendering path users do not get. **Engineering recommends neither: keep the presenter + source-check pattern `FE-W13` shipped with in MR-41, and REWRITE `FE-W12`'s check.** That is a decision rather than a workaround, because it changes what `FE-W12` promises — which is why it is on this page |
+| 2.5 | **RESOLVED 22 Sep 2026 — yes, a dev-only test renderer (`C10`, `.ai-collab/decisions.md`); built in MR-50 F.**  **Does `apps/console` get a RENDERER, and therefore a third test runner?** | **`FE-W12`**, and every console screen after it | **Filed MR-44 D2, and the ask is made BEFORE the work rather than mid-build.** The console's pages are React Server Components and `vitest.config.ts` says exercising them *"needs a browser or a Next test harness, and neither exists yet"*. `FE-W12`'s recorded check — *"a console test asserts a previously-saved override renders"* — cannot be met without one. **Playwright against `next dev`** is the only option that exercises what actually ships; it costs a dev dependency **plus browser binaries**, CI minutes, and a **third runner** beside vitest and jest. `react-dom/server` in vitest avoids the runner but only partly supports async server components, so it would assert a rendering path users do not get. **Engineering recommends neither: keep the presenter + source-check pattern `FE-W13` shipped with in MR-41, and REWRITE `FE-W12`'s check.** That is a decision rather than a workaround, because it changes what `FE-W12` promises — which is why it is on this page |
 | 2.6 | **What should the MR's privacy notice say about check-ins and location?** | **`FE-W52`** — a compliance record: the transparency screen every MR reads | **Filed MR-45. The notice currently UNDERSTATES what the app records.** It tells MRs that check-in/check-out times and their location are *"Not yet — this app cannot do this today"*. Both ARE recorded: check-ins go to Supabase through `sync_push` with coordinates. **It is not a one-line flip**, because the location row promises tracking *"Start day to End day"* while the app records position only AT check-in — so "yes" would overstate in the other direction. Engineering can make each row derive from whether its write path is live, so it cannot drift again; **the sentence the MR reads is yours to approve.** Until then, every MR is being told something false about their own data |
 | 2.7 | **Should configuration belong to an ORGANISATION, and may an MR call system-health functions?** | **`BE-W106`** | **Filed MR-45, with one half proven.** `app_thresholds` has only `global` and `territory` scope — **no organisation scope** — so every "org default" is one row shared by every tenant, and `threshold()` hands any caller the value for any territory they name. Measured: an MR of one company read another company's territory setting (`42`), with a positive control from the owning company and a negative control from the attacker's own territory. `audio_purge_health()` also returns every company's recording counts to any MR. **Configuration and counts, not personal data** — lower severity than `BE-W101` — but the same class of defect, and the fix depends on a model decision engineering should not make alone |
 | ~~2.4~~ | **→ see 5.3**, which is broader: it carries the alternative resolution, shipping foreground-only check-in. Reconciled MR-44 A2. *(was: Transistorsoft release licence)* | Before FE-W8, but check now | Believed required for Android release builds, free for debug. Unverified — check transistorsoft.com. A purchase order takes longer than a sprint. |
@@ -311,7 +317,7 @@ These predate the frontend entirely. Drafts are in `docs/escalations-week3.md`. 
 | # | Item | Open since | What it blocks |
 |---|---|---|---|
 | 4.1 | **PV and privacy sign-off.** Two specific questions: may `adverse_event_reports.reported_text` contain patient information, and does an adverse-event report survive a consent withdrawal? | Sprint 1 | Both are currently answered by a **default, not a decision**, and both are now baked into a deployed production schema. A different answer is a migration against live tables. **MR-43 A3 — the pointer this row was missing.** Both questions already have recorded ENGINEERING answers in `.ai-collab/decisions.md` (BE-W7, 16 August 2026): *"`reported_text` kept on the adverse-event record — Decision: keep it, and flag it hard"*, and *"An adverse-event report survives a consent withdrawal — Decision: it survives"*, the second explicitly labelled **"This is a default, not a ruling"**. So **no engineering work is waiting on this** — the schema is built and documented. What is waiting is the sign-off that turns two defaults into rulings. |
-| 4.2 | **Contract I3 — STT vendor decision and measured Hinglish WER on real audio** | Sprint 2 | The entire AI layer. **CI goes red on 30 September** unless `TranscriptV1` exists. If the answer comes back bad, the pipeline is cut — so every week of delay is a week of risk that work gets built and deleted. |
+| 4.2 | **PARTLY RESOLVED 22 Sep: ship-or-cut answered — KEEP (`C7`). Still open: the vendor choice and measured Hinglish error rate, which need labelled audio (MR-50 B4).**  **Contract I3 — STT vendor decision and measured Hinglish WER on real audio** | Sprint 2 | The entire AI layer. **CI goes red on 30 September** unless `TranscriptV1` exists. If the answer comes back bad, the pipeline is cut — so every week of delay is a week of risk that work gets built and deleted. |
 | ~~4.3~~ | **→ see 5.7**, which is broader: it includes the reference data §6.1 is sequenced around. Reconciled MR-44 A2. *(was: Per-territory working hours from the client)* | Sprint 3 | Capture refuses without them. The org-default window expires 60 days after being configured, then refuses again — by design. |
 | 4.4 | **Supabase DPA question:** does a deleted storage object survive in S3 versioning, a soft-delete window, or a sub-processor's backup? | Sprint 7 | Decides whether the 90-day retention claim is literally true. Not answerable from the API. Needed before the pilot. |
 
@@ -796,3 +802,263 @@ re-checks.
 **All three were correct when written, none was re-evaluated when the world moved, and each sat in
 a place whose authority discouraged checking.** A stale alarm and a stale to-do are the same
 defect as a permanent red in CI — only the last one had a workflow run to make it visible.
+
+## MR-46 — 21 September 2026: 2.6 and 2.7, with what you need to decide them
+
+### 2.6 — every MR who has used the app was shown a false privacy notice
+
+**A fact for the operator and the signatory, not a finding to schedule.** Every MR who has opened
+the transparency screen — it is the last step of first run, and reachable from Today at any time —
+was told:
+
+- *"Right now this app records nothing new about you."* It records check-ins and check-outs with
+  coordinates, distance from the clinic and inside/outside the geofence; call reports; and samples.
+- that where they are and when they checked in were *"Not yet — this app cannot do this today"*.
+  Both have been recorded since MR-18.
+
+**It is still live.** The corrected wording is ready and tested on branch
+`mr-46/fe-w52-notice-pending-approval` and has **not** been merged, because the sentence the MR
+reads is yours to approve. **Approve it (or edit it) and it ships in one merge.** Draft:
+
+| Row | Draft wording | Why this and not something stronger |
+| --- | --- | --- |
+| Preamble | *This app records your work visits: when you check in and check out, where you were at those two moments, and what you report. It does not follow you between visits. Each item is below.* | |
+| Location | *Where you are — only when you check in or check out.* Your position at the moment you press check-in and check-out, and how far that is from the clinic. Nothing between visits, and nothing in the background. | The old row promised "Start day to End day", which overstates the other way |
+| Visits | *Which doctors you saw, and when.* Check-in and check-out times, and whether you were inside the clinic's area. | The geofence result is stored on every check-in and check-out row |
+| Reports | *Your call reports.* What you write after a visit. Your manager can read them. | No retention period: nothing deletes reports |
+| Samples | *Samples and inputs you give.* The item, the quantity, its value, the doctor and the time. | Not mentioned at all before |
+| Voice notes | *Your voice notes.* Recorded and kept on this phone. Not sent to anyone in this build. | "Kept 90 days" held for server audio only; these never reach the server |
+| Recordings | *Recordings — only if a doctor agrees.* Made only after the doctor's consent is recorded, and kept on this phone. Not sent to anyone in this build. If they say no, nothing happens to you. | |
+| Never | *Your personal calls, messages, other apps or camera. Where you are between visits.* | "Anything at all once your shift ends" was false: reports and samples are accepted at any hour |
+
+**Two things the wording cannot fix, for you to know before approving:** (1) nothing deletes
+audio from the phone, including a recording the doctor declined — `FE-W53`; (2) whether a retention
+period should be promised for reports is a policy choice, and the draft promises none.
+
+### 2.7 — the settings, measured, as input to the model decision
+
+**Engineering has not decided the model.** What MR-46 measured:
+
+- **Nobody but the database owner can write a setting.** A tenant admin is refused INSERT, UPDATE
+  and DELETE on `app_thresholds`, as is an MR (both `permission denied`; the admin CAN read the row,
+  so the refusal is about writing; the owner's insert of the same row succeeds, so the row is
+  valid). No function writes the table. **So there is no cross-tenant integrity breach**, and the
+  question is only who should see and set what.
+- **`audio_purge_health()` is fixed** (no decision needed): revoked from every signed-in role.
+
+Every setting in the table. **"Kind" is engineering's reading, offered as input — it is the part
+you are deciding.**
+
+| Setting | Read by | Kind (proposed) | Written by, today |
+| --- | --- | --- | --- |
+| `consent_future_tolerance_seconds` | `capture_consent`, `validate_consent_capture`, `validate_consent_withdrawal`, `validate_visit` | product-wide integrity bound | owner (migration) only |
+| `consent_max_sync_lag_hours` | `capture_consent`, `validate_consent_capture`, `validate_consent_withdrawal` | product-wide integrity bound | owner only |
+| `ucpmp_sample_cap_quantity` | `enforce_ucpmp_sample_cap`, `sample_cap_status`, `ucpmp_cap_decision_status`; `check-decision-debt.mjs`; `packages/core` `entities.ts` | **statutory** (UCPMP) — the same for every company, if the code sets one | owner only |
+| `ucpmp_sample_cap_decision_due` | `ucpmp_cap_decision_status`; `check-decision-debt.mjs` | product-wide (our own decision deadline) | owner only |
+| `org_default_shift_window` | `is_within_shift`, `resolve_shift_window`, `org_default_shift_window_status`, `team_exceptions`, `validate_app_threshold`; `seed-reference-data.mjs` | **per-company choice** — its name says so, and today it is one global row, currently `null` | owner only |
+| `consent_deviation` | `team_exceptions` | per-company choice (manager alert tuning) | owner only |
+| `consent_min_captures` | `team_exceptions` | per-company choice | owner only |
+| `consent_min_team_size` | `team_exceptions` | per-company choice | owner only |
+| `rejection_min_items` | `team_exceptions` | per-company choice | owner only |
+| `rejection_rate_threshold` | `team_exceptions` | per-company choice | owner only |
+| `sync_stale_hours` | `team_exceptions` | per-company choice | owner only |
+| `audio_storage_ceiling_bytes` | `begin_upload` | product-wide (capacity) — or per-company if storage is billed per company | owner only |
+| `purge_batch_limit` | `audio_purge_is_stalled`; `purge-expired-audio.mjs` | product-wide (operations) | owner only |
+| `purge_backlog_multiplier` | `audio_purge_is_stalled` | product-wide (operations) | owner only |
+| `purge_max_silence_hours` | `audio_purge_is_stalled` | product-wide (operations) | owner only |
+
+"Read by" is the functions whose definitions name the key, and the files that do; a key built at
+runtime from parts would not appear. **Grep located these; it did not decide them.**
+
+**The shape of the decision, as measured:** seven settings are plausibly per-company and all seven
+are today one row shared by every company; the rest are the same for everyone by nature. Nobody can
+currently change any of them without a migration.
+
+## MR-47 — 21 September 2026: the audio on the phone, and the notice still waiting
+
+### 2.6 — the false notice is STILL LIVE (21 September 2026)
+
+No approved wording has been recorded. **Every MR who opens the transparency screen is still told
+the app records nothing new about them.** The draft on `mr-46/fe-w52-notice-pending-approval` was
+**corrected by MR-47** before approval — read this version, not MR-46's:
+
+- **Recordings — only if a doctor agrees** is now `not-yet` ("this app cannot do this today"). MR-46
+  had marked it active from code; on the Pixel 10 a consultation recording cannot be started at
+  all, before or after the doctor agrees.
+- **Your voice notes** now says *"Recorded and kept on this phone, including a note you start
+  again."* Measured: a discarded note stays in the app's storage.
+
+### The audio question — what is actually on the phone, and the two options
+
+**Measured on the Pixel 10 (`FE-W53`, corrected):**
+
+- **No consultation audio can exist.** The record control never appears — after a decline, and
+  after a consent, both captured on the phone and both stored on the server.
+- **Voice notes do exist**, in the app's private cache: `cache/Audio/recording-<uuid>.m4a`,
+  about 55 KB for 4 seconds. The file is written while the MR records, **before** "Save".
+- **Nothing deletes them.** "Start again" leaves the file. A force-stop and relaunch leaves it.
+  **Signing out leaves it** — the next person to sign in on that phone inherits it. They go only
+  when the app's data is cleared, the app is uninstalled, or Android clears the cache under storage
+  pressure (the last is Android's decision, not the app's; its timing is not something this app
+  controls or can promise).
+- **"Save this note" does nothing from a real visit** (`FE-W54`) — the screen still reads the visit
+  from the mock — so in practice every voice note is a kept-but-unsaved file.
+
+**The options, as asked. Neither adds `expo-file-system` in this session.**
+
+| | (a) Voice-note recording off, behind a flag | (b) Recording stays; discarded audio deleted |
+| --- | --- | --- |
+| What changes | A build flag hides "Record a voice note" and the route refuses to record. Consultation recording is already unreachable | Add `expo-file-system` (a native module — needs a new app binary, not an over-the-air update). Delete the file on "Start again", on leaving without saving, and sweep `cache/Audio` for orphans at launch. Fix `FE-W54` first, or every note is effectively discarded |
+| Cost | ~0.5 half-day with tests and a device check. No dependency | Dependency approval, ~1.5–2 half-days, a rebuilt binary, and a device check of every path above |
+| Files already on phones | **Stay.** Removing them needs a file API — which is option (b)'s dependency | Removed by the launch sweep |
+| Saved notes | None can be made | Still kept indefinitely: there is no upload client, so a saved note has nowhere to go |
+| **The notice** | Voice notes → `not-yet`. Recordings stay `not-yet`. **But** if any phone already holds notes, "not recorded" is false for it — the row needs a clause such as *"notes recorded before [date] may still be on this phone"* | Voice notes stay `active`: *"Kept on this phone until they can be sent; a note you start again is deleted. Not sent to anyone in this build."* No retention period can be promised for kept notes |
+
+**Recommendation:** (a) now, because it removes a live privacy gap for the cost of a flag, and (b)
+only when the upload client exists — deletion without upload still leaves every saved note on the
+phone for ever.
+
+### Before deploying MR-47's migration: configure shift hours
+
+`coverage()` no longer hard-codes India time. For an MR whose territory has **no configured
+hours**, the manager's report now counts days in **UTC** and labels them `fallback_utc` — the same
+answer the MR's own screen already gives. **`org_default_shift_window` is null locally, and the record
+(`territory-day.ts`, this file) says production has no hours configured — not measured by MR-47**,
+so on deploy every MR's report would move visits finished between 00:00 and
+05:30 IST to the previous day. **Setting `org_default_shift_window` (or per-territory hours) to
+India time first makes the change invisible for Indian territories.** Production is still at 19 of
+64 migrations, accepted until 31 October, so nothing reaches it until that deploy.
+
+## MR-48 — 21 September 2026
+
+### Voice notes — option (a) or (b) — ✅ RESOLVED 22 Sep 2026: option (b), kept (`C9`)
+
+No approval of either option is recorded, so voice notes were **not** switched off. What MR-48
+measured narrows the severity:
+
+- **A different rep signing in on the same phone does NOT see the previous rep's voice notes.**
+  On the Pixel 10, after sign-out and sign-in as a second rep, the queue read *"Everything is
+  sent"* and the voice-note screen opened at 00:00. The two files were still in `cache/Audio`.
+  **They are on disk, not shown.** Reaching them needs device-level access to the app's private
+  storage — here, `run-as` on a debug build.
+- **The previous rep's whole pulled list stays on the phone too** — visits, doctors, plans — under
+  their own user key, likewise not shown to the next rep.
+
+### FE-W55 — "say what the server says" needs a choice
+
+The visit screen tells the MR to ask a doctor who has already answered, because the app holds no
+consent records. The only way a rep can read the server's answer is `list_consent_records()`,
+which writes an **audit row on every read**. MR-12 Q4 kept consent out of the pull for exactly that
+audit volume. The options:
+
+| | What the screen gets | Cost |
+| --- | --- | --- |
+| An audited read when a visit screen opens | The server's answer, always | One `audit_log` row per visit-screen open — the load Q4 avoided, smaller (per open, not per sync) |
+| Reverse Q4: consent in the pull | The server's answer, offline too | The audit volume Q4 measured (~3,000 rows a day) |
+| Neither: stop claiming | *"This phone does not have the doctor's answer"* instead of *"ask the doctor first"* | No audit load; the screen is honest but still cannot record |
+
+Recording itself is unreachable in this build (`consents` is empty), so the last option loses
+nothing that works today.
+
+### FE-W61 — the offline queue survives sign-out (by reading code)
+
+Queued writes are kept under one key for every user, and nothing clears them at sign-out. A
+check-in queued offline by one rep would be sent by the next rep's app under the next rep's
+sign-in. **Not reproduced on the device; what the server does with it is not measured.** Relevant
+the moment phones are shared.
+
+### E2 — has a real rep signed in anywhere?
+
+**Nothing on this machine shows one, and production cannot be answered from here.**
+
+- The local database's 7,162 users are all `@example.test`.
+- The field app's local config points at `127.0.0.1`; there is no `eas.json`, so this repository
+  holds no configuration for distributing a build.
+- The register records the pilot gate **G-PILOT as not met** and the cutover (`BE-W46`) as not done.
+- **But the repository-root `.env` points at the production project** — a build or a script run
+  with it reaches production.
+- Whether anyone has signed in to production is a question for production's `auth.users`, which
+  MR-48 did not read.
+
+## MR-49 — 21 September 2026
+
+### BE-W108 — whose timezone is a UCPMP month? (a compliance count)
+
+**Measured:** the UCPMP sample cap counts by when the sample was GIVEN (`occurred_at`), which is
+right — but it bounds the month with `date_trunc('month', occurred_at)` in the database's session
+timezone, **UTC**. A sample handed over between **00:00 and 05:30 IST on the 1st of a month counts
+in the previous month's cap.** 19:00Z on 30 September (00:30 IST on 1 October) truncates to
+September.
+
+Not changed, because the answer is an enforcement rule:
+
+| Option | Effect |
+| --- | --- |
+| India time, always | Matches a code written for India; simplest; wrong only if the product ever runs a territory elsewhere |
+| The doctor's territory's zone | Correct everywhere hours are configured; **falls back to UTC where they are not** (MR-47's `day_zone_for`), which is today's defect again |
+| The MR's territory's zone | Same fallback problem, and a cap belongs to the doctor, not the MR |
+
+**Recommendation: India time, always, stated in the function** — the cap is a UCPMP (Indian) rule,
+and a configuration gap must not move a compliance count.
+
+### Voice notes — ✅ RESOLVED 22 Sep 2026: option (b), kept, `expo-file-system` approved (`C9`)
+
+Option (a) or (b) (`blocked-on-you` → MR-47) is still unapproved, so MR-49 did not switch voice
+notes off.
+
+### FE-W65 — a second way into a visit in progress?
+
+Today's next-visit card is the only way into a visit; a filter defect in MR-48 stranded a checked-in
+MR. The Beat plan stop and the doctor profile could also open an in-progress visit. Registered, not
+built: it is a navigation decision, and a doctor with two visits makes "which visit" a real question.
+
+### Shared phones — what changed
+
+A rep's unsent work now stays under their own account when they sign out, is sent the next time
+**they** sign in, and is never shown to or sent by anyone else on that phone. Measured before the
+fix on the Pixel 10: the next rep's app sent the previous rep's queued check-in and consent answer
+under its own sign-in; the server refused both, so nothing false was recorded — but the previous
+rep's work was lost.
+
+## MR-50 — 22 September 2026
+
+### Decisions recorded
+
+`C7` keep the AI layer · `C8` the audio purpose · `C9` voice notes kept, `expo-file-system` approved ·
+`C10` a dev-only console test renderer — all in `.ai-collab/decisions.md`. The items they settle are
+marked resolved above, with pointers. **The MR-50 brief referred to a table of decisions that did not
+reach the session; if it held others, they are not recorded yet.**
+
+### The bake-off corpus — a proposal for you to approve (nothing has been recorded)
+
+**Why it is needed.** Choosing an STT vendor (`BE-W32`, item 4.2) needs 5–10 hours of labelled
+MR–doctor audio, measured against the Hinglish failure the plan documents (mr-app-plan §0.5: a
+Whisper-class model at 52% mixed error rate on code-switched Hindi–English). Real consultations cannot
+supply it: recording a real doctor waits on the §8.6 signatory (`C3`, `C8`).
+
+**The proposal: the team records its own corpus — staged role-play between consenting employees, in
+Hinglish.**
+
+| | Proposed |
+| --- | --- |
+| **Volume** | 5–10 hours: roughly 30–40 conversations of 10–15 minutes |
+| **Who** | Employees only, each signing a consent for this one purpose (vendor evaluation), with a deletion date. Different voices, genders and regional accents. **No real doctor, no real patient** |
+| **What is said** | Semi-scripted: a scenario card per conversation (product detailing, an objection, a sample hand-over, a follow-up), improvised in the speakers' own words so the language is natural. Mix: mostly romanised Hinglish, some Hindi-heavy, some English-heavy — code-switching mid-sentence is the case that matters |
+| **Planted test content** | Drug names from the product list, dosages and numbers; **fictional** adverse-event mentions (for detection) and **fictional** patient identifiers — a name, an age, a village — inside Hindi sentences (for the redaction suite, `BE-W33`). Nothing real |
+| **Conditions** | Recorded on the phones reps will carry, the way the app records: in a room with a fan or AC running, phone on a desk and in a pocket, some crosstalk |
+| **Labels** | Human transcription in the `TranscriptV1` shape — speaker labels, per-token language, the planted items marked — so the bake-off scores exactly what the pipeline will consume |
+
+**What this does and does not remove.**
+
+- **Removes:** the wait for real doctors and for the signatory, for the purpose of choosing a vendor.
+- **Does NOT remove:** sending employees' voices to candidate vendors is still processing personal
+  data by a third party. Each vendor's terms for evaluation audio (retention, training use) must be
+  checked before upload — the vendor data agreement item (`B6`) applies in a lighter form.
+- **Does not replace real audio** for final tuning: staged speech is cleaner than a clinic. The
+  bake-off picks a vendor; real-audio measurement comes after the signatory.
+
+**Cost, not measured:** I believe careful human transcription of code-switched speech takes several
+hours of transcriber time per hour of audio — please get a quote rather than rely on that.
+
+**What we need from you:** approval of the approach, someone to own recording it, and the consent
+form wording for the employees taking part.

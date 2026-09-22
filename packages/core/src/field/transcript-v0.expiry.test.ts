@@ -1,178 +1,191 @@
 import { describe, expect, it } from 'vitest';
 import * as field from './index.js';
+import type { TranscriptTokenV1, TranscriptV1 } from './index.js';
 
 /**
- * A hard expiry on the `TranscriptV0` placeholder.
+ * Contract I3 — the transcript schema exists, and holds a real Hinglish consultation.
  *
- * BE-W6 published `TranscriptV0` so that the week-8 storage layer could be designed
- * against something, and flagged the obvious risk in its own review: publishing it
- * removes the most visible symptom of a late contract, and a placeholder that works
- * is a placeholder that stays. A header comment saying "this is temporary" does not
- * stop that. Nothing does, except a build that goes red.
+ * ---
+ * **WHY THIS NO LONGER CHECKS A DATE — MR-50 B3, 22 September 2026.**
  *
- * So this fails on a fixed date unless a real `TranscriptV1` exists.
+ * This file used to fail the build on 2026-09-30T23:59:59+05:30 unless a `TranscriptV1Schema` was
+ * exported. BE-W6 wrote it so the `TranscriptV0` placeholder could not quietly become permanent, and
+ * MR-38 gave it a warning window. **The date was never the point; the question behind it was: does
+ * the AI layer ship, or is it cut?** On 22 September 2026 the operator answered it — **keep the AI
+ * layer** (`C7`, `.ai-collab/decisions.md`) — and `TranscriptV1` was designed as the real contract
+ * (`transcript-v1.ts`), not as a placeholder to satisfy this file.
  *
- * A CI break on a date is a blunt instrument, and that is the point — it is the only
- * mechanism that survives everybody forgetting. Extending it is deliberately a
- * one-line change that shows up in a diff with somebody's name on it, which is the
- * difference between a decision and a drift.
+ * So the deadline has done its job and is retired. What replaces it is the thing the deadline was a
+ * proxy for: that the contract exists and **accepts the hard case** — a code-switched Hinglish
+ * segment with per-token languages and exact span offsets — and **rejects** a transcript that is
+ * missing what downstream stages need. The vendor choice is still open (`blocked-on-you` 4.2); this
+ * file does not pretend otherwise.
+ * ---
  */
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TO EXTEND THIS DEADLINE: change the date on the next line, and say in the
-// commit message who agreed to the new one. That is the whole mechanism.
-// ─────────────────────────────────────────────────────────────────────────────
-const CONTRACT_I3_DEADLINE = new Date('2026-09-30T23:59:59+05:30');
-
-/**
- * **MR-38 A1. Twenty-one days, and the number is not a coincidence.**
- *
- * `BE-W21` gave the UCPMP cap decision a warning window and wrote the reasoning into
- * `20260907001000_ucpmp_cap_decision_warning.sql`: *"a warning arriving three weeks earlier is
- * treated as a question"*, where a red build on the day *"is treated as an obstacle to get
- * past"*. It uses `warn_days := 21` and the warning deliberately does **not** fail the build.
- *
- * This deadline had two states where that one has three, in the same repository, for the same
- * class of problem. Now it has three.
- */
-const WARN_DAYS = 21;
-
-/**
- * `clear` | `warn` | `overdue`, from the same inputs `ucpmp_cap_decision_status()` computes.
- *
- * Pure and exported so all three states are asserted at fixed dates rather than waiting for a
- * calendar. That is the same technique `decision-debt.spec.ts` uses on the UCPMP side — it
- * backdates a row instead of waiting for November.
- *
- * **Why this lives here and not in `check:decision-debt`.** That script is the obvious place to
- * reuse, and `FIX-08 B2` forbids it: `scripts-convention.spec.ts` fails the build if anything in
- * `services/api/scripts/` imports `packages/core`, because no workflow builds workspace
- * dependencies before running those scripts directly. The fact this turns on — whether
- * `TranscriptV1Schema` is really exported — is a runtime property of this package. Checking it
- * here reads the actual export; checking it there would have meant grepping source for a symbol.
- */
-export const contractDeadlineState = (input: {
-  readonly now: Date;
-  readonly deadline: Date;
-  readonly hasV1: boolean;
-  readonly warnDays: number;
-}): 'clear' | 'warn' | 'overdue' => {
-  if (input.hasV1) return 'clear';
-  if (input.now.getTime() > input.deadline.getTime()) return 'overdue';
-  const warnFrom = input.deadline.getTime() - input.warnDays * 24 * 60 * 60 * 1000;
-  return input.now.getTime() >= warnFrom ? 'warn' : 'clear';
+/** Words → tokens with exact code-point offsets, so the fixture's pointers are honest. */
+const tokens = (text: string, languages: readonly string[]): TranscriptTokenV1[] => {
+  const chars = Array.from(text);
+  const out: TranscriptTokenV1[] = [];
+  let i = 0;
+  let w = 0;
+  while (i < chars.length) {
+    while (i < chars.length && chars[i] === ' ') i += 1;
+    const start = i;
+    while (i < chars.length && chars[i] !== ' ') i += 1;
+    if (i > start) {
+      const language = languages[w];
+      out.push({
+        text: chars.slice(start, i).join(''),
+        startChar: start,
+        endChar: i,
+        ...(language === undefined ? {} : { language }),
+      });
+      w += 1;
+    }
+  }
+  return out;
 };
 
-const OWNER = [
-  'CONTRACT I3 — the transcript schema — IS OWNED BY AI/ML AND IS PAST DUE.',
-  '',
-  'It was due at the end of week 2. Backend published `TranscriptV0` in week 6 as a',
-  'placeholder so the storage layer could be designed against something; it does not',
-  'close I3. AI/ML still owes the measured word error rate on real Hinglish MR-doctor',
-  'audio, and the vendor decision that follows from it. Those are what decide whether',
-  'the AI layer ships at all.',
-  '',
-  'This test fails because the deadline for replacing the placeholder has passed and',
-  'no `TranscriptV1Schema` is exported from @fieldforce/core/field.',
-  '',
-  'There are exactly two honest ways to make it pass:',
-  '  1. Publish TranscriptV1 alongside V0, so consumers migrate deliberately.',
-  '  2. Move CONTRACT_I3_DEADLINE in packages/core/src/field/transcript-v0.expiry.test.ts,',
-  '     and put the person who agreed the new date in the commit message.',
-  '',
-  'Deleting this test is a third way and it is not one of the honest ones.',
-].join('\n');
+/** The code-switched line: romanised Hindi carrying English clinical terms, mid-sentence. */
+const HINGLISH = 'Doctor sahab, BP ki dose kam kar dijiye, patient ko dizziness ho rahi thi';
+const HINGLISH_LANGS = [
+  'en',
+  'hi-Latn',
+  'en',
+  'hi-Latn',
+  'en',
+  'hi-Latn',
+  'hi-Latn',
+  'hi-Latn',
+  'en',
+  'hi-Latn',
+  'en',
+  'hi-Latn',
+  'hi-Latn',
+  'hi-Latn',
+];
 
-describe('TranscriptV0 is a placeholder with a deadline', () => {
-  it('fails once the deadline passes unless TranscriptV1 exists', () => {
-    const hasV1 = 'TranscriptV1Schema' in field;
-    const state = contractDeadlineState({
-      now: new Date(),
-      deadline: CONTRACT_I3_DEADLINE,
-      hasV1,
-      warnDays: WARN_DAYS,
-    });
+/** A reply in Devanagari — combining marks make code points differ from visible characters. */
+const DEVANAGARI = 'जी, मैं अगली विज़िट में देखूँगा';
 
-    if (state === 'warn') {
-      const days = Math.ceil((CONTRACT_I3_DEADLINE.getTime() - Date.now()) / 86_400_000);
-      // `::warning::` is a GitHub Actions annotation, so this reaches the run summary rather
-      // than only a log nobody opens on a green build. Same surface `check:decision-debt` uses
-      // for the UCPMP cap -- the mechanism is reused, not rebuilt.
-      console.log(
-        `::warning title=Decision due::CONTRACT I3 -- the transcript schema -- is due on ` +
-          `2026-09-30 (${String(days)} day(s) left). After that this test fails the build. ` +
-          `See docs/blocked-on-you.md.`,
-      );
+/** A realistic two-speaker transcript of a short MR–doctor exchange. */
+const realistic = (): TranscriptV1 => ({
+  schemaVersion: 'v1',
+  id: '7a1f3c2e-0b4d-4e6f-8a9b-1c2d3e4f5a61',
+  visitId: '44444444-4444-4444-8444-444444444401',
+  source: { kind: 'recording', recordingId: '9b8c7d6e-5f4a-4b3c-8d2e-1f0a9b8c7d61' },
+  vendor: 'bake-off-candidate',
+  modelVersion: 'unversioned-fixture',
+  primaryLanguage: 'hi-Latn',
+  durationMs: 12_000,
+  transcribedAt: '2026-09-22T06:00:00.000Z',
+  segments: [
+    {
+      id: '0c1d2e3f-4a5b-4c6d-8e7f-8a9b0c1d2e31',
+      index: 0,
+      speakerLabel: 'speaker_0',
+      startMs: 0,
+      endMs: 6_400,
+      text: HINGLISH,
+      language: 'hi-Latn',
+      confidence: 0.71,
+      tokens: tokens(HINGLISH, HINGLISH_LANGS),
+    },
+    {
+      id: '0c1d2e3f-4a5b-4c6d-8e7f-8a9b0c1d2e32',
+      index: 1,
+      speakerLabel: 'speaker_1',
+      // Overlaps the first segment: people talk over each other. `index` orders them.
+      startMs: 6_100,
+      endMs: 9_800,
+      text: DEVANAGARI,
+      language: 'hi-Deva',
+      // The vendor gave no segment score. Stated, not omitted.
+      confidence: null,
+      tokens: tokens(DEVANAGARI, []),
+    },
+  ],
+});
+
+describe('I3 — TranscriptV1 is the real contract', () => {
+  it('is exported from @fieldforce/core/field', () => {
+    expect('TranscriptV1Schema' in field).toBe(true);
+  });
+
+  it('accepts a realistic Hinglish consultation, code-switch and all', () => {
+    const parsed = field.TranscriptV1Schema.safeParse(realistic());
+    expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true);
+  });
+
+  it('carries the code-switch INSIDE a segment, word by word', () => {
+    const segment = realistic().segments[0];
+    const byLanguage = (tag: string): string[] =>
+      (segment?.tokens ?? []).filter((t) => t.language === tag).map((t) => t.text);
+    expect(byLanguage('en')).toEqual(['Doctor', 'BP', 'dose', 'patient', 'dizziness']);
+    expect(byLanguage('hi-Latn')).toContain('dijiye,');
+  });
+
+  it('points exactly: each token is the code-point slice it names, in Devanagari too', () => {
+    for (const segment of realistic().segments) {
+      const chars = Array.from(segment.text);
+      for (const token of segment.tokens) {
+        expect(chars.slice(token.startChar, token.endChar).join('')).toBe(token.text);
+      }
     }
-
-    // Written as a single assertion carrying the whole message, because a bare
-    // `expect(false).toBe(true)` tells whoever hits this nothing about why.
-    expect(state !== 'overdue', OWNER).toBe(true);
   });
 
-  it('still exports the placeholder it is guarding, so this cannot pass vacuously', () => {
-    // If TranscriptV0 were renamed or removed, the test above would keep passing
-    // while guarding nothing at all.
+  it('still exports TranscriptV0, so consumers move deliberately rather than by breakage', () => {
     expect('TranscriptV0Schema' in field).toBe(true);
-  });
-
-  it('names a deadline that is a real date', () => {
-    expect(Number.isNaN(CONTRACT_I3_DEADLINE.getTime())).toBe(false);
-  });
-
-  it('is WARNING right now, which is the whole point of adding the state', () => {
-    // Not a tautology: it asserts the window is wide enough to already be open. If WARN_DAYS
-    // were shortened to something that leaves today outside it, this fails and says so.
-    const state = contractDeadlineState({
-      now: new Date(),
-      deadline: CONTRACT_I3_DEADLINE,
-      hasV1: 'TranscriptV1Schema' in field,
-      warnDays: WARN_DAYS,
-    });
-    expect(state).toBe('warn');
   });
 });
 
-/**
- * MR-38 A1 — the three states, at fixed dates.
- *
- * Nothing here depends on today. `decision-debt.spec.ts` exercises the UCPMP side by backdating
- * a row rather than waiting for November; this does the same by passing `now` in, which is why
- * the evaluator takes it as an argument instead of calling `new Date()` itself.
- */
-describe('the deadline has three states, not two', () => {
-  const deadline = new Date('2026-09-30T23:59:59+05:30');
-  const at = (iso: string) => ({ now: new Date(iso), deadline, hasV1: false, warnDays: 21 });
+describe('I3 — TranscriptV1 rejects what downstream stages cannot use', () => {
+  const rejects = (mutate: (t: TranscriptV1) => unknown): boolean =>
+    !field.TranscriptV1Schema.safeParse(mutate(realistic())).success;
 
-  it('is clear well before the window opens', () => {
-    expect(contractDeadlineState(at('2026-09-01T00:00:00Z'))).toBe('clear');
+  it('rejects a segment with no confidence field at all — null must be SAID', () => {
+    expect(
+      rejects((t) => ({
+        ...t,
+        segments: t.segments.map((segment) => {
+          const without: Record<string, unknown> = { ...segment };
+          delete without['confidence'];
+          return without;
+        }),
+      })),
+    ).toBe(true);
   });
 
-  it('warns inside the window', () => {
-    expect(contractDeadlineState(at('2026-09-16T00:00:00Z'))).toBe('warn');
+  it('rejects a token whose text is not what its offsets point at', () => {
+    expect(
+      rejects((t) => {
+        const [first, ...others] = t.segments;
+        if (first === undefined) return t;
+        const [token, ...restTokens] = first.tokens;
+        if (token === undefined) return t;
+        return {
+          ...t,
+          segments: [
+            { ...first, tokens: [{ ...token, text: 'Patient' }, ...restTokens] },
+            ...others,
+          ],
+        };
+      }),
+    ).toBe(true);
   });
 
-  it('is overdue after the deadline', () => {
-    expect(contractDeadlineState(at('2026-10-01T00:00:00Z'))).toBe('overdue');
+  it('rejects a transcript that does not say which audio it came from', () => {
+    expect(
+      rejects((t) => {
+        const without: Record<string, unknown> = { ...t };
+        delete without['source'];
+        return without;
+      }),
+    ).toBe(true);
   });
 
-  it('opens the window exactly 21 days out, tested from BOTH sides', () => {
-    // A boundary tested from one side is a boundary that has not been tested -- the rule this
-    // repo's own `dayMonthIn` midnight test is written to.
-    expect(contractDeadlineState(at('2026-09-09T18:29:58Z'))).toBe('clear');
-    expect(contractDeadlineState(at('2026-09-09T18:30:00Z'))).toBe('warn');
-  });
-
-  it('fires exactly at the deadline, tested from BOTH sides', () => {
-    expect(contractDeadlineState(at('2026-09-30T18:29:59Z'))).toBe('warn');
-    expect(contractDeadlineState(at('2026-09-30T18:30:00Z'))).toBe('overdue');
-  });
-
-  it('is clear at every date once TranscriptV1 exists, which is the way OUT', () => {
-    // The positive control. Without it, a function that returned 'overdue' unconditionally
-    // would satisfy the overdue assertion above.
-    for (const iso of ['2026-09-01T00:00:00Z', '2026-09-16T00:00:00Z', '2027-01-01T00:00:00Z']) {
-      expect(contractDeadlineState({ ...at(iso), hasV1: true })).toBe('clear');
-    }
+  it('rejects a segment that ends after the audio does', () => {
+    expect(rejects((t) => ({ ...t, durationMs: 5_000 }))).toBe(true);
   });
 });

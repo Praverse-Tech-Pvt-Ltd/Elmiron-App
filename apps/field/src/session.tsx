@@ -1,9 +1,10 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { readAppClaims } from './claims';
 import type { Role } from './claims';
 import { supabase } from './supabase';
+import { setQueueOwner } from './sync/async-storage-store';
 
 export interface SessionState {
   /** `loading` until the stored session has been read from disk. */
@@ -52,6 +53,16 @@ export const SessionProvider = ({ children }: { readonly children: ReactNode }):
       data.subscription.unsubscribe();
     };
   }, []);
+
+  /**
+   * MR-49 / `FE-W61`. The outbox belongs to whoever is signed in. A LAYOUT effect, because every
+   * layout effect runs before any ordinary effect: the flusher, which reads the queue from an
+   * ordinary effect, can never see the previous user as the owner after a sign-in.
+   */
+  const userId = session?.user.id ?? null;
+  useLayoutEffect(() => {
+    setQueueOwner(userId);
+  }, [userId]);
 
   const value = useMemo<SessionState>(() => {
     const claims = session === null ? null : readAppClaims(session.access_token);

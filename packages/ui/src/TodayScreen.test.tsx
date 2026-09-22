@@ -259,3 +259,40 @@ describe('what the screen says when it does not know', () => {
     expect(screen.queryByText(/deleted/i)).toBeNull();
   });
 });
+
+/**
+ * MR-49 D1 / `FE-W60` and D2 / `FE-W59` — both seen on the Pixel 10.
+ */
+describe('TodayScreen — says what the plan and the visit actually are', () => {
+  it('does NOT claim the plan is done while stops on it have no visit', async () => {
+    await render(<TodayScreen {...props({ next: null, planned: 3, done: 1, stillOnPlan: 2 })} />);
+    expect(screen.getByText('2 more stops on today’s plan')).toBeTruthy();
+    expect(screen.queryByText("That's everyone on the plan")).toBeNull();
+    expect(screen.queryByText(/every visit on the plan/u)).toBeNull();
+  });
+
+  it('POSITIVE CONTROL: with nothing left on the plan, it does say so', async () => {
+    await render(<TodayScreen {...props({ next: null, planned: 3, done: 3, stillOnPlan: 0 })} />);
+    expect(screen.getByText("That's everyone on the plan")).toBeTruthy();
+  });
+
+  it('an in-progress next visit says Continue, not Start', async () => {
+    await render(
+      <TodayScreen
+        {...props({
+          onStartNextVisit: jest.fn(),
+          next: {
+            doctorName: 'Dr Vikram Rao',
+            clinic: null,
+            clinicPending: false,
+            scheduledLabel: 'Checked in 11:38',
+            inProgress: true,
+          },
+        })}
+      />,
+    );
+    expect(screen.getByText('Continue the visit to Dr Vikram Rao')).toBeTruthy();
+    expect(screen.queryByText(/Start the visit/u)).toBeNull();
+    expect(screen.getByText('Checked in 11:38')).toBeTruthy();
+  });
+});

@@ -123,6 +123,7 @@ describe('MR-26 B2: witnessedStage — facts the client saw itself record', () =
       scheduledFor: null,
       startedAt: null,
       completedAt: null,
+      visitDay: null,
       notMetReason: null,
       receivedAt: '2026-09-11T00:00:00.000Z',
       createdAt: '2026-09-11T00:00:00.000Z',

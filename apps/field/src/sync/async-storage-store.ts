@@ -30,7 +30,39 @@ import type { SyncQueueStore } from './store';
  * entity needing real merge semantics needs the real thing, and this file should be
  * replaced rather than extended.
  */
-const KEY = 'sync.queue.v1';
+/**
+ * **MR-49 — `FE-W61`. The queue belongs to the MR who made it.**
+ *
+ * This was ONE key, `sync.queue.v1`, for everyone who signs in on the phone, and nothing cleared
+ * it at sign-out. Measured on the Pixel 10: rep A queued a check-in and a consent answer offline
+ * and signed out; rep B signed in, B's queue screen listed A's two writes and offered "Try again
+ * now", and B's app sent them under B's sign-in. The server refused both (`not_your_record`),
+ * so nothing false was recorded -- but the sync ledger now holds two rejected items attributed to
+ * B for A's visit, B was shown A's work, and A's check-in and the doctor's answer were lost.
+ *
+ * Now keyed per user, the way the pulled store and its cursor have been since MR-15. The owner is
+ * set by `SessionProvider` from the signed-in session. With no owner there is no queue to read or
+ * write: reads answer `unreadable`, so every writer refuses rather than guessing (`FE-W44`'s
+ * path), and nothing is ever filed under nobody.
+ *
+ * **The old shared key is never read again.** Its items cannot be attributed to anyone, and
+ * sending them as whoever signs in next is exactly the defect. They stay on disk untouched.
+ */
+const LEGACY_SHARED_KEY = 'sync.queue.v1';
+const keyFor = (userId: string): string => `${LEGACY_SHARED_KEY}.${userId}`;
+
+let owner: string | null = null;
+
+/** Called by `SessionProvider` whenever the signed-in user changes. */
+export const setQueueOwner = (userId: string | null): void => {
+  owner = userId;
+};
+
+/** Whose queue is being read and written right now. */
+export const queueOwner = (): string | null => owner;
+
+/** Exported for the test that pins it: the shared key is not a key this module reads. */
+export const QUEUE_KEYS = { legacyShared: LEGACY_SHARED_KEY, forUser: keyFor } as const;
 
 /**
  * Rows are parsed back through `SyncQueueItemSchema` rather than cast.
@@ -52,8 +84,9 @@ const parseItems = (raw: unknown): readonly SyncQueueItem[] => {
 
 export const asyncStorageQueueStore: SyncQueueStore = {
   load: async (): Promise<readonly SyncQueueItem[]> => {
+    if (owner === null) return [];
     try {
-      const raw = await AsyncStorage.getItem(KEY);
+      const raw = await AsyncStorage.getItem(keyFor(owner));
       if (raw === null) return [];
       const parsed: unknown = JSON.parse(raw);
       // Tolerates both shapes: the full state object this module writes, and a bare
@@ -74,7 +107,8 @@ export const asyncStorageQueueStore: SyncQueueStore = {
     // state goes in a single value — which is what makes the write atomic in the
     // sense `store.ts` asks for: a reader sees the state before or after, never a
     // half-applied transition.
-    await AsyncStorage.setItem(KEY, JSON.stringify(state));
+    if (owner === null) throw new Error('No one is signed in, so there is no queue to write.');
+    await AsyncStorage.setItem(keyFor(owner), JSON.stringify(state));
   },
 };
 
@@ -103,8 +137,11 @@ export type QueueLoad =
 
 /** The full state, for a screen that needs rejections and warnings as well as items. */
 export const loadQueueState = async (): Promise<QueueLoad> => {
+  // No owner, no queue. `unreadable` rather than empty: an empty answer would let a writer
+  // start a queue that belongs to nobody, and would tell a screen "everything sent".
+  if (owner === null) return { kind: 'unreadable' };
   try {
-    const raw = await AsyncStorage.getItem(KEY);
+    const raw = await AsyncStorage.getItem(keyFor(owner));
     // Genuinely absent is genuinely empty: nothing has ever been queued on this device.
     // That is an answer, and it is different from the catch below.
     if (raw === null) return { kind: 'loaded', state: emptyQueue };
@@ -139,8 +176,9 @@ export const QUEUE_UNREADABLE =
 
 /** Test seam. */
 export const clearQueue = async (): Promise<void> => {
+  if (owner === null) return;
   try {
-    await AsyncStorage.removeItem(KEY);
+    await AsyncStorage.removeItem(keyFor(owner));
   } catch {
     // Nothing to do.
   }

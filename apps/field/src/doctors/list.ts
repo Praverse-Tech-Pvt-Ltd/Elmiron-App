@@ -121,7 +121,8 @@ export const buildDoctorRows = (
  * out. A chip that silently did something else under the same name would be worse
  * than its absence.
  *
- * "On plan" means on today's approved beat plan, which the caller supplies: this
+ * "On plan" means on the plan the Beat plan screen shows for today, whatever its status --
+ * nothing is approved in v1 (MR-46 D1). The caller supplies it: this
  * module holds no plan and must not guess at one.
  */
 export type DoctorFilter = 'all' | 'overdue' | 'on-plan';

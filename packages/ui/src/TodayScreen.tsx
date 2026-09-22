@@ -47,6 +47,12 @@ export interface TodayNextVisit {
   readonly clinicPending: boolean;
   /** Already formatted by the caller — this component does no clock arithmetic. */
   readonly scheduledLabel: string | null;
+  /**
+   * MR-49 D2 / `FE-W59`. The MR is already inside this visit. The card then says "Continue",
+   * not "Start", and the caller's label is when they checked in, not when it was scheduled --
+   * on the Pixel 10 an in-progress visit from the 16th read "Scheduled 13:00 · Start the visit".
+   */
+  readonly inProgress?: boolean;
 }
 
 export interface TodayScreenProps {
@@ -86,6 +92,12 @@ export interface TodayScreenProps {
    * is the term the MR-11 C5 decision was taken on.
    */
   readonly notMet: number;
+  /**
+   * MR-49 D1 / `FE-W60`. Stops on today's beat plan with no visit yet. Counted into `planned` by
+   * the caller; here it stops the screen claiming the plan is done. On the Pixel 10, after one
+   * of three stops, Today said "You went to every visit on the plan".
+   */
+  readonly stillOnPlan?: number;
   readonly next: TodayNextVisit | null;
   readonly sync: SyncQueueState;
   readonly onOpenQueue: () => void;
@@ -160,6 +172,7 @@ export const TodayScreen = ({
   planned,
   notMet,
   done,
+  stillOnPlan = 0,
   next,
   sync,
   onOpenQueue,
@@ -208,20 +221,35 @@ export const TodayScreen = ({
         // or the other: a day with no plan (S2) is not a day that has been worked
         // through. S2's copy never says "ask your manager for a beat plan" — that
         // hands the MR's day to somebody else.
-        <Card>
-          <BodyText>
-            {planned === 0 ? 'Nothing planned for today' : "That's everyone on the plan"}
-          </BodyText>
-          <Label muted>
-            {planned === 0
-              ? "No beat plan came through. You can still visit anyone in your territory and it'll all be logged."
-              : notMet === 0
-                ? 'You went to every visit on the plan.'
-                : notMet === 1
-                  ? 'You went to every visit on the plan. One doctor was not available.'
-                  : `You went to every visit on the plan. ${String(notMet)} doctors were not available.`}
-          </Label>
-        </Card>
+        stillOnPlan > 0 ? (
+          // MR-49 D1 / `FE-W60`. The plan is not done: stops on it have no visit yet. Said as
+          // a count and a way to the route, never as "everyone on the plan".
+          <Card>
+            <BodyText>
+              {stillOnPlan === 1
+                ? '1 more stop on today’s plan'
+                : `${String(stillOnPlan)} more stops on today’s plan`}
+            </BodyText>
+            <Label muted>
+              No visit has started for them yet. See today’s route for who is left.
+            </Label>
+          </Card>
+        ) : (
+          <Card>
+            <BodyText>
+              {planned === 0 ? 'Nothing planned for today' : "That's everyone on the plan"}
+            </BodyText>
+            <Label muted>
+              {planned === 0
+                ? "No beat plan came through. You can still visit anyone in your territory and it'll all be logged."
+                : notMet === 0
+                  ? 'You went to every visit on the plan.'
+                  : notMet === 1
+                    ? 'You went to every visit on the plan. One doctor was not available.'
+                    : `You went to every visit on the plan. ${String(notMet)} doctors were not available.`}
+            </Label>
+          </Card>
+        )
       ) : (
         <Card tone="hero">
           <Label>Next visit</Label>
@@ -263,18 +291,22 @@ export const TodayScreen = ({
             variant="quiet"
           />
         )}
-        {next !== null && onOpenRoute !== undefined ? (
+        {(next !== null || stillOnPlan > 0) && onOpenRoute !== undefined ? (
           <Button label="See today's route" onPress={onOpenRoute} variant="secondary" />
         ) : null}
         {next === null && planned === 0 && onFindDoctor !== undefined ? (
           <Button label="Find a doctor" onPress={onFindDoctor} variant="secondary" />
         ) : null}
-        {next === null && planned > 0 && onOpenDayEnd !== undefined ? (
+        {next === null && planned > 0 && stillOnPlan === 0 && onOpenDayEnd !== undefined ? (
           <Button label="How today ended" onPress={onOpenDayEnd} variant="secondary" />
         ) : null}
         {next === null || onStartNextVisit === undefined ? null : (
           <Button
-            label={`Start the visit to ${next.doctorName}`}
+            label={
+              next.inProgress === true
+                ? `Continue the visit to ${next.doctorName}`
+                : `Start the visit to ${next.doctorName}`
+            }
             onPress={onStartNextVisit}
             variant="primary"
           />

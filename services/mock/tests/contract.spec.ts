@@ -45,6 +45,7 @@ import {
   VoiceNoteSchema,
   createApiClient,
   pageResponseSchema,
+  ListAnalysisOverridesResponseSchema,
 } from '@fieldforce/core';
 import { startMockServer } from '../src/server.js';
 import { IDS } from '../src/fixtures.js';
@@ -244,6 +245,10 @@ describe('every declared endpoint conforms to packages/core', () => {
       method: 'POST',
       body: { findingId: IDS.finding, reason: 'Context the model could not see.' },
       expectStatus: 201,
+    }); // MR-50 F2 / FE-W12: the overrides read at the RPC path the real server serves.
+    await expectConforms('/rpc/list_analysis_overrides', ListAnalysisOverridesResponseSchema, {
+      method: 'POST',
+      body: { p_analysis_id: IDS.analysis, p_reason: null },
     });
   });
 

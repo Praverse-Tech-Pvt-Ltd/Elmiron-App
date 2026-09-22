@@ -7,8 +7,6 @@ import type {
 } from '@fieldforce/core';
 import { buildDayRoute } from './route';
 import type { DayRoute } from './route';
-import { dayIn } from './territory-day';
-import type { TerritoryZone } from './territory-day';
 
 /**
  * `BE-W89`, client half — MR-45 B. What the beat-plan screen shows, decided here so it can be
@@ -110,20 +108,7 @@ export interface BeatPlanViewInput {
   readonly entries: readonly BeatPlanEntry[];
   readonly visits: readonly Visit[];
   readonly doctors: readonly Doctor[];
-  /** The territory's zone, so a visit's DAY is reckoned the way the plan's date is. */
-  readonly zone: TerritoryZone;
 }
-
-/**
- * The instant that decides which day a visit belongs to.
- *
- * `completedAt` first, because that is what the SERVER uses: `coverage()` assigns a visit to
- * `(completed_at at time zone 'Asia/Kolkata')::date`. A visit still in progress, or one that
- * never started, falls back to `startedAt` and then `scheduledFor`. A visit with none of them
- * has no day and cannot be on any route.
- */
-const visitInstant = (visit: Visit): string | null =>
-  visit.completedAt ?? visit.startedAt ?? visit.scheduledFor;
 
 /**
  * **The visits that belong to THIS plan's day — and only those.**
@@ -133,22 +118,17 @@ const visitInstant = (visit: Visit): string | null =>
  * DOCTOR alone. On the mock that was harmless, because the mock only ever served today's
  * visits. The pulled store holds the MR's whole history, so a doctor seen on 16 September
  * rendered as DONE on 21 September's route, and the header counted it — "3 planned · 1 done"
- * on a day nobody had been visited. Which past visit leaked was arbitrary: a later `planned`
- * row happened to outrank the others.
+ * on a day nobody had been visited.
  *
- * The rule is the SERVER's, not a new one: `coverage()` counts a planned doctor as seen when a
- * completed visit to them falls on the plan's day. So the MR's route and the manager's coverage
- * report now agree about what "done" means.
+ * **MR-47 — `BE-W107`. The day is the SERVER's answer, not a copy of its rule.** MR-45 reckoned
+ * it here from `completedAt ?? startedAt ?? scheduledFor` in the territory zone; MR-46 found
+ * that was a second copy of `coverage()`'s rule and that the two already differed. The server
+ * now decides it once, in `visit_day()`, and sends it on every visit; the manager's report
+ * counts by the same function. A visit whose day the server has not sent (`null`: a direct
+ * write response, before the next pull) is on no plan's day.
  */
-const visitsOnPlanDay = (
-  visits: readonly Visit[],
-  planDate: string,
-  zone: TerritoryZone,
-): readonly Visit[] =>
-  visits.filter((visit) => {
-    const at = visitInstant(visit);
-    return at !== null && dayIn(at, zone) === planDate;
-  });
+const visitsOnPlanDay = (visits: readonly Visit[], planDate: string): readonly Visit[] =>
+  visits.filter((visit) => visit.visitDay === planDate);
 
 export const beatPlanView = (input: BeatPlanViewInput): BeatPlanView => {
   const { status, today } = input;
@@ -181,9 +161,39 @@ export const beatPlanView = (input: BeatPlanViewInput): BeatPlanView => {
     statusLine,
     route: buildDayRoute(
       { ...plan, entries },
-      visitsOnPlanDay(input.visits, plan.planDate, input.zone),
+      visitsOnPlanDay(input.visits, plan.planDate),
       input.doctors,
       [],
     ),
   };
+};
+
+/**
+ * `BE-W89`'s last piece — MR-46 D1. The doctors the Doctors screen's "On plan" chip keeps.
+ *
+ * **Derived from `beatPlanView`, not from a second reading of the store**, so the chip and the
+ * Beat plan screen cannot disagree about which plan is today's, or about whether it has arrived.
+ *
+ * `null` means **do not offer the chip**: the pull has not settled (`loading`, `syncing`), it
+ * failed (`unreachable`), or there is no plan today (`no-plan`). An empty set filtered against
+ * a plan that has not arrived would show "No doctors under On plan" — the client presenting its
+ * own gap as a fact about the day.
+ *
+ * `no-stops` is different: the plan is here, settled, and has none. An empty set is then true.
+ *
+ * Plan status is not consulted. The chip follows the plan the Beat plan screen shows, which
+ * states its status itself; nothing is approved in v1.
+ */
+export const onPlanDoctorIds = (view: BeatPlanView): ReadonlySet<string> | null => {
+  switch (view.kind) {
+    case 'route':
+      return new Set(view.route.stops.map((stop) => stop.doctorId));
+    case 'no-stops':
+      return new Set();
+    case 'loading':
+    case 'unreachable':
+    case 'no-plan':
+    case 'syncing':
+      return null;
+  }
 };

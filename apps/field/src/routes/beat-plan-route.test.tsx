@@ -79,6 +79,9 @@ const VISIT = {
   scheduledFor: null,
   startedAt: '2026-09-20T18:45:00.000Z',
   completedAt: '2026-09-20T18:53:00.000Z',
+  // MR-47 / BE-W107. The server's day for this visit: 18:53Z is 00:23 IST on the 21st, and the
+  // pull sends that answer. The route no longer reckons it from the instant.
+  visitDay: '2026-09-21',
   receivedAt: '2026-09-20T18:53:01.000Z',
   createdAt: '2026-09-20T18:00:00.000Z',
   updatedAt: '2026-09-20T18:53:01.000Z',

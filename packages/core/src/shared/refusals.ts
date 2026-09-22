@@ -93,6 +93,13 @@ export interface Refusal {
  */
 export const BY_SQLSTATE: Readonly<Record<string, { code: RefusalCode; actionable: boolean }>> = {
   '28000': { code: 'not_authenticated', actionable: true },
+  // MR-48 / `FE-W56`. PostgREST's own codes for a bad sign-in, measured against the local
+  // stack: an expired token answers 401 `PGRST303` "JWT expired", a malformed one 401
+  // `PGRST301`. Both are the same fact as 28000 -- the server does not know who this is -- and
+  // the MR's remedy is to sign in again. Before this they fell through to `unrecognised`, and
+  // the Doctors screen told an MR whose sign-in had lapsed that "The server refused this sync".
+  PGRST301: { code: 'not_authenticated', actionable: true },
+  PGRST303: { code: 'not_authenticated', actionable: true },
   '42501': { code: 'not_permitted', actionable: false },
   '45001': { code: 'consent_notice_superseded', actionable: true },
   '45002': { code: 'shift_window_not_configured', actionable: false },

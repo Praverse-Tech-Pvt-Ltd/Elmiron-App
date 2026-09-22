@@ -605,7 +605,8 @@ export type SyncPullResponse = z.infer<typeof SyncPullResponseSchema>;
  * **Taken from the function, not invented.** The keys are built explicitly in camelCase by
  * that function rather than with `to_jsonb(row)` — which is what `list_analysis_overrides`
  * does, and why the database emits `analysis_id` where `AnalysisOverrideSchema` declares
- * `analysisId`. Registered as `BE-W95`; this pair does not repeat it.
+ * `analysisId`. Registered as `BE-W100` (first cited here as "BE-W95", a mis-citation reconciled in
+ * the register); fixed in MR-50 C2. This pair does not repeat it.
  *
  * `ipAddress` is deliberately absent. It is in the table for an investigator with database
  * access, and a console screen is not that.
@@ -711,6 +712,8 @@ export const API_PATHS = {
   overdueCallReports: '/rpc/overdue_call_reports',
   myShiftWindow: '/rpc/my_shift_window',
   auditLog: '/rpc/list_audit_log',
+  /** MR-50 F2 / `FE-W12`. The override history's read — the RPC, which Supabase and the mock both serve. */
+  listAnalysisOverrides: '/rpc/list_analysis_overrides',
   retentionStatus: '/rpc/retention_status',
 } as const;
 
@@ -860,6 +863,11 @@ export const VisitRowSchema = z.object({
   scheduled_for: IsoDateTimeSchema.nullable(),
   started_at: IsoDateTimeSchema.nullable(),
   completed_at: IsoDateTimeSchema.nullable(),
+  /**
+   * MR-47 / `BE-W107`. Not a column: `sync_pull` adds it (`visit_day()`). Absent from a direct
+   * write response, which returns the table row.
+   */
+  visit_day: IsoDateSchema.nullable().optional(),
   received_at: IsoDateTimeSchema,
   created_at: IsoDateTimeSchema,
   updated_at: IsoDateTimeSchema,
@@ -1054,9 +1062,12 @@ export const fromClinicAddressRow = (row: unknown): ClinicAddress => {
     city: parsed.city,
     state: parsed.state,
     postalCode: parsed.postal_code,
-    // Null, always. See the note above: the pair exists in the table and the provenance
-    // the contract demands does not, and inventing it is worse than omitting it.
-    coordinates: null,
+    // MR-50 C3 / BE-W88. The centre is carried now that the contract asks only for what a centre
+    // has. Both or neither: half a position is not a place.
+    coordinates:
+      parsed.latitude !== null && parsed.longitude !== null
+        ? { latitude: parsed.latitude, longitude: parsed.longitude }
+        : null,
     geofenceRadiusMetres: parsed.geofence_radius_metres,
   });
 };
@@ -1164,6 +1175,7 @@ export const fromVisitRow = (row: unknown): Visit => {
     scheduledFor: parsed.scheduled_for,
     startedAt: parsed.started_at,
     completedAt: parsed.completed_at,
+    visitDay: parsed.visit_day ?? null,
     receivedAt: parsed.received_at,
     createdAt: parsed.created_at,
     updatedAt: parsed.updated_at,

@@ -15,7 +15,7 @@ import type {
   CreateSampleAndInputRequest,
   SyncQueueItem,
 } from '@fieldforce/core';
-import { asyncStorageQueueStore, loadQueueState } from './async-storage-store';
+import { asyncStorageQueueStore, loadQueueState, queueOwner } from './async-storage-store';
 import type { QueueLoad } from './async-storage-store';
 import { SyncPushRefusal } from './push-client';
 import type { OutboxWriteClient } from './push-client';
@@ -396,6 +396,13 @@ export interface FlushResult {
    * genuinely nothing to send.
    */
   readonly unreadable?: boolean;
+  /**
+   * MR-49 / `FE-W61`. True when the signed-in user changed while this flush was running. It
+   * stopped before the next send and wrote nothing: the rest of that queue belongs to the
+   * previous user and must not be sent under the new one. Writes are idempotent by id, so the
+   * previous user's next flush resends whatever this one did not record.
+   */
+  readonly ownerChanged?: boolean;
 }
 
 /**
@@ -408,7 +415,9 @@ export interface FlushResult {
 export const flushOutbox = async (
   client: OutboxWriteClient,
   store: QueuePersistence = devicePersistence,
+  owner: () => string | null = queueOwner,
 ): Promise<FlushResult> => {
+  const startedFor = owner();
   const load = await store.read();
   if (load.kind === 'unreadable') {
     // `FE-W44`. Not "nothing to do". Flushing nothing and then writing at the bottom would
@@ -426,6 +435,11 @@ export const flushOutbox = async (
 
   let sent = 0;
   for (const item of queued) {
+    // MR-49 / `FE-W61`. The client sends under whoever is signed in NOW. If that is no longer
+    // the user whose queue this is, stop before sending another of their items as someone else.
+    if (owner() !== startedFor) {
+      return { attempted: sent, sent, stillQueued: queued.length - sent, ownerChanged: true };
+    }
     try {
       const plan = sendFor(client, item);
       if ('blocked' in plan) {

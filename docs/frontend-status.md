@@ -1273,3 +1273,108 @@ from `src/today/beat-plan-view.ts`.
 `src/transparency/content.ts` still marks every capture row `not-yet`. The wording needs a decision
 (`blocked-on-you` 2.6): the location row promises continuous tracking the app does not do either, so
 a plain flip would overstate in the other direction.
+
+## MR-46 — 21 September 2026: "On plan", and the notice waits for approval
+
+**Counts:** `@fieldforce/field` vitest **532** (33 files, +8), jest **142** (20 suites, +3).
+
+### What changed on screen
+
+**Doctors → "On plan" chip.** Keeps the doctors on the plan the Beat plan screen shows for today,
+whatever its status. It is **not offered** while the pull is loading, while the plan's stops are
+still syncing, when the pull failed, or when there is no plan today, so it never shows "no doctors on
+your plan" about stops that have not arrived. Built on `onPlanDoctorIds` in
+`src/today/beat-plan-view.ts`. Tested only; not driven on a device.
+
+### What did NOT change on screen, and why
+
+**The transparency screen still shows the false notice.** The corrected wording is on branch
+`mr-46/fe-w52-notice-pending-approval`, waiting for `blocked-on-you` 2.6. Every row becomes
+`active`; location is described as recorded **at check-in and check-out only**; no retention period
+is promised.
+
+### Known and recorded
+
+- `FE-W53`: nothing deletes audio from the phone, including a recording the doctor declined.
+- `BE-W107`: the route's "which day is this visit" rule is a copy of `coverage()`'s. It differs for
+  MRs with no configured shift hours (UTC vs IST).
+
+## MR-47 — 21 September 2026: the route takes its day from the server
+
+**Counts:** `@fieldforce/field` vitest **536** (34 files, +4), jest **142** (20 suites).
+
+### What changed on screen
+
+**Beat plan / "On plan".** A visit is on a plan's day when the SERVER says so — `visit.visitDay`,
+sent by the pull from `visit_day()`, the function the manager's report counts by. The screen no
+longer reckons a day from an instant. A visit whose day the server has not sent (a direct write
+response, before the next pull) is on no plan's day.
+
+**First launch after updating:** the stored list is rebuilt once (*"Your list has been rebuilt"*),
+because stored visits from before this build have no server day. Verified on the Pixel 10.
+
+### Measured on the Pixel 10, not changed
+
+- **Consultation recording is unreachable** — the record control never appears, before or after
+  consent (`FE-W53`, corrected). After the doctor answers, the screen still says *"Ask the doctor
+  first"* (`FE-W55`).
+- **Voice notes stay in `cache/Audio`** through "Start again", restart and sign-out; **"Save this
+  note" does nothing from a real visit** because that screen still reads the mock (`FE-W54`).
+- **Today disagrees with the route** about a visit started today but scheduled earlier (`FE-W57`).
+- An expired sign-in read *"The server refused this sync (PGRST303)"* (`FE-W56`).
+
+### Transparency notice
+
+Still the false version on `main`. The corrected draft is on `mr-46/fe-w52-notice-pending-approval`
+(`17260f2`): recordings `not-yet`, voice notes "kept on this phone, including a note you start
+again".
+
+## MR-48 — 21 September 2026: Today shows the visit you are in
+
+**Counts:** `@fieldforce/field` vitest **540** (34 files, +4), jest **147** (20 suites, +5).
+
+### What changed on screen
+
+- **Today** shows the visits whose server day is today, **and always a visit in progress**. An MR
+  checked in to a visit scheduled for an earlier day now sees it, taps it, and can check out —
+  before this they could not reach check-out at all. Driven on the Pixel 10 to a recorded check-out.
+- **An expired sign-in** now reads *"Your sign-in has expired — sign out and sign in again from
+  Me"* on Today, Doctors, a doctor's profile, a visit, samples and consent. Before: *"The server
+  refused this sync (PGRST303)"*, or *"could not reach the server"*.
+- **Voice note from a real visit:** *"This note cannot be saved — the visit is not on this phone …
+  the recording stays on this phone and is not sent."* Before: Save did nothing, silently.
+
+### Seen on the device, not changed
+
+- Today's card for an in-progress visit says *"Scheduled 13:00"* and *"Start the visit"* (`FE-W59`).
+- After checking out of one of three planned stops, Today says *"You went to every visit on the
+  plan"* (`FE-W60`).
+- The visit screen still says *"Ask the doctor first"* after the doctor answered (`FE-W55`, a
+  decision).
+
+## MR-49 — 21 September 2026: shared phones, offline check-in, and a truthful Today
+
+**Counts:** `@fieldforce/field` vitest **564** (35 files, +24), jest **152** (21 suites, +5);
+`@fieldforce/ui` jest **253** (+3).
+
+### What changed on screen
+
+- **Offline check-in works.** With no connection, the visit screen shows the visit and the check-in
+  button instead of *"Could not load this visit"* — as long as the visit is on the phone.
+- **Me, before sign-out:** *"N things have not been sent yet. They stay on this phone under your
+  account and send the next time you sign in here. Nobody else who signs in on this phone will see or
+  send them."*
+- **A second rep on the same phone** sees an empty queue, not the first rep's work.
+- **Visit screen, consent line:** what this phone witnessed — *"The doctor agreed to recording, on
+  this phone at 13:54"* (or *"said no"*, with *"Waiting to send."* while queued) — or *"This phone does
+  not have the doctor's answer for this visit."* Replaces *"Ask the doctor first"*.
+- **Samples:** the date is the day the visit happened, from the server, not its schedule.
+- **Today:** an in-progress visit reads *"Checked in 13:34"* and *"Continue the visit to …"*; the count
+  includes the plan's stops; with stops left and no visit to walk to, *"1 more stop on today's
+  plan"* — never *"You went to every visit on the plan"*.
+
+### Seen on the device, not changed
+
+- A queued check-in is announced as *"This check-out cannot be sent yet"* (`FE-W63`).
+- Opened by deep link, a visit the phone does not hold renders as *"This visit · Not started"*
+  (`FE-W64`).

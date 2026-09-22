@@ -28,7 +28,8 @@ import {
   offerableVersions,
 } from '../../src/consent/record';
 import { consentQueueItem, sendOrQueue } from '../../src/sync/outbox';
-import { refusalTextFor } from '../../src/sync/explanation';
+import { recordWitnessedConsent } from '../../src/consent/witnessed';
+import { SESSION_EXPIRED, refusalTextFor, sessionExpired } from '../../src/sync/explanation';
 
 /**
  * Phase 3 — the handoff, as a route.
@@ -282,6 +283,18 @@ export default function ConsentRoute(): ReactNode {
           return;
         }
 
+        // MR-49 C / `FE-W55`. The device witnessed this answer: record THAT, scoped to this MR
+        // and this visit, so the visit screen can say what happened on this phone instead of
+        // telling the MR to ask again. Only a sent or queued answer reaches here -- a refusal
+        // and an unwritable queue returned above. A failure to keep the note must not stop the
+        // MR leaving; the answer itself is already sent or queued.
+        await recordWitnessedConsent({
+          visitId: visit.id,
+          outcome: body.outcome,
+          capturedAt: body.capturedAt,
+          syncItemId: body.id,
+        }).catch(() => undefined);
+
         // Straight back to the visit, and with no confirmation screen in
         // between: the doctor has answered and the phone is about to change hands.
         // A "thank you" here would be the app addressing the doctor after the
@@ -332,26 +345,28 @@ export default function ConsentRoute(): ReactNode {
           // `not_permitted` is deliberately still unconditional: that is a server DECISION
           // about this MR's access, not a silence, and an MR who has lost access to a visit
           // must be told even while a cached copy sits in the store.
-          (pullFailure !== null &&
-          pullFailure.kind === 'refused' &&
-          pullFailure.refusal.code === 'not_permitted'
-            ? {
-                title: 'You do not have access to this visit',
-                detail: 'The server refused this request for your account.',
-              }
-            : // Only when the VISIT itself is missing. Keyed on the notices instead, this
-              // said "Could not load this visit" while holding the visit -- the caught-by-test
-              // version of the very defect B3 is about. With the visit present and no notices,
-              // `blockedReason(notice, failed)` has the accurate sentence and a next step:
-              // "the consent notice could not be loaded ... you can ask once you have signal".
-              pullFailure !== null && (visit === null || doctor === null)
+          (sessionExpired(pullFailure)
+            ? SESSION_EXPIRED
+            : pullFailure !== null &&
+                pullFailure.kind === 'refused' &&
+                pullFailure.refusal.code === 'not_permitted'
               ? {
-                  title: 'Could not load this visit',
-                  detail: 'The app could not reach the server. It will try again.',
+                  title: 'You do not have access to this visit',
+                  detail: 'The server refused this request for your account.',
                 }
-              : settled
-                ? blockedReason(notice, failed)
-                : null)
+              : // Only when the VISIT itself is missing. Keyed on the notices instead, this
+                // said "Could not load this visit" while holding the visit -- the caught-by-test
+                // version of the very defect B3 is about. With the visit present and no notices,
+                // `blockedReason(notice, failed)` has the accurate sentence and a next step:
+                // "the consent notice could not be loaded ... you can ask once you have signal".
+                pullFailure !== null && (visit === null || doctor === null)
+                ? {
+                    title: 'Could not load this visit',
+                    detail: 'The app could not reach the server. It will try again.',
+                  }
+                : settled
+                  ? blockedReason(notice, failed)
+                  : null)
         }
         busy={busy}
         loading={!settled || status === 'loading'}

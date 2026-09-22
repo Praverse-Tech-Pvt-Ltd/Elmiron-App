@@ -44,6 +44,16 @@ export const CoverageRowSchema = z.object({
   actualVisitCount: z.number().int().nonnegative(),
   /** Planned doctors with no completed visit that day — not a count difference. */
   missedVisitCount: z.number().int().nonnegative(),
+  /**
+   * MR-47 / `BE-W107`. The zone this MR's days are counted in -- the same one the MR's own
+   * screen uses, from `visit_day()`. Before MR-47 the report hard-coded India time.
+   */
+  dayZone: z.string().min(1),
+  /**
+   * `fallback_utc` when the MR's territory has no configured hours: the day is the UTC date,
+   * which cuts an Indian working day at 05:30. Shown so the report labels it, as the screen does.
+   */
+  dayZoneSource: z.enum(['territory', 'fallback_utc']),
 });
 export type CoverageRow = z.infer<typeof CoverageRowSchema>;
 

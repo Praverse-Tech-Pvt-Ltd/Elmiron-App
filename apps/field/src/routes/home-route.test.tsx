@@ -1,5 +1,5 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import { BodyText as mockBodyText } from '@fieldforce/ui';
 
 const mockSession = jest.fn();
@@ -18,8 +18,9 @@ jest.mock('../session', () => ({ useSession: () => mockSession() }));
 // `src/sync/pulled-store.test.tsx`. This file is about the screen.
 const mockStore = jest.fn();
 jest.mock('../sync/pulled-store', () => ({ usePulledStore: () => mockStore() }));
+const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: mockPush }),
   // Rendered through @fieldforce/ui rather than react-native's Text: apps/field is
   // barred from importing visual primitives, and the rule applies to test files too.
   // The alias is `mock`-prefixed because a jest.mock factory may only close over
@@ -33,7 +34,14 @@ const signedInAs = (role: string) => ({ status: 'signed-in', role, signOut: jest
 
 /** An empty, settled store — the shape `usePulledStore` returns after a quiet sync. */
 const emptyPulled = () => ({
-  store: { visit: new Map(), doctor: new Map(), beat_plan: new Map(), clinic_address: new Map() },
+  // MR-49 D1. `beat_plan_entry` is in the real store (MR-44); Today reads it now.
+  store: {
+    visit: new Map(),
+    doctor: new Map(),
+    beat_plan: new Map(),
+    beat_plan_entry: new Map(),
+    clinic_address: new Map(),
+  },
   status: 'ready',
   notice: null,
   failure: null,
@@ -202,5 +210,80 @@ describe('app/home.tsx — FE-W40, a day restored from disk says so', () => {
         'The app could not reach the server. It will try again when you come back to it.',
       ),
     ).toBeTruthy();
+  });
+});
+
+/**
+ * MR-48 — `FE-W57`, the case the Pixel 10 found. Checked in on the 21st to a visit scheduled
+ * for the 16th, the MR saw "Nothing planned for today · 0 of 0". Today's next-visit card is the
+ * only way into a visit, so check-out was unreachable.
+ */
+describe('app/home.tsx — the visit the MR is standing inside is never hidden', () => {
+  const DOCTOR = {
+    id: '33333333-3333-4333-8333-333333333301',
+    fullName: 'Dr Asha Deshpande',
+    registrationNumber: null,
+    specialty: 'Urology',
+    qualification: null,
+    territoryId: '11111111-1111-4111-8111-111111111103',
+    assignedMrId: null,
+    clinicAddresses: [],
+    isActive: true,
+    createdAt: '2026-09-01T08:00:00.000Z',
+    updatedAt: '2026-09-01T08:00:00.000Z',
+  };
+  const visitOf = (status: string, id: string) => ({
+    id,
+    mrId: '22222222-2222-4222-8222-222222222202',
+    doctorId: DOCTOR.id,
+    beatPlanId: null,
+    clinicAddressId: null,
+    status,
+    notMetReason: null,
+    scheduledFor: '2026-09-09T07:30:00.000Z',
+    startedAt: status === 'in_progress' ? '2026-09-09T07:35:00.000Z' : null,
+    completedAt: null,
+    // The server's day: an earlier one than Today's 2026-09-14.
+    visitDay: '2026-09-09',
+    receivedAt: '2026-09-09T07:35:01.000Z',
+    createdAt: '2026-09-08T08:00:00.000Z',
+    updatedAt: '2026-09-09T07:35:01.000Z',
+  });
+  const withVisit = (visit: ReturnType<typeof visitOf>) => {
+    const base = emptyPulled();
+    return {
+      ...base,
+      store: {
+        ...base.store,
+        visit: new Map([[visit.id, visit]]),
+        doctor: new Map([[DOCTOR.id, DOCTOR]]),
+      },
+    };
+  };
+
+  it('offers the in-progress visit from an earlier day, and opens THAT visit', async () => {
+    mockSession.mockReturnValue(signedInAs('mr'));
+    mockStore.mockReturnValue(
+      withVisit(visitOf('in_progress', '66666666-6666-4666-8666-666666666606')),
+    );
+    mockPush.mockClear();
+    await render(<Home />);
+
+    // MR-49 D2 / FE-W59: an in-progress visit is CONTINUED, not started.
+    await fireEvent.press(await screen.findByText('Continue the visit to Dr Asha Deshpande'));
+    expect(mockPush).toHaveBeenCalledWith('/visit/66666666-6666-4666-8666-666666666606');
+    expect(screen.queryByText('Nothing planned for today')).toBeNull();
+  });
+
+  it('NEGATIVE CONTROL: the same visit still PLANNED on that earlier day is not offered', async () => {
+    mockSession.mockReturnValue(signedInAs('mr'));
+    mockStore.mockReturnValue(
+      withVisit(visitOf('planned', '66666666-6666-4666-8666-666666666607')),
+    );
+    await render(<Home />);
+
+    expect(await screen.findByText('Nothing planned for today')).toBeTruthy();
+    expect(screen.queryByText('Start the visit to Dr Asha Deshpande')).toBeNull();
+    expect(screen.queryByText('Continue the visit to Dr Asha Deshpande')).toBeNull();
   });
 });

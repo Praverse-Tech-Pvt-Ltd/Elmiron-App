@@ -7,6 +7,7 @@ import { lastSeenLabel } from '../../src/doctors/list';
 import { availabilityFrom, availabilitySentence } from '../../src/doctors/availability';
 import { buildDoctorProfile, consentLabel } from '../../src/doctors/profile';
 import { dayMonthIn } from '../../src/today/territory-day';
+import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
 
 /** B9 shows three. More than that is a history screen, which this is not. */
 const VISITS_SHOWN = 3;
@@ -46,18 +47,20 @@ export default function DoctorProfile(): ReactNode {
 
   const failure =
     pullFailure !== null
-      ? pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
-        ? {
-            title: 'You do not have access to this doctor',
-            detail: 'The server refused this request for your account.',
-          }
-        : {
-            title: 'Could not load this doctor',
-            detail:
-              pullFailure.kind === 'refused'
-                ? `The server refused this sync (${pullFailure.refusal.sqlState}).`
-                : 'The app could not reach the server. It will try again.',
-          }
+      ? sessionExpired(pullFailure)
+        ? SESSION_EXPIRED
+        : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
+          ? {
+              title: 'You do not have access to this doctor',
+              detail: 'The server refused this request for your account.',
+            }
+          : {
+              title: 'Could not load this doctor',
+              detail:
+                pullFailure.kind === 'refused'
+                  ? `The server refused this sync (${pullFailure.refusal.sqlState}).`
+                  : 'The app could not reach the server. It will try again.',
+            }
       : status !== 'loading' && doctor === undefined
         ? {
             // Not found is not a denial. Saying "you do not have access" about a doctor who

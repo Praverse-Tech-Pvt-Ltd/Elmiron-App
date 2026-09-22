@@ -7,7 +7,7 @@ import type {
   Doctor,
   Visit,
 } from '@fieldforce/core';
-import { beatPlanView, planStatusLine, todaysPlan } from './beat-plan-view';
+import { beatPlanView, onPlanDoctorIds, planStatusLine, todaysPlan } from './beat-plan-view';
 import type { BeatPlanViewInput } from './beat-plan-view';
 import { territoryToday } from './territory-day';
 import type { TerritoryZone } from './territory-day';
@@ -78,7 +78,6 @@ const input = (over: Partial<BeatPlanViewInput> = {}): BeatPlanViewInput => ({
   ],
   visits: [],
   doctors: [doctor(D1, 'Dr Asha Deshpande'), doctor(D2, 'Dr Vikram Rao')],
-  zone: IST,
   ...over,
 });
 
@@ -223,8 +222,12 @@ describe('BE-W89 — the route uses the server’s stop order and names', () => 
 // B3, found on the device — a visit counts only on the day it happened
 // ---------------------------------------------------------------------------------------------
 
-/** A completed visit to `doctorId`, finishing at `completedAt`. */
-const completed = (doctorId: string, completedAt: string): Visit =>
+/**
+ * A completed visit to `doctorId`, finishing at `completedAt`, which the SERVER has put on
+ * `visitDay`. MR-47 (`BE-W107`): the day is `visit_day()`'s answer, sent by the pull; the client
+ * no longer reckons it from the instant, so the two are set independently here on purpose.
+ */
+const completed = (doctorId: string, completedAt: string, visitDay: string | null): Visit =>
   VisitSchema.parse({
     id: '44444444-4444-4444-8444-44444444440' + doctorId.slice(-1),
     mrId: MR,
@@ -236,6 +239,7 @@ const completed = (doctorId: string, completedAt: string): Visit =>
     scheduledFor: null,
     startedAt: completedAt,
     completedAt,
+    visitDay,
     receivedAt: completedAt,
     createdAt: completedAt,
     updatedAt: completedAt,
@@ -253,27 +257,122 @@ describe('BE-W89 B3 — a visit on ANOTHER day is not done on today’s route', 
     // The Pixel 10 showed exactly this: a visit to Dr Meera Iyer on 16 September rendered as
     // DONE on 21 September's route, and the header said "3 planned · 1 done" on a day nobody
     // had been seen. `buildDayRoute` matches by doctor alone; the store holds all history.
-    const visits = [completed(D1, '2026-09-16T09:49:00.000Z')];
+    const visits = [completed(D1, '2026-09-16T09:49:00.000Z', '2026-09-16')];
     expect(doneNames(input({ visits }))).toEqual([]);
   });
 
   it('does mark a doctor done for a visit today — the positive control', () => {
     // Without this, a filter that dropped EVERY visit would pass the test above.
-    const visits = [completed(D1, '2026-09-21T06:00:00.000Z')];
+    const visits = [completed(D1, '2026-09-21T06:00:00.000Z', '2026-09-21')];
     expect(doneNames(input({ visits }))).toEqual(['Dr Asha Deshpande']);
   });
+});
 
-  it('counts a visit finished at 18:45Z on the 20th as the 21st in IST', () => {
-    // 18:45Z is 00:15 IST on the 21st. The SERVER's `coverage()` puts it on the 21st, because
-    // it reckons `completed_at` in Asia/Kolkata. The route must agree, or the MR and their
-    // manager see two different answers to "was this doctor seen today".
-    const visits = [completed(D1, '2026-09-20T18:45:00.000Z')];
-    expect(doneNames(input({ visits, zone: IST }))).toEqual(['Dr Asha Deshpande']);
+describe('BE-W107 — the route follows the SERVER’s day, at the instant where zones disagree', () => {
+  // 18:45Z on the 20th is 00:15 IST on the 21st. Which date it is depends on the MR's zone, and
+  // MR-47 moved that decision to `visit_day()`. The client must follow what the server sent --
+  // either way -- and never re-decide it from the instant. (`one-day-rule.spec.ts` asserts, on
+  // the server, that the pull and the manager's report agree at this same instant.)
+  const AT = '2026-09-20T18:45:00.000Z';
+
+  it('done on the 21st’s route when the server says the 21st (an India-time territory)', () => {
+    expect(doneNames(input({ visits: [completed(D1, AT, '2026-09-21')] }))).toEqual([
+      'Dr Asha Deshpande',
+    ]);
   });
 
-  it('and as the 20th under the UTC fallback, so it is NOT on the 21st’s route', () => {
-    // The same instant, the same plan: the zone alone decides whether the visit counts.
-    const visits = [completed(D1, '2026-09-20T18:45:00.000Z')];
-    expect(doneNames(input({ visits, zone: UTC }))).toEqual([]);
+  it('NOT done on the 21st’s route when the server says the 20th (the UTC fallback)', () => {
+    expect(doneNames(input({ visits: [completed(D1, AT, '2026-09-20')] }))).toEqual([]);
+  });
+
+  it('NOT done when the server has not said — a visit with no day is on no plan’s day', () => {
+    // A direct write response carries the table row and no `visit_day`. It must not be counted
+    // by falling back to the client's own reading of the instant.
+    expect(doneNames(input({ visits: [completed(D1, AT, null)] }))).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// MR-46 D1 — the Doctors screen's "On plan" chip, at values that would expose a defect
+// ---------------------------------------------------------------------------------------------
+
+describe('BE-W89 D1 — "On plan" keeps exactly the doctors on the plan the Beat plan screen shows', () => {
+  const D3 = '33333333-3333-4333-8333-333333333303';
+  const D4 = '33333333-3333-4333-8333-333333333304';
+  const YESTERDAY_PLAN = '55555555-5555-4555-8555-555555555499';
+
+  /**
+   * Three plans for one MR: yesterday's with D3 on it, and two versions of today's. Version 1
+   * had D4; version 2, which supersedes it, has D1 and D2. D1 also has a visit from five days ago.
+   */
+  const crowded = (over: Partial<BeatPlanViewInput> = {}): BeatPlanViewInput =>
+    input({
+      plans: [
+        record({ id: YESTERDAY_PLAN, planDate: '2026-09-20' }),
+        record({ id: OLD_PLAN, version: 1 }),
+        record({ id: PLAN, version: 2, supersedesBeatPlanId: OLD_PLAN }),
+      ],
+      entries: [
+        { ...entry('55555555-5555-4555-8555-555555555590', D3, 1), beatPlanId: YESTERDAY_PLAN },
+        { ...entry('55555555-5555-4555-8555-555555555591', D4, 1), beatPlanId: OLD_PLAN },
+        entry('55555555-5555-4555-8555-555555555511', D1, 1),
+        entry('55555555-5555-4555-8555-555555555512', D2, 2),
+      ],
+      visits: [completed(D1, '2026-09-16T09:49:00.000Z', '2026-09-16')],
+      doctors: [
+        doctor(D1, 'Dr Asha Deshpande'),
+        doctor(D2, 'Dr Vikram Rao'),
+        doctor(D3, 'Dr Meera Iyer'),
+        doctor(D4, 'Dr Kiran Shah'),
+      ],
+      ...over,
+    });
+
+  const onPlan = (i: BeatPlanViewInput): readonly string[] | null => {
+    const ids = onPlanDoctorIds(beatPlanView(i));
+    return ids === null ? null : [...ids].sort();
+  };
+
+  it('keeps the doctors on today’s plan — and only those', () => {
+    expect(onPlan(crowded())).toEqual([D1, D2].sort());
+  });
+
+  it('leaves out a doctor who is only on YESTERDAY’s plan', () => {
+    expect(onPlan(crowded())).not.toContain(D3);
+  });
+
+  it('keeps a doctor on today’s plan who has a PAST visit — the plan decides, not the visit', () => {
+    // D1 was seen on the 16th. That must neither drop them from the chip nor mark them done.
+    expect(onPlan(crowded())).toContain(D1);
+    const view = beatPlanView(crowded());
+    expect(view.kind === 'route' ? view.route.done : null).toBe(0);
+  });
+
+  it('leaves out a doctor only on a SUPERSEDED version of today’s plan', () => {
+    expect(onPlan(crowded())).not.toContain(D4);
+  });
+
+  it('follows the territory date across 18:30Z: at 18:45Z on the 20th, today is the 21st in IST', () => {
+    const today = territoryToday('2026-09-20T18:45:00.000Z', IST);
+    expect(onPlan(crowded({ today }))).toEqual([D1, D2].sort());
+    // And the UTC reading of the same instant is the 20th -- yesterday's plan, D3 alone.
+    const utcToday = territoryToday('2026-09-20T18:45:00.000Z', UTC);
+    expect(onPlan(crowded({ today: utcToday }))).toEqual([D3]);
+  });
+
+  it('is NOT OFFERED while the stops are still syncing — an empty filter there would be false', () => {
+    expect(onPlan(crowded({ status: 'loading', entries: [] }))).toBeNull();
+  });
+
+  it('is NOT OFFERED when there is no plan today, while loading, or when the pull failed', () => {
+    expect(
+      onPlan(crowded({ plans: [record({ id: YESTERDAY_PLAN, planDate: '2026-09-20' })] })),
+    ).toBeNull();
+    expect(onPlan(crowded({ today: null }))).toBeNull();
+    expect(onPlan(crowded({ today: null, status: 'failed' }))).toBeNull();
+  });
+
+  it('IS offered, and empty, when today’s plan has settled with no stops — that is true', () => {
+    expect(onPlan(crowded({ entries: [] }))).toEqual([]);
   });
 });

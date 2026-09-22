@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { render, screen, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 /**
  * MR-14 B2. The list reads the store the pull maintains, not the mock API client, so the
@@ -31,6 +31,9 @@ const emptyLocalStore = () => ({
   visit: new Map(),
   doctor: new Map(),
   beat_plan: new Map(),
+  // MR-46 D1. The real store has carried this map since MR-44 (`pull.ts` LocalStore); the
+  // double did not, because nothing on this screen read it until the "On plan" chip.
+  beat_plan_entry: new Map(),
   clinic_address: new Map(),
 });
 
@@ -105,6 +108,24 @@ describe('app/doctors.tsx — how the client presents a server decision', () => 
     expect(screen.queryByText('No doctors in your territory yet.')).toBeNull();
   });
 
+  it('names an EXPIRED sign-in as one — not a refusal, not a lost signal (FE-W56)', async () => {
+    // Seen on the Pixel 10: "The server refused this sync (PGRST303)". PostgREST answers an
+    // expired token with 401 PGRST303; the server refused nothing, and the remedy is to sign in.
+    mockStore.mockReturnValue(
+      pulled({
+        status: 'failed',
+        failure: {
+          kind: 'refused',
+          refusal: { code: 'not_authenticated', sqlState: 'PGRST303', actionable: true },
+        },
+      }),
+    );
+    await render(<Doctors />);
+    expect(await screen.findByText('Your sign-in has expired')).toBeTruthy();
+    expect(screen.queryByText(/refused/u)).toBeNull();
+    expect(screen.queryByText(/could not reach/u)).toBeNull();
+  });
+
   it('distinguishes an empty territory from a refused one', async () => {
     // Same screen, different server answer, different words. If these two collapsed into
     // one state the MR could not tell "you have none" from "you may not look".
@@ -137,7 +158,7 @@ describe('app/doctors.tsx — how the client presents a server decision', () => 
     expect(screen.queryByText('You do not have access to this list')).toBeNull();
   });
 
-  it('does not offer "On plan", because the pull cannot answer it', async () => {
+  it('does not offer "On plan" when there is no plan for today', async () => {
     // MR-14 B9, updated by MR-44 B. **This comment's original reason is no longer true and
     // the assertion is still right**, which is exactly what it was written to force: it said
     // "adding the entity is a change to this test rather than a chip quietly reappearing",
@@ -152,6 +173,10 @@ describe('app/doctors.tsx — how the client presents a server decision', () => 
     // because nobody has built it yet, and it should reuse `todaysPlan` from
     // `src/today/beat-plan-view.ts` rather than grow a second definition of "today's plan".
     // This assertion stays until then, so the chip cannot reappear without a deliberate test.
+    //
+    // MR-46 D1. It was built, and this assertion survived it for a NEW reason: this store holds
+    // no plan for today, and `onPlanDoctorIds` offers no chip without one. The chip's own
+    // cases are in the "On plan" block at the end of this file.
     mockStore.mockReturnValue(pulled());
     await render(<Doctors />);
     expect(screen.getByText('All')).toBeTruthy();
@@ -235,5 +260,75 @@ describe("app/doctors.tsx — FE-W42, the age is the server's or it is not claim
     // And it IS Overdue -- without this, the case above is satisfiable by never badging
     // anything, which would lose the one signal this screen exists to give.
     expect(screen.getByText('Overdue')).toBeTruthy();
+  });
+});
+
+describe('app/doctors.tsx — "On plan" (MR-46 D1, the last of BE-W89)', () => {
+  const OTHER = {
+    ...DOCTOR,
+    id: '33333333-3333-4333-8333-333333333334',
+    fullName: 'Dr Meera Iyer',
+  };
+  const PLAN = {
+    id: '55555555-5555-4555-8555-555555555501',
+    mrId: VISIT.mrId,
+    territoryId: DOCTOR.territoryId,
+    planDate: '2026-10-01',
+    status: 'submitted',
+    approvedByUserId: null,
+    approvedAt: null,
+    version: 1,
+    supersedesBeatPlanId: null,
+    createdAt: '2026-09-30T08:00:00.000Z',
+    updatedAt: '2026-09-30T08:00:00.000Z',
+  } as const;
+  const ENTRY = {
+    id: '55555555-5555-4555-8555-555555555511',
+    beatPlanId: PLAN.id,
+    doctorId: DOCTOR.id,
+    clinicAddressId: null,
+    plannedSequence: 1,
+  } as const;
+
+  /** Two doctors; only Asha is on today's plan, and she has a PAST visit. */
+  const withPlan = (entries: readonly (typeof ENTRY)[], over: Record<string, unknown> = {}) =>
+    pulled({
+      store: {
+        ...emptyLocalStore(),
+        doctor: new Map([
+          [DOCTOR.id, DOCTOR],
+          [OTHER.id, OTHER],
+        ]),
+        visit: new Map([[VISIT.id, VISIT]]),
+        beat_plan: new Map([[PLAN.id, PLAN]]),
+        beat_plan_entry: new Map(entries.map((e) => [e.id, e])),
+      },
+      ...over,
+    });
+
+  it('offers the chip and keeps only the doctor on today’s plan', async () => {
+    mockStore.mockReturnValue(withPlan([ENTRY]));
+    await render(<Doctors />);
+    await fireEvent.press(await screen.findByText('On plan'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Dr Asha Deshpande')).toBeTruthy();
+    });
+    // The negative half: a doctor NOT on the plan is gone, so the chip filtered something.
+    expect(screen.queryByText('Dr Meera Iyer')).toBeNull();
+  });
+
+  it('POSITIVE CONTROL: without the chip, both doctors are listed', async () => {
+    mockStore.mockReturnValue(withPlan([ENTRY]));
+    await render(<Doctors />);
+    expect(await screen.findByText('Dr Meera Iyer')).toBeTruthy();
+    expect(screen.getByText('Dr Asha Deshpande')).toBeTruthy();
+  });
+
+  it('does NOT offer the chip while the plan’s stops are still syncing', async () => {
+    mockStore.mockReturnValue(withPlan([], { status: 'loading' }));
+    await render(<Doctors />);
+    await screen.findByText('Not seen 30d');
+    expect(screen.queryByText('On plan')).toBeNull();
   });
 });

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   CoordinatesSchema,
+  GeofenceCentreSchema,
   IsoDateSchema,
   IsoDateTimeSchema,
   UuidSchema,
@@ -23,8 +24,12 @@ export const ClinicAddressSchema = z.object({
   city: z.string().min(1),
   state: z.string().min(1),
   postalCode: z.string().min(1),
-  /** Geofence centre for check-in. `null` until someone captures it in the field. */
-  coordinates: CoordinatesSchema.nullable(),
+  /**
+   * The geofence centre check-in is measured against (`record_check_in` computes the distance
+   * server-side). A place, not a captured fix — `GeofenceCentre`, not `Coordinates` (`BE-W88`).
+   * `null` when the clinic has no centre configured.
+   */
+  coordinates: GeofenceCentreSchema.nullable(),
   geofenceRadiusMetres: z.number().positive(),
 });
 export type ClinicAddress = z.infer<typeof ClinicAddressSchema>;
@@ -111,6 +116,16 @@ export const VisitSchema = z.object({
   scheduledFor: IsoDateTimeSchema.nullable(),
   startedAt: IsoDateTimeSchema.nullable(),
   completedAt: IsoDateTimeSchema.nullable(),
+  /**
+   * MR-47 / `BE-W107`. **The day this visit belongs to, decided by the SERVER** --
+   * `visit_day()`, the same function the manager's `coverage()` report counts by, in the MR's
+   * territory zone (UTC, labelled, when none is configured). The client never reckons a visit's
+   * day itself; that was a second copy of the rule, and it had already drifted.
+   *
+   * `null` when the server did not say: a direct write response carries the table row, not
+   * the pull's payload. A visit with no day is on no plan's day until the next pull says.
+   */
+  visitDay: IsoDateSchema.nullable().default(null),
   /** When the server took delivery. Server-stamped; a supplied value is discarded. */
   receivedAt: IsoDateTimeSchema,
   createdAt: IsoDateTimeSchema,

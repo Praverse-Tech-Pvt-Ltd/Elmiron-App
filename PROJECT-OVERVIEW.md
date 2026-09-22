@@ -17103,3 +17103,646 @@ brief defined.**
    comments I had written with confidence the session before.
 3. **A sweep's label is a hypothesis.** "Safe only by delegation" was a guess about three functions;
    trying to cross the boundary proved one of them was never safe.
+
+### MR-46 — the false notice
+
+**The privacy notice was false in six places, not two. The settings table turned out to be
+write-safe, and a function said to be "granted to nobody" was granted to everybody. The day rule
+MR-45 called "the server's" is a copy that already differs. BE-W89 is closed.**
+
+#### A1 — CI, by workflow name
+
+| | |
+| --- | --- |
+| Run | `35565430658` — **`success`** |
+| Workflow | **`CI`** |
+| Event | `push` |
+| SHA | `48219644db048d9587e0e3e885d2cd08d39f4cc8` — **equal to HEAD** (`git rev-parse HEAD`) |
+
+Nothing was held. Checkout guard: `@fieldforce/api` · `Praverse-Tech-Pvt-Ltd/Elmiron-App` ·
+`f34ceef` is an ancestor. **The environment was not up** — MR-45's services had been stopped at
+the operator's request — so Supabase was started, and it restored from its backup. **`migration up`
+then applied three 17 September migrations as well as this session's**: the restored stack's history
+did not list them. All three applied cleanly and the admin-escape migration's own postcondition
+guard passed; recorded because it means a local backup can lag the migration history silently.
+
+#### A — `FE-W52`: every claim in the notice, checked against the code
+
+**No wording was approved in `blocked-on-you` 2.6, so A2's second branch applies:** the change is
+prepared on `mr-46/fe-w52-notice-pending-approval` (`2ab65f7`), pushed, and **not merged. The false
+version is live until the operator answers.**
+
+| Claim on screen | Verdict | Evidence |
+| --- | --- | --- |
+| *"Right now this app records nothing new about you"* | **FALSE** | `apply_sync_item` writes check-ins, check-outs, call reports, samples and consent records |
+| Location — *"Start day to End day"*, `not-yet` | **FALSE both ways** — recorded, but only at check-in and check-out | `takeFix` has no watcher; its recording caller is `visit/[id].tsx` only; no background-location permission. `record_check_in`/`record_check_out` store lat, long, accuracy, distance, geofence |
+| Check-in and check-out times, `not-yet` | **FALSE** | `check_ins` / `check_outs`, since MR-18 |
+| Voice notes and reports, `not-yet`, *"Kept 90 days, then deleted"* | **FALSE for reports** (sent, never deleted); **partly false for voice notes** (recorded, kept on the phone, never uploaded; the 90-day purge covers server audio only) | `createCallReport` via `sync_push`; `voice-note/[visitId].tsx` uses the mock client and has no upload; `purge-expired-audio.mjs` is bucket `audio` only |
+| Recordings — *"only if a doctor agrees"*, `not-yet` | **`not-yet` is false** (recorded on the phone); **"only if a doctor agrees" is TRUE** | `startRecording` returns unless `authorisingConsent` is non-null; the server re-checks |
+| *"If they say no, nothing happens to you"* | **not contradicted by code** | nothing penalises a declined consent |
+| Never: *"your personal calls, messages, other apps, your camera"* | **TRUE** | no camera, SMS, contacts, call-log or usage-stats permission (read from the local generated `android/` manifest, which is not tracked) |
+| Never: *"or anything at all once your shift ends"* | **FALSE** | the server refuses check-in/out outside the shift window, but `call_report` and `sample_and_input` have no shift check |
+
+**Also found, not a notice claim: `FE-W53`.** A recording the doctor withdraws is described in
+code as discarded; nothing deletes the file. By inspection only.
+
+**A4, on content:** 8 tests; both detectors first fire on the verbatim false version (positive
+control). Mutants: the preamble reverted to *"records nothing"* kills only *"does not deny
+recording location"*; *"Start day to End day"* in the location row kills only *"does not claim
+continuous tracking"*. **A5** is in `blocked-on-you` with the draft wording laid out for approval.
+
+#### B1 — who can write `app_thresholds`: nobody but the owner
+
+| Actor | INSERT | UPDATE | DELETE | Read |
+| --- | --- | --- | --- | --- |
+| Database owner (positive control) | **succeeds** — the row is valid | — | — | — |
+| Company A's **admin** (attacker) | `permission denied` | `permission denied` | `permission denied` | **reads it** — so the refusals are about writing |
+| Company A's **MR** (negative control) | `permission denied` | — | — | — |
+
+`authenticated` holds SELECT only, RLS is forced, and **no function writes the table** (the only
+function naming it is `threshold()`, a reader). `service_role` has no write grant either. **No
+cross-tenant integrity breach; not a stop.**
+
+#### B2 — the settings
+
+Fifteen keys, every one a `global` row written only by migrations. The full table — readers, a
+proposed kind, writers — is in `blocked-on-you.md` → *MR-46, 2.7*. In short: **seven look
+per-company and are shared by every company** (`org_default_shift_window` and six manager-alert
+tunings); the consent bounds and purge settings are product-wide; `ucpmp_sample_cap_quantity` is
+statutory. The model was not decided.
+
+#### B3/B4 — `audio_purge_health()`, fixed
+
+**Measured before:** an MR of a company with no recordings read `liveObjectCount = 56` — all 56
+belonging to other companies. **Why it survived:** `20260916000300` says twice that the function is
+*"granted to nobody"*; `20260815000300:869` grants it to `authenticated`. A claim written, never
+measured.
+
+**Fix: revoked from every signed-in role** (`20260921000100`), with a postcondition guard that also
+refuses losing it for the owner. Not "admins only": `admin` is a tenant role (`decisions.md` C1),
+so that is the same leak to a smaller audience. Not scoped: its callers are the watchdog and two
+specs, all connecting as the owner, and they need the whole database. The per-company view,
+`retention_status()`, already existed.
+
+**Proof, 7 cases.** Before the migration the four refusals — rival MR, rival admin, own MR, own
+admin — **failed** and the three controls passed; after, 7/7. Owning-company positive control: its
+admin still sees its recording through `retention_status()`. Rival negative control: the rival
+admin does not. Operator positive control: the owner still reads it. Mutant: also revoking
+`retention_status()` kills exactly the two `retention_status()` cases. The rollback was executed in
+a rolled-back transaction and re-opens the grant.
+
+#### C1 — the day rule is a copy
+
+**The client holds a copy, and it already differs.** MR-45 wrote that the route used "the same day
+rule the server's `coverage()` uses". `coverage()`: completed visits, `completed_at`, hard-coded
+`'Asia/Kolkata'`. Client: any visit, `completedAt ?? startedAt ?? scheduledFor`, the territory's
+zone — **UTC when no shift hours are configured**, which is every territory relying on
+`org_default_shift_window`, currently `null`. **The MR-27 precedent applies — the server sends the
+answer** — but the server's own rule hard-codes the zone, so the fix is one server function used by
+both `coverage()` and `sync_pull`. That changes the manager's report, so it is **registered as
+`BE-W107`, not done.** The false comment is corrected.
+
+#### D1 — "On plan", and `BE-W89` closed
+
+The chip is derived from `beatPlanView`, so it cannot disagree with the Beat plan screen about which
+plan is today's; it is **not offered** while loading, syncing, unreachable or with no plan today.
+
+| Exposing value | Result |
+| --- | --- |
+| a doctor only on **yesterday's** plan | **out** |
+| a doctor on today's plan with a visit **five days ago** | **in**, and the route counts **0 done** |
+| a doctor only on a **superseded** version of today's plan | **out** |
+| 18:45Z on the 20th | IST gives the 21st's plan; UTC gives the 20th's (yesterday's doctor alone) |
+| plan here, stops still syncing | chip **not offered** |
+
+Mutants: an empty chip while syncing kills only the syncing case; an empty chip with no plan kills
+only the no-plan case. At route level, always offering the chip kills the new syncing case **and**
+MR-14's no-plan case — whose stated reason (*"the pull cannot answer it"*) was no longer true; its
+assertion was right and its name is corrected. **Not driven on a device**: the chip is established
+by tests only, and the register row says so.
+
+#### Counts — each runner's own lines
+
+| Workspace | Runner | Tests | Suites / Files |
+| --- | --- | --- | --- |
+| `@fieldforce/core` | vitest | 28 | 3 files |
+| `@fieldforce/ui` | vitest | 4 | 1 file |
+| `@fieldforce/ui` | jest | 250 | 22 suites |
+| `@fieldforce/ui-tokens` | vitest | 54 | 3 files |
+| `@fieldforce/console` | vitest | 28 | 4 files |
+| `@fieldforce/field` | vitest | **532** | 33 files |
+| `@fieldforce/field` | jest | **142** | 20 suites |
+| `@fieldforce/api` | vitest | **730** | **51 files** |
+| `@fieldforce/mock` | vitest | 43 | 1 file |
+
+**1,811 passing on `main`, zero failing, up 18.** The branch adds 8 more (the notice tests), not
+counted here. `typecheck`, `lint`, `format:check` and `verify:rollbacks --files-only` (63 of 63)
+exit 0.
+
+#### Where it stopped
+
+**No stop was a BLOCKAGE, and all four parts were done.** Two things were deliberately not done,
+each for a reason the brief defined or the record requires:
+
+- **A2 — CONDITIONAL STOP THE BRIEF DEFINED.** No approved wording, so the change is prepared, not
+  shipped.
+- **C2 — ROOM, recorded as `BE-W107`.** Nothing blocked it; doing it well means changing the
+  manager's coverage report in the same change, which deserves its own session.
+
+**One rule broken, and recorded:** `BE-W107` was cited in a code comment before its register row
+existed — the exact error MR-45 recorded. Both landed in the same push, so no pushed commit cites
+an unregistered id, but the order was wrong.
+
+**Three things to carry forward.**
+
+1. **If one line of a notice is false, check them all.** 2.6 named two; there were six.
+2. **A comment that says "granted to nobody" is a claim about an ACL, and the ACL is one query
+   away.** It was wrong the day it was written, and it is why the leak survived a session that built the
+   correct alternative.
+3. **"Uses the server's rule" means calling it.** A copy that agrees today is a second rule.
+
+### MR-47 — the audio on the phone
+
+**The audio MR-46 worried about cannot exist; different audio does, and nothing deletes it. The
+watchdog was never at risk, and the reason is a production database 44 migrations behind. The day
+rule is now one server function, and a test caught my own migration breaking the pull.**
+
+#### Checkout guard and CI
+
+`@fieldforce/api` · `Praverse-Tech-Pvt-Ltd/Elmiron-App` · `f34ceef` is an ancestor. HEAD `3949cc8`
+on arrival, level with `origin/main`. **CI on that HEAD:** run `35569428635`, workflow **`CI`**,
+event `push`, **success**, SHA `3949cc8b3f3ba39213cb736f331a8f750b4bd92a` — equal to HEAD.
+
+#### Local drift, after the environment
+
+Supabase was **still running** from MR-46 — not restored this time. `check:migration-drift` against
+`127.0.0.1`, output read in full: **63 files, 63 applied, `drifted: false`, nothing applied without
+a file, nothing unapplied.** After this session's migration: **64 and 64, no drift.**
+
+**What the production drift run said, found while answering A:** run `35569428636` is green while
+printing `drifted: true` — production has applied **the first 19 of 63** migrations (`shortfall:
+partial-prefix`). That is a recorded, dated acceptance (`--accept-undeployed-until 2026-10-31`),
+and the script says an interleaved gap or an out-of-band version would still be red. So it is
+known, not hidden — but it means **nothing since 7 September has reached production**, including
+MR-46's revoke and this session's day rule.
+
+#### A — did removing `audio_purge_health()` break the watchdog? No
+
+**A1.** One runtime caller: `scripts/check-purge-health.mjs`, run by both `retention-watchdog.yml`
+(hourly) and `retention.yml`, through the `SUPABASE_DB_URL` secret. The secret cannot be read. The
+record says it is the **session-pooler** string (`docs/backend-prompt-w8.md:63`), and
+`.ai-collab/rollback.md` runs DDL rollbacks through it — an owner-level `postgres` login, which
+MR-46's migration asserts keeps `EXECUTE`. **Not measured**: the role is established from the
+record, not observed.
+
+**A2, two-sided, the watchdog's own command, output read:**
+
+| Run as | Output | Exit |
+| --- | --- | --- |
+| `postgres` (local) | `stalled: false`, `liveObjectCount: 58`, `destroyedTotal: 629`, `overdueObjectCount: 0` — *"Audio retention is healthy."* | 0 |
+| a temporary login role with no grant (negative control) | `permission denied for function audio_purge_health`, code `42501` | **1** — the workflow goes red |
+
+**It cannot break silently**: a refused query rejects the script's top-level await. The probe role
+was dropped (count 0 after). No fix was needed.
+
+#### B — `FE-W53`: why does declined audio exist? It does not. Other audio does
+
+**B1 — can recording start before consent? No, and it cannot start at all.** From the code:
+`app/visit/[id].tsx:90` holds `consents` as a **hard-coded empty array** (the pull omits consent
+records, MR-21 B6), so `recordingBlock([])` is always `never_asked` and `onStartRecording` is never
+passed. **Confirmed on the Pixel 10**, signed in as `demo-1ed65c8a-mr`, checked in to visit
+`b0d7f3e0` at 11:38 IST:
+
+| Step | Server | Screen |
+| --- | --- | --- |
+| before consent, microphone off | — | *"No recording can be made — the microphone is off"*; no record control |
+| doctor declines | `declined` at 06:09:11Z | no record control; unchanged |
+| microphone allowed through the app's own prompt | — | *"Ask the doctor first. Nothing can be recorded until they have answered on this phone."* |
+| doctor agrees | `consented` at 06:14:46Z | **still** *"Ask the doctor first"*; no record control |
+
+**B2 did not trigger** — recording cannot precede consent. But `FE-W53` as MR-46 wrote it
+(*"a doctor who said no may still be on the MR's phone"*) was wrong, and is corrected in the
+register. The last row is `FE-W55`: the screen tells the MR to ask a doctor who has answered.
+
+**B3 — what is on the device**, listed with `run-as` over the app's private storage:
+
+| When | Audio files |
+| --- | --- |
+| baseline | **none**; no external-storage folder |
+| after the declined consent | **none** |
+| a 4-second voice note recorded, not saved | `cache/Audio/recording-b1c4c655-….m4a`, **55,801 bytes** |
+| after "Start again" | **still there**, the screen back at 00:00 |
+| a second note, "Save this note" pressed twice | `recording-252de88a-….m4a`, 56,608 bytes, beside the first; **the save did nothing** (`FE-W54`: the screen reads the visit from the mock, the real id is not there, `save()` returns on its first line) |
+| force-stop and relaunch | both still there |
+| **sign out** | **both still there** — the next person on that phone inherits them |
+
+**How long it stays:** until the app's data is cleared, it is uninstalled, or Android trims the
+cache — the last on Android's schedule, which the app does not control.
+
+**B4** — the two options, their cost and what each does to the notice, are in
+`blocked-on-you.md` → *MR-47*. In short: **(a)** a flag turns voice-note recording off for ~0.5
+half-day with no dependency, but cannot remove files already on phones; **(b)** keeps recording,
+adds `expo-file-system` (a native module, a new binary), deletes discarded audio and sweeps
+orphans, ~1.5–2 half-days — and saved notes still stay for ever, because nothing uploads them.
+`expo-file-system` was **not** added.
+
+**The draft notice was corrected on its branch** (`17260f2`): the recordings row is `not-yet`, and
+the voice-note row says a note the MR starts again stays on the phone. Two mutants, one kill each.
+
+#### C — `BE-W107`: one day rule, sent by the server
+
+`visit_day(visit)` = `coalesce(completed_at, started_at, scheduled_for)` in the zone from
+`day_zone_for(mr)`, which is `my_shift_window()`'s rule exactly: the MR's territory, active profile
+only, through `resolve_shift_window()`; otherwise `UTC`, labelled `fallback_utc`. `coverage()`
+counts completed visits by it and **returns `day_zone` and `day_zone_source`**; `sync_pull` sends
+`visit_day` on every visit; the route uses `visit.visitDay` and reckons nothing.
+
+**A test found a defect in my own first draft.** I revoked both helpers from signed-in users, on the
+BE-W106 lesson. `sync_pull` is `SECURITY INVOKER` — it runs as the MR — so the C4 spec failed with
+*"permission denied for function visit_day"*. Revoking was the wrong fix. Now they are granted, and
+`day_zone_for()` **refuses** an MR outside the caller's `visible_user_ids()` with `42501`, tested
+two-sided (another company's MR refused; the MR asking about themselves answered).
+
+**C2 — what the manager's report shows differently:**
+
+| An MR whose territory is… | Before | After |
+| --- | --- | --- |
+| configured in India time | India date | **unchanged** |
+| configured in another zone | India date | that zone's date |
+| **not configured** | India date | **UTC date, labelled `fallback_utc`** — a visit finished 00:00–05:30 IST moves a day earlier, which is what the MR's own screen already showed |
+
+**C3:** the report now carries the fallback label per row, as the screen's zone banner does.
+**Before deploying: configure hours**, or every unconfigured Indian territory's report moves those
+visits — recorded in `blocked-on-you`.
+
+**C4 — 18:45Z, the pull and the report agree in each territory:**
+
+| Territory | 18:45Z on 10 Jan 2026 is | Pull `visit_day` | Report counts it on | Label |
+| --- | --- | --- | --- | --- |
+| India time (inherited national window) | 00:15 on the 11th | `2026-01-11` | 11 Jan only | `Asia/Kolkata` · `territory` |
+| `Asia/Dubai` override | 22:45 on the 10th | `2026-01-10` | 10 Jan only | `Asia/Dubai` · `territory` |
+| no hours at all | 18:45 on the 10th | `2026-01-10` | 10 Jan only | `UTC` · `fallback_utc` |
+
+The visit is committed once in the spec's own fixture world — `sync_pull` reads up to the current
+snapshot, and a row inserted by the transaction doing the pulling is not in it — and each case
+changes the hours inside a rolled-back transaction.
+
+**C5 — mutants, each killing exactly one test:**
+
+| Mutant | Kills only |
+| --- | --- |
+| the report reckons in UTC | the India-time case |
+| `day_zone_for` answers any MR id | the cross-company refusal |
+| the fallback labelled `territory` | the no-hours case |
+| the stored-visit guard removed | the re-sync case |
+| the route re-deriving the day from `completedAt` | the 18:45Z *"server says the 21st"* case |
+
+**Device-verified, the path `FE-W50` never had:** a pre-MR-47 store (stored visits with no
+`visitDay` key) was put back on the Pixel 10 and the new build cold-started. It refused the store,
+the screen said *"Your list has been rebuilt"*, and **all five stored days equal `visit_day()` on
+the server.** An earlier state — every day `null` — came from hot-reloading my own edits in the
+wrong order, before the guard existed; a real update restarts the app.
+
+**Found and registered, not changed: `FE-W57`.** Today holds a third copy of the day rule
+(`scheduledFor ?? startedAt`). On the device, checked in today to a visit scheduled for the 16th,
+Today read *"Nothing planned for today · 0 of 0"* while the pull and the report say the 21st.
+
+#### D — the notice
+
+**2.6 is not approved. The false notice is still live on 21 September 2026.** The branch is not
+merged; its tests have passed only locally.
+
+#### Also registered
+
+`FE-W54` (voice-note save silently does nothing from a real visit), `FE-W55` (told to ask a doctor
+who has answered), `FE-W56` (an expired sign-in shown as *"The server refused this sync
+(PGRST303)"*, seen once on the device). All registered **before** any code or note cited them.
+
+#### Counts — each runner's own lines
+
+| Workspace | Runner | Tests | Suites / Files |
+| --- | --- | --- | --- |
+| `@fieldforce/core` | vitest | 28 | 3 files |
+| `@fieldforce/ui` | vitest | 4 | 1 file |
+| `@fieldforce/ui` | jest | 250 | 22 suites |
+| `@fieldforce/ui-tokens` | vitest | 54 | 3 files |
+| `@fieldforce/console` | vitest | 28 | 4 files |
+| `@fieldforce/field` | vitest | **536** | **34 files** |
+| `@fieldforce/field` | jest | 142 | 20 suites |
+| `@fieldforce/api` | vitest | **735** | **52 files** |
+| `@fieldforce/mock` | vitest | 43 | 1 file |
+
+**1,820 passing on `main`, zero failing, up 9.** The notice branch adds 9 of its own. `typecheck`,
+`lint`, `format:check`, `verify:rollbacks --files-only` (64 of 64) exit 0; this session's rollback
+was executed, once in a rolled-back transaction and once for real, and re-applied.
+
+#### Where it stopped
+
+**No BLOCKAGE; all four parts done to the point the brief allowed.**
+
+- **B2 — the brief's stop did not trigger**: recording cannot precede consent.
+- **B4 — a CONDITIONAL STOP THE BRIEF DEFINED**: options prepared, no dependency added, the
+  operator deciding.
+- **D — CONDITIONAL**: 2.6 unapproved, recorded as live.
+- **`FE-W57` — ROOM**: registered with device evidence, not changed, because what "today" means on
+  Today is a product choice.
+
+**Three things to carry forward.**
+
+1. **Code said "declined audio may stay on the phone"; the device said no audio of that kind can
+   exist, and a different kind does.** A finding made by reading is a hypothesis about the device.
+2. **Know whether a function runs as the caller before revoking what it calls.** `sync_pull` is
+   `SECURITY INVOKER`; the lesson from one function (revoke) was wrong for the next, and only the
+   test said so.
+3. **A green check can be printing `drifted: true`.** Read the output, not the colour — the brief's
+   own rule, and it turned up production 44 migrations behind.
+
+### MR-48 — the third copy
+
+**The checked-in MR could not check out. Today hid the visit they were standing inside, and
+Today's card is the only way into a visit. Fixed and driven to a recorded check-out on the Pixel
+10. A second search for copies of the day rule found what the first missed, and the error
+contract's own guard caught me mapping codes nothing in the database raises.**
+
+#### Checkout guard, CI, drift
+
+`@fieldforce/api` · `Praverse-Tech-Pvt-Ltd/Elmiron-App` · `f34ceef` is an ancestor. HEAD
+`b532916` on arrival, level with `origin/main`. **CI:** run `35574115358`, workflow **`CI`**, event
+`push`, **success**, SHA `b532916968c5b13021839aae3bb356bd046c4b27` = HEAD. Supabase still running
+from MR-47; **local drift: 64 files, 64 applied, `drifted: false`**, both lists empty — again at the
+end.
+
+#### A — every copy of the day rule, found two ways
+
+**Method 1, by behaviour** — anything converting an instant to a date (`dayIn`, `dayMonthIn`,
+`territoryToday`, ISO slicing, `Intl`/`Date` day accessors), kept where fed a visit's time.
+**Method 2, by data flow** — every read of a visit's `scheduledFor`, `startedAt`, `completedAt`,
+`receivedAt`, wherever it goes: 52 reads in 21 files. **Method 2 changed the list.**
+
+| Site | What it does | Found by | Verdict |
+| --- | --- | --- | --- |
+| `src/today/plan.ts` `onDay` | **decides which visits Today shows**, from `scheduledFor ?? startedAt` | both | **a copy — fixed in B** |
+| `app/samples/[visitId].tsx:235` | date on a **UCPMP-relevant** samples record, from `scheduledFor ?? receivedAt` | both | label copy, schedule-first — `FE-W58` |
+| `app/analysis/[id].tsx:175`, `app/report/[visitId].tsx:52` | `dayMonthFrom()` **slices the ISO string** — the date is whatever offset it carries | **method 2 only** | label copy, no zone; right today only because both screens read the mock's `+05:30` — `FE-W58` |
+| `app/doctor/[id].tsx:93` | `dayMonthIn(completedAt, zone)` | both | agrees with `visit_day()` by construction; recorded, not faulted |
+| `src/doctors/list.ts`, `src/doctors/profile.ts` | days **since** the last visit, in milliseconds | **method 2 only** | a different question (elapsed time), not which day |
+| `src/today/day-end.ts` | counts whatever list it is given | method 2 | no day rule; its screen still reads the mock |
+| `apps/console`, `packages/*` | no visit dates | both | none |
+
+#### B — Today, and the checked-in MR
+
+**B1, on the Pixel 10 before the fix: check-out was UNREACHABLE.** Signed in as
+`demo-1ed65c8a-mr`, checked in at 11:38 IST to visit `b0d7f3e0` (scheduled 16 September,
+`visit_day()` = 21 September). Today read *"Nothing planned for today · 0 of 0"*, and none of its
+cards led anywhere. Doctors → Dr Asha showed history only. The Beat plan screen (by deep link) listed
+Asha as *"Next stop · 11:38"* — and tapping her opened her **profile**. By code:
+`home.tsx:208` is the only navigation into a visit. **The MR-24 defect by a different route.**
+
+**B2.** Today shows visits whose server day (`visit.visitDay`) is today, **and always a visit in
+progress**, whatever its date. `summariseDay` no longer takes a zone.
+
+**B3 values:**
+
+| Case | Result |
+| --- | --- |
+| in progress, server day an earlier date | **shown, offered as next, opens that visit** |
+| in progress, server day not sent (`null`) | shown |
+| **planned**, earlier day | not shown (negative control — MR-14's defect) |
+| **completed**, earlier day | not shown — only in-progress is exempt |
+| 18:45Z, server says the 10th | on the 10th's Today |
+| 18:45Z, server says the 9th | not on the 10th's Today |
+
+Mutants: requiring a sent day for the exemption kills only the `null` case; widening the exemption
+to anything not planned kills only the completed case. Re-deriving from the schedule is caught by
+two tests.
+
+**B4, on the Pixel 10 after the fix:** Today read *"Started 11:38 · Next visit Dr Asha · 0 of 1"*;
+the button opened the visit; *"Leaving — check out"* checked out. **Server:** `completed` at
+07:07:50Z, `visit_day` 2026-09-21, one `check_outs` row, geofence `inside`.
+
+**Two more things the device showed, registered:** `FE-W59` — the card calls the in-progress visit
+*"Scheduled 13:00"* (the 16th's time, no date) and offers to *"Start"* it; `FE-W60` — after
+checking out, Today said *"You went to every visit on the plan"* while the Beat plan screen said
+*"3 planned · 1 done"*. Today counts visit rows; the plan's other stops have none.
+
+#### C — voice notes
+
+**C1, on the Pixel 10: on disk, not shown.** Signed out, signed in as `demo-1ae08971-mr`: the queue
+read *"Everything is sent"*; the voice-note screen on that rep's visit opened at 00:00. Both
+earlier files — `recording-b1c4c655-….m4a` (55,801 bytes) and `recording-252de88a-….m4a` (56,608)
+— were still in `cache/Audio`. The previous rep's pulled list is also still on the phone, under its
+own key, not shown.
+
+**C2/C3 — CONDITIONAL STOP THE BRIEF DEFINED.** Option (a) is not approved; nothing was switched off.
+
+**Found by reading code, not on the device: `FE-W61`.** The offline queue is one key
+(`sync.queue.v1`) for every user and `clearQueue()` has no callers — a queued write from one rep
+would be sent under the next rep's sign-in.
+
+#### D — three small defects
+
+| | Outcome | Established by |
+| --- | --- | --- |
+| **D1 `FE-W55`** | **Not done — a decision.** The server's answer is reachable only through `list_consent_records()`, an audited read; MR-12 Q4 kept consent out of the pull for that audit cost. Options in `blocked-on-you` | — |
+| **D2 `FE-W56`** | **Done.** Measured: expired token → 401 `PGRST303`, malformed → 401 `PGRST301`. Both → `not_authenticated`; six screens say *"Your sign-in has expired"* first. The error contract's B2 guard **failed** on the new codes — nothing in `pg_proc` raises them — and its derivation now **measures the gateway** each run instead of listing codes. Mutants: three, one kill each | tests only — not produced on the device |
+| **D3 `FE-W54`** | **Done.** *"This note cannot be saved … The recording stays on this phone and is not sent"*, on load and on Save, never over a microphone failure. Mutants: removing it and always showing it each kill one | **the Pixel 10**, after a cold start |
+
+#### E — the deploy order
+
+**E1**, in `docs/restore-runbook.md` → *"The deploy ORDER"*: **1.** pre-flight SELECT (Phase 0) —
+skipped, a territory-less user half-applies the deploy; **2.** shift hours, **before** the
+migrations — both tables are already in production's 19; skipped, the coverage report moves
+00:00–05:30 IST visits a day and every check-in is refused `45002`; **3.** the **45** pending
+migrations (not 37 — 64 minus 19) — skipped, a current build's check-in fails on production's flat
+coordinate read; **4.** THEN reference data — run earlier it fails cleanly in one transaction,
+because `consent_text_versions.organisation_id` arrives in `20260908001200`. **I wrote one claim
+wrong and corrected it before commit:** that production lacks `sync_pull`/`sync_push` — it has
+them, from `20260813000200`, just not their later versions.
+
+**E2 — nothing on this machine shows a real rep, and production cannot be answered from here.**
+Local users: 7,162, all `@example.test`. The field app's local config points at `127.0.0.1`; no
+`eas.json`. The register: G-PILOT not met, `BE-W46` not done. **But the repository-root `.env`
+points at the production project.** Production's `auth.users` was not read.
+
+#### Counts — each runner's own lines
+
+| Workspace | Runner | Tests | Suites / Files |
+| --- | --- | --- | --- |
+| `@fieldforce/core` | vitest | **32** | **4 files** |
+| `@fieldforce/ui` | vitest | 4 | 1 file |
+| `@fieldforce/ui` | jest | 250 | 22 suites |
+| `@fieldforce/ui-tokens` | vitest | 54 | 3 files |
+| `@fieldforce/console` | vitest | 28 | 4 files |
+| `@fieldforce/field` | vitest | **540** | 34 files |
+| `@fieldforce/field` | jest | **147** | 20 suites |
+| `@fieldforce/api` | vitest | **736** | 52 files |
+| `@fieldforce/mock` | vitest | 43 | 1 file |
+
+**1,834 passing, zero failing, up 14.** `typecheck`, `lint`, `format:check` exit 0.
+
+**One process failure, recorded:** `d891169` was committed with `format:check` failing on
+`home.tsx` — I read the check's exit after the commit had run. Fixed in `2b45c4d`, before push.
+
+#### Where it stopped
+
+**No BLOCKAGE.**
+
+- **C2/C3 — CONDITIONAL STOP THE BRIEF DEFINED**: option (a) not approved.
+- **D1 — ROOM**, as a decision: fixing it well means choosing against a recorded constraint's
+  reasoning, which is not engineering's to do silently.
+- Everything else in A–E was done.
+
+**Three things to carry forward.**
+
+1. **A second search is a test of the first.** By name and by behaviour found one decider; by data
+   flow found two more copies that slice ISO strings.
+2. **"The screen shows nothing" can mean "the MR cannot leave".** Today hiding a visit was a
+   navigation defect, not a display one, because Today is the only door.
+3. **A guard failing on your change is the guard working.** B2 said *"fix the derivation, do not
+   delete the assertion"* — and the fix made it measure the gateway instead of trusting a list.
+
+### MR-49 — the shared queue
+
+**On one phone, the next rep's app sent the previous rep's offline work under its own sign-in. The
+server refused it, so nothing false was recorded, but the work was lost and the ledger now names the
+wrong rep. Measuring that meant going offline, which showed that offline check-in was impossible
+too. Both fixed and re-run on the Pixel 10. The UCPMP cap counts in the wrong month for five and a
+half hours at every month boundary.**
+
+#### Checkout guard, CI, drift, environment
+
+`@fieldforce/api` · `Praverse-Tech-Pvt-Ltd/Elmiron-App` · `f34ceef` is an ancestor. HEAD `752ac00`
+on arrival, level with `origin/main`. **CI:** run `35578184965`, workflow **`CI`**, event `push`,
+**success**, SHA `752ac00b9442b34b9d97241052c01e772082bf50` = HEAD. Supabase restored from backup;
+**local drift: 64 files, 64 applied, `drifted: false`**, both lists empty — and again at the end.
+
+The emulator resumed from a snapshot with **last session's JavaScript still running**, and its clock
+**~2 h 40 min behind** the host. That showed MR-48's `FE-W56` fix working for the first time on a real
+expired session (*"Your sign-in has expired · Sign out and sign in again from Me"*), and it is why
+times on the device read earlier than the server's receipts.
+
+#### A — FE-W61, the shared queue: before and after, on the Pixel 10
+
+Rep A = `demo-1ed65c8a-mr` (`b95aa032`), rep B = `demo-1ae08971-mr` (`15bdcba4`), visit
+`0809df1c` (A's, `planned`). "Offline" = the `adb reverse` for 54321 removed.
+
+**Found first: `FE-W62` — offline, the visit screen hid the visit.** Any failed background pull made
+the screen show only *"Could not load this visit"*, although A's stored list held `0809df1c` as
+`planned`; `VisitScreen` returns the banner alone. **Offline check-in was impossible** — the case the
+queue exists for. The MR-26 B1 rule (stale is not absent), already on the consent screen, now applies
+here; verified on the device before continuing.
+
+| | BEFORE the fix | AFTER the fix |
+| --- | --- | --- |
+| A queues offline | `check_in` + `consent_record` under **`sync.queue.v1`** — one key for everyone | both under **`sync.queue.v1.b95aa032…`** |
+| A's Me screen before sign-out | nothing said | *"2 things have not been sent yet. They stay on this phone under your account and send the next time you sign in here. Nobody else who signs in on this phone will see or send them."* |
+| B signs in; B's queue screen | *"2 things won't go · Stuck: check_in and consent_record"*, **"Try again now"** | *"Everything is sent · Nothing is waiting"* |
+| What the server did | B's app sent both **as B**; **REFUSED** — `not_your_record`, *"visit 0809df1c… is not yours"*. Visit still `planned`; **two rejected `sync_items` with `mr_id` = B** | **nothing** — no item sent as B |
+| A signs back in | — | the flusher (now also run on sign-in) sent both **as A**: `check_in` accepted, `consent_record` accepted; visit `in_progress`; ledger *"declined by b95aa032"* |
+
+**A2 did not trigger** — nothing was accepted as B. The before-state was still wrong three ways: B
+was shown A's work, the ledger holds rejections attributed to B, and A's check-in and the doctor's
+decline were lost unannounced.
+
+**A5 mutants**, each killing one: reading the shared key with no owner; the mid-flush owner check
+removed; the flusher's deps back to `[]`; its null-user guard removed; the visit failure made
+unconditional again. Keying every user to the shared key is caught by two.
+
+#### B — the samples date
+
+**B1: the cap counts by `occurred_at` — when the sample was given — not the schedule.** B2's defect,
+as framed, does not exist.
+
+**But measured: the cap's month is the UTC month.** `date_trunc('month', occurred_at)` runs in the
+session timezone, `UTC`, with no override. 19:00Z on 30 September — **00:30 IST on 1 October** —
+truncates to **September**. A sample given 00:00–05:30 IST on the 1st counts in last month's cap.
+**Reported first, registered `BE-W108`, not changed** — whose timezone a UCPMP month is decides an
+enforcement rule; the recommendation (India time, always) is in `blocked-on-you`.
+
+**B3:** the screen dated the record by the visit's **schedule**; it now prints the server's day
+(`visitDay`). Boundary values:
+
+| Case | Label |
+| --- | --- |
+| scheduled 30 Sep, happened 1 Oct (server says `2026-10-01`) | **1 Oct** (was "30 Sep") |
+| 18:45Z on 30 Sep — India-time territory (server: the 1st) | **1 Oct** |
+| the same instant — UTC-fallback territory (server: the 30th) | **30 Sep** |
+| no server day | "this visit" — not the schedule |
+
+On the device: visit `0809df1c`, scheduled the 17th, in progress on the 21st —
+*"Dr Vikram Rao (DEMO) · 21 Sep"*.
+
+#### C — FE-W55, what this phone witnessed
+
+No audited read; MR-12 Q4 untouched. The consent screen records the answer it captured — outcome,
+device time, sync item id — under `consent.witnessed.v1.<userId>`, only when sent or queued. On the
+Pixel 10, visit `0809df1c`:
+
+| Moment | The screen said |
+| --- | --- |
+| no answer witnessed yet | *"This phone does not have the doctor's answer for this visit."* |
+| a yes, sent | *"The doctor agreed to recording, on this phone at 13:54."* |
+| a no, sent | *"The doctor said no to recording, on this phone at 13:54."* |
+| a yes, captured with no connection | *"… at 13:55. Waiting to send."* → after the flush and re-entering: the plain sentence |
+| rep B on this phone | no witnessed key for B; A's is `consent.witnessed.v1.b95aa032…` only |
+
+**One false start, recorded:** the first "offline" answer went out — removing the tunnel does not close
+a connection already open — so the queued case was produced by cold-starting with the tunnel down.
+**And one line went stale while the screen was open**: "waiting to send" stayed until the screen was
+re-entered, because the visit screen reads its queue on mount — existing behaviour, not new.
+
+#### D — Today
+
+| | Before | After, on the Pixel 10 |
+| --- | --- | --- |
+| `FE-W59` in-progress card | *"Scheduled 13:00 · Start the visit"* | *"Checked in 13:34 · Continue the visit to Dr Vikram Rao (DEMO)"* |
+| `FE-W60` the count | visit rows only — *"You went to every visit on the plan"* after 1 of 3 | plan stops counted — *"1 of 3"*, then *"1 more stop on today's plan … 2 of 3"* |
+
+D3: `FE-W65` registered — whether the Beat plan stop and the doctor profile should also open an
+in-progress visit. Not built.
+
+#### E — voice notes and the pre-flight
+
+**E1 — CONDITIONAL STOP THE BRIEF DEFINED:** option (a) not approved; nothing switched off. **E2:** the
+runbook's step 1 now counts production's signed-in users and those outside `@example.test`, with the
+query's limits stated. Run locally: `signed_in_ever=66 signed_in_outside_test_domains=0`.
+
+#### Also registered
+
+`FE-W63` (a queued check-in announced as *"This check-out cannot be sent yet"*), `FE-W64` (by deep
+link, the visit screen renders a visit it does not hold). Both seen on the device.
+
+#### Counts — each runner's own lines
+
+| Workspace | Runner | Tests | Suites / Files |
+| --- | --- | --- | --- |
+| `@fieldforce/core` | vitest | 32 | 4 files |
+| `@fieldforce/ui` | vitest | 4 | 1 file |
+| `@fieldforce/ui` | jest | **253** | 22 suites |
+| `@fieldforce/ui-tokens` | vitest | 54 | 3 files |
+| `@fieldforce/console` | vitest | 28 | 4 files |
+| `@fieldforce/field` | vitest | **564** | **35 files** |
+| `@fieldforce/field` | jest | **152** | **21 suites** |
+| `@fieldforce/api` | vitest | 736 | 52 files |
+| `@fieldforce/mock` | vitest | 43 | 1 file |
+
+**1,866 passing, zero failing, up 32.** `typecheck`, `lint`, `format:check` exit 0, and format was
+checked before every commit this session.
+
+#### Where it stopped
+
+**No BLOCKAGE.**
+
+- **B2 — the defect as framed does not exist; a different one does**, reported first and registered
+  (`BE-W108`) — the fix is an enforcement decision.
+- **E1 — CONDITIONAL STOP THE BRIEF DEFINED**: option (a) not approved.
+- Everything else in A–E was done and, where the brief asked, confirmed on the device.
+
+**Three things to carry forward.**
+
+1. **To measure the offline queue you must first be able to go offline in the app.** The first
+   attempt found `FE-W62`: offline check-in had been impossible.
+2. **"Refused" is not "harmless".** The server refused rep A's work sent as rep B — and the result
+   was lost work and a ledger that names the wrong rep.
+3. **A promise on screen needs the mechanism behind it.** "Sends the next time you sign in" was false
+   until the flusher ran on sign-in; the device showed it before a user could.

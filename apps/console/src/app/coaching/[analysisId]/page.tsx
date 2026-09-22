@@ -3,6 +3,7 @@ import { createApiClient } from '@fieldforce/core';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Body, Card, Heading, Label, MissingNote, Title } from '../../../lib/ui';
 import { OverrideForm } from '../../../lib/override-form';
+import { OverridesPanel, loadOverrides } from '../../../lib/overrides-panel';
 
 /**
  * Phase 4 E2 — the analysis review, and the override.
@@ -58,6 +59,8 @@ export default async function Review({
   }
 
   const findings = analysis.findings.filter((finding) => finding.severity !== 'info');
+  // FE-W12: what has already been decided, read before the form that decides again.
+  const overrides = await loadOverrides(client, analysis.id);
 
   return (
     <div
@@ -118,7 +121,16 @@ export default async function Review({
         </Card>
       </div>
 
-      <div style={{ width: 404, flex: 'none', display: 'flex' }}>
+      <div
+        style={{
+          width: 404,
+          flex: 'none',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: tokens.space.md,
+        }}
+      >
+        <OverridesPanel result={overrides} />
         <OverrideForm
           analysisId={analysis.id}
           baseUrl={baseUrl}

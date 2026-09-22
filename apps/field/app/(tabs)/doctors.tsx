@@ -4,9 +4,11 @@ import { DoctorListScreen, Screen } from '@fieldforce/ui';
 import { useRouter } from 'expo-router';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { dayMonthIn } from '../../src/today/territory-day';
+import { beatPlanView, onPlanDoctorIds } from '../../src/today/beat-plan-view';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { FILTER_LABELS, buildDoctorRows, lastSeenLabel, rankDoctors } from '../../src/doctors/list';
 import type { DoctorFilter } from '../../src/doctors/list';
+import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
 
 /**
  * B8 — the doctor list, searchable.
@@ -26,33 +28,40 @@ export default function Doctors(): ReactNode {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<DoctorFilter>('all');
   // MR-14 B2. Doctors and visits come from the store the pull maintains.
-  const { store, status, serverTime, zone, failure: pullFailure } = usePulledStore();
+  const { store, status, serverTime, today, zone, failure: pullFailure } = usePulledStore();
   const doctors = doctorsFromStore(store);
   const visits = visitsFromStore(store);
 
   /**
-   * **"On plan" is not offered, and that is a finding rather than a simplification.**
+   * **"On plan" — `BE-W89`'s last piece, MR-46 D1.**
    *
-   * The chip filters by today's beat plan, which means `BeatPlan.entries`.
+   * The chip keeps the doctors on the plan the Beat plan screen shows, derived through the
+   * same `beatPlanView` so the two cannot disagree about which plan is today's. It is offered
+   * only when that plan has settled: `onPlanDoctorIds` returns `null` while the pull is
+   * loading, the stops are syncing, the pull failed, or there is no plan today -- an empty
+   * filter there would say "no doctors on your plan" about stops that have not arrived.
    *
-   * **MR-45 correction: the reason this comment gave in MR-44 was FALSE.** It said this screen
-   * was "still on `createClientForScenario()`". It is not, and was not then: it reads
-   * `usePulledStore()` a few lines above. MR-45 established that by ELIMINATION -- with the
-   * mock dead, this screen still renders the server's doctors and their visit ages. MR-44
-   * had asserted the opposite by inspection, and inspected the wrong thing.
-   *
-   * **What actually remains is smaller, and it is now only a decision to build it.**
-   * `sync_pull` carries `beat_plan_entry` (MR-44), this screen reads the store, and as of
-   * MR-45 `app/beat-plan.tsx` reads `store.beat_plan_entry` for today's plan through
-   * `todaysPlan` in `src/today/beat-plan-view.ts`. The chip needs that same selection, so it
-   * uses the plan the route screen uses rather than a second definition of "today's plan".
-   *
-   * **Until it is built, it stays absent rather than half-built.** Offering it with the wrong
-   * plan, or before the stops have arrived, would filter against an empty set and show NO
-   * DOCTORS -- indistinguishable from "none of your doctors are on today's plan", the client
-   * presenting its own gap as a fact about the day. `BE-W89` -- PROJECT-OVERVIEW.md, MR-14 B9,
-   * MR-44 B and MR-45 B5.
+   * MR-44 recorded this screen as mock and wrote that here; MR-45 established otherwise by
+   * elimination and corrected it.
    */
+  const onPlan = useMemo(
+    () =>
+      onPlanDoctorIds(
+        beatPlanView({
+          status,
+          today,
+          plans: [...store.beat_plan.values()],
+          entries: [...store.beat_plan_entry.values()],
+          visits,
+          doctors,
+        }),
+      ),
+    [status, today, store, visits, doctors],
+  );
+  // If the chip goes away while selected (a refresh re-opens the pull), the list must not keep
+  // filtering by a set the screen no longer offers.
+  const activeFilter: DoctorFilter = filter === 'on-plan' && onPlan === null ? 'all' : filter;
+
   /**
    * **A denial and a dropped connection are different screens.**
    *
@@ -64,18 +73,20 @@ export default function Doctors(): ReactNode {
   const failure =
     pullFailure === null
       ? null
-      : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
-        ? {
-            title: 'You do not have access to this list',
-            detail: 'The server refused this request for your account.',
-          }
-        : {
-            title: 'Could not load doctors',
-            detail:
-              pullFailure.kind === 'refused'
-                ? `The server refused this sync (${pullFailure.refusal.sqlState}).`
-                : 'The app could not reach the server. It will try again when you come back to it.',
-          };
+      : sessionExpired(pullFailure)
+        ? SESSION_EXPIRED
+        : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
+          ? {
+              title: 'You do not have access to this list',
+              detail: 'The server refused this request for your account.',
+            }
+          : {
+              title: 'Could not load doctors',
+              detail:
+                pullFailure.kind === 'refused'
+                  ? `The server refused this sync (${pullFailure.refusal.sqlState}).`
+                  : 'The app could not reach the server. It will try again when you come back to it.',
+            };
   const loading = status === 'loading';
 
   // `Date.now()` is read once per data change rather than per render: a list whose
@@ -99,14 +110,20 @@ export default function Doctors(): ReactNode {
     () => buildDoctorRows(doctors, visits, serverNow),
     [doctors, visits, serverNow],
   );
-  const ranked = useMemo(() => rankDoctors(all, query, filter), [all, query, filter]);
+  const ranked = useMemo(
+    () => rankDoctors(all, query, activeFilter, onPlan ?? new Set()),
+    [all, query, activeFilter, onPlan],
+  );
 
   return (
     <Screen scrollable>
       <DoctorListScreen
-        activeFilter={filter}
+        activeFilter={activeFilter}
         failure={failure}
-        filters={(['all', 'overdue'] as const).map((id) => ({
+        filters={(onPlan === null
+          ? (['all', 'overdue'] as const)
+          : (['all', 'overdue', 'on-plan'] as const)
+        ).map((id) => ({
           id,
           label: FILTER_LABELS[id],
         }))}

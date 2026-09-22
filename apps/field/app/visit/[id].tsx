@@ -35,6 +35,8 @@ import {
   recordingRequest,
 } from '../../src/capture/recording';
 import { checkInQueueItem, checkOutQueueItem, sendOrQueue } from '../../src/sync/outbox';
+import { describeWitnessed, witnessedConsentFor } from '../../src/consent/witnessed';
+import type { WitnessedConsent } from '../../src/consent/witnessed';
 import { QUEUE_UNREADABLE, loadQueueState } from '../../src/sync/async-storage-store';
 import type { QueueLoad } from '../../src/sync/async-storage-store';
 import { emptyQueue } from '../../src/sync/reducer';
@@ -42,6 +44,7 @@ import { unavailableReason } from '../../src/capture/preconditions';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { clockIn } from '../../src/today/territory-day';
+import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
 
 /**
  * B4 / B5 / B6 — one visit, from arriving to leaving.
@@ -51,6 +54,13 @@ import { clockIn } from '../../src/today/territory-day';
  * position after the request returns, which is the client half of the promise the
  * transparency screen makes.
  */
+/** MR-50 E2 / `FE-W64`. Said when a settled pull does not hold the visit asked for. */
+const VISIT_NOT_ON_PHONE = {
+  title: 'This visit is not on this phone',
+  detail:
+    'It is not in the visit list this phone holds for you, so there is nothing here to check in to.',
+} as const;
+
 export default function VisitRoute(): ReactNode {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -97,6 +107,11 @@ export default function VisitRoute(): ReactNode {
   const loading = status === 'loading';
   const [busy, setBusy] = useState(false);
   const [blocked, setBlocked] = useState<string | null>(null);
+  /**
+   * MR-50 E1 / `FE-W63`. The write the banner reports, fixed at the press. The stage moves the
+   * moment a check-in is queued, so reading it at render named the wrong write.
+   */
+  const [blockedWrite, setBlockedWrite] = useState<'check-in' | 'check-out'>('check-in');
   const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
 
   useEffect(() => {
@@ -121,6 +136,22 @@ export default function VisitRoute(): ReactNode {
   // invisible and the MR presses the button again.
   const [queueLoad, setQueueLoad] = useState<QueueLoad>({ kind: 'loaded', state: emptyQueue });
   const queue = queueLoad.kind === 'loaded' ? queueLoad.state : emptyQueue;
+  /**
+   * MR-49 C / `FE-W55`. The doctor's answer as THIS PHONE witnessed it, for this MR and this visit
+   * only. Not the server's ledger (MR-12 Q4 keeps that out of the pull, and the audited read is not
+   * used), and it decides nothing -- it replaces "ask the doctor first", which was false after an
+   * answer on this phone.
+   */
+  const [witnessed, setWitnessed] = useState<WitnessedConsent | null>(null);
+  useEffect(() => {
+    let live = true;
+    void witnessedConsentFor(id).then((found) => {
+      if (live) setWitnessed(found);
+    });
+    return () => {
+      live = false;
+    };
+  }, [id]);
   const refreshQueue = useCallback(() => {
     void loadQueueState().then(setQueueLoad);
   }, []);
@@ -260,6 +291,7 @@ export default function VisitRoute(): ReactNode {
     if (visit === null) return;
     setBusy(true);
     setBlocked(null);
+    setBlockedWrite(stage === 'before' ? 'check-in' : 'check-out');
 
     void (async () => {
       try {
@@ -363,22 +395,40 @@ export default function VisitRoute(): ReactNode {
       <VisitScreen
         actionLabel={actionLabelFor(stage)}
         blocked={blocked}
+        blockedWrite={blockedWrite}
         busy={busy}
         clinic={clinic === undefined ? null : `${clinic.label}, ${clinic.city}`}
         doctorName={doctor?.fullName ?? 'This visit'}
         failure={
           failure ??
           (pullFailure === null
-            ? null
-            : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
-              ? {
-                  title: 'You do not have access to this visit',
-                  detail: 'The server refused this request for your account.',
-                }
-              : {
-                  title: 'Could not load this visit',
-                  detail: 'The app could not reach the server. It will try again.',
-                })
+            ? // MR-50 E2 / `FE-W64`. The pull has SETTLED and this visit is not in it -- reached
+              // by a direct link to a visit this phone does not hold (MR-49 opened rep A's visit
+              // as rep B). The screen drew "This visit · Not started · I am here" with nothing
+              // behind it. Say so instead. Only once settled: while loading, nothing is claimed.
+              status === 'ready' && visit === null
+              ? VISIT_NOT_ON_PHONE
+              : null
+            : sessionExpired(pullFailure)
+              ? SESSION_EXPIRED
+              : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
+                ? {
+                    title: 'You do not have access to this visit',
+                    detail: 'The server refused this request for your account.',
+                  }
+                : // MR-49 / `FE-W62`. A failed background refresh is not "this screen has no
+                  // data". This branch was unconditional, and `VisitScreen` renders ONLY the
+                  // banner when given a failure -- so offline, with the visit in the store, the
+                  // MR saw "Could not load this visit" and no check-in: the offline queue was
+                  // unreachable in exactly the case it exists for. Measured on the Pixel 10.
+                  // The consent screen has had this rule since MR-26 B1; the two server
+                  // DECISIONS above stay unconditional.
+                  visit === null || doctor === null
+                  ? {
+                      title: 'Could not load this visit',
+                      detail: 'The app could not reach the server. It will try again.',
+                    }
+                  : null)
         }
         loading={loading}
         onAction={advance}
@@ -418,7 +468,13 @@ export default function VisitRoute(): ReactNode {
         {...(block === null && !recorderState.isRecording
           ? { onStartRecording: startRecording }
           : {})}
-        recordingBlockedReason={block === null ? null : blockReason(block)}
+        recordingBlockedReason={
+          block === null
+            ? null
+            : block.kind === 'never_asked'
+              ? describeWitnessed(witnessed, queue.items, (iso) => clockIn(iso, zone))
+              : blockReason(block)
+        }
         onRecordSamples={() => {
           router.push(`/samples/${visit?.id ?? id}`);
         }}

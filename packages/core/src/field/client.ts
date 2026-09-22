@@ -30,6 +30,7 @@ import {
   SyncPushRequestSchema,
   SyncPushResponseSchema,
   WithdrawConsentRequestSchema,
+  ListAnalysisOverridesResponseSchema,
   ListAuditLogResponseSchema,
   RetentionStatusSchema,
 } from './endpoints.js';
@@ -68,6 +69,7 @@ import type {
   SyncPushRequest,
   SyncPushResponse,
   WithdrawConsentRequest,
+  ListAnalysisOverridesResponse,
   ListAuditLogResponse,
   RetentionStatus,
 } from './endpoints.js';
@@ -380,6 +382,21 @@ export const createApiClient = (options: ApiClientOptions) => {
         p_limit: input.limit ?? 100,
         p_before_id: input.beforeId ?? null,
         p_reason: input.reason,
+      }),
+
+    /**
+     * MR-50 F2 / `FE-W12` — the overrides already logged against an analysis: the human-review
+     * record SOP monitoring relies on (`C8`). The RPC, not the mock-only REST path, so the same
+     * call works against Supabase: `list_analysis_overrides` returns the contract's camelCase shape
+     * since MR-50 C2 (`BE-W100`). Every read writes its own audit row; an admin must give a reason.
+     */
+    listAnalysisOverrides: (input: {
+      readonly analysisId: string;
+      readonly reason?: string;
+    }): Promise<ListAnalysisOverridesResponse> =>
+      request('POST', API_PATHS.listAnalysisOverrides, ListAnalysisOverridesResponseSchema, {
+        p_analysis_id: input.analysisId,
+        p_reason: input.reason ?? null,
       }),
 
     /**

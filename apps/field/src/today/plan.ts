@@ -1,6 +1,4 @@
 import type { Doctor, Visit } from '@fieldforce/core';
-import { dayIn } from './territory-day';
-import type { TerritoryZone } from './territory-day';
 
 /**
  * The day, reduced to what B1 puts on screen.
@@ -46,6 +44,12 @@ export interface NextVisit {
   readonly clinicPending: boolean;
   /** Server-scheduled time, ISO. Null for an unplanned visit. */
   readonly scheduledFor: string | null;
+  /**
+   * MR-49 D2 / `FE-W59`. The MR is inside this visit: the card says "Continue" and shows when
+   * they checked in (`startedAt`, server-stamped), not the schedule.
+   */
+  readonly inProgress: boolean;
+  readonly startedAt: string | null;
 }
 
 export interface DaySummary {
@@ -65,6 +69,13 @@ export interface DaySummary {
   readonly next: NextVisit | null;
   /** The earliest `startedAt` the server stamped today, ISO. Null before the first. */
   readonly startedAt: string | null;
+  /**
+   * MR-49 D1 / `FE-W60`. Doctors on today's beat plan with no visit counted today. Included in
+   * `planned`: the plan is what the server says the day was, and a stop with no visit row is
+   * still on it. Without this Today counted visit rows only and, after one of three stops, said
+   * "You went to every visit on the plan".
+   */
+  readonly stillOnPlan: number;
 }
 
 /** `planned` and `cancelled` are both "not done"; only `cancelled` leaves the count. */
@@ -89,18 +100,20 @@ const countsTowardTheDay = (visit: Visit): boolean => visit.status !== 'cancelle
  * `+00:00`. So the slice produced a UTC date and compared it against a device-local one,
  * two different frames, and it only looked right because the emulator is set to IST.
  *
- * The comparison is now between two TERRITORY days: the visit's instant read in the
- * territory's zone, against today read the same way from the server's clock.
+ * **MR-48 — `FE-W57`. The day is the SERVER's, and a visit in progress is always today's.**
+ * MR-15 A2 reckoned the day here from `scheduledFor ?? startedAt` in the territory zone. That
+ * was a third copy of the rule `visit_day()` now decides once, and it disagreed: on the Pixel
+ * 10 an MR checked in on the 21st to a visit scheduled for the 16th saw *"Nothing planned for
+ * today · 0 of 0"*, and because this screen's next-visit card is the ONLY way into a visit,
+ * **check-out was unreachable** — the MR-24 defect by another route.
  *
- * **A visit with no date is not claimed for today.** An unscheduled visit falls back to
- * `startedAt`, which is server-stamped; with neither, nothing says it belongs to this day,
- * and asserting that it does would be presenting an absence as a fact. It is not lost —
- * it is simply not part of today's count.
+ * The decision (MR-48 brief): Today shows the visits whose server day is today, AND always
+ * shows a visit that is `in_progress`, whatever its date — the visit the MR is standing inside
+ * is the one thing this screen must never hide. A visit whose day the server has not sent
+ * (`visitDay === null`) is not claimed for today unless it is in progress.
  */
-const onDay = (visit: Visit, day: string, zone: TerritoryZone): boolean => {
-  const stamp = visit.scheduledFor ?? visit.startedAt;
-  return stamp !== null && dayIn(stamp, zone) === day;
-};
+const onDay = (visit: Visit, day: string): boolean =>
+  visit.status === 'in_progress' || visit.visitDay === day;
 
 /**
  * **`deviceDay()` was here and is deliberately gone — MR-15 A2.**
@@ -167,6 +180,8 @@ const nextVisitFrom = (visit: Visit, doctor: Doctor | undefined): NextVisit => {
     clinic: clinic.label,
     clinicPending: clinic.pending,
     scheduledFor: visit.scheduledFor,
+    inProgress: visit.status === 'in_progress',
+    startedAt: visit.startedAt,
   };
 };
 
@@ -179,9 +194,12 @@ export const summariseDay = (
   visits: readonly Visit[],
   doctors: readonly Doctor[],
   day: string,
-  zone: TerritoryZone,
+  /** Today's plan's doctors, from `onPlanDoctorIds(beatPlanView(...))`; empty when none. */
+  planDoctorIds: ReadonlySet<string> = new Set(),
 ): DaySummary => {
-  const counted = visits.filter((visit) => countsTowardTheDay(visit) && onDay(visit, day, zone));
+  const counted = visits.filter((visit) => countsTowardTheDay(visit) && onDay(visit, day));
+  const visited = new Set(counted.map((visit) => visit.doctorId));
+  const stillOnPlan = [...planDoctorIds].filter((doctorId) => !visited.has(doctorId)).length;
   const byId = new Map(doctors.map((doctor) => [doctor.id, doctor]));
 
   // `in_progress` comes before `planned`: a visit the MR is standing inside is the
@@ -200,7 +218,8 @@ export const summariseDay = (
     .sort();
 
   return {
-    planned: counted.length,
+    planned: counted.length + stillOnPlan,
+    stillOnPlan,
     done: counted.filter((visit) => visit.status === 'completed').length,
     notMet: counted.filter((visit) => visit.status === 'not_met').length,
     startedAt: startedTimes[0] ?? null,
