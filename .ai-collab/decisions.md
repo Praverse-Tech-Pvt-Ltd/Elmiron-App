@@ -1950,3 +1950,61 @@ this phone" — or states that it has nothing, and never implies either answer.*
 
 The UCPMP cap took its month from the session timezone. **Decision (proposed, `BE-W108`): any
 period boundary on a compliance count names its zone explicitly in the function.**
+
+## Operator decisions — 22 September 2026 (recorded in MR-50)
+
+**Unlike `C1`–`C6`, which were REVIEWER decisions taken on the operator's behalf, these four are the
+operator's own**, relayed in the MR-50 brief. They continue the same id series so there is one
+canonical place to cite them. The MR-50 brief referred to a table of decisions that did not reach the
+session; only the decisions the brief states in its own words are recorded here, and nothing is
+applied that is not in this list.
+
+### C7 — KEEP the AI layer
+
+**Decided.** The AI layer stays. **This answers the ship-or-cut question the 30 September
+`CONTRACT_I3_DEADLINE` existed to force** — `packages/core/src/field/transcript-v0.expiry.test.ts`
+and `docs/blocked-on-you.md` → *"TWO DATED DEADLINES"*.
+
+**It is not resolved by a placeholder schema.** `TranscriptV1` is designed as the real,
+vendor-agnostic contract (MR-50 B). What stays OPEN: the STT vendor choice and measured Hinglish error
+rate (`blocked-on-you` 4.2) — a bake-off needs labelled audio the project does not have yet.
+
+**Relation to `C3` and `C4`.** `C3` (audio out of MR v1 for legal reasons) is **not reversed**: its two
+blockers — the §2.4 adverse-event screening duty and the §8.6 PV/DPDP signatory — still stand before a
+recording reaches a real doctor. `C7` means engineering builds towards the AI layer; `C3` still decides
+when it may touch a real doctor. `C4`'s second reason ("no AI layer") no longer holds; its first
+(§3.6 unrecorded) does, so coaching stays out of v1 until §3.6 is written down.
+
+### C8 — The purpose of the audio
+
+**Decided, in the operator's words:** *recordings and voice notes are kept so the AI layer can
+support proper review and monitor that SOPs are followed.*
+
+**This answers the question open since MR-38** (`blocked-on-you` → *"Does the MR app record audio at
+all, if there is no AI layer?"*). It is the DPDP purpose. It also changes what the audio IS: review
+for SOP adherence is **monitoring of the rep**, not only a record of the doctor's consent — which is
+what `C8`'s requirements (below, and MR-50 A3) follow from.
+
+**What the purpose requires before any real recording is made** — registered, not blocking
+engineering:
+
+1. **The consent text shown to doctors names this purpose.** Today's notice says the team *"reviews
+   how they presented"*; it does not say SOP monitoring or AI processing.
+2. **The privacy notice to reps says their visits may be recorded and reviewed for SOP adherence** —
+   employee monitoring, stated as such (`FE-W52`, `blocked-on-you` 2.6).
+3. **The PV/DPDP signatory (§8.6) is still required before the recording feature reaches a real
+   doctor**, because transcripts create the adverse-event screening duty in §2.4.
+
+**Engineering may proceed on everything that does not touch a real doctor.**
+
+### C9 — Voice notes are KEPT (option b), and `expo-file-system` is approved
+
+**Decided.** Option (b) of `blocked-on-you` → *"Voice notes — option (a) or (b)"*: voice-note
+recording stays; discarded audio is deleted from the phone. **`expo-file-system` is approved** — the
+dependency option (b) required. The upload itself is not in scope yet (MR-50 D5).
+
+### C10 — `apps/console` gets a dev-only test renderer
+
+**Decided (reviewer's choice, approved).** `@testing-library/react` with a DOM environment for the
+console's existing runner (vitest), **dev-only** — nothing ships in the app bundle. This answers
+`blocked-on-you` 2.5 and unblocks `FE-W12`.

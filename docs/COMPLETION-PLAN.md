@@ -2436,3 +2436,14 @@ condition requires.
 | **`FE-W59`** / **`FE-W60`** — status | **DONE (MR-49 D), device-verified.** `FE-W59`: an in-progress next visit reads *"Checked in 13:34"* and *"Continue the visit to Dr Vikram Rao (DEMO)"* — no schedule time, no "Start". `FE-W60`: Today counts today's PLAN stops (the same `beatPlanView` selection as the Beat plan screen) with its visits, so on the Pixel 10 it read *"1 of 3"*, and after checking out of the second stop *"1 more stop on today's plan · No visit has started for them yet"* and *"2 of 3"* — where it had said *"You went to every visit on the plan"* |
 | **`FE-W65`** | **Should the Beat plan stop and the doctor profile also open a visit that is in progress?** MR-48 found that Today's next-visit card was the ONLY way into a visit: one filter defect (`FE-W57`) stranded a checked-in MR with no way to check out, and the Beat plan screen's stop — showing that very visit as current — opened the doctor's profile instead. **Registered for a decision, not built (MR-49 D3).** A second door is a navigation choice with its own risk (opening the wrong visit for a doctor seen twice), and it should be decided, not slipped in |
 
+### Added by MR-50 — keeping the audio
+
+**What the recorded audio purpose (`C8`, 22 September 2026) requires before any real recording is
+made.** None of it blocks engineering; all of it blocks the first real doctor.
+
+| Item | Detail |
+|---|---|
+| **`BE-W109`** | **The consent text shown to doctors must name the purpose.** `C8`: recordings are kept *"so the AI layer can support proper review and monitor that SOPs are followed"*. The text a doctor reads today (`consent_text_versions`, loaded by `seed:reference`; seen on the Pixel 10 in MR-47) says the team *"reviews how they presented"* and names neither AI processing nor SOP monitoring. The wording is legal copy — the operator's to supply and approve; engineering loads it. **Blocks: the first recording of a real doctor** |
+| **`FE-W52`** — `C8` addition | **The reps' privacy notice must say their visits may be recorded and reviewed for SOP adherence.** That is employee monitoring and must be stated as such. The redraft on `mr-46/fe-w52-notice-pending-approval` is MR-50 G; approval stays `blocked-on-you` 2.6 |
+| **§8.6 signatory** — `C8` confirmation | **Still required before the recording feature reaches a real doctor** (`blocked-on-you` 5.8, `C3`), because transcripts create the §2.4 adverse-event screening duty. `C7` keeping the AI layer does not change this |
+

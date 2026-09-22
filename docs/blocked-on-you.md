@@ -117,7 +117,13 @@
 > they turn red and force a deliberate update** rather than passing silently.
 
 
-> # ❓ THE QUESTION THE 30 SEPTEMBER DATE IS ACTUALLY ASKING
+> # ✅ RESOLVED 22 September 2026 — THE QUESTION THE 30 SEPTEMBER DATE WAS ASKING
+>
+> **Answered by the operator: the AI layer is KEPT (`C7`), and the audio's purpose is *"recordings
+> and voice notes are kept so the AI layer can support proper review and monitor that SOPs are
+> followed"* (`C8`).** Both in `.ai-collab/decisions.md`. What that purpose requires before any real
+> recording — consent text, the reps' notice, the signatory — is listed under `C8`. The text below is
+> kept as the record of the question.
 >
 > ## Does the MR app record audio at all, if there is no AI layer?
 >
@@ -188,13 +194,13 @@
 > about to answer it by accident.
 
 
-> # 📅 TWO DATED DEADLINES, AND NEITHER WARNS YOU FIRST
+> # 📅 TWO DATED DEADLINES — the 30 September one is RESOLVED (`C7`, MR-50 B); 6 November is still open
 >
 > **Both break CI on a fixed date. Neither is an engineering task. Both are yours.**
 >
 > | Date | What breaks | Days left as of 16 Sep 2026 |
 > | --- | --- | --- |
-> | **30 September 2026, 23:59 IST** | `CONTRACT_I3_DEADLINE` — the `TranscriptV0` placeholder expires | **14** |
+> | ~~**30 September 2026, 23:59 IST**~~ | ~~`CONTRACT_I3_DEADLINE`~~ — **RESOLVED 22 Sep: AI layer kept (`C7`); the test now checks the real `TranscriptV1` contract, not a date (MR-50 B)** | — |
 > | **6 November 2026** | `5.9` — the UCPMP sample cap decision (warns from 16 October) | 51 |
 >
 > ### The 30 September one has NO warning period, and that is the difference
@@ -289,7 +295,7 @@ Every open item that no agent can resolve, consolidated. Backend is stopped by d
 | 2.1 | **Whose Play Console account ships this — yours or the client's?** | Before FE-W8 | Decides package ID, listing ownership, keystore custody, and what happens if the relationship ends |
 | ~~2.2~~ | **DECIDED AND EXECUTED — `O2`, 17 August 2026. Cleared MR-43 A3/A6.** This row said *"Currently the placeholder `com.praversetech.elmironmr`"*. It is not: `app.json` holds `com.praversetech.fieldforce`, the scheme is the reverse-DNS form, and the string `elmironmr` appears **nowhere** in code or config | — | **The decision was in `.ai-collab/decisions.md` the whole time** — *"O2 — the name in permanent identifiers: EXECUTED, commit `f34ceef`"*. That is the same `f34ceef` this repository's checkout guard has asserted as an ancestor in every session. The trademark reasoning (ELMIRON® is a third party's mark) is kept there in full |
 | 2.3 | **Keystore custody** — EAS holds it, or enrol in Play App Signing | Before first Play upload | If access to the Expo account is ever lost, you cannot update an app already on the Play Store. No recovery path. *[Verify Play App Signing against current Play Console docs.]* |
-| 2.5 | **Does `apps/console` get a RENDERER, and therefore a third test runner?** | **`FE-W12`**, and every console screen after it | **Filed MR-44 D2, and the ask is made BEFORE the work rather than mid-build.** The console's pages are React Server Components and `vitest.config.ts` says exercising them *"needs a browser or a Next test harness, and neither exists yet"*. `FE-W12`'s recorded check — *"a console test asserts a previously-saved override renders"* — cannot be met without one. **Playwright against `next dev`** is the only option that exercises what actually ships; it costs a dev dependency **plus browser binaries**, CI minutes, and a **third runner** beside vitest and jest. `react-dom/server` in vitest avoids the runner but only partly supports async server components, so it would assert a rendering path users do not get. **Engineering recommends neither: keep the presenter + source-check pattern `FE-W13` shipped with in MR-41, and REWRITE `FE-W12`'s check.** That is a decision rather than a workaround, because it changes what `FE-W12` promises — which is why it is on this page |
+| 2.5 | **RESOLVED 22 Sep 2026 — yes, a dev-only test renderer (`C10`, `.ai-collab/decisions.md`); built in MR-50 F.**  **Does `apps/console` get a RENDERER, and therefore a third test runner?** | **`FE-W12`**, and every console screen after it | **Filed MR-44 D2, and the ask is made BEFORE the work rather than mid-build.** The console's pages are React Server Components and `vitest.config.ts` says exercising them *"needs a browser or a Next test harness, and neither exists yet"*. `FE-W12`'s recorded check — *"a console test asserts a previously-saved override renders"* — cannot be met without one. **Playwright against `next dev`** is the only option that exercises what actually ships; it costs a dev dependency **plus browser binaries**, CI minutes, and a **third runner** beside vitest and jest. `react-dom/server` in vitest avoids the runner but only partly supports async server components, so it would assert a rendering path users do not get. **Engineering recommends neither: keep the presenter + source-check pattern `FE-W13` shipped with in MR-41, and REWRITE `FE-W12`'s check.** That is a decision rather than a workaround, because it changes what `FE-W12` promises — which is why it is on this page |
 | 2.6 | **What should the MR's privacy notice say about check-ins and location?** | **`FE-W52`** — a compliance record: the transparency screen every MR reads | **Filed MR-45. The notice currently UNDERSTATES what the app records.** It tells MRs that check-in/check-out times and their location are *"Not yet — this app cannot do this today"*. Both ARE recorded: check-ins go to Supabase through `sync_push` with coordinates. **It is not a one-line flip**, because the location row promises tracking *"Start day to End day"* while the app records position only AT check-in — so "yes" would overstate in the other direction. Engineering can make each row derive from whether its write path is live, so it cannot drift again; **the sentence the MR reads is yours to approve.** Until then, every MR is being told something false about their own data |
 | 2.7 | **Should configuration belong to an ORGANISATION, and may an MR call system-health functions?** | **`BE-W106`** | **Filed MR-45, with one half proven.** `app_thresholds` has only `global` and `territory` scope — **no organisation scope** — so every "org default" is one row shared by every tenant, and `threshold()` hands any caller the value for any territory they name. Measured: an MR of one company read another company's territory setting (`42`), with a positive control from the owning company and a negative control from the attacker's own territory. `audio_purge_health()` also returns every company's recording counts to any MR. **Configuration and counts, not personal data** — lower severity than `BE-W101` — but the same class of defect, and the fix depends on a model decision engineering should not make alone |
 | ~~2.4~~ | **→ see 5.3**, which is broader: it carries the alternative resolution, shipping foreground-only check-in. Reconciled MR-44 A2. *(was: Transistorsoft release licence)* | Before FE-W8, but check now | Believed required for Android release builds, free for debug. Unverified — check transistorsoft.com. A purchase order takes longer than a sprint. |
@@ -311,7 +317,7 @@ These predate the frontend entirely. Drafts are in `docs/escalations-week3.md`. 
 | # | Item | Open since | What it blocks |
 |---|---|---|---|
 | 4.1 | **PV and privacy sign-off.** Two specific questions: may `adverse_event_reports.reported_text` contain patient information, and does an adverse-event report survive a consent withdrawal? | Sprint 1 | Both are currently answered by a **default, not a decision**, and both are now baked into a deployed production schema. A different answer is a migration against live tables. **MR-43 A3 — the pointer this row was missing.** Both questions already have recorded ENGINEERING answers in `.ai-collab/decisions.md` (BE-W7, 16 August 2026): *"`reported_text` kept on the adverse-event record — Decision: keep it, and flag it hard"*, and *"An adverse-event report survives a consent withdrawal — Decision: it survives"*, the second explicitly labelled **"This is a default, not a ruling"**. So **no engineering work is waiting on this** — the schema is built and documented. What is waiting is the sign-off that turns two defaults into rulings. |
-| 4.2 | **Contract I3 — STT vendor decision and measured Hinglish WER on real audio** | Sprint 2 | The entire AI layer. **CI goes red on 30 September** unless `TranscriptV1` exists. If the answer comes back bad, the pipeline is cut — so every week of delay is a week of risk that work gets built and deleted. |
+| 4.2 | **PARTLY RESOLVED 22 Sep: ship-or-cut answered — KEEP (`C7`). Still open: the vendor choice and measured Hinglish error rate, which need labelled audio (MR-50 B4).**  **Contract I3 — STT vendor decision and measured Hinglish WER on real audio** | Sprint 2 | The entire AI layer. **CI goes red on 30 September** unless `TranscriptV1` exists. If the answer comes back bad, the pipeline is cut — so every week of delay is a week of risk that work gets built and deleted. |
 | ~~4.3~~ | **→ see 5.7**, which is broader: it includes the reference data §6.1 is sequenced around. Reconciled MR-44 A2. *(was: Per-territory working hours from the client)* | Sprint 3 | Capture refuses without them. The org-default window expires 60 days after being configured, then refuses again — by design. |
 | 4.4 | **Supabase DPA question:** does a deleted storage object survive in S3 versioning, a soft-delete window, or a sub-processor's backup? | Sprint 7 | Decides whether the 90-day retention claim is literally true. Not answerable from the API. Needed before the pilot. |
 
@@ -925,7 +931,7 @@ India time first makes the change invisible for Indian territories.** Production
 
 ## MR-48 — 21 September 2026
 
-### Voice notes — option (a) or (b) is still yours, and MR-48 did not pick
+### Voice notes — option (a) or (b) — ✅ RESOLVED 22 Sep 2026: option (b), kept (`C9`)
 
 No approval of either option is recorded, so voice notes were **not** switched off. What MR-48
 measured narrows the severity:
@@ -995,7 +1001,7 @@ Not changed, because the answer is an enforcement rule:
 **Recommendation: India time, always, stated in the function** — the cap is a UCPMP (Indian) rule,
 and a configuration gap must not move a compliance count.
 
-### Voice notes — still not decided
+### Voice notes — ✅ RESOLVED 22 Sep 2026: option (b), kept, `expo-file-system` approved (`C9`)
 
 Option (a) or (b) (`blocked-on-you` → MR-47) is still unapproved, so MR-49 did not switch voice
 notes off.
