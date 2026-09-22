@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
@@ -127,3 +128,60 @@ describe.skipIf(!reachable)('MR-43 C3 — active_consent_text inherits the calle
     expect(id).not.toBe(world.consentTextVersionId);
   });
 });
+
+/**
+ * MR-50 C1 — `BE-W104`. `issue_recording_upload_grant` is one line:
+ * `select * from public.begin_upload(p_visit_id, 'recording', ...)`. It has no ownership check of
+ * its own; `begin_upload` refuses a visit that is not the caller's (`visit % is not yours`, 42501).
+ * If anyone inlines the wrapper — writes the grant directly, say, to skip a function call — the
+ * check goes with it and any MR could open an upload path for any visit. These cases are what fail.
+ */
+describe.skipIf(!reachable)(
+  'MR-50 C1 — issue_recording_upload_grant inherits the own-visit check',
+  () => {
+    /** A standing consent on the Pune visit, so the only question left is WHOSE visit it is. */
+    const consented = async (client: Client): Promise<void> => {
+      await client.query('reset role');
+      await client.query(
+        `insert into public.consent_records
+         (id, visit_id, doctor_id, captured_by_mr_id, outcome, consent_text_version_id,
+          displayed_language, captured_at)
+       values ($1, $2, $3, $4, 'consented', $5, 'en-IN', now())`,
+        [
+          randomUUID(),
+          world.visits.pune,
+          world.doctors.pune,
+          world.users.puneMr.id,
+          world.consentTextVersionId,
+        ],
+      );
+    };
+
+    const grantAs = (user: FixtureUser) =>
+      inRolledBackTransaction(async (client) => {
+        await consented(client);
+        await asUser(client, user);
+        const { rows } = await client.query<{ visit_id: string; mr_id: string; kind: string }>(
+          'select visit_id, mr_id, kind from public.issue_recording_upload_grant($1, $2, $3)',
+          [world.visits.pune, 1024, 60],
+        );
+        return rows[0];
+      });
+
+    it('POSITIVE CONTROL: the visit’s own MR gets a recording grant', async () => {
+      expect(await grantAs(world.users.puneMr)).toEqual({
+        visit_id: world.visits.pune,
+        mr_id: world.users.puneMr.id,
+        kind: 'recording',
+      });
+    });
+
+    it('refuses another MR of the SAME organisation', async () => {
+      await expect(grantAs(world.users.southMr)).rejects.toMatchObject({ code: '42501' });
+    });
+
+    it('refuses an MR of the rival organisation', async () => {
+      await expect(grantAs(world.users.rivalMr)).rejects.toMatchObject({ code: '42501' });
+    });
+  },
+);

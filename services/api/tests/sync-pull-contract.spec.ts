@@ -6,6 +6,8 @@ import {
   fromBeatPlanRow,
   fromDoctorRow,
   fromVisitRow,
+  CreateCheckInRequestSchema,
+  fromClinicAddressRow,
 } from '@fieldforce/core';
 import { requireDatabase } from './db.js';
 import { mintAccessToken, rest } from './auth.js';
@@ -170,6 +172,36 @@ describe.skipIf(!reachable)('C4 — what the payload actually contains', () => {
     const visit = fromVisitRow(payloads['visit']);
     expect(visit.mrId).toBe(payloads['visit']?.['mr_id']);
     expect(visit.receivedAt).toBe(payloads['visit']?.['received_at']);
+  });
+
+  it('MR-50 C3 / BE-W88: a clinic address carries its geofence centre, intact', async () => {
+    // Before MR-50 the mapper sent `coordinates: null` always: the contract demanded a GPS fix's
+    // accuracy and capture time, which a centre does not have. The centre is a place.
+    const payloads = await payloadsByEntity();
+    const row = payloads['clinic_address'];
+    expect(typeof row?.['latitude']).toBe('number');
+    expect(fromClinicAddressRow(row).coordinates).toEqual({
+      latitude: row?.['latitude'],
+      longitude: row?.['longitude'],
+    });
+  });
+
+  it('MR-50 C3 / BE-W88: a CHECK-IN still requires a captured fix, provenance and all', () => {
+    // The negative half: loosening the centre must not loosen the capture.
+    const base = {
+      id: '00000000-0000-4000-8000-000000000001',
+      visitId: '00000000-0000-4000-8000-000000000002',
+      coordinates: { latitude: 18.52, longitude: 73.85 },
+      source: 'automatic',
+      occurredAt: '2026-09-22T06:00:00.000Z',
+    };
+    expect(CreateCheckInRequestSchema.safeParse(base).success).toBe(false);
+    expect(
+      CreateCheckInRequestSchema.safeParse({
+        ...base,
+        coordinates: { ...base.coordinates, accuracyMetres: 8, capturedAt: base.occurredAt },
+      }).success,
+    ).toBe(true);
   });
 
   it('the AGGREGATE schemas cannot be satisfied by a pull, and that is the finding', async () => {

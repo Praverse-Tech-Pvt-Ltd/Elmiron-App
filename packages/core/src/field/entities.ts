@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   CoordinatesSchema,
+  GeofenceCentreSchema,
   IsoDateSchema,
   IsoDateTimeSchema,
   UuidSchema,
@@ -23,8 +24,12 @@ export const ClinicAddressSchema = z.object({
   city: z.string().min(1),
   state: z.string().min(1),
   postalCode: z.string().min(1),
-  /** Geofence centre for check-in. `null` until someone captures it in the field. */
-  coordinates: CoordinatesSchema.nullable(),
+  /**
+   * The geofence centre check-in is measured against (`record_check_in` computes the distance
+   * server-side). A place, not a captured fix — `GeofenceCentre`, not `Coordinates` (`BE-W88`).
+   * `null` when the clinic has no centre configured.
+   */
+  coordinates: GeofenceCentreSchema.nullable(),
   geofenceRadiusMetres: z.number().positive(),
 });
 export type ClinicAddress = z.infer<typeof ClinicAddressSchema>;

@@ -31,3 +31,16 @@ export const CoordinatesSchema = z.object({
   capturedAt: IsoDateTimeSchema,
 });
 export type Coordinates = z.infer<typeof CoordinatesSchema>;
+
+/**
+ * MR-50 C3 / `BE-W88`. **A place, not a fix.** A clinic's geofence centre is a latitude and
+ * longitude that nobody captured at any moment with any accuracy — it is configuration. Modelling
+ * it as `Coordinates` demanded `accuracyMetres` and `capturedAt` it does not have, so the mapper
+ * could only ever send `null`, and filling them in would have been fabrication. A captured position
+ * (check-in, check-out) keeps `Coordinates`, provenance and all.
+ */
+export const GeofenceCentreSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+});
+export type GeofenceCentre = z.infer<typeof GeofenceCentreSchema>;

@@ -139,12 +139,8 @@ export const doctors: Doctor[] = [
         city: 'Pune',
         state: 'Maharashtra',
         postalCode: '411004',
-        coordinates: {
-          latitude: 18.5074,
-          longitude: 73.8077,
-          accuracyMetres: 12,
-          capturedAt: T(9, 30),
-        },
+        // A geofence centre is a place, not a captured fix (BE-W88): no accuracy, no capture time.
+        coordinates: { latitude: 18.5074, longitude: 73.8077 },
         geofenceRadiusMetres: 150,
       },
     ],
