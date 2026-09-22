@@ -22,7 +22,11 @@ import type { TransparencyEntry } from '@fieldforce/ui';
  * - **Reports and samples** — `apply_sync_item`'s `call_report` and `sample_and_input`
  *   branches. Managers read reports through `visible_user_ids()`. Nothing deletes either,
  *   so no retention period is promised for them.
- * - **Voice notes** — audio is captured on the phone; the metadata goes to the mock and the
+ * - **MR-50 G, 22 September 2026 — redrafted for `C8` and `C9`.** Voice notes are KEPT (`C9`): a saved
+ *   note moves to the rep's own folder, and a discarded one is deleted (MR-50 D, emulator). The
+ *   audio's recorded PURPOSE (`C8`) is review for SOP adherence — employee monitoring — so the
+ *   preamble says so in plain words, and each audio row says what review it is kept for.
+ * - **Voice notes** (before MR-50) — audio is captured on the phone; the metadata goes to the mock and the
  *   bytes go nowhere (no upload client). So they are "kept on this phone", and the 90-day
  *   purge, which covers server audio only, is not promised for them. **MR-47, measured on the
  *   Pixel 10:** a note the MR discards with "Start again" stays in `cache/Audio` too (`FE-W53`).
@@ -42,7 +46,7 @@ export const NEVER_RECORDED =
   'Your personal calls, messages, other apps or camera. Where you are between visits.';
 
 export const TRANSPARENCY_PREAMBLE =
-  'This app records your work visits: when you check in and check out, where you were at those two moments, and what you report. It does not follow you between visits. Each item is below.';
+  'This app records your work visits: when you check in and check out, where you were at those two moments, what you report and the samples you give. It does not follow you between visits. What it records is kept so your visits can be reviewed — by your manager, and by an AI system once that is built — to check that the company’s procedures (SOPs) are followed. That is monitoring of your work, and each item it covers is below.';
 
 export const TRANSPARENCY_ENTRIES: readonly TransparencyEntry[] = [
   {
@@ -69,12 +73,13 @@ export const TRANSPARENCY_ENTRIES: readonly TransparencyEntry[] = [
   {
     title: 'Your voice notes',
     detail:
-      'Recorded and kept on this phone, including a note you start again. Not sent to anyone in this build.',
+      'Kept on this phone when you save one; a note you start again or leave without saving is deleted. Not sent to anyone yet — sending is not built. Once it is, saved notes are reviewed for how procedures are followed.',
     state: 'active',
   },
   {
     title: 'Recordings — only if a doctor agrees',
-    detail: 'If they say no, nothing happens to you.',
+    detail:
+      'When recording is built, a consultation is recorded only after the doctor agrees, and is reviewed for how procedures are followed. If they say no, nothing happens to you.',
     state: 'not-yet',
   },
 ];

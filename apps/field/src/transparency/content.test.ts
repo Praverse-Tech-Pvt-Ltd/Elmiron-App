@@ -105,10 +105,26 @@ describe('FE-W52 — the transparency notice says what the code does', () => {
     expect(all.filter((s) => /\b\d+ days?\b|then deleted/i.test(s))).toEqual([]);
   });
 
-  it('says a discarded voice note stays on the phone — measured, FE-W53', () => {
+  it('says a SAVED voice note is kept and a discarded one is deleted — MR-50 D, emulator', () => {
     const note = current.entries.find((e) => /voice notes/i.test(e.title));
-    expect(note?.detail).toMatch(/start again/i);
-    expect(note?.detail).toMatch(/kept on this phone/i);
+    expect(note?.detail).toMatch(/kept on this phone when you save/i);
+    expect(note?.detail).toMatch(/start again or leave without saving is deleted/i);
+    // The MR-47 line said the opposite; asserted absent so it cannot come back.
+    expect(note?.detail).not.toMatch(/including a note you start again/i);
+  });
+
+  it('names the purpose: review for SOP adherence, stated as monitoring (C8)', () => {
+    expect(current.preamble).toMatch(/procedures \(SOPs\)/);
+    expect(current.preamble).toMatch(/monitoring of your work/i);
+    // Every audio row says what review it is kept for.
+    for (const title of [/voice notes/i, /recordings/i]) {
+      const row = current.entries.find((e) => title.test(e.title));
+      expect(row?.detail).toMatch(/reviewed for how procedures are followed/i);
+    }
+  });
+
+  it('does not claim the AI review already happens — it is not built', () => {
+    expect(current.preamble).toMatch(/AI system once that is built/i);
   });
 
   it('no longer says nothing is recorded once the shift ends — reports and samples are', () => {
