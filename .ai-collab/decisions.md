@@ -2036,3 +2036,41 @@ rep's folder is opened** — the same ownership rule as the MR-49 queue.
 `BYPASSRLS`, so a restrictive policy on a table only functions read is never evaluated. Defence in
 depth for those tables would need the functions to run as a role without `BYPASSRLS` — a design
 change, not a policy.
+
+## Operator decisions — 22 September 2026, the remainder (recorded in MR-51)
+
+**The table MR-50 did not receive arrived with MR-51**, in the operator's own numbering. Each maps to
+one canonical id here; cite the `C` id.
+
+| Operator's id | Canonical id | State |
+| --- | --- | --- |
+| D-3 keep voice notes | `C9` | recorded MR-50 |
+| D-5 keep the AI layer; purpose review and SOP monitoring | `C7`, `C8` | recorded MR-50 |
+| D-6 console test renderer, reviewer's choice | `C10` | recorded MR-50 |
+| D-7 `expo-file-system` approved | **`C11`** | recorded here |
+| D-9 emulator as far as possible; final testing, with AI, on a handset | **`C12`** | recorded here |
+
+**Still unanswered, and NOT applied:** 2.6 notice wording, `BE-W108` UCPMP month timezone, `FE-W65`
+second entry to an in-progress visit, `BE-W106` settings model, the bake-off corpus approach,
+`BE-W109` doctor consent text.
+
+### C11 — `expo-file-system` is approved (operator's D-7)
+
+**Decided.** `expo-file-system` may be a dependency of `apps/field`. **Correction to the MR-51 brief,
+which said D-7 was "not yet recorded":** `C9`'s heading already carried it, bundled with keeping voice
+notes. It gets its own id so the approval can be cited without citing the voice-note decision, and
+so it survives if `C9` is ever revisited. **Scope is the one package.** It is pinned exactly to
+57.0.2, the version in the installed dev-client build (MR-50 engineering decision, above); moving it
+means rebuilding the binary on purpose.
+
+### C12 — Where testing happens (operator's D-9)
+
+**Decided.** Test on the Android Studio emulator (the Pixel 10 AVD) as far as it goes. **Final
+testing, with the AI integration, happens on a physical handset.**
+
+**What this changes about "verified" for `FE-G1` and `FE-G2`:** an emulator result is evidence for
+engineering, and it is never the gate. **Both gates close only on a physical handset, run after the AI
+integration exists** — so a handset run made before the AI layer is built does not close them either,
+and has to be repeated. Every result is labelled code, emulator or handset; only "handset" counts
+towards `FE-G1`/`FE-G2`. It does not change which handset: `blocked-on-you` 5.1 (a Xiaomi, Oppo, Vivo
+or Realme, not a Pixel) stands.

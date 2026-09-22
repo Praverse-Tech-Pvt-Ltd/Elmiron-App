@@ -439,6 +439,11 @@ device demonstrates it, because there is nothing there to demonstrate.
 > **There is nothing else between this app and both device gates except a phone.** Item 1.5 —
 > a Xiaomi, Oppo, Vivo or Realme, not a Pixel. **Seven weeks outstanding.**
 
+> **Superseded in part by `C12` (operator's D-9, recorded MR-51, 22 September 2026):** final testing
+> happens on a physical handset **with the AI integration**. So a phone is no longer the only thing
+> between the app and these gates — **both close only on a handset run made after the AI integration
+> exists.** Emulator results are engineering evidence, never the gate.
+
 **Item 1.5 is therefore upgraded**: it now blocks `FE-G1` **and** `FE-G2`, not FE-G1 alone, and
 it is the only remaining blocker on either.
 

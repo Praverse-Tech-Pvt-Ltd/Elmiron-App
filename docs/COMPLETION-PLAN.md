@@ -263,7 +263,7 @@ returns `null` when no window exists at any ancestor.
 | **G-REC** | **Met by this document** | Five contradictions resolved with evidence; four corrections issued |
 | **G-CI** | **Partly met** | CI green on real runs (1a). Off-machine backup unverified — B1 |
 | **G-WRITE** | **Not met** | No Supabase write exists anywhere in the app (1g) |
-| **FE-G1 / FE-G2** | **Not met** | Device gates; emulator only |
+| **FE-G1 / FE-G2** | **Not met** | Device gates; emulator only. **`C12` (MR-51): verified means a physical handset, run after the AI integration exists** — an emulator result never closes them |
 | **G-RLS** | **Partly met** | RLS forced on all 34 tables, 344 `api` tests pass. The full adversarial matrix was not re-run this session |
 | **G-PERF** | **Not met** | Never measured; no seeded volume exists |
 | **G-CRON** | **Not met** | Last scheduled run 23 Aug, failed (1i) |
