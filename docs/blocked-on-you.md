@@ -1019,3 +1019,46 @@ A rep's unsent work now stays under their own account when they sign out, is sen
 fix on the Pixel 10: the next rep's app sent the previous rep's queued check-in and consent answer
 under its own sign-in; the server refused both, so nothing false was recorded — but the previous
 rep's work was lost.
+
+## MR-50 — 22 September 2026
+
+### Decisions recorded
+
+`C7` keep the AI layer · `C8` the audio purpose · `C9` voice notes kept, `expo-file-system` approved ·
+`C10` a dev-only console test renderer — all in `.ai-collab/decisions.md`. The items they settle are
+marked resolved above, with pointers. **The MR-50 brief referred to a table of decisions that did not
+reach the session; if it held others, they are not recorded yet.**
+
+### The bake-off corpus — a proposal for you to approve (nothing has been recorded)
+
+**Why it is needed.** Choosing an STT vendor (`BE-W32`, item 4.2) needs 5–10 hours of labelled
+MR–doctor audio, measured against the Hinglish failure the plan documents (mr-app-plan §0.5: a
+Whisper-class model at 52% mixed error rate on code-switched Hindi–English). Real consultations cannot
+supply it: recording a real doctor waits on the §8.6 signatory (`C3`, `C8`).
+
+**The proposal: the team records its own corpus — staged role-play between consenting employees, in
+Hinglish.**
+
+| | Proposed |
+| --- | --- |
+| **Volume** | 5–10 hours: roughly 30–40 conversations of 10–15 minutes |
+| **Who** | Employees only, each signing a consent for this one purpose (vendor evaluation), with a deletion date. Different voices, genders and regional accents. **No real doctor, no real patient** |
+| **What is said** | Semi-scripted: a scenario card per conversation (product detailing, an objection, a sample hand-over, a follow-up), improvised in the speakers' own words so the language is natural. Mix: mostly romanised Hinglish, some Hindi-heavy, some English-heavy — code-switching mid-sentence is the case that matters |
+| **Planted test content** | Drug names from the product list, dosages and numbers; **fictional** adverse-event mentions (for detection) and **fictional** patient identifiers — a name, an age, a village — inside Hindi sentences (for the redaction suite, `BE-W33`). Nothing real |
+| **Conditions** | Recorded on the phones reps will carry, the way the app records: in a room with a fan or AC running, phone on a desk and in a pocket, some crosstalk |
+| **Labels** | Human transcription in the `TranscriptV1` shape — speaker labels, per-token language, the planted items marked — so the bake-off scores exactly what the pipeline will consume |
+
+**What this does and does not remove.**
+
+- **Removes:** the wait for real doctors and for the signatory, for the purpose of choosing a vendor.
+- **Does NOT remove:** sending employees' voices to candidate vendors is still processing personal
+  data by a third party. Each vendor's terms for evaluation audio (retention, training use) must be
+  checked before upload — the vendor data agreement item (`B6`) applies in a lighter form.
+- **Does not replace real audio** for final tuning: staged speech is cleaner than a clinic. The
+  bake-off picks a vendor; real-audio measurement comes after the signatory.
+
+**Cost, not measured:** I believe careful human transcription of code-switched speech takes several
+hours of transcriber time per hour of audio — please get a quote rather than rely on that.
+
+**What we need from you:** approval of the approach, someone to own recording it, and the consent
+form wording for the employees taking part.
