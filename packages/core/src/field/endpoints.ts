@@ -712,6 +712,8 @@ export const API_PATHS = {
   overdueCallReports: '/rpc/overdue_call_reports',
   myShiftWindow: '/rpc/my_shift_window',
   auditLog: '/rpc/list_audit_log',
+  /** MR-50 F2 / `FE-W12`. The override history's read — the RPC, which Supabase and the mock both serve. */
+  listAnalysisOverrides: '/rpc/list_analysis_overrides',
   retentionStatus: '/rpc/retention_status',
 } as const;
 

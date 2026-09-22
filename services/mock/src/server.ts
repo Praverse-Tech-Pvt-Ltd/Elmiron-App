@@ -662,6 +662,23 @@ const routes: Route[] = [
     }),
   },
   {
+    // MR-50 F2 / FE-W12. The overrides read, at the RPC path Supabase serves -- the same shape
+    // `list_analysis_overrides` returns since MR-50 C2 (BE-W100), keyed by `p_analysis_id`.
+    method: 'POST',
+    pattern: API_PATHS.listAnalysisOverrides,
+    handler: (ctx) => {
+      const analysisId = asString(asRecord(ctx.body)['p_analysis_id'], fx.IDS.analysis);
+      return {
+        body: {
+          data:
+            ctx.scenario === 'empty' ? [] : fx.analysisOverrides.map((o) => ({ ...o, analysisId })),
+          readAt: '2026-09-07T17:05:00+05:30',
+          auditLogId: 1,
+        },
+      };
+    },
+  },
+  {
     // BE-W15. `retentionDays` is the number the DATABASE enforces, not the design's.
     method: 'POST',
     pattern: API_PATHS.retentionStatus,
