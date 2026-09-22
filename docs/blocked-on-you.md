@@ -1062,3 +1062,25 @@ hours of transcriber time per hour of audio — please get a quote rather than r
 
 **What we need from you:** approval of the approach, someone to own recording it, and the consent
 form wording for the employees taking part.
+
+### 2.6 — the notice, REDRAFTED for `C8` and `C9` (MR-50 G) — this is the version to approve
+
+**Still not approved, still not merged, and the false notice is still live on 22 September 2026.**
+The draft on `mr-46/fe-w52-notice-pending-approval` (`7ec0c0f`, with `main` merged in so it is
+checked against the current code) now reads:
+
+| Row | Draft wording |
+| --- | --- |
+| Preamble | *This app records your work visits: when you check in and check out, where you were at those two moments, what you report and the samples you give. It does not follow you between visits. What it records is kept so your visits can be reviewed — by your manager, and by an AI system once that is built — to check that the company's procedures (SOPs) are followed. That is monitoring of your work, and each item it covers is below.* |
+| Location | *Where you are — only when you check in or check out.* Your position at the moment you press check-in and check-out, and how far that is from the clinic. Nothing between visits, and nothing in the background. |
+| Visits | *Which doctors you saw, and when.* Check-in and check-out times, and whether you were inside the clinic's area. |
+| Reports | *Your call reports.* What you write after a visit. Your manager can read them. |
+| Samples | *Samples and inputs you give.* The item, the quantity, its value, the doctor and the time. |
+| Voice notes | *Your voice notes.* Kept on this phone when you save one; a note you start again or leave without saving is deleted. Not sent to anyone yet — sending is not built. Once it is, saved notes are reviewed for how procedures are followed. |
+| Recordings (not yet) | *Recordings — only if a doctor agrees.* When recording is built, a consultation is recorded only after the doctor agrees, and is reviewed for how procedures are followed. If they say no, nothing happens to you. |
+| Never | *Your personal calls, messages, other apps or camera. Where you are between visits.* |
+
+**What changed from MR-47's draft, and why:** voice notes are now kept and discarded audio deleted
+(`C9`, MR-50 D, on the emulator); and `C8` makes the audio's purpose SOP review — **monitoring of the
+rep** — which the notice must say in plain words. Before approving, note that the doctor-facing
+consent text must change too (`BE-W109`), and that neither text replaces the §8.6 signatory (5.8).

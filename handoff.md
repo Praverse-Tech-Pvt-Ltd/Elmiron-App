@@ -1044,3 +1044,36 @@ LOCAL demo tenant only.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-49 — the shared queue | `PROJECT-OVERVIEW.md` → `### MR-49 — the shared queue` |
+
+---
+
+## After MR-50 — 22 September 2026
+
+| | |
+| --- | --- |
+| **CI on `35a871d`** | Confirmed green — `35594549615`, workflow `CI`, event `push`, SHA = HEAD at session start |
+| **Decisions** | `C7` keep the AI layer · `C8` audio purpose = SOP review · `C9` voice notes kept · `C10` console renderer. **A table of decisions the brief referred to never arrived** — if it held more, record them |
+| **I3 / 30 September** | **Resolved by `TranscriptV1`**, the real contract; the deadline test now validates a Hinglish fixture. Next AI step `BE-W32` is blocked on labelled audio — a role-play corpus is proposed |
+| **Backend** | `BE-W104`, `BE-W100`, `BE-W88` closed; `BE-W83` measured (10 function-scoped, 19 permissive-only, 7 bounded); `BE-W110` new |
+| **Voice notes** | Kept per rep in `files/voice-notes/<userId>/`; discarded audio deleted; `FE-W53`/`FE-W54` closed on the emulator. **Upload not built** — the list is in the register |
+| **Device defects** | `FE-W63`, `FE-W64` closed on the emulator |
+| **Console** | Dev-only renderer; `FE-W12` built with a real render assertion |
+| **Notice** | Redrafted on the branch for `C8`/`C9`; **2.6 still awaits approval; false notice still live** |
+| **Tests** | **1,891 passing, zero failing, up 25** |
+
+### For the next session
+
+- **`BE-W110` before any console write of overrides**: the write RPC returns snake_case and the client
+  posts to a mock-only path.
+- **The voice-note upload** starts from the MR-50 D5 list in `COMPLETION-PLAN.md`; check first whether
+  Supabase's resumable upload needs another library (that would be an ask).
+- **`expo-file-system` is pinned to 57.0.2 on purpose** — the version in the installed native build.
+  Do not let `expo install` or `pnpm add` float it without rebuilding the binary.
+- **Every result here is emulator or code.** Handset verification, with the AI integration, is still to
+  come; `FE-G1` and `FE-G2` stay open.
+- The emulator was cold-booted without its snapshot; its clock was right this time.
+- Services stopped at the end of this session.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-50 — keeping the audio | `PROJECT-OVERVIEW.md` → `### MR-50 — keeping the audio` |

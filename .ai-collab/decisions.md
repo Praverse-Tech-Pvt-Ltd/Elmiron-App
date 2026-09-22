@@ -2008,3 +2008,31 @@ dependency option (b) required. The upload itself is not in scope yet (MR-50 D5)
 **Decided (reviewer's choice, approved).** `@testing-library/react` with a DOM environment for the
 console's existing runner (vitest), **dev-only** — nothing ships in the app bundle. This answers
 `blocked-on-you` 2.5 and unblocks `FE-W12`.
+
+## 22 September 2026 — MR-50, engineering decisions
+
+### A deadline test is retired by answering its question, not by moving its date
+
+`transcript-v0.expiry.test.ts` existed to force ship-or-cut. `C7` answered it. **Decision: the test now
+asserts the contract it was waiting for — `TranscriptV1` exists and accepts the hard case — and says
+in its own text why the date is gone.** A placeholder schema would have satisfied the old test and
+answered nothing.
+
+### A native module is pinned to what the installed build contains
+
+`expo install` and `pnpm add` each moved `expo-file-system` under the installed dev client.
+**Decision: a native dependency is pinned exactly to the version in the lockfile the binary was built
+from, until the binary is rebuilt on purpose.**
+
+### Kept audio belongs to the rep; discarded audio does not stay
+
+**Decision (applying `C9`): a voice note is kept only by Save, in `files/voice-notes/<userId>/`; every
+other path deletes it; leftovers are swept on opening the screen; and no path outside the signed-in
+rep's folder is opened** — the same ownership rule as the MR-49 queue.
+
+### A policy on a function-scoped table is not a second layer here
+
+**Recorded, not decided:** all 85 `SECURITY DEFINER` functions are owned by `postgres`, which has
+`BYPASSRLS`, so a restrictive policy on a table only functions read is never evaluated. Defence in
+depth for those tables would need the functions to run as a role without `BYPASSRLS` — a design
+change, not a policy.
