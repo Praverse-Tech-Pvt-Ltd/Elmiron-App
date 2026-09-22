@@ -2074,3 +2074,15 @@ integration exists** — so a handset run made before the AI layer is built does
 and has to be repeated. Every result is labelled code, emulator or handset; only "handset" counts
 towards `FE-G1`/`FE-G2`. It does not change which handset: `blocked-on-you` 5.1 (a Xiaomi, Oppo, Vivo
 or Realme, not a Pixel) stands.
+
+## Operator decision — 22 September 2026, given during MR-51
+
+### C13 — MR-51 continues past C2, with `app_thresholds` excluded
+
+**Decided (operator, in session).** MR-51 C1 found one of the 19 directly readable tables leaking
+across the tenant boundary: `app_thresholds`. An MR and an admin of one organisation read another's
+territory-scoped row — key, value, territory id and `set_by_user_id` (a user id of the other
+company). That is **`BE-W106`**, already registered and awaiting `blocked-on-you` 2.7; the brief
+lists `BE-W106` as unanswered. C2 said stop on any leak; the operator chose: **record it under
+`BE-W106`, leave it unfixed, build C3 on the other 18, and continue to D and E.** Not chosen: a
+restrictive policy on `app_thresholds` now (it would partly pre-empt the settings-model decision).

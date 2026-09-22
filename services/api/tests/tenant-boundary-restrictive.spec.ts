@@ -196,17 +196,114 @@ describe.skipIf(!reachable)('D2 — a restrictive tenant boundary cannot be wide
            from pg_policy p join pg_class c on c.oid = p.polrelid
           where not p.polpermissive
             and c.relname not like 'mr07_d2_mirror_%'
+            and c.relname not like 'mr51_c3_mirror_%'
+            -- MR-51 C3: a restrictive policy counts only if it reaches the tenant through the
+            -- existing helper, so one rewritten to something else drops out of this list.
+            and position('current_user_organisation_id()' in pg_get_expr(p.polqual, p.polrelid)) > 0
           order by c.relname`,
       );
+      // MR-07 D's seven, plus MR-51 C3's eighteen (BE-W83). `app_thresholds` is absent on
+      // purpose: it is BE-W106, awaiting the operator (C13).
       expect(rows.rows.map((r) => r.relname)).toEqual([
+        'adverse_event_reports',
+        'beat_plan_entries',
+        'beat_plans',
+        'call_report_approvals',
+        'call_reports',
+        'check_ins',
+        'check_outs',
         'clinic_addresses',
         'consent_text_versions',
         'doctors',
         'organisations',
+        'recordings',
+        'samples_and_inputs',
+        'sync_batches',
+        'sync_events',
+        'sync_item_reinstatements',
+        'sync_items',
         'territories',
         'territory_shift_windows',
+        'upload_grants',
         'user_profiles',
+        'visit_audio_quarantine',
+        'visit_audio_quarantine_clearances',
+        'visits',
+        'voice_notes',
       ]);
+    });
+  });
+});
+
+/**
+ * MR-51 C3 — the same pair for the predicate the eighteen BE-W83 tables use.
+ *
+ * Those tables carry no organisation column, so their boundary reaches the tenant through the MR who
+ * owns the row: `mr_id in (select p.id from user_profiles p where p.organisation_id =
+ * current_user_organisation_id())`. The pair above proves a restrictive `organisation_id =` works; it
+ * says nothing about THIS shape, whose subquery runs under the caller's RLS on `user_profiles`. So
+ * the mirror carries an `mr_id`, the permissive policy is the real tables' `visible_user_ids()`
+ * scoping, and the restrictive expression is copied from `20260922000300` verbatim.
+ */
+const mrMirrorTable = async (client: Client): Promise<string> => {
+  const name = `mr51_c3_mirror_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+  await client.query(`create table public.${name} (id uuid primary key, mr_id uuid not null)`);
+  await client.query(`alter table public.${name} enable row level security`);
+  await client.query(`alter table public.${name} force row level security`);
+  await client.query(`grant select on public.${name} to authenticated`);
+  await client.query(
+    `create policy ${name}_select_own_or_team on public.${name}
+       for select to authenticated
+       using (mr_id in (select public.visible_user_ids()))`,
+  );
+  // Copied verbatim from 20260922000300_tenant_boundary_direct_tables.sql.
+  await client.query(
+    `create policy ${name}_tenant_boundary on public.${name}
+       as restrictive for all to authenticated
+       using (mr_id in (select p.id from public.user_profiles p
+                         where p.organisation_id = public.current_user_organisation_id()))
+       with check (mr_id in (select p.id from public.user_profiles p
+                              where p.organisation_id = public.current_user_organisation_id()))`,
+  );
+  await client.query(`insert into public.${name} (id, mr_id) values ($1, $2), ($3, $4)`, [
+    randomUUID(),
+    world.users.puneMr.id,
+    randomUUID(),
+    world.users.rivalMr.id,
+  ]);
+  return name;
+};
+
+const rowsOf = async (client: Client, table: string, mrId: string): Promise<number> =>
+  (await client.query(`select id from public.${table} where mr_id = $1`, [mrId])).rowCount ?? 0;
+
+describe.skipIf(!reachable)('MR-51 C3 — the mr_id-shaped boundary cannot be widened', () => {
+  it('an over-broad PERMISSIVE policy does not reach another tenant through it', async () => {
+    await inDdlTransaction(async (client) => {
+      const table = await mrMirrorTable(client);
+      await client.query(
+        `create policy ${table}_over_broad on public.${table}
+           for select to authenticated using (true)`,
+      );
+      await asUser(client, world.users.admin);
+
+      expect(await rowsOf(client, table, world.users.rivalMr.id), 'another tenant').toBe(0);
+      // Positive control, same transaction, same policies: the admin's own tenant is readable.
+      expect(await rowsOf(client, table, world.users.puneMr.id), 'own tenant').toBe(1);
+    });
+  });
+
+  it('and with that restrictive policy removed, the same policy widens immediately', async () => {
+    await inDdlTransaction(async (client) => {
+      const table = await mrMirrorTable(client);
+      await client.query(`drop policy ${table}_tenant_boundary on public.${table}`);
+      await client.query(
+        `create policy ${table}_over_broad on public.${table}
+           for select to authenticated using (true)`,
+      );
+      await asUser(client, world.users.admin);
+
+      expect(await rowsOf(client, table, world.users.rivalMr.id), 'reaches across').toBe(1);
     });
   });
 });
