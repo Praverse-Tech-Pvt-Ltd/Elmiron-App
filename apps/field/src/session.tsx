@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { readAppClaims } from './claims';
 import type { Role } from './claims';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { readPersistedSession } from './persisted-session';
 import { supabase } from './supabase';
 import { setQueueOwner } from './sync/async-storage-store';
 
@@ -28,8 +30,14 @@ export const SessionProvider = ({ children }: { readonly children: ReactNode }):
     // is already signed in, on every cold start.
     void supabase.auth
       .getSession()
-      .then(({ data }) => {
-        setSession(data.session);
+      .then(async ({ data }) => {
+        // **MR-52 B2 / `FE-W67`.** `null` here does not mean signed out. Offline, a refresh fails
+        // with a network error, which the library treats as retryable: it KEEPS the session in
+        // storage and still answers null because the access token has expired. Asking storage is
+        // what separates "cannot reach the server" from "the server rejected this session" -- on a
+        // rejection the library has already removed the entry, so this finds nothing.
+        const restored = data.session ?? (await readPersistedSession(AsyncStorage));
+        setSession(restored);
         setReady(true);
       })
       // **MR-28 C2, and the worst outcome on the sweep's list.** No `.catch` stood here.
