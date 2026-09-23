@@ -1154,3 +1154,36 @@ LOCAL demo tenant only.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-52 — the console | `PROJECT-OVERVIEW.md` → `### MR-52 — the console` |
+
+## MR-53 — the recording path (23 September 2026)
+
+- **The recording path is built and is OFF.** Two independent switches, and the state of each is a
+  fact you can check rather than remember:
+  - server: `app_thresholds.recording_feature_enabled` ships **`false`** (`20260923000400`), and
+    `recording_permission()` reads it before it reads consent;
+  - client: `readRecordingFlag()` **throws, naming the host**, if the flag is set against a
+    non-local Supabase URL. An unparseable URL is not local.
+- **This machine is not in the shipped state, and both differences are needed to resume.** The local
+  database carries a later `recording_feature_enabled = true` row, and the git-ignored
+  `apps/field/.env` carries `EXPO_PUBLIC_RECORDING_ENABLED=true`. Neither is committed. A database
+  built from the migrations has `false` only.
+- **The emulator proof is HALF DONE.** Proven on the Pixel 10 AVD: never-asked wording, the consent
+  screen, and the DECLINED wording with the record control absent. **Not proven on any device:** the
+  consented case — the control appearing, record and stop, the object in storage with the server's
+  byte count and retention date, the offline queue flushing exactly once, and the phone's copy
+  deleted only after the server confirms. Start there.
+- `pnpm test` **cannot pass with the Supabase stack stopped**: `consent-notice-tenancy`,
+  `dimension-coverage` and `organisation-backfill` assert preconditions outside their
+  `skipIf(!reachable)` guard and fail with `ECONNREFUSED` instead of skipping. Nine tests, three
+  files, not MR-53's, not fixed here.
+- `FE-W68` is new and registered: `apps/console` pins supabase-js **2.117.0**, `apps/field` declares
+  **`^2.112.3`** and resolves 2.112.3. The caret is the risky half — the phone's version can move on
+  a re-resolve without anybody choosing it.
+- **`BE-W109` is still live in the wrong form on the emulator**: the consent notice reads "reviews
+  how they presented". Nothing reached a doctor, because of the two switches.
+- Services stopped at the end of this session: Metro, the emulator and Supabase (with a backup, so
+  the local state above survives a restart).
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-53 — the recording path | `PROJECT-OVERVIEW.md` → `### MR-53 — the recording path` |

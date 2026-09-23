@@ -18347,3 +18347,228 @@ function owned by `postgres` can never demonstrate a row-level policy, in either
 **ROOM**, and named: `BE-W106`'s model question (now dated), the `.m4a`-versus-format argument in
 `begin_upload`, the three drafts in `blocked-on-you` that are the operator's to approve, and the
 handset gates.
+
+### MR-53 — the recording path
+
+**23 September 2026.** Every result is marked **code**, **emulator**, **browser** or **handset**.
+There is no handset result. **The emulator run is PARTIAL and stopped part-way**, on the operator's
+instruction rather than on anything the work found — said plainly here and again at the end, because
+a partial proof read as a whole one is the failure this file exists to prevent.
+
+**The hard constraint this session was given, and how it is enforced.** Nothing built here may reach
+a real doctor: §8.6 needs a named PV/DPDP signatory before a recording feature ships, and §2.4's
+adverse-event screening duty follows from transcripts existing at all. So the recording path is
+behind **two independent off switches, and neither is a boolean somebody remembers to check**:
+
+1. **The server's.** `app_thresholds` gains a row `recording_feature_enabled` = **`false`**
+   (`20260923000400`). `recording_permission(visit)` reads it FIRST and answers
+   `{allowed: false, reason: 'feature_off'}` without looking at consent at all. The migration's own
+   `do $$` guard asserts the flag is off after it runs, so a migration that shipped it on would fail
+   the build that applied it.
+2. **The client's, and it THROWS rather than warns.** `readRecordingFlag(env, supabaseUrl)` in
+   `packages/core` refuses to return `true` when the Supabase URL is not a local host, and the
+   refusal names the host it saw. An unparseable URL is NOT local. So setting
+   `EXPO_PUBLIC_RECORDING_ENABLED=true` in a build pointed at a hosted project does not produce a
+   recording feature; it produces a crash at configuration read, before any screen renders.
+   `apps/field/src/capture/recording-permission.ts` then **fails closed to `off`** if the config
+   cannot be read, and does not call the server at all while disabled.
+
+Neither switch is sufficient alone and that is deliberate: the server's flag protects every client,
+and the client's guard protects against the flag being flipped on a hosted project by somebody who
+thought it was a test.
+
+#### Checkout guard, CI, drift
+
+`@fieldforce/api` · `Praverse-Tech-Pvt-Ltd/Elmiron-App` · `f34ceef` is an ancestor. HEAD on arrival
+`4697656`, level with `origin/main`, tree clean. **CI on arrival:** run `35829172383`, workflow
+**`CI`**, event `push`, **success**, SHA `46976566d9b7a3a11d7b41676dade8777f1fffc2` = the MR-52
+FINALLY commit; **Migration drift** (`35829172347`) green on the same SHA. **Local migration drift
+was NOT checked at the end** — the Supabase stack is stopped at the operator's instruction and
+`check:migration-drift` needs a database. Stated rather than skipped quietly.
+
+#### A — what stood between "the doctor agreed" and "a recording row exists"
+
+**A1 (code).** Nothing was missing on the server. `capture_consent` records the answer against the
+exact notice version; `begin_upload` refuses a recording without a standing consent; the ceilings,
+the grant, the retention stamp and `cascade_consent_withdrawal` all existed and all had tests.
+
+**A2 (code) — the functions never called FROM THE APP.** The finding that decided the shape of B:
+`sync_pull` deliberately omits `consent_record` (MR-21 B6), so the phone has never held the consent
+ledger and cannot answer "may I record this visit?" locally. The record control was therefore
+unreachable not because a screen was missing but because the phone was asking a question it had no
+data for. **The fix is a server READ, not shipping the ledger to the phone** — which would have been
+re-deriving a server rule on the client, and is forbidden.
+
+#### B — the record control, reachable behind both switches (code, then partial emulator)
+
+**B1–B3 (code).** `recording_permission(visit)` answers `{allowed, reason, featureEnabled,
+consentRecordId, consentCapturedAt}` with reasons `allowed | feature_off | not_your_visit |
+quarantined | never_asked | declined | withdrawn`. It uses the SAME predicate `begin_upload`
+enforces — `standing_consent_for_visit` — so the screen and the upload cannot disagree about what
+consent means. The predicate itself is revoked from every role: only the two functions call it.
+
+**B4 (code).** A withdrawal mid-recording: the existing cascade wins. The open grant goes to
+`revoked`, the next byte is refused by `assert_upload_still_permitted` — which checks consent FIRST,
+before state and expiry — and `uploadRecording` surfaces it as a `SyncPushRefusal` with the server's
+own sentence. **The file stays on the phone**, because a refusal is not proof the recording should
+be destroyed and the MR is told instead.
+
+**B5 (emulator, PARTIAL).** On a Pixel 10 AVD against local Supabase with both switches on locally:
+signed in; Today showed *"Started 10:45"*; the planned visit opened; check-in first refused with
+*"The phone could not find your position in time"* (mock location needs re-injecting per boot, which
+is a known emulator fact and not a defect), then **checked in at 13:23**. The never-asked case
+rendered *"No recording can be made — This phone does not have the doctor's answer for this visit."*
+*"Ask about recording"* opened the consent screen (*"May we record this conversation?"*, Notice DEMO
+v1 `f512ba7d`), and **"No, don't record"** produced the declined case: **"No recording can be made —
+The doctor said no. Nothing will be recorded, and that is the end of it — carry on with the visit."**
+with the record control absent.
+
+**What B5 did NOT reach, and it is the more important half:** the CONSENTED case — the control
+appearing, a recording made and stopped, the object in storage with the server's byte count and
+retention date, the offline queue flushing exactly once on reconnect, and the phone's copy being
+deleted only after the server confirms. Those are C3's proofs and **they are unproven on a device.**
+They are proven in code by `recording-upload.test.ts`, which is not the same claim.
+
+#### C — the recording uploads through the voice-note path (code; C3's device half outstanding)
+
+One sender, `uploadAudio`, not two. The differences are exactly two and both are the SERVER's: the
+kind asked of `begin_upload` — where the recording's consent check lives — and the folder the file
+was kept in. A recording is kept in the rep's own `recordings/` folder and **not in `cache/Audio`,
+because the voice-note screen sweeps that cache and would delete it.** It replays as an ordinary
+sync item with the outbox's retry, per-rep ownership and dead-lettering; the server issues the
+storage key and the client uses it as given (`BE-W111`'s `.m4a` holds); `complete_upload` still takes
+the size Storage observed, so the phone's number is not the one that counts. The screen no longer
+POSTs to the mock on `:4010`. **Mutants:** forcing the folder to `voice-notes` fails five recording
+cases; forcing the kind to `voice_note` fails exactly one; the voice-note suite stays green in both,
+which is what makes the second mutant meaningful.
+
+#### D — a `TranscriptV1` can be written, by a service identity (code)
+
+`ingest_transcript(jsonb)` writes into **`transcripts_raw`**, which has existed since MR-14 with
+`transcripts_redacted` beneath it — which is why `cascade_consent_withdrawal` already deleted
+transcripts. Their shape governs; this is the door, not a new room.
+
+**Who may call it:** `service_role` only. `authenticated` and `anon` are not granted EXECUTE at all,
+so an MR or an admin of any organisation is refused by the GRANT before a single row is read, and
+the migration's guard asserts exactly that.
+
+**What it refuses, and why these:** a span that runs past the end of the audio (a segmenter that
+padded the tail) and segments that overlap (two speakers diarised onto one timeline). Both are
+silent corruption if stored, because a `FindingCitation` would then point at a moment that does not
+exist — and a citation is what a manager reads before deciding about somebody's job. Also: an
+unknown `schemaVersion` rather than a guess, a transcript longer than its audio, a transcript filed
+against another visit, a destroyed recording, and **a withdrawn consent** — without which a job in
+flight would write a transcript after the destruction log said the audio was destroyed. Idempotent
+on `id`, so a vendor retrying a lost acknowledgement writes one row.
+
+**Not built, deliberately (D4):** any vendor client. There is no vendor and no corpus; that is
+`BE-W32` and it waits on the operator.
+
+**A test-design point worth keeping.** The D3 fixtures pass `unchecked: true` on purpose.
+`TranscriptV1Schema` refuses a span past the end and an overlap too, so a fixture parsed through the
+contract could never reach the SERVER's copy of those rules — and a vendor POSTing raw JSON to
+PostgREST never touches the TypeScript contract at all. The valid fixtures are still parsed, so they
+cannot drift from the contract.
+
+#### E — three answers
+
+**E1 — how long a rep survives offline (code and configuration, NOT measured).** The two tokens have
+different lives and only one of them is a clock. The ACCESS token is `jwt_expiry = 3600`
+(`config.toml:189`), and that hour is the boundary MR-52 B1 measured. The REFRESH token has **no
+expiry in this repository's configuration at all**: rotation is on with a 10-second reuse interval,
+and **`[auth.sessions]` is commented out** — no `timebox`, no `inactivity_timeout`. So a rep offline
+from Friday evening to Monday morning loses the access token after an hour and is signed in for the
+rest of the weekend because `persisted-session.ts` says so; on Monday's first signal
+`autoRefreshToken` exchanges the refresh token and the outbox flushes. **Sixty-three hours is no
+worse than two, and the thing that would break it is not the clock:** an operator setting
+`timebox = "24h"` or `inactivity_timeout = "8h"` on the hosted project signs out every rep across a
+weekend — and `persisted-session.ts` correctly would NOT save them, because a session the server has
+ended is a non-retryable refusal and auth-js removes the stored entry. **`config.toml` says in its
+own comments that it configures the LOCAL stack only, so production's values are an operator
+question this repository cannot answer.** Nobody has left a device offline for 63 hours either: the
+hour is measured, the weekend is reasoned.
+
+**E2 — `FE-W68`, registered (code).** `apps/console` pins `@supabase/supabase-js` **2.117.0**
+exactly; `apps/field` declares **`^2.112.3`** and resolves **2.112.3**. The reason is good:
+`@supabase/ssr@0.12.7` peers on `^2.114.0`, and moving the PHONE's auth library inside a console
+change would have shipped an untested change to what reps depend on. It earns an id anyway, because
+`persisted-session.ts` is written against auth-js BEHAVIOUR measured on 2.112.3 and nothing in CI
+re-runs that measurement — and because **the caret is the sharper half**: the console's version can
+only move when somebody chooses it, the phone's can move on any re-resolve. **Convergence
+condition:** the field moves to the console's exact version, pinned exactly, in a change of its own
+whose evidence is MR-52 B4 re-run on a device.
+
+**E3 — the duplicated deadline row (code; the tests are written and SKIPPED here).** **I answered a
+different question first.** The one that was asked is about the duplicate MR-52 recorded as a
+mistake of its own: two identical `be_w106_settings_model_decision_due` rows on the LOCAL database.
+**It produces ONE warning, not two**, because `threshold()` reads `order by … effective_from desc
+limit 1` and `app_thresholds_unique_version` forces the duplicates to differ in `effective_from`, so
+which one wins is deterministic. The duplicate is invisible, not merely harmless. The sharper half,
+pinned in the same test: `effective_from <= now()` excludes a future-dated row, so a deferral written
+that way would look filed and change nothing. **Both tests need the database and are skipped on this
+machine**; they are reasoned from the SQL and will be proved by CI.
+
+**E3, the other question, and a real defect fixed.** Asking "one warning or two" of the STEP rather
+than the row found this: MR-52 D4 put `BE-W106` into `check:decision-debt` beside the UCPMP cap and
+did not split the ADVICE. The dates overlap by design — `BE-W106` warns from **2026-10-10**, the cap
+from **2026-10-16** — so for fifteen days a reader would have been told to go and ask the client what
+the UCPMP sample cap is **in order to clear a question about which settings belong to which
+company**, and from 2026-10-31 that wrong paragraph would have arrived attached to a RED build with
+`enforce_ucpmp_sample_cap() is inert` underneath it. Advice that looks like a control while pointing
+somewhere else is this repository's own named failure mode. Fixed: the question and the consequence
+belong to the debt, `evaluateAllDecisionDebt` is pure and exported, and the CLI prints one block per
+unanswered decision. **Mutant:** giving the settings debt the UCPMP question kills exactly one test
+and leaves ten green.
+
+#### Counts, from each runner's own summary line
+
+`@fieldforce/core` 4 files / **38**. `@fieldforce/ui-tokens` 3 / **54**. `@fieldforce/mock` 1 / **43**.
+`@fieldforce/console` 6 / **37**. `@fieldforce/ui` vitest 1 / **4**, jest 22 suites / **253**.
+`@fieldforce/field` vitest 40 / **611**, jest 21 suites / **162**.
+
+`@fieldforce/api`: **13 files passed, 101 tests, 703 skipped — and 3 files / 9 tests FAILED because
+the database is down.** Those nine are not MR-53's: `consent-notice-tenancy`, `dimension-coverage`
+and `organisation-backfill` assert their preconditions OUTSIDE the `skipIf(!reachable)` guard, so
+they fail with `ECONNREFUSED` rather than skipping. **That is a small real defect in the suite** —
+`pnpm test` cannot pass with the stack stopped, although the design elsewhere in these files says it
+should. Left alone deliberately: it is nobody's mess made here, and fixing three unrelated suites
+inside this change is the kind of scope creep this file complains about elsewhere.
+
+#### Two local-only enablements still set on this machine
+
+Neither is committed and neither ships; both are needed to resume B5:
+
+1. `app_thresholds` on the LOCAL database carries a later `recording_feature_enabled` = `true` row.
+   The repository's migration inserts `false`, and a database built from the migrations has only
+   that.
+2. `apps/field/.env` (git-ignored) carries `EXPO_PUBLIC_RECORDING_ENABLED=true`, which is only
+   accepted at all because the Supabase URL is `127.0.0.1`.
+
+#### Mistakes of my own, recorded
+
+1. **I committed `df1300f` without running the api typecheck.** `transcript-ingest.spec.ts` passed
+   `role: string` where `asDatabaseRole` takes a union, which `tsc` rejects. vitest was green and I
+   stopped there. It never reached CI only because the commit was never pushed — it would have
+   turned it red. **This is the third session in a row this rule has cost a follow-up commit**, and
+   the rule is not "run lint": it is run typecheck, lint AND format, and read all three.
+2. **I misread E3** and answered a question about the two DEBTS sharing a step before answering the
+   one asked, about the duplicated ROW. The first answer found a real defect and is kept; the
+   misreading is recorded rather than tidied away, because the brief named the duplicated row
+   explicitly and I had read the MR-52 section that recorded it.
+
+#### Where it stopped, and why
+
+**Not a blockage, and no conditional stop the brief defined fired. It is an OPERATOR INSTRUCTION**,
+which is a fourth thing and should not be dressed as one of the three: the operator stopped the work,
+then asked that it continue with the services down and the emulator unused.
+
+**Complete:** A, B1–B4, C1/C2/C4, D, E, and the record. **Incomplete and named:** B5's consented
+case and all of C3's device proofs — the object in storage with the server's byte count and retention
+date, the offline queue flushing exactly once, and the phone's copy deleted only after confirmation.
+Those need the emulator and are the first thing to do on resuming.
+
+**ROOM, unchanged and still the operator's:** the 2.6 notice wording, `BE-W106`'s model (dated
+2026-10-31, unconfirmed), `BE-W108`'s UCPMP month timezone, `FE-W65`, the corpus consent, and
+`BE-W109`'s doctor consent text — **which the emulator showed is still live in the wrong form**: the
+notice on screen says the company "reviews how they presented", and `BE-W109` says that must change
+before a doctor reads it. Nothing here shipped it to a doctor, because of the two switches above.

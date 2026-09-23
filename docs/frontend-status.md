@@ -1458,3 +1458,30 @@ again".
 - The transparency notice on `main` is still the false one; the corrected row waits on its branch —
   `blocked-on-you` 2.6.
 - `FE-G1` and `FE-G2` still need a handset, after the AI integration (`C12`).
+
+## MR-53 — the recording path (23 September 2026)
+
+### Changed
+
+- **The record control now asks the SERVER whether this visit may be recorded**, instead of reading
+  a consent ledger the phone has never had (`sync_pull` omits `consent_record` by design, MR-21 B6).
+  `recordingAvailability()` calls `recording_permission(visit)` and renders one of four states:
+  allowed, off, blocked with the server's reason, or unknown.
+- The wording for each blocked reason is the doctor's answer stated plainly — proved on the emulator
+  for **never asked** (*"This phone does not have the doctor's answer for this visit."*) and
+  **declined** (*"The doctor said no. Nothing will be recorded, and that is the end of it — carry on
+  with the visit."*), with the record control absent in both.
+- A stopped recording is **kept in the rep's own `recordings/` folder and queued**, through the same
+  sender a voice note uses — not POSTed to the mock. `cache/Audio` is not used, because the
+  voice-note screen sweeps it.
+
+### Not changed, and off
+
+- **The feature is OFF and cannot be turned on against a hosted project**: the client configuration
+  throws when the flag is set against a non-local Supabase URL, and the server's own flag ships
+  `false`.
+- **The consented path is unproven on a device.** Recording, stopping, the upload, the retention date
+  and the delete-after-confirm are proved in code only.
+- The transparency notice on `main` is still the false one (`blocked-on-you` 2.6), and the consent
+  notice still says "reviews how they presented" (`BE-W109`).
+- `FE-G1` and `FE-G2` still need a handset, after the AI integration (`C12`).

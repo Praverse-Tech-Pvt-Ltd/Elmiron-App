@@ -2086,3 +2086,20 @@ company). That is **`BE-W106`**, already registered and awaiting `blocked-on-you
 lists `BE-W106` as unanswered. C2 said stop on any leak; the operator chose: **record it under
 `BE-W106`, leave it unfixed, build C3 on the other 18, and continue to D and E.** Not chosen: a
 restrictive policy on `app_thresholds` now (it would partly pre-empt the settings-model decision).
+
+
+### C14 — MR-53 stops with the emulator half of B5/C3 unproven
+
+**Decided (operator, in session).** After the declined-consent case was captured on the Pixel 10
+AVD, the operator stopped the work, then asked that it continue with **all services stopped and the
+emulator unused**. So Part E and the record were completed from code, configuration and the
+lockfile, and the remaining device proofs were not attempted.
+
+**This is an operator instruction, not a blockage and not a conditional stop the brief defined** —
+recorded as a fourth kind so it is not read as one of the three. What is unproven is named in
+`PROJECT-OVERVIEW.md` → `### MR-53 — the recording path`: the consented case, the object in storage
+with the server's byte count and retention date, the offline queue flushing exactly once, and the
+phone's copy being deleted only after the server confirms.
+
+**Not chosen:** marking C3 closed on the strength of `recording-upload.test.ts`. Code evidence and
+device evidence are different claims, and the brief asked for both.

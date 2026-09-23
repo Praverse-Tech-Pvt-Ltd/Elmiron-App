@@ -83,3 +83,32 @@ non-obvious go here; a typo caught by typecheck does not.
   now: the ceiling is unchanged by a chunk, and unchanged by a resume.
 - **Verified:** mutation 3 now kills a test. Second time the mutation pass has found a
   hollow test rather than a hollow guard.
+
+## MR-53 E3 · Two decisions shared a CI step and one of them carried the other's question
+
+- **Found:** asking "one warning or two?" of `check:decision-debt`. MR-52 D4 added `BE-W106` to the
+  step beside the UCPMP cap and concatenated the two debts' warning arrays — but the CLI printed the
+  **UCPMP paragraph after every warning and every failure**, because the advice lived in the loop
+  rather than on the debt.
+- **Why it would have bitten, with dates:** `BE-W106` is due 2026-10-31 and warns from **2026-10-10**;
+  the cap is due 2026-11-06 and warns from **2026-10-16**. For fifteen days both warn. A reader would
+  have been sent to ask the client what the UCPMP sample cap is in order to clear a question about
+  which settings belong to which company — and from 2026-10-31 that paragraph would have arrived
+  attached to a RED build, under `enforce_ucpmp_sample_cap() is inert`.
+- **What worked:** the question and the consequence belong to the debt (`DEBTS`);
+  `evaluateAllDecisionDebt` is pure and exported so the both-warning state is testable without a
+  calendar or a database; the CLI prints one block per unanswered decision.
+- **Verified:** six tests. Mutant — giving the settings debt the UCPMP question — kills exactly one
+  and leaves ten green.
+- **Note:** this is the same class as FIX-05's inert `ALTER DEFAULT PRIVILEGES`: something that looks
+  like a control while pointing somewhere else. A second job would not have had this bug, which is
+  the honest cost of MR-52 D4's (still correct) choice to use one.
+
+## MR-53 · I committed a typecheck failure, for the third session running
+
+- **Found:** `pnpm --filter @fieldforce/api typecheck` after the fact — `transcript-ingest.spec.ts`
+  passed `role: string` where `asDatabaseRole` takes a union.
+- **Why it got through:** vitest was green and I stopped reading there. It never reached CI only
+  because the commit had not been pushed yet.
+- **What worked:** nothing clever — running the command. The rule is not "run lint": it is run
+  **typecheck, lint AND format**, and read all three outputs, before committing.
