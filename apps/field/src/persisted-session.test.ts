@@ -39,7 +39,10 @@ describe('MR-52 B2 — the session the library persisted', () => {
   });
 
   it('refuses a session with no refresh token — it could never come back', async () => {
-    const { refresh_token: _dropped, ...withoutRefresh } = session;
+    // Copied and deleted rather than destructured away: an unused binding is a lint error, and
+    // the repo has been here before (MR-50 D).
+    const withoutRefresh: Record<string, unknown> = { ...session };
+    delete withoutRefresh['refresh_token'];
     expect(await readPersistedSession(stored(JSON.stringify(withoutRefresh)))).toBeNull();
   });
 
