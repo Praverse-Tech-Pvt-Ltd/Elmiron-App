@@ -1089,3 +1089,90 @@ checked against the current code) now reads:
 (`C9`, MR-50 D, on the emulator); and `C8` makes the audio's purpose SOP review — **monitoring of the
 rep** — which the notice must say in plain words. Before approving, note that the doctor-facing
 consent text must change too (`BE-W109`), and that neither text replaces the §8.6 signatory (5.8).
+
+---
+
+## MR-51 — three drafts for you. Nothing is shipped, and nothing has been recorded.
+
+### E1 — consent for the bake-off corpus, for employees who take part
+
+**What it is for.** `BE-W32` (the speech-vendor bake-off) needs 5–10 hours of labelled Hinglish
+MR–doctor audio, and the project has none. The MR-50 proposal was that the team records it itself:
+**staged role-play between consenting employees**, no real doctor and no real patient. This is the
+consent those employees would sign. **It does not answer the vendor-terms question** — see below.
+
+> **Taking part in the speech recording session — what you are agreeing to**
+>
+> We are recording short, acted sales conversations so we can test speech-to-text software on
+> Indian English and Hindi mixed together. **Nothing in these recordings is real.** You will be
+> given a made-up doctor, a made-up clinic and a made-up conversation to act out. Do not use a real
+> doctor's name, a real patient's details, or anything about your actual work.
+>
+> **What we record.** Your voice, and a written copy of what you said. Your name is kept separately
+> from the recording so that the recording itself is not labelled with who you are.
+>
+> **What it is used for.** One thing only: comparing speech-to-text vendors, and measuring how
+> accurately each one writes down Hinglish. It is not used to assess you, it is never seen by your
+> manager as part of your appraisal, and it does not go into the app's SOP review.
+>
+> **Who else receives it.** The speech-to-text vendors we are testing, listed by name before you
+> agree, **on written terms that forbid them from training their models on this audio and require
+> them to delete it when the test ends.** If a vendor will not agree to that, their test is run on
+> nothing of yours.
+>
+> **How long it is kept.** Until the vendor comparison is finished, and no longer than **[operator
+> to fix a date — a proposal: 12 months]**, after which the audio and the transcripts are deleted.
+>
+> **You can say no, and you can change your mind.** Taking part is voluntary. Saying no has no
+> effect on your job, your targets or your appraisal. You can withdraw at any time up to deletion,
+> by telling **[named person]**, and your recordings are then deleted.
+>
+> Name · Signature · Date
+
+**What you must fill in before this is usable:** the vendor list, the retention date, the named
+person for withdrawal, and whether legal wants a consent form at all versus a documented
+work-instruction. **Still open beside it:** whether each vendor's standard terms actually permit
+this (no-training, deletion) — a recording made before that is answered may have to be destroyed.
+
+### E2 — `BE-W109`, the text a DOCTOR reads before a consultation is recorded
+
+**Why it has to change.** `C8` makes the purpose explicit: recordings are reviewed, with AI
+assistance, to check the company's procedures are followed. The live text (`consent_text_versions`,
+loaded by `seed:reference`) says the team *"reviews how they presented"* — it names neither the AI
+processing nor the SOP monitoring, so a doctor agreeing to it is not agreeing to what happens.
+
+> **Before we record this conversation**
+>
+> With your permission, [Company] would like to record today's conversation with our
+> representative.
+>
+> **Why.** We use it to check that our representative followed our own rules for these visits — for
+> example, what they are allowed to tell you about a medicine. The recording is reviewed by our
+> team, and by an automated system that helps them find the parts worth reviewing.
+>
+> **What is recorded.** The conversation between you and our representative. Before anyone reviews
+> it, patient details are removed from the written copy.
+>
+> **How long we keep it.** [Operator: the retention period, matching what the system enforces.]
+>
+> **Your choice.** You can say no, and you can ask us to stop at any point during the visit. If you
+> say no, the visit goes ahead exactly as it would have — nothing changes for you, and nothing
+> happens to our representative.
+>
+> **Afterwards.** You can ask us for a copy, or ask us to delete it, at [contact].
+>
+> Do you agree to this conversation being recorded?   **Yes / No**
+
+**Two things this draft does not settle, and engineering must not settle them:** the retention
+period (it must match what the database enforces, not a number chosen here) and the contact point.
+
+> **This text may not be shown to a real doctor until the §8.6 PV/DPDP signatory exists (5.8).**
+> A recorded consultation creates the §2.4 adverse-event screening duty; `C3` is not reversed by
+> `C7`. Approving the wording does not lift that.
+
+### E3 — the reps' notice (2.6) must now say the note is SENT
+
+**The MR-51 D upload changes what 2.6 claims.** The draft's voice-note row says *"Not sent to anyone
+yet — sending is not built."* That is false as of `76de417`: a saved note uploads, and the phone's
+copy is deleted once the server has it. The row on the branch has been corrected (see below); the
+notice is **still unapproved and still unmerged**, and the false notice is still live.
