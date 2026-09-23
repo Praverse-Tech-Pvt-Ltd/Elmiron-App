@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
 import type { Client } from 'pg';
-import { evaluateAllDecisionDebt, evaluateDecisionDebt } from '../scripts/check-decision-debt.mjs';
+import {
+  evaluateAllDecisionDebt,
+  evaluateDecisionDebt,
+  evaluateSettingsModelDebt,
+} from '../scripts/check-decision-debt.mjs';
 
 /**
  * BE-W21 — the forcing function on the UCPMP cap decision.
@@ -273,6 +277,77 @@ const settings = (over: Record<string, unknown> = {}) => ({
   dueAt: '2026-10-31T00:00:00Z',
   daysRemaining: 38,
   ...over,
+});
+
+/**
+ * MR-53 E3 — **the duplicated deadline row, which is the question as it was actually asked.**
+ *
+ * MR-52 recorded it as a mistake of its own: the LOCAL database carries two identical
+ * `be_w106_settings_model_decision_due` rows, because the migration was re-applied by hand after a
+ * rollback drill. `app_thresholds` is append-only, so neither can be removed, and a database built
+ * from the migrations has exactly one. The question is whether that duplicate makes
+ * `check:decision-debt` say the same thing twice.
+ *
+ * **It does not, and the reason is one line of `threshold()`:** `order by (territory_id is not
+ * null) desc, effective_from desc limit 1`. One row is read, so one status is built, so one
+ * warning is produced. The duplicate is invisible rather than merely harmless.
+ *
+ * The second test is the one that matters more, because "the latest row wins" is only safe if the
+ * duplicate is the LATEST row. A deferral stamped into the FUTURE is excluded by `effective_from
+ * <= now()` and the old deadline keeps governing -- which is the right behaviour and the
+ * surprising one, so it is pinned rather than assumed.
+ */
+describe.skipIf(!reachable)('MR-53 E3 — a duplicated deadline row is read once', () => {
+  const settingsStatus = async (client: Client): Promise<Record<string, unknown>> => {
+    const result = await client.query<{ s: Record<string, unknown> }>(
+      'select public.be_w106_decision_status() as s',
+    );
+    const value = result.rows[0]?.s;
+    if (value === undefined) throw new Error('be_w106_decision_status() returned nothing');
+    return value;
+  };
+
+  it('two identical rows produce ONE warning, not two', async () => {
+    await inRolledBackTransaction(async (client) => {
+      // The state MR-52 left on the local database, reproduced deliberately: the same key, the
+      // same value, a different `effective_from` (the unique constraint requires that much).
+      const due = JSON.stringify(new Date(Date.now() + 10 * 86_400_000).toISOString());
+      await supersede(client, 'be_w106_settings_model_decision_due', due, 3);
+      await supersede(client, 'be_w106_settings_model_decision_due', due, 2);
+
+      const rows = await client.query<{ count: string }>(
+        `select count(*) as count from public.app_thresholds
+          where key = 'be_w106_settings_model_decision_due'`,
+      );
+      // Both rows are really there -- otherwise this test proves nothing about duplicates.
+      expect(Number(rows.rows[0]?.count)).toBeGreaterThanOrEqual(2);
+
+      const verdict = evaluateSettingsModelDebt(await settingsStatus(client));
+      expect(verdict.warnings).toHaveLength(1);
+      expect(verdict.clear).toBe(true);
+    });
+  });
+
+  it('the LATEST effective row governs, and a future-dated one does not yet', async () => {
+    await inRolledBackTransaction(async (client) => {
+      await supersede(client, 'be_w106_settings_model_decision_due', '"2026-01-01T00:00:00Z"', 3);
+      expect((await settingsStatus(client))['overdue']).toBe(true);
+
+      // A later row moves it: this is what a deferral is.
+      await supersede(client, 'be_w106_settings_model_decision_due', '"2099-01-01T00:00:00Z"', 2);
+      expect((await settingsStatus(client))['overdue']).toBe(false);
+
+      // A row stamped into the FUTURE is not yet in effect -- `effective_from <= now()` -- so the
+      // overdue date above comes back. A deferral written that way would look filed and change
+      // nothing, which is exactly the shape of failure this suite exists to catch.
+      await client.query(
+        `insert into public.app_thresholds (key, value, scope, effective_from, note)
+         values ('be_w106_settings_model_decision_due', '"2099-06-01T00:00:00Z"'::jsonb, 'global',
+                 now() + interval '1 day', 'MR-53 E3 fixture: not yet in effect')`,
+      );
+      expect((await settingsStatus(client))['dueAt']).toContain('2099-01-01');
+    });
+  });
 });
 
 describe('MR-53 E3 — two decisions share the step without sharing their advice', () => {
