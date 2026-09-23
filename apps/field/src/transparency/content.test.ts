@@ -107,10 +107,19 @@ describe('FE-W52 — the transparency notice says what the code does', () => {
 
   it('says a SAVED voice note is kept and a discarded one is deleted — MR-50 D, emulator', () => {
     const note = current.entries.find((e) => /voice notes/i.test(e.title));
-    expect(note?.detail).toMatch(/kept on this phone when you save/i);
+    expect(note?.detail).toMatch(/saved on this phone when you press save/i);
     expect(note?.detail).toMatch(/start again or leave without saving is deleted/i);
     // The MR-47 line said the opposite; asserted absent so it cannot come back.
     expect(note?.detail).not.toMatch(/including a note you start again/i);
+  });
+
+  it('says a saved note is SENT, and removed from the phone afterwards — MR-51 D', () => {
+    const note = current.entries.find((e) => /voice notes/i.test(e.title));
+    expect(note?.detail).toMatch(/sent to the company/i);
+    expect(note?.detail).toMatch(/waits and sends later/i);
+    expect(note?.detail).toMatch(/removed from this phone/i);
+    // The claim the upload made false. Asserted absent so the draft cannot drift back to it.
+    expect(note?.detail).not.toMatch(/not sent to anyone yet|sending is not built/i);
   });
 
   it('names the purpose: review for SOP adherence, stated as monitoring (C8)', () => {

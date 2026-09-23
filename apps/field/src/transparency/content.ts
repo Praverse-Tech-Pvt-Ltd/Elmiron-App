@@ -26,10 +26,16 @@ import type { TransparencyEntry } from '@fieldforce/ui';
  *   note moves to the rep's own folder, and a discarded one is deleted (MR-50 D, emulator). The
  *   audio's recorded PURPOSE (`C8`) is review for SOP adherence — employee monitoring — so the
  *   preamble says so in plain words, and each audio row says what review it is kept for.
- * - **Voice notes** (before MR-50) — audio is captured on the phone; the metadata goes to the mock and the
- *   bytes go nowhere (no upload client). So they are "kept on this phone", and the 90-day
- *   purge, which covers server audio only, is not promised for them. **MR-47, measured on the
- *   Pixel 10:** a note the MR discards with "Start again" stays in `cache/Audio` too (`FE-W53`).
+ * - **MR-51 E3, 23 September 2026 — a saved note is now SENT.** `FE-W29` is built: Save keeps the
+ *   note and queues it, it uploads when there is signal, and the phone's copy is deleted once the
+ *   server has confirmed it (MR-51 D, emulator: `voice_notes` rows with the server's own byte count,
+ *   and the file gone afterwards). The previous draft said *"Not sent to anyone yet — sending is not
+ *   built"*, which was true when it was written and is false now. **The retention period is still
+ *   not promised here**: `stamp_audio_retention` sets one on the server, but this notice names no
+ *   number, because the number is the server's and may change without this file.
+ * - **Voice notes** (before MR-51) — audio was captured and kept on the phone and the bytes went
+ *   nowhere (no upload client). **MR-47, measured on the Pixel 10:** a note the MR discarded with
+ *   "Start again" stayed in `cache/Audio` too (`FE-W53`); MR-50 D fixed that.
  * - **Consultation recordings — `not-yet`, and truly so (MR-47).** MR-46 marked this row
  *   active from code. On the device the record control never appears, before or after the
  *   doctor consents: the visit screen's consent list is a hard-coded empty array.
@@ -73,7 +79,7 @@ export const TRANSPARENCY_ENTRIES: readonly TransparencyEntry[] = [
   {
     title: 'Your voice notes',
     detail:
-      'Kept on this phone when you save one; a note you start again or leave without saving is deleted. Not sent to anyone yet — sending is not built. Once it is, saved notes are reviewed for how procedures are followed.',
+      'Saved on this phone when you press Save, then sent to the company — when you have no signal it waits and sends later. Once it has been sent, it is removed from this phone. A note you start again or leave without saving is deleted and never sent. Sent notes are reviewed for how procedures are followed.',
     state: 'active',
   },
   {
