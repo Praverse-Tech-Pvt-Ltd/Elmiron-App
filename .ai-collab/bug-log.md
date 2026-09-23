@@ -112,3 +112,33 @@ non-obvious go here; a typo caught by typecheck does not.
   because the commit had not been pushed yet.
 - **What worked:** nothing clever — running the command. The rule is not "run lint": it is run
   **typecheck, lint AND format**, and read all three outputs, before committing.
+
+## MR-54 · My offline check proved nothing, in the direction nobody checks
+
+- **Found:** restoring `adb reverse` and running the same `curl` check, which failed again — with
+  the network demonstrably up.
+- **Cause:** **`curl` is not on the Android emulator image.** `CURL_FAILED` meant "no such binary",
+  not "no network". The earlier "proof" that the phone was offline was vacuous and would have read
+  identically with the tunnel in place.
+- **What worked:** `nc`, which exists (`/system/bin/nc`), driven two-sided — port open with the
+  reverse, **connection refused** without it, open again when restored.
+- **Note:** this repository's rule is "a command that exits 0 is not a command that worked". The
+  inverse needs saying too: **a command that FAILS is not a command that tested anything.** A
+  negative result from a tool that is absent looks exactly like a negative result from the condition
+  you meant to test.
+
+## MR-54 · A screen that never re-asks looked like a server that answered wrong
+
+- **Found:** the visit screen said *"This phone does not have the doctor's answer for this visit"*
+  for a visit whose consent row was `consented`, while online.
+- **Tried:** asked the server directly as that rep — `allowed`. Turned on `log_statement=all` on the
+  local database and re-triggered: **the app made no query at all**, so the screen was not asking.
+  Cold-started the app: rendered correctly. Then read the effect — keyed on `[visit?.id]`, no focus
+  listener.
+- **What worked:** calling the RPC over HTTP **with the app's own bearer token**, lifted from the
+  database log, which returned `allowed` and removed the last hypothesis that the client and the
+  server disagreed about the rule.
+- **Verified:** registered as `FE-W69`. The useful half is the direction that is dangerous — a stale
+  screen still offering *Record this visit* after a withdrawal.
+- **Note:** I nearly wrote this up as a server defect after two screenshots. The thing that settled
+  it was making the app's own request by hand.

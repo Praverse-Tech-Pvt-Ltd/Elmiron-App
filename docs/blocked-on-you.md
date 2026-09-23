@@ -1184,3 +1184,71 @@ so it is checked against the code that now exists), and this is the row to appro
 
 Every other row of 2.6 is unchanged from the MR-50 table above. The notice is **still unapproved and
 still unmerged**, and the false notice is still live on 23 September 2026.
+
+
+## MR-54 — 23 September 2026: a withdrawal cannot stop a recording, and two rules contradict
+
+### The measurement, first
+
+On the emulator, with a recording in progress, a withdrawal was written to `consent_records`.
+`standing_consent_for_visit` went to **null** while the phone was still capturing.
+
+- **The recording did not stop.** It ran until the rep pressed stop.
+- **518,740 bytes of audio of a doctor who had withdrawn were written to the phone, and are still
+  there.**
+- **Nothing reached the company.** `begin_upload` refused, no grant was minted, nothing was stored,
+  and the rep was told in the server's own words.
+
+So the server boundary held exactly as designed. The phone is the problem, and it is not a bug that
+can be fixed by tightening a check — **there is no channel by which a withdrawal reaches a
+recording device.** The phone holds no consent ledger (a deliberate MR-21 decision), it asks the
+server once per screen (`FE-W69`), and **the app cannot capture a withdrawal at all** — that is
+`BE-W95`, open since MR-28.
+
+### The decision, which is yours and not engineering's
+
+**Two recorded rules contradict each other and both cannot stand.**
+
+| | Says |
+| --- | --- |
+| MR-53 B4, under test at `recording-upload.test.ts:149-152` | A refused recording is **KEPT** on the phone: *"a refusal is not proof the recording should be destroyed, and the MR is told. Destroying it here would also destroy the only copy of something a manager may need to know existed."* |
+| MR-54's brief, A5 | After a withdrawal, **"nothing is left on the phone"** |
+
+Engineering has not picked one, deliberately. The question is not a coding preference:
+
+1. **When a doctor withdraws, must audio already captured on the rep's phone be destroyed?** If
+   yes, the MR-53 rule is wrong for withdrawals specifically and the phone must delete on that one
+   refusal reason while keeping on the others.
+2. **If yes, how does the phone find out?** Today it cannot. Either the app gains a way to capture a
+   withdrawal (`BE-W95`) and destroys locally on the spot, or the phone must poll the server during
+   a recording — which is a new network behaviour during a consultation, and a decision in itself.
+3. **What is the rep told**, given that a destroyed recording cannot be shown to anybody who later
+   asks what was captured?
+
+Until this is answered, the honest description of the current behaviour is: **a withdrawal stops the
+audio reaching the company, and does not stop it being captured or stored on the phone.**
+
+### Also recorded this session
+
+**`BE-W112`** — `recordings`, `voice_notes` and `upload_grants` carry **no audit trigger**, while
+`consent_records`, `visits` and fourteen other tables do. The system records that a doctor agreed
+and does not record that audio of them was created. Measured from the live catalogue; zero audit
+rows exist for the four recordings uploaded in this session.
+
+### And one constraint on the hosted project (MR-54 D1)
+
+> **Do not set `timebox` or `inactivity_timeout` under `[auth.sessions]` on the hosted Supabase
+> project without re-testing the offline path.**
+
+MR-53 E1 established that this repository sets neither: `[auth.sessions]` is commented out in
+`services/api/supabase/config.toml:296-300`, so a refresh token has no expiry by the passage of
+time, and a rep who is offline over a weekend stays signed in and their queued work survives.
+`config.toml` configures the **local** stack only (it says so at `:180-182`), so the hosted
+project's values are unknown to this repository and can be changed in the dashboard **with no code
+change and no test failure anywhere.**
+
+The commented examples in the file are `timebox = "24h"` and `inactivity_timeout = "8h"`. Either
+one signs out every rep across a weekend, and `persisted-session.ts` correctly would NOT save them:
+a session the server has ended is a non-retryable refusal, so auth-js removes the stored entry and
+the rep lands on **Sign in** with their day's queued work unreachable until they have signal. That
+is `FE-W67`'s failure mode, reintroduced from the dashboard.

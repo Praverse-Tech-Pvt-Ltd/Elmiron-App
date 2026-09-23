@@ -18590,3 +18590,185 @@ window opens on 2026-10-10, and neither is warning yet.
 
 **Unchanged by this correction:** the emulator half of B5 and C3 is still unproven, and no CI run can
 prove it.
+
+### MR-54 — the consented case
+
+**23 September 2026.** Every result is marked **code**, **emulator**, **browser** or **handset**.
+There is no handset result.
+
+**The session stopped at A6, which is a CONDITIONAL STOP THE BRIEF DEFINED.** A5 failed. The brief
+says *"If anything here fails, that is the session — report it rather than working past it"*, so
+Parts B, C and E2 were not built. D1 and E1/E2 are pure reporting and cost nothing, so they are
+here. **The consented recording works. A withdrawal does not stop one.**
+
+#### Checkout guard, CI, drift
+
+`git rev-parse --git-dir` ✓ · `"@fieldforce/core"` present in `packages/core/package.json` ✓ ·
+remote `https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App.git` ✓ · `f34ceef` **is** an ancestor
+of `a492918` ✓. Combined guard exits 0. HEAD on arrival `a492918`, level with `origin/main`, tree
+clean. **CI on arrival:** run `35847499571`, workflow **`CI`**, event `push`, **success**, SHA
+`a492918f8f6859a69618cc07fdfa50a6b925c495`. **Local drift, run with the stack up: 72 migration files,
+72 applied, `drifted: false`, `shortfall: complete`.**
+
+Docker was not running and `pnpm db:start` failed with `LegacyDockerLifecycleInspectError`; the
+emulator then failed once with `WHPX: Failed to setup partition, hr=80070005` and booted on a retry.
+Neither is a defect in this repository, and both are recorded because they cost ten minutes.
+
+#### A1 — the two local-only switches (code)
+
+**Restored, and neither is committed.** `supabase start` came back from its own backup, so both
+survived from MR-53: `threshold('recording_feature_enabled')` answers **`true`** from a local row,
+and `apps/field/.env:29` carries `EXPO_PUBLIC_RECORDING_ENABLED=true`. The migration inserts
+**`false`** and a database built from the migrations has only that. `.env` is git-ignored. Said
+again here because a reader of this file is exactly the person who would otherwise assume the
+repository ships what this machine runs.
+
+#### A2 — the consented recording, end to end (emulator)
+
+`FE-W65` got in the way first and was NOT worked around: the route's stop opens the doctor's
+profile, not the visit, and there is no door into the visit from there. So the in-progress visit was
+checked out of, in the app, until the target visit became *Next visit*.
+
+The doctor agreed at 11:49:44Z — and **the consent notice on screen still reads *"Their team reviews
+how they presented"***, which is `BE-W109`'s wrong text, live, confirmed again. **Record this visit**
+then appeared: *the first time the record control has ever been reachable on a device.* The
+recording banner read *"Recording · agreed at 17:19"*, which is the server's consent time, not the
+device clock.
+
+| A2 asks | Observed in the database |
+| --- | --- |
+| the object exists in storage | `recordings/e0fce4ad…/2d864d2c….m4a`, `storage.objects` row created 11:51:01.670Z |
+| the row carries the SERVER's byte count | `recordings.size_bytes` **382527** = `storage.objects.metadata->>'size'` **382527** |
+| the retention date is stamped by the server | `purge_after` **2026-12-22T11:51:01.715Z** = `received_at` + 90 days, written by the `recordings_stamp_retention` trigger; the client payload has no retention field |
+| the extension matches the container | key ends **`.m4a`**, mimetype Storage observed is **`audio/mp4`**, `codec` `aac` — `BE-W111` holds |
+| the phone's copy is deleted only after the server confirms | `files/recordings/<rep>/` **empty** after; the folder exists, so the file was there and went |
+
+The timer read **00:30** at the stop and the row says `duration_seconds` **31**.
+
+**One honest limit on the byte count.** The two numbers being equal does not by itself prove the
+server ignored the client's claim — the client claimed the same number. The discriminating proof is
+`upload.spec.ts:898`, which finalises with a deliberately wrong `1` and asserts the stored value is
+what Storage received. **That is code, not emulator**, and the emulator run cannot separate the two
+hypotheses.
+
+#### A3 — offline, then exactly once (emulator)
+
+**A correction first, because it is the more useful half.** The offline state was initially "proved"
+with `curl` on the device, which returned failure — **and curl is not on the Android image at all**.
+The check was vacuous: it would have failed identically with the network up. Re-established with
+`nc`, which exists: port 54321 **open** with the `adb reverse` in place, **connection refused**
+without it, **open** again when restored. This is the repository's own *"a command that exits 0 is
+not a command that worked"* rule, inverted — a command that fails is not a command that tested
+anything either.
+
+Offline: *"Recording saved on this phone. It will send by itself when you have signal, and is then
+removed from this phone."* — wording that does not claim the company has it. File on disk
+(124,001 bytes), server unchanged. Reconnected: it uploaded, and **the recording id is the filename
+that was on the phone** (`37908b24…`). Flushed again: **2 recordings, 2 distinct keys, 2 grants, 2
+objects** — unchanged — and the phone folder empty. A third offline recording repeated it on a
+cold-start flush.
+
+#### A4 — a second rep on the same phone (emulator, two-sided)
+
+The sign-out screen states the claim before it is tested: *"1 thing has not been sent yet — They
+stay on this phone under your account and send the next time you sign in here. **Nobody else who
+signs in on this phone will see or send them.**"*
+
+Signed in as a second rep (`mr54-b`, seeded with `seed:mr`) on the same phone, **with the network
+up**: Today said **Everything sent**, their settings showed **no** unsent banner, **no second
+`recordings/` folder was created at all**, the first rep's stranded `3b5352a4….m4a` (108,943 bytes)
+was untouched, and the server count did not move. **Positive control:** the owner signed back in and
+it sent at once — folder empty, count 3 → 4.
+
+#### A5 — a withdrawal mid-recording: THIS FAILED (emulator)
+
+With a recording running, a withdrawal was written and `standing_consent_for_visit` went to **null**
+while the phone was still capturing.
+
+| A5 asks | What happened |
+| --- | --- |
+| the grant is revoked | **No grant exists mid-recording.** A grant is minted at `begin_upload`, which runs at STOP. Nothing was there to revoke, and none was issued afterwards — still 4 grants, all `completed` |
+| recording stops | **NO.** It ran until the rep pressed stop. **518,740 bytes of audio of a doctor who had withdrawn were written to the phone** |
+| nothing is left on the phone | **NO.** `8d85620c….m4a` is still in the rep's folder |
+
+**What did work is the whole server boundary**, and it is worth stating as plainly as the failure:
+`begin_upload` refused, nothing reached Storage, no row was written, and the rep was told in the
+server's own words — *"The recording was not accepted: visit 11ae8015… has no standing consent;
+there is no upload path"*.
+
+**Why the phone cannot do better today.** There is no channel by which a withdrawal reaches a
+recording device: the phone holds no consent ledger by design (MR-21 B6), it asks the server once
+per mount (`FE-W69`, below), and **the app cannot capture a withdrawal at all** — `is_withdrawal`
+and `supersedes_consent_record_id` are never sent, which is `BE-W95`, open since MR-28. The
+withdrawal in this test had to be written server-side for that reason.
+
+**And A5 contradicts a recorded rule, so engineering did not silently pick a side.** MR-53 B4 keeps
+a refused recording on the phone, under test at `recording-upload.test.ts:149-152` — *"a refusal is
+not proof the recording should be destroyed"*. A5 says nothing is left. Both cannot hold. Recorded
+as an operator decision in `blocked-on-you` → **MR-54**, with the three questions it turns on.
+
+#### Two other findings, registered not fixed
+
+**`FE-W69` — the visit screen asks the server once and never asks again.** The effect is keyed on
+`[visit?.id]` with no focus listener, so a screen left in the navigation stack keeps the permission
+it fetched on mount. Found by chasing an apparent contradiction: a stale screen said *"This phone
+does not have the doctor's answer"* while the server, asked over the app's own PostgREST path with
+the app's own bearer token, answered `{"reason":"allowed","allowed":true}`. A cold start rendered it
+correctly. **The direction I hit is harmless; the reverse is not** — a stale screen still offering
+**Record this visit** after a withdrawal is precisely how `FE-W70` gets started.
+
+**`BE-W112` — the recording is not audited; the consent that authorised it is.** From the live
+catalogue: 16 tables carry `write_audit_row`, and `recordings`, `voice_notes` and `upload_grants`
+carry none. Zero audit rows exist for the four recordings uploaded this session.
+
+#### D1 — the operator constraint, recorded
+
+In `blocked-on-you` → MR-54: **do not set `timebox` or `inactivity_timeout` under `[auth.sessions]`
+on the hosted project without re-testing the offline path.** Both are commented out in
+`config.toml:296-300`; the commented examples are `24h` and `8h`, and either signs out every rep
+across a weekend — reintroducing `FE-W67` from a dashboard, with no code change and no failing test
+anywhere.
+
+#### E1 — two things the reviewer did not receive, quoted
+
+**What MR-53 A2 found had never been called from the app**, quoted from `### MR-53`:
+
+> **A2 (code) — the functions never called FROM THE APP.** The finding that decided the shape of B:
+> `sync_pull` deliberately omits `consent_record` (MR-21 B6), so the phone has never held the
+> consent ledger and cannot answer "may I record this visit?" locally. The record control was
+> therefore unreachable not because a screen was missing but because the phone was asking a question
+> it had no data for. **The fix is a server READ, not shipping the ledger to the phone** — which
+> would have been re-deriving a server rule on the client, and is forbidden.
+
+**How the flag is enforced against a production target** — not that it exists, how:
+
+> 2. **The client's, and it THROWS rather than warns.** `readRecordingFlag(env, supabaseUrl)` in
+>    `packages/core` refuses to return `true` when the Supabase URL is not a local host, and the
+>    refusal names the host it saw. An unparseable URL is NOT local. So setting
+>    `EXPO_PUBLIC_RECORDING_ENABLED=true` in a build pointed at a hosted project does not produce a
+>    recording feature; it produces a crash at configuration read, before any screen renders.
+
+#### E2 — is that enforcement a mechanism or documentation?
+
+**A mechanism, and checked by exercising it rather than by reading the prose.**
+`packages/core/src/shared/config.test.ts` drives `loadAppConfig` with a PRODUCTION Supabase URL and
+`APP_RECORDING_ENABLED=true` and asserts it **throws**; with an unparseable URL and the flag on it
+**throws**; with a production URL and the flag absent it is `false`; and the positive control — a
+local URL with the flag on — returns `true`, so the test would fail if the guard simply refused
+everything. `@fieldforce/core` 4 files / **38 tests**, all passing. The server half is a second,
+independent mechanism: the migration's own `do $$` guard asserts the flag is off after it runs.
+**Nothing to fix here.**
+
+#### Counts, from each runner's own summary lines
+
+`@fieldforce/core` 4 files / **38**. The full suite was not re-run: no product code was changed this
+session, and Part B — which was to have fixed the three suites that cannot skip with the stack
+stopped — was not reached.
+
+#### Where it stopped, and why
+
+**A CONDITIONAL STOP THE BRIEF DEFINED: A6.** Not a blockage — nothing prevented the work — and not
+an operator instruction. A5 failed, and A6 says that is the session.
+
+**Not done, and owed:** B1 (the commit hook), B2/B3 (the three precondition guards), C1 (pinning
+`apps/field` to supabase-js 2.112.3 exactly, which is `FE-W68`'s risky half) and C2.

@@ -2103,3 +2103,19 @@ phone's copy being deleted only after the server confirms.
 
 **Not chosen:** marking C3 closed on the strength of `recording-upload.test.ts`. Code evidence and
 device evidence are different claims, and the brief asked for both.
+
+
+### C15 — MR-54 stops at A6, and does not pick a side on destroying audio
+
+**A conditional stop the brief defined.** A5 failed on the emulator: a withdrawal written while a
+recording was running did not stop the recording, and 518,740 bytes of audio of a doctor who had
+withdrawn were written to the phone and kept there. The upload was refused and nothing reached the
+company. A6 says a failure ends the session, so Parts B, C and E2's fix were not built.
+
+**Not decided, deliberately.** A5's *"nothing is left on the phone"* contradicts MR-53 B4, which
+keeps a refused recording and has a test saying why (`recording-upload.test.ts:149-152`). Engineering
+refused to silently reverse a recorded rule about destroying evidence of a doctor's consultation.
+The question, its three parts and what each costs are in `blocked-on-you` → MR-54.
+
+**Also not decided:** whether the phone should re-ask permission on focus, on an interval, or on a
+server signal (`FE-W69`). Each is a different amount of network traffic during a consultation.

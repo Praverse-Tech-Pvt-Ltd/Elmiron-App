@@ -1485,3 +1485,30 @@ again".
 - The transparency notice on `main` is still the false one (`blocked-on-you` 2.6), and the consent
   notice still says "reviews how they presented" (`BE-W109`).
 - `FE-G1` and `FE-G2` still need a handset, after the AI integration (`C12`).
+
+## MR-54 — the consented case (23 September 2026)
+
+### Proved on a device for the first time
+
+- **The record control appears once the doctor agrees**, and the recording banner shows the time the
+  SERVER holds for that agreement, not the device clock.
+- A recording is uploaded, the phone's copy is deleted **only after the server confirms**, and an
+  offline recording waits, sends once on reconnect, and is not re-sent on a later flush.
+- **A second rep signing in on the same phone sees none of it and sends none of it** — no folder of
+  theirs is created, and the first rep's file is untouched until its owner returns.
+
+### Found, not fixed
+
+- **`FE-W69`** — the visit screen asks whether recording is allowed once, when it mounts. A screen
+  left in the navigation stack keeps that answer. Cold starts are always right.
+- **`FE-W70`** — a withdrawal does not stop a recording that is already running. The phone keeps
+  capturing and keeps the file; only the upload is refused, with the server's own sentence shown to
+  the rep.
+
+### Unchanged
+
+- The consent notice a doctor reads still says *"Their team reviews how they presented"*
+  (`BE-W109`), confirmed live on the emulator again.
+- `FE-W65` still stands: the route's stop opens the doctor's profile, not the visit.
+- The recording feature is OFF in the repository and can only be enabled against a local target.
+- `FE-G1` and `FE-G2` still need a handset, after the AI integration (`C12`).

@@ -1187,3 +1187,33 @@ LOCAL demo tenant only.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-53 — the recording path | `PROJECT-OVERVIEW.md` → `### MR-53 — the recording path` |
+
+## MR-54 — the consented case (23 September 2026)
+
+- **The consented recording works end to end on the emulator.** Object in Storage, `size_bytes`
+  equal to what Storage observed, `purge_after` stamped by a trigger at `received_at` + 90 days,
+  `.m4a` matching `audio/mp4`, the phone's copy deleted only after the server confirmed, offline
+  queue uploading exactly once, and a second rep on the same phone neither seeing nor sending the
+  first rep's file.
+- **A withdrawal does NOT stop a recording that is already running** (`FE-W70`). The audio keeps
+  being captured and stays on the phone; only the UPLOAD is refused. This is the session's stop
+  (A6) and it needs an operator decision — `blocked-on-you` → MR-54.
+- **`FE-W69`:** the visit screen asks `recording_permission` once on mount and never again, so a
+  screen left in the navigation stack shows a stale answer. A cold start is always correct.
+- **`BE-W112`:** `recordings`, `voice_notes` and `upload_grants` have no audit trigger; the consent
+  that authorises a recording is audited and the recording is not.
+- **Two local-only switches are still set on this machine and are NOT committed:** a
+  `recording_feature_enabled = true` row on the local database, and
+  `EXPO_PUBLIC_RECORDING_ENABLED=true` in the git-ignored `apps/field/.env`. `supabase stop` keeps a
+  backup, so both survive a restart.
+- **Emulator gotchas that cost time, both now in the record:** `curl` does not exist on the Android
+  image — use `nc` to prove reachability, and never read a curl failure as "offline". Docker must be
+  running before `pnpm db:start`. The emulator can fail once with `WHPX: Failed to setup partition`
+  and boot on a retry.
+- **Still owed from this brief:** B1 (the commit hook), B2/B3 (three suites that cannot skip with
+  the stack stopped), C1 (pin `apps/field` to supabase-js 2.112.3 exactly) and C2.
+- Services stopped at the end of this session.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-54 — the consented case | `PROJECT-OVERVIEW.md` → `### MR-54 — the consented case` |
