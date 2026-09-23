@@ -4,7 +4,7 @@ import type { Client } from 'pg';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
 import { asUser } from './auth.js';
 import { seedFixtures } from './fixtures.js';
-import type { FixtureUser, FixtureWorld } from './fixtures.js';
+import type { FixtureWorld } from './fixtures.js';
 
 /**
  * MR-53 B1 — the screen asks the server whether this visit may be recorded.
