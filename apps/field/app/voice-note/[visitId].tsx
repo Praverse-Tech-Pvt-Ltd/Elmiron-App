@@ -14,6 +14,9 @@ import { blockReason, elapsedLabel } from '../../src/capture/recording';
 import { discardNote, keepNote, sweepUnsaved } from '../../src/capture/voice-note-files';
 import { cacheRoot, documentRoot, expoNoteFileSystem } from '../../src/capture/voice-note-fs';
 import { useSession } from '../../src/session';
+import { sendOrQueue, voiceNoteQueueItem } from '../../src/sync/outbox';
+import type { SendOutcome } from '../../src/sync/outbox';
+import { createPushClient } from '../../src/sync/push-client';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 
@@ -35,12 +38,17 @@ import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
  *   visit id found nothing and "Save this note" could not save. It now reads the same store as the
  *   visit screen, and says the visit is not here only once the pull has settled without it.
  * - **Save keeps the note on this phone, in the signed-in rep's folder** (`voice-note-files.ts`).
- *   It is NOT sent: there is no upload client (`FE-W29`), and the screen says so rather than
- *   "sent". The previous version posted metadata to the mock and reported a byte count the server
- *   "expected" — a server that never saw it.
+ *   In MR-50 it was not sent (no upload client, `FE-W29` — now built, below). The version before
+ *   that posted metadata to the mock and reported a byte count the server "expected" — a server
+ *   that never saw it.
  * - **Discarded audio is deleted**: "Start again", recording over an unsaved note, and leaving the
  *   screen without saving. Leftovers in the recorder's cache are swept when the screen opens.
  *   MR-47 measured on the emulator that none of this happened before.
+ * ---
+ * **MR-51 D — sent (`FE-W29`).** Save keeps the note, then sends it as an ordinary sync item: sent
+ * now if there is signal, queued with the rest of the rep's work if not, and flushed with it. The
+ * phone's copy is deleted only once the server has accepted it (`push-client.ts`). The screen says
+ * which of those happened, and only that.
  * ---
  */
 const VISIT_NOT_HERE = {
@@ -49,8 +57,15 @@ const VISIT_NOT_HERE = {
     'This visit is not on this phone, so there is nothing to save the note against. Nothing you record here is kept.',
 } as const;
 
-const KEPT =
-  'Saved on this phone, in your notes. It has not been sent — sending notes is not built into this app yet.';
+/** What Save says, per outcome. Each sentence claims only what that outcome established. */
+const SAVED: Record<SendOutcome['kind'], (message: string) => string> = {
+  sent: () => 'Sent. The note has reached the company, so it is no longer kept on this phone.',
+  queued: () =>
+    'Saved on this phone. It will send by itself when you have signal, and is then removed from this phone.',
+  refused: (message) => `Saved on this phone, but the server refused to take it: ${message}`,
+  queue_unreadable: () =>
+    'Saved on this phone, but it could not be put in line to send, so it will not send by itself.',
+};
 
 export default function VoiceNoteRoute(): ReactNode {
   const { visitId } = useLocalSearchParams<{ visitId: string }>();
@@ -67,7 +82,11 @@ export default function VoiceNoteRoute(): ReactNode {
       : (doctorsFromStore(store).find((candidate) => candidate.id === visit.doctorId) ?? null);
 
   const [granted, setGranted] = useState<boolean | null>(null);
-  const [captured, setCaptured] = useState<{ uri: string; seconds: number } | null>(null);
+  const [captured, setCaptured] = useState<{
+    uri: string;
+    seconds: number;
+    recordedAt: string;
+  } | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
@@ -146,7 +165,11 @@ export default function VoiceNoteRoute(): ReactNode {
         // `uri` is null until the recorder has actually written the file.
         if (recorder.uri !== null) {
           unsaved.current = recorder.uri;
-          setCaptured({ uri: recorder.uri, seconds });
+          // **MR-29 A3 - ALLOWLIST: a RECORD of when this device acted, not a DECISION.** When the
+          // MR recorded the note; only the handset knows it, and a queued note may reach the
+          // server hours later.
+          // eslint-disable-next-line no-restricted-syntax -- allowlisted above
+          setCaptured({ uri: recorder.uri, seconds, recordedAt: new Date().toISOString() });
         }
       })
       .catch((error: unknown) => {
@@ -164,11 +187,25 @@ export default function VoiceNoteRoute(): ReactNode {
       return;
     }
     setBusy(true);
-    void keepNote(expoNoteFileSystem, documentRoot(), userId, captured.uri, uuid.v4())
-      .then(() => {
+    const noteId = uuid.v4();
+    void keepNote(expoNoteFileSystem, documentRoot(), userId, captured.uri, noteId)
+      .then(async () => {
         // Kept: leaving the screen must no longer delete it.
         unsaved.current = null;
-        setSaved(KEPT);
+        const body = {
+          id: uuid.v4(),
+          noteId,
+          visitId: visit.id,
+          userId,
+          // The server refuses a zero-length note; a sub-second one is one second.
+          durationSeconds: Math.max(1, captured.seconds),
+          recordedAt: captured.recordedAt,
+        };
+        const outcome = await sendOrQueue(
+          () => createPushClient().uploadVoiceNote(body),
+          voiceNoteQueueItem(body),
+        );
+        setSaved(SAVED[outcome.kind](outcome.kind === 'refused' ? outcome.message : ''));
       })
       .catch((error: unknown) => {
         setFailure({

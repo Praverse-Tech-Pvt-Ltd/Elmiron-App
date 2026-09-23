@@ -19,6 +19,8 @@ import { asyncStorageQueueStore, loadQueueState, queueOwner } from './async-stor
 import type { QueueLoad } from './async-storage-store';
 import { SyncPushRefusal } from './push-client';
 import type { OutboxWriteClient } from './push-client';
+import { voiceNoteUploadFrom } from './voice-note-upload';
+import type { VoiceNoteUpload } from './voice-note-upload';
 import { syncQueueReducer } from './reducer';
 import type { SyncQueueState } from './reducer';
 
@@ -172,6 +174,27 @@ const captureQueueItem = (
     operation,
     entityId: body.visitId,
     payload: { ...body, __queueEntity: entity },
+    status: 'queued',
+    attemptCount: 1,
+    lastError: null,
+    clientCreatedAt: nowIso(),
+    syncedAt: null,
+  });
+
+/**
+ * MR-51 D1 — a queue row for a kept voice note.
+ *
+ * `entityId` is the visit, like every other row, so a note waits beside the visit it belongs to
+ * on the queue screen. The note's own id travels in the payload; `uploadVoiceNote` sends it as the
+ * `sync_push` entity, because that is what `complete_upload` takes as the object id.
+ */
+export const voiceNoteQueueItem = (body: VoiceNoteUpload): SyncQueueItem =>
+  SyncQueueItemSchema.parse({
+    id: body.id,
+    entity: 'voice_note',
+    operation: 'create',
+    entityId: body.visitId,
+    payload: { ...body, __queueEntity: 'voice_note' },
     status: 'queued',
     attemptCount: 1,
     lastError: null,
@@ -630,15 +653,17 @@ const sendFor = (client: OutboxWriteClient, item: SyncQueueItem): SendPlan => {
     case 'call_report':
       return plan(CreateCallReportRequestFrom(item), (body) => client.createCallReport(body));
 
+    // MR-51 D1 / `FE-W29`. A voice note replays as a voice note: upload, then finalise.
+    case 'voice_note':
+      return plan(voiceNoteUploadFrom(item.payload), (body) => client.uploadVoiceNote(body));
+
     // Still deliberate gaps rather than oversights:
     //   `visit`      -- written straight to the table, no RPC in the way (FIX-07).
-    //   `recording`  -- needs an uploadGrantId only an upload session can mint (FE-W29).
-    //   `voice_note` -- the same.
+    //   `recording`  -- a consultation recording; not reached by any screen (C3), so not built.
     // Listed rather than defaulted, so that converting one is a change to this line and
     // not a change to nothing.
     case 'visit':
     case 'recording':
-    case 'voice_note':
       return blocked('not_convertible');
   }
 

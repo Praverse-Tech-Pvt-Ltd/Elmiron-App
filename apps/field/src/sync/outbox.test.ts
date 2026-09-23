@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiRequestError, ServerSyncStatusSchema, SyncPushResponseSchema } from '@fieldforce/core';
 import type {
-  ApiClient,
   CreateCheckInRequest,
   CreateConsentRecordRequest,
   CreateSampleAndInputRequest,
@@ -16,6 +15,7 @@ import {
 } from './outbox';
 import type { QueuePersistence } from './outbox';
 import { SyncPushRefusal } from './push-client';
+import type { OutboxWriteClient } from './push-client';
 import { emptyQueue } from './reducer';
 import type { SyncQueueState } from './reducer';
 
@@ -164,8 +164,8 @@ describe('the queue survives being read back', () => {
 });
 
 describe('flushing', () => {
-  const clientThat = (send: () => Promise<unknown>): ApiClient =>
-    ({ createCheckIn: send }) as unknown as ApiClient;
+  const clientThat = (send: () => Promise<unknown>): OutboxWriteClient =>
+    ({ createCheckIn: send }) as unknown as OutboxWriteClient;
 
   it('does nothing when there is nothing waiting', async () => {
     const result = await flushOutbox(
@@ -266,7 +266,10 @@ describe('the flush sends each queued row through its own endpoint', () => {
 
     const createCheckIn = vi.fn(() => Promise.resolve({}));
     const createSampleAndInput = vi.fn(() => Promise.resolve({}));
-    await flushOutbox({ createCheckIn, createSampleAndInput } as unknown as ApiClient, store);
+    await flushOutbox(
+      { createCheckIn, createSampleAndInput } as unknown as OutboxWriteClient,
+      store,
+    );
 
     expect(createCheckIn).not.toHaveBeenCalled();
     expect(createSampleAndInput).toHaveBeenCalledTimes(1);
@@ -284,7 +287,7 @@ describe('the flush sends each queued row through its own endpoint', () => {
     const createCheckIn = vi.fn(() => Promise.resolve({}));
     const createSampleAndInput = vi.fn(() => Promise.resolve({}));
     const result = await flushOutbox(
-      { createCheckIn, createSampleAndInput } as unknown as ApiClient,
+      { createCheckIn, createSampleAndInput } as unknown as OutboxWriteClient,
       store,
     );
 
@@ -305,7 +308,7 @@ describe('the flush sends each queued row through its own endpoint', () => {
     );
 
     const createCheckIn = vi.fn(() => Promise.resolve({}));
-    const result = await flushOutbox({ createCheckIn } as unknown as ApiClient, store);
+    const result = await flushOutbox({ createCheckIn } as unknown as OutboxWriteClient, store);
 
     expect(createCheckIn).not.toHaveBeenCalled();
     expect(result.sent).toBe(0);
@@ -347,7 +350,10 @@ describe('a queued consent answer', () => {
 
     const createConsentRecord = vi.fn(() => Promise.resolve({}));
     const createCheckIn = vi.fn(() => Promise.resolve({}));
-    await flushOutbox({ createConsentRecord, createCheckIn } as unknown as ApiClient, store);
+    await flushOutbox(
+      { createConsentRecord, createCheckIn } as unknown as OutboxWriteClient,
+      store,
+    );
 
     expect(createCheckIn).not.toHaveBeenCalled();
     // The version id and the displayed language survive the queue. Without them the
@@ -363,7 +369,10 @@ describe('a queued consent answer', () => {
     await sendOrQueue(fail, consentQueueItem(consent('consented')), store);
 
     const createConsentRecord = vi.fn(() => Promise.resolve({}));
-    const result = await flushOutbox({ createConsentRecord } as unknown as ApiClient, store);
+    const result = await flushOutbox(
+      { createConsentRecord } as unknown as OutboxWriteClient,
+      store,
+    );
 
     expect(createConsentRecord).toHaveBeenCalledTimes(2);
     expect(result.sent).toBe(2);
@@ -391,7 +400,7 @@ describe('MR-08 C: a departure is not an arrival, and the clock is the server’
 
     const createCheckIn = vi.fn(() => Promise.resolve({}));
     const createCheckOut = vi.fn(() => Promise.resolve({}));
-    await flushOutbox({ createCheckIn, createCheckOut } as unknown as ApiClient, store);
+    await flushOutbox({ createCheckIn, createCheckOut } as unknown as OutboxWriteClient, store);
 
     expect(createCheckIn).not.toHaveBeenCalled();
     expect(createCheckOut).toHaveBeenCalledTimes(1);
@@ -410,7 +419,7 @@ describe('MR-08 C: a departure is not an arrival, and the clock is the server’
 
     const createCheckIn = vi.fn(() => Promise.resolve({}));
     const createCheckOut = vi.fn(() => Promise.resolve({}));
-    await flushOutbox({ createCheckIn, createCheckOut } as unknown as ApiClient, store);
+    await flushOutbox({ createCheckIn, createCheckOut } as unknown as OutboxWriteClient, store);
 
     expect(createCheckOut).not.toHaveBeenCalled();
     expect(createCheckIn).toHaveBeenCalledTimes(1);
@@ -430,7 +439,7 @@ describe('MR-08 C: a departure is not an arrival, and the clock is the server’
 
     const serverStamp = '2026-09-08T11:22:33.444Z';
     const createCheckIn = vi.fn(() => Promise.resolve({ receivedAt: serverStamp }));
-    await flushOutbox({ createCheckIn } as unknown as ApiClient, store);
+    await flushOutbox({ createCheckIn } as unknown as OutboxWriteClient, store);
 
     expect(store.current().items[0]?.syncedAt).toBe(serverStamp);
   });
@@ -447,7 +456,7 @@ describe('MR-08 C: a departure is not an arrival, and the clock is the server’
     );
 
     const createCheckIn = vi.fn(() => Promise.resolve({}));
-    const result = await flushOutbox({ createCheckIn } as unknown as ApiClient, store);
+    const result = await flushOutbox({ createCheckIn } as unknown as OutboxWriteClient, store);
 
     expect(result.sent).toBe(1);
     expect(store.current().items[0]?.status).toBe('synced');
@@ -471,7 +480,7 @@ describe('MR-09 B: the misroute class, not just the one instance', () => {
 
     const createCheckIn = vi.fn(() => Promise.resolve({}));
     const createCheckOut = vi.fn(() => Promise.resolve({}));
-    await flushOutbox({ createCheckIn, createCheckOut } as unknown as ApiClient, store);
+    await flushOutbox({ createCheckIn, createCheckOut } as unknown as OutboxWriteClient, store);
 
     // Neither. Not sent as the wrong event, and not sent as the right one either — the
     // row contradicts itself and nothing here is entitled to guess which half is true.
@@ -496,7 +505,7 @@ describe('MR-09 B: the misroute class, not just the one instance', () => {
     );
 
     const createCheckOut = vi.fn(() => Promise.resolve({}));
-    await flushOutbox({ createCheckOut } as unknown as ApiClient, store);
+    await flushOutbox({ createCheckOut } as unknown as OutboxWriteClient, store);
 
     expect(createCheckOut).not.toHaveBeenCalled();
     expect(store.current().items[0]?.status).toBe('queued');
@@ -520,7 +529,7 @@ describe('MR-09 B: the misroute class, not just the one instance', () => {
     );
 
     const createCheckIn = vi.fn(() => Promise.resolve({}));
-    await flushOutbox({ createCheckIn } as unknown as ApiClient, store);
+    await flushOutbox({ createCheckIn } as unknown as OutboxWriteClient, store);
 
     expect(createCheckIn).not.toHaveBeenCalled();
     const item = store.current().items[0];
@@ -540,7 +549,7 @@ describe('MR-09 B: the misroute class, not just the one instance', () => {
     );
 
     const createCheckOut = vi.fn(() => Promise.resolve({ receivedAt: '2026-09-08T00:00:00.000Z' }));
-    await flushOutbox({ createCheckOut } as unknown as ApiClient, store);
+    await flushOutbox({ createCheckOut } as unknown as OutboxWriteClient, store);
 
     expect(createCheckOut).toHaveBeenCalledTimes(1);
     // And the body that goes out is the contract's, with no device-local marker on it.
@@ -577,7 +586,7 @@ describe('MR-10 C: a refusal during a flush is not a silence', () => {
     );
 
     const createCheckIn = vi.fn(() => Promise.reject(refusal()));
-    await flushOutbox({ createCheckIn } as unknown as ApiClient, store);
+    await flushOutbox({ createCheckIn } as unknown as OutboxWriteClient, store);
 
     const item = store.current().items[0];
     expect(item?.status, 'a refused row must not go back to queued').toBe('failed');
@@ -602,7 +611,7 @@ describe('MR-10 C: a refusal during a flush is not a silence', () => {
     );
 
     const createCheckIn = vi.fn(() => Promise.reject(new Error('Network request failed')));
-    await flushOutbox({ createCheckIn } as unknown as ApiClient, store);
+    await flushOutbox({ createCheckIn } as unknown as OutboxWriteClient, store);
 
     const item = store.current().items[0];
     expect(item?.status).toBe('queued');
@@ -619,7 +628,7 @@ describe('MR-10 C: a refusal during a flush is not a silence', () => {
       store,
     );
     const createCheckIn = vi.fn(() => Promise.resolve({ receivedAt: '2026-09-08T00:00:00.000Z' }));
-    await flushOutbox({ createCheckIn } as unknown as ApiClient, store);
+    await flushOutbox({ createCheckIn } as unknown as OutboxWriteClient, store);
     expect(store.current().items[0]?.status).toBe('synced');
   });
 });
@@ -858,7 +867,11 @@ describe('FE-W61 — a flush stops when the signed-in user changes', () => {
       who = 'rep-b'; // rep A signs out and rep B signs in while the first send is in flight
       return Promise.resolve({});
     });
-    const result = await flushOutbox({ createCheckIn } as unknown as ApiClient, store, () => who);
+    const result = await flushOutbox(
+      { createCheckIn } as unknown as OutboxWriteClient,
+      store,
+      () => who,
+    );
     expect(createCheckIn).toHaveBeenCalledTimes(1);
     expect(result.ownerChanged).toBe(true);
     expect(store.current()).toBe(before);
@@ -868,7 +881,7 @@ describe('FE-W61 — a flush stops when the signed-in user changes', () => {
     const store = await twoQueued();
     const createCheckIn = vi.fn(() => Promise.resolve({}));
     const result = await flushOutbox(
-      { createCheckIn } as unknown as ApiClient,
+      { createCheckIn } as unknown as OutboxWriteClient,
       store,
       () => 'rep-a',
     );
