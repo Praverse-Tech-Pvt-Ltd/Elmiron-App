@@ -1174,5 +1174,13 @@ period (it must match what the database enforces, not a number chosen here) and 
 
 **The MR-51 D upload changes what 2.6 claims.** The draft's voice-note row says *"Not sent to anyone
 yet — sending is not built."* That is false as of `76de417`: a saved note uploads, and the phone's
-copy is deleted once the server has it. The row on the branch has been corrected (see below); the
-notice is **still unapproved and still unmerged**, and the false notice is still live.
+copy is deleted once the server has it. **Corrected on the branch (`75dd570`, with `main` merged in
+so it is checked against the code that now exists), and this is the row to approve:**
+
+> *Your voice notes.* Saved on this phone when you press Save, then sent to the company — when you
+> have no signal it waits and sends later. Once it has been sent, it is removed from this phone. A
+> note you start again or leave without saving is deleted and never sent. Sent notes are reviewed
+> for how procedures are followed.
+
+Every other row of 2.6 is unchanged from the MR-50 table above. The notice is **still unapproved and
+still unmerged**, and the false notice is still live on 23 September 2026.
