@@ -440,7 +440,7 @@ describe.skipIf(!reachable)('the recording path is absent without consent', () =
         [world.visits.pune, 1024, 60],
       );
       const key = result.rows[0]?.storage_key ?? '';
-      expect(key).toMatch(/^recordings\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.opus$/);
+      expect(key).toMatch(/^recordings\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.m4a$/);
       // Nothing about a doctor, a clinic or a patient. Object paths leak through
       // logs, error messages and support tickets.
       expect(key).not.toMatch(/pune|kulkarni|dr|clinic/i);

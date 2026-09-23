@@ -11,9 +11,15 @@ import {
 } from 'expo-audio';
 import { Screen, VoiceNoteScreen } from '@fieldforce/ui';
 import { blockReason, elapsedLabel } from '../../src/capture/recording';
-import { discardNote, keepNote, sweepUnsaved } from '../../src/capture/voice-note-files';
+import {
+  discardNote,
+  keepNote,
+  removeUnsendableNotes,
+  sweepUnsaved,
+} from '../../src/capture/voice-note-files';
 import { cacheRoot, documentRoot, expoNoteFileSystem } from '../../src/capture/voice-note-fs';
 import { useSession } from '../../src/session';
+import { loadQueueState } from '../../src/sync/async-storage-store';
 import { sendOrQueue, voiceNoteQueueItem } from '../../src/sync/outbox';
 import type { SendOutcome } from '../../src/sync/outbox';
 import { createPushClient } from '../../src/sync/push-client';
@@ -90,6 +96,8 @@ export default function VoiceNoteRoute(): ReactNode {
   const [saved, setSaved] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
+  /** MR-52 C2: how many notes from before the upload existed were removed on opening. */
+  const [removed, setRemoved] = useState(0);
 
   /** The recorder file not yet kept — what leaving the screen must delete. */
   const unsaved = useRef<string | null>(null);
@@ -104,6 +112,23 @@ export default function VoiceNoteRoute(): ReactNode {
       sweepUnsaved(expoNoteFileSystem, cacheRoot());
     } catch {
       // A sweep that cannot run leaves the files where they were; it must not stop recording.
+    }
+
+    // **MR-52 C2.** A note kept before MR-51 D has no queue row, so its visit is unknown and it can
+    // never be sent. Removed here, and counted so the rep is told rather than left with audio that
+    // silently goes nowhere. A note queued moments ago is in the queue and is not touched.
+    if (userId !== null) {
+      void (async () => {
+        const load = await loadQueueState();
+        if (load.kind === 'unreadable') return;
+        const queued = load.state.items
+          .filter((item) => item.entity === 'voice_note')
+          .map((item) => String((item.payload as { noteId?: unknown }).noteId ?? ''));
+        const went = removeUnsendableNotes(expoNoteFileSystem, documentRoot(), userId, queued);
+        if (!stopped()) setRemoved(went);
+      })().catch(() => {
+        // Tidying must never stop a rep recording. Nothing is claimed if it could not run.
+      });
     }
 
     // MR-29 B3: the microphone and the visit are separate operations with separate remedies.
@@ -129,7 +154,7 @@ export default function VoiceNoteRoute(): ReactNode {
       discardNote(expoNoteFileSystem, unsaved.current);
       unsaved.current = null;
     };
-  }, []);
+  }, [userId]);
 
   // "Not on this phone" is a claim about the store, so only a settled pull may make it.
   const visitMissing = status !== 'loading' && visit === null;
@@ -240,7 +265,12 @@ export default function VoiceNoteRoute(): ReactNode {
         onStartAgain={forget}
         prompt="What should I put in the report?"
         recording={state.isRecording}
-        saved={saved}
+        saved={
+          saved ??
+          (removed === 0
+            ? null
+            : `${String(removed)} older note${removed === 1 ? '' : 's'} could not be sent — they were saved before sending existed, so the visit was not recorded with them. They have been removed from this phone.`)
+        }
         subject={`Your note · ${doctor?.fullName ?? 'this visit'}`}
         {...(captured === null || saved !== null ? {} : { onSave: save })}
       />

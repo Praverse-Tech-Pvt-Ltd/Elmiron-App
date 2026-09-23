@@ -90,6 +90,46 @@ export const sweepUnsaved = (fs: NoteFileSystem, cacheRoot: string): readonly st
   return orphans;
 };
 
+/**
+ * MR-52 C2 — notes saved before the upload existed, which can NEVER be sent.
+ *
+ * **Why they cannot be sent, rather than "are not yet".** A kept file is named by its note id and
+ * nothing else; the VISIT it belongs to lives in the queue row (`voiceNoteQueueItem`). A note saved
+ * before MR-51 D has no queue row, so the visit is gone — and `begin_upload` takes a visit. There is
+ * no repair: the audio exists and the fact it documents does not.
+ *
+ * **So the choice is delete-and-say, not upload.** Leaving them is the third option and the worst:
+ * audio sitting on a phone forever, which the notice would then have to describe and nobody could
+ * act on. The rep is told how many went, on the screen that owns these files.
+ *
+ * `queuedNoteIds` is what the rep's own outbox holds. A note uploaded seconds ago is not in either
+ * set, and is not here either — `uploadVoiceNote` deletes the file the moment the server takes it.
+ */
+export const unsendableNotes = (
+  fs: NoteFileSystem,
+  documentRoot: string,
+  userId: string,
+  queuedNoteIds: readonly string[],
+): readonly string[] => {
+  const queued = new Set(queuedNoteIds.map((id) => encodeURIComponent(id)));
+  return listNotes(fs, documentRoot, userId).filter((uri) => {
+    const name = uri.slice(noteFolder(documentRoot, userId).length);
+    return !queued.has(name.replace(/\.m4a$/u, ''));
+  });
+};
+
+/** Removes them, and returns how many went, so the caller can say so rather than guess. */
+export const removeUnsendableNotes = (
+  fs: NoteFileSystem,
+  documentRoot: string,
+  userId: string,
+  queuedNoteIds: readonly string[],
+): number => {
+  const doomed = unsendableNotes(fs, documentRoot, userId, queuedNoteIds);
+  for (const uri of doomed) fs.remove(uri);
+  return doomed.length;
+};
+
 /** The signed-in rep's kept notes — and only theirs. */
 export const listNotes = (
   fs: NoteFileSystem,

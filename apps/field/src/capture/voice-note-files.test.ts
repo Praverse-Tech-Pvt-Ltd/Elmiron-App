@@ -6,6 +6,7 @@ import {
   keepNote,
   listNotes,
   noteFolder,
+  removeUnsendableNotes,
   sweepUnsaved,
 } from './voice-note-files';
 import type { NoteFileSystem } from './voice-note-files';
@@ -110,5 +111,46 @@ describe('D3 — a note belongs to the rep who recorded it', () => {
     expect(() => {
       assertOwned(`${noteFolder(DOC, REP_B)}../${REP_A}/note-1.m4a`, DOC, REP_B);
     }).toThrow(NotYourNoteError);
+  });
+});
+
+describe('MR-52 C2 — notes that can never be sent are removed, and counted', () => {
+  const REP = 'b95aa032-bd5e-4bb8-8b37-44696c6d6cc1';
+  const OLD = 'c1329c2e-a9b1-437f-83db-3d9653c45077';
+  const QUEUED = '10b56052-a3ca-4658-95eb-75b5b9293bee';
+
+  const withNotes = () => {
+    const fs = memoryFs([
+      `${noteFolder(DOC, REP)}${OLD}.m4a`,
+      `${noteFolder(DOC, REP)}${QUEUED}.m4a`,
+      `${noteFolder(DOC, 'another-rep')}0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f01.m4a`,
+    ]);
+    return { files: fs.files, fs };
+  };
+
+  it('removes a note with no queue row — its visit is unknown, so it has no upload path', () => {
+    const { files, fs } = withNotes();
+    const went = removeUnsendableNotes(fs, DOC, REP, [QUEUED]);
+    expect(went).toBe(1);
+    expect(files.has(`${noteFolder(DOC, REP)}${OLD}.m4a`)).toBe(false);
+  });
+
+  it('POSITIVE CONTROL: a note the outbox is holding is left alone', () => {
+    const { files, fs } = withNotes();
+    removeUnsendableNotes(fs, DOC, REP, [QUEUED]);
+    expect(files.has(`${noteFolder(DOC, REP)}${QUEUED}.m4a`)).toBe(true);
+  });
+
+  it('never reaches another rep’s folder, whatever is queued', () => {
+    const { files, fs } = withNotes();
+    removeUnsendableNotes(fs, DOC, REP, []);
+    expect([...files]).toEqual([
+      `${noteFolder(DOC, 'another-rep')}0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f01.m4a`,
+    ]);
+  });
+
+  it('counts nothing when there is nothing to remove', () => {
+    const { fs } = withNotes();
+    expect(removeUnsendableNotes(fs, DOC, REP, [OLD, QUEUED])).toBe(0);
   });
 });

@@ -237,7 +237,8 @@ describe.skipIf(!reachable)('a resumable session', () => {
       const grant = await beginUpload(client, visitId);
 
       expect(grant.state).toBe('open');
-      expect(grant.storage_key).toMatch(/^recordings\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.opus$/);
+      // MR-52 C1 / BE-W111: the key names the container the phone actually writes.
+      expect(grant.storage_key).toMatch(/^recordings\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.m4a$/);
 
       const sliding = new Date(grant.expires_at).getTime();
       const hard = new Date(grant.hard_expires_at).getTime();

@@ -23,7 +23,7 @@ const OTHER_REP = '0a0a0a0a-0a0a-4a0a-8a0a-0a0a0a0a0a02';
 const ROOT = 'file:///data/user/0/app/files/';
 const GRANT = '0b0b0b0b-0b0b-4b0b-8b0b-0b0b0b0b0b01';
 const KEY =
-  'voice-notes/0c0c0c0c-0c0c-4c0c-8c0c-0c0c0c0c0c01/0c0c0c0c-0c0c-4c0c-8c0c-0c0c0c0c0c02.opus';
+  'voice-notes/0c0c0c0c-0c0c-4c0c-8c0c-0c0c0c0c0c01/0c0c0c0c-0c0c-4c0c-8c0c-0c0c0c0c0c02.m4a';
 
 const note: VoiceNoteUpload = {
   id: '0d0d0d0d-0d0d-4d0d-8d0d-0d0d0d0d0d01',

@@ -45,7 +45,12 @@ export const RecordingSchema = z.object({
   consentRecordId: UuidSchema,
   storageKey: z.string().nullable(),
   durationSeconds: z.number().nonnegative(),
-  codec: z.literal('opus'),
+  /**
+   * MR-52 C1 / `BE-W111`. Was `literal('opus')` while the phone recorded AAC in an MP4 container.
+   * Both are declared because both can now be STORED — objects written before `20260923000200`
+   * carry `.opus` keys — and the server defaults new rows to what the recorder actually produces.
+   */
+  codec: z.enum(['opus', 'aac']),
   bitrateKbps: z.number().int().positive(),
   uploadStatus: UploadStatusSchema,
   recordedAt: IsoDateTimeSchema,
