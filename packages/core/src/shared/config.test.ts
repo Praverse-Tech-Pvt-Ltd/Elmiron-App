@@ -38,3 +38,60 @@ describe('loadAppConfig', () => {
     expect(() => loadAppConfig({ ...VALID, APP_DEEP_LINK_SCHEME: 'Elmiron MR://' })).toThrow();
   });
 });
+
+/**
+ * MR-53 B2 — the recording flag is enforced here, not documented somewhere.
+ *
+ * `C3` stands: scope §8.6 needs a named PV/DPDP signatory before the recording feature ships, and
+ * §2.4's adverse-event duty follows from transcripts existing. The feature is built and
+ * unreachable, and the half of that which lives in the client is this refusal.
+ */
+describe('MR-53 B2 — consultation recording cannot be enabled against a deployment', () => {
+  const PRODUCTION = 'https://abcdefghijklmnopqrst.supabase.co';
+
+  it('is OFF when nothing asks for it — the shipping state', () => {
+    expect(loadAppConfig(VALID).recordingEnabled).toBe(false);
+  });
+
+  it('is off when the value is anything other than true', () => {
+    for (const value of ['false', '1', 'yes', 'TRUE ', '']) {
+      expect(
+        loadAppConfig({ ...VALID, APP_RECORDING_ENABLED: value }).recordingEnabled,
+        value,
+      ).toBe(value === 'TRUE ');
+    }
+  });
+
+  it('a production-shaped target REFUSES to start rather than quietly ignoring the flag', () => {
+    expect(() =>
+      loadAppConfig({ ...VALID, SUPABASE_URL: PRODUCTION, APP_RECORDING_ENABLED: 'true' }),
+    ).toThrow(/may not be enabled against a deployment/u);
+  });
+
+  it('the refusal names the host it refused, so it cannot be mistaken for a DNS failure', () => {
+    expect(() =>
+      loadAppConfig({ ...VALID, SUPABASE_URL: PRODUCTION, APP_RECORDING_ENABLED: 'true' }),
+    ).toThrow(/abcdefghijklmnopqrst\.supabase\.co/u);
+  });
+
+  it('a production target with the flag UNSET still loads — the guard is about the flag', () => {
+    expect(loadAppConfig({ ...VALID, SUPABASE_URL: PRODUCTION }).recordingEnabled).toBe(false);
+  });
+
+  it('an unparseable URL is not treated as local', () => {
+    expect(() =>
+      loadAppConfig({ ...VALID, SUPABASE_URL: 'not a url', APP_RECORDING_ENABLED: 'true' }),
+    ).toThrow();
+  });
+
+  it('POSITIVE CONTROL: a local stack may enable it', () => {
+    expect(loadAppConfig({ ...VALID, APP_RECORDING_ENABLED: 'true' }).recordingEnabled).toBe(true);
+    expect(
+      loadAppConfig({
+        ...VALID,
+        SUPABASE_URL: 'http://localhost:54321',
+        APP_RECORDING_ENABLED: 'true',
+      }).recordingEnabled,
+    ).toBe(true);
+  });
+});

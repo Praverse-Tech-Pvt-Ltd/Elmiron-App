@@ -27,6 +27,9 @@ export const appConfig: AppConfig = loadAppConfig({
   APP_SITE_URL: process.env.EXPO_PUBLIC_APP_SITE_URL,
   APP_ADDITIONAL_REDIRECT_URLS: process.env.EXPO_PUBLIC_APP_ADDITIONAL_REDIRECT_URLS,
   APP_DEEP_LINK_SCHEME: process.env.EXPO_PUBLIC_APP_DEEP_LINK_SCHEME,
+  // MR-53 B2. Inlined into the bundle at build time, like every EXPO_PUBLIC_* value, and refused
+  // by `loadAppConfig` unless this build points at a local Supabase.
+  APP_RECORDING_ENABLED: process.env.EXPO_PUBLIC_RECORDING_ENABLED,
 });
 
 /**

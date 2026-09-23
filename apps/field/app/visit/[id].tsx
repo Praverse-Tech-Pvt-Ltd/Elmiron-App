@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { ConsentRecord } from '@fieldforce/core';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 // The idempotency key for the request, generated on the device because the
 // contract says so: `id` "doubles as the server-side idempotency key", so a
@@ -27,13 +26,14 @@ import {
   witnessedStage,
 } from '../../src/capture/visit';
 import {
-  authorisingConsent,
   blockReason,
   elapsedLabel,
-  recordingBlock,
   recordingLabel,
   recordingRequest,
 } from '../../src/capture/recording';
+import type { RecordingBlock } from '../../src/capture/recording';
+import { recordingAvailability } from '../../src/capture/recording-permission';
+import type { RecordingAvailability } from '../../src/capture/recording-permission';
 import { checkInQueueItem, checkOutQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { describeWitnessed, witnessedConsentFor } from '../../src/consent/witnessed';
 import type { WitnessedConsent } from '../../src/consent/witnessed';
@@ -80,24 +80,35 @@ export default function VisitRoute(): ReactNode {
       : (doctorsFromStore(store).find((candidate) => candidate.id === visit.doctorId) ?? null);
 
   /**
-   * **Consent records are NOT in the pull, and this is a divergence rather than an
-   * oversight** — MR-21 B6.
+   * **MR-53 B1 — the screen ASKS the server whether this visit may be recorded.**
    *
-   * `sync_pull`'s own `completeness.omittedEntities` lists `consent_record` alongside the
-   * other capture entities: a declared phase-2 scope. So the client cannot know this
-   * doctor's consent state and this list is empty.
+   * Consent records are still not in the pull (`sync_pull`'s own `completeness.omittedEntities`
+   * lists `consent_record`; MR-21 B6, a declared phase-2 scope), and they still should not be: the
+   * alternative to asking is shipping the ledger and re-deriving the consent rule on the device.
+   * `recording_permission` answers from the same predicate `begin_upload` enforces, and an API test
+   * asserts the two agree in both directions.
    *
-   * What that produces is honest rather than merely convenient. `recordingBlock([])`
-   * returns `never_asked`, whose wording is *"Nothing can be recorded until they have
-   * answered ON THIS PHONE"* — which is exactly true of a client holding no consent record.
-   * It does not claim the doctor was never asked, only that this phone has no answer.
-   *
-   * Recording is out of v1, needs an `uploadGrantId` only an upload session can mint
-   * (FE-W29), and cannot run on Expo Go at all, so nothing reachable is lost. Registered so
-   * that adding `consent_record` to the pull is a change to this comment rather than a
-   * change to nothing.
+   * Until the answer arrives this is `unknown`, which draws no control and claims no reason.
+   * `C3` stands: both halves of the flag are off, so on any ordinary build this is `off`.
    */
-  const consents: readonly ConsentRecord[] = [];
+  const [availability, setAvailability] = useState<RecordingAvailability>({ kind: 'unknown' });
+
+  useEffect(() => {
+    let cancelled = false;
+    if (visit === null) return;
+    void recordingAvailability(visit.id)
+      .then((answer) => {
+        if (!cancelled) setAvailability(answer);
+      })
+      .catch(() => {
+        // `recordingAvailability` already answers `unknown` on failure; this is the belt for a
+        // rejection it could not catch. Never `allowed` by accident.
+        if (!cancelled) setAvailability({ kind: 'unknown' });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [visit?.id]);
   const [micGranted, setMicGranted] = useState(false);
   const [recordingStartedAt, setRecordingStartedAt] = useState<string | null>(null);
 
@@ -178,11 +189,14 @@ export default function VisitRoute(): ReactNode {
    * existed on a phone in a doctor's room, and deleting it afterwards does not
    * undo that.
    */
-  const block = recordingBlock(consents, micGranted);
-  const authorising = authorisingConsent(consents);
+  // The DEVICE half stays a device fact: the microphone is this phone's business, and refusing
+  // before it opens is why this check runs here at all.
+  const block: RecordingBlock | null =
+    availability.kind === 'allowed' && !micGranted ? { kind: 'no_microphone' } : null;
+  const authorising = availability.kind === 'allowed' ? availability : null;
 
   const startRecording = (): void => {
-    if (block !== null || authorising === null) return;
+    if (authorising === null) return;
     void (async () => {
       const permission = await AudioModule.requestRecordingPermissionsAsync();
       setMicGranted(permission.granted);
@@ -250,7 +264,8 @@ export default function VisitRoute(): ReactNode {
           recordingRequest({
             id: uuid.v4(),
             visitId: visit.id,
-            consentRecordId: authorising.id,
+            // The row the SERVER named as authorising this recording, not one the phone chose.
+            consentRecordId: authorising.consentRecordId,
             durationSeconds: seconds,
             // The preset's own bitrate, not a guess: HIGH_QUALITY is 128 kbps.
             bitrateKbps: 128,
@@ -452,7 +467,7 @@ export default function VisitRoute(): ReactNode {
           ? {
               recording: {
                 elapsed: elapsedLabel(recorderState.durationMillis / 1000),
-                label: recordingLabel(clockIn(authorising.capturedAt, zone)),
+                label: recordingLabel(clockIn(authorising.consentCapturedAt, zone)),
                 onStop: () => {
                   stopRecording(true);
                 },
@@ -465,15 +480,22 @@ export default function VisitRoute(): ReactNode {
         onRecordVoiceNote={() => {
           router.push(`/voice-note/${visit?.id ?? id}`);
         }}
-        {...(block === null && !recorderState.isRecording
+        {...(availability.kind === 'allowed' && block === null && !recorderState.isRecording
           ? { onStartRecording: startRecording }
           : {})}
         recordingBlockedReason={
-          block === null
-            ? null
-            : block.kind === 'never_asked'
-              ? describeWitnessed(witnessed, queue.items, (iso) => clockIn(iso, zone))
-              : blockReason(block)
+          // `off` and `unknown` say NOTHING: the feature being unbuilt for this build, or a server
+          // that could not be asked, are not facts about the doctor and must not be dressed as one.
+          block !== null
+            ? blockReason(block)
+            : availability.kind !== 'blocked'
+              ? null
+              : availability.why === 'never_asked'
+                ? // The phone knows something the server cannot: an answer captured here and still
+                  // queued. MR-49 wrote this sentence for exactly that, and the server saying
+                  // "never asked" is true of the SERVER, not of this phone.
+                  describeWitnessed(witnessed, queue.items, (iso) => clockIn(iso, zone))
+                : availability.sentence
         }
         onRecordSamples={() => {
           router.push(`/samples/${visit?.id ?? id}`);

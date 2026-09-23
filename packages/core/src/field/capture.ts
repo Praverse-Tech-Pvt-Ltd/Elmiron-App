@@ -98,3 +98,47 @@ export const TranscriptSchema = z.object({
   createdAt: IsoDateTimeSchema,
 });
 export type Transcript = z.infer<typeof TranscriptSchema>;
+
+/**
+ * MR-53 B1 — the server's answer to "may this visit be recorded?".
+ *
+ * **The client asks; it does not decide.** `sync_pull` deliberately omits `consent_record` (MR-21
+ * B6), so the phone has no consent ledger to reason over — and putting one there would mean a
+ * second copy of the rule `begin_upload` already enforces. `recording_permission` answers from the
+ * same predicate, and an API test asserts the two agree in both directions.
+ *
+ * **`featureEnabled` is the SERVER half of the flag** (`app_thresholds.recording_feature_enabled`,
+ * shipped false). The client half is `AppConfig.recordingEnabled`, which refuses to be true against
+ * a deployment at all. Both must be true before a control is drawn: `C3` stands until the named
+ * PV/DPDP signatory exists.
+ */
+export const RecordingPermissionReasonSchema = z.enum([
+  'allowed',
+  /** The flag is off on the server. Not a fact about the doctor, and not shown as one. */
+  'feature_off',
+  /** Not this rep's visit — deliberately indistinguishable from a visit that does not exist. */
+  'not_your_visit',
+  /** The visit's consent state is not trusted after a database restore. */
+  'quarantined',
+  'never_asked',
+  'declined',
+  /** They agreed, then changed their mind. A different sentence from "they said no". */
+  'withdrawn',
+]);
+export type RecordingPermissionReason = z.infer<typeof RecordingPermissionReasonSchema>;
+
+export const RecordingPermissionSchema = z.object({
+  allowed: z.boolean(),
+  reason: RecordingPermissionReasonSchema,
+  featureEnabled: z.boolean(),
+  /** The consent row that authorises it, when one does. The recording cites this row. */
+  consentRecordId: UuidSchema.nullable(),
+  /**
+   * When the doctor agreed — the CONSENT's time, not the device's.
+   *
+   * The screen shows it while recording, and a screen that showed the handset's clock there would
+   * be asserting a compliance fact from a clock `capture_consent` itself refuses to trust.
+   */
+  consentCapturedAt: IsoDateTimeSchema.nullable(),
+});
+export type RecordingPermission = z.infer<typeof RecordingPermissionSchema>;
