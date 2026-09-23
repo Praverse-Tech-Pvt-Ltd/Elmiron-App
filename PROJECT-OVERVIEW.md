@@ -18572,3 +18572,21 @@ Those need the emulator and are the first thing to do on resuming.
 `BE-W109`'s doctor consent text — **which the emulator showed is still live in the wrong form**: the
 notice on screen says the company "reviews how they presented", and `BE-W109` says that must change
 before a doctor reads it. Nothing here shipped it to a doctor, because of the two switches above.
+
+#### MR-53 — correction to E3's evidence, after the push
+
+The section above says E3's duplicated-row tests "are skipped on this machine" and "will be proved
+by CI". **They were, and the claim is now upgraded from reasoned to proved.** CI run `35846853029`,
+workflow **`CI`**, event `push`, **success**, SHA `e3764ef764a3740527675484e11522832193560f` = HEAD;
+**Migration drift** (`35846853043`) green on the same SHA. In its *migrations · Gate 0 RLS suite ·
+rollbacks* job, `tests/decision-debt.spec.ts` ran **23 tests with none skipped** — so both duplicated
+-row cases executed against a real database — alongside `transcript-ingest.spec.ts` (11),
+`recording-permission.spec.ts` (7) and `recording-withdrawal.spec.ts` (4).
+
+The same run also printed the two deadlines from the server rather than from my arithmetic, which is
+worth having beside the dates quoted above: the cap `dueAt` **2026-11-06**, `warnFromAt`
+**2026-10-16**, 44 days remaining; `BE-W106` `dueAt` **2026-10-31**, 37 days remaining — so its
+window opens on 2026-10-10, and neither is warning yet.
+
+**Unchanged by this correction:** the emulator half of B5 and C3 is still unproven, and no CI run can
+prove it.
