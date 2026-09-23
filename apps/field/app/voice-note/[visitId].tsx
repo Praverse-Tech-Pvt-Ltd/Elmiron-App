@@ -123,7 +123,10 @@ export default function VoiceNoteRoute(): ReactNode {
         if (load.kind === 'unreadable') return;
         const queued = load.state.items
           .filter((item) => item.entity === 'voice_note')
-          .map((item) => String((item.payload as { noteId?: unknown }).noteId ?? ''));
+          .map((item) => (item.payload as { noteId?: unknown }).noteId)
+          // Only a string is an id. Anything else is a payload this build cannot read, and
+          // coercing it would produce a name no file could match.
+          .filter((noteId): noteId is string => typeof noteId === 'string');
         const went = removeUnsendableNotes(expoNoteFileSystem, documentRoot(), userId, queued);
         if (!stopped()) setRemoved(went);
       })().catch(() => {
