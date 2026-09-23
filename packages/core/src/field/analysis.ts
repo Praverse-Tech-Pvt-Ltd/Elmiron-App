@@ -67,7 +67,14 @@ export const AnalysisSchema = z.object({
   visitId: UuidSchema,
   /** The MR being coached. This is sensitive employment data. */
   mrId: UuidSchema,
-  transcriptId: UuidSchema,
+  /**
+   * **Null until the transcript pipeline exists — MR-52 A2.** `20260811000100` records the reason
+   * beside the table: transcripts do not exist until week 8 and the analysis engine lands in week
+   * 10, so `analyses` has no `transcript_id` column and `read_analysis` emits null. Declaring it
+   * required made the contract unsatisfiable by the real server, which is how the console came to
+   * read a mock instead (`FE-W66`).
+   */
+  transcriptId: UuidSchema.nullable(),
   status: AnalysisStatusSchema,
   refusalReason: z.string().nullable(),
   rubricVersion: z.string().min(1),

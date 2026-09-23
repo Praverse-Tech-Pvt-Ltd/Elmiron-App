@@ -31,6 +31,9 @@ import {
   SyncPushResponseSchema,
   WithdrawConsentRequestSchema,
   ListAnalysisOverridesResponseSchema,
+  ListAnalysesPageSchema,
+  ListConsentRecordsPageSchema,
+  ReadAnalysisResponseSchema,
   ListAuditLogResponseSchema,
   RetentionStatusSchema,
 } from './endpoints.js';
@@ -70,6 +73,9 @@ import type {
   SyncPushResponse,
   WithdrawConsentRequest,
   ListAnalysisOverridesResponse,
+  ListAnalysesPage,
+  ListConsentRecordsPage,
+  ReadAnalysisResponse,
   ListAuditLogResponse,
   RetentionStatus,
 } from './endpoints.js';
@@ -382,6 +388,44 @@ export const createApiClient = (options: ApiClientOptions) => {
         p_limit: input.limit ?? 100,
         p_before_id: input.beforeId ?? null,
         p_reason: input.reason,
+      }),
+
+    /**
+     * MR-52 A2 / `FE-W66` — the analyses in the caller's scope, from the RPC Supabase serves.
+     *
+     * `listAnalyses` above is the REST page `services/mock` answers; this is the real server's, and
+     * the two differ in shape because the RPC carries the audit id of the read it just wrote. An
+     * admin must give a reason, which the database enforces — the client does not decide that, it
+     * passes what the caller gave.
+     */
+    listAnalysesForReview: (
+      input: { readonly mrId?: string; readonly reason?: string } = {},
+    ): Promise<ListAnalysesPage> =>
+      request('POST', API_PATHS.listAnalysesRpc, ListAnalysesPageSchema, {
+        p_mr_id: input.mrId ?? null,
+        p_reason: input.reason ?? null,
+      }),
+
+    /**
+     * MR-52 A2 / `FE-W66` — one analysis, from the RPC. `data` is null when it is not in scope,
+     * which is a refusal expressed as an absence by the server, not by this client.
+     */
+    readAnalysis: (input: {
+      readonly analysisId: string;
+      readonly reason?: string;
+    }): Promise<ReadAnalysisResponse> =>
+      request('POST', API_PATHS.readAnalysis, ReadAnalysisResponseSchema, {
+        p_analysis_id: input.analysisId,
+        p_reason: input.reason ?? null,
+      }),
+
+    /** MR-52 A2 / `FE-W66` — consent records in scope, from the RPC. */
+    listConsentRecordsForReview: (
+      input: { readonly visitId?: string; readonly reason?: string } = {},
+    ): Promise<ListConsentRecordsPage> =>
+      request('POST', API_PATHS.listConsentRecordsRpc, ListConsentRecordsPageSchema, {
+        p_visit_id: input.visitId ?? null,
+        p_reason: input.reason ?? null,
       }),
 
     /**

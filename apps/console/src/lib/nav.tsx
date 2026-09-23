@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { compactTypography, tokens } from '@fieldforce/ui-tokens';
+import { SignOut } from './sign-out';
 
 /**
  * The admin sidebar.
@@ -22,7 +23,13 @@ const ITEMS: readonly { readonly label: string; readonly href?: string }[] = [
   { label: 'Retention & purge' },
 ];
 
-export const Nav = (): ReactNode => (
+/**
+ * MR-52 A1: `signedInEmail` is whoever the request's cookie belongs to, or null before sign-in.
+ * Rendered at the bottom so a shared machine shows whose console this is, with the way out beside it.
+ */
+export const Nav = ({
+  signedInEmail = null,
+}: { readonly signedInEmail?: string | null } = {}): ReactNode => (
   <nav
     style={{
       width: 224,
@@ -74,6 +81,11 @@ export const Nav = (): ReactNode => (
           {item.label}
         </a>
       ),
+    )}
+    {signedInEmail === null ? null : (
+      <div style={{ marginTop: 'auto', padding: `0 ${String(tokens.space.lg)}px` }}>
+        <SignOut email={signedInEmail} />
+      </div>
     )}
   </nav>
 );

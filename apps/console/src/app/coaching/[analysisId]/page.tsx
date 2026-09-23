@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { createApiClient } from '@fieldforce/core';
+import { signedIn } from '../../../lib/session';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Body, Card, Heading, Label, MissingNote, Title } from '../../../lib/ui';
 import { OverrideForm } from '../../../lib/override-form';
@@ -27,7 +27,12 @@ import { OverridesPanel, loadOverrides } from '../../../lib/overrides-panel';
  * Built under the second §3.6 reversal of 3 September 2026 — see
  * `docs/fe-w3-spec.md`.
  */
-const baseUrl = process.env['NEXT_PUBLIC_API_BASE_URL'] ?? 'http://127.0.0.1:4010';
+/**
+ * MR-52 A2 — the reason this read writes into the audit trail. `read_analysis` refuses an admin who
+ * gives none, and an analysis is sensitive employment data: "why was this person's analysis opened"
+ * deserves an answer better than a blank.
+ */
+const READ_REASON = 'console review screen — analysis opened for review';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,9 +47,14 @@ export default async function Review({
   readonly params: Promise<{ readonly analysisId: string }>;
 }): Promise<ReactNode> {
   const { analysisId } = await params;
-  const client = createApiClient({ baseUrl, getAccessToken: () => Promise.resolve(null) });
+  const session = await signedIn();
 
-  const analysis = await client.getAnalysis(analysisId).catch(() => null);
+  // `data: null` is the server saying this analysis is not in scope — an absence, not an error.
+  const analysis =
+    (await session?.client
+      .readAnalysis({ analysisId, reason: READ_REASON })
+      .then((response) => response.data)
+      .catch(() => null)) ?? null;
 
   if (analysis === null) {
     return (
@@ -60,7 +70,7 @@ export default async function Review({
 
   const findings = analysis.findings.filter((finding) => finding.severity !== 'info');
   // FE-W12: what has already been decided, read before the form that decides again.
-  const overrides = await loadOverrides(client, analysis.id);
+  const overrides = session === null ? null : await loadOverrides(session.client, analysis.id);
 
   return (
     <div
@@ -131,11 +141,7 @@ export default async function Review({
         }}
       >
         <OverridesPanel result={overrides} />
-        <OverrideForm
-          analysisId={analysis.id}
-          baseUrl={baseUrl}
-          findingId={findings[0]?.id ?? null}
-        />
+        <OverrideForm analysisId={analysis.id} findingId={findings[0]?.id ?? null} />
       </div>
     </div>
   );

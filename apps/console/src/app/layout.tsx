@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Nav } from '../lib/nav';
+import { signedIn } from '../lib/session';
 
 export const metadata = {
   title: 'Field Force — admin',
@@ -21,7 +22,13 @@ export const metadata = {
  * and shipping a half-applied typeface would be worse than the honest system stack
  * this falls back to. Recorded in `docs/fe-w3-spec.md` with the rest of Phase 4.
  */
-export default function RootLayout({ children }: { readonly children: ReactNode }): ReactNode {
+export default async function RootLayout({
+  children,
+}: {
+  readonly children: ReactNode;
+}): Promise<ReactNode> {
+  // MR-52 A1. Read per request, so the sidebar names whoever this browser is signed in as.
+  const session = await signedIn();
   return (
     <html lang="en">
       <body
@@ -34,7 +41,7 @@ export default function RootLayout({ children }: { readonly children: ReactNode 
           minHeight: '100vh',
         }}
       >
-        <Nav />
+        <Nav signedInEmail={session?.email ?? null} />
         <main style={{ flex: 1, padding: tokens.space.xl, overflow: 'auto' }}>{children}</main>
       </body>
     </html>

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ZodType } from 'zod';
 import {
   CoordinatesSchema,
   IsoDateSchema,
@@ -334,6 +335,27 @@ export type ListAnalysesRequest = z.infer<typeof ListAnalysesRequestSchema>;
 
 export const ListAnalysesResponseSchema = pageResponseSchema(AnalysisSchema);
 export type ListAnalysesResponse = z.infer<typeof ListAnalysesResponseSchema>;
+
+/**
+ * MR-52 A2 — what `list_analyses`, `read_analysis` and `list_consent_records` actually return.
+ *
+ * **The same envelope `list_analysis_overrides` established** (`data`, `readAt`, `auditLogId`), and
+ * for the same reason: each of these reads writes its own `audit_log` row BEFORE answering, and the
+ * id of that row comes back so a caller can point at its own read in the trail. The page shapes
+ * above (`items`/`nextCursor`/`hasMore`) are the REST endpoints' and stay for `services/mock`; these
+ * are the RPC's, which is what a signed-in console and a signed-in app both reach.
+ */
+export const readResponseSchema = <T extends ZodType>(data: T) =>
+  z.object({ data, readAt: IsoDateTimeSchema, auditLogId: z.number().int().positive() });
+
+export const ReadAnalysisResponseSchema = readResponseSchema(AnalysisSchema.nullable());
+export type ReadAnalysisResponse = z.infer<typeof ReadAnalysisResponseSchema>;
+
+export const ListAnalysesPageSchema = readResponseSchema(z.array(AnalysisSchema));
+export type ListAnalysesPage = z.infer<typeof ListAnalysesPageSchema>;
+
+export const ListConsentRecordsPageSchema = readResponseSchema(z.array(ConsentRecordSchema));
+export type ListConsentRecordsPage = z.infer<typeof ListConsentRecordsPageSchema>;
 
 /** The MR's written reply to their own analysis. Attached, never overwriting. */
 export const RespondToAnalysisRequestSchema = z.object({
@@ -698,6 +720,10 @@ export const API_PATHS = {
   analysisResponse: (id: string) => `/analyses/${id}/response`,
   /** MR-51 B1 / `BE-W110`. The override write — the RPC Supabase serves, camelCase since `20260922000200`. */
   createAnalysisOverride: '/rpc/create_analysis_override',
+  /** MR-52 A2 / `FE-W66`. The console's three reads, at the RPCs Supabase serves. */
+  readAnalysis: '/rpc/read_analysis',
+  listAnalysesRpc: '/rpc/list_analyses',
+  listConsentRecordsRpc: '/rpc/list_consent_records',
   syncPush: '/rpc/sync_push',
   syncPull: '/sync/pull',
   syncQueueStatus: '/rpc/sync_queue_status',

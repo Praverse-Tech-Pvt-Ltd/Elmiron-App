@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { createApiClient } from '@fieldforce/core';
+import { signedIn } from '../../lib/session';
 import { tokens } from '@fieldforce/ui-tokens';
 import {
   Body,
@@ -32,7 +32,14 @@ import { consentSignal, queueRows } from '../../lib/queue';
  * **No ranking, and no shape that could hold one.** Rows sort by MR id, which is
  * arbitrary on purpose — §3.6's scoring ban was never part of either reversal.
  */
-const baseUrl = process.env['NEXT_PUBLIC_API_BASE_URL'] ?? 'http://127.0.0.1:4010';
+/**
+ * MR-52 A2 — the reason every read here carries into the audit trail.
+ *
+ * `list_analyses` and `list_consent_records` refuse an admin who gives none, and write whatever is
+ * given beside the row. It names the screen, because "why did the console read every analysis in
+ * scope" has one honest answer: somebody opened the queue.
+ */
+const READ_REASON = 'console coaching queue — queue render';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,16 +50,18 @@ const stamp = (startMs: number): string => {
 };
 
 export default async function CoachingQueue(): Promise<ReactNode> {
-  const client = createApiClient({ baseUrl, getAccessToken: () => Promise.resolve(null) });
+  // MR-52 A1: the signed-in server. `null` cannot happen behind the middleware, and is handled
+  // rather than asserted, because a page that throws on a signed-out render is worse than one that
+  // says nothing loaded.
+  const session = await signedIn();
 
-  const [analyses, consents, me] = await Promise.all([
-    client.listAnalyses().catch(() => null),
-    client.listConsentRecords().catch(() => null),
-    client.getMe().catch(() => null),
+  const [analyses, consents] = await Promise.all([
+    session?.client.listAnalysesForReview({ reason: READ_REASON }).catch(() => null) ?? null,
+    session?.client.listConsentRecordsForReview({ reason: READ_REASON }).catch(() => null) ?? null,
   ]);
 
-  const rows = analyses === null ? [] : queueRows(analyses.items);
-  const consent = consents === null ? null : consentSignal(consents.items);
+  const rows = analyses === null ? [] : queueRows(analyses.data);
+  const consent = consents === null ? null : consentSignal(consents.data);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1320 }}>
@@ -72,8 +81,8 @@ export default async function CoachingQueue(): Promise<ReactNode> {
 
       {analyses === null ? (
         <MissingNote>
-          The analysis service could not be reached at {baseUrl}. This queue is empty because the
-          request failed, not because nothing recurred.
+          The analyses could not be read. This queue is empty because the request failed, not
+          because nothing recurred.
         </MissingNote>
       ) : null}
 
@@ -180,7 +189,7 @@ export default async function CoachingQueue(): Promise<ReactNode> {
               so this console can write one and cannot count them.
             </MissingNote>
             <Body muted>
-              {`Every override is logged and feeds the weekly rubric accuracy report. Signed in as ${me?.profile.fullName ?? 'an unknown user'}.`}
+              {`Every override is logged and feeds the weekly rubric accuracy report. Signed in as ${session?.email ?? 'nobody — this page is not signed in'}.`}
             </Body>
           </Card>
         </div>

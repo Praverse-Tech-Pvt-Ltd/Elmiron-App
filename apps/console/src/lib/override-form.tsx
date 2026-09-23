@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { createApiClient } from '@fieldforce/core';
+import { browserClient } from './supabase';
 import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { Body, Card, Heading, Label, MissingNote } from './ui';
 
@@ -27,7 +28,6 @@ import { Body, Card, Heading, Label, MissingNote } from './ui';
  */
 export interface OverrideFormProps {
   readonly analysisId: string;
-  readonly baseUrl: string;
   /** The finding being overridden, when there is exactly one in question. */
   readonly findingId: string | null;
 }
@@ -51,7 +51,20 @@ const button = (): React.CSSProperties => ({
   cursor: 'pointer',
 });
 
-export const OverrideForm = ({ analysisId, baseUrl, findingId }: OverrideFormProps): ReactNode => {
+/**
+ * MR-52 A2 — the write carries the signed-in admin's token.
+ *
+ * This is a client component, so it builds its own client from the session `@supabase/ssr` keeps in
+ * the cookie. It posts to the same RPC the server-rendered reads use; the database decides whether
+ * this admin may override this analysis, exactly as before.
+ */
+const restUrl = (): string => {
+  const base = process.env['NEXT_PUBLIC_SUPABASE_URL'];
+  if (base === undefined || base === '') throw new Error('NEXT_PUBLIC_SUPABASE_URL is not set');
+  return `${base.replace(/\/+$/, '')}/rest/v1`;
+};
+
+export const OverrideForm = ({ analysisId, findingId }: OverrideFormProps): ReactNode => {
   const [state, setState] = useState<State>({ kind: 'undecided' });
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -59,7 +72,13 @@ export const OverrideForm = ({ analysisId, baseUrl, findingId }: OverrideFormPro
   const log = (): void => {
     if (busy || reason.trim() === '') return;
     setBusy(true);
-    const client = createApiClient({ baseUrl, getAccessToken: () => Promise.resolve(null) });
+    const client = createApiClient({
+      baseUrl: restUrl(),
+      getAccessToken: async () => {
+        const { data } = await browserClient().auth.getSession();
+        return data.session?.access_token ?? null;
+      },
+    });
     void client
       .createAnalysisOverride(analysisId, {
         findingId,

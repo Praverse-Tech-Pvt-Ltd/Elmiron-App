@@ -664,6 +664,48 @@ const routes: Route[] = [
     }),
   },
   {
+    // MR-52 A2 / FE-W66. The console's three reads, at the RPC paths Supabase serves, in the
+    // envelope those functions return: `data`, `readAt`, and the id of the audit row each read
+    // writes before it answers.
+    method: 'POST',
+    pattern: API_PATHS.listAnalysesRpc,
+    handler: (ctx) => ({
+      body: {
+        data: ctx.scenario === 'empty' ? [] : fx.analyses,
+        readAt: '2026-09-23T06:00:00+05:30',
+        auditLogId: 1,
+      },
+    }),
+  },
+  {
+    method: 'POST',
+    pattern: API_PATHS.readAnalysis,
+    handler: (ctx) => {
+      const id = asString(asRecord(ctx.body)['p_analysis_id'], fx.IDS.analysis);
+      const analysis = fx.analyses.find((a) => a.id === id) ?? null;
+      return {
+        body: {
+          // Out of scope is an ABSENCE from the server, not an error: `read_analysis` returns
+          // `data: null` rather than raising, and the mock answers the same way.
+          data: analysis,
+          readAt: '2026-09-23T06:00:00+05:30',
+          auditLogId: 1,
+        },
+      };
+    },
+  },
+  {
+    method: 'POST',
+    pattern: API_PATHS.listConsentRecordsRpc,
+    handler: (ctx) => ({
+      body: {
+        data: ctx.scenario === 'empty' ? [] : fx.consentRecords,
+        readAt: '2026-09-23T06:00:00+05:30',
+        auditLogId: 1,
+      },
+    }),
+  },
+  {
     // MR-50 F2 / FE-W12. The overrides read, at the RPC path Supabase serves -- the same shape
     // `list_analysis_overrides` returns since MR-50 C2 (BE-W100), keyed by `p_analysis_id`.
     method: 'POST',

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { tokens } from '@fieldforce/ui-tokens';
-import { createApiClient } from '@fieldforce/core';
+import { consentTextVersions } from '../../lib/consent-text';
+import { signedIn } from '../../lib/session';
 import {
   Body,
   Card,
@@ -64,7 +65,6 @@ import { purgeNotice, retentionFigures, retentionSentence } from '../../lib/rete
 // The field app is the opposite case and says so — Expo rewrites `process.env.X`
 // at build time and only that exact syntax — but Next reads it at runtime here, so
 // the strict form is both allowed and correct.
-const baseUrl = process.env['NEXT_PUBLIC_API_BASE_URL'] ?? 'http://127.0.0.1:4010';
 
 /**
  * Both read paths REQUIRE a reason and write it to the trail before returning, so
@@ -77,19 +77,17 @@ const READ_REASON = 'console admin screen — compliance panel render';
 export const dynamic = 'force-dynamic';
 
 export default async function Admin(): Promise<ReactNode> {
-  const client = createApiClient({ baseUrl, getAccessToken: () => Promise.resolve(null) });
+  const session = await signedIn();
 
   const [versions, records, audit, retention] = await Promise.all([
-    client.listConsentTextVersions().catch(() => null),
-    client.listConsentRecords().catch(() => null),
-    client.listAuditLog({ reason: READ_REASON, limit: 25 }).catch(() => null),
-    client.getRetentionStatus({ reason: READ_REASON }).catch(() => null),
+    session === null ? null : consentTextVersions(session.db).catch(() => null),
+    session?.client.listConsentRecordsForReview({ reason: READ_REASON }).catch(() => null) ?? null,
+    session?.client.listAuditLog({ reason: READ_REASON, limit: 25 }).catch(() => null) ?? null,
+    session?.client.getRetentionStatus({ reason: READ_REASON }).catch(() => null) ?? null,
   ]);
 
   const rows =
-    versions === null
-      ? []
-      : versionRows(versions.items, records?.items ?? [], new Date().toISOString());
+    versions === null ? [] : versionRows(versions, records?.data ?? [], new Date().toISOString());
 
   const trail = audit === null ? [] : auditRows(audit);
   const hidden = audit === null ? null : hiddenRowsNote(audit);
@@ -106,8 +104,8 @@ export default async function Admin(): Promise<ReactNode> {
 
       {versions === null ? (
         <MissingNote>
-          The consent ledger could not be reached at {baseUrl}. Nothing below is being shown from
-          cache — this table is empty because the request failed, not because there are no versions.
+          The consent ledger could not be reached. Nothing below is being shown from cache — this
+          table is empty because the request failed, not because there are no versions.
         </MissingNote>
       ) : null}
 

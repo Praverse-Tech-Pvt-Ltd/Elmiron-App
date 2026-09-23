@@ -25,6 +25,9 @@ import {
   GetShiftWindowResponseSchema,
   SyncQueueStatusResponseSchema,
   ListAnalysesResponseSchema,
+  ListAnalysesPageSchema,
+  ListConsentRecordsPageSchema,
+  ReadAnalysisResponseSchema,
   ListBeatPlansResponseSchema,
   ListCallReportsResponseSchema,
   ListConsentRecordsResponseSchema,
@@ -240,6 +243,19 @@ describe('every declared endpoint conforms to packages/core', () => {
     await expectConforms(`/analyses/${IDS.analysis}/response`, AnalysisSchema, {
       method: 'POST',
       body: { response: 'The doctor asked me to send it by message.' },
+    });
+    // MR-52 A2 / FE-W66: the console's reads, at the RPC paths the real server serves.
+    await expectConforms('/rpc/list_analyses', ListAnalysesPageSchema, {
+      method: 'POST',
+      body: { p_mr_id: null, p_reason: 'mock contract check' },
+    });
+    await expectConforms('/rpc/read_analysis', ReadAnalysisResponseSchema, {
+      method: 'POST',
+      body: { p_analysis_id: IDS.analysis, p_reason: 'mock contract check' },
+    });
+    await expectConforms('/rpc/list_consent_records', ListConsentRecordsPageSchema, {
+      method: 'POST',
+      body: { p_visit_id: null, p_reason: 'mock contract check' },
     });
     // MR-51 B1 / BE-W110: the override write at the RPC path the real server serves.
     await expectConforms('/rpc/create_analysis_override', AnalysisOverrideSchema, {
