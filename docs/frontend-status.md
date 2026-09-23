@@ -1401,3 +1401,30 @@ again".
 - The transparency notice on `main` is still the false one; the redraft (for `C8`/`C9`) waits on the
   branch for approval (2.6).
 - Voice notes are not uploaded; `FE-W29` and the upload list are in the register.
+
+## MR-51 — 23 September 2026: a saved voice note is sent, and the console's history read works
+
+**Counts:** `@fieldforce/field` vitest **585** (37 files, +12), jest **162** (21 suites, +3);
+`@fieldforce/console` vitest **31** (5 files, unchanged).
+
+### What changed on screen (emulator)
+
+- **Voice note** — Save keeps the note and sends it. With signal: *"Sent. The note has reached the
+  company, so it is no longer kept on this phone."* Without: *"Saved on this phone. It will send by
+  itself when you have signal, and is then removed from this phone."* A server refusal says so and
+  does not claim it will send. The queue lists it as `voice_note` waiting, and it goes on reconnect.
+- **Another rep on the same phone** sees and sends nothing of the first rep's: the queue is per rep
+  and every file path is checked against the signed-in rep's folder.
+
+### Console (code)
+
+- The override history read now sends a reason, so an admin sees the history instead of *"could not
+  be loaded"* — the mock never asked for one, which is why MR-50 missed it.
+- **`FE-W66`**: the console still has no sign-in and reads analyses from mock-only paths, so a
+  browser cannot show any of this against the real server.
+
+### Not changed
+
+- The transparency notice on `main` is still the false one. The corrected row (it now says a saved
+  note is sent and then removed) waits on the branch for approval — `blocked-on-you` 2.6.
+- `FE-G1` and `FE-G2` stay open. `C12`: they close only on a handset, after the AI integration.

@@ -1077,3 +1077,41 @@ LOCAL demo tenant only.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-50 — keeping the audio | `PROJECT-OVERVIEW.md` → `### MR-50 — keeping the audio` |
+
+---
+
+## After MR-51 — 23 September 2026
+
+| | |
+| --- | --- |
+| **CI on arrival** | `35720176839`, workflow `CI`, event `push`, success, SHA = HEAD (`f8a468f`) |
+| **Decisions** | `C11` `expo-file-system` approved (its own id; `C9` already carried it) · `C12` final testing is a HANDSET run made after the AI integration — `FE-G1`/`FE-G2` cannot close before that · `C13` continue past C2 with `app_thresholds` left open |
+| **`BE-W110`** | **Closed.** The override write returns the contract's shape and the client calls the RPC. Driven over real HTTP, and again with the mock dead |
+| **`FE-W12`** | **Reopened and fixed**: the history read now sends a reason, or every admin saw "could not be loaded" against the real server |
+| **`FE-W66`** | **New, open: the console has no sign-in**, and reads analyses from mock-only paths. A browser still cannot show the override history |
+| **`BE-W83`** | **18 of 19 tables now carry a restrictive tenant boundary.** `app_thresholds` leaks and is `BE-W106`, left open by `C13`. `sync_pull` unchanged at synthetic volume; direct full-table counts 40–50% slower |
+| **`FE-W29`** | **Built.** A kept voice note uploads as an ordinary sync item and the phone's copy is deleted once the server confirms. Online, offline-then-reconnect, exactly-once and two-reps all proved on the Pixel 10 |
+| **New, open** | `BE-W111` (objects named `.opus`, audio is AAC) · `FE-W67` (offline past token expiry signs the rep out) · notes saved before this build have no queue row |
+| **Drafts for the operator** | corpus consent, `BE-W109` doctor text, and the corrected 2.6 row — all in `blocked-on-you`, none shipped |
+| **Tests** | **1,931 passing, zero failing, up 40** |
+
+### For the next session
+
+- **`verify:rollbacks` EMPTIES the local schema.** It is destructive by design and this session ran
+  it anyway; the warning is at line 72 above and in the script's own header. `db:reset` after, then
+  `node scripts/enable-lock-logging.mjs` — the reset drops the database-level setting `BE-W92`
+  asserts.
+- **A committed test fixture must look real in every column another suite aggregates.** The C1
+  probe's adverse-event rows defaulted `statutory_due_at` and were born overdue, failing
+  `adverse-events.spec`; the table is append-only, so the database had to be reset.
+- **Removing the `adb reverse` does not make the phone offline** unless the app is cold-started —
+  one save went straight to the server through an already-open connection.
+- The emulator holds two voice notes from MR-50 whose reps no longer exist; they have no queue row
+  and nothing will send them.
+- Every result this session is code or emulator. `FE-G1`/`FE-G2` stay open, and `C12` now sets what
+  closing them means.
+- Services stopped at the end of this session.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-51 — the review record and the upload | `PROJECT-OVERVIEW.md` → `### MR-51 — the review record and the upload` |

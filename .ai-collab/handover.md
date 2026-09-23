@@ -1012,3 +1012,25 @@ LOCAL demo tenant only.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-50 — keeping the audio | `PROJECT-OVERVIEW.md` → `### MR-50 — keeping the audio` |
+
+---
+
+## MR-51 — 23 September 2026
+
+**Decisions recorded:** `C11` (`expo-file-system`), `C12` (handset-with-AI is what "verified" means
+for `FE-G1`/`FE-G2`), `C13` (continue past the C2 stop, `app_thresholds` left open as `BE-W106`).
+
+**Built:** the override write against the real server (`BE-W110`), the reason the history read needs
+(`FE-W12`), restrictive tenant boundaries on 18 directly readable tables (`BE-W83`) with a
+before/after measurement at synthetic volume, and the voice-note upload (`FE-W29`) proved on the
+Pixel 10 — online, offline-then-reconnect, exactly once, and two reps on one phone.
+
+**Open and registered:** `FE-W66` (the console cannot sign in), `BE-W111` (`.opus` keys on AAC
+audio), `FE-W67` (offline past token expiry signs the rep out), notes saved before this build.
+
+**Waiting on the operator:** the 2.6 notice row (corrected on its branch, still unmerged), the
+bake-off corpus consent, `BE-W109`'s doctor text, and `BE-W106`'s settings model.
+
+**Two of my own mistakes are written up in `PROJECT-OVERVIEW.md`** — running the destructive
+rollback verifier against the local database, and a committed probe fixture that failed an unrelated
+suite. Both were recoverable; both were avoidable by reading a warning that already existed.

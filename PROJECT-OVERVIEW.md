@@ -17934,3 +17934,219 @@ commit; 65 migrations, 65 rollback files.
    cases vacuous; only the mutant showed it.
 3. **Pin a native module to what the build already has.** Two package commands each quietly moved
    the version under the installed binary; the lockfile at build time was the only reliable answer.
+
+### MR-51 — the review record and the upload
+
+**22–23 September 2026.** Every result below is marked **code**, **emulator** or **handset**. There
+is no handset result in this session; `FE-G1` and `FE-G2` stay open, and `C12` now says what closing
+them requires.
+
+#### Checkout guard, CI, drift
+
+`@fieldforce/api` · `Praverse-Tech-Pvt-Ltd/Elmiron-App` · `f34ceef` is an ancestor. HEAD on arrival
+`f8a468f`, level with `origin/main`. **CI:** run `35720176839`, workflow **`CI`**, event `push`,
+**success**, SHA `f8a468f716c6989302211d407b32b9f867fbf079` = HEAD. Docker Desktop was not running;
+started. Local drift on arrival: **65 files, 65 applied, `drifted: false`**; 67/67 at the end.
+
+#### A — the two decisions that had not arrived (code)
+
+The table MR-50 never received came with this brief. `D-3`, `D-5` and `D-6` map to `C9`, `C7`/`C8`
+and `C10`, already recorded. Two were new:
+
+| Id | Decision |
+| --- | --- |
+| **`C11`** | **`expo-file-system` is approved** (operator's `D-7`). **The brief said it was not recorded; that is half wrong** — `C9`'s heading already carried it. It gets its own id so the approval can be cited without citing the voice-note decision. Scope is `apps/field`, pinned exactly to 57.0.2 |
+| **`C12`** | **The emulator as far as it goes; final testing, with the AI integration, on a physical handset** (operator's `D-9`). **What it changes about "verified":** `FE-G1`/`FE-G2` close only on a handset run made AFTER the AI integration exists, so an emulator result is never the gate and an early handset run does not close them either. Said beside both gates (`COMPLETION-PLAN` and the `blocked-on-you` banner, which claimed a phone was the only thing left) |
+| **`C13`** | **The operator's answer inside this session**: continue past C2's stop with `app_thresholds` excluded (below) |
+
+**A2 — the session URL.** It is not exposed to this agent, so every commit says so in its
+`Claude-Session:` line rather than omitting the line.
+
+#### B — `BE-W110`: the SOP-review record works against the real server (code)
+
+`analysis_overrides` is the human-review record `C8`'s monitoring rests on, and neither half of it
+reached the real server. **The write now does.** `20260922000200` drops and recreates
+`create_analysis_override` returning the contract's camelCase `jsonb` — a return type cannot change
+in place — with its grants restored and **asserted equal to what the catalogue held**
+(`{postgres=X/postgres,authenticated=X/postgres}`); `client.createAnalysisOverride` posts to
+`/rpc/create_analysis_override`, and the mock serves that path instead of the one only it served.
+
+**B2, end to end against local Supabase with no mock**: `analysis-overrides-http.spec.ts` drives the
+console's own client (`createApiClient`) over real HTTP with a GoTrue password sign-in. The owning
+admin saves; the row carries that admin as reviewer and the same organisation on both sides of the
+join (`analysis_overrides` has no organisation column — it is reached through the analysis's MR);
+the history lists it back. **Provenance by elimination, driven twice**: with the mock running on
+`:4010` and again after killing it (`curl` → `000`, nothing listening). Both saves are real rows —
+`3e66f02f…` and `b4b40a46…`, reviewer the fixture admin, audit rows `178389` and `178391` — and
+neither is the mock's fixture id, which is `13131313…` and a fixed reviewer `22222222…`.
+
+**B3, cross-tenant**: the rival organisation's admin is refused the save and the read by the scope
+check (`42501`, *"not within your scope"*), **with a reason supplied** so it is not the admin-reason
+rule refusing instead, and nothing is written. Positive control: the same two calls succeed for the
+owning admin. **Mutants:** the rollback live fails B2 and the owner control and leaves the refusals
+green; the scope check deleted fails only the rival save.
+
+**`FE-W12` was REOPENED by this.** MR-50 closed it against the mock, which never asks for a reason;
+`list_analysis_overrides` refuses an admin read without one, so **against the real server every
+admin saw "could not be loaded"**. `loadOverrides` now always sends a screen-naming reason — the
+admin screen's own `READ_REASON` pattern, so the console never decides which roles need one. Proved
+by rendering the panel from the REAL read (both times above). Mutant: the reason dropped fails only
+the render case.
+
+**`FE-W66`, new and not fixed: the console cannot reach the real server as a signed-in user.** Every
+page builds its client with `getAccessToken: () => Promise.resolve(null)`, and the review screen
+reads its analysis from `GET /analyses/:id`, a path only the mock serves (`read_analysis` is the
+RPC). So the write path is real and proved through the console's own client and panel — **and a
+browser still cannot show it.** Sign-in is a design question plus, most likely, a dependency to ask
+for.
+
+#### C — the 19 directly readable tables
+
+**C1, probed rather than reasoned about (code, real HTTP).** One row of the rival organisation in
+each table, read by an MR and an admin of the first, with the row's own tenant as the positive
+control.
+
+| Reads another organisation's row? | Tables |
+| --- | --- |
+| **No** (A-MR 0, A-admin 0, B's own user 1) | `adverse_event_reports`, `beat_plan_entries`, `beat_plans`, `call_report_approvals`, `call_reports`, `check_ins`, `check_outs`, `recordings`, `samples_and_inputs`, `sync_batches`, `sync_events`, `sync_item_reinstatements`, `sync_items`, `upload_grants`, `visit_audio_quarantine`, `visit_audio_quarantine_clearances`, `visits`, `voice_notes` |
+| **YES** (A-MR 1, A-admin 1) | **`app_thresholds`** — `using (true)`. The key, the value, the rival's territory id and `set_by_user_id`, a user of the other company |
+
+**Why the eighteen hold:** not the table policies — `visible_user_ids()` filters by organisation
+**inside its own body** (MR-06 / `BE-W76`). One function was the whole boundary.
+
+**C2 fired, and the operator answered it (`C13`).** The leak is `BE-W106`, registered since MR-45 and
+awaiting `blocked-on-you` 2.7, which this brief lists as unanswered. Recorded with the new detail
+(the table is readable directly, and a row carries another company's user id), **left unfixed**, and
+asserted **as it is** in the probe so the day it is fixed that test fails and the register is
+updated with it.
+
+**C3 (code).** `20260922000300` adds a restrictive `*_tenant_boundary` to each of the 18 through the
+existing helper: `mr_id in (select p.id from user_profiles p where p.organisation_id =
+current_user_organisation_id())`, one hop further where the row has no `mr_id`, and by former MR or
+former territory for `sync_events`. The explicit `organisation_id =` is what makes it independent:
+were `visible_user_ids()` ever to return another tenant's ids again, this still refuses them. The
+migration's guard asserts exactly those 18, restrictive, to `authenticated`, through the helper in
+both `using` and `with check`, and that `app_thresholds` was not touched.
+
+**The register's own verification was wrong, and was not used as written.** `BE-W83` named
+`team_activity` and `coverage` — both `SECURITY DEFINER` owned by `postgres`, which holds
+`BYPASSRLS`, so no policy runs inside them and the measurement would have shown nothing. Measured
+instead on the paths these policies are actually on, against `seed:synthetic --mrs 100 --history 1y`
+(208,819 visits), median of five:
+
+| As | Query | Before | After |
+| --- | --- | --- | --- |
+| MR | `sync_pull(null, null, 500)` — SECURITY INVOKER, the phone's hot path | 562 ms | **560 ms** |
+| MR | `count(*) visits` (2,088 rows visible) | 13.5 ms | 19.4 ms |
+| manager | `count(*) visits` (83,520) | 25.3 ms | 34.7 ms |
+| admin | `count(*) visits` (208,800) | 33.9 ms | 51.9 ms |
+| MR / manager | `count(*) check_ins` | 14.3 / 25.8 ms | 16.2 / 26.6 ms |
+
+**Rows seen are identical before and after** — nothing legitimate was lost. The plan explains the
+cost: the organisation subquery is a **`hashed SubPlan` evaluated once** (`loops=1`), the index-only
+scan survives, and each row pays one extra hash probe. `beat_plan_entries` and
+`call_report_approvals` timings are vacuous and are reported as such — the synthetic seed creates
+none.
+
+**C4 (code).** `visits_tenant_boundary` dropped live → **exactly one test fails**, the catalogue test
+(now 25 tables, and it counts a policy only if its expression reaches the tenant through the
+helper). The C1 probe stays green, **which is the point of a second layer** and is said rather than
+hidden. The behaviour is proved by a mirror pair in the MR-07 D2 style, for this predicate's shape:
+an over-broad permissive policy cannot widen past it, and widens the moment the restrictive one is
+dropped. Real tables are not used for that pair, because MR-07 recorded that `create policy` on them
+deadlocks a full run.
+
+#### D — the voice-note upload (`FE-W29`), emulator
+
+**A note is an ordinary sync item, on purpose.** Save keeps it, then `sendOrQueue` puts it through
+the outbox that already has retry, per-rep ownership and dead-lettering — no second upload path, no
+second dead-letter path. `uploadVoiceNote` checks the note belongs to whoever is signed in, asks
+`begin_upload` for a grant with the file's **real** size (`FE-W46` — `expo-file-system`'s `File.size`
+replaces the literal `1`), writes the bytes to the key the server issued, finalises through
+`sync_push` → `apply_sync_item` → `complete_upload`, and only then deletes the phone's copy. A note
+the server already holds is not uploaded again.
+
+**D2 — the byte count is the server's** and always was: `complete_upload` reads
+`storage.objects.metadata->>'size'` and ignores the client's claim. The emulator row proves the two
+agree: **65,231 bytes**, the exact size of the file measured on the phone before saving.
+
+**D3, online (emulator, local Supabase):** `voice_notes` `826579f2` — 5 s, 65,231 bytes,
+`upload_status uploaded`, `purge_after` **2026-12-21** stamped by `stamp_audio_retention` (the
+server's number, not the client's); the object is in the private `audio` bucket at 65,231 bytes with
+`mimetype audio/mp4`; the grant is `completed` with `bytes_received 65231`; the phone's copy is gone.
+
+**What happens to the phone's copy — decided and stated: it is deleted, and only after the server
+confirms.** The screen says *"Sent. The note has reached the company, so it is no longer kept on this
+phone."* Offline it says it will send later **and then be removed** — and the notice draft was
+corrected to match (E3).
+
+**D4, offline (emulator):** cold-started with the reverse removed, Save answered *"Saved on this
+phone…"*, the queue showed `voice_note` waiting, and the server had nothing. On reconnect it uploaded
+**once** — `10b56052`, 6 s, 71,961 bytes — and the file went. Flushed again: still one row, one
+`sync_items` row per note, two objects, two completed grants. **A trap worth recording:** removing
+the `adb reverse` without a cold start does NOT make the phone offline — an already-open connection
+carried a save straight to the server (`a76f0cd6`), exactly as `handoff.md` warns.
+
+**D5, two reps on one phone (emulator):** rep A's kept, unsent note stayed untouched while rep B was
+signed in and online for 25 s (three uploaded rows, not four), and rep B's own note uploaded under
+**B's** `mr_id` into B's own folder. The queue is per rep (MR-49) and every file path is checked
+against the signed-in rep's folder.
+
+**D6, mutants:** the already-stored check removed fails only the lost-acknowledgement test; the visit
+sent as the sync entity instead of the note fails only the item-shape test.
+
+**Registered, not fixed:** **`BE-W111`** — the server names every voice-note object `.opus` while the
+phone records AAC in an MP4 container; only the KEY lies (Storage records `audio/mp4`), and the fix
+is a server decision. **`FE-W67`** — offline past the access token's life the rep is signed OUT: a
+cold start with a day-old token landed on "Sign in", the same cold start with a fresh token restored
+the day. The queued work is safe; the rep cannot see it. `FE-W19`'s gate is a full offline DAY, which
+is longer than an hour. **And notes saved before this build have no queue row**, so nothing will ever
+send them.
+
+#### E — three drafts, written and not shipped (code)
+
+**E1** the employee consent for the staged Hinglish corpus — what is recorded, that it is acted, that
+it is used only to compare speech vendors, the no-training and deletion terms a vendor must accept,
+deletion, and withdrawal. **E2** `BE-W109`, the doctor-facing text, naming AI-assisted SOP review as
+the purpose, marked as blocked on the §8.6 signatory whatever its wording. Both name what the
+operator must fill in, and neither is loaded anywhere. **E3** the reps' notice: MR-51 D made the
+draft's *"Not sent to anyone yet"* false, so the row on
+`mr-46/fe-w52-notice-pending-approval` (`75dd570`, with `main` merged in) now says a saved note is
+sent, waits for signal, and leaves the phone afterwards, with a test asserting the old claim cannot
+come back. **Not merged. The live notice on `main` is still the false one.**
+
+#### Counts, from each runner's own summary line
+
+| Package | Runner | Tests |
+| --- | --- | --- |
+| `@fieldforce/api` | vitest | **768** (55 files, +25) |
+| `@fieldforce/field` | vitest | **585** (37 files, +12) |
+| `@fieldforce/field` | jest | **162** (21 suites, +3) |
+| `@fieldforce/ui` | jest | 253 (22 suites) |
+| `@fieldforce/ui` | vitest | 4 (1 file) |
+| `@fieldforce/ui-tokens` | vitest | 54 (3 files) |
+| `@fieldforce/core` | vitest | 31 (4 files) |
+| `@fieldforce/console` | vitest | 31 (5 files) |
+| `@fieldforce/mock` | vitest | 43 (1 file) |
+| **Total** | | **1,931 passing, zero failing, up 40** |
+
+#### Two mistakes of my own, both recorded because the next session will be tempted the same way
+
+1. **`verify:rollbacks` was run against the local database.** It is destructive **by design** — its
+   own header and `handoff.md:72` both say so, and both say `db:reset` after. I read neither first.
+   Recovered the documented way; nothing remote was touched, because the script refuses a non-local
+   host.
+2. **A committed probe fixture failed an unrelated suite.** The C1 rows are inserted under
+   `session_replication_role = replica`, so the trigger that sets `statutory_due_at` never ran, the
+   column defaulted to `received_at`, and three rows were **born overdue** —
+   `adverse_event_clock_summary()` counts every row in the database. `adverse_event_reports` is
+   append-only, so they could not be corrected and the database was reset. **A committed fixture must
+   look like a real row in every column another suite aggregates.**
+
+#### Where it stopped, and why
+
+**No blockage.** **`C2` fired as a CONDITIONAL STOP THE BRIEF DEFINED** — a table did leak — and the
+operator answered it inside the session (`C13`): record it under `BE-W106`, leave it unfixed,
+continue. Everything else in A–E is done. What is left undone is **ROOM**, and named: `FE-W66` (the
+console cannot sign in), `BE-W111`, `FE-W67`, the notes saved before this build, and the three drafts
+that are the operator's to approve.
