@@ -11,6 +11,8 @@ import type {
 } from '@fieldforce/core';
 import { resolveClient } from '../capture/client';
 import type { RpcCaller } from '../capture/client';
+import { assertOwned, noteFolder } from '../capture/voice-note-files';
+import type { VoiceNoteUpload } from './voice-note-upload';
 
 /**
  * The five writes, through `sync_push` — MR-18 B1. This is what closes `G-WRITE`.
@@ -103,10 +105,35 @@ export interface PushAccepted {
   readonly receivedAt: string;
 }
 
+/**
+ * MR-51 D1 — what sending a voice note needs beyond `rpc`: the kept file, the audio bucket, and
+ * one read. Injected so every rule in `uploadVoiceNote` is tested without a device, a bucket or a
+ * network; `voice-note-device.ts` binds them to `expo-file-system` and `supabase-js`.
+ */
+export interface VoiceNoteDeps {
+  /** Who is signed in NOW — the only rep whose folder may be opened. */
+  readonly signedInUserId: () => Promise<string | null>;
+  readonly documentRoot: () => string;
+  readonly fileExists: (uri: string) => boolean;
+  /** Bytes on disk, read from the file — the reservation `begin_upload` asks for. */
+  readonly fileSize: (uri: string) => number;
+  readonly fileBytes: (uri: string) => Promise<ArrayBuffer>;
+  readonly removeFile: (uri: string) => void;
+  /** Writes the bytes to `audio/<key>`, the key the server issued. Throws when it did not land. */
+  readonly storeObject: (key: string, bytes: ArrayBuffer) => Promise<void>;
+  /**
+   * The server's `received_at` when this note already exists, else null. The lost-acknowledgement
+   * case: the note landed and the answer did not.
+   */
+  readonly storedAt: (noteId: string) => Promise<string | null>;
+}
+
 export interface PushClientDeps {
   readonly client?: RpcCaller;
   /** Injected in tests. Production mints a batch id per call. */
   readonly newBatchId?: () => string;
+  /** Injected in tests. Production binds the device (`voice-note-device.ts`) on first use. */
+  readonly voiceNotes?: VoiceNoteDeps;
 }
 
 /**
@@ -123,7 +150,37 @@ export interface OutboxWriteClient {
   createConsentRecord: (body: CreateConsentRecordRequest) => Promise<PushAccepted>;
   createSampleAndInput: (body: CreateSampleAndInputRequest) => Promise<PushAccepted>;
   createCallReport: (body: CreateCallReportRequest) => Promise<PushAccepted>;
+  /** MR-51 D1 / `FE-W29`. Upload, then finalise through `sync_push`, then forget the phone's copy. */
+  uploadVoiceNote: (body: VoiceNoteUpload) => Promise<PushAccepted>;
 }
+
+/**
+ * A SQLSTATE from PostgREST is the server's verdict; anything else is no answer.
+ *
+ * Class `28` (not authenticated) is left as no answer on purpose: an expired session is fixed by
+ * signing in again, and refusing the note for it would lose work the server never judged.
+ */
+const refusalOrSilence = (error: { code?: string | null; message: string }): Error => {
+  const code = error.code ?? '';
+  if (/^[0-9A-Z]{5}$/u.test(code) && !code.startsWith('28')) {
+    return new SyncPushRefusal({
+      message: error.message,
+      sqlState: code,
+      rejectionCode: null,
+      deadLettered: false,
+    });
+  }
+  return new Error(error.message);
+};
+
+const grantFrom = (data: unknown): { id: string; storageKey: string } => {
+  const row = (Array.isArray(data) ? data[0] : data) as
+    { id?: unknown; storage_key?: unknown } | null | undefined;
+  if (typeof row?.id !== 'string' || typeof row.storage_key !== 'string') {
+    throw new Error('begin_upload answered without a grant');
+  }
+  return { id: row.id, storageKey: row.storage_key };
+};
 
 interface Pushable {
   readonly id: string;
@@ -137,15 +194,23 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
   // the repository already had an answer.
   const newBatchId = deps.newBatchId ?? ((): string => uuid.v4());
 
-  const push = async (entity: SyncEntity, body: Pushable): Promise<PushAccepted> => {
+  const push = (entity: SyncEntity, body: Pushable): Promise<PushAccepted> =>
+    // `entityId` is the VISIT for every one of these five, matching what `outbox.ts`
+    // already stores, so everything waiting on one visit groups together on the queue
+    // screen. `id` is the request's own id and is never regenerated -- it is the
+    // idempotency key.
+    pushItem(entity, body.id, body.visitId, body);
+
+  const pushItem = async (
+    entity: SyncEntity,
+    id: string,
+    entityId: string,
+    payload: object,
+  ): Promise<PushAccepted> => {
     const db = await resolveClient<RpcCaller>(deps.client);
     const { data, error } = await db.rpc('sync_push', {
       p_batch_id: newBatchId(),
-      // `entityId` is the VISIT for every one of these five, matching what `outbox.ts`
-      // already stores, so everything waiting on one visit groups together on the queue
-      // screen. `id` is the request's own id and is never regenerated -- it is the
-      // idempotency key.
-      p_items: [{ id: body.id, entity, entityId: body.visitId, payload: body }],
+      p_items: [{ id, entity, entityId, payload }],
     });
 
     if (error !== null) {
@@ -159,9 +224,9 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
     // Parsed, never cast. This crosses a process boundary and is the only place that can
     // notice the server changed shape.
     const response = SyncPushResponseSchema.parse(data);
-    const verdict = response.results.find((result) => result.id === body.id);
+    const verdict = response.results.find((result) => result.id === id);
     if (verdict === undefined) {
-      throw new Error(`sync_push returned no verdict for item ${body.id}`);
+      throw new Error(`sync_push returned no verdict for item ${id}`);
     }
 
     switch (verdict.status) {
@@ -206,5 +271,66 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
     createConsentRecord: (body) => push('consent_record', body),
     createSampleAndInput: (body) => push('sample_and_input', body),
     createCallReport: (body) => push('call_report', body),
+    uploadVoiceNote: async (body) => {
+      const notes = deps.voiceNotes ?? (await import('./voice-note-device')).deviceVoiceNotes;
+
+      // Only the signed-in rep's own folder is opened (MR-50 D). The queue is already per rep
+      // (MR-49), so this cannot normally differ; if it does, nothing is read or sent.
+      const signedIn = await notes.signedInUserId();
+      if (signedIn === null || signedIn !== body.userId) {
+        throw new Error('This note belongs to a different sign-in, so it was not sent.');
+      }
+      const root = notes.documentRoot();
+      const uri = `${noteFolder(root, body.userId)}${encodeURIComponent(body.noteId)}.m4a`;
+      assertOwned(uri, root, signedIn);
+
+      // The acknowledgement lost last time: the note is already the server's. Forget the copy.
+      // Without this a retry would take a SECOND grant and upload the bytes again -- the row
+      // would still be written once (the sync item id and the note id both deduplicate), but
+      // an orphan object would sit in the bucket until the stale-session sweep.
+      const already = await notes.storedAt(body.noteId);
+      if (already !== null) {
+        if (notes.fileExists(uri)) notes.removeFile(uri);
+        return { receivedAt: already };
+      }
+
+      if (!notes.fileExists(uri)) {
+        // Neither here nor there. Not a server verdict, so it takes the outbox's own path:
+        // a failed attempt, visible, and eventually a person's problem.
+        throw new Error('This voice note is no longer on this phone, so it cannot be sent.');
+      }
+
+      const db = await resolveClient<RpcCaller>(deps.client);
+      const size = notes.fileSize(uri);
+      const began = await db.rpc('begin_upload', {
+        p_visit_id: body.visitId,
+        p_kind: 'voice_note',
+        p_size_bytes: size,
+        p_duration_seconds: body.durationSeconds,
+      });
+      if (began.error !== null) throw refusalOrSilence(began.error);
+      const grant = grantFrom(began.data);
+
+      await notes.storeObject(grant.storageKey, await notes.fileBytes(uri));
+
+      // The finalisation, as the ordinary sync item it is. `entityId` is the NOTE here, not the
+      // visit: `apply_sync_item` hands it to `complete_upload` as the object id. `sizeBytes` is
+      // sent because the signature has it; the server stores what Storage observed.
+      const accepted = await pushItem('voice_note', body.id, body.noteId, {
+        uploadGrantId: grant.id,
+        durationSeconds: body.durationSeconds,
+        sizeBytes: size,
+        recordedAt: body.recordedAt,
+      });
+
+      // Only now, with the server's acceptance in hand, does the phone's copy go (MR-51 D3).
+      try {
+        notes.removeFile(uri);
+      } catch {
+        // The server has it. A copy that could not be deleted is tidied by the next save's
+        // listing, not reported as a failed send.
+      }
+      return accepted;
+    },
   };
 };

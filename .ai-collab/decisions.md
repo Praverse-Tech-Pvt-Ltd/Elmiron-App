@@ -2008,3 +2008,81 @@ dependency option (b) required. The upload itself is not in scope yet (MR-50 D5)
 **Decided (reviewer's choice, approved).** `@testing-library/react` with a DOM environment for the
 console's existing runner (vitest), **dev-only** — nothing ships in the app bundle. This answers
 `blocked-on-you` 2.5 and unblocks `FE-W12`.
+
+## 22 September 2026 — MR-50, engineering decisions
+
+### A deadline test is retired by answering its question, not by moving its date
+
+`transcript-v0.expiry.test.ts` existed to force ship-or-cut. `C7` answered it. **Decision: the test now
+asserts the contract it was waiting for — `TranscriptV1` exists and accepts the hard case — and says
+in its own text why the date is gone.** A placeholder schema would have satisfied the old test and
+answered nothing.
+
+### A native module is pinned to what the installed build contains
+
+`expo install` and `pnpm add` each moved `expo-file-system` under the installed dev client.
+**Decision: a native dependency is pinned exactly to the version in the lockfile the binary was built
+from, until the binary is rebuilt on purpose.**
+
+### Kept audio belongs to the rep; discarded audio does not stay
+
+**Decision (applying `C9`): a voice note is kept only by Save, in `files/voice-notes/<userId>/`; every
+other path deletes it; leftovers are swept on opening the screen; and no path outside the signed-in
+rep's folder is opened** — the same ownership rule as the MR-49 queue.
+
+### A policy on a function-scoped table is not a second layer here
+
+**Recorded, not decided:** all 85 `SECURITY DEFINER` functions are owned by `postgres`, which has
+`BYPASSRLS`, so a restrictive policy on a table only functions read is never evaluated. Defence in
+depth for those tables would need the functions to run as a role without `BYPASSRLS` — a design
+change, not a policy.
+
+## Operator decisions — 22 September 2026, the remainder (recorded in MR-51)
+
+**The table MR-50 did not receive arrived with MR-51**, in the operator's own numbering. Each maps to
+one canonical id here; cite the `C` id.
+
+| Operator's id | Canonical id | State |
+| --- | --- | --- |
+| D-3 keep voice notes | `C9` | recorded MR-50 |
+| D-5 keep the AI layer; purpose review and SOP monitoring | `C7`, `C8` | recorded MR-50 |
+| D-6 console test renderer, reviewer's choice | `C10` | recorded MR-50 |
+| D-7 `expo-file-system` approved | **`C11`** | recorded here |
+| D-9 emulator as far as possible; final testing, with AI, on a handset | **`C12`** | recorded here |
+
+**Still unanswered, and NOT applied:** 2.6 notice wording, `BE-W108` UCPMP month timezone, `FE-W65`
+second entry to an in-progress visit, `BE-W106` settings model, the bake-off corpus approach,
+`BE-W109` doctor consent text.
+
+### C11 — `expo-file-system` is approved (operator's D-7)
+
+**Decided.** `expo-file-system` may be a dependency of `apps/field`. **Correction to the MR-51 brief,
+which said D-7 was "not yet recorded":** `C9`'s heading already carried it, bundled with keeping voice
+notes. It gets its own id so the approval can be cited without citing the voice-note decision, and
+so it survives if `C9` is ever revisited. **Scope is the one package.** It is pinned exactly to
+57.0.2, the version in the installed dev-client build (MR-50 engineering decision, above); moving it
+means rebuilding the binary on purpose.
+
+### C12 — Where testing happens (operator's D-9)
+
+**Decided.** Test on the Android Studio emulator (the Pixel 10 AVD) as far as it goes. **Final
+testing, with the AI integration, happens on a physical handset.**
+
+**What this changes about "verified" for `FE-G1` and `FE-G2`:** an emulator result is evidence for
+engineering, and it is never the gate. **Both gates close only on a physical handset, run after the AI
+integration exists** — so a handset run made before the AI layer is built does not close them either,
+and has to be repeated. Every result is labelled code, emulator or handset; only "handset" counts
+towards `FE-G1`/`FE-G2`. It does not change which handset: `blocked-on-you` 5.1 (a Xiaomi, Oppo, Vivo
+or Realme, not a Pixel) stands.
+
+## Operator decision — 22 September 2026, given during MR-51
+
+### C13 — MR-51 continues past C2, with `app_thresholds` excluded
+
+**Decided (operator, in session).** MR-51 C1 found one of the 19 directly readable tables leaking
+across the tenant boundary: `app_thresholds`. An MR and an admin of one organisation read another's
+territory-scoped row — key, value, territory id and `set_by_user_id` (a user id of the other
+company). That is **`BE-W106`**, already registered and awaiting `blocked-on-you` 2.7; the brief
+lists `BE-W106` as unanswered. C2 said stop on any leak; the operator chose: **record it under
+`BE-W106`, leave it unfixed, build C3 on the other 18, and continue to D and E.** Not chosen: a
+restrictive policy on `app_thresholds` now (it would partly pre-empt the settings-model decision).

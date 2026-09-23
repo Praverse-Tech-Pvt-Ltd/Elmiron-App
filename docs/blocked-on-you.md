@@ -297,7 +297,7 @@ Every open item that no agent can resolve, consolidated. Backend is stopped by d
 | 2.3 | **Keystore custody** — EAS holds it, or enrol in Play App Signing | Before first Play upload | If access to the Expo account is ever lost, you cannot update an app already on the Play Store. No recovery path. *[Verify Play App Signing against current Play Console docs.]* |
 | 2.5 | **RESOLVED 22 Sep 2026 — yes, a dev-only test renderer (`C10`, `.ai-collab/decisions.md`); built in MR-50 F.**  **Does `apps/console` get a RENDERER, and therefore a third test runner?** | **`FE-W12`**, and every console screen after it | **Filed MR-44 D2, and the ask is made BEFORE the work rather than mid-build.** The console's pages are React Server Components and `vitest.config.ts` says exercising them *"needs a browser or a Next test harness, and neither exists yet"*. `FE-W12`'s recorded check — *"a console test asserts a previously-saved override renders"* — cannot be met without one. **Playwright against `next dev`** is the only option that exercises what actually ships; it costs a dev dependency **plus browser binaries**, CI minutes, and a **third runner** beside vitest and jest. `react-dom/server` in vitest avoids the runner but only partly supports async server components, so it would assert a rendering path users do not get. **Engineering recommends neither: keep the presenter + source-check pattern `FE-W13` shipped with in MR-41, and REWRITE `FE-W12`'s check.** That is a decision rather than a workaround, because it changes what `FE-W12` promises — which is why it is on this page |
 | 2.6 | **What should the MR's privacy notice say about check-ins and location?** | **`FE-W52`** — a compliance record: the transparency screen every MR reads | **Filed MR-45. The notice currently UNDERSTATES what the app records.** It tells MRs that check-in/check-out times and their location are *"Not yet — this app cannot do this today"*. Both ARE recorded: check-ins go to Supabase through `sync_push` with coordinates. **It is not a one-line flip**, because the location row promises tracking *"Start day to End day"* while the app records position only AT check-in — so "yes" would overstate in the other direction. Engineering can make each row derive from whether its write path is live, so it cannot drift again; **the sentence the MR reads is yours to approve.** Until then, every MR is being told something false about their own data |
-| 2.7 | **Should configuration belong to an ORGANISATION, and may an MR call system-health functions?** | **`BE-W106`** | **Filed MR-45, with one half proven.** `app_thresholds` has only `global` and `territory` scope — **no organisation scope** — so every "org default" is one row shared by every tenant, and `threshold()` hands any caller the value for any territory they name. Measured: an MR of one company read another company's territory setting (`42`), with a positive control from the owning company and a negative control from the attacker's own territory. `audio_purge_health()` also returns every company's recording counts to any MR. **Configuration and counts, not personal data** — lower severity than `BE-W101` — but the same class of defect, and the fix depends on a model decision engineering should not make alone |
+| 2.7 | **Should configuration belong to an ORGANISATION, and may an MR call system-health functions?** | **`BE-W106`** | **Filed MR-45, with one half proven.** `app_thresholds` has only `global` and `territory` scope — **no organisation scope** — so every "org default" is one row shared by every tenant, and `threshold()` hands any caller the value for any territory they name. Measured: an MR of one company read another company's territory setting (`42`), with a positive control from the owning company and a negative control from the attacker's own territory. `audio_purge_health()` also returns every company's recording counts to any MR. **Configuration and counts, not personal data** — lower severity than `BE-W101` — but the same class of defect, and the fix depends on a model decision engineering should not make alone **MR-51 C1 adds (22 September 2026):** the table itself is readable over the API with no function call — `app_thresholds_select_authenticated` is `using (true)` — and a row carries `set_by_user_id`, the id of a user in the other company. An MR and an admin of one organisation both read the other's territory row. Left open by your choice (`C13`) |
 | ~~2.4~~ | **→ see 5.3**, which is broader: it carries the alternative resolution, shipping foreground-only check-in. Reconciled MR-44 A2. *(was: Transistorsoft release licence)* | Before FE-W8, but check now | Believed required for Android release builds, free for debug. Unverified — check transistorsoft.com. A purchase order takes longer than a sprint. |
 
 ---
@@ -438,6 +438,11 @@ device demonstrates it, because there is nothing there to demonstrate.
 >
 > **There is nothing else between this app and both device gates except a phone.** Item 1.5 —
 > a Xiaomi, Oppo, Vivo or Realme, not a Pixel. **Seven weeks outstanding.**
+
+> **Superseded in part by `C12` (operator's D-9, recorded MR-51, 22 September 2026):** final testing
+> happens on a physical handset **with the AI integration**. So a phone is no longer the only thing
+> between the app and these gates — **both close only on a handset run made after the AI integration
+> exists.** Emulator results are engineering evidence, never the gate.
 
 **Item 1.5 is therefore upgraded**: it now blocks `FE-G1` **and** `FE-G2`, not FE-G1 alone, and
 it is the only remaining blocker on either.
@@ -1062,3 +1067,112 @@ hours of transcriber time per hour of audio — please get a quote rather than r
 
 **What we need from you:** approval of the approach, someone to own recording it, and the consent
 form wording for the employees taking part.
+
+### 2.6 — the notice, REDRAFTED for `C8` and `C9` (MR-50 G) — this is the version to approve
+
+**Still not approved, still not merged, and the false notice is still live on 22 September 2026.**
+The draft on `mr-46/fe-w52-notice-pending-approval` (`7ec0c0f`, with `main` merged in so it is
+checked against the current code) now reads:
+
+| Row | Draft wording |
+| --- | --- |
+| Preamble | *This app records your work visits: when you check in and check out, where you were at those two moments, what you report and the samples you give. It does not follow you between visits. What it records is kept so your visits can be reviewed — by your manager, and by an AI system once that is built — to check that the company's procedures (SOPs) are followed. That is monitoring of your work, and each item it covers is below.* |
+| Location | *Where you are — only when you check in or check out.* Your position at the moment you press check-in and check-out, and how far that is from the clinic. Nothing between visits, and nothing in the background. |
+| Visits | *Which doctors you saw, and when.* Check-in and check-out times, and whether you were inside the clinic's area. |
+| Reports | *Your call reports.* What you write after a visit. Your manager can read them. |
+| Samples | *Samples and inputs you give.* The item, the quantity, its value, the doctor and the time. |
+| Voice notes | *Your voice notes.* Kept on this phone when you save one; a note you start again or leave without saving is deleted. Not sent to anyone yet — sending is not built. Once it is, saved notes are reviewed for how procedures are followed. |
+| Recordings (not yet) | *Recordings — only if a doctor agrees.* When recording is built, a consultation is recorded only after the doctor agrees, and is reviewed for how procedures are followed. If they say no, nothing happens to you. |
+| Never | *Your personal calls, messages, other apps or camera. Where you are between visits.* |
+
+**What changed from MR-47's draft, and why:** voice notes are now kept and discarded audio deleted
+(`C9`, MR-50 D, on the emulator); and `C8` makes the audio's purpose SOP review — **monitoring of the
+rep** — which the notice must say in plain words. Before approving, note that the doctor-facing
+consent text must change too (`BE-W109`), and that neither text replaces the §8.6 signatory (5.8).
+
+---
+
+## MR-51 — three drafts for you. Nothing is shipped, and nothing has been recorded.
+
+### E1 — consent for the bake-off corpus, for employees who take part
+
+**What it is for.** `BE-W32` (the speech-vendor bake-off) needs 5–10 hours of labelled Hinglish
+MR–doctor audio, and the project has none. The MR-50 proposal was that the team records it itself:
+**staged role-play between consenting employees**, no real doctor and no real patient. This is the
+consent those employees would sign. **It does not answer the vendor-terms question** — see below.
+
+> **Taking part in the speech recording session — what you are agreeing to**
+>
+> We are recording short, acted sales conversations so we can test speech-to-text software on
+> Indian English and Hindi mixed together. **Nothing in these recordings is real.** You will be
+> given a made-up doctor, a made-up clinic and a made-up conversation to act out. Do not use a real
+> doctor's name, a real patient's details, or anything about your actual work.
+>
+> **What we record.** Your voice, and a written copy of what you said. Your name is kept separately
+> from the recording so that the recording itself is not labelled with who you are.
+>
+> **What it is used for.** One thing only: comparing speech-to-text vendors, and measuring how
+> accurately each one writes down Hinglish. It is not used to assess you, it is never seen by your
+> manager as part of your appraisal, and it does not go into the app's SOP review.
+>
+> **Who else receives it.** The speech-to-text vendors we are testing, listed by name before you
+> agree, **on written terms that forbid them from training their models on this audio and require
+> them to delete it when the test ends.** If a vendor will not agree to that, their test is run on
+> nothing of yours.
+>
+> **How long it is kept.** Until the vendor comparison is finished, and no longer than **[operator
+> to fix a date — a proposal: 12 months]**, after which the audio and the transcripts are deleted.
+>
+> **You can say no, and you can change your mind.** Taking part is voluntary. Saying no has no
+> effect on your job, your targets or your appraisal. You can withdraw at any time up to deletion,
+> by telling **[named person]**, and your recordings are then deleted.
+>
+> Name · Signature · Date
+
+**What you must fill in before this is usable:** the vendor list, the retention date, the named
+person for withdrawal, and whether legal wants a consent form at all versus a documented
+work-instruction. **Still open beside it:** whether each vendor's standard terms actually permit
+this (no-training, deletion) — a recording made before that is answered may have to be destroyed.
+
+### E2 — `BE-W109`, the text a DOCTOR reads before a consultation is recorded
+
+**Why it has to change.** `C8` makes the purpose explicit: recordings are reviewed, with AI
+assistance, to check the company's procedures are followed. The live text (`consent_text_versions`,
+loaded by `seed:reference`) says the team *"reviews how they presented"* — it names neither the AI
+processing nor the SOP monitoring, so a doctor agreeing to it is not agreeing to what happens.
+
+> **Before we record this conversation**
+>
+> With your permission, [Company] would like to record today's conversation with our
+> representative.
+>
+> **Why.** We use it to check that our representative followed our own rules for these visits — for
+> example, what they are allowed to tell you about a medicine. The recording is reviewed by our
+> team, and by an automated system that helps them find the parts worth reviewing.
+>
+> **What is recorded.** The conversation between you and our representative. Before anyone reviews
+> it, patient details are removed from the written copy.
+>
+> **How long we keep it.** [Operator: the retention period, matching what the system enforces.]
+>
+> **Your choice.** You can say no, and you can ask us to stop at any point during the visit. If you
+> say no, the visit goes ahead exactly as it would have — nothing changes for you, and nothing
+> happens to our representative.
+>
+> **Afterwards.** You can ask us for a copy, or ask us to delete it, at [contact].
+>
+> Do you agree to this conversation being recorded?   **Yes / No**
+
+**Two things this draft does not settle, and engineering must not settle them:** the retention
+period (it must match what the database enforces, not a number chosen here) and the contact point.
+
+> **This text may not be shown to a real doctor until the §8.6 PV/DPDP signatory exists (5.8).**
+> A recorded consultation creates the §2.4 adverse-event screening duty; `C3` is not reversed by
+> `C7`. Approving the wording does not lift that.
+
+### E3 — the reps' notice (2.6) must now say the note is SENT
+
+**The MR-51 D upload changes what 2.6 claims.** The draft's voice-note row says *"Not sent to anyone
+yet — sending is not built."* That is false as of `76de417`: a saved note uploads, and the phone's
+copy is deleted once the server has it. The row on the branch has been corrected (see below); the
+notice is **still unapproved and still unmerged**, and the false notice is still live.

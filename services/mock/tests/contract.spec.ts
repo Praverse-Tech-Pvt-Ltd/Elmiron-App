@@ -241,10 +241,14 @@ describe('every declared endpoint conforms to packages/core', () => {
       method: 'POST',
       body: { response: 'The doctor asked me to send it by message.' },
     });
-    await expectConforms(`/analyses/${IDS.analysis}/overrides`, AnalysisOverrideSchema, {
+    // MR-51 B1 / BE-W110: the override write at the RPC path the real server serves.
+    await expectConforms('/rpc/create_analysis_override', AnalysisOverrideSchema, {
       method: 'POST',
-      body: { findingId: IDS.finding, reason: 'Context the model could not see.' },
-      expectStatus: 201,
+      body: {
+        p_analysis_id: IDS.analysis,
+        p_finding_id: IDS.finding,
+        p_reason: 'Context the model could not see.',
+      },
     }); // MR-50 F2 / FE-W12: the overrides read at the RPC path the real server serves.
     await expectConforms('/rpc/list_analysis_overrides', ListAnalysisOverridesResponseSchema, {
       method: 'POST',

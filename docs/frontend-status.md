@@ -1378,3 +1378,26 @@ again".
 - A queued check-in is announced as *"This check-out cannot be sent yet"* (`FE-W63`).
 - Opened by deep link, a visit the phone does not hold renders as *"This visit · Not started"*
   (`FE-W64`).
+
+## MR-50 — 22 September 2026: voice notes are kept, and the console shows the override history
+
+**Counts:** `@fieldforce/field` vitest **573** (36 files, +9), jest **159** (21 suites, +7);
+`@fieldforce/console` vitest **31** (5 files, +3).
+
+### What changed on screen (emulator)
+
+- **Voice note** — reads the visit from the phone's store (*"Your note · Dr Vikram Rao (DEMO)"*).
+  **Save** keeps the note in the rep's own folder and says *"Saved on this phone, in your notes. It has
+  not been sent — sending notes is not built into this app yet."* **Start again**, recording over, and
+  leaving without saving delete the audio; leftovers are swept when the screen opens. Another rep on
+  the same phone saves into their own folder and sees nothing of the first rep's.
+- **Visit** — a queued check-in's banner says *"This check-in cannot be sent yet"* (it said check-out);
+  a visit not on the phone says *"This visit is not on this phone"* once the list has settled.
+- **Console review screen** — *"Overrides already logged (n)"* above the override form; a failed read
+  says it could not be loaded, never "none".
+
+### Not changed
+
+- The transparency notice on `main` is still the false one; the redraft (for `C8`/`C9`) waits on the
+  branch for approval (2.6).
+- Voice notes are not uploaded; `FE-W29` and the upload list are in the register.

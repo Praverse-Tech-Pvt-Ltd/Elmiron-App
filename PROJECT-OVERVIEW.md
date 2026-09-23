@@ -17746,3 +17746,191 @@ checked before every commit this session.
    was lost work and a ledger that names the wrong rep.
 3. **A promise on screen needs the mechanism behind it.** "Sends the next time you sign in" was false
    until the flusher ran on sign-in; the device showed it before a user could.
+
+### MR-50 — keeping the audio
+
+**The operator kept the AI layer and gave the audio a purpose — SOP review — so the 30 September
+deadline was answered by a real transcript contract, not a date change. Voice notes are now kept,
+owned by the rep, and nothing unsaved stays on the phone. Three guards and one mutant caught my own
+mistakes on the way, and one of them showed a test that had been passing without testing anything.**
+
+Every result below is marked **emulator** (the Pixel 10 AVD), **code** (tests or the catalogue), or
+**handset**. There are no handset results in this session. **`FE-G1` and `FE-G2` stay OPEN**: a Pixel
+image does not reproduce OEM battery killing.
+
+#### Checkout guard, CI, drift
+
+`@fieldforce/api` · `Praverse-Tech-Pvt-Ltd/Elmiron-App` · `f34ceef` is an ancestor. HEAD `35a871d`
+on arrival (MR-49 had been completed and pushed from another session), level with `origin/main`.
+**CI:** run `35594549615`, workflow **`CI`**, event `push`, **success**, SHA
+`35a871d8cd925c5ccd7c991c4e4a8954848b2c0d` = HEAD. Docker Desktop was not running; started. Supabase
+restored from backup; **local drift: 64 files, 64 applied, `drifted: false`** — and 65/65 at the end,
+after this session's migration.
+
+#### A — the decisions (code: `.ai-collab/decisions.md`)
+
+| Id | Decision, as recorded |
+| --- | --- |
+| **`C7`** | **Keep the AI layer.** Answers the ship-or-cut question the I3 deadline forced. `C3` is **not** reversed: its legal blockers still stand before a real doctor |
+| **`C8`** | **The audio's purpose**, in the operator's words: *recordings and voice notes are kept so the AI layer can support proper review and monitor that SOPs are followed* — the question open since MR-38 |
+| **`C9`** | **Voice notes are kept** (option b); `expo-file-system` approved |
+| **`C10`** | **A dev-only console test renderer** (`blocked-on-you` 2.5) |
+
+**The brief referred to a table of decisions that did not reach the session.** Only decisions the
+brief states in words were recorded; if the table held others, they are not in the repository.
+Resolved items in `blocked-on-you` now carry a pointer instead of a banner.
+
+**A3 — what `C8` requires before any real recording** (none blocks engineering): **`BE-W109`**, the
+consent text shown to doctors must name the purpose (it says *"reviews how they presented"* today);
+**`FE-W52`**, the reps' notice must say their visits may be recorded and reviewed for SOP adherence —
+employee monitoring; and the **§8.6 PV/DPDP signatory** (5.8) is still required before recording
+reaches a real doctor, because transcripts create the §2.4 screening duty.
+
+#### B — I3, resolved by the real contract (code)
+
+**`TranscriptV1`** (`packages/core/src/field/transcript-v1.ts`), built on V0 — every V0 field keeps its
+meaning and V0 stays exported:
+
+| Field | For |
+| --- | --- |
+| `id` | what `FindingCitation.transcriptId` points at |
+| `source` (recording XOR voice note) | the database's `transcripts_raw_one_source`; the retention purge cascades by it |
+| segment `id`, `index` | stable pointer; reading order that survives overlapping speech |
+| `speakerLabel` | diarization label, never a name or role (V0's rule) |
+| `startMs` / `endMs` | citations and review point at audio time |
+| segment `language` + token `language` | code-switching **inside** a segment — the Hinglish case where Whisper-class models delete words at the switch (mr-app-plan §0.5) |
+| segment `confidence`, **required, nullable** | redaction and screening must know when to distrust a span; `null` says "the vendor gave none" |
+| `tokens` with `startChar`/`endChar` | **stable span offsets**, in Unicode code points, that redaction and citations point into without the raw text leaving the gate |
+
+**B3:** `transcript-v0.expiry.test.ts` no longer checks a date. It checks `TranscriptV1` exists,
+**accepts** a two-speaker fixture with the line *"Doctor sahab, BP ki dose kam kar dijiye, patient ko
+dizziness ho rahi thi"* (English and `hi-Latn` per token) and a Devanagari reply with no confidence,
+and **rejects** what downstream stages cannot use. **The reason is written in the test:** the
+ship-or-cut question it forced was answered on 22 September. **B5:** removing `confidence`, then
+`language`, from the fixture each fails exactly the acceptance case, naming the path; removing the
+offset-slice check fails only the mismatch case.
+
+**B4:** `BE-W30` closed; the next milestone is the existing **`BE-W32`**, now blocked honestly on 5–10
+hours of labelled audio. **Proposed** (nothing recorded): a corpus of **staged role-play between
+consenting employees, in Hinglish** — 30–40 conversations of 10–15 minutes, scenario cards, planted
+drug names and **fictional** adverse events and patient identifiers, recorded on reps' phones in
+realistic noise, labelled in the `TranscriptV1` shape. It removes the wait for doctors and the
+signatory; it does **not** remove the vendor-terms question for employees' voices. Cost not measured.
+
+#### C — backend (code)
+
+| Item | Outcome |
+| --- | --- |
+| **C1 `BE-W104`** | **Closed.** `issue_recording_upload_grant` tested to inherit `begin_upload`'s own-visit check (own MR granted; same-org and rival MRs refused). Mutants: inlined with no check fails both refusals; inlined with a COMPANY check fails only the same-org case. The first mutant was **broken** (it missed a `NOT NULL` column and failed the positive control too) — fixed before it counted |
+| **C2 `BE-W100`** | **Closed.** `list_analysis_overrides` returns camelCase (`20260922000100`); the REAL response parses through the core schema; the rollback fails both cases. **My own postcondition guard failed the first apply** — a comment inside the function contained the literal it checks for. Found and registered **`BE-W110`**: the override *write* returns snake_case, and the client posts to a mock-only path. A first draft of that row claimed the client "would throw"; checked, it never reaches the server |
+| **C3 `BE-W88`** | **Closed.** `GeofenceCentreSchema` for a clinic's centre; captured fixes keep provenance. A real pull payload round-trips; a check-in without provenance is still refused. The mock had invented an accuracy and a capture time for a centre |
+| **C4 `BE-W83`** | **Measured, not built — ROOM.** Table below |
+
+**C4, from the catalogue:**
+
+| Group | Tables | Restrictive tenant policy? |
+| --- | --- | --- |
+| **Function-scoped** — RLS forced, no grant, no policy | `analyses`, `analysis_overrides`, `audio_destruction_log`, `audio_purge_runs`, `audit_log`, `consent_records`, `restore_reconciliation_findings`, `restore_reconciliation_runs`, `transcripts_raw`, `transcripts_redacted` (10) | **None, and none would be evaluated**: all 85 `SECURITY DEFINER` functions are owned by `postgres`, which has `BYPASSRLS`. The function bodies are the whole boundary |
+| **Directly readable, permissive only** — `BE-W83`'s scope | `adverse_event_reports`, `app_thresholds`, `beat_plan_entries`, `beat_plans`, `call_report_approvals`, `call_reports`, `check_ins`, `check_outs`, `recordings`, `samples_and_inputs`, `sync_batches`, `sync_events`, `sync_item_reinstatements`, `sync_items`, `upload_grants`, `visit_audio_quarantine`, `visit_audio_quarantine_clearances`, `visits`, `voice_notes` (19) | **None** — not built: the register's EXPLAIN verification did not fit beside D–G |
+| **Tenant boundary** | `clinic_addresses`, `consent_text_versions`, `doctors`, `organisations`, `territories`, `territory_shift_windows`, `user_profiles` (7) | **Yes** |
+
+#### D — voice notes, kept (emulator unless marked)
+
+**D1:** `expo-file-system` pinned **exactly 57.0.2** — the version `expo` 57.0.12 had already linked
+into the installed build (code: the APK's dex holds its classes; the lockfile at the 15 September
+build says 57.0.2). `expo install` wrote `~57.0.7` and bumped `expo`'s own copy; `pnpm add` bumped it to
+57.0.5; both reverted. **No native rebuild was needed.**
+
+**D2 and D3, the app's files, listed with `run-as`:**
+
+| Step | `cache/Audio` | `files/voice-notes/…` |
+| --- | --- | --- |
+| baseline | absent | absent |
+| 3 s note recorded, not saved | `recording-5200cc63….m4a` 43,251 B | — |
+| **"Start again"** | **empty** | — |
+| recorded, **Save** | **empty** | `b95aa032…/c1329c2e….m4a` 53,556 B |
+| recorded, then **Back** without saving | 50,095 B → **empty** | the kept note, untouched |
+| recorded, **force-stop**, reopen the screen | 49,338 B → **swept** | the kept note, untouched |
+| **rep B** signs in, saves on B's visit | empty | A's note untouched **and** `15bdcba4…/0a67828b….m4a` 50,215 B |
+
+Rep B's screen showed only B's visit (*"Your note · Dr Asha Deshpande (DEMO)"*); nothing lists notes, so
+nothing of A's appeared. "Not readable by B's session" is enforced by `assertOwned` (**code**; no reader
+exists to show it on screen). **D4 `FE-W54`:** from a real visit, *"Your note · Dr Vikram Rao (DEMO)"* —
+Save says *"Saved on this phone, in your notes. It has not been sent"*. **D6:** mutants on the rules
+kill one each (discard never deletes; traversal guard dropped); a shared folder is caught by four.
+**The route's leave-discard mutant first SURVIVED** — the mount-time sweep had deleted each test's
+file before the hold was released, so three cases were vacuous. Fixed (the file is written after
+mount, as on the device; the fake's `move` fails on a missing file); that exposed an un-awaited async
+`unmount` (testing-library 14). The mutant now kills exactly one.
+
+**D5 — what the upload needs** (code, not built): server — `begin_upload(visit,'voice_note',…)`, the
+private `audio` bucket whose INSERT/UPDATE/SELECT policies require `has_live_upload_grant(name)`,
+`record_upload_progress`, `resume_upload`, `complete_upload` (takes Storage's observed size),
+`abandon_upload`, `my_upload_queue`. Client — reconcile `UploadSession` (a REST shape no route returns)
+with those RPCs; the byte upload; **`FE-W29`** (an offline note needs its own per-rep queued upload);
+delete the kept file only after `complete_upload`; **`FE-W46`** (send the real size). Open: whether
+Storage's resumable (TUS) endpoint needs another client library — not checked.
+
+#### E — two device defects (emulator)
+
+| | Before | After, on the emulator |
+| --- | --- | --- |
+| **`FE-W63`** | a queued check-in read *"This check-out cannot be sent yet"* | offline check-in on rep B's `36e65ca7`: *"Checked in — waiting to send"* · **"This check-in cannot be sent yet"**; flushed on reconnect, the server holds one check-in by rep B |
+| **`FE-W64`** | *"This visit · Not started · I am here — check in"* for a visit not held | rep A's `0809df1c` as rep B: *"Getting this visit"*, then **"This visit is not on this phone"**, no check-in |
+
+The FE-W63 test first failed only in the full run — the case before it queued a check-in for the same
+visit in shared storage; now cleared at the start.
+
+#### F — the console renderer (code)
+
+`@testing-library/react` **16.3.3**, its required peer `@testing-library/dom` **10.4.1**, and `jsdom`
+**20.0.3** — the last two already in the tree and declared at the same versions; all exact, all dev;
+no non-test file imports them. `client.listAnalysisOverrides` calls the RPC the real server serves; the
+mock serves it too. **`FE-W12`** renders the overrides already logged above the form; **a real render**
+asserts a saved override appears, and deleting the fetch fails it. Not driven in a browser.
+`blocked-on-you` 2.5 resolved.
+
+#### G — the notice, redrafted (code; not merged)
+
+On `mr-46/fe-w52-notice-pending-approval` (`7ec0c0f`, `main` merged in). The preamble now says what
+is recorded is *"kept so your visits can be reviewed — by your manager, and by an AI system once that
+is built — to check that the company's procedures (SOPs) are followed. That is monitoring of your
+work"*; voice notes *"Kept on this phone when you save one; a note you start again or leave without
+saving is deleted. Not sent to anyone yet"*; recordings stay *not-yet*, *"recorded only after the doctor
+agrees, and … reviewed for how procedures are followed"*; location stays check-in and check-out only.
+**2.6 still waits for the operator's approval; the false notice is still live.**
+
+#### Counts — each runner's own lines
+
+| Workspace | Runner | Tests | Suites / Files |
+| --- | --- | --- | --- |
+| `@fieldforce/core` | vitest | **31** | 4 files |
+| `@fieldforce/ui` | vitest | 4 | 1 file |
+| `@fieldforce/ui` | jest | 253 | 22 suites |
+| `@fieldforce/ui-tokens` | vitest | 54 | 3 files |
+| `@fieldforce/console` | vitest | **31** | **5 files** |
+| `@fieldforce/field` | vitest | **573** | **36 files** |
+| `@fieldforce/field` | jest | **159** | 21 suites |
+| `@fieldforce/api` | vitest | **743** | **53 files** |
+| `@fieldforce/mock` | vitest | 43 | 1 file |
+
+**1,891 passing, zero failing, up 25.** `typecheck`, `lint`, `format:check` exit 0, checked before every
+commit; 65 migrations, 65 rollback files.
+
+#### Where it stopped
+
+**No BLOCKAGE; all of A–G done.**
+
+- **C4 — ROOM**: the 19 policies were measured, not built; their verification needs EXPLAIN against the
+  one-year synthetic seed.
+- **G2 — CONDITIONAL STOP THE BRIEF DEFINED**: the redraft is not merged; 2.6 awaits approval.
+- **D5 — the brief's own stop**: the upload is listed, not built.
+
+**Three things to carry forward.**
+
+1. **A guard that fails on your change is doing its job — including your own guard.** The postcondition
+   that caught a comment inside the function body was written ten minutes earlier.
+2. **A surviving mutant can mean a hollow test, not a weak mutant.** The sweep made three voice-note
+   cases vacuous; only the mutant showed it.
+3. **Pin a native module to what the build already has.** Two package commands each quietly moved
+   the version under the installed binary; the lockfile at build time was the only reliable answer.

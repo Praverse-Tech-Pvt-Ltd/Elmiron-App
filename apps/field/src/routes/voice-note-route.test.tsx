@@ -62,6 +62,20 @@ jest.mock('../session', () => ({
 const mockStore = jest.fn();
 jest.mock('../sync/pulled-store', () => ({ usePulledStore: () => mockStore() }));
 
+// MR-51 D. The upload itself is `push-client.ts`'s, tested in `voice-note-upload.test.ts`; here
+// only what the screen does with each outcome. Offline unless a test says otherwise.
+const mockUpload = jest.fn<(body: Record<string, unknown>) => Promise<{ receivedAt: string }>>();
+jest.mock('../sync/push-client', () => {
+  const actual = jest.requireActual<Record<string, unknown>>('../sync/push-client');
+  return { ...actual, createPushClient: () => ({ uploadVoiceNote: mockUpload }) };
+});
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setQueueOwner } from '../sync/async-storage-store';
+import type * as PushClient from '../sync/push-client';
+
+type PushClientModule = typeof PushClient;
+
 import VoiceNoteRoute from '../../app/voice-note/[visitId]';
 
 const visit = {
@@ -93,7 +107,12 @@ const pulled = (visits: readonly unknown[], status = 'ready') => ({
   status,
 });
 
-beforeEach(() => {
+beforeEach(async () => {
+  await AsyncStorage.clear();
+  // The queue is per rep (MR-49); the real session names its owner, the mocked one does not.
+  setQueueOwner(REP_A);
+  mockUpload.mockReset();
+  mockUpload.mockRejectedValue(new Error('Network request failed'));
   mockFiles.clear();
   mockRequestPermissions.mockReset();
   mockRequestPermissions.mockResolvedValue({ granted: true });
@@ -138,16 +157,58 @@ describe('each failure carries its own remedy', () => {
 });
 
 describe('FE-W54 — Save keeps the note, from a REAL visit', () => {
-  it('moves the recording into the signed-in rep’s folder and says it was not sent', async () => {
+  it('moves the recording into the signed-in rep’s folder; offline, says it will send later', async () => {
     await recordOne('one');
     await fireEvent.press(screen.getByText('Save this note'));
     await waitFor(() => {
-      expect(screen.getByText(/Saved on this phone, in your notes/u)).toBeTruthy();
+      expect(screen.getByText(/It will send by itself when you have signal/u)).toBeTruthy();
     });
     const kept = [...mockFiles];
     expect(kept).toHaveLength(1);
     expect(kept[0]).toMatch(new RegExp(`^${DOC}voice-notes/${REP_A}/[0-9a-f-]+\\.m4a$`, 'u'));
-    expect(screen.getByText(/It has not been sent/u)).toBeTruthy();
+  });
+});
+
+describe('MR-51 D — Save sends the note it kept', () => {
+  it('sends the kept file’s note, for this visit and this rep', async () => {
+    mockUpload.mockResolvedValue({ receivedAt: '2026-09-22T10:05:00Z' });
+    await recordOne('five');
+    await fireEvent.press(screen.getByText('Save this note'));
+    await screen.findByText(/Sent\. The note has reached the company/u);
+
+    const [body] = mockUpload.mock.calls[0] ?? [];
+    const kept = [...mockFiles][0] ?? '';
+    expect(body?.['visitId']).toBe(VISIT);
+    expect(body?.['userId']).toBe(REP_A);
+    // The note sent is the file kept: its name is the note id.
+    expect(kept.endsWith(`/${String(body?.['noteId'])}.m4a`)).toBe(true);
+  });
+
+  it('offline, the note is queued in the rep’s own queue as a voice_note', async () => {
+    await recordOne('six');
+    await fireEvent.press(screen.getByText('Save this note'));
+    await screen.findByText(/It will send by itself/u);
+
+    const keys = await AsyncStorage.getAllKeys();
+    const raw = await AsyncStorage.getItem(keys.find((k) => k.includes(REP_A)) ?? '');
+    const items = (JSON.parse(raw ?? '{}') as { items?: { entity: string }[] }).items ?? [];
+    expect(items.map((i) => i.entity)).toEqual(['voice_note']);
+  });
+
+  it('a refusal says so, and does not claim the note will send', async () => {
+    const { SyncPushRefusal } = jest.requireActual<PushClientModule>('../sync/push-client');
+    mockUpload.mockRejectedValue(
+      new SyncPushRefusal({
+        message: 'visit is not yours',
+        sqlState: '42501',
+        rejectionCode: null,
+        deadLettered: false,
+      }),
+    );
+    await recordOne('seven');
+    await fireEvent.press(screen.getByText('Save this note'));
+    await screen.findByText(/the server refused to take it: visit is not yours/u);
+    expect(screen.queryByText(/It will send by itself/u)).toBeNull();
   });
 });
 

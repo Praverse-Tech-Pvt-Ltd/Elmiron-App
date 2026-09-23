@@ -492,15 +492,17 @@ const routes: Route[] = [
     // rendered as "the evidence of human oversight". `findingId` is now echoed from the
     // request rather than taken from a fixture, so the mock stops inventing which
     // finding a manager overrode.
+    //
+    // MR-51 B1 / BE-W110: at the RPC path Supabase serves, keyed as the RPC's arguments. The
+    // `/analyses/:id/overrides` POST was a path only this mock answered.
     method: 'POST',
-    pattern: '/analyses/:id/overrides',
+    pattern: API_PATHS.createAnalysisOverride,
     handler: (ctx) => ({
-      status: 201,
       body: {
         ...first(fx.analysisOverrides),
-        analysisId: ctx.params['id'] ?? fx.IDS.analysis,
-        findingId: asRecord(ctx.body)['findingId'] ?? null,
-        reason: asString(asRecord(ctx.body)['reason'], first(fx.analysisOverrides).reason),
+        analysisId: asString(asRecord(ctx.body)['p_analysis_id'], fx.IDS.analysis),
+        findingId: asRecord(ctx.body)['p_finding_id'] ?? null,
+        reason: asString(asRecord(ctx.body)['p_reason'], first(fx.analysisOverrides).reason),
       },
     }),
   },
