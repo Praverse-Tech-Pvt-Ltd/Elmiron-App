@@ -264,19 +264,29 @@ describe.skipIf(!reachable)('C1 — a row of another organisation, read directly
   });
 
   /**
-   * The one that leaks, measured in C1 and left open by the operator (`C13`): it is `BE-W106`, a
-   * settings-model decision (`blocked-on-you` 2.7). Asserted AS it is, so the day it is fixed this
-   * fails and the register gets updated with it -- not quietly skipped, not written as if fixed.
+   * **The one that leaked — and this test is why it is written down rather than forgotten.**
+   *
+   * MR-51 C1 asserted the leak AS IT WAS, so that closing it would fail here and force the register
+   * to be updated with it. MR-52 D closed it: `app_thresholds` lost SELECT for `authenticated` and
+   * its `using (true)` policy, so no signed-in user reads the table directly at all. The assertion
+   * is now the refusal. **`BE-W106` is not thereby answered** — `threshold()` still returns any
+   * territory's value to any caller who names it, and a `global` row is still shared by every
+   * tenant; that is the model question, now dated (`be_w106_decision_status()`).
    */
-  it('app_thresholds -- BE-W106, OPEN: another organisation reads a territory setting', async () => {
-    const own = await seen('app_thresholds', world.users.rivalAdmin);
-    const mr = await seen('app_thresholds', world.users.puneMr);
-    const admin = await seen('app_thresholds', world.users.admin);
-    console.log(
-      `C1 app_thresholds | A-MR ${String(mr)} | A-admin ${String(admin)} | B-rivalAdmin ${String(own)}`,
-    );
-    expect(own).toBe(1);
-    expect(mr, 'BE-W106: an MR of another organisation reads it').toBe(1);
-    expect(admin, 'BE-W106: an admin of another organisation reads it').toBe(1);
+  it('app_thresholds -- the read is REFUSED now, for every signed-in user (MR-52 D)', async () => {
+    for (const [label, user] of [
+      ['A-MR', world.users.puneMr],
+      ['A-admin', world.users.admin],
+      ['B-rivalAdmin', world.users.rivalAdmin],
+    ] as const) {
+      const [column, value] = rival.get('app_thresholds') ?? ['', ''];
+      const response = await rest(`/app_thresholds?select=*&${column}=eq.${value}`, {
+        token: await token(user),
+      });
+      console.log(`C1 app_thresholds | ${label} | ${String(response.status)}`);
+      // Refused, not filtered: an empty 200 would be indistinguishable from a table with no rows.
+      expect(response.status, `${label}: ${response.text}`).toBe(403);
+      expect(response.body).toMatchObject({ code: '42501' });
+    }
   });
 });
