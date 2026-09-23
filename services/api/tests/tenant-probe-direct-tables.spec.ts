@@ -71,8 +71,14 @@ const seedRivalRows = async (): Promise<void> => {
     await db.query('set local session_replication_role = replica');
     const q = (sql: string, params: unknown[]) => db.query(sql, params);
     await q(
-      `insert into public.adverse_event_reports (id, visit_id, source, reported_by_mr_id, reported_text)
-       values ($1, $2, 'mr_reported', $3, 'MR-51 probe')`,
+      // `statutory_due_at` is set explicitly because the trigger that would set it does not run
+      // under `replica`. Left to default it equals `received_at`, so the row is born overdue --
+      // and `adverse_event_clock_summary()` counts EVERY row in the database, so a probe row with
+      // a wrong deadline fails an unrelated suite. A committed fixture must look like a real row
+      // in any column another suite aggregates.
+      `insert into public.adverse_event_reports
+         (id, visit_id, source, reported_by_mr_id, reported_text, statutory_due_at)
+       values ($1, $2, 'mr_reported', $3, 'MR-51 probe', now() + interval '15 days')`,
       [id.aer, visit, mr],
     );
     await q(
