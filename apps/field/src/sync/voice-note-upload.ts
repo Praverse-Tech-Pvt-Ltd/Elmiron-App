@@ -11,6 +11,20 @@
  * **No size is stored.** `complete_upload` stores the size Storage observed (`FE-W46`); the device's
  * figure is only the reservation `begin_upload` asks for, read from the file when it is sent.
  */
+/**
+ * MR-53 C1 — a consultation recording queues the same way, and through the same sender.
+ *
+ * Only two things differ from a voice note, and both are the SERVER's: `begin_upload` is asked for
+ * kind `recording` (which is where the consent check lives), and the file is kept in the
+ * `recordings` folder so the voice-note screen's cache sweep cannot delete it.
+ *
+ * `bitrateKbps` rides along because `complete_upload` takes it; the size does not, because the
+ * server stores what Storage observed (`FE-W46`).
+ */
+export interface RecordingUpload extends VoiceNoteUpload {
+  readonly bitrateKbps: number;
+}
+
 export interface VoiceNoteUpload {
   /** The sync item's id — the server's idempotency key. Never regenerated on a retry. */
   readonly id: string;
@@ -35,8 +49,11 @@ const isUuid = (value: unknown): value is string => typeof value === 'string' &&
  * the rest of the day's work. The `__queueEntity` discriminant is checked first, for the reason
  * `payloadIs` gives: a row whose body is not what its slot says is refused, not trusted.
  */
-export const voiceNoteUploadFrom = (payload: Record<string, unknown>): VoiceNoteUpload | null => {
-  if (payload['__queueEntity'] !== 'voice_note') return null;
+const audioUploadFrom = (
+  payload: Record<string, unknown>,
+  entity: 'voice_note' | 'recording',
+): VoiceNoteUpload | null => {
+  if (payload['__queueEntity'] !== entity) return null;
   const { id, noteId, visitId, userId, durationSeconds, recordedAt } = payload;
   if (!isUuid(id) || !isUuid(noteId) || !isUuid(visitId)) return null;
   if (typeof userId !== 'string' || userId.length === 0) return null;
@@ -44,4 +61,17 @@ export const voiceNoteUploadFrom = (payload: Record<string, unknown>): VoiceNote
   if (durationSeconds <= 0) return null;
   if (typeof recordedAt !== 'string' || Number.isNaN(Date.parse(recordedAt))) return null;
   return { id, noteId, visitId, userId, durationSeconds, recordedAt };
+};
+
+export const voiceNoteUploadFrom = (payload: Record<string, unknown>): VoiceNoteUpload | null =>
+  audioUploadFrom(payload, 'voice_note');
+
+/** MR-53 C1. A recording additionally carries the bitrate `complete_upload` records. */
+export const recordingUploadFrom = (payload: Record<string, unknown>): RecordingUpload | null => {
+  const base = audioUploadFrom(payload, 'recording');
+  if (base === null) return null;
+  const bitrateKbps = payload['bitrateKbps'];
+  if (typeof bitrateKbps !== 'number' || !Number.isInteger(bitrateKbps)) return null;
+  if (bitrateKbps <= 0) return null;
+  return { ...base, bitrateKbps };
 };

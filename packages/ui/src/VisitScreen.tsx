@@ -101,6 +101,14 @@ export interface VisitScreenProps {
   readonly onStartRecording?: () => void;
   /** Why no recording may be started. Shown in place of the control. */
   readonly recordingBlockedReason?: string | null;
+  /**
+   * MR-53 C1 — what happened to the recording that just stopped.
+   *
+   * Its own prop rather than folded into `failure`, because "saved on this phone, it will send when
+   * you have signal" is not a failure — and rendering it as one would teach an MR to ignore the
+   * banner that IS.
+   */
+  readonly recordingNotice?: string | null;
   /** D7. Offered on every visit, consent or not — a voice note has no third party. */
   readonly onRecordVoiceNote?: () => void;
   /**
@@ -175,6 +183,7 @@ export const VisitScreen = ({
   onRecordSamples,
   onStartRecording,
   recordingBlockedReason = null,
+  recordingNotice = null,
   onRecordVoiceNote,
   recording,
   consent,
@@ -291,6 +300,9 @@ export const VisitScreen = ({
         {stage === 'during' && recording === undefined && onStartRecording !== undefined ? (
           <Button label="Record this visit" onPress={onStartRecording} variant="secondary" />
         ) : null}
+        {recordingNotice === null ? null : (
+          <Banner detail={recordingNotice} title="The recording" tone="info" />
+        )}
         {stage === 'during' && recording === undefined && recordingBlockedReason !== null ? (
           // The reason instead of the control. §02 keeps `attention` for a
           // condition with a remedy — a doctor who said no is not a failure.

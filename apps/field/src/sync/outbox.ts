@@ -19,8 +19,8 @@ import { asyncStorageQueueStore, loadQueueState, queueOwner } from './async-stor
 import type { QueueLoad } from './async-storage-store';
 import { SyncPushRefusal } from './push-client';
 import type { OutboxWriteClient } from './push-client';
-import { voiceNoteUploadFrom } from './voice-note-upload';
-import type { VoiceNoteUpload } from './voice-note-upload';
+import { recordingUploadFrom, voiceNoteUploadFrom } from './voice-note-upload';
+import type { RecordingUpload, VoiceNoteUpload } from './voice-note-upload';
 import { syncQueueReducer } from './reducer';
 import type { SyncQueueState } from './reducer';
 
@@ -174,6 +174,27 @@ const captureQueueItem = (
     operation,
     entityId: body.visitId,
     payload: { ...body, __queueEntity: entity },
+    status: 'queued',
+    attemptCount: 1,
+    lastError: null,
+    clientCreatedAt: nowIso(),
+    syncedAt: null,
+  });
+
+/**
+ * MR-53 C1 — a queue row for a kept consultation recording.
+ *
+ * `entityId` is the visit, like every other row, so a recording waits beside the visit it belongs
+ * to on the queue screen. The recording's own id travels in the payload and is what
+ * `complete_upload` takes as the object id.
+ */
+export const recordingQueueItem = (body: RecordingUpload): SyncQueueItem =>
+  SyncQueueItemSchema.parse({
+    id: body.id,
+    entity: 'recording',
+    operation: 'create',
+    entityId: body.visitId,
+    payload: { ...body, __queueEntity: 'recording' },
     status: 'queued',
     attemptCount: 1,
     lastError: null,
@@ -657,13 +678,16 @@ const sendFor = (client: OutboxWriteClient, item: SyncQueueItem): SendPlan => {
     case 'voice_note':
       return plan(voiceNoteUploadFrom(item.payload), (body) => client.uploadVoiceNote(body));
 
-    // Still deliberate gaps rather than oversights:
-    //   `visit`      -- written straight to the table, no RPC in the way (FIX-07).
-    //   `recording`  -- a consultation recording; not reached by any screen (C3), so not built.
-    // Listed rather than defaulted, so that converting one is a change to this line and
+    // MR-53 C1. A recording replays as a recording, through the same sender. It is reachable only
+    // behind two off-by-default switches (`C3`): the build's, and the server's.
+    case 'recording':
+      return plan(recordingUploadFrom(item.payload), (body) => client.uploadRecording(body));
+
+    // Still a deliberate gap rather than an oversight:
+    //   `visit` -- written straight to the table, no RPC in the way (FIX-07).
+    // Listed rather than defaulted, so that converting it is a change to this line and
     // not a change to nothing.
     case 'visit':
-    case 'recording':
       return blocked('not_convertible');
   }
 

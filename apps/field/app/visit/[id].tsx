@@ -16,7 +16,6 @@ import {
 } from 'expo-audio';
 import { ApiRequestError } from '@fieldforce/core';
 import { Screen, VisitScreen } from '@fieldforce/ui';
-import { createClientForScenario } from '../../src/api';
 import { createPushClient } from '../../src/sync/push-client';
 import { takeFix } from '../../src/capture/location';
 import {
@@ -25,16 +24,20 @@ import {
   checkInRequest,
   witnessedStage,
 } from '../../src/capture/visit';
-import {
-  blockReason,
-  elapsedLabel,
-  recordingLabel,
-  recordingRequest,
-} from '../../src/capture/recording';
+import { blockReason, elapsedLabel, recordingLabel } from '../../src/capture/recording';
 import type { RecordingBlock } from '../../src/capture/recording';
+import { keepRecording } from '../../src/capture/voice-note-files';
+import { expoNoteFileSystem, documentRoot } from '../../src/capture/voice-note-fs';
 import { recordingAvailability } from '../../src/capture/recording-permission';
 import type { RecordingAvailability } from '../../src/capture/recording-permission';
-import { checkInQueueItem, checkOutQueueItem, sendOrQueue } from '../../src/sync/outbox';
+import {
+  checkInQueueItem,
+  checkOutQueueItem,
+  recordingQueueItem,
+  sendOrQueue,
+} from '../../src/sync/outbox';
+import type { SendOutcome } from '../../src/sync/outbox';
+import { queueOwner } from '../../src/sync/async-storage-store';
 import { describeWitnessed, witnessedConsentFor } from '../../src/consent/witnessed';
 import type { WitnessedConsent } from '../../src/consent/witnessed';
 import { QUEUE_UNREADABLE, loadQueueState } from '../../src/sync/async-storage-store';
@@ -60,6 +63,22 @@ const VISIT_NOT_ON_PHONE = {
   detail:
     'It is not in the visit list this phone holds for you, so there is nothing here to check in to.',
 } as const;
+
+/**
+ * MR-53 C1 — what the MR is told once a recording has stopped.
+ *
+ * A recording that is queued has NOT reached the company, and a sentence that implied it had would
+ * be the lie the outbox exists to prevent. The refusal case matters most: `begin_upload` re-checks
+ * consent, so "the doctor withdrew while you were recording" arrives here as a server refusal.
+ */
+const SENT: Record<SendOutcome['kind'], (message: string) => string> = {
+  sent: () => 'Recording sent. It is no longer on this phone.',
+  queued: () =>
+    'Recording saved on this phone. It will send by itself when you have signal, and is then removed from this phone.',
+  refused: (message) => `The recording was not accepted: ${message}`,
+  queue_unreadable: () =>
+    'Recording saved on this phone, but it could not be put in line to send, so it will not send by itself.',
+};
 
 export default function VisitRoute(): ReactNode {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -111,6 +130,15 @@ export default function VisitRoute(): ReactNode {
   }, [visit?.id]);
   const [micGranted, setMicGranted] = useState(false);
   const [recordingStartedAt, setRecordingStartedAt] = useState<string | null>(null);
+  /** MR-53 C1 — what happened to the recording that just stopped. */
+  const [recordingOutcome, setRecordingOutcome] = useState<string | null>(null);
+  // MR-53 C1. Whose folder the recording is kept in, and whose queue it joins.
+  //
+  // `queueOwner()` rather than `useSession()`: the session module imports `../config`, which
+  // throws at module load without an `.env` -- it fails a whole test suite at import time, which
+  // is how this was caught. The owner is the same fact by MR-49's rule: the signed-in rep owns
+  // the queue this recording is about to join.
+  const userId = queueOwner();
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
@@ -248,11 +276,11 @@ export default function VisitRoute(): ReactNode {
         // decision to keep something, and the MR has no reason to think anything went
         // wrong and nothing to re-do.
         //
-        // Still not FILED -- a recording with no visit, no authorising consent or no start
-        // time cannot be written honestly, and `recordingRequest` would refuse it anyway.
+        // Still not FILED -- a recording with no visit, no authorising consent, no start time or
+        // no signed-in rep cannot be written honestly, and the queue row would refuse it anyway.
         // What changes is that the MR is told, through the same channel the `.catch` below
         // already uses for exactly this outcome.
-        if (visit === null || authorising === null || startedAt === null) {
+        if (visit === null || authorising === null || startedAt === null || userId === null) {
           setFailure({
             title: 'The recording was not filed',
             detail:
@@ -260,28 +288,42 @@ export default function VisitRoute(): ReactNode {
           });
           return;
         }
-        await createClientForScenario().createRecording(
-          recordingRequest({
-            id: uuid.v4(),
-            visitId: visit.id,
-            // The row the SERVER named as authorising this recording, not one the phone chose.
-            consentRecordId: authorising.consentRecordId,
-            durationSeconds: seconds,
-            // The preset's own bitrate, not a guess: HIGH_QUALITY is 128 kbps.
-            bitrateKbps: 128,
-            // `FE-W46`, closed server-side in MR-37 B2. This is still not a measurement —
-            // the real count needs `expo-file-system`, which is a dependency and therefore an
-            // ask — but it no longer reaches anything. `complete_upload` now takes the size
-            // Storage OBSERVED (`storage.objects.metadata ->> 'size'`) and ignores this value,
-            // so `recordings.size_bytes` and the storage ceiling that sums it are real.
-            //
-            // `positive()` still needs a value here. Leaving it visibly false is deliberate:
-            // an estimate like `bitrateKbps * seconds / 8` would look like a measurement and
-            // the next reader would stop checking.
-            sizeBytes: 1,
-            recordedAt: startedAt,
-          }),
+        // **MR-53 C1 — the recording is KEPT, then queued, exactly as a voice note is.**
+        //
+        // It used to POST to the mock on :4010, which meant the bytes stayed on the phone and a
+        // fabricated row came back. Now: the file moves out of `cache/Audio` into the rep's own
+        // `recordings` folder — where the voice-note screen's cache sweep cannot delete it — and
+        // the send goes through the outbox, with its retry, its per-rep ownership and its
+        // dead-lettering. `begin_upload` re-checks the doctor's consent when it runs, so a
+        // withdrawal between stopping and sending refuses the upload rather than filing it.
+        const uri = recorder.uri;
+        if (uri === null) {
+          setFailure({
+            title: 'The recording was not filed',
+            detail:
+              'The phone did not finish writing the audio, so there is nothing to send. Nothing was filed.',
+          });
+          return;
+        }
+
+        const recordingId = uuid.v4();
+        await keepRecording(expoNoteFileSystem, documentRoot(), userId, uri, recordingId);
+        const body = {
+          id: uuid.v4(),
+          noteId: recordingId,
+          visitId: visit.id,
+          userId,
+          // The server refuses a zero-length recording; a sub-second one is one second.
+          durationSeconds: Math.max(1, seconds),
+          // The preset's own bitrate, not a guess: HIGH_QUALITY is 128 kbps.
+          bitrateKbps: 128,
+          recordedAt: startedAt,
+        };
+        const outcome = await sendOrQueue(
+          () => createPushClient().uploadRecording(body),
+          recordingQueueItem(body),
         );
+        setRecordingOutcome(SENT[outcome.kind](outcome.kind === 'refused' ? outcome.message : ''));
       })
       .catch((error: unknown) => {
         setFailure({
@@ -483,6 +525,7 @@ export default function VisitRoute(): ReactNode {
         {...(availability.kind === 'allowed' && block === null && !recorderState.isRecording
           ? { onStartRecording: startRecording }
           : {})}
+        recordingNotice={recordingOutcome}
         recordingBlockedReason={
           // `off` and `unknown` say NOTHING: the feature being unbuilt for this build, or a server
           // that could not be asked, are not facts about the doctor and must not be dressed as one.

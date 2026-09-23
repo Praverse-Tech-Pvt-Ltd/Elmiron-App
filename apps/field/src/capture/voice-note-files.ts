@@ -32,11 +32,28 @@ export interface NoteFileSystem {
 const withSlash = (uri: string): string => (uri.endsWith('/') ? uri : `${uri}/`);
 
 /**
- * The rep's own folder. The id is encoded so no user id can reach outside it — `..` or a `/` in an
- * id becomes part of one folder name, never a path step.
+ * The kinds of audio this phone keeps, each in its own folder.
+ *
+ * **MR-53 C1 — a consultation recording is kept the same way a voice note is**, and deliberately
+ * NOT in `cache/Audio`: the voice-note screen sweeps that folder on open (MR-50 D), so a recording
+ * left there would be deleted by the next note the rep starts.
  */
+export type KeptAudioKind = 'voice-notes' | 'recordings';
+
+/**
+ * The rep's own folder, per kind. The id is encoded so no user id can reach outside it — `..` or a
+ * `/` in an id becomes part of one folder name, never a path step.
+ */
+export const audioFolder = (documentRoot: string, userId: string, kind: KeptAudioKind): string =>
+  `${withSlash(documentRoot)}${kind}/${encodeURIComponent(userId)}/`;
+
+/** The voice-note folder, which is what every existing caller means. */
 export const noteFolder = (documentRoot: string, userId: string): string =>
-  `${withSlash(documentRoot)}voice-notes/${encodeURIComponent(userId)}/`;
+  audioFolder(documentRoot, userId, 'voice-notes');
+
+/** MR-53 C1 — where a kept consultation recording lives until the server has it. */
+export const recordingFolder = (documentRoot: string, userId: string): string =>
+  audioFolder(documentRoot, userId, 'recordings');
 
 /** Only `recording-*.m4a` directly in the cache's `Audio/` folder is the recorder's working file. */
 const RECORDER_FILE = /\/Audio\/recording-[^/]+\.m4a$/u;
@@ -52,8 +69,13 @@ export class NotYourNoteError extends Error {
  * Refuses any path outside the signed-in rep's folder. Every read and delete of a KEPT note goes
  * through here, so another rep's session has no way in.
  */
-export const assertOwned = (uri: string, documentRoot: string, userId: string): void => {
-  const folder = noteFolder(documentRoot, userId);
+export const assertOwned = (
+  uri: string,
+  documentRoot: string,
+  userId: string,
+  kind: KeptAudioKind = 'voice-notes',
+): void => {
+  const folder = audioFolder(documentRoot, userId, kind);
   const rest = uri.startsWith(folder) ? uri.slice(folder.length) : null;
   if (rest === null || rest.length === 0 || rest.includes('/') || rest.includes('..')) {
     throw new NotYourNoteError(uri);
@@ -61,17 +83,41 @@ export const assertOwned = (uri: string, documentRoot: string, userId: string): 
 };
 
 /** Save: move the recorder's working file into the rep's folder. Returns where it now lives. */
+export const keepAudio = async (
+  fs: NoteFileSystem,
+  documentRoot: string,
+  userId: string,
+  recorderUri: string,
+  id: string,
+  kind: KeptAudioKind = 'voice-notes',
+): Promise<string> => {
+  const to = `${audioFolder(documentRoot, userId, kind)}${encodeURIComponent(id)}.m4a`;
+  await fs.move(recorderUri, to);
+  return to;
+};
+
 export const keepNote = async (
   fs: NoteFileSystem,
   documentRoot: string,
   userId: string,
   recorderUri: string,
   noteId: string,
-): Promise<string> => {
-  const to = `${noteFolder(documentRoot, userId)}${encodeURIComponent(noteId)}.m4a`;
-  await fs.move(recorderUri, to);
-  return to;
-};
+): Promise<string> => keepAudio(fs, documentRoot, userId, recorderUri, noteId, 'voice-notes');
+
+/**
+ * MR-53 C1 — keep a consultation recording for upload.
+ *
+ * The extension is `.m4a` because that is what `expo-audio` writes, and `BE-W111` (MR-52 C1) is
+ * the rule that a name must match its container — the server now mints `.m4a` keys for the same
+ * reason.
+ */
+export const keepRecording = async (
+  fs: NoteFileSystem,
+  documentRoot: string,
+  userId: string,
+  recorderUri: string,
+  recordingId: string,
+): Promise<string> => keepAudio(fs, documentRoot, userId, recorderUri, recordingId, 'recordings');
 
 /** Start again / record over / leave without saving: the unsaved audio goes. */
 export const discardNote = (fs: NoteFileSystem, recorderUri: string | null): void => {

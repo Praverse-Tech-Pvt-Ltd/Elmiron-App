@@ -522,8 +522,10 @@ describe('MR-09 B: the misroute class, not just the one instance', () => {
       () => Promise.reject(new Error('Network request failed')),
       {
         ...checkInQueueItem(body),
-        entity: 'recording',
-        payload: { ...body, __queueEntity: 'recording' },
+        // MR-53 C1: `recording` used to be the example here and now HAS an endpoint. `visit` is
+        // the remaining deliberate gap -- written straight to the table, no RPC in the way.
+        entity: 'visit',
+        payload: { ...body, __queueEntity: 'visit' },
       },
       store,
     );
@@ -536,6 +538,27 @@ describe('MR-09 B: the misroute class, not just the one instance', () => {
     expect(item?.status, 'a row nothing can send must not sit in_flight forever').toBe('queued');
     expect(item?.lastError).toMatch(/cannot send this kind of item yet/i);
     expect(item?.attemptCount).toBeGreaterThan(1);
+  });
+
+  it('B4, the other half: a recording row this build cannot READ says so, not "cannot send"', async () => {
+    // MR-53 C1. The two messages are different facts -- an entity with no endpoint, and a payload
+    // from another version of the app -- and a recording is now the second kind, not the first.
+    const store = inMemory();
+    await sendOrQueue(
+      () => Promise.reject(new Error('Network request failed')),
+      {
+        ...checkInQueueItem(body),
+        entity: 'recording',
+        payload: { ...body, __queueEntity: 'recording' },
+      },
+      store,
+    );
+
+    const uploadRecording = vi.fn(() => Promise.resolve({ receivedAt: '2026-09-23T06:00:00Z' }));
+    await flushOutbox({ uploadRecording } as unknown as OutboxWriteClient, store);
+
+    expect(uploadRecording, 'an unreadable payload is never sent').not.toHaveBeenCalled();
+    expect(store.current().items[0]?.lastError).toMatch(/different version of the app/i);
   });
 
   it('THE POSITIVE CONTROL: a correctly labelled row still sends', async () => {
