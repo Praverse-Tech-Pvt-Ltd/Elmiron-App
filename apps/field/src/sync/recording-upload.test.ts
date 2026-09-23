@@ -138,7 +138,10 @@ describe('MR-53 C1 — the recording uses the voice-note path', () => {
 
   it('B4: a withdrawal refuses the upload as a server verdict, and the file stays', async () => {
     const w = world({
-      beginError: { code: '42501', message: 'visit has no standing consent; there is no upload path' },
+      beginError: {
+        code: '42501',
+        message: 'visit has no standing consent; there is no upload path',
+      },
     });
     const error = await w.client.uploadRecording(recording).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(SyncPushRefusal);
