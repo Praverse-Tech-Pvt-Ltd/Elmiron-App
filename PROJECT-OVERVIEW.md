@@ -18150,3 +18150,200 @@ operator answered it inside the session (`C13`): record it under `BE-W106`, leav
 continue. Everything else in A–E is done. What is left undone is **ROOM**, and named: `FE-W66` (the
 console cannot sign in), `BE-W111`, `FE-W67`, the notes saved before this build, and the three drafts
 that are the operator's to approve.
+
+### MR-52 — the console
+
+**23 September 2026.** Every result is marked **code**, **emulator**, **browser** or **handset**.
+There is no handset result; `FE-G1` and `FE-G2` close only on a handset run made after the AI
+integration exists (`C12`).
+
+#### Checkout guard, CI, drift
+
+`@fieldforce/api` · `Praverse-Tech-Pvt-Ltd/Elmiron-App` · `f34ceef` is an ancestor. HEAD on arrival
+`031e463`, level with `origin/main`, tree clean. **CI:** run `35820894838`, workflow **`CI`**, event
+`push`, **success**, SHA `031e463b4840512f7140821fc796f8af379db89a` = HEAD; **Migration drift**
+(`35820894948`) green on the same SHA. Local drift on arrival: **67 of 67 applied, `drifted:
+false`**; 70 of 70 at the end.
+
+#### A — `FE-W66`: the console is usable (code, then browser)
+
+**A1, the package.** `@supabase/ssr` **0.12.7** with `@supabase/supabase-js` **2.117.0**, both pinned
+exactly, in `apps/console` only. `apps/field` stays on its locked **2.112.3** — checked in the
+lockfile after installing, because a shared bump would have moved the app under test. `D-14`'s two
+conditions hold by construction: it is the **same** `auth.users` row and the **same** `user_profiles`
+role the phone signs in with, and no second user table exists. Cookies rather than `localStorage`,
+because the pages are React Server Components and the server has to read the session the browser
+wrote. `middleware.ts` refreshes the token on every request and redirects a signed-out browser —
+**the redirect is a courtesy, not the access control**, which A5 measures separately.
+
+**A2, what each read reached, before and after.**
+
+| Console read | Before | After |
+| --- | --- | --- |
+| `listAnalyses` | REST `/analyses` — **mock only** | **`/rpc/list_analyses`** |
+| `getAnalysis` | REST `/analyses/:id` — **mock only** | **`/rpc/read_analysis`** |
+| `listConsentRecords` | REST `/consent-records` — **mock only** | **`/rpc/list_consent_records`** |
+| `listConsentTextVersions` | REST `/consent-text-versions` — **mock only** | **the `consent_text_versions` table**, through PostgREST |
+| `getMe` | REST `/me` — **mock only** | **dropped** — the signed-in email replaces the name it supplied |
+| `listAuditLog`, `getRetentionStatus` | already RPCs | unchanged |
+| `listAnalysisOverrides`, `createAnalysisOverride` | made real in MR-50 F2 / MR-51 B | unchanged |
+
+`20260923000100` makes the three analysis-and-consent reads emit the contract's camelCase through
+**one shared row shaper**, so the read and the list cannot drift from each other — the third and last
+of the `to_jsonb(row)` family after `BE-W100` and `BE-W110`. The consent notices are read from the
+table directly because it is one of the seven with a RESTRICTIVE tenant boundary, mapped by
+`fromConsentTextVersionRow` — **which already existed** (MR-23 B1) and which I duplicated before
+grepping for it, then deleted.
+
+**Two columns the contract declared and the schema does not have.** `AnalysisSchema.transcriptId` is
+now nullable and `findings` comes back empty, because `20260811000100` records beside the table that
+findings and transcript citations *"arrive with the analysis engine in week 10"* and transcripts do
+not exist until week 8. So the review screen honestly says **"Nothing was flagged"** on a real
+analysis, and the coaching queue lists nothing — it lists finding CATEGORIES THAT RECURRED, and there
+are no findings yet. Inventing either would be `BE-W56` in a new place.
+
+**A3–A5, in a browser** (Playwright, installed in a scratch directory with `--no-save` — a session
+tool like `adb`, not a repository dependency; the browser was already on the machine).
+
+- **A3:** signed in as an organisation's admin; the review screen showed the real analysis
+  (*"Analysis d579344d · rubric v1.0 · MR-52 demo seeded-by-hand"*), the history said *"No override
+  logged yet"*, the form saved one, and after a reload the page showed **"Overrides already logged
+  (1)"** with the exact reason. Row `68e9c81f` in Postgres carries that admin and that organisation.
+- **Elimination:** the mock was killed — `curl` → `000`, nothing listening on 4010 — and the same
+  pages still rendered the analysis and the history.
+- **A4:** the other organisation's admin got *"This analysis could not be loaded"* and no override
+  text; the owning admin, in the same run, saw both.
+- **A5:** `/`, `/coaching`, `/admin` and `/coaching/:id` all redirected an unauthenticated browser to
+  `/sign-in` and leaked no id — **and, separately, all four RPCs answered `401` `42501` permission
+  denied** to the publishable key with no user token. That is what refuses; the redirect only avoids
+  rendering a shell.
+
+A test reads every console source file and fails if any of them builds a client with a null token or
+names `:4010` again. Its first run failed on my own comment quoting the old defect, so it strips
+comments and reads code.
+
+#### B — `FE-W67`: a rep offline all day stays signed in (emulator)
+
+**B1, the boundary, measured rather than assumed.** `supabase-js` KEEPS the session in storage when a
+refresh fails for a network reason — it treats that as retryable — but `getSession()` still answers
+`{ session: null }` once the access token has expired, and `session.tsx` read that null as signed
+out. So the cut-off is the ACCESS TOKEN's expiry, not the refresh token's. With `jwt_expiry` lowered
+to 120s locally (3600s restored afterwards): signed in 11:26:30; a cold start at **11:28:29**, one
+second before expiry, stayed on Today; a cold start at **11:31:01**, offline and past expiry, landed
+on **Sign in**. At the real 3600s that is the first cold start after about an hour offline — and
+while the app stays open it survives, which is why it looks intermittent.
+
+**What the rep loses:** every screen behind the sign-in — Today, the visit, check-in, check-out and
+the queue screen. Their queued work is safe on disk under their own key and unreachable until they
+sign in, which needs signal. `FE-G2` is a full offline DAY; this would end it before lunch.
+
+**B2.** `persisted-session.ts` asks storage when the library answers null. It decides nothing about
+permission — an expired token is refused by the server exactly as before — and the
+offline-versus-rejected distinction is the LIBRARY's: a non-retryable refusal removes the entry. The
+client's storage key is now named (`fieldforce.auth.v1`) so the app can read what the library wrote;
+a device holding a session under the old derived key signs in once more, which the emulator did.
+
+**B4.** With the token five minutes expired and no signal, the rep opened a visit and checked in —
+*"Checked in — waiting to send"*, *"This check-in cannot be sent yet"* (`FE-W63`'s wording intact),
+nothing on the server — and on reconnect it landed exactly once (`35cc6ff1`, `geofence_status
+inside`).
+
+**B3.** With signal and the refresh token revoked server-side, the next cold start after expiry
+signed the rep out. `FE-W56`'s `PGRST303` wording is on the pull-failure path and is untouched.
+
+#### C — two small ones the AI layer needs
+
+**C1 — `BE-W111`, the object is named for what it holds (code).** `begin_upload` mints `.m4a`; both
+`storage_key` CHECKs accept `.opus` OR `.m4a`, so MR-51's three uploaded objects stay valid rows;
+`recordings.codec` accepts `aac` and now DEFAULTS to it, because `complete_upload` names no codec and
+the old default would have made a future recording claim Opus. **What else read that extension,
+checked:** the two CHECKs, the codec CHECK and default, `packages/core`'s recording contract, two
+suites that asserted the minted name (updated), four that build their own keys (unaffected), and the
+mock's fixtures. The storage policies key on `has_live_upload_grant(name)` and read no extension.
+**Owed when a second container exists:** the format belongs in `begin_upload`'s arguments; one
+producer writing one container does not justify that signature change today.
+
+**C2 — notes saved before the upload existed (emulator).** **They are deleted, and the rep is told**,
+and that is not a preference: a kept file is named by its note id, and the VISIT lives in the queue
+row, so a note saved before MR-51 D has no visit — and `begin_upload` takes one. There was never an
+upload path to give them. The voice-note screen removes any kept note the rep's own outbox is not
+holding and says *"1 older note could not be sent — they were saved before sending existed, so the
+visit was not recorded with them. They have been removed from this phone."* Proved on the Pixel 10
+with a planted note; the queued note beside it was untouched. **What this deliberately does not do:**
+open another rep's folder. Two notes on that emulator belong to accounts that no longer exist, and
+the ownership rule (`C9`, MR-49) is exactly what stops a session deleting another rep's audio from a
+shared phone. They go when that rep signs in, or with the device.
+
+#### D — `BE-W106`: the leak closed, the model left open, the acceptance dated
+
+**D1/D2 (code).** `app_thresholds` loses SELECT for `authenticated` and `anon` and its `using (true)`
+policy. **Nothing broke, and that was established rather than assumed:** exactly one database object
+reads the table — `threshold(text, uuid)`, `SECURITY DEFINER` owned by `postgres`, so a grant to
+`authenticated` is irrelevant to it — and no client reads it at all. **D1's "scoped function" half
+was NOT built**, deliberately: nothing needs one today, every value already arrives through a
+function, and an unused read path is the speculative code this repository refuses. That is a
+reviewer instruction declined with its reason, not skipped.
+
+**D3, two-sided (code).** An MR and an admin are refused over real HTTP — **403, `42501`, "permission
+denied for table app_thresholds"** — and the rival admin cannot reach the other company's
+`set_by_user_id`. Positive controls: `threshold()` answers and `my_shift_window()` resolves.
+Restoring the grant fails exactly those three refusals and nothing else.
+
+**D4, the dated expiry.** **Proposed: `2026-10-31`, for the operator to confirm** — the date the
+repository's other recorded acceptance expires (the production drift acceptance), so two accepted
+gaps come due in one conversation rather than drifting apart. The mechanism is `BE-W21`'s, reused
+rather than reinvented: a dated append-only row, `be_w106_decision_status()`, and
+`check:decision-debt` failing CI once it passes. **Resolution is read from the SCHEMA** — organisation
+scoping on the table, as a column or a `scope` value — not from a flag somebody must remember to
+flip; and it fails closed, so deleting the deadline row reads as overdue. Today it reports **37 days
+remaining**.
+
+**What is still open and unchanged:** `threshold()` returns any territory's value to any caller who
+names it, and a `global` row is shared by every tenant. That is the model question.
+
+#### E — the register's wrong check, replaced
+
+`BE-W83`'s recorded verification named `team_activity` and `coverage`. Both are `SECURITY DEFINER`
+owned by `postgres` (`BYPASSRLS`), so **no policy runs inside them** and the before/after would have
+been identical whatever the policies did — a green result meaning nothing. MR-51 refused it; MR-52
+replaces it with the paths the policies are actually on: `sync_pull` (`SECURITY INVOKER`, the phone's
+hot path) and a direct per-role table read, **plus the row counts each role sees**, which is what
+catches a policy that removes legitimate rows rather than merely costing time. **Where else those two
+functions are named:** `BE-W107`, its status row and the MR-47 day-rule notes — all about which day a
+visit counts on, all unaffected. The general rule is now written beside it: a `SECURITY DEFINER`
+function owned by `postgres` can never demonstrate a row-level policy, in either direction.
+
+#### Counts, from each runner's own summary line
+
+| Package | Runner | Tests |
+| --- | --- | --- |
+| `@fieldforce/api` | vitest | **783** (57 files, +15) |
+| `@fieldforce/field` | vitest | **596** (38 files, +11) |
+| `@fieldforce/field` | jest | 162 (21 suites) |
+| `@fieldforce/ui` | jest | 253 (22 suites) |
+| `@fieldforce/ui` | vitest | 4 (1 file) |
+| `@fieldforce/ui-tokens` | vitest | 54 (3 files) |
+| `@fieldforce/core` | vitest | 31 (4 files) |
+| `@fieldforce/console` | vitest | **37** (6 files, +6) |
+| `@fieldforce/mock` | vitest | 43 (1 file) |
+| **Total** | | **1,963 passing, zero failing, up 32** |
+
+#### Mistakes of my own, recorded
+
+1. **I committed twice before reading the lint output** — an unused destructured binding, and a
+   coerced `unknown` that would have produced a name no file could match. Both were caught by the
+   next command and fixed in follow-up commits, but the rule is "check format BEFORE committing" and
+   lint belongs in the same breath. The third and fourth commits were checked first.
+2. **I wrote a `consent_text_versions` row mapper that already existed** (MR-23 B1) and only found it
+   when the build refused the duplicate declaration. Grep for prior art before writing, not after.
+3. **The local database carries two identical `be_w106_settings_model_decision_due` rows**, because I
+   re-applied the migration by hand after a rollback drill. `app_thresholds` is append-only so
+   neither can be removed; a database built from the migrations has exactly one. Harmless, and said
+   rather than tidied away.
+
+#### Where it stopped, and why
+
+**No blockage, and no conditional stop fired.** A, B, C, D and E are all complete. What is left is
+**ROOM**, and named: `BE-W106`'s model question (now dated), the `.m4a`-versus-format argument in
+`begin_upload`, the three drafts in `blocked-on-you` that are the operator's to approve, and the
+handset gates.

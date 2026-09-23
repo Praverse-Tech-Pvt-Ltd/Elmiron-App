@@ -1115,3 +1115,42 @@ LOCAL demo tenant only.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-51 — the review record and the upload | `PROJECT-OVERVIEW.md` → `### MR-51 — the review record and the upload` |
+
+---
+
+## After MR-52 — 23 September 2026
+
+| | |
+| --- | --- |
+| **CI on arrival** | `35820894838`, workflow `CI`, event `push`, success, SHA = HEAD (`031e463`); `Migration drift` green on the same SHA |
+| **`FE-W66`** | **CLOSED.** The console signs in (`@supabase/ssr` 0.12.7 + `@supabase/supabase-js` 2.117.0, pinned, console only) on the SAME identity as the app, and every page reads the real server. Proved in a browser, including with the mock killed |
+| **`FE-W67`** | **FIXED.** Offline no longer signs a rep out: the cut-off was the ACCESS token's expiry (~1 h at the real 3600s), measured both ways on the emulator. A rejected session still signs out |
+| **`BE-W111`** | **FIXED.** Objects are named `.m4a`; both CHECKs accept either name so MR-51's uploads stay valid; `recordings.codec` defaults to `aac` |
+| **Old voice notes** | **Deleted, with the rep told** — a note with no queue row has no visit, so it never had an upload path. Another rep's folder is never touched |
+| **`BE-W106`** | **Leak closed** (`app_thresholds` is not directly readable), **model untouched**, and the acceptance now **expires 2026-10-31** — proposed, and `check:decision-debt` fails CI after it |
+| **`BE-W83`** | Its recorded verification named two functions that bypass RLS; replaced with `sync_pull` and per-role reads plus row counts |
+| **Tests** | **1,963 passing, zero failing, up 32** |
+
+### For the next session
+
+- **Run `pnpm --filter <pkg> lint` BEFORE committing, not after.** Two commits this session needed a
+  follow-up fix for a lint error that was already on screen.
+- **Grep for prior art before writing a mapper or helper** — `fromConsentTextVersionRow` already
+  existed and was rediscovered only when the build refused the duplicate.
+- The console needs `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_KEY`; copy
+  `apps/console/.env.example` to `.env.local`. `next build` passes without them, every route is
+  dynamic.
+- **`apps/field`'s auth storage key is now `fieldforce.auth.v1`.** A device holding the old derived
+  key signs in once more; that is expected, not a defect.
+- The coaching queue is legitimately empty and a real analysis says "Nothing was flagged": findings
+  arrive with the analysis engine (week 10, `20260811000100`), and the RPC returns `[]` rather than
+  inventing any.
+- The local database carries two identical `be_w106_settings_model_decision_due` rows from a
+  hand-re-applied migration; the table is append-only, and a fresh build has one.
+- Every result this session is code, emulator or browser. `FE-G1`/`FE-G2` still need a handset, after
+  the AI integration (`C12`).
+- Services stopped at the end of this session.
+
+| Session | Where the narrative is |
+| --- | --- |
+| MR-52 — the console | `PROJECT-OVERVIEW.md` → `### MR-52 — the console` |

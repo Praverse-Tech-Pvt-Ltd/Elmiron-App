@@ -1034,3 +1034,25 @@ bake-off corpus consent, `BE-W109`'s doctor text, and `BE-W106`'s settings model
 **Two of my own mistakes are written up in `PROJECT-OVERVIEW.md`** — running the destructive
 rollback verifier against the local database, and a committed probe fixture that failed an unrelated
 suite. Both were recoverable; both were avoidable by reading a warning that already existed.
+
+---
+
+## MR-52 — 23 September 2026
+
+**Built:** console sign-in on the existing Supabase identity (`D-14`; `@supabase/ssr` 0.12.7 and
+`@supabase/supabase-js` 2.117.0, pinned, `apps/console` only) and every console read pointed at the
+real server (`FE-W66`, proved in a browser and with the mock killed); an offline rep stays signed in
+(`FE-W67`); objects named for the container they hold (`BE-W111`); notes that could never be sent
+removed with the rep told; and `app_thresholds` made unreadable directly (`BE-W106`'s leak) without
+touching its model question.
+
+**Decided in-session, and defended in the record:** D1's "scoped function" half was not built —
+nothing reads that table, and an unused read path is speculative code. `BE-W83`'s recorded
+verification was replaced because it named two functions that bypass row security.
+
+**Waiting on the operator:** `BE-W106`'s settings model — **now dated, proposed 2026-10-31**, after
+which CI fails; the 2.6 notice row; the corpus consent; `BE-W109`'s doctor text.
+
+**My own mistakes are written up in `PROJECT-OVERVIEW.md`**: two commits made before reading lint
+output, a helper written that already existed, and a duplicated deadline row left in the local
+database rather than tidied away silently.

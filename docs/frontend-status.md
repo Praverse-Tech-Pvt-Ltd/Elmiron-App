@@ -1428,3 +1428,33 @@ again".
 - The transparency notice on `main` is still the false one. The corrected row (it now says a saved
   note is sent and then removed) waits on the branch for approval — `blocked-on-you` 2.6.
 - `FE-G1` and `FE-G2` stay open. `C12`: they close only on a handset, after the AI integration.
+
+## MR-52 — 23 September 2026: the console is usable, and offline keeps you signed in
+
+**Counts:** `@fieldforce/console` vitest **37** (6 files, +6); `@fieldforce/field` vitest **596**
+(38 files, +11), jest **162** (21 suites, unchanged).
+
+### Console (browser)
+
+- **Sign in** at `/sign-in`, with the same account as the app. The sidebar names who is signed in and
+  offers Sign out. A signed-out browser is redirected — and the server refuses its reads anyway.
+- **Coaching queue and review** read the real server. A real analysis renders as *"Nothing was
+  flagged"* and the queue is empty, because findings arrive with the analysis engine — the console
+  shows what exists rather than what the mock invented.
+- **The override history works end to end**: saved from the form, *"Overrides already logged (1)"*
+  after a reload, and still there with the mock killed. The other organisation's admin sees *"This
+  analysis could not be loaded"*.
+
+### Field app (emulator)
+
+- **Offline no longer signs a rep out.** Before: a cold start past the token's expiry landed on Sign
+  in. After: Today, with *"not confirmed since"*, a check-in queued with the existing wording, and the
+  queued write landing once on reconnect. A session the server has rejected still signs out.
+- **Voice notes saved before sending existed are removed**, with one line saying how many and why.
+  Another rep's notes are never touched.
+
+### Not changed
+
+- The transparency notice on `main` is still the false one; the corrected row waits on its branch —
+  `blocked-on-you` 2.6.
+- `FE-G1` and `FE-G2` still need a handset, after the AI integration (`C12`).
