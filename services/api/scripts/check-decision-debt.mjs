@@ -2,7 +2,10 @@ import { Client } from 'pg';
 import { assertTargetAllowed } from './target-guard.mjs';
 
 /**
- * BE-W21 — the forcing function on the UCPMP cap decision.
+ * BE-W21 — the forcing function on the UCPMP cap decision, and since MR-52 D4 on the
+ * BE-W106 settings-model decision too. Two recorded acceptances, one step, the same shape:
+ * a dated row in `app_thresholds` and a status function that reads the schema for whether
+ * the question has actually been answered.
  *
  * `20260907000700_ucpmp_sample_caps.sql` built the cap and deliberately left the
  * ceiling null, because nothing in this repository states what the UCPMP limit is and
@@ -85,6 +88,53 @@ export const evaluateDecisionDebt = (status) => {
   return { clear: reasons.length === 0, reasons, warnings };
 };
 
+/**
+ * MR-52 D4 — the same evaluation for `BE-W106`, the settings-model decision.
+ *
+ * `app_thresholds` stopped being directly readable in `20260923000300`, which removed the LEAK. The
+ * model question — which settings belong to which company — is the operator's and stays open, so
+ * the acceptance carries a date instead of running forever. `settingsScoped` is read from the
+ * schema by `be_w106_decision_status()`, not from a flag: the answer lands as organisation scoping
+ * on the table or it has not landed.
+ *
+ * @param {Record<string, unknown>} status the jsonb from public.be_w106_decision_status()
+ * @returns {{ clear: boolean, reasons: string[], warnings: string[] }}
+ */
+export const evaluateSettingsModelDebt = (status) => {
+  const reasons = [];
+  const warnings = [];
+
+  if (status === null || typeof status !== 'object') {
+    return {
+      clear: false,
+      reasons: ['be_w106_decision_status() returned nothing readable.'],
+      warnings,
+    };
+  }
+
+  const due =
+    status.dueAt === null || status.dueAt === undefined ? 'never set' : String(status.dueAt);
+
+  if (status.overdue === true) {
+    reasons.push(
+      `BE-W106 is unanswered and its accepted deadline (${due}) has passed: app_thresholds still ` +
+        'has no organisation scoping.',
+    );
+  } else if (status.overdue !== false) {
+    reasons.push(`be_w106_decision_status() returned overdue=${String(status.overdue)}.`);
+  } else if (status.warn === true) {
+    warnings.push(
+      `the BE-W106 settings-model decision is due on ${due}` +
+        (status.daysRemaining === null || status.daysRemaining === undefined
+          ? ''
+          : ` -- ${String(status.daysRemaining)} day(s) left`) +
+        '. After that this step fails the build.',
+    );
+  }
+
+  return { clear: reasons.length === 0, reasons, warnings };
+};
+
 export const checkDecisionDebt = async (overrides = {}) => {
   const config = { ...DEFAULTS, ...overrides };
   // MR-43 D2 / `BE-W103`. Found by running every script against a non-resolving host rather
@@ -105,7 +155,21 @@ export const checkDecisionDebt = async (overrides = {}) => {
   try {
     const result = await client.query('select public.ucpmp_cap_decision_status() as status');
     const status = result.rows[0]?.status ?? null;
-    return { status, ...evaluateDecisionDebt(status) };
+    const cap = evaluateDecisionDebt(status);
+
+    // MR-52 D4. Two debts, one step: a second CI job for a second dated row would be two places
+    // to remember, and the one nobody remembers is the one that lapses.
+    const settingsResult = await client.query('select public.be_w106_decision_status() as status');
+    const settingsStatus = settingsResult.rows[0]?.status ?? null;
+    const settings = evaluateSettingsModelDebt(settingsStatus);
+
+    return {
+      status,
+      settingsStatus,
+      clear: cap.clear && settings.clear,
+      reasons: [...cap.reasons, ...settings.reasons],
+      warnings: [...cap.warnings, ...settings.warnings],
+    };
   } finally {
     await client.end();
   }
@@ -116,8 +180,8 @@ if (
   process.argv[1] !== undefined &&
   import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))
 ) {
-  const { status, clear, reasons, warnings } = await checkDecisionDebt();
-  console.log(JSON.stringify(status, null, 2));
+  const { status, settingsStatus, clear, reasons, warnings } = await checkDecisionDebt();
+  console.log(JSON.stringify({ ucpmpCap: status, settingsModel: settingsStatus }, null, 2));
 
   for (const warning of warnings) {
     // ::warning:: is a GitHub Actions annotation, so this surfaces on the run summary
@@ -148,5 +212,14 @@ if (
     days === null || days === undefined
       ? '\nUCPMP sample cap is configured. Nothing outstanding.'
       : `\nUCPMP sample cap decision is outstanding, ${String(days)} day(s) to the deadline.`,
+  );
+
+  const settingsDays = settingsStatus?.daysRemaining;
+  console.log(
+    settingsStatus?.settingsScoped === true
+      ? 'BE-W106: app_thresholds carries organisation scoping. Nothing outstanding.'
+      : settingsDays === null || settingsDays === undefined
+        ? 'BE-W106: the settings-model decision is outstanding with no deadline.'
+        : `BE-W106: the settings-model decision is outstanding, ${String(settingsDays)} day(s) to the deadline.`,
   );
 }

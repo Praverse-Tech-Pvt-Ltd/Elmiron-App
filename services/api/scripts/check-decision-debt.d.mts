@@ -1,5 +1,5 @@
 /**
- * Types for the UCPMP cap decision deadline.
+ * Types for the UCPMP cap decision deadline, and since MR-52 D4 the BE-W106 one beside it.
  *
  * `evaluateDecisionDebt` is pure and exported separately from the database call for the
  * same reason `evaluatePurgeHealth` is: the failure path has to be provable without
@@ -30,6 +30,23 @@ export declare const evaluateDecisionDebt: (
   status: (Partial<CapDecisionStatus> & Record<string, unknown>) | null,
 ) => DecisionDebtVerdict;
 
-export declare const checkDecisionDebt: (overrides?: {
-  dbUrl?: string;
-}) => Promise<DecisionDebtVerdict & { status: CapDecisionStatus | null }>;
+/** MR-52 D4 — the settings-model decision (`BE-W106`), carried by the same step. */
+export interface SettingsModelStatus {
+  /** True once `app_thresholds` carries organisation scoping — read from the schema, not a flag. */
+  settingsScoped: boolean;
+  dueAt: string | null;
+  overdue: boolean;
+  warn: boolean;
+  daysRemaining: number | null;
+}
+
+export declare const evaluateSettingsModelDebt: (
+  status: (Partial<SettingsModelStatus> & Record<string, unknown>) | null,
+) => DecisionDebtVerdict;
+
+export declare const checkDecisionDebt: (overrides?: { dbUrl?: string }) => Promise<
+  DecisionDebtVerdict & {
+    status: CapDecisionStatus | null;
+    settingsStatus: SettingsModelStatus | null;
+  }
+>;
