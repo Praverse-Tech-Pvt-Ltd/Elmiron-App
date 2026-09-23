@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
 import type { Client } from 'pg';
-import { evaluateDecisionDebt } from '../scripts/check-decision-debt.mjs';
+import { evaluateAllDecisionDebt, evaluateDecisionDebt } from '../scripts/check-decision-debt.mjs';
 
 /**
  * BE-W21 — the forcing function on the UCPMP cap decision.
@@ -238,5 +238,110 @@ describe('check:decision-debt turns that status into a CI failure', () => {
     // null, and CI goes red rather than green.
     expect(evaluateDecisionDebt(null).clear).toBe(false);
     expect(evaluateDecisionDebt({ capConfigured: false }).clear).toBe(false);
+  });
+});
+/**
+ * MR-53 E3 — **two dated decisions in one step, and what the reader is told about each.**
+ *
+ * MR-52 D4 added `BE-W106` beside the UCPMP cap, for a reason this file agrees with: two CI jobs
+ * are two things to remember, and the one nobody remembers is the one that lapses. The question
+ * asked here is what happens on the days when BOTH are outstanding, because the dates overlap by
+ * design and nobody had looked:
+ *
+ *   - `BE-W106` is due 2026-10-31 -- it enters its 21-day window on **2026-10-10**.
+ *   - the UCPMP cap is due 2026-11-06 -- it enters its window on **2026-10-16**.
+ *
+ * So for fifteen days both warn, and from 2026-10-31 one is red while the other is still amber.
+ * The answer is TWO warnings, not one -- and before this the second one arrived carrying the
+ * first one's question.
+ *
+ * Pure: no database, no calendar.
+ */
+const outstanding = (over: Record<string, unknown> = {}) => ({
+  capConfigured: false,
+  overdue: false,
+  warn: false,
+  dueAt: '2026-11-06T00:00:00Z',
+  daysRemaining: 60,
+  ...over,
+});
+
+const settings = (over: Record<string, unknown> = {}) => ({
+  settingsScoped: false,
+  overdue: false,
+  warn: false,
+  dueAt: '2026-10-31T00:00:00Z',
+  daysRemaining: 38,
+  ...over,
+});
+
+describe('MR-53 E3 — two decisions share the step without sharing their advice', () => {
+  it('both inside their windows is TWO warnings, one per decision', () => {
+    const result = evaluateAllDecisionDebt(
+      outstanding({ warn: true, daysRemaining: 21 }),
+      settings({ warn: true, daysRemaining: 15 }),
+    );
+    expect(result.warnings).toHaveLength(2);
+    // Still green: a warning is something said, not something failed.
+    expect(result.clear).toBe(true);
+    expect(result.debts.map((debt) => debt.key)).toEqual(['ucpmpCap', 'settingsModel']);
+  });
+
+  it('each warning is paired with ITS OWN question, not the other decision’s', () => {
+    const [cap, model] = evaluateAllDecisionDebt(
+      outstanding({ warn: true, daysRemaining: 21 }),
+      settings({ warn: true, daysRemaining: 15 }),
+    ).debts;
+
+    expect(cap?.warnings).toHaveLength(1);
+    expect(cap?.question).toMatch(/UCPMP sample cap/u);
+
+    expect(model?.warnings).toHaveLength(1);
+    expect(model?.question).toMatch(/which company/iu);
+    // The defect this exists to stop: the settings-model reader being sent to ask the client
+    // about a sample cap.
+    expect(model?.question).not.toMatch(/UCPMP/u);
+    expect(model?.consequence).not.toMatch(/enforce_ucpmp_sample_cap/u);
+  });
+
+  it('BE-W106 overdue fails the build alone, with the settings consequence', () => {
+    // 2026-10-31 to 2026-11-06: one red, one amber. The red must not describe the amber one.
+    const result = evaluateAllDecisionDebt(
+      outstanding({ warn: true, daysRemaining: 6 }),
+      settings({ overdue: true, daysRemaining: 0 }),
+    );
+    expect(result.clear).toBe(false);
+
+    const failing = result.debts.filter((debt) => !debt.clear);
+    expect(failing).toHaveLength(1);
+    expect(failing[0]?.key).toBe('settingsModel');
+    expect(failing[0]?.reasons.join(' ')).toContain('2026-10-31');
+    expect(failing[0]?.consequence).toMatch(/app_thresholds stays global/u);
+  });
+
+  it('answering one does not clear the other', () => {
+    // A combined verdict that went green because the loudest debt was answered would be worse
+    // than two jobs, which is the objection MR-52 D4 has to survive.
+    const result = evaluateAllDecisionDebt(
+      outstanding({ capConfigured: true, daysRemaining: null }),
+      settings({ overdue: true }),
+    );
+    expect(result.clear).toBe(false);
+    expect(result.reasons.join(' ')).toContain('BE-W106');
+    expect(result.reasons.join(' ')).not.toContain('UCPMP sample cap is still unconfigured');
+  });
+
+  it('both answered is silent', () => {
+    expect(
+      evaluateAllDecisionDebt(
+        outstanding({ capConfigured: true, daysRemaining: null }),
+        settings({ settingsScoped: true }),
+      ),
+    ).toMatchObject({ clear: true, reasons: [], warnings: [] });
+  });
+
+  it('fails closed when either status is unreadable', () => {
+    expect(evaluateAllDecisionDebt(null, settings()).clear).toBe(false);
+    expect(evaluateAllDecisionDebt(outstanding(), null).clear).toBe(false);
   });
 });

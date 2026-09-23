@@ -135,6 +135,70 @@ export const evaluateSettingsModelDebt = (status) => {
   return { clear: reasons.length === 0, reasons, warnings };
 };
 
+/**
+ * MR-53 E3 — **each debt carries its own next step.**
+ *
+ * MR-52 D4 put a second dated decision into this one step, for a stated reason: "two places to
+ * remember, and the one nobody remembers is the one that lapses". What it did not do was split
+ * the ADVICE. The CLI printed the UCPMP question after every warning and after every failure, so
+ * from 2026-10-10 -- when `BE-W106` enters its 21-day window, six days before the cap enters its
+ * own -- a reader would have been told to go and ask the client what the UCPMP sample cap is in
+ * order to clear a question about which settings belong to which company. On 2026-10-31 the same
+ * wrong paragraph would have arrived attached to a RED build.
+ *
+ * That is the failure this repository names elsewhere as the worst kind: advice that looks like a
+ * control while pointing somewhere else. So the question and the consequence belong to the debt,
+ * not to the loop that prints them.
+ */
+const DEBTS = {
+  ucpmpCap: {
+    label: 'UCPMP sample cap',
+    question:
+      'What is the UCPMP sample cap, on what dimension, and who at the client owns\nthat number?',
+    consequence:
+      'Until it is set, public.enforce_ucpmp_sample_cap() is inert: samples are\n' +
+      'accepted and uncounted, and the samples screen still says so.\n\n' +
+      'Do NOT invent a value to clear this. Either set the real one, or file a\n' +
+      'migration moving ucpmp_sample_cap_decision_due with the reason in its note.',
+  },
+  settingsModel: {
+    label: 'BE-W106 settings model',
+    question: 'Which settings belong to which company, and who owns that decision?',
+    consequence:
+      'Until it is answered, app_thresholds stays global: every organisation reads\n' +
+      'one set of values, and the accessors that read them cannot tell them apart.\n' +
+      'The LEAK is closed -- 20260923000300 revoked the direct select -- but the\n' +
+      'model question is untouched by that.\n\n' +
+      'Do NOT invent a scoping to clear this. Either land the decision on the table\n' +
+      'as an organisation column or scope value, or file a migration moving\n' +
+      'be_w106_settings_model_decision_due with the reason in its note.',
+  },
+};
+
+/**
+ * Both debts, each with its own advice, and the combined verdict the exit code reads.
+ *
+ * Pure and exported for the same reason the two evaluators are: the state where BOTH are inside
+ * their windows at once lasts fifteen days in October 2026, and a control whose behaviour in that
+ * state has never been seen is indistinguishable from one that gets it wrong.
+ *
+ * @param {Record<string, unknown> | null} capStatus jsonb from ucpmp_cap_decision_status()
+ * @param {Record<string, unknown> | null} settingsStatus jsonb from be_w106_decision_status()
+ */
+export const evaluateAllDecisionDebt = (capStatus, settingsStatus) => {
+  const debts = [
+    { key: 'ucpmpCap', ...DEBTS.ucpmpCap, ...evaluateDecisionDebt(capStatus) },
+    { key: 'settingsModel', ...DEBTS.settingsModel, ...evaluateSettingsModelDebt(settingsStatus) },
+  ];
+  return {
+    debts,
+    clear: debts.every((debt) => debt.clear),
+    // Flattened as well, unchanged: the exit code and the run summary read the whole set.
+    reasons: debts.flatMap((debt) => debt.reasons),
+    warnings: debts.flatMap((debt) => debt.warnings),
+  };
+};
+
 export const checkDecisionDebt = async (overrides = {}) => {
   const config = { ...DEFAULTS, ...overrides };
   // MR-43 D2 / `BE-W103`. Found by running every script against a non-resolving host rather
@@ -155,21 +219,13 @@ export const checkDecisionDebt = async (overrides = {}) => {
   try {
     const result = await client.query('select public.ucpmp_cap_decision_status() as status');
     const status = result.rows[0]?.status ?? null;
-    const cap = evaluateDecisionDebt(status);
 
     // MR-52 D4. Two debts, one step: a second CI job for a second dated row would be two places
     // to remember, and the one nobody remembers is the one that lapses.
     const settingsResult = await client.query('select public.be_w106_decision_status() as status');
     const settingsStatus = settingsResult.rows[0]?.status ?? null;
-    const settings = evaluateSettingsModelDebt(settingsStatus);
 
-    return {
-      status,
-      settingsStatus,
-      clear: cap.clear && settings.clear,
-      reasons: [...cap.reasons, ...settings.reasons],
-      warnings: [...cap.warnings, ...settings.warnings],
-    };
+    return { status, settingsStatus, ...evaluateAllDecisionDebt(status, settingsStatus) };
   } finally {
     await client.end();
   }
@@ -180,30 +236,27 @@ if (
   process.argv[1] !== undefined &&
   import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))
 ) {
-  const { status, settingsStatus, clear, reasons, warnings } = await checkDecisionDebt();
+  const { status, settingsStatus, debts, clear } = await checkDecisionDebt();
   console.log(JSON.stringify({ ucpmpCap: status, settingsModel: settingsStatus }, null, 2));
 
-  for (const warning of warnings) {
-    // ::warning:: is a GitHub Actions annotation, so this surfaces on the run summary
-    // rather than only inside a log nobody opens on a green build.
-    console.log(`::warning title=Decision due::${warning}`);
-    console.error(`\nA DECISION IS COMING DUE:\n  - ${warning}`);
-    console.error(
-      '\nWhat is the UCPMP sample cap, on what dimension, and who at the client owns\n' +
-        'that number? This is not failing the build yet. It will.',
-    );
+  for (const debt of debts) {
+    for (const warning of debt.warnings) {
+      // ::warning:: is a GitHub Actions annotation, so this surfaces on the run summary
+      // rather than only inside a log nobody opens on a green build.
+      console.log(`::warning title=${debt.label} decision due::${warning}`);
+      console.error(`\nA DECISION IS COMING DUE -- ${debt.label}:\n  - ${warning}`);
+      console.error(`\n${debt.question}\n\nThis is not failing the build yet. It will.`);
+    }
   }
 
   if (!clear) {
-    console.error('\nA DECISION IS OVERDUE:');
-    for (const reason of reasons) console.error(`  - ${reason}`);
-    console.error(
-      '\nWhat is the UCPMP sample cap, on what dimension, and who at the client owns\n' +
-        'that number? Until it is set, public.enforce_ucpmp_sample_cap() is inert:\n' +
-        'samples are accepted and uncounted, and the samples screen still says so.\n\n' +
-        'Do NOT invent a value to clear this. Either set the real one, or file a\n' +
-        'migration moving ucpmp_sample_cap_decision_due with the reason in its note.',
-    );
+    // MR-53 E3. One block per unanswered decision, each with ITS OWN question and consequence.
+    for (const debt of debts) {
+      if (debt.clear) continue;
+      console.error(`\nA DECISION IS OVERDUE -- ${debt.label}:`);
+      for (const reason of debt.reasons) console.error(`  - ${reason}`);
+      console.error(`\n${debt.question}\n\n${debt.consequence}`);
+    }
     process.exit(1);
   }
 

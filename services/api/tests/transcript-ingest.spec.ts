@@ -103,7 +103,11 @@ const recordingFor = async (client: Client, over: { durationSeconds?: number } =
   return id;
 };
 
-const ingestAs = async (client: Client, role: string, transcript: unknown) => {
+const ingestAs = async (
+  client: Client,
+  role: 'authenticated' | 'anon' | 'service_role',
+  transcript: unknown,
+) => {
   await asDatabaseRole(client, role);
   return client.query<{ result: Record<string, unknown> }>(
     'select public.ingest_transcript($1::jsonb) as result',
