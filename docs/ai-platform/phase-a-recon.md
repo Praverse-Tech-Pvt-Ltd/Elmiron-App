@@ -360,6 +360,28 @@ people-time or the spend has been approved for it.
 
 ---
 
+## 6a. What was built after this document (24 September 2026)
+
+Built on the branch, under three assumptions each of which the operator can overrule: **work
+stays on the branch** (D10), **no dependency is added** (none was), and **market lives on
+content, not on the organisation** (D6).
+
+- **AI-B1 — catalogue.** `markets`, `therapy_areas`, `products`, `product_markets`. Identity only
+  — no claim, indication or label text, by design and by test. Admin writes; the organisation
+  reads; restrictive tenant boundary; cross-organisation references refused by trigger.
+- **AI-B2 — LMS core.** `courses`, `course_versions` (draft → published → retired),
+  `course_modules`, `lessons`, `course_assignments`, `course_enrolments`, `lesson_completions`.
+  A published version is frozen by trigger, even for the table owner; state changes go through
+  six RPCs; completions are append-only; the server stamps every time. **No score, grade or
+  pass mark anywhere** — X2 is still open.
+- **Evidence, not impressions.** For each: a spec (`catalogue.spec.ts`, `lms-core.spec.ts`), a
+  deliberate mutation run in which weakening each guard failed exactly the test that covers it,
+  the new tables added to the restrictive-boundary catalog check and the over-HTTP tenant probe,
+  every RPC response parsed against `packages/core`, `verify:rollbacks` executed, and the
+  database rebuilt from every migration with `db:reset`.
+- **Still UNVERIFIED in the §56 sense.** Nothing in `apps/field` or `apps/console` calls any of
+  it. "It must be exercised through the real application" has not happened.
+
 ## 7. Status (§56 of the prompt)
 
 `DONE` means exercised through the real application, not "an endpoint exists".
@@ -371,10 +393,11 @@ people-time or the spend has been approved for it.
 | Transcript ingestion | **UNVERIFIED** — built and tested, called by nothing |
 | AI analysis on real visits | **BLOCKED** (C3, C4) |
 | Adverse-event ingest | **BLOCKED** — mechanical half built; routing awaits sign-off |
-| Products / therapy / market | **DECISION REQUIRED** (D5, D6) |
-| LMS, assessments, certification | **DECISION REQUIRED** (X2, D5) |
+| Products / therapy / market | **Schema built, UNVERIFIED** — AI-B1, `20260924000400_catalogue.sql`. No rows (D5); market on content (assumed for D6). Tested at the database; no screen reads it yet |
+| LMS core — courses, versions, lessons, assignments, enrolments, completions | **Built, UNVERIFIED** — AI-B2, `20260924000500_lms_core.sql`, contracts in `packages/core/src/field/lms.ts`. Tested at the database and against the contracts; no screen calls it yet |
+| Assessments, certification | **DECISION REQUIRED** (X2) — deliberately not built |
 | Knowledge ingestion / RAG | **DECISION REQUIRED** (D3, D8) |
-| AI gateway / provider layer / cost tracking | **DECISION REQUIRED** (D1, D2) |
+| AI gateway / provider layer / cost tracking | **DECISION REQUIRED** (D1, D2) — D1's testability premise now measured (§4): the local edge runtime works and forwards the caller's identity |
 | MR chatbot, AI Doctor, AI Coach | **DECISION REQUIRED** (D1, D2, X2, X4) |
 | Voice (simulator) | **DECISION REQUIRED** (D2, vendor) |
 | PV / complaint / off-label screening | **BLOCKED** (C3, `blocked-on-you` 4.1, 5.8) |
