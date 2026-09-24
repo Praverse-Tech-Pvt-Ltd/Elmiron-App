@@ -3,6 +3,18 @@ import { CONSENT_OUTCOMES, ConsentOutcomeSchema, ConsentRecordSchema } from './f
 import { ROLES } from './shared/identity.js';
 import { AnalysisSchema, FindingSchema } from './field/analysis.js';
 import { ApiErrorCodeSchema } from './shared/errors.js';
+import { ProductSchema } from './field/catalogue.js';
+import {
+  CompleteLessonResponseSchema,
+  CourseAssignmentSchema,
+  CourseEnrolmentSchema,
+  CourseModuleSchema,
+  CourseSchema,
+  CourseVersionSchema,
+  LessonCompletionSchema,
+  LessonSchema,
+  StartCourseVersionResponseSchema,
+} from './field/lms.js';
 
 /**
  * These are contract guards, not unit tests. Each one fails if someone later
@@ -91,5 +103,44 @@ describe('analysis', () => {
 describe('api errors', () => {
   it('has a distinct permission_denied code', () => {
     expect(ApiErrorCodeSchema.options).toContain('permission_denied');
+  });
+});
+
+describe('LMS (AI-B2) — no score on the manager surface until X2 is decided', () => {
+  // `.ai-collab/constraints.md` forbids a score on the manager surface, and managers read
+  // enrolments, assignments and completions. Whether training is exempt is X2
+  // (`docs/ai-platform/phase-a-recon.md`); until someone rules, the contract holds the line.
+  const lmsSchemas = {
+    CourseSchema,
+    CourseVersionSchema,
+    CourseModuleSchema,
+    LessonSchema,
+    CourseAssignmentSchema,
+    CourseEnrolmentSchema,
+    LessonCompletionSchema,
+    CompleteLessonResponseSchema,
+    StartCourseVersionResponseSchema,
+  };
+  const forbidden = /(score|grade|rank|percent|rating|passed|failed|passMark|marks?$)/i;
+
+  it.each(Object.entries(lmsSchemas))('%s carries no score-like field', (_name, schema) => {
+    expect(Object.keys(schema.shape).filter((k) => forbidden.test(k))).toEqual([]);
+  });
+});
+
+describe('catalogue (AI-B1) — identity only', () => {
+  it('a product carries no claim, indication, dose or label field', () => {
+    expect(Object.keys(ProductSchema.shape).sort()).toEqual(
+      [
+        'brandName',
+        'createdAt',
+        'genericName',
+        'id',
+        'isActive',
+        'organisationId',
+        'therapyAreaId',
+        'updatedAt',
+      ].sort(),
+    );
   });
 });

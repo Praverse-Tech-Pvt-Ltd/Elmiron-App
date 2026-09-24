@@ -16,5 +16,7 @@ export * from './transcript-v1.js';
 export * from './analysis.js';
 export * from './sync.js';
 export * from './manager.js';
+export * from './catalogue.js';
+export * from './lms.js';
 export * from './endpoints.js';
 export * from './client.js';

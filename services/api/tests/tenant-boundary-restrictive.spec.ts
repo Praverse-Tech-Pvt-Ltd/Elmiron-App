@@ -203,8 +203,8 @@ describe.skipIf(!reachable)('D2 — a restrictive tenant boundary cannot be wide
           order by c.relname`,
       );
       // MR-07 D's seven, plus MR-51 C3's eighteen (BE-W83), plus AI-B1's four catalogue tables
-      // (`20260924000400`). `app_thresholds` is absent on purpose: it is BE-W106, awaiting the
-      // operator (C13).
+      // (`20260924000400`) and AI-B2's seven LMS tables (`20260924000500`). `app_thresholds` is
+      // absent on purpose: it is BE-W106, awaiting the operator (C13).
       expect(rows.rows.map((r) => r.relname)).toEqual([
         'adverse_event_reports',
         'beat_plan_entries',
@@ -215,7 +215,14 @@ describe.skipIf(!reachable)('D2 — a restrictive tenant boundary cannot be wide
         'check_outs',
         'clinic_addresses',
         'consent_text_versions',
+        'course_assignments',
+        'course_enrolments',
+        'course_modules',
+        'course_versions',
+        'courses',
         'doctors',
+        'lesson_completions',
+        'lessons',
         'markets',
         'organisations',
         'product_markets',
