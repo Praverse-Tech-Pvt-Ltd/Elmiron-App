@@ -290,10 +290,41 @@ describe.skipIf(!reachable)('the watchdog against the real database', () => {
   // migration wrongly believed audio_purge_health() itself needed fixing, from
   // reading only the first `create or replace` of that function and missing a
   // later one; this suite now pins the real SQL return shape directly.
+  /**
+   * MR-54 `BE-W114` — make the two stall tests assert THEIR data, not the machine's.
+   *
+   * `audio_purge_is_stalled()` reads the whole of `recordings` and `voice_notes` and trips on
+   * either a backlog over `purge_batch_limit x purge_backlog_multiplier` or an oldest overdue
+   * age past `purge_max_silence_hours`. Both are GLOBAL. So a single committed row more than
+   * twelve hours overdue — left by any earlier session, a synthetic seed, or an abandoned
+   * probe — makes the false-positive test below fail, on a tree where nothing is wrong.
+   *
+   * **Measured, not reasoned:** one committed recording backdated thirteen hours flipped
+   * `audio_purge_is_stalled()` from false to true and failed that test on demand; deleting it
+   * passed it again. It was first recorded as an intermittent failure "under parallel load",
+   * which was wrong — it is accumulated database state, and it looked intermittent because
+   * `db:reset` clears it.
+   *
+   * Called inside the rolled-back transaction BEFORE the test inserts anything, so every
+   * pre-existing overdue row is pushed out of the window and the only overdue rows left are
+   * the ones the test is about. Nothing is committed.
+   */
+  const onlyOurOverdueRows = async (client: Client): Promise<void> => {
+    for (const table of ['recordings', 'voice_notes']) {
+      await client.query(
+        `update public.${table} set purge_after = now() + interval '365 days'
+        where purge_state <> 'destroyed' and purge_after <= now()`,
+      );
+    }
+  };
+
   describe('backlog-based stall detection, against the real function', () => {
     it('trips on backlog size even though nothing is individually old', async () => {
       await asUserTx(world.users.puneMr, async (client) => {
         await client.query('reset role');
+        // BE-W114. Without this the assertion can pass vacuously on a machine that was
+        // already stalled, which is the same defect as its neighbour wearing a green tick.
+        await onlyOurOverdueRows(client);
 
         const limits = await client.query<{ batch: string; multiplier: string }>(
           `select public.threshold_number('purge_batch_limit') as batch,
@@ -356,6 +387,9 @@ describe.skipIf(!reachable)('the watchdog against the real database', () => {
     it('does not trip on a single object briefly overdue -- the false-positive case', async () => {
       await asUserTx(world.users.puneMr, async (client) => {
         await client.query('reset role');
+        // BE-W114. This is the test that was failing on accumulated state rather than on a
+        // defect. See `onlyOurOverdueRows` above for the measurement.
+        await onlyOurOverdueRows(client);
         const visitId = randomUUID();
         const consentId = randomUUID();
         await client.query(

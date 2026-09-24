@@ -2137,3 +2137,19 @@ are worth naming rather than leaving in a diff:
 **Not decided:** `BE-W114`'s intermittent failure. It is registered with exactly what was observed
 — twice in four parallel runs, never in three standalone ones, named once — and no mechanism is
 claimed.
+
+
+### C17 — the grant is audited on custody, not on progress
+
+**Decided (engineering, in session).** `upload_grants` gets an audit trigger on insert and delete,
+and on update **only when `state` changes**. `record_upload_progress` writes to the grant on every
+chunk and never touches `state`; auditing all of it would put one row per chunk into `audit_log`
+and bury `issued -> revoked`.
+
+**Not chosen:** auditing every grant update "for completeness". A trail that cannot be read is the
+same failure as no trail, reached from the other side — and the meaningful transitions are exactly
+the ones `state` names.
+
+**Also recorded:** `audit_log` deliberately keeps a null actor for the purge worker and the
+retention job. Both columns are nullable, `current_app_role()` cannot raise for an unauthenticated
+caller, and a job is not a person — the row should not invent one.

@@ -1241,3 +1241,25 @@ LOCAL demo tenant only.
 - `apps/field` is pinned to `@supabase/supabase-js` **2.112.3** exactly. The lockfile moved one
   line and no version changed.
 - Services stopped at the end of this session.
+
+## MR-54 continued — the two backend items closed (24 September 2026)
+
+- **`BE-W112` closed.** `recordings` and `voice_notes` are audited on insert/update/delete;
+  `upload_grants` on insert/delete and on a **state change only**, because
+  `record_upload_progress` updates the grant on every chunk without touching `state` and an
+  unfiltered trigger would bury `issued -> revoked` under progress. Destruction was never the gap —
+  `audio_destruction_log` has covered that since August.
+- **`BE-W114` closed, and I had it wrong.** It is not "parallel load". `audio_purge_is_stalled()`
+  is GLOBAL, so **one committed recording more than 12h overdue anywhere in your database** fails
+  `retention-ops`' false-positive test. It looks intermittent because the retention suite commits
+  real purges: the first run fails and destroys the backlog, the next is green.
+- **If you see that test fail, look at your database, not at the code:**
+  `select public.audio_purge_is_stalled();` and
+  `select count(*) from public.recordings where purge_state <> 'destroyed' and purge_after <= now();`
+  A `pnpm db:reset` clears it. The tests now isolate themselves either way.
+- **Worth knowing before you poison a local database to test something:** while one 13h-overdue row
+  was committed, **23 unrelated tests failed** — `begin_upload`, the storage policy, the whole
+  resumable-session suite. A stalled purge is a fleet-wide interlock on new uploads.
+- `pnpm --filter @fieldforce/api test` with the stack up: **61 files / 818 tests**. `verify:rollbacks`
+  clean; drift 73 of 73 after a rebuild.
+- Services stopped at the end of this session.

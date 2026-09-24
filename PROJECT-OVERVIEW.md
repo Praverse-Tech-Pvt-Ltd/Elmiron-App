@@ -18883,3 +18883,87 @@ database up **60 / 813, none skipped**; with it stopped **101 passed / 712 skipp
 **ROOM.** Everything MR-54 asked for is now done: A (with A5 failing and reported), B1, B2, B3, C1,
 C2, D1, E1, E2. What is left is not this brief's: `FE-W70`'s operator decision, `FE-W69`'s re-ask
 policy, `BE-W112`'s audit gap and `BE-W114`'s flake.
+
+### MR-54 (continued) — the two backend items, closed
+
+**24 September 2026.** Every result is **code**. `BE-W112` and `BE-W114` were the two backend
+items MR-54 left open; both are closed, and the second one closed by contradicting what I had
+written about it.
+
+#### `BE-W112` — the recording is audited, and the grant's progress noise is not
+
+`20260924000100_audio_rows_are_audited.sql`. `recordings` and `voice_notes` on insert, update and
+delete; `upload_grants` on insert and delete, and on update **only when `state` changes**.
+
+**The filter is the design decision, not tidiness.** `record_upload_progress` updates a grant on
+every chunk — `bytes_received`, `chunk_count`, `last_progress_at`, a sliding `expires_at` — and
+never touches `state`. An unfiltered trigger writes one audit row per chunk and buries
+`issued -> revoked` under progress. A trail nobody can read is the same failure as no trail,
+arrived at from the other side.
+
+**What this does not claim, and there is a test saying so.** Destruction was never the gap:
+`audio_destruction_log` has recorded what was destroyed, when, why and under which run since
+`20260815000300`, deliberately without the storage key in the clear. The gap was **creation**, and
+the custody change before it — the system recorded that a doctor agreed and not that audio of them
+was made, when the agreement was about the audio.
+
+**Checked before writing rather than after.** `audit_log.actor_id` and `actor_role` are nullable,
+and `current_app_role()` reads the JWT through `nullif` and cannot raise for an unauthenticated
+caller. So putting a trigger on `recordings` — a table the purge worker updates — cannot make that
+worker fail on a row it is entitled to change. The actor comes out null, which is true: a job is not
+a person, and the row should not pretend one was there.
+
+**The migration's guards assert its own premise.** Besides the function and the three tables, it
+fails if **any of the three is already audited** — because then the measurement it is built on has
+changed and the next reader should know before trusting it. Afterwards it asserts four triggers
+exist *and* that the grant's update trigger carries a `when` clause, since the flooding version
+would otherwise satisfy the count.
+
+**Mutants, both directions.** Removing the `when` clause kills exactly one test — the progress half
+of the two-sided case. Dropping the triggers kills three, including the state-change half of that
+same test. Suite **61 files / 818 tests**; `verify:rollbacks` applied every rollback in reverse and
+emptied the schema; drift **73 of 73, `drifted: false`** after rebuilding.
+
+#### `BE-W114` — closed, and my first diagnosis was wrong
+
+I registered it as *"an intermittent api failure under parallel load"*. **Load has nothing to do
+with it.**
+
+`audio_purge_is_stalled()` reads the whole of `recordings` and `voice_notes` and trips on a backlog
+over `purge_batch_limit x purge_backlog_multiplier` **or** an oldest-overdue age past
+`purge_max_silence_hours` (12h). Both are global. The false-positive test inserts one 4h-overdue row
+and asserts the global function is **false**. **So one committed row more than twelve hours overdue
+— left by any earlier session, a synthetic seed, an abandoned probe — fails it on a tree where
+nothing is wrong.**
+
+**Measured:** a single committed recording backdated 13 hours flipped the function false → true and
+failed that test on demand; deleting it passed again.
+
+**Why it looked intermittent, which is the better half.** The retention suite commits real purges.
+The first run on a poisoned database fails *and destroys the backlog while running*, so the next run
+is green. **Self-clearing state is indistinguishable from flakiness from the outside**, and that is
+why the first diagnosis reached for the nearest available story — parallel load — on evidence that
+never supported it. The register row now says so in those words.
+
+**Fix:** `onlyOurOverdueRows(client)` pushes every pre-existing overdue row out of the window inside
+the rolled-back transaction, before either stall test inserts anything, so both assert their own
+data on any machine. It is applied to the **backlog** test as well, because on an already-stalled
+database that test passed **vacuously** — the same defect wearing a green tick.
+
+**Two-sided control, on the same poisoned database:** helper removed → the test fails; helper
+restored → it passes.
+
+**Found by accident and worth keeping:** while the database was poisoned, **23 other tests failed** —
+`begin_upload`, the storage policy, the whole resumable-session suite. A stalled purge is a
+fleet-wide interlock on new uploads. That is designed behaviour and this register had not stated it
+anywhere.
+
+#### Counts
+
+`@fieldforce/api` with the database up: **61 files / 818 tests, none skipped** (was 60 / 813 — the
+five new ones are `audio-audit.spec.ts`). Every other workspace unchanged from the previous section.
+
+#### Where it stopped, and why
+
+**ROOM.** Both backend items are closed. What remains is not engineering's: `FE-W70`'s destroy-or-keep
+decision and `FE-W69`'s re-ask policy, plus the operator questions already in `blocked-on-you`.

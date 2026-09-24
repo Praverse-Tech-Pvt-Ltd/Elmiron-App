@@ -158,3 +158,23 @@ non-obvious go here; a typo caught by typecheck does not.
   neighbouring hole deeper.**
 - **Verified:** `services/api/turbo.json` sets `cache: false` on that task; the run now reports
   `8 cached, 9 total` with the api one executing. Registered as `BE-W113`, closed.
+
+## MR-54 · I diagnosed a flake as load and it was database state
+
+- **Found:** an api test failing twice in four `pnpm test` runs and never in three standalone ones.
+  I registered it as intermittent "under parallel load" and named a plausible mechanism — a
+  time-sensitive assertion under contention.
+- **Cause, once actually measured:** nothing to do with load. `audio_purge_is_stalled()` reads the
+  WHOLE of `recordings` and `voice_notes`; the false-positive test asserts that global function is
+  false after adding one 4h-overdue row of its own. **One committed row more than 12 hours overdue
+  anywhere fails it.** A single recording backdated 13 hours flipped the function and failed the
+  test on demand; deleting it passed again.
+- **Why it looked intermittent — the part worth keeping:** the retention suite commits real purges,
+  so the first run on a poisoned database fails **and destroys the backlog while running**, and the
+  next run is green. **Self-clearing state is indistinguishable from flakiness from outside.**
+- **What worked:** poisoning the database deliberately and running the single test, rather than
+  re-running the suite and watching the colour change.
+- **Note on my own method:** "intermittent under load" was the nearest available story, and I wrote
+  it into the register on evidence that never supported it — two failures and no measurement of the
+  mechanism. The register row now says the first diagnosis was wrong, in those words. A weakness
+  register that only accumulates confident guesses is worse than a short one.
