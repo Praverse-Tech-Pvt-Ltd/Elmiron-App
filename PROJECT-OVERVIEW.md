@@ -18967,3 +18967,78 @@ five new ones are `audio-audit.spec.ts`). Every other workspace unchanged from t
 
 **ROOM.** Both backend items are closed. What remains is not engineering's: `FE-W70`'s destroy-or-keep
 decision and `FE-W69`'s re-ask policy, plus the operator questions already in `blocked-on-you`.
+
+### MR-54 (continued) — `BE-W96`, the last open backend item
+
+**24 September 2026.** Every result is **code**.
+
+`complete_upload.p_recorded_at` was the device's word with no bounds, while `capture_consent` has
+bounded `captured_at` in both directions since FIX-12. It now refuses a future claim (**45009**),
+one older than the server will accept on the device's word (**45010**), and an explicit null.
+
+**Why this is more than a wrong-looking date.** `recorded_at` is what a coaching queue orders by
+and what any later citation of a consultation points at. A recording that claims to predate its own
+consent, or to have happened next Tuesday, is a record of a real conversation with a named doctor
+filed under a time that never happened.
+
+#### The decision that shaped it: new codes, not the consent ones
+
+The client turns a SQLSTATE straight into a sentence, and `45007` reads *"your consent was captured
+in the future"*. Reusing it would have told a rep their **consent** was refused when their
+**recording** was — which is exactly the one-sentence-for-four-codes defect `refusalForSqlState` was
+built to end. So `45009` and `45010` are distinct codes with the same meanings about a different
+artefact.
+
+**And the contract is enforced rather than remembered.** `error-contract.spec.ts` derives every code
+the database raises live from `pg_proc.prosrc` and fails if one is missing from `BY_SQLSTATE`. So
+minting a code without wiring it reddens CI — which is how a repository makes "minting a SQLSTATE is
+half the work" a mechanism instead of a lesson.
+
+#### It crossed into the client, and that was the honest call
+
+Both codes are `actionable: true`. Shipping that with no remedy sentence would be a claim the code
+does not honour — the contract would say *there is something you can do* and the app would show
+nothing. So `explanation.ts` gains two sentences: the 45009 one ends *"the recording itself is
+fine"*, because the rep has just recorded a consultation and needs to know it survived; the 45010
+one says *"waiting will not change that"*, because an upload refused for age only gets older and the
+outbox dead-letters it.
+
+#### Thresholds reused, with the caveat said out loud
+
+`consent_future_tolerance_seconds` (120s) and `consent_max_sync_lag_hours` (72h) bound the same
+physical thing: **one phone's clock, in one rep's pocket**. Minting audio-specific twins would give
+the operator two unverified numbers to ratify for one question, and the one nobody remembers is the
+one that drifts — the MR-52 D4 argument. **The caveat, stated rather than left to be discovered:
+the keys are NAMED for consent.** If audio must ever differ, that is a new dated row and a change
+in the function, not a silent edit.
+
+#### Evidence
+
+**Mutants, one per bound.** Disabling the forward check kills exactly the 45009 test; disabling the
+backward check kills exactly the 45010 test; **the other five stay green each time**, which is what
+shows the positive controls are not passing merely because everything is refused. The positive
+controls are the ones that matter here: an ordinary recording from a minute ago, a recording inside
+the clock-skew tolerance, and **a recording queued offline for sixteen hours** — the case MR-54 A3
+proved happens on a device, and the one a careless bound would have broken.
+
+**An existing test collided, and was corrected rather than deleted.** `upload.spec.ts`'s retention
+test passed a **200-day-old** `recorded_at` to prove `purge_after` is server-stamped; 200 days is now
+refused. Changed to **71 hours** — the oldest claim the server still accepts — which keeps it
+discriminating, since a `purge_after` derived from `recorded_at` would land near now + 87 days and
+still fail its assertion. The comment says why the number moved.
+
+**Not addressed, and older than this change:** a refusal at finalise leaves the bytes already in
+Storage and the grant open until it expires, exactly as the existing size and duration refusals do.
+
+#### Counts
+
+`@fieldforce/api` **62 files / 824 tests**, none skipped. `@fieldforce/field` vitest 40 / **613**
+(two new). `@fieldforce/core` 4 / **38**. `verify:rollbacks` applied every rollback in reverse and
+emptied the schema; drift **74 of 74** after rebuilding.
+
+#### Where it stopped, and why
+
+**ROOM.** `BE-W96` was the last open backend item that was engineering's to do. `BE-W102` remains
+open as a **recorded acceptance** — refused reads are not audited, four escape routes were costed
+and doing nothing was chosen and written down — and reopening that is a decision, not a chore.
+Everything else outstanding is the operator's.

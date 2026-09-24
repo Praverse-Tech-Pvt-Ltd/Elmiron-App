@@ -673,8 +673,15 @@ describe.skipIf(!reachable)('finalising an upload', () => {
         recordingId,
         240,
         4096,
-        // The device claims the recording is ancient. The trigger does not care.
-        new Date(Date.now() - 200 * 24 * 3600 * 1000).toISOString(),
+        // The device claims the recording is old. The trigger does not care.
+        //
+        // **Was 200 days until MR-54 `BE-W96`**, which bounded `recorded_at` by
+        // `consent_max_sync_lag_hours` (72h) — so 200 days is now refused as 45010 and this
+        // test was failing for a reason that has nothing to do with what it asserts. 71
+        // hours is the oldest claim the server still accepts, and it keeps the property
+        // DISCRIMINATING: a `purge_after` derived from `recorded_at` would land at roughly
+        // now + 87 days and fail the assertion below, exactly as 200 days would have.
+        new Date(Date.now() - 71 * 3600 * 1000).toISOString(),
         28,
       ]);
 

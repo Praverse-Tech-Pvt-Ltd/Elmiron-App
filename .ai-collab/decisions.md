@@ -2153,3 +2153,23 @@ the ones `state` names.
 **Also recorded:** `audit_log` deliberately keeps a null actor for the purge worker and the
 retention job. Both columns are nullable, `current_app_role()` cannot raise for an unauthenticated
 caller, and a job is not a person — the row should not invent one.
+
+
+### C18 — audio clock refusals get their own SQLSTATEs, and their own sentences
+
+**Decided (engineering, in session).** `complete_upload` raises **45009** (recorded in the future)
+and **45010** (older than the server accepts on the device's word) rather than reusing consent's
+45007/45008.
+
+**Why it is not duplication.** The client maps a SQLSTATE straight to a sentence. 45007's sentence
+is about a consent; showing it for a refused recording is the exact collapse `refusalForSqlState`
+was built to end.
+
+**The consequence accepted with it.** Both are `actionable: true`, and a contract that claims an
+action while the app shows none is a claim the code does not honour — so this change crossed into
+`apps/field/src/sync/explanation.ts` for two sentences. That was deliberate, not scope creep: the
+alternative was shipping an inconsistency.
+
+**Not chosen:** audio-specific threshold keys. `consent_future_tolerance_seconds` and
+`consent_max_sync_lag_hours` bound one phone's clock, and two unverified numbers for one question
+is how the forgotten one drifts. The naming caveat is recorded in the migration header.

@@ -1263,3 +1263,21 @@ LOCAL demo tenant only.
 - `pnpm --filter @fieldforce/api test` with the stack up: **61 files / 818 tests**. `verify:rollbacks`
   clean; drift 73 of 73 after a rebuild.
 - Services stopped at the end of this session.
+
+## MR-54 continued — `BE-W96` closed (24 September 2026)
+
+- **`recorded_at` is bounded now.** `complete_upload` refuses a future claim (**45009**) and one
+  older than `consent_max_sync_lag_hours` (**45010**). It was the device's unbounded word;
+  `capture_consent` has had both bounds since FIX-12.
+- **If you mint a `450xx`, you must wire it.** `error-contract.spec.ts` derives every raised code
+  live from `pg_proc.prosrc` and fails if it is missing from `BY_SQLSTATE` in `packages/core`. CI
+  catches it; the hook does not.
+- **Do not reuse 45007/45008 for audio.** The client maps a SQLSTATE straight to a sentence, and
+  those two say "consent". A rep whose recording was refused must not be told their consent was.
+- **The thresholds are the consent ones on purpose** — one phone, one clock — but they are NAMED
+  for consent. If audio ever needs different numbers, that is a new dated row, not an edit.
+- **A test you may trip over:** `upload.spec.ts`'s retention-clock test used a 200-day-old
+  `recorded_at` and now uses 71 hours, which is the oldest the server accepts. It still
+  discriminates; the comment says why.
+- api **62 files / 824 tests**; field vitest **613**; rollbacks clean; drift 74 of 74.
+- Services stopped at the end of this session.

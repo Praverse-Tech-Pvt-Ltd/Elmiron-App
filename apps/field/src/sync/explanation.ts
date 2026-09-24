@@ -62,6 +62,15 @@ const REMEDIES: Partial<Readonly<Record<RefusalCode, string>>> = {
   // Distinct from 45001 precisely because the remedy differs.
   consent_too_old_to_accept:
     'This consent was captured too long ago to be accepted now. Connect and sync sooner after a visit — your manager can tell you the limit for your territory.',
+  // MR-54 `BE-W96`, 45009. The same phone-clock remedy as 45007 and deliberately a separate
+  // sentence: a rep whose RECORDING was refused must not be told their consent was. What is
+  // on the phone is fine, which is worth saying -- they have just recorded a consultation.
+  recording_in_future:
+    "This phone's clock is ahead of the server, so the recording looks like it happened in the future. Turn on automatic date and time in Settings, then send again — the recording itself is fine.",
+  // 45010. It will not become acceptable by waiting, so the sentence must not imply it
+  // might. The recording stays on the phone; what changes is only that it cannot be filed.
+  recording_too_old_to_accept:
+    'This recording was made too long ago to be accepted now, and waiting will not change that. Connect and sync sooner after a visit — your manager can tell you the limit for your territory.',
   // 45004. Not actionable by the MR: the remedy is to stop and speak to a manager, which is
   // somebody else's decision rather than a next step the app can offer.
   ucpmp_sample_cap_exceeded:

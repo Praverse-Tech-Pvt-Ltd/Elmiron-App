@@ -34,6 +34,8 @@ import { z } from 'zod';
  * | `45006`  |      1 | sync cursor too old, re-sync (BE-W61) |
  * | `45007`  |      1 | consent captured in the future (FIX-12) |
  * | `45008`  |      1 | consent older than the maximum sync lag (FIX-12) |
+ * | `45009`  |      1 | audio recorded in the future (MR-54 `BE-W96`) |
+ * | `45010`  |      1 | audio older than the maximum sync lag (MR-54 `BE-W96`) |
  *
  * **`45004` was minted in FIX-09 and never reached this table.** A server-side code with
  * no client-side mapping renders as `unrecognised`, which is honest and useless: the MR is
@@ -58,6 +60,15 @@ export const RefusalCodeSchema = z.enum([
   'sync_cursor_expired',
   'consent_captured_in_future',
   'consent_too_old_to_accept',
+  /**
+   * MR-54 `BE-W96`. Deliberately NOT `consent_captured_in_future`.
+   *
+   * The two mean the same thing about the same clock, and they must stay separate because
+   * this table turns a SQLSTATE into a sentence: a rep whose RECORDING was refused must not
+   * be told their consent was. That collapse is the defect this whole table exists to end.
+   */
+  'recording_in_future',
+  'recording_too_old_to_accept',
   'append_only',
   'invalid_for_this_record',
   'references_missing_record',
@@ -121,6 +132,12 @@ export const BY_SQLSTATE: Readonly<Record<string, { code: RefusalCode; actionabl
   // Sync sooner. Distinct from `45001` precisely because the remedy differs: this consent
   // was valid when it was taken and arrived too late to be accepted on the device's word.
   '45008': { code: 'consent_too_old_to_accept', actionable: true },
+  // MR-54 `BE-W96`. Actionable in the same way 45007 is -- the remedy is the phone's clock,
+  // and the recording itself is fine.
+  '45009': { code: 'recording_in_future', actionable: true },
+  // Actionable, but NOT by waiting: an upload refused for age only gets older. The outbox
+  // treats a server verdict as terminal, so this dead-letters rather than retrying forever.
+  '45010': { code: 'recording_too_old_to_accept', actionable: true },
   '23001': { code: 'append_only', actionable: false },
   '23514': { code: 'invalid_for_this_record', actionable: false },
   '23503': { code: 'references_missing_record', actionable: false },

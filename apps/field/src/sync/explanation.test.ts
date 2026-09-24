@@ -112,6 +112,23 @@ describe('MR-17 B2 — a SQLSTATE carries its own remedy', () => {
     expect(shown.remedy).not.toMatch(/read the current notice/i);
   });
 
+  it('45009 — the recording clock, and it does NOT mention consent', () => {
+    // MR-54 BE-W96. 45009 exists as its own code precisely so this sentence can differ from
+    // 45007's; if it ever collapses back onto the consent one, this fails.
+    const shown = presentRejection(refused('45009'));
+    expect(shown.refusalCode).toBe('recording_in_future');
+    expect(shown.remedy).toMatch(/clock/i);
+    expect(shown.remedy).not.toMatch(/consent/i);
+  });
+
+  it('45010 — sync sooner, and it does not pretend waiting helps', () => {
+    const shown = presentRejection(refused('45010'));
+    expect(shown.refusalCode).toBe('recording_too_old_to_accept');
+    expect(shown.remedy).toMatch(/sync sooner/i);
+    expect(shown.remedy).toMatch(/waiting will not change that/i);
+    expect(shown.remedy).not.toMatch(/consent/i);
+  });
+
   it('45004 — the UCPMP cap, and it says stop rather than retry', () => {
     const shown = presentRejection(refused('45004'));
     expect(shown.refusalCode).toBe('ucpmp_sample_cap_exceeded');
