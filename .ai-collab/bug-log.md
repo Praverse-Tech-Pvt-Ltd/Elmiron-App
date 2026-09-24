@@ -178,3 +178,29 @@ non-obvious go here; a typo caught by typecheck does not.
   it into the register on evidence that never supported it — two failures and no measurement of the
   mechanism. The register row now says the first diagnosis was wrong, in those words. A weakness
   register that only accumulates confident guesses is worse than a short one.
+
+## MR-54 `BE-W102` · I measured a status with the wrong identity and generalised it
+
+- **Found:** `analysis-overrides-http.spec` failing with *expected 401 to be 403* after I made
+  refusals return an envelope instead of raising.
+- **Cause:** the spike that established the status called the RPC with the **anon key**, where
+  PostgREST answers 401 because it has no identity to refuse. For an identified caller an in-body
+  `42501` is **403**. I had one measurement and treated it as the general rule.
+- **What worked:** the existing suite, which already asserted 403 from a real user.
+- **Note:** the measurement was real and the conclusion was still wrong, which is the more dangerous
+  shape — it had a number attached. "Measured" is not a property of a fact; it is a property of a
+  fact *under stated conditions*, and I did not state them.
+
+## MR-54 `BE-W102` · A drop-and-recreate handed anon the audit trail
+
+- **Found:** `privilege-posture.spec` and `rls.spec` failing together on the first full run after the
+  migration.
+- **Cause:** `list_audit_log` needed a new parameter, which means DROP and CREATE — and **a newly
+  created function carries EXECUTE to PUBLIC by default**. Granting to `authenticated` afterwards
+  does not remove it. For one run, `anon` could call the function that reads the audit trail.
+- **What worked:** two guards written by earlier sessions for exactly this, neither of which I was
+  thinking about when I wrote the migration.
+- **Verified:** the ACL is `postgres=X | authenticated=X`, identical to what it was before the drop,
+  and the migration now asserts `anon` cannot execute it.
+- **Note:** I recorded the ACL before the drop *in order to restore it* and still missed that the
+  default grant is additive. Reading the before-state is not the same as diffing the after-state.

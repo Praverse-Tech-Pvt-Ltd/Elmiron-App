@@ -2173,3 +2173,23 @@ alternative was shipping an inconsistency.
 **Not chosen:** audio-specific threshold keys. `consent_future_tolerance_seconds` and
 `consent_max_sync_lag_hours` bound one phone's clock, and two unverified numbers for one question
 is how the forgotten one drifts. The naming caveat is recorded in the migration header.
+
+
+### C19 — `BE-W102` reopened and closed for in-body refusals only
+
+**Decided (operator instruction, built in session).** MR-40 costed four escape routes and chose to
+do nothing. The operator asked for it, so the acceptance is reversed deliberately rather than by
+forgetting that it existed.
+
+**What made it cheap enough to be worth doing:** PostgREST's `response.status` lets a function
+refuse without raising, so the transaction commits and the audit row survives — and
+`request.method` lets the same function keep raising for in-database callers, so no existing test
+or internal caller changed.
+
+**Scope decided, not inherited.** Only `42501` refusals are recorded. `28000` is excluded because
+auditing unauthenticated calls lets anon grow an append-only table at one row per request;
+`22023` is excluded because a missing reason is a malformed call, not an access attempt.
+
+**Not closed, and the register says so:** grant-level refusals happen before the function body
+runs. Closing those needs a change at or in front of the PostgREST layer, which is the route MR-40
+costed as "moves part of the trail outside the database" — still true, still not chosen.

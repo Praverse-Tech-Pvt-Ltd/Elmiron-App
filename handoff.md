@@ -1281,3 +1281,25 @@ LOCAL demo tenant only.
   discriminates; the comment says why.
 - api **62 files / 824 tests**; field vitest **613**; rollbacks clean; drift 74 of 74.
 - Services stopped at the end of this session.
+
+## MR-54 continued — `BE-W102` closed for in-body refusals (24 September 2026)
+
+- **A refused read now leaves a row.** `refuse_read` writes to `audit_log` with
+  `refused = true`, then refuses: by raising for an in-database caller, or over HTTP by setting
+  `response.status` and returning PostgREST's own error envelope so the transaction commits.
+- **The trick worth knowing:** a request does not have to fail as an ERROR to fail as a 403.
+  PostgreSQL has no autonomous transaction, but it does not need one.
+- **Only three functions raise 42501** — `list_analysis_overrides`, `list_audit_log`,
+  `retention_status`. MR-40's "seven read paths" describes their shape, not their refusals.
+- **`list_audit_log` excludes refused rows unless `p_include_refused`**, so the console panel's
+  "Successful reads" heading stays true without a console change. Its signature changed, so it was
+  dropped and recreated.
+- **If you ever drop-and-recreate a function here, REVOKE FROM PUBLIC.** A new function is
+  EXECUTE-to-PUBLIC by default; this one briefly handed `anon` the audit trail. `privilege-posture`
+  and `rls` caught it within one test run.
+- **PostgREST's status for an in-body `42501` is 403 for an identified caller and 401 for anon.**
+  Measuring it with the anon key and generalising was my mistake; the suite caught that too.
+- **`raise ... using hint = null` is an error in PL/pgSQL.** Branch, do not pass a null hint.
+- **Still open and unclosable this way:** grant-level refusals happen before the body runs.
+- api **63 files / 830 tests**, run twice; rollbacks clean; drift 75 of 75.
+- Services stopped at the end of this session.

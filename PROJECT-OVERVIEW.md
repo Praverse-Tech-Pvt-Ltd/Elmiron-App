@@ -19042,3 +19042,91 @@ emptied the schema; drift **74 of 74** after rebuilding.
 open as a **recorded acceptance** — refused reads are not audited, four escape routes were costed
 and doing nothing was chosen and written down — and reopening that is a decision, not a chore.
 Everything else outstanding is the operator's.
+
+### MR-54 (continued) — `BE-W102`, a refused read reaches the trail
+
+**24 September 2026.** Every result is **code**. This reverses a recorded decision on the
+operator's instruction: MR-40 B costed four escape routes and chose **doing nothing**, written
+down so an assessor was told rather than left to discover it.
+
+#### The fifth route, which the 2026 costing did not have
+
+PostgreSQL still has no autonomous transaction — that part of the costing was right. But **a
+request does not have to fail as an ERROR in order to fail as a 403.** PostgREST lets a function
+set `response.status` and RETURN; the transaction then **commits**, so the audit row survives while
+the caller is still refused. No dependency, no `dblink`, and the trail stays inside the database
+that guarantees the rest of it.
+
+**Measured before anything was written**, on a throwaway function: the client received HTTP 403 and
+the audit row was in the table afterwards. And measured a second way — `current_setting('request.method',
+true)` is `POST` over PostgREST and null in psql — which is what lets in-database callers keep
+raising exactly as before. **No existing test and no internal caller changed.** That is what makes
+this small rather than a rewrite of seven security functions.
+
+#### Three functions, not seven — the register is corrected
+
+MR-40 recorded *"seven, not one"*, and that is true of the audit-then-return **shape**. But only
+three of the seven raise a `42501`: `list_analysis_overrides`, `list_audit_log`, `retention_status`.
+The other four refuse only on `28000` (no identity) or `22023` (no reason given), and their tenancy
+scoping filters rows rather than refusing. So there were three refusals to record, not seven.
+
+#### What is deliberately not recorded, which is the security half
+
+- **`28000`, unauthenticated.** There is no actor to name, and auditing it would let an anonymous
+  caller grow an append-only table — one with a rejection trigger and no delete path — at one row
+  per request. That is a write-amplification vector, not a trail.
+- **`22023`, no reason given.** A malformed call from our own console, not somebody finding out what
+  they can reach.
+
+#### The panel's heading stays true
+
+`audit_log.refused` marks these rows, and `list_audit_log` **excludes them unless
+`p_include_refused`**. The console panel's heading is *"Successful reads"*; a refusal arriving in
+that list unasked would have turned a true heading into a false one on the day this migration ran.
+Adding the parameter meant dropping and recreating the function, because a defaulted parameter on an
+existing signature creates a second overload that PostgREST then calls ambiguous.
+
+#### What is still open, measured rather than assumed
+
+A **GRANT-level** refusal — `permission denied for function list_audit_log` — happens before the
+body runs, so no in-function mechanism will ever see it. `BE-W102` is closed for **in-body**
+refusals and remains open for those. The register says it in those words, because the difference is
+exactly what an assessor would ask about.
+
+#### Two defects of mine, both caught by guards that already existed
+
+1. **The drop-and-recreate left `list_audit_log` EXECUTE-to-PUBLIC.** A newly created function
+   carries that by default, so for one run `anon` could call the function that reads the audit
+   trail. `privilege-posture.spec` and `rls.spec` failed immediately. Revoked, and the migration's
+   own guard now asserts `anon` cannot execute it — the assertion exists because the mistake
+   happened, not in anticipation of it.
+2. **I measured the HTTP status as `anon` and generalised it.** The spike called the RPC with the
+   anon key, where PostgREST answers **401** because it has no identity to refuse; for an
+   **identified** caller an in-body `42501` is **403**. `analysis-overrides-http.spec` already
+   asserted 403 and failed. The migration records the correction beside the line it corrects.
+
+A third, smaller: `raise ... using hint = null` is itself an error in PL/pgSQL, and one of the three
+callers passes no hint. Found by `rls.spec`, not by reading.
+
+#### Evidence
+
+**Mutants, two-sided and separating the two properties.** A helper that records the attempt and then
+**serves** the data — strictly worse than the defect — kills 2 tests. One that refuses correctly and
+records **nothing** — the original defect restored — kills 3. No single mutation kills the same set,
+which is what shows the suite tests *refuses* and *records* independently.
+
+**The tests are not in a rolled-back transaction**, deliberately: the whole property is that the
+transaction commits, and a rolled-back test could not tell the fix from the defect — both would show
+an empty table at the end. They go over real HTTP and find their rows by actor id. Run twice in
+succession to confirm the accumulation is safe.
+
+`@fieldforce/api` **63 files / 830 tests**, twice. `verify:rollbacks` applied every rollback in
+reverse and emptied the schema; drift **75 of 75** after rebuilding.
+
+#### Where it stopped, and why
+
+**ROOM.** With `BE-W96` and now `BE-W102`, there is no open backend item left that is engineering's
+to do. What remains is the operator's: `BE-W21`, `BE-W32`, `BE-W93`, `BE-W106`, `BE-W108`,
+`BE-W109`, and `BE-W95` behind `FE-W70`'s decision — plus the grant-level half of `BE-W102`, which
+no in-function mechanism can close and which would need a change at the PostgREST layer or in front
+of it.
