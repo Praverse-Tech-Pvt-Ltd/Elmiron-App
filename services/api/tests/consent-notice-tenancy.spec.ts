@@ -295,81 +295,88 @@ describe.skipIf(!reachable)('C4 — another tenant publishing a notice has no ef
  * ordering is what makes these assertions bite: with the clause gone, `order by
  * effective_from desc` hands an `en-IN` capture the Hindi notice.
  */
-describe('MR-16 B3 — a capture resolves ITS language, not the newest notice', () => {
-  it('resolves en-IN even though the hi-IN notice for the same tenant is NEWER', async () => {
-    // THE LOAD-BEARING CASE. Without the language clause this returns the Hindi row,
-    // because it is the most recent notice this tenant has.
-    await inRolledBackTransaction(async (client) => {
-      await asOwner(client, async () => {
-        const rows = await client.query<{ id: string; language: string }>(
-          'select id, language from public.active_consent_text_at($1, now(), $2)',
-          ['en-IN', world.organisationId],
-        );
-        expect(rows.rows.length, 'no active en-IN notice for this tenant').toBe(1);
-        expect(rows.rows[0]?.language).toBe('en-IN');
-        expect(rows.rows[0]?.id).toBe(world.consentTextVersionId);
-        // Named explicitly: the wrong answer has a known id, so a failure says which
-        // notice was selected rather than only that the ids differ.
-        expect(rows.rows[0]?.id, 'selected the Hindi notice for an en-IN capture').not.toBe(
-          world.hindiConsentTextVersionId,
-        );
+// MR-54 B2. Every test below opens a transaction, so the guard belongs on the describe and
+// not only on its neighbours. Without it these four fail with ECONNREFUSED when the stack is
+// stopped -- which is not "the suite caught something", it is the suite being unable to say
+// it did not run.
+describe.skipIf(!reachable)(
+  'MR-16 B3 — a capture resolves ITS language, not the newest notice',
+  () => {
+    it('resolves en-IN even though the hi-IN notice for the same tenant is NEWER', async () => {
+      // THE LOAD-BEARING CASE. Without the language clause this returns the Hindi row,
+      // because it is the most recent notice this tenant has.
+      await inRolledBackTransaction(async (client) => {
+        await asOwner(client, async () => {
+          const rows = await client.query<{ id: string; language: string }>(
+            'select id, language from public.active_consent_text_at($1, now(), $2)',
+            ['en-IN', world.organisationId],
+          );
+          expect(rows.rows.length, 'no active en-IN notice for this tenant').toBe(1);
+          expect(rows.rows[0]?.language).toBe('en-IN');
+          expect(rows.rows[0]?.id).toBe(world.consentTextVersionId);
+          // Named explicitly: the wrong answer has a known id, so a failure says which
+          // notice was selected rather than only that the ids differ.
+          expect(rows.rows[0]?.id, 'selected the Hindi notice for an en-IN capture').not.toBe(
+            world.hindiConsentTextVersionId,
+          );
+        });
       });
     });
-  });
 
-  it('and resolves hi-IN when the capture IS in Hindi — the positive control', async () => {
-    // Without this, a predicate hard-coded to always return the en-IN row would satisfy
-    // the case above while being just as wrong.
-    await inRolledBackTransaction(async (client) => {
-      await asOwner(client, async () => {
-        const rows = await client.query<{ id: string; language: string }>(
-          'select id, language from public.active_consent_text_at($1, now(), $2)',
-          ['hi-IN', world.organisationId],
-        );
-        expect(rows.rows.length, 'no active hi-IN notice for this tenant').toBe(1);
-        expect(rows.rows[0]?.language).toBe('hi-IN');
-        expect(rows.rows[0]?.id).toBe(world.hindiConsentTextVersionId);
+    it('and resolves hi-IN when the capture IS in Hindi — the positive control', async () => {
+      // Without this, a predicate hard-coded to always return the en-IN row would satisfy
+      // the case above while being just as wrong.
+      await inRolledBackTransaction(async (client) => {
+        await asOwner(client, async () => {
+          const rows = await client.query<{ id: string; language: string }>(
+            'select id, language from public.active_consent_text_at($1, now(), $2)',
+            ['hi-IN', world.organisationId],
+          );
+          expect(rows.rows.length, 'no active hi-IN notice for this tenant').toBe(1);
+          expect(rows.rows[0]?.language).toBe('hi-IN');
+          expect(rows.rows[0]?.id).toBe(world.hindiConsentTextVersionId);
+        });
       });
     });
-  });
 
-  it('asserts its own precondition: BOTH languages exist for this tenant', async () => {
-    // The fixture is the whole mechanism here. If `seedFixtures()` ever stopped publishing
-    // the second notice, the two cases above would still pass -- the en-IN one trivially,
-    // and the hi-IN one would fail in a way that reads as a selection defect rather than a
-    // missing fixture. This says which.
-    await inRolledBackTransaction(async (client) => {
-      await asOwner(client, async () => {
-        const rows = await client.query<{ language: string }>(
-          `select distinct language from public.consent_text_versions
+    it('asserts its own precondition: BOTH languages exist for this tenant', async () => {
+      // The fixture is the whole mechanism here. If `seedFixtures()` ever stopped publishing
+      // the second notice, the two cases above would still pass -- the en-IN one trivially,
+      // and the hi-IN one would fail in a way that reads as a selection defect rather than a
+      // missing fixture. This says which.
+      await inRolledBackTransaction(async (client) => {
+        await asOwner(client, async () => {
+          const rows = await client.query<{ language: string }>(
+            `select distinct language from public.consent_text_versions
             where organisation_id = $1 and language in ('en-IN','hi-IN')`,
-          [world.organisationId],
-        );
-        expect(
-          rows.rows.length,
-          'the language dimension is single-valued for this tenant again',
-        ).toBe(2);
+            [world.organisationId],
+          );
+          expect(
+            rows.rows.length,
+            'the language dimension is single-valued for this tenant again',
+          ).toBe(2);
+        });
       });
     });
-  });
 
-  it('and the Hindi notice really is the newer of the two', async () => {
-    // The ordering is not incidental -- it is what makes the deletion mutation fail. If
-    // hi-IN ever became the older row, the mutation would pass again and this suite would
-    // go back to proving nothing, silently.
-    await inRolledBackTransaction(async (client) => {
-      await asOwner(client, async () => {
-        const rows = await client.query<{ newest: string }>(
-          `select language as newest from public.consent_text_versions
+    it('and the Hindi notice really is the newer of the two', async () => {
+      // The ordering is not incidental -- it is what makes the deletion mutation fail. If
+      // hi-IN ever became the older row, the mutation would pass again and this suite would
+      // go back to proving nothing, silently.
+      await inRolledBackTransaction(async (client) => {
+        await asOwner(client, async () => {
+          const rows = await client.query<{ newest: string }>(
+            `select language as newest from public.consent_text_versions
             where organisation_id = $1 and language in ('en-IN','hi-IN')
             order by effective_from desc limit 1`,
-          [world.organisationId],
-        );
-        expect(
-          rows.rows[0]?.newest,
-          'hi-IN must be newer, or deleting the language clause stops being detectable',
-        ).toBe('hi-IN');
+            [world.organisationId],
+          );
+          expect(
+            rows.rows[0]?.newest,
+            'hi-IN must be newer, or deleting the language clause stops being detectable',
+          ).toBe('hi-IN');
+        });
       });
     });
-  });
-});
+  },
+);

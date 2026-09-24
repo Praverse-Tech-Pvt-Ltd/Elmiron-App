@@ -299,17 +299,24 @@ describe('min() of a uuid, which PostgreSQL does not have', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('is absent from the catalogue, which is why the shipped form is a subquery', async () => {
-    await inScratch(async (client) => {
-      // Asserted against the server rather than remembered: if a future PostgreSQL adds
-      // min(uuid), this fails and the rule above can be relaxed deliberately.
-      const { rows } = await client.query<{ count: string }>(
-        `select count(*)::text as count from pg_proc
+  // MR-54 B2. The guard is on THIS test and not on the describe: its two neighbours read
+  // migration files and are meant to run with the stack stopped. A describe-level skip here
+  // would quietly stop checking the repository for `min(id)`, which is the check that found
+  // the defect twice.
+  it.skipIf(!reachable)(
+    'is absent from the catalogue, which is why the shipped form is a subquery',
+    async () => {
+      await inScratch(async (client) => {
+        // Asserted against the server rather than remembered: if a future PostgreSQL adds
+        // min(uuid), this fails and the rule above can be relaxed deliberately.
+        const { rows } = await client.query<{ count: string }>(
+          `select count(*)::text as count from pg_proc
           where proname = 'min' and 'uuid'::regtype::oid = any (proargtypes)`,
-      );
-      expect(rows[0]?.count).toBe('0');
-    });
-  });
+        );
+        expect(rows[0]?.count).toBe('0');
+      });
+    },
+  );
 
   it('is replaced by an ordered subquery in both backfills', () => {
     for (const file of [ORG_BACKFILL, NOTICE_BACKFILL]) {

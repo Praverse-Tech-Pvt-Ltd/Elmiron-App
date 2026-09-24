@@ -18772,3 +18772,114 @@ an operator instruction. A5 failed, and A6 says that is the session.
 
 **Not done, and owed:** B1 (the commit hook), B2/B3 (the three precondition guards), C1 (pinning
 `apps/field` to supabase-js 2.112.3 exactly, which is `FE-W68`'s risky half) and C2.
+
+### MR-54 (continued) — B, C, and one the cache was hiding
+
+**24 September 2026.** Continuing MR-54 after A6 stopped it. Every result is **code**; nothing
+here needed a device.
+
+#### B1 — the commit check, as a mechanism
+
+Three sessions running, a commit went out with a failure already on screen. That is now
+`.githooks/pre-commit`, wired with `core.hooksPath` and enabled per clone by `pnpm hooks:install`.
+**No new dependency:** a shell hook and `scripts/ci-local.mjs`.
+
+**It does not carry its own list of steps.** `ci-local.mjs` derives them from `ci.yml` and argues at
+length why a hand-kept parallel list must not exist — it has drifted three times here, always toward
+claiming more coverage than it has. So the hook names three commands and a new `--only=` flag finds
+them, **and every pattern must match exactly one step**. A `ci.yml` rename therefore makes the hook
+fail rather than quietly check less. All three controls were exercised: a pattern matching nothing
+throws, `--only=pnpm` (11 matches) throws, and an empty `--only=` throws.
+
+**The refusal, proved:** a staged `const deliberatelyWrong: number = 'this is a string'` gave
+`src/shared/b1-control.ts(2,14): error TS2322`, then *COMMIT REFUSED*, and **`git log` was still at
+`e7664e1`** — nothing was committed. **The pass, proved:** this session's own commits went through
+the hook.
+
+**Three limits, stated rather than left to be discovered.** It checks the working tree, not the
+index — the same trade husky and lint-staged make, and the failure it was written for (a broken
+working tree committed anyway) is caught. It does not run the tests, because a hook that costs
+minutes is a hook people `--no-verify` past, and a bypassed control is not a control. And it cannot
+stop `--no-verify`: git allows the bypass by design, so CI stays the enforcement and this is the
+thing that tells you first.
+
+#### B2/B3 — the three suites, and both counts
+
+`consent-notice-tenancy` and `dimension-coverage` each had a whole `describe` with no
+`.skipIf(!reachable)`. `organisation-backfill` was different and is the more interesting fix: **one**
+test in a describe whose other two read migration files and are meant to run with the stack down, so
+the guard went on the test. A describe-level skip there would have stopped checking the repository
+for `min(id)` — the check that caught that defect twice.
+
+| | api files | api tests | `pnpm test` |
+| --- | --- | --- | --- |
+| stack **stopped**, before | 13 passed, **3 FAILED**, 44 skipped | 101 passed, **9 FAILED**, 703 skipped | **exit 1** |
+| stack **stopped**, after | 14 passed, 46 skipped | **101 passed**, 712 skipped | **exit 0** |
+| stack **running**, after | **60 passed** | **813 passed, none skipped** | exit 0 |
+
+**The control that matters is the middle row's 101** — unchanged. Nothing that used to run was
+skipped to buy the green, and with the database present the nine do not merely skip, they pass.
+
+**Does any other suite have the same shape?** Empirically no: a full stack-stopped run is clean.
+That is a stronger answer than grepping for `describe(` without a guard, because a describe with no
+guard is perfectly correct when its tests touch no database — `decision-debt.spec.ts` has one on
+purpose.
+
+#### `BE-W113` — the cache was reporting a stopped stack as green, and B2 made it worse
+
+Found while gathering B3's counts, not by looking for it. With the database **up**, `pnpm test`
+reported api as **101 passed / 712 skipped** — the stopped-stack numbers. `turbo` keys that task on
+file content, and **whether Postgres is listening is not a file**, so it replayed a stopped-stack
+green over a running one. `--force` on the same tree gave **813 passed**, which is the proof.
+
+**And B2 sharpened it.** Before B2 a stopped stack failed loudly, so nobody could mistake it.
+After B2 it exits 0 — correctly — and the cache can then serve that 0 to a developer who believes
+the database tests ran. **Closed in the same change:** `services/api/turbo.json` sets `cache: false`
+on that one task. CI runs the suite once, so nothing is lost.
+
+#### `BE-W114` — an intermittent api failure under parallel load, registered and not chased
+
+Observed **twice in four** `pnpm test` runs and **never in three** standalone `vitest run` runs of
+the same tree. Once it named itself: `retention-ops.spec.ts > … does not trip on a single object
+briefly overdue -- the false-positive case`, which is time-sensitive by construction. The second
+occurrence was counted but not named, and **it is not recorded as the same test, because that was
+not observed.** Finding it properly means repeated runs under controlled load; that is its own
+session. Registered because a suite that fails one run in two, under the command developers
+actually type, teaches people to re-run until green.
+
+#### C1/C2 — `FE-W68`'s risky half
+
+`apps/field` now pins `@supabase/supabase-js` at **`2.112.3`** exactly. **The lockfile diff is one
+line** — the specifier — and the resolved version does not move, which is the point: this removes a
+silent change vector rather than upgrading anything. `pnpm install --frozen-lockfile` still passes.
+
+**C2, the cost of convergence, so the decision arrives with a price on it.** Moving the field to
+2.117.0 is not a version bump, it is invalidating a measurement: `persisted-session.ts` is written
+against auth-js *behaviour* — a retryable refresh failure leaves the stored session alone, a
+non-retryable one removes it — and that was established on 2.112.3 **on a device**, because nothing
+in this repository tests it. Convergence therefore costs an emulator re-run of MR-52 B1 (cold start
+past token expiry, offline, stays signed in), B3 (refresh token revoked, signs out), B4 (offline
+check-in lands exactly once), and MR-54 A2/A3, since the upload path uses the same client. **Roughly
+a session**, and reading the auth-js changelog cannot shorten it, because what is being re-tested is
+this app's behaviour at the boundary and not the library's stated behaviour.
+
+#### The local database is back to what the repository ships
+
+A1 had enabled `recording_feature_enabled` locally, and with the stack up that made MR-53 B2's
+*"off means off"* test fail — correctly, since it asserts the shipped state. A later `false` row now
+restores it (`app_thresholds` is append-only, so this is a dated row, not an edit). **That failure
+was mine and is recorded as mine.** `EXPO_PUBLIC_RECORDING_ENABLED=true` stays in the git-ignored
+`.env`, which is inert while the server flag is off.
+
+#### Counts, from each runner's own summary lines
+
+`@fieldforce/core` 4 / **38**. `@fieldforce/ui-tokens` 3 / **54**. `@fieldforce/mock` 1 / **43**.
+`@fieldforce/console` 6 / **37**. `@fieldforce/ui` vitest 1 / **4**, jest 22 suites / **253**.
+`@fieldforce/field` vitest 40 / **611**, jest 21 suites / **162**. `@fieldforce/api` with the
+database up **60 / 813, none skipped**; with it stopped **101 passed / 712 skipped**.
+
+#### Where it stopped, and why
+
+**ROOM.** Everything MR-54 asked for is now done: A (with A5 failing and reported), B1, B2, B3, C1,
+C2, D1, E1, E2. What is left is not this brief's: `FE-W70`'s operator decision, `FE-W69`'s re-ask
+policy, `BE-W112`'s audit gap and `BE-W114`'s flake.

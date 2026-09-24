@@ -1512,3 +1512,13 @@ again".
 - `FE-W65` still stands: the route's stop opens the doctor's profile, not the visit.
 - The recording feature is OFF in the repository and can only be enabled against a local target.
 - `FE-G1` and `FE-G2` still need a handset, after the AI integration (`C12`).
+
+## MR-54 continued — the field app's pin (24 September 2026)
+
+- `apps/field` now pins `@supabase/supabase-js` at **2.112.3** exactly, removing the caret that let
+  the library `persisted-session.ts` was measured against move on any re-resolve. Nothing upgraded:
+  the lockfile diff is the specifier line alone.
+- What convergence with the console's 2.117.0 would cost is written down (`FE-W68`, C2): an
+  emulator re-run of MR-52 B1/B3/B4 and MR-54 A2/A3 — roughly a session — because what would be
+  re-tested is this app's behaviour at the auth boundary, not the library's stated behaviour.
+- Nothing else in the app changed, and no screen was touched.

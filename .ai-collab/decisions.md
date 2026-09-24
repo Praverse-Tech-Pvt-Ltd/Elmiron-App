@@ -2119,3 +2119,21 @@ The question, its three parts and what each costs are in `blocked-on-you` → MR
 
 **Also not decided:** whether the phone should re-ask permission on focus, on an interval, or on a
 server signal (`FE-W69`). Each is a different amount of network traffic during a consultation.
+
+
+### C16 — MR-54's remainder completed; the api test task is not cached
+
+**Decided (engineering, in session).** B1, B2, B3, C1 and C2 are done. Two decisions inside them
+are worth naming rather than leaving in a diff:
+
+1. **The pre-commit hook does not run the tests.** Typecheck, lint and format only. A hook that
+   costs minutes is a hook that gets `--no-verify`'d, and a bypassed control is not a control —
+   the same argument `check:decision-debt` makes for not blocking `pnpm test`.
+2. **`@fieldforce/api:test` is no longer turbo-cached** (`services/api/turbo.json`). The cache key
+   cannot see whether the database is reachable, so it could replay a stopped-stack green over a
+   running stack. CI runs the suite once, so the cache bought nothing there; locally it bought
+   speed at the price of a result that could be untrue.
+
+**Not decided:** `BE-W114`'s intermittent failure. It is registered with exactly what was observed
+— twice in four parallel runs, never in three standalone ones, named once — and no mechanism is
+claimed.

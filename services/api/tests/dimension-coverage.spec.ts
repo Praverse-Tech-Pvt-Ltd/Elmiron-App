@@ -40,7 +40,10 @@ beforeAll(async () => {
   world = await seedFixtures();
 }, 60_000);
 
-describe('the predicates that decide who sees what can be falsified', () => {
+// MR-54 B2. `world` is built in a `beforeAll` that RETURNS EARLY when the database is
+// unreachable, so without this guard the first test dereferences `undefined` and reports
+// `Cannot read properties of undefined` -- a message that says nothing about the real cause.
+describe.skipIf(!reachable)('the predicates that decide who sees what can be falsified', () => {
   it('TENANT — a second organisation exists AND holds rows of its own', async () => {
     // `organisation_id = X` is the RESTRICTIVE tenant boundary. With one organisation,
     // every isolation test ever written was asserting that an MR could not see rows that

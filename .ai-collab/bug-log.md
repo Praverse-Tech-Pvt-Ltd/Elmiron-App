@@ -142,3 +142,19 @@ non-obvious go here; a typo caught by typecheck does not.
   screen still offering *Record this visit* after a withdrawal.
 - **Note:** I nearly wrote this up as a server defect after two screenshots. The thing that settled
   it was making the app's own request by hand.
+
+## MR-54 B3 · A green test run that had not run
+
+- **Found:** doing B3's "report both counts". With the database UP, `pnpm test` reported
+  `@fieldforce/api` as **101 passed / 712 skipped** — the numbers from the run I had just done with
+  the database DOWN.
+- **Cause:** `turbo` keys `@fieldforce/api:test` on file content. **Whether Postgres is listening on
+  54322 is not a file**, so the cached green from a stopped stack was replayed over a running one.
+- **What worked:** `npx turbo run test --filter @fieldforce/api --force` on the same tree → **813
+  passed**. The tree was identical; only the cache differed.
+- **What makes it worse, and it is my own change:** before B2 a stopped stack FAILED, so nobody
+  could mistake it. After B2 it exits 0 — correctly — and the cache can then serve that 0 to
+  somebody who believes the database tests ran. **A fix that makes a thing quieter can make a
+  neighbouring hole deeper.**
+- **Verified:** `services/api/turbo.json` sets `cache: false` on that task; the run now reports
+  `8 cached, 9 total` with the api one executing. Registered as `BE-W113`, closed.

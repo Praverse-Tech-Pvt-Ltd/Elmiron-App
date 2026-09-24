@@ -1217,3 +1217,27 @@ LOCAL demo tenant only.
 | Session | Where the narrative is |
 | --- | --- |
 | MR-54 — the consented case | `PROJECT-OVERVIEW.md` → `### MR-54 — the consented case` |
+
+## MR-54 continued — B, C (24 September 2026)
+
+- **`pnpm hooks:install` — run it once in every clone.** `.githooks/pre-commit` runs typecheck,
+  lint and format and refuses the commit on a failure. Git does not read `core.hooksPath` from the
+  repository, so a fresh clone has no hook until you run that.
+- It checks the **working tree**, not the index, does not run the tests, and cannot stop
+  `--no-verify`. Those are deliberate; the reasons are in the hook's own header.
+- **`pnpm test` now exits 0 with the stack stopped** — the three suites that could not skip are
+  fixed. With the stack up the api suite is **60 files / 813 tests, none skipped**.
+- **`BE-W113`, closed:** `turbo` was caching `@fieldforce/api:test` on file content, so a green
+  from a STOPPED stack was replayed over a running one. `services/api/turbo.json` now sets
+  `cache: false` on that task. If you ever see api reporting skips while Docker is up, that is what
+  it was.
+- **`BE-W114`, open:** an intermittent api failure under `pnpm test` (twice in four runs; never in
+  three standalone runs). Named once: `retention-ops.spec.ts > … briefly overdue -- the
+  false-positive case`. Not chased.
+- **The local database is back to the shipped state:** a later `recording_feature_enabled = false`
+  row was appended, because with the flag on, MR-53 B2's "off means off" test fails — correctly.
+  To resume emulator work, insert a `true` row again; `.env` still has
+  `EXPO_PUBLIC_RECORDING_ENABLED=true` and is inert while the server flag is off.
+- `apps/field` is pinned to `@supabase/supabase-js` **2.112.3** exactly. The lockfile moved one
+  line and no version changed.
+- Services stopped at the end of this session.

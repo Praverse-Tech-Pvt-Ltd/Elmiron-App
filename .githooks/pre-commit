@@ -1,0 +1,44 @@
+#!/bin/sh
+#
+# MR-54 B1 — the commit check, as a MECHANISM.
+#
+# **Why this exists.** Three sessions running, a commit went out with a failure already on
+# screen: vitest green, `tsc` red, and nobody ran `tsc`. MR-52 needed two follow-up commits
+# for lint findings that were already printed; MR-53 committed `role: string` where a union
+# was required and only found it a session later. Each time the rule was restated and each
+# time it failed, so the rule is now a script instead of a sentence.
+#
+# **What it runs, and why it does not list the steps itself.** `scripts/ci-local.mjs` derives
+# its step list by reading `.github/workflows/ci.yml`, for a reason that file argues at
+# length: a hand-kept parallel list has already drifted three times in this repository, and
+# it drifts in the direction of claiming MORE coverage than it has. So this hook names three
+# steps by their COMMAND and lets that script find them. If `ci.yml` renames or removes one,
+# `--only` matches zero steps and this hook FAILS rather than quietly checking less.
+#
+# **What it deliberately does NOT do.**
+#
+#   - It does not run the tests. `pnpm test` takes minutes and a hook that costs minutes is a
+#     hook people pass `--no-verify` to, and a bypassed control is not a control. The three
+#     steps here are the ones that have actually caught the failures, and they are the three
+#     the brief named.
+#   - It checks the WORKING TREE, not the index. That is the honest limitation: if you stage
+#     broken code and then fix the file without staging it, this passes and the commit is
+#     still broken. It is the standard trade (husky and lint-staged make the same one), and
+#     the failure it was written for — a broken working tree, committed anyway — is caught.
+#   - It cannot stop `git commit --no-verify`. Git allows the bypass by design. CI is still
+#     the enforcement; this is the thing that tells you before the push.
+#
+# **Enable it once per clone:** `pnpm hooks:install`. Git does not read `core.hooksPath` from
+# the repository — that is a security property, not an oversight, since a cloned repo must
+# not be able to run code on `git commit` without being asked.
+
+set -e
+
+echo "pre-commit: typecheck, lint and format (MR-54 B1). Bypass with --no-verify."
+
+if ! node scripts/ci-local.mjs --only=typecheck,lint,format:check; then
+  echo ""
+  echo "COMMIT REFUSED — a step CI runs has failed above."
+  echo "Fix it, or commit with --no-verify and own the red build."
+  exit 1
+fi

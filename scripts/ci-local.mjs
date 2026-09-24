@@ -30,6 +30,13 @@
  *   node scripts/ci-local.mjs              # the `static` job — needs no database
  *   node scripts/ci-local.mjs --with-db    # also the `database` job — needs Docker + Supabase
  *   node scripts/ci-local.mjs --list       # print the derived step list and exit
+ *   node scripts/ci-local.mjs --only=a,b   # only the steps whose command contains a / b
+ *
+ * **`--only` exists for the pre-commit hook (MR-54 B1) and for nothing else.** It is a
+ * SUBSET of CI by construction, so it says so loudly when it finishes, and every pattern
+ * must match exactly one step -- a pattern that matches none, or two, is a `ci.yml` edit
+ * that has silently changed what the hook covers, and it fails rather than running fewer
+ * checks. That is the same control the derivation above already carries for the whole job.
  */
 
 import { readFileSync, existsSync } from 'node:fs';
@@ -179,9 +186,31 @@ const resolveShell = () => {
   return found;
 };
 
+/**
+ * The `--only=` patterns, or null when the flag is absent.
+ *
+ * Matched against the step's COMMAND, not its name: `pnpm run typecheck` is stable and a
+ * human-written `name:` is not. An empty `--only=` is rejected rather than treated as "all",
+ * because a hook that silently checked nothing is the failure this whole file exists about.
+ */
+const onlyPatterns = () => {
+  const flag = process.argv.find((argument) => argument.startsWith('--only='));
+  if (flag === undefined) return null;
+  const patterns = flag
+    .slice('--only='.length)
+    .split(',')
+    .map((pattern) => pattern.trim())
+    .filter((pattern) => pattern !== '');
+  if (patterns.length === 0) {
+    throw new Error('--only= was given with no patterns. Name the steps, or drop the flag.');
+  }
+  return patterns;
+};
+
 const main = () => {
   const withDb = process.argv.includes('--with-db');
   const listOnly = process.argv.includes('--list');
+  const only = onlyPatterns();
   const workflow = readFileSync(WORKFLOW, 'utf8');
   const shell = resolveShell();
 
@@ -231,11 +260,38 @@ const main = () => {
     }
   }
 
-  const total = planned.filter((entry) => entry.kind === 'run').length;
-  const skipped = planned.length - total;
+  // MR-54 B1 -- the subset, and the control that keeps it honest.
+  //
+  // Each pattern must select exactly one step. None means `ci.yml` no longer runs what the
+  // hook believes it runs; two means the hook would run a step twice and the developer would
+  // not know which. Both are silent coverage changes, and both stop the run here.
+  let selected = planned;
+  if (only !== null) {
+    const runnable = planned.filter((entry) => entry.kind === 'run');
+    const chosen = [];
+    for (const pattern of only) {
+      const matches = runnable.filter((entry) => entry.body.includes(pattern));
+      if (matches.length !== 1) {
+        throw new Error(
+          '--only=' +
+            pattern +
+            ' matched ' +
+            matches.length +
+            ' step(s) in ci.yml, and it must match exactly one. The workflow has changed ' +
+            'under the pre-commit hook: fix .githooks/pre-commit rather than committing ' +
+            'with fewer checks than it claims.',
+        );
+      }
+      chosen.push(matches[0]);
+    }
+    selected = chosen;
+  }
+
+  const total = selected.filter((entry) => entry.kind === 'run').length;
+  const skipped = selected.length - total;
 
   console.log('ci-local — derived from .github/workflows/ci.yml');
-  for (const entry of planned) {
+  for (const entry of selected) {
     console.log((entry.kind === 'run' ? '  RUN  [' : '  skip [') + entry.job + '] ' + entry.label);
   }
   console.log(
@@ -305,7 +361,7 @@ const main = () => {
   if (listOnly) return 0;
 
   let index = 0;
-  for (const entry of planned) {
+  for (const entry of selected) {
     if (entry.kind !== 'run') continue;
     index += 1;
     const heading = '[' + index + '/' + total + '] ' + entry.job + ' · ' + entry.label;
@@ -329,6 +385,20 @@ const main = () => {
       );
       return 1;
     }
+  }
+
+  if (only !== null) {
+    // Never "this is what CI runs". It is three steps out of sixteen, and a reader who takes
+    // a green subset for a green build is the reader this file was written for.
+    console.log(
+      '\nAll ' +
+        index +
+        ' step(s) passed. THIS IS A SUBSET: ' +
+        (planned.filter((entry) => entry.kind === 'run').length - index) +
+        ' other step(s) of the static job did not run, and neither did the database job. ' +
+        'Run `pnpm ci:local` before pushing.',
+    );
+    return 0;
   }
 
   console.log('\nAll ' + index + ' step(s) passed. This is what CI runs for ' + jobs.join(' and '));
