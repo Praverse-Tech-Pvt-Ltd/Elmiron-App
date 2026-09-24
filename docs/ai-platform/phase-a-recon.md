@@ -71,13 +71,29 @@ Paths relative to the repo root. Migrations are in `services/api/supabase/migrat
 **Every new AI/LMS table must follow this pattern.** New tables get the restrictive boundary,
 get added to the tenant probe, and get a rollback file.
 
-**A trap specific to RAG.** `.ai-collab/constraints.md` (FIX-08) proves that on an RLS table, a
-non-`LEAKPROOF` operator can never use an index. *I believe* pgvector's distance operators
-(`<=>`, `<->`, `<#>`) are not declared leakproof — **verify before relying on it.** If so, a
-vector search on an RLS-protected chunks table would sequentially scan every chunk for every
-query. The fix is the one the repo already uses: a `security definer` retrieval RPC that
-resolves org / product / country / approval status to values first, then runs the vector
-query with the scope in its body.
+**A trap specific to RAG — measured 24 September 2026 on the local stack, pgvector 0.8.2.**
+`.ai-collab/constraints.md` (FIX-08) proves that on an RLS table a non-`LEAKPROOF` operator in a
+**`WHERE`** clause can never use an index. **Every pgvector operator is `leakproof = false`**
+(`select o.oprname, p.proleakproof from pg_operator o join pg_proc p on p.oid = o.oprcode join
+pg_type l on l.oid = o.oprleft where l.typname = 'vector'`, after `create extension vector`).
+
+What that does and does not mean, measured as `authenticated` on a 20,000-row table with RLS
+forced and an HNSW index:
+
+| query shape | plan |
+| --- | --- |
+| `order by e <=> $q limit 5` (nearest neighbours) | **Index Scan** on the HNSW index, RLS applied as a `Filter` |
+| `where e <=> $q < 0.1` (distance threshold) | **Seq Scan** — the FIX-08 effect |
+
+So nearest-neighbour search is **not** slowed by RLS. The real trap is different and quieter:
+the HNSW scan hands back a bounded candidate set (`hnsw.ef_search`, default 40) and RLS filters
+it **afterwards**. If most near chunks belong to another tenant, another market or an
+unapproved document version, the query returns **fewer than k rows, or none** — which reads as
+"approved information not available" when it is available. pgvector 0.8's
+`hnsw.iterative_scan` exists for this. The design that avoids it is the one the repo already
+uses: a `security definer` retrieval RPC that resolves org / product / market / approval status
+to values first and filters inside the scan, with a test that plants many near-but-forbidden
+chunks and asserts the permitted ones still come back.
 
 ### 1.3 Audit — REUSE AS-IS
 
@@ -247,8 +263,27 @@ Numbered so they can be answered by number. **Owner** is who should answer, not 
 
 **Recommendation: (a) for interactive calls, plus (c) for batch work** (embeddings, transcript
 analysis, benchmark runs). The gateway is deliberately dumb: it cannot grant anything the
-database would not. The first task after D1 is to **prove the local edge runtime works under
-`pnpm db:start`** — the premise BE-W7 rested on — before building on it.
+database would not.
+
+**BE-W7's premise, re-checked 24 September 2026 — it no longer holds.** A throwaway function
+(deleted afterwards, never committed) was served with `supabase functions serve` against the
+stack `pnpm db:start` brings up:
+
+- `pnpm db:start` runs a `supabase_edge_runtime_*` container; the function was served by
+  `supabase-edge-runtime-1.74.3 (compatible with Deno v2.1.4)`.
+- **No token → 401** `UNAUTHORIZED_NO_AUTH_HEADER`. JWT verification is on by default.
+- The function forwarded the caller's `Authorization` header to PostgREST and called
+  `rpc/current_user_organisation_id`. **With the anon key the database refused it**
+  (`42501 permission denied for function current_user_organisation_id`); **with a signed
+  `authenticated` token it ran** and returned `null` (no profile for that user). So the caller's
+  identity reaches Postgres through the gateway, and Postgres — not the function — decides.
+- A function added **after** `db:start` is not picked up (404 `Function not found`) until
+  `functions serve` runs. CI would need that step; it does not have one today.
+
+This removes the testability objection. It does **not** by itself make D1 decided: BE-W7's
+other point — a second place for logic to live — still stands, and is answered only by keeping
+the gateway free of authorisation logic, which a test can check (it should hold no service-role
+key for user traffic).
 
 ---
 
