@@ -78,6 +78,8 @@ const seedRivalRows = async (): Promise<void> => {
     knowledgeDocument: randomUUID(),
     knowledgeVersion: randomUUID(),
     knowledgeChunk: randomUUID(),
+    aiPrompt: randomUUID(),
+    aiRequest: randomUUID(),
   };
 
   await withClient(async (db) => {
@@ -281,6 +283,20 @@ const seedRivalRows = async (): Promise<void> => {
        values ($1, $2, $3, 1, 'AI-C1 probe')`,
       [id.knowledgeChunk, org, id.knowledgeVersion],
     );
+    // AI-D0's control plane. The prompt is APPROVED (stamps by hand under `replica`; the four-eyes
+    // CHECK still applies, so the decider is not the author), and the request is the rival MR's.
+    await q(
+      `insert into public.ai_prompt_versions
+         (id, organisation_id, feature, version_number, status, system_prompt, created_by_user_id,
+          submitted_at, submitted_by_user_id, decided_at, decided_by_user_id, approval_attestation)
+       values ($1, $2, 'product_qa', 1, 'approved', 'AI-D0 probe', $3, now(), $3, now(), $4, 'probe')`,
+      [id.aiPrompt, org, admin, mr],
+    );
+    await q(
+      `insert into public.ai_requests (id, organisation_id, user_id, feature, prompt_version_id)
+       values ($1, $2, $3, 'product_qa', $4)`,
+      [id.aiRequest, org, mr, id.aiPrompt],
+    );
     await db.query('commit');
   });
 
@@ -317,6 +333,8 @@ const seedRivalRows = async (): Promise<void> => {
     ['knowledge_documents', id.knowledgeDocument],
     ['knowledge_document_versions', id.knowledgeVersion],
     ['knowledge_chunks', id.knowledgeChunk],
+    ['ai_prompt_versions', id.aiPrompt],
+    ['ai_requests', id.aiRequest],
   ];
   for (const [table, rowId] of byId) rival.set(table, ['id', rowId]);
   rival.set('visit_audio_quarantine', ['visit_id', id.quarantineVisit]);
@@ -379,6 +397,9 @@ const TABLES: readonly (readonly [string, 'rivalMr' | 'rivalAdmin'])[] = [
   ['knowledge_documents', 'rivalMr'],
   ['knowledge_document_versions', 'rivalMr'],
   ['knowledge_chunks', 'rivalMr'],
+  // AI-D0 (`20260924000700`): prompts are admin-only; a request is its own user's.
+  ['ai_prompt_versions', 'rivalAdmin'],
+  ['ai_requests', 'rivalMr'],
 ];
 
 describe.skipIf(!reachable)('C1 — a row of another organisation, read directly', () => {
