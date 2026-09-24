@@ -407,7 +407,9 @@ content, not on the organisation** (D6).
 | Knowledge ingestion, review and approval | **Built, UNVERIFIED** — AI-C1, `20260924000600_knowledge.sql`, contracts in `packages/core/src/field/knowledge.ts`. Four-eyes approval with attestation; product content must name a market; server-side chunking; scoped full-text search returning `not_available` when nothing qualifies. No screen calls it yet |
 | Vector retrieval (embeddings) | **DECISION REQUIRED** (D3, pgvector) — the full-text search above is the fallback until then |
 | PDF / file extraction | **DECISION REQUIRED** — needs a parser dependency; versions take supplied text for now |
-| AI gateway / provider layer / cost tracking | **DECISION REQUIRED** (D1, D2) — D1's testability premise now measured (§4): the local edge runtime works and forwards the caller's identity |
+| AI control plane, database half — prompt versions, request/usage log, flags, daily limit, `45011`/`45012` | **Built, UNVERIFIED** — AI-D0, `20260924000700_ai_control_plane.sql`, contracts in `packages/core/src/field/ai.ts`. Nothing calls it until a gateway exists |
+| AI gateway runtime / provider layer | **DECISION REQUIRED** (D1, D2) — D1's testability premise now measured (§4): the local edge runtime works and forwards the caller's identity |
+| Frontend contract package (§50) | **Written** — `docs/ai-platform/api-contracts.md`, over the Zod schemas in `packages/core` |
 | MR chatbot, AI Doctor, AI Coach | **DECISION REQUIRED** (D1, D2, X2, X4) |
 | Voice (simulator) | **DECISION REQUIRED** (D2, vendor) |
 | PV / complaint / off-label screening | **BLOCKED** (C3, `blocked-on-you` 4.1, 5.8) |
