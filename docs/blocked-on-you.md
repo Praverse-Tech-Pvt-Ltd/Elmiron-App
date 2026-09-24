@@ -1252,3 +1252,82 @@ one signs out every rep across a weekend, and `persisted-session.ts` correctly w
 a session the server has ended is a non-retryable refusal, so auth-js removes the stored entry and
 the rep lands on **Sign in** with their day's queued work unreachable until they have signal. That
 is `FE-W67`'s failure mode, reintroduced from the dashboard.
+
+
+---
+
+# EVERY DECISION THE BACKEND IS WAITING ON — one list, 24 September 2026
+
+**This is a VIEW, not a second register.** Every row points at the numbered item above that
+owns it, and those rows stay the source of truth. If the two ever disagree, the numbered row
+wins and this list is the stale one — it is a reading aid, and a reading aid that gets treated
+as the record is how a list like this starts lying.
+
+**Why it exists:** the asks above are grouped by when they were raised, across six months and
+five separate escalations. Nothing anywhere said *"here is what the server cannot finish until
+you answer."* This does.
+
+**Scope: server-side only.** Handset, Play Store, brand and design asks are above and are not
+repeated here.
+
+**As of this date there is no open backend item that engineering can close on its own.** Every
+row below is a decision.
+
+## 1. Dated — these turn CI red, or their cost grows daily
+
+| Ask | Owner | What the backend cannot do until it is answered |
+| --- | --- | --- |
+| **5.9 / `BE-W21`** — the UCPMP sample cap value and its dimension, and whether `input` counts against it | Client | **A build-failing deadline of 6 November is already wired**, warning from 16 October. Until it is set `enforce_ucpmp_sample_cap()` is inert: samples are accepted and uncounted, and the samples screen says so. **Do not let engineering pick a number to clear it** |
+| **2.7 / `BE-W106`** — should configuration belong to an ORGANISATION? `app_thresholds.scope` is `global` or `territory` and nothing else | Client | Dated **2026-10-31** and wired into `check:decision-debt`. The read leak is closed (`20260923000300`); the MODEL is untouched, so every organisation still shares one set of thresholds |
+| **5.13 / `BE-W93`** — the registered legal name for the consent notice, and whether MRs' display names may be shown to doctors | Client | **The only item whose cost accrues every day the app is used.** `consent_records` is append-only, so every consent captured before the name exists is permanently defective **and cannot be amended by design** |
+
+## 2. The recording and transcript path — built, and cannot be switched on
+
+| Ask | Owner | What the backend cannot do until it is answered |
+| --- | --- | --- |
+| **5.8** — the named PV/DPDP signatory | Client | Audio, permanently (`C3`). It is why `recording_feature_enabled` ships **false** and why the client config throws when the flag is set against a non-local target |
+| **4.2 / `BE-W32`** — which transcription vendor, and the measured Hinglish error rate | Client | `ingest_transcript(jsonb)` is built, tested and callable by nothing. Needs labelled audio, which needs E1 |
+| **E1** — consent from employees whose audio joins the bake-off corpus | Client + legal | Blocks collecting the corpus at all. The draft still needs the vendor list, a retention date and a named person to withdraw to |
+| **E2 / `BE-W109`** — the text a doctor reads before being recorded | Client | The live notice says the team *"reviews how they presented"*, naming neither the AI processing nor the SOP monitoring — so a doctor agreeing is not agreeing to what happens. **Confirmed still live on the emulator, 23 September 2026** |
+| **4.1** — may `adverse_event_reports.reported_text` contain patient information, and does an AE report leave the platform? | Client | The schema and the egress path for the §2.4 screening duty, which follows from transcripts existing at all |
+
+## 3. What the consent ledger MEANS
+
+| Ask | Owner | What the backend cannot do until it is answered |
+| --- | --- | --- |
+| **5.14 / `BE-W95`** — is a doctor's second answer a WITHDRAWAL of the first, or a separate answer? | Client | `is_withdrawal` and `supersedes_consent_record_id` are still null, because the client sends neither. Open since MR-24 |
+| **`FE-W70`** — NEW, MR-54 A5 — when a doctor withdraws, must audio already captured on the rep's phone be destroyed? | Client | **Measured on the emulator: a withdrawal does not stop a running recording.** 518,740 bytes of a doctor who had withdrawn were written to the phone and kept. The upload was refused and nothing reached the company. **It also contradicts MR-53 B4**, which keeps a refused recording and has a test saying why (`recording-upload.test.ts:149-152`). Both cannot stand, and engineering has deliberately not picked one |
+| **5.12** — which consent-notice LANGUAGE an MR is shown first | Client | Decides `displayed_language` on a compliance record. The current order is labelled **arbitrary** rather than dressed up as a preference |
+| **5.10** — confirm `consent_max_sync_lag_hours` (72h) and `consent_future_tolerance_seconds` (120s) | Client | Both still **UNVERIFIED**, and **MR-54 `BE-W96` widened their reach**: since `20260924000200` they also bound `recorded_at` on every audio upload, not only consent captures. Two numbers nobody has confirmed now decide whether a recording can be filed |
+
+## 4. Data model and retention
+
+| Ask | Owner | What the backend cannot do until it is answered |
+| --- | --- | --- |
+| **5.5 / `O1`** — the data-controller model | Client, open 1 month | Controller fields on **every clinical table**. The patient app cannot start without it |
+| **5.7** — reference data and per-territory shift hours | Client, open since sprint 3 | Capture **refuses** without them, and the organisation-default window expires 60 days after configuration and then refuses again |
+| **4.4** — does a deleted storage object survive in S3 versioning, a soft-delete window, or a sub-processor's backup? | Operator | Decides whether *"destroyed"* in `audio_destruction_log` is TRUE. The 90-day promise is about the objects, not the rows |
+| **7.2** — the storage gap | Operator | A database restore brings back every row of `storage.objects` and none of the objects. The recovery posture covers the ledger and not the audio |
+
+## 5. Operations and recovery
+
+| Ask | Owner | What the backend cannot do until it is answered |
+| --- | --- | --- |
+| **6.1** — production must be migrated to `main` BEFORE any reference data is loaded | Operator | A sequencing constraint with a date, not a backlog item |
+| **6.2** — re-make the PITR decision; both premises of the original are absent | Operator | The recorded "daily backups plus the runbook" posture rests on assumptions that no longer hold |
+| **6.3 / `BE-W11`** — where may the backup lawfully go? | Operator | `backup:database` and `backup:verify` are built and proven end to end, and the artefact has **nowhere lawful to go** |
+| **7.3** — the platform unknowns; one email to Supabase support | Operator | Several facts in `docs/restore-runbook.md` are written down as *"unobserved"* because nobody has asked |
+| **5.2** — the Supabase paid plan, ~$25/month | Operator | The free tier **auto-paused production for two weeks in August**, and it is the honest fix for `BE-W69` |
+
+## 6. One that is engineering's, and is still a decision
+
+| Ask | Owner | Why it is not simply built |
+| --- | --- | --- |
+| **`BE-W102`** — the grant-level half | Engineering, with an operator trade-off | The in-body half was **closed on 24 September** (`20260924000300`): a refused read now reaches `audit_log`, because a request can fail as a 403 without failing as an error, so the transaction commits. But `permission denied for function …` fires **before the body runs**, so no in-database mechanism will ever see it. Closing it means logging at the PostgREST layer — which MR-40 costed as *"moves part of the trail outside the database that guarantees the rest"*. That trade is unchanged and still not chosen |
+
+## If you answer only three
+
+1. **5.9** — the date is in the build. It turns CI red on 6 November whatever else is happening.
+2. **5.13** — it is the only one whose cost is larger tomorrow than today, and the damage cannot
+   be repaired afterwards because the ledger is append-only by design.
+3. **`FE-W70`** — the current behaviour keeps audio of a doctor who said stop.
