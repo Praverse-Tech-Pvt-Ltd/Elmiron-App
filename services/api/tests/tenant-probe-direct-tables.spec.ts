@@ -75,6 +75,9 @@ const seedRivalRows = async (): Promise<void> => {
     courseAssignment: randomUUID(),
     courseEnrolment: randomUUID(),
     lessonCompletion: randomUUID(),
+    knowledgeDocument: randomUUID(),
+    knowledgeVersion: randomUUID(),
+    knowledgeChunk: randomUUID(),
   };
 
   await withClient(async (db) => {
@@ -256,6 +259,28 @@ const seedRivalRows = async (): Promise<void> => {
        values ($1, $2, $3, $4, $5)`,
       [id.lessonCompletion, org, id.courseEnrolment, mr, id.lesson],
     );
+    // AI-C1's knowledge: an APPROVED version, so the rival MR can read it. The lifecycle stamps and
+    // the four-eyes reviewer are written by hand under `replica`; the CHECKs still apply, so the
+    // reviewer is the rival MR -- any user other than the author satisfies the constraint.
+    await q(
+      `insert into public.knowledge_documents (id, organisation_id, title, document_type, created_by_user_id)
+       values ($1, $2, 'AI-C1 probe', 'faq', $3)`,
+      [id.knowledgeDocument, org, admin],
+    );
+    await q(
+      `insert into public.knowledge_document_versions
+         (id, organisation_id, document_id, version_number, status, body, source_reference,
+          effective_from, created_by_user_id, submitted_at, submitted_by_user_id, decided_at,
+          decided_by_user_id, approval_attestation)
+       values ($1, $2, $3, 1, 'approved', 'AI-C1 probe', 'probe', '2026-01-01', $4, now(), $4,
+               now(), $5, 'probe')`,
+      [id.knowledgeVersion, org, id.knowledgeDocument, admin, mr],
+    );
+    await q(
+      `insert into public.knowledge_chunks (id, organisation_id, document_version_id, position, body)
+       values ($1, $2, $3, 1, 'AI-C1 probe')`,
+      [id.knowledgeChunk, org, id.knowledgeVersion],
+    );
     await db.query('commit');
   });
 
@@ -289,6 +314,9 @@ const seedRivalRows = async (): Promise<void> => {
     ['course_assignments', id.courseAssignment],
     ['course_enrolments', id.courseEnrolment],
     ['lesson_completions', id.lessonCompletion],
+    ['knowledge_documents', id.knowledgeDocument],
+    ['knowledge_document_versions', id.knowledgeVersion],
+    ['knowledge_chunks', id.knowledgeChunk],
   ];
   for (const [table, rowId] of byId) rival.set(table, ['id', rowId]);
   rival.set('visit_audio_quarantine', ['visit_id', id.quarantineVisit]);
@@ -347,6 +375,10 @@ const TABLES: readonly (readonly [string, 'rivalMr' | 'rivalAdmin'])[] = [
   ['course_assignments', 'rivalMr'],
   ['course_enrolments', 'rivalMr'],
   ['lesson_completions', 'rivalMr'],
+  // AI-C1 (`20260924000600`): approved knowledge, readable by the rival's own MR.
+  ['knowledge_documents', 'rivalMr'],
+  ['knowledge_document_versions', 'rivalMr'],
+  ['knowledge_chunks', 'rivalMr'],
 ];
 
 describe.skipIf(!reachable)('C1 — a row of another organisation, read directly', () => {

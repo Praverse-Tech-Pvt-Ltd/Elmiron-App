@@ -18,5 +18,6 @@ export * from './sync.js';
 export * from './manager.js';
 export * from './catalogue.js';
 export * from './lms.js';
+export * from './knowledge.js';
 export * from './endpoints.js';
 export * from './client.js';

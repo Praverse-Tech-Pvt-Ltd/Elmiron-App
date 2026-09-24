@@ -374,6 +374,14 @@ content, not on the organisation** (D6).
   A published version is frozen by trigger, even for the table owner; state changes go through
   six RPCs; completions are append-only; the server stamps every time. **No score, grade or
   pass mark anywhere** — X2 is still open.
+- **AI-C1 — approved knowledge.** `knowledge_documents`, `knowledge_document_versions` (draft →
+  in review → approved / rejected → retired), `knowledge_chunks`. Submitting freezes the text and
+  chunks it, so what was reviewed is what is retrieved. **Four eyes**: the author or submitter
+  cannot approve, and approval stores a written attestation — D8's "approved by" as a named admin,
+  not a fourth role. Product content must name a market. `search_approved_knowledge` resolves the
+  caller's scope (organisation, market, product, approved, in date, document active) to version
+  ids first and only then runs the text search, so nothing out of scope can crowd out a
+  permitted result; nothing matching is `status: 'not_available'`, never a guess.
 - **Evidence, not impressions.** For each: a spec (`catalogue.spec.ts`, `lms-core.spec.ts`), a
   deliberate mutation run in which weakening each guard failed exactly the test that covers it,
   the new tables added to the restrictive-boundary catalog check and the over-HTTP tenant probe,
@@ -396,7 +404,9 @@ content, not on the organisation** (D6).
 | Products / therapy / market | **Schema built, UNVERIFIED** — AI-B1, `20260924000400_catalogue.sql`. No rows (D5); market on content (assumed for D6). Tested at the database; no screen reads it yet |
 | LMS core — courses, versions, lessons, assignments, enrolments, completions | **Built, UNVERIFIED** — AI-B2, `20260924000500_lms_core.sql`, contracts in `packages/core/src/field/lms.ts`. Tested at the database and against the contracts; no screen calls it yet |
 | Assessments, certification | **DECISION REQUIRED** (X2) — deliberately not built |
-| Knowledge ingestion / RAG | **DECISION REQUIRED** (D3, D8) |
+| Knowledge ingestion, review and approval | **Built, UNVERIFIED** — AI-C1, `20260924000600_knowledge.sql`, contracts in `packages/core/src/field/knowledge.ts`. Four-eyes approval with attestation; product content must name a market; server-side chunking; scoped full-text search returning `not_available` when nothing qualifies. No screen calls it yet |
+| Vector retrieval (embeddings) | **DECISION REQUIRED** (D3, pgvector) — the full-text search above is the fallback until then |
+| PDF / file extraction | **DECISION REQUIRED** — needs a parser dependency; versions take supplied text for now |
 | AI gateway / provider layer / cost tracking | **DECISION REQUIRED** (D1, D2) — D1's testability premise now measured (§4): the local edge runtime works and forwards the caller's identity |
 | MR chatbot, AI Doctor, AI Coach | **DECISION REQUIRED** (D1, D2, X2, X4) |
 | Voice (simulator) | **DECISION REQUIRED** (D2, vendor) |
