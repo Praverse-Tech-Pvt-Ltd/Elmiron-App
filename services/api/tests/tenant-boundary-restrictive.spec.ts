@@ -202,8 +202,9 @@ describe.skipIf(!reachable)('D2 — a restrictive tenant boundary cannot be wide
             and position('current_user_organisation_id()' in pg_get_expr(p.polqual, p.polrelid)) > 0
           order by c.relname`,
       );
-      // MR-07 D's seven, plus MR-51 C3's eighteen (BE-W83). `app_thresholds` is absent on
-      // purpose: it is BE-W106, awaiting the operator (C13).
+      // MR-07 D's seven, plus MR-51 C3's eighteen (BE-W83), plus AI-B1's four catalogue tables
+      // (`20260924000400`). `app_thresholds` is absent on purpose: it is BE-W106, awaiting the
+      // operator (C13).
       expect(rows.rows.map((r) => r.relname)).toEqual([
         'adverse_event_reports',
         'beat_plan_entries',
@@ -215,7 +216,10 @@ describe.skipIf(!reachable)('D2 — a restrictive tenant boundary cannot be wide
         'clinic_addresses',
         'consent_text_versions',
         'doctors',
+        'markets',
         'organisations',
+        'product_markets',
+        'products',
         'recordings',
         'samples_and_inputs',
         'sync_batches',
@@ -224,6 +228,7 @@ describe.skipIf(!reachable)('D2 — a restrictive tenant boundary cannot be wide
         'sync_items',
         'territories',
         'territory_shift_windows',
+        'therapy_areas',
         'upload_grants',
         'user_profiles',
         'visit_audio_quarantine',

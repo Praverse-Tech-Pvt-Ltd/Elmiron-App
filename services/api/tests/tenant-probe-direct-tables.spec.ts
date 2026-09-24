@@ -64,6 +64,10 @@ const seedRivalRows = async (): Promise<void> => {
     note: randomUUID(),
     threshold: randomUUID(),
     quarantineVisit: randomUUID(),
+    market: randomUUID(),
+    therapyArea: randomUUID(),
+    product: randomUUID(),
+    productMarket: randomUUID(),
   };
 
   await withClient(async (db) => {
@@ -182,6 +186,28 @@ const seedRivalRows = async (): Promise<void> => {
        values ($1, $2, $3, 30, 1000, now(), now() + interval '30 days')`,
       [id.note, visit, mr],
     );
+    // AI-B1's catalogue. `organisation_id` is written explicitly: under `replica` neither its
+    // default nor `product_markets`' deriving trigger runs.
+    const org = world.rivalOrganisationId;
+    await q(
+      `insert into public.markets (id, organisation_id, country_code, name)
+       values ($1, $2, 'AE', 'AI-B1 probe')`,
+      [id.market, org],
+    );
+    await q(
+      `insert into public.therapy_areas (id, organisation_id, name) values ($1, $2, 'AI-B1 probe')`,
+      [id.therapyArea, org],
+    );
+    await q(
+      `insert into public.products (id, organisation_id, therapy_area_id, brand_name)
+       values ($1, $2, $3, 'AI-B1 probe')`,
+      [id.product, org, id.therapyArea],
+    );
+    await q(
+      `insert into public.product_markets (id, organisation_id, product_id, market_id)
+       values ($1, $2, $3, $4)`,
+      [id.productMarket, org, id.product, id.market],
+    );
     await db.query('commit');
   });
 
@@ -204,6 +230,10 @@ const seedRivalRows = async (): Promise<void> => {
     ['visit_audio_quarantine_clearances', id.clearance],
     ['visits', visit],
     ['voice_notes', id.note],
+    ['markets', id.market],
+    ['therapy_areas', id.therapyArea],
+    ['products', id.product],
+    ['product_markets', id.productMarket],
   ];
   for (const [table, rowId] of byId) rival.set(table, ['id', rowId]);
   rival.set('visit_audio_quarantine', ['visit_id', id.quarantineVisit]);
@@ -248,6 +278,12 @@ const TABLES: readonly (readonly [string, 'rivalMr' | 'rivalAdmin'])[] = [
   ['visit_audio_quarantine_clearances', 'rivalAdmin'],
   ['visits', 'rivalAdmin'],
   ['voice_notes', 'rivalAdmin'],
+  // AI-B1 (`20260924000400`): the catalogue is read by everyone in its organisation, so the
+  // positive control is the rival's MR, the least-privileged reader.
+  ['markets', 'rivalMr'],
+  ['therapy_areas', 'rivalMr'],
+  ['products', 'rivalMr'],
+  ['product_markets', 'rivalMr'],
 ];
 
 describe.skipIf(!reachable)('C1 — a row of another organisation, read directly', () => {
