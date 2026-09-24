@@ -454,6 +454,29 @@ describe.skipIf(!reachable)('AI-C1 — the search returns only what may be said'
     });
   });
 
+  it('AI-C2: a question worded differently from the label still finds it, best match first', async () => {
+    // The AI-C1 search ANDed every word, so this returned not_available -- found by the first
+    // end-to-end test (`ai-product-qa.spec.ts`), not by this file, whose fixtures used the query's
+    // own words. The label below is worded the way labels are.
+    await inRolledBackTransaction(async (client) => {
+      const reviewer = await makeReviewer(client);
+      const storage = await approvedDoc(client, reviewer, {
+        body: '# Storage\n\nStore Wordwell tablets below 25 °C in the original pack.',
+      });
+      const other = await approvedDoc(client, reviewer, {
+        body: '# Presentation\n\nWordwell tablets come in strips of ten.',
+      });
+      const r = await search(
+        client,
+        world.users.puneMr,
+        'What is the storage temperature for Wordwell tablets?',
+      );
+      expect(r.status).toBe('found');
+      expect(versionsIn(r)[0], 'the storage section ranks first').toBe(storage.versionId);
+      expect(versionsIn(r)).toContain(other.versionId);
+    });
+  });
+
   it('respects the calendar: not yet effective, and past review, are both excluded', async () => {
     await inRolledBackTransaction(async (client) => {
       const reviewer = await makeReviewer(client);
