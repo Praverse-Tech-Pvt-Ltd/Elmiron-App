@@ -64,6 +64,22 @@ const seedRivalRows = async (): Promise<void> => {
     note: randomUUID(),
     threshold: randomUUID(),
     quarantineVisit: randomUUID(),
+    market: randomUUID(),
+    therapyArea: randomUUID(),
+    product: randomUUID(),
+    productMarket: randomUUID(),
+    course: randomUUID(),
+    courseVersion: randomUUID(),
+    courseModule: randomUUID(),
+    lesson: randomUUID(),
+    courseAssignment: randomUUID(),
+    courseEnrolment: randomUUID(),
+    lessonCompletion: randomUUID(),
+    knowledgeDocument: randomUUID(),
+    knowledgeVersion: randomUUID(),
+    knowledgeChunk: randomUUID(),
+    aiPrompt: randomUUID(),
+    aiRequest: randomUUID(),
   };
 
   await withClient(async (db) => {
@@ -182,6 +198,105 @@ const seedRivalRows = async (): Promise<void> => {
        values ($1, $2, $3, 30, 1000, now(), now() + interval '30 days')`,
       [id.note, visit, mr],
     );
+    // AI-B1's catalogue. `organisation_id` is written explicitly: under `replica` neither its
+    // default nor `product_markets`' deriving trigger runs.
+    const org = world.rivalOrganisationId;
+    await q(
+      `insert into public.markets (id, organisation_id, country_code, name)
+       values ($1, $2, 'AE', 'AI-B1 probe')`,
+      [id.market, org],
+    );
+    await q(
+      `insert into public.therapy_areas (id, organisation_id, name) values ($1, $2, 'AI-B1 probe')`,
+      [id.therapyArea, org],
+    );
+    await q(
+      `insert into public.products (id, organisation_id, therapy_area_id, brand_name)
+       values ($1, $2, $3, 'AI-B1 probe')`,
+      [id.product, org, id.therapyArea],
+    );
+    await q(
+      `insert into public.product_markets (id, organisation_id, product_id, market_id)
+       values ($1, $2, $3, $4)`,
+      [id.productMarket, org, id.product, id.market],
+    );
+    // AI-B2's LMS. A PUBLISHED version, so the rival MR -- the positive control -- can read its
+    // content; under `replica` the stamps the publish RPC would set are written by hand, and the
+    // CHECK constraints requiring them still apply.
+    await q(
+      `insert into public.courses (id, organisation_id, title) values ($1, $2, 'AI-B2 probe')`,
+      [id.course, org],
+    );
+    await q(
+      `insert into public.course_versions
+         (id, organisation_id, course_id, version_number, status, title, published_at,
+          published_by_user_id)
+       values ($1, $2, $3, 1, 'published', 'AI-B2 probe', now(), $4)`,
+      [id.courseVersion, org, id.course, admin],
+    );
+    await q(
+      `insert into public.course_modules (id, organisation_id, course_version_id, position, title)
+       values ($1, $2, $3, 1, 'AI-B2 probe')`,
+      [id.courseModule, org, id.courseVersion],
+    );
+    await q(
+      `insert into public.lessons
+         (id, organisation_id, module_id, course_version_id, position, title, body)
+       values ($1, $2, $3, $4, 1, 'AI-B2 probe', 'Synthetic. Describes nobody.')`,
+      [id.lesson, org, id.courseModule, id.courseVersion],
+    );
+    await q(
+      `insert into public.course_assignments
+         (id, organisation_id, course_id, assignee_user_id, assigned_by_user_id)
+       values ($1, $2, $3, $4, $5)`,
+      [id.courseAssignment, org, id.course, mr, admin],
+    );
+    await q(
+      `insert into public.course_enrolments (id, organisation_id, user_id, course_version_id)
+       values ($1, $2, $3, $4)`,
+      [id.courseEnrolment, org, mr, id.courseVersion],
+    );
+    await q(
+      `insert into public.lesson_completions (id, organisation_id, enrolment_id, user_id, lesson_id)
+       values ($1, $2, $3, $4, $5)`,
+      [id.lessonCompletion, org, id.courseEnrolment, mr, id.lesson],
+    );
+    // AI-C1's knowledge: an APPROVED version, so the rival MR can read it. The lifecycle stamps and
+    // the four-eyes reviewer are written by hand under `replica`; the CHECKs still apply, so the
+    // reviewer is the rival MR -- any user other than the author satisfies the constraint.
+    await q(
+      `insert into public.knowledge_documents (id, organisation_id, title, document_type, created_by_user_id)
+       values ($1, $2, 'AI-C1 probe', 'faq', $3)`,
+      [id.knowledgeDocument, org, admin],
+    );
+    await q(
+      `insert into public.knowledge_document_versions
+         (id, organisation_id, document_id, version_number, status, body, source_reference,
+          effective_from, created_by_user_id, submitted_at, submitted_by_user_id, decided_at,
+          decided_by_user_id, approval_attestation)
+       values ($1, $2, $3, 1, 'approved', 'AI-C1 probe', 'probe', '2026-01-01', $4, now(), $4,
+               now(), $5, 'probe')`,
+      [id.knowledgeVersion, org, id.knowledgeDocument, admin, mr],
+    );
+    await q(
+      `insert into public.knowledge_chunks (id, organisation_id, document_version_id, position, body)
+       values ($1, $2, $3, 1, 'AI-C1 probe')`,
+      [id.knowledgeChunk, org, id.knowledgeVersion],
+    );
+    // AI-D0's control plane. The prompt is APPROVED (stamps by hand under `replica`; the four-eyes
+    // CHECK still applies, so the decider is not the author), and the request is the rival MR's.
+    await q(
+      `insert into public.ai_prompt_versions
+         (id, organisation_id, feature, version_number, status, system_prompt, created_by_user_id,
+          submitted_at, submitted_by_user_id, decided_at, decided_by_user_id, approval_attestation)
+       values ($1, $2, 'product_qa', 1, 'approved', 'AI-D0 probe', $3, now(), $3, now(), $4, 'probe')`,
+      [id.aiPrompt, org, admin, mr],
+    );
+    await q(
+      `insert into public.ai_requests (id, organisation_id, user_id, feature, prompt_version_id)
+       values ($1, $2, $3, 'product_qa', $4)`,
+      [id.aiRequest, org, mr, id.aiPrompt],
+    );
     await db.query('commit');
   });
 
@@ -204,6 +319,22 @@ const seedRivalRows = async (): Promise<void> => {
     ['visit_audio_quarantine_clearances', id.clearance],
     ['visits', visit],
     ['voice_notes', id.note],
+    ['markets', id.market],
+    ['therapy_areas', id.therapyArea],
+    ['products', id.product],
+    ['product_markets', id.productMarket],
+    ['courses', id.course],
+    ['course_versions', id.courseVersion],
+    ['course_modules', id.courseModule],
+    ['lessons', id.lesson],
+    ['course_assignments', id.courseAssignment],
+    ['course_enrolments', id.courseEnrolment],
+    ['lesson_completions', id.lessonCompletion],
+    ['knowledge_documents', id.knowledgeDocument],
+    ['knowledge_document_versions', id.knowledgeVersion],
+    ['knowledge_chunks', id.knowledgeChunk],
+    ['ai_prompt_versions', id.aiPrompt],
+    ['ai_requests', id.aiRequest],
   ];
   for (const [table, rowId] of byId) rival.set(table, ['id', rowId]);
   rival.set('visit_audio_quarantine', ['visit_id', id.quarantineVisit]);
@@ -248,6 +379,27 @@ const TABLES: readonly (readonly [string, 'rivalMr' | 'rivalAdmin'])[] = [
   ['visit_audio_quarantine_clearances', 'rivalAdmin'],
   ['visits', 'rivalAdmin'],
   ['voice_notes', 'rivalAdmin'],
+  // AI-B1 (`20260924000400`): the catalogue is read by everyone in its organisation, so the
+  // positive control is the rival's MR, the least-privileged reader.
+  ['markets', 'rivalMr'],
+  ['therapy_areas', 'rivalMr'],
+  ['products', 'rivalMr'],
+  ['product_markets', 'rivalMr'],
+  // AI-B2 (`20260924000500`): published content, and the rival MR's own learning records.
+  ['courses', 'rivalMr'],
+  ['course_versions', 'rivalMr'],
+  ['course_modules', 'rivalMr'],
+  ['lessons', 'rivalMr'],
+  ['course_assignments', 'rivalMr'],
+  ['course_enrolments', 'rivalMr'],
+  ['lesson_completions', 'rivalMr'],
+  // AI-C1 (`20260924000600`): approved knowledge, readable by the rival's own MR.
+  ['knowledge_documents', 'rivalMr'],
+  ['knowledge_document_versions', 'rivalMr'],
+  ['knowledge_chunks', 'rivalMr'],
+  // AI-D0 (`20260924000700`): prompts are admin-only; a request is its own user's.
+  ['ai_prompt_versions', 'rivalAdmin'],
+  ['ai_requests', 'rivalMr'],
 ];
 
 describe.skipIf(!reachable)('C1 — a row of another organisation, read directly', () => {
