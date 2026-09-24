@@ -408,7 +408,9 @@ content, not on the organisation** (D6).
 | Vector retrieval (embeddings) | **DECISION REQUIRED** (D3, pgvector) — the full-text search above is the fallback until then |
 | PDF / file extraction | **DECISION REQUIRED** — needs a parser dependency; versions take supplied text for now |
 | AI control plane, database half — prompt versions, request/usage log, flags, daily limit, `45011`/`45012` | **Built, UNVERIFIED** — AI-D0, `20260924000700_ai_control_plane.sql`, contracts in `packages/core/src/field/ai.ts`. Nothing calls it until a gateway exists |
-| AI gateway runtime / provider layer | **DECISION REQUIRED** (D1, D2) — D1's testability premise now measured (§4): the local edge runtime works and forwards the caller's identity |
+| Gateway logic — provider interfaces, guardrails, `product_qa` flow, §54 benchmark | **Built, UNVERIFIED** — AI-D1, `packages/core/src/field/gateway/`. Runs end to end against the real control plane with a scripted model (`ai-product-qa.spec.ts`); 4 benchmark cases wait for a real model |
+| Knowledge search defect — natural questions found nothing | **Fixed** — AI-C2, `20260924000800`: any-term ranked search. Found by the first end-to-end test |
+| AI gateway runtime / vendor adapter | **DECISION REQUIRED** (D1, D2) — D1's testability premise now measured (§4): the local edge runtime works and forwards the caller's identity |
 | Frontend contract package (§50) | **Written** — `docs/ai-platform/api-contracts.md`, over the Zod schemas in `packages/core` |
 | MR chatbot, AI Doctor, AI Coach | **DECISION REQUIRED** (D1, D2, X2, X4) |
 | Voice (simulator) | **DECISION REQUIRED** (D2, vendor) |

@@ -138,6 +138,10 @@ A learner who started a version keeps it after it is retired or superseded — r
 `createdByUserId` nor `submittedByUserId` — the server refuses otherwise, and a button that always
 fails for the author is a worse screen than no button. The server is still the control.
 
+**Search matches any content word of the query, ranked** (AI-C2, `20260924000800`) — pass the
+user's question as they typed it. Loose matching is safe because scope is applied first and an AI
+answer is gated by the model's `supported` verdict and a citation check, not by retrieval.
+
 **Search:** `status: 'not_available'` is an answer, not an error. Show
 `KNOWLEDGE_NOT_AVAILABLE_MESSAGE` verbatim; never fall back to anything else. A product question
 must pass `p_market_id` — with no market, product content is never returned.
@@ -167,6 +171,22 @@ will do and what an AI screen will receive. **No client ever calls a model vendo
 | `retire_ai_prompt_version` | admin | `{ p_version_id }` | `RetireAiPromptVersionResponseSchema` | 42501; 22023 |
 | `ai_begin_request` | the gateway, as the user | `AiBeginRequestRequestSchema` | `AiBeginRequestResponseSchema` | **45011**, **45012**, 42501 |
 | `ai_complete_request` | the gateway, as the same user, once | `AiCompleteRequestRequestSchema` | `AiCompleteRequestResponseSchema` | 42501 not yours; 22023 twice / bad source; 23514 unknown flag |
+
+### The gateway's logic — `field/gateway/` (AI-D1)
+
+`answerProductQuestion({ rpc, provider, question, marketId, productId })` is the whole `product_qa`
+flow, runtime- and vendor-neutral. It returns a `ProductQaResult`:
+
+| `kind` | Show |
+| --- | --- |
+| `answered` | `answer`, and every entry of `citations` (document, version, section) — never the answer without them |
+| `not_available` | `message` verbatim (`KNOWLEDGE_NOT_AVAILABLE_MESSAGE`) |
+| `patient_specific` | `message` verbatim (`PATIENT_SPECIFIC_REFUSAL_MESSAGE`) — do not echo what was typed |
+| `failed` | `message` verbatim; a retry is safe |
+
+A `45011`/`45012` refusal is **thrown** with its SQLSTATE in `code`, before anything else happens —
+map it with `refusalForSqlState`. The runtime that calls this (D1) supplies the `ControlPlaneRpc`
+(the user's token) and the `LlmProvider` (the vendor, D2).
 
 ### Feature flags
 
