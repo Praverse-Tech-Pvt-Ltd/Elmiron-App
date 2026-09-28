@@ -1,15 +1,15 @@
-// deno-lint-ignore-file no-explicit-any
+﻿// deno-lint-ignore-file no-explicit-any
 /**
- * W1-B C1 — the AI gateway, as a Supabase Edge Function. `C30` (register `#4` / `D1`).
+ * W1-B C1 â€” the AI gateway, as a Supabase Edge Function. `C30` (register `#4` / `D1`).
  *
  * **THE ONE PROPERTY THIS FILE EXISTS TO PRESERVE: it calls the control plane as the USER'S
  * TOKEN, never as a service role, so Postgres keeps every authorisation decision.**
  *
- * `.ai-collab/constraints.md` — *"RLS is the enforcement layer, never application code."* A
+ * `.ai-collab/constraints.md` â€” *"RLS is the enforcement layer, never application code."* A
  * gateway holding `SUPABASE_SERVICE_ROLE_KEY` and calling `ai_begin_request` with it would work,
  * would pass a happy-path test, and would have moved the feature flag, the daily allowance, the
  * organisation boundary and the approved-prompt check out of the database into this file. The
- * service-role key is therefore **not read here at all** — not read and ignored, not read
+ * service-role key is therefore **not read here at all** â€” not read and ignored, not read
  * defensively: there is no reference to it, so it cannot be reached for later by someone fixing a
  * 401 in a hurry.
  *
@@ -25,7 +25,7 @@
  *
  * **Why the flow is imported rather than written here.** `answerProductQuestion` is 140 lines with
  * 35 tests over it (`packages/core/src/field/gateway/product-qa.test.ts`), including the order of
- * the steps — guardrail before search, search before model, citation check before answer. A second
+ * the steps â€” guardrail before search, search before model, citation check before answer. A second
  * copy of that order living in Deno would be a second set of guarantees nobody could keep aligned,
  * which is the failure `nav.tsx` and `outbox.ts` both have comments about. **This function adds a
  * transport; it does not add a flow.**
@@ -34,7 +34,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { PRODUCT_QA_FAILED_MESSAGE, answerProductQuestion } from '../_shared/core.ts';
 import type { ControlPlaneRpc, LlmProvider } from '../_shared/core.ts';
-import { createStubProvider, stubProviderRefusal } from '../_shared/stub-provider.ts';
+import { createStubProvider, stubProviderRefusal } from '../_shared/stub-provider-DELIBERATELY-BROKEN.ts';
 
 interface RequestBody {
   readonly question?: unknown;
@@ -50,7 +50,7 @@ const json = (status: number, body: unknown): Response =>
 
 /**
  * A refusal raised by an RPC arrives as a PostgREST error object, and the SQLSTATE is in `code`.
- * The gateway does not interpret it — `45011` and `45012` are the database's sentences and the
+ * The gateway does not interpret it â€” `45011` and `45012` are the database's sentences and the
  * client maps them with `refusalForSqlState`. Re-wording them here would put a second copy of the
  * refusal vocabulary in a third place.
  */
