@@ -79,6 +79,25 @@ jobs:
             echo "::warning title=Mergeability unknown::GitHub had not finished computing mergeability for $still_unknown PR(s). Re-run this check."
           fi
 
+          # A CONFLICTING reading is RE-VERIFIED before it fails the job, and this is not caution
+          # for its own sake -- it was measured. Immediately after a push, GitHub served
+          # `mergeable: CONFLICTING` for a PR that was in fact clean, and settled to MERGEABLE about
+          # 15 seconds later. W1-C read that transient as a real conflict and said so.
+          #
+          # The poll above does NOT catch it, because GitHub returned a confident wrong answer rather
+          # than UNKNOWN. So the only defence is to ask again: a real conflict persists, a racing
+          # read does not. Without this, the check fails on almost every push to `main` -- the exact
+          # trigger it needs most -- and a check that cries wolf is one people switch off.
+          if [ "$conflicting" != "0" ]; then
+            echo "$conflicting PR(s) read as CONFLICTING; re-verifying in 30s before failing"
+            sleep 30
+            gh pr list --repo "$REPO" --state open --json number,title,mergeable,isDraft               > /tmp/prs.json
+            conflicting=$(jq -r '[.[] | select(.mergeable == "CONFLICTING")] | length' /tmp/prs.json)
+            if [ "$conflicting" = "0" ]; then
+              echo "::notice title=Transient::The CONFLICTING reading did not survive a re-check. Not failing."
+            fi
+          fi
+
           if [ "$conflicting" != "0" ]; then
             jq -r '.[] | select(.mergeable == "CONFLICTING")
                    | "::error title=PR #\(.number) is CONFLICTING and its CI is SILENT::GitHub cannot build refs/pull/\(.number)/merge, so no CI run is created for this PR at all -- it is not failing, it is absent. Merge origin/main into the branch to restore it."' \

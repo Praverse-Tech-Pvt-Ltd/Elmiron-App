@@ -142,7 +142,7 @@ changes; the assumptions are the argument.**
 | Tokens per Q&A call | 2,000 in (approved passages + prompt), 300 out | assumed |
 | Practice sessions per rep per week | 2, of 10 minutes | assumed |
 | Speech rate | ~900 characters per minute | assumed |
-| Rupee to dollar | **₹88 = $1** | **UNVERIFIED** — I did not check today's rate |
+| Rupee to dollar | **₹88 = $1** | **UNVERIFIED** — I did not check today's rate. **Every dollar figure below moves with it; §10.4 shows by how much and why no conclusion changes** |
 
 ### Text — Product Q&A fits the budget comfortably
 
@@ -152,7 +152,8 @@ changes; the assumptions are the argument.**
 
 - input 8.8 × ₹29.28 = **₹257.66**
 - output 1.32 × ₹73.2 = **₹96.62**
-- **total ≈ ₹354 per month ≈ $4.0**
+- **total ≈ ₹354 per month ≈ $4.0** — *the rupee figure is the vendor's published price; the dollar
+  is converted at the ASSUMED ₹88 = $1 (§10.4)*
 
 **That is an order of magnitude inside the $10–40 budget**, and it would still fit at roughly
 three times the assumed volume. **Product Q&A, MR Chat and the learning tutor are affordable.**
@@ -170,7 +171,8 @@ roughly the same of speech out.
 - **Speech in:** 1,600 min ÷ 60 × ₹30 = **₹800 ≈ $9.1**
 - **Speech out:** 1,600 min × 900 chars = 1,440,000 chars → 144 × ₹30 = **₹4,320 ≈ $49.1**
 - **plus the model turns**, not counted here
-- **≈ $58 a month, before the LLM, at 20 reps**
+- **≈ $58 a month, before the LLM, at 20 reps** — *converted at the ASSUMED ₹88 = $1 (§10.4); the
+  rupee would have to reach ₹128 = $1 before this fell inside the budget*
 
 **Two things follow and both matter.**
 
@@ -300,3 +302,149 @@ All read **28 September 2026**.
 - [Voice of India: A Large-Scale Benchmark for Real-World Speech Recognition in India](https://arxiv.org/html/2604.19151v2), arXiv 2604.19151v2, **24 May 2026**
 - [Indic DiarBench](https://arxiv.org/html/2607.23808), arXiv 2607.23808, Interspeech 2026
 - Repository record, not independently verified: `docs/mr-app-plan.md` §0.5
+
+---
+
+# 10. W1-C — closing the five material gaps
+
+**28 September 2026.** Four of the five are questions to a vendor rather than research, so they are
+drafted below as emails ready to send. The fifth was retried and stays UNVERIFIED.
+
+## 10.1 The two emails, ready to send
+
+Each is short, specific, and answerable with a yes, a no, or a clause reference. Neither asks for a
+call.
+
+### To AWS — gaps 1 and 2
+
+> **Subject: Bedrock in India — abuse-detection data location, and training use**
+>
+> We are evaluating Amazon Bedrock in the India geography (`ap-south-1` / `ap-south-2`) for a
+> pharmaceutical field-force application under India's DPDP Act. Our requirement is that customer
+> content is processed and stored **only in India**.
+>
+> Your post *"Introducing OpenAI models on Amazon Bedrock for in-country inferencing in India"*
+> (27 August 2026) states that Bedrock *"routes requests only within the India geography"* and uses
+> *"a zero data retention (ZDR) data security model"* under which Bedrock *"does not store model
+> inputs or outputs"*. It also states that *"for certain models, including GPT-5.6, content flagged
+> by the Amazon Bedrock automated abuse-detection classifiers is retained for offline abuse
+> detection."*
+>
+> Two questions, both about that exception:
+>
+> 1. **Where is abuse-flagged content stored, and where is it reviewed?** Specifically: does any
+>    flagged prompt or output, or any derived copy, leave the India geography — including for human
+>    review? If it does not, can you point us to the clause or document that commits to that?
+> 2. **Is customer input or output used to train or improve any model**, Amazon's or a third-party
+>    model provider's? If not, which contractual term says so?
+>
+> A third question if the answers above are favourable: **which models available in `ap-south-1`
+> carry the abuse-detection retention exception, and which do not?** We would rather choose a model
+> without it than rely on a term about it.
+
+### To Sarvam — gaps 3 and 4
+
+> **Subject: Written retention, no-training and sub-processor terms for the hosted API**
+>
+> We are evaluating Sarvam's hosted APIs — text, speech-to-text and text-to-speech — for a
+> pharmaceutical field-force application in India, under the DPDP Act. Your public pages state that
+> the platform is *"developed and operated entirely in India"* and that you hold SOC 2 Type II and
+> ISO 27001 and are DPDP compliant.
+>
+> We could not find the following in your documentation, and we need them in writing rather than as
+> a summary:
+>
+> 1. **Retention.** For the hosted API, what is retained of a request and a response, and for how
+>    long? Is there a zero-retention option, and is it the default or must it be enabled?
+> 2. **Training.** Is customer input or output used to train or improve your models? Which clause
+>    says so, and can it be switched off contractually if it is not already off?
+> 3. **Sub-processors.** Please provide the current sub-processor list for the hosted API, and the
+>    notice period before it changes. We need to confirm that no sub-processor is outside India.
+> 4. **The document.** Do you have a standard data processing agreement we can review?
+>
+> A fourth, commercial question: your published price for speech-to-text is **₹30 per hour** and for
+> text-to-speech **₹30 per 10,000 characters**. **Are those the current rates**, and is there volume
+> pricing for continuous conversational use?
+
+**Who sends these, and it is not engineering.** Both need a person who can sign what comes back —
+the same unnamed signatory as register `#18`, which `C29` deferred for *real doctor* work. **A vendor
+contract needs a signatory whether or not a doctor is ever recorded.**
+
+## 10.2 Gap 5 — Google's residency page: retried once, still UNVERIFIED
+
+Retried on 28 September at `docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/data-residency`
+and the `?hl=en` variant. Both return the documentation site's navigation shell rather than the page
+body — the content is rendered client-side and the fetch does not execute it. **It stays UNVERIFIED,
+and a third attempt would not be evidence.**
+
+**What that means for the decision, which is the useful part.** Google is **not eliminated** — it is
+simply unassessed on the one question that matters. Two facts are established and they point in
+opposite directions:
+
+* **For it:** `asia-south1` (Mumbai) **is** a listed regional endpoint for Cloud Text-to-Speech and a
+  supported region for Speech-to-Text v2, and generative AI on Vertex AI is available there.
+* **Against it:** the residency guarantee sentence in Google's own Text-to-Speech documentation reads
+  *"your data at-rest and in-use stay within the regional or continental boundaries of **Europe or
+  the USA**, respectively"* — **it names Europe and the USA and not India.**
+
+**So the question to put to Google is the same shape as the one to AWS:** *does the in-region
+guarantee extend to `asia-south1`, and which clause says so?* Until someone asks, Google's row stays
+what it is — **SHORTLIST, conditional**, on a condition nobody has tested.
+
+## 10.3 The line this document lacked — self-hosting is the only option where residency is a FACT
+
+**Every other row in this document trades on a contractual term. This one does not, and that is the
+whole argument for it.**
+
+Running an open-weights model on hardware inside the project's own India region means **there is no
+sub-processor, no retention question, no training question, and no abuse-monitoring exception** —
+because nothing leaves the machine. The other candidates can only *promise* those things, and the
+strongest promise in this document (Bedrock's zero data retention) already has a documented exception
+whose location is the single most important unverified cell here.
+
+**Roughly costed, and the numbers are the weakness rather than the strength.** A GPU capable of
+serving a small open model conversationally is **not** priced per token: it is an hourly instance
+that costs the same whether it serves 4,400 requests a month or none. **Order of magnitude, and
+marked as such: a single mid-range GPU instance in an Indian region runs in the low hundreds of US
+dollars per month if left on** — **UNVERIFIED**, because I did not read a current price list and
+will not invent one. Against a text workload costing **≈$4/month** on a hosted API, that is one to
+two orders of magnitude more expensive.
+
+**What it trades away, stated plainly because it is more than money:**
+
+| Given up | Why it matters here |
+| --- | --- |
+| **Quality** | *Voice of India* measured Sarvam at **5.0% Hindi WER** against OpenAI's 33.9%. A general open model is very unlikely to match a house that trains on Indian languages, and Hinglish is the axis that decides whether this is usable |
+| **Somebody else's operations** | patching, capacity, GPU driver failures and uptime become ours. There is no on-call rota in this project |
+| **Elasticity** | a hosted API costs nothing when idle. An instance costs the same at 3 a.m. |
+| **The voice half entirely** | speech-to-text and text-to-speech would each need their own model, served and tuned. The cost and quality gap widens, it does not close |
+
+**When it becomes the right answer, which is a real possibility rather than a courtesy.** If the AWS
+and Sarvam emails come back unsatisfactory — if abuse-flagged content leaves India, or if Sarvam
+cannot produce a no-training term — **then self-hosting stops being the expensive option and becomes
+the only compliant one.** It should be kept on the list for exactly that reason, and Sarvam's own
+on-premise and air-gapped offering is the cheapest route to it, because it keeps the Indian-language
+quality while moving the hardware.
+
+**Recommendation is unchanged: not now.** But it is the fallback, and it is the only row where
+residency is not somebody's word.
+
+## 10.4 The exchange rate is an assumption, and every rupee figure moves with it
+
+> **⚠ Every dollar figure in this document was converted at an ASSUMED rate of ₹88 = $1, which I did
+> not verify.** It is listed as UNVERIFIED cell 9.
+
+**Which numbers move with it — all of them that matter:**
+
+| Figure | At ₹88 | What it is |
+| --- | --- | --- |
+| Product Q&A, 4,400 calls/month | **₹354 ≈ $4.0** | comfortably inside the $10–40 budget |
+| Voice speech-in, 1,600 min/month | **₹800 ≈ $9.1** | |
+| Voice speech-out, 1.44M chars/month | **₹4,320 ≈ $49.1** | |
+| **Voice total** | **≈₹5,120 ≈ $58** | **above the $10–40 budget** |
+
+**Does the rate change any conclusion? No, and that is worth stating so the caveat is not mistaken
+for a reason to wait.** The rupee would have to move to about **₹128 = $1** before voice fell under
+$40, and to about **₹12 = $1** before text rose above $10. **Both conclusions — text fits easily,
+voice does not fit at all — survive any plausible rate.** The rupee figures are the vendor's own
+published prices and do not move at all; only the dollar translation does.

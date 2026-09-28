@@ -20838,3 +20838,227 @@ silently on a cadence set by other people's merges**, because both sides append 
 documents and an append conflicts with every other append at the same end of a file. `BE-W118`
 covers the id half of that root cause; the CI half is why `workflow_dispatch` matters more than it
 looked.
+
+
+---
+
+### W1-C — unblocking the frontend
+
+**28 September 2026.** Checkout guard first: namespace `@fieldforce/core`, remote
+`Praverse-Tech-Pvt-Ltd/Elmiron-App`, `f34ceef` an ancestor of HEAD — **exit 0**, toplevel
+`D:/Praverse/Elmiron-App/.claude/worktrees/ai-platform-phase-a`, branch
+`worktree-ai-platform-phase-a` (PR #2).
+
+**Was a merge of `main` needed first? At session start, NO** — `main` had not moved and
+`gh pr view 2` reported `MERGEABLE / CLEAN`. **It was needed twice later**, once for real (PR #7,
+8 commits) and once not at all — see the correction below.
+
+#### Three rulings, and the first use of the id namespace one of them creates
+
+`BE-C1`, `BE-C2`, `BE-C3`. **`BE-C3` establishes that the backend mints `BE-C<n>` and the frontend
+mints `FE-C<n>`**, each from its own sequence; `C1`–`C31` keep their names. It is recorded in
+**`CLAUDE.md`** — the only file both tracks load before reading any code — as well as in
+`decisions.md` and `docs/contract-requests.md`, **because a rule only one track reads is not a rule.**
+
+#### Part A — the frontend's four requests, answered
+
+**CR-3 is the one that unblocks six screens, and the answer is yes on all five.**
+`services/api/tests/cr3-mr-reads.spec.ts` — **10 tests passing** — signs in as the fixture MR through
+**real GoTrue**, calls each function over **real HTTP** with that MR's token, and parses every
+response through the exact exported schema.
+
+**Why the existing suite did not already answer it.** `console-reads-contract.spec.ts` proves three
+of the five parse — **as an `admin`**. `list_analyses` and `list_consent_records` branch on role, and
+`read_analysis` returns `data: null` out of scope, so **an admin passing proves nothing about an MR.**
+And reading the grant answers neither half: `grant execute … to authenticated` is true for all five
+and says nothing about what the body does with `current_app_role()`.
+
+**One naming answer, which is the "or" in the frontend's question.** `daily_mileage` is the only one
+of the five that is not a `jsonb` builder — it is `returns table (mr_id, travel_date, …)`, so
+PostgREST serialises those names literally and **the wire is snake_case**, which is why MR-52 A2's
+camelCase sweep never touched it. **Not a defect: `MileageRowSchema` is the wire shape and
+`fromMileageRow` is the mapper**, already used at `apps/field/src/capture/visits.ts:102`. A **negative
+control** asserts `MileageDaySchema` does *not* parse the wire, so a later camelCase conversion turns
+the double-mapping into a red test instead of a silent bug.
+
+**CR-4 / `BE-C2`** — `20260928000200_approximate_check_in.sql`. `check_ins.location_is_approximate`,
+true when the device's accuracy radius **exceeds the clinic's geofence radius** — the one threshold
+with a meaning rather than a taste, because an error radius larger than the circle cannot place the
+rep inside or outside it. **NULL where the question has no answer**, including every pre-existing row:
+`false` would assert a good fix. **The verdict is byte-for-byte unchanged**, and a test asserts a 5 m
+and a 5 km fix at the same point give the **same verdict and different flags**, so a future session
+widening the geofence by accuracy reverses the ruling visibly. **Nothing is refused on the flag.**
+
+**Three defects in my own first draft of that migration, all from transcribing a function body by
+reading it.** It **dropped the idempotency block** that makes a replayed check-in return the existing
+row — which would have broken the offline replay path the frontend had just proved in FE-D1 — used
+`within_shift_window` for what is really `is_within_shift`, and changed a refusal message. **The
+committed version is generated from `pg_proc.prosrc`** with three surgical additions, and a test now
+asserts idempotency because nothing else in the suite would have noticed its absence. **Anything that
+re-states an existing function should be generated from the authoritative definition, not from a
+reading of it.**
+
+**CR-1 — NOT SET, and the date is no longer conditional.** `gh secret list` returns exactly three
+secrets and `BACKUP_DESTINATION` is not among them; **no environments exist** and `backup.yml`
+declares none, so an environment secret cannot apply; **only the organisation level is unreadable**
+(`HTTP 403`, needs org admin) and is marked UNVERIFIED. Unless an org secret supplies it, **Database
+backup goes red from 2026-10-16 UTC, first on the schedule Monday 2026-10-19.**
+
+**CR-2 — corrected** in `handoff-frontend.md:259`. The 30 September deadline was retired on
+22 September **by answering its question** (`C7`); contract I3 is register `#19` and is deferred, with
+no deadline attached.
+
+#### Part B — and a correction I have to make about my own reading
+
+**`.github/workflows/pr-mergeable.yml`** makes a conflicting PR loud. **It runs from the default
+branch** — schedule, push to `main`, and dispatch — because a mergeability job inside `ci.yml` would
+be suppressed by the very condition it reports. **A workflow that cannot report its own absence is
+the exact shape this project keeps finding.**
+
+**THE CORRECTION.** I reported a fifth conflict today. **There was no fifth conflict.** `gh pr view 2`
+returned `CONFLICTING` immediately after a push, and 15 seconds later returned `MERGEABLE / UNSTABLE`
+with `main` unmoved. **It was a racing read and I called it a conflict.**
+
+**That mistake improved the check, which is the only good thing about it.** The poll I had written
+waits out `UNKNOWN` — but GitHub returned a **confident wrong answer**, not `UNKNOWN`, so the poll
+would not have caught it. **The check now re-verifies a `CONFLICTING` reading after 30 seconds before
+failing**: a real conflict persists, a racing read does not. Without that, it would have failed on
+almost every push to `main` — the trigger it needs most — and **a check that cries wolf is one people
+switch off.**
+
+**The real count for the day is four conflicts, not five**, all in `PROJECT-OVERVIEW.md` or
+`.ai-collab/decisions.md`.
+
+**B1 proposes `BE-W120`** — per-track append files, with the shared document keeping a stable index.
+It says what it costs a reader (two files to interleave by date) and **that it would not have
+prevented the `C20` collision**, which needed `BE-C3` instead. `BE-W118` conflated those two problems
+and the conflation is why the renumbering was a surprise.
+
+**B2 — recommendation: merge PR #2 after the 4 October demo, and take it out of draft now.** The
+AGAINST case is entirely about **timing** — 82 migrations including a rewrite of `record_check_in`,
+which is on the demo's critical path — and it expires on 5 October, while the conflict cost compounds
+daily. **Not merged; that is the operator's.**
+
+**And a limitation of B3 that is an argument for B2:** `schedule`, `push: branches: [main]` and
+`workflow_dispatch` all resolve against the **default branch**, so **this check does nothing until
+PR #2 merges.** The fix for silent CI cannot be switched on while the problem is happening.
+
+#### Part C — the five provider gaps
+
+**Two emails drafted ready to send**, in `PROVIDER-SHORTLIST.md` §10.1 — to AWS on where
+abuse-flagged content is processed and stored and whether Bedrock trains on customer data; to Sarvam
+on written retention, no-training and sub-processor terms. Both short, both answerable with a yes, a
+no, or a clause reference. **Neither is engineering's to send: both need someone who can sign what
+comes back**, the same unnamed signatory as register `#18`.
+
+**Google, gap 5: retried once, still UNVERIFIED.** The documentation renders client-side and the fetch
+returns the navigation shell. **A third attempt is not evidence.** Google is not eliminated — it is
+unassessed on the one question that matters, and the question to ask is the same shape as AWS's.
+
+**C3 — the latency harness exists and runs.** `services/api/scripts/measure-provider-latency.mjs`,
+vendor-neutral, configured entirely by environment variables so **the repository still names no
+provider**. Proven both ways: **exit 2 with instructions when unconfigured**, and a real measurement
+against a local echo endpoint (5 calls, p50 33 ms, p95 63 ms). It reports **p50, p95, max and
+time-to-first-byte and deliberately no mean** — one outlier in twenty moves a mean by half a second
+and moves p95 to the number a rep would complain about. It also refuses to guess where it ran:
+`measuredFrom` is null unless told, because **a latency number without a location is not a
+measurement.**
+
+**C4 — the line the shortlist lacked.** Self-hosting an open model in the project's own India region
+is **the only option where residency is a fact rather than a contractual term** — no sub-processor, no
+retention question, no abuse-monitoring exception, because nothing leaves the machine. Costed as an
+order of magnitude and **marked UNVERIFIED rather than invented**: a mid-range GPU instance runs in
+the low hundreds of dollars a month if left on, against ≈$4 for the text workload on a hosted API.
+What it trades away: Indian-language quality (Sarvam's 5.0% Hindi WER), somebody else's operations,
+elasticity, and the voice half entirely. **It becomes the right answer if the two emails come back
+unsatisfactory**, and Sarvam's own air-gapped offering is the cheapest route to it.
+
+**C5 — the exchange rate is flagged at the point of use**, not only in the appendix. And §10.4 does
+the sensitivity: the rupee would have to reach **₹128 = $1** before voice fell inside the budget and
+**₹12 = $1** before text rose above it, so **neither conclusion depends on the assumption.**
+
+#### Part E — the demo path, and what it can honestly show
+
+**`docs/demo-path-2026-10-01.md` commits to a 16-step walkthrough on a real phone, against the local
+stack on the laptop's LAN address.** Ten lines, each marked as it stands today:
+
+| # | What it shows | Today |
+| --- | --- | --- |
+| 1 | Sign in — Supabase Auth password grant | **BUILT** |
+| 2–5 | First run: location, notifications, battery, "what we record" | **BUILT** (device permissions). Notifications grant **changes nothing — nothing sends any** |
+| 6–7 | Today and Beat plan, from `sync_pull` | **BUILT.** No map, no reorder, by decision |
+| 8 | Microphone permission, once per phone | **BUILT** |
+| 9 | **Check-in** — `record_check_in` | **BUILT**, and its listed caveat is now **answered**: `BE-C2` flags an approximate fix |
+| 10 | Consent — reads the notice, writes through `sync_push` | **BUILT** |
+| 11 | Samples | **BUILT**, and the UCPMP cap is **inert** — `#1` unset, so samples are accepted uncounted and the screen says so |
+| 12 | Voice note — real upload to the `audio` bucket | **BUILT.** **Nothing transcribes it** |
+| 13–15 | Check-out, call report, offline queue and flush | **BUILT** |
+| 16 | **Day end** — visits and mileage | **STUBBED — reads the mock.** Its caveat is now **answered**: CR-3 says `daily_mileage` works for an MR, so this is a frontend-only switch |
+| — | Coaching, Analysis, Reply | **HIDDEN by flag** (`P6`), because their content is mock AI output |
+| — | **Any AI feature: Product Q&A, AI Doctor, AI Coach** | **DOES NOT EXIST on the demo path.** Not in the document at all |
+
+**E2 — what the demo cannot show while `#5` is unanswered, and what it should not pretend.**
+
+**It cannot show a single AI answer.** The gateway is deployed and audited and answers through a
+**stub** that always returns "approved information not available". There is no product catalogue
+(`#7`), no approved knowledge, and no model. **AI Doctor does not exist at all.** The demo path is
+honest about this by omission — it contains no AI step — and that is the right shape.
+
+**Should a stubbed answer be shown to an audience? No.** Two reasons, and the second is the stronger.
+A stub that renders a plausible sentence teaches the room that the feature works; the audience cannot
+see the difference and will repeat what they saw. And **the stub's only honest output is a refusal** —
+"approved information not available" — which would be shown as a working AI feature declining, when in
+fact no model was called. **Either reading misleads.** The demo should say the AI platform is built to
+the gateway and waiting on a provider decision, and show the **console approval screen** instead:
+that is real, it is the thing `C24` makes safe, and it demonstrates the pipeline that makes AI content
+trustworthy without pretending any AI ran.
+
+**What the demo can honestly add from this session:** nothing on the phone. Everything W1-C built is
+backend and console. **The one demo-relevant change is that item 16's blocker is answered** — Day end
+can leave the mock, if the frontend has time before Thursday.
+
+#### Counts, from each runner's own summary lines
+
+| Workspace / runner | Summary line |
+| --- | --- |
+| **api / vitest — `cr3-mr-reads.spec.ts`** | **`Test Files 1 passed (1)` · `Tests 10 passed (10)`** |
+| **api / vitest — `approximate-check-in.spec.ts`** | **`Test Files 1 passed (1)` · `Tests 6 passed (6)`** |
+| api / vitest — both together | `Test Files 2 passed (2)` · `Tests 16 passed (16)` |
+| latency harness, unconfigured | exit **2**, with instructions |
+| latency harness, against a local echo | 5 calls, p50 **33 ms**, p95 **63 ms**, exit 0 |
+
+`typecheck` **9 successful, 9 total**. `lint` **7 successful, 7 total**, exit 0, one pre-existing
+warning in `@fieldforce/field` untouched. `prettier --check .` **"All matched files use Prettier code
+style!"**
+
+#### WHERE THIS STOPPED — Part D was not started, and that is a judgement not a shortfall
+
+**This is a CONDITIONAL STOP THE BRIEF DEFINED.** The stop rule says to complete parts in order and
+**after each, judge whether the session has room to do the next one WELL.** After Part C, it does not.
+
+**Part D is the largest part of this brief** — persona and scenario tables with their own four-eyes
+approval lifecycle (D1), sessions and turns, tenant-scoped and audited (D2), a turn exchange through
+the gateway (D3), a server-validated coach contract under `C27` (D4), an end-to-end HTTP suite with
+two-sided cross-tenant refusals (D5), and a two-sided mutation requiring a rebuild and a server
+restart each time (D7). That is comparable to the whole of W1-B Part C.
+
+**Why starting it would have been worse than stopping.** The only version of Part D that fits the
+remaining room is D1 and D2 — **the tables, with no gateway route, no test and no consumer.** That is
+precisely this repository's characteristic defect, and `INVENTORY.md`'s central finding is that
+**zero of PR #2's eight pieces had ever been called by an app.** Adding a ninth would have been the
+worst available outcome: a schema that looks like progress, is cited as progress, and is exercised by
+nothing.
+
+**Part E was done anyway, out of order, deliberately.** It costs ten lines and it is **time-critical**
+— the demo is Thursday 1 October and the question "can we show an AI feature" needed an answer before
+then, not after Part D. Recorded as a deviation rather than presented as the plan.
+
+**Nothing in Part D is blocked.** It needs no decision, `#5` included — the stub provider and the
+deployed gateway are enough to build it against. **It is the obvious first thing for the next
+session**, and the order it should be built in is D1 → D2 → D3 → D5, with D4's contract written
+before D3 so the turn exchange has a shape to validate against.
+
+**Two things a reader should not conclude.** The gateway still answers through a **stub**, so nothing
+here is evidence that any model works. And every number above is from **this machine's local stack**;
+there is still no handset result anywhere in this repository and no result of any kind against a
+hosted Supabase project.
