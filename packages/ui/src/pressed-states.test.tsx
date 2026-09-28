@@ -31,6 +31,7 @@ const STATUSES: readonly StatusKind[] = [
   'info',
   'offline',
   'recording',
+  'neutral',
 ];
 
 describe('ListItem — the rows of the beat plan, the queue and the doctor list', () => {

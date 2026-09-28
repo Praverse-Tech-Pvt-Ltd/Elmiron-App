@@ -1,7 +1,10 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen, fireEvent } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
+import { tokens } from '@fieldforce/ui-tokens';
 import { BeatPlanScreen } from './BeatPlanScreen';
 import type { BeatPlanStop } from './BeatPlanScreen';
+import { SyncQueueIndicator } from './SyncQueueIndicator';
 
 const stops: readonly BeatPlanStop[] = [
   {
@@ -56,6 +59,70 @@ describe('the route is a timeline', () => {
     await render(<BeatPlanScreen done={1} onOpenDoctor={onOpen} planned={3} stops={stops} />);
     await fireEvent.press(screen.getByText('Dr K. Shah'));
     expect(onOpen).toHaveBeenCalledWith('c');
+  });
+});
+
+/**
+ * FE-D8 1 — an upcoming stop is upcoming, not "saved on phone".
+ *
+ * The dashed ring and the dashed wash row are `offline`: work that is on this phone and waiting
+ * to send. Upcoming, cancelled and not-met stops were drawn with it, which told the rep that
+ * three doctors they have not seen yet were somehow sitting in their queue. B3 draws an upcoming
+ * stop as a plain row with a hollow, SOLID ring.
+ */
+describe('FE-D8 1 — a stop that has not happened is not a queued write', () => {
+  /** Every style in the rendered tree, flattened. */
+  const allStyles = (): Record<string, unknown>[] => {
+    const out: Record<string, unknown>[] = [];
+    const walk = (node: unknown): void => {
+      if (node === null || typeof node !== 'object') return;
+      if (Array.isArray(node)) {
+        node.forEach(walk);
+        return;
+      }
+      const host = node as { props?: { style?: unknown }; children?: unknown };
+      const flat = StyleSheet.flatten(host.props?.style as never) as
+        Record<string, unknown> | undefined;
+      if (flat !== undefined) out.push(flat);
+      walk(host.children);
+    };
+    walk(screen.toJSON());
+    return out;
+  };
+
+  const notYet: readonly BeatPlanStop[] = [
+    { id: 'u', doctorName: 'Dr K. Shah', clinic: 'Matunga', state: 'upcoming', detail: '' },
+    { id: 'x', doctorName: 'Dr M. Rao', clinic: null, state: 'cancelled', detail: 'cancelled' },
+    { id: 'n', doctorName: 'Dr P. Nair', clinic: null, state: 'not_met', detail: 'Not met · away' },
+  ];
+
+  it('draws no dashed ring and no dashed row for upcoming, cancelled or not-met stops', async () => {
+    await render(<BeatPlanScreen done={0} planned={3} stops={notYet} />);
+    expect(allStyles().filter((style) => style['borderStyle'] === 'dashed')).toEqual([]);
+  });
+
+  it('draws an upcoming stop as a plain row, not on the offline wash', async () => {
+    await render(<BeatPlanScreen done={0} planned={3} stops={notYet} />);
+    expect(
+      allStyles().filter((style) => style['backgroundColor'] === tokens.color.offlineFill),
+    ).toEqual([]);
+  });
+
+  it('draws an upcoming stop with a hollow ring, as B3 does', async () => {
+    await render(<BeatPlanScreen done={0} planned={1} stops={notYet.slice(0, 1)} />);
+    const rings = allStyles().filter(
+      (style) => style['borderRadius'] === tokens.radius.pill && style['borderWidth'] !== undefined,
+    );
+    expect(rings.length).toBe(1);
+    expect(rings[0]?.['borderStyle']).not.toBe('dashed');
+  });
+
+  it('still draws "saved on phone" where writes really are waiting — the queue indicator', async () => {
+    // The control: the style itself is not removed, only its misuse.
+    await render(
+      <SyncQueueIndicator onPress={() => undefined} state={{ kind: 'waiting', count: 2 }} />,
+    );
+    expect(allStyles().some((style) => style['borderStyle'] === 'dashed')).toBe(true);
   });
 });
 
