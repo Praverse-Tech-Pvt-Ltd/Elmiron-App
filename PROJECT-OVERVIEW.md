@@ -19625,3 +19625,136 @@ new dependencies, and the jest preset is not switched.
 - **Carried from FE-D2:** A4 and A2 copy versus the design; S4's layout versus Home-in-manual-mode;
   `packages/ui/jest.config.cjs:39` eslint; `visit-route.test.tsx`'s location mock without
   `capturedAt`; the stale 30 September line in `handoff-frontend.md:259` (CR-2).
+
+### FE-D4 — demo prep: stacked PRs merged, Coaching hidden, call-report labels real, CR-4, demo network check
+
+**28 September 2026, branch `fe-d4-demo` off `main` at `9ce42b3`.** PR
+[#6](https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App/pull/6) targets `main`. **Not merged.**
+Stopped after the network check, as instructed. **No APK has been built.**
+
+**CI on PR #6:** run `36397352190`, **success**. Both `typecheck · lint · format · unit tests` and
+`migrations · Gate 0 RLS suite · rollbacks` passed, at `fa52f56`. The commit adding this section
+follows.
+
+#### 0 — Merges
+
+The PRs were merged in order, each with a merge commit (no squash, no rebase). After each merge,
+the next PR was retarget to `main` and run through CI against `main` before it was merged.
+Changing a PR's base does not start a run, so each retargeted PR was closed and reopened to fire
+`reopened`. No code was changed to get a run. There were no conflicts and no red.
+
+| PR | Merge commit | CI against `main` before merging |
+| --- | --- | --- |
+| #3 `fe-d1-enqueue` | `3360ef0` | run `36386923105` at head `6e7bfe7` (base was already `main`) |
+| #4 `fe-d2-daily` | `a8e5e4d` | run `36395594076`, success |
+| #5 `fe-d3-states` | `9ce42b3` | run `36395975886`, success |
+
+Every commit hash cited in this file's FE-D1 to FE-D3 sections is an ancestor of `main`. For
+example, `0cea0f8`, `fba2572`, `6e7bfe7`, `8471253`, `36575b1`, `c119268` and `33e68bb` were each
+checked with `git merge-base --is-ancestor`.
+
+#### Items 1–3
+
+Each item was written test-first, shown red on the old code, then green. One commit each, pushed.
+
+| # | Item | Commit | Red on the old code | Green |
+| --- | --- | --- | --- | --- |
+| 1 | Coaching hidden unless `EXPO_PUBLIC_COACHING_ENABLED=true` | `09e89e3` | with the flag module present but not wired, the tab bar rendered "TAB coaching" and the three routes had no `redirect:/home` (4 failed) | 6/6. **Negative control:** forcing the flag ON in the OFF tests failed 4, and removing it gave 6/6 |
+| 2 | Call-report labels from the pulled store, not the mock | `b58d0fc` | with the mock never answering: "Unable to find … /Dr Asha Deshpande/" and "… /21 Sep/" | 4/4 |
+| 3 | CR-4 appended to `docs/contract-requests.md` | `fa52f56` | — (a document) | +36 / −0 |
+
+**Item 1, in detail.**
+- `src/features.ts` holds `coachingEnabled = process.env.EXPO_PUBLIC_COACHING_ENABLED === 'true'`,
+  read with dot access so Expo inlines it.
+- With the flag off:
+  - the Coaching `Tabs.Screen` gets `href: null`;
+  - `(tabs)/coaching.tsx`, `analysis/[id].tsx` and `reply/[analysisId].tsx` each export a wrapper
+    that renders `<Redirect href="/home" />`.
+- With the flag on, the wrapper renders the unchanged screen, now an inner function.
+- The Coaching route itself is included because a hidden tab is still reachable by deep link.
+- Nothing was deleted.
+- **Corrected test:** `reply-route.test.tsx` (FE-D2 5) mocks `coachingEnabled: true`. It tests the
+  reply screen itself, which is now flag-on behaviour.
+
+**Item 2, in detail.**
+- It is frontend-only. The visit and doctor are already in the pulled store, which the visit,
+  samples and consent screens read; no backend or contract change was needed.
+- The date is now `dayMonthIn(completedAt, zone)`, the conversion MR-25 C1's comment asked for, so
+  the lint exception and the `dayMonthFrom` character slice are gone.
+- `docs/demo-path-2026-10-01.md` step 14 is now **REAL**.
+- Corrected in the same commit, because item 1 had made it false: the demo document said "The
+  Coaching tab is always visible … do not tap it". It now says Coaching is hidden, and adds build
+  precondition **P6** (`EXPO_PUBLIC_COACHING_ENABLED` unset).
+
+**Item 3.** CR-4 is in the operator's wording, with the evidence:
+- accuracy is sent (`location.ts:83`) and stored (`check_ins.accuracy_metres`,
+  `check_outs.accuracy_metres`);
+- the verdict does not read it (`20260911000300_check_in_starts_the_visit.sql:70-74`).
+
+**Suite totals:** field vitest **637**, field jest **223**, ui vitest **4**, ui jest **254**, all
+passing. `tsc` is clean for field and ui; lint has 0 errors.
+
+#### Item 4 — the demo network check (read-only)
+
+A clean `npx expo prebuild --platform android --no-install --clean` at `fa52f56`. **Prebuild
+changed no tracked file** (`git status` before and after, compared: identical).
+
+**What the generated manifests say:**
+
+| Manifest | Line | Cleartext |
+| --- | --- | --- |
+| `android/app/src/main/AndroidManifest.xml` (release) | 21: `<application android:name=".MainApplication" … android:enableOnBackInvokedCallback="false">` | **No `usesCleartextTraffic`, and no `networkSecurityConfig`.** No `network_security_config` XML exists |
+| `android/app/src/debug/AndroidManifest.xml` | 6: `<application android:usesCleartextTraffic="true" tools:targetApi="28" … tools:replace="android:usesCleartextTraffic" />` | allowed |
+| `android/app/src/debugOptimized/AndroidManifest.xml` | 6: the same line | allowed |
+
+**`targetSdkVersion` is 36.** `android/app/build.gradle:94` reads `rootProject.ext.targetSdkVersion`,
+which `ExpoRootProjectPlugin.kt:55` sets from React Native's version catalog,
+`node_modules/react-native/gradle/libs.versions.toml:4` (`targetSdk = "36"`). For apps targeting
+API 28 and up, Android's default is to **block cleartext** when the manifest says nothing.
+
+**Verdict: the operator's belief is right.** A **release** build, as the demo plan has it, blocks
+`http://<laptop-LAN-IP>:54321` (local Supabase) and `http://<laptop-LAN-IP>:4010` (the mock).
+Sign-in would fail on the phone. Only the debug variants allow cleartext.
+
+**Options considered, with the evidence for each:**
+
+| Option | Evidence | Meets the constraints? | Risk |
+| --- | --- | --- | --- |
+| **A. A local config plugin that allows cleartext to ONE host, the laptop's LAN IP, and only when a build-time variable is set** | It would be written with `withAndroidManifest` / `withDangerousMod` from **`expo/config-plugins`, which ships inside the already-installed `expo` package** (`node_modules/expo/config-plugins.js`, exports checked). **No new dependency.** It would write `res/xml/network_security_config.xml`, with a base config that keeps cleartext off and a `domain-config` for that one IP, and point the manifest's `android:networkSecurityConfig` at it. Applied from `app.config.ts` only when, for example, `DEMO_CLEARTEXT_HOST` is set, so every other build is byte-identical to today | Release build: no Metro, no dev menu, no LogBox. The release config guard (FE-D2 2) is untouched: it governs `EXPO_PUBLIC_API_BASE_URL`, and a LAN address already passes it | **Lowest.** Cleartext is opened to one private IP, in demo builds only, and checkable at prebuild. **Unverified:** that an IP literal in `<domain>` matches on the phone. Prove it at prebuild and on the phone before Thursday |
+| B. `expo-build-properties` `android.usesCleartextTraffic: true` | **Not installed** (not in `apps/field/package.json`, not in `node_modules`) | **New dependency: needs asking** | Opens cleartext to *every* host in that build, which is broader than A |
+| C. Serve local Supabase over HTTPS | `services/api/supabase/config.toml:26-28`: `[api.tls] enabled = false`, and it would use a **self-signed** pair. Apps targeting API 24+ do not trust user-installed CAs | It needs a network security config anyway, plus a certificate on the phone, plus a mock with TLS | Strictly more work than A, for the same manifest change |
+| D. An HTTPS tunnel to the laptop (e.g. a hosted tunnel) | No app change; a public certificate works in release as-is | **A new tool on the laptop** (to be asked about). It needs internet at the venue | It exposes the local stack's API, and its publishable key, on a public URL for the demo |
+| E. Demo a debug / debugOptimized build | Both allow cleartext (lines above) | **Fails:** debuggable variants load JS from Metro and carry the dev menu and LogBox (`__DEV__`) | Violates two constraints |
+| F. A hosted Supabase over HTTPS | Production is unseeded (`supabase.ts:6-12`). No staging project is known to this repo | Depends on the backend owner | Needs a seeded HTTPS environment the backend doesn't have yet |
+
+**Recommendation: A.**
+- Write it as a local config plugin, with no new dependency, gated on a build-time variable and
+  scoped to the single LAN IP.
+- Verify it at prebuild (the `networkSecurityConfig` attribute and the XML appear only when the
+  variable is set, and the manifest is unchanged otherwise).
+- Then verify it on the phone against the laptop, before Thursday.
+- Keep D as the fallback, if the IP-literal match fails on the device. It needs your approval for
+  the tunnel tool, and it has the exposure noted above.
+- **Not built. It waits for the operator's reply.**
+
+#### Boundary
+
+```
+$ git status --porcelain --untracked-files=all -- services packages/core .github scripts
+(exit 0, 0 lines)
+$ git diff --name-only origin/main...fe-d4-demo -- services packages/core .github scripts
+(exit 0, 0 files)
+```
+
+The branch changes 11 files (+372 / −44) in `apps/field` and `docs`. There are no new dependencies.
+
+#### Open items, written down and not acted on
+
+- **Item 4 is waiting for a decision.** Recommendation A, if chosen, is a new file in
+  `apps/field` and a line in `app.config.ts`, and it must be proven on the phone.
+- **P2 (seed coverage)** and **CR-3** are unanswered. Day-end is still SAMPLE DATA.
+- **CR-4** is open with the backend owner.
+- **A1:** the jest-expo Android preset does not load. For next week.
+- **Carried:** A4 and A2 copy versus the design; S4's layout; `packages/ui/jest.config.cjs:39`
+  eslint; `visit-route.test.tsx`'s location mock without `capturedAt`; CR-2 (the stale 30
+  September line in `handoff-frontend.md:259`).
