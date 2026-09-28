@@ -47,3 +47,24 @@ append to is in `PROJECT-OVERVIEW.md` → FE-D1.
 
 *FE-D1 itself needed no new contract shape. The check-in queue row uses `SyncQueueItem` and
 `CreateCheckInRequest` exactly as `packages/core` already defines them.*
+
+---
+
+### CR-3 — Can an MR call the five functions that would replace the mock, and do they return the contract shapes?
+
+| | |
+| --- | --- |
+| Date | 2026-09-28 |
+| Requester | Frontend (screen inventory, `docs/screen-inventory-2026-09-28.md` §d) |
+| Owner asked | Backend |
+| Needed | For each of `daily_mileage`, `list_analyses`, `read_analysis`, `respond_to_analysis`, `list_consent_records`: (1) is it granted to, and does it behave for, an **MR's** session? (2) does its return parse against the `packages/core` schema the screen already uses (`MileageRowSchema` or `MileageDaySchema`, `AnalysisSchema`, `ConsentRecordSchema`, in `packages/core/src/field/`)? A yes or no per function, plus the name of any mismatch. |
+| Status | **Open** |
+
+**Why.** Six MR screens read through the mock server (`apps/field/src/config.ts:42` defaults to
+`http://127.0.0.1:4010`): report labels, day-end, mileage, coaching, analysis and reply. A real device
+can't reach that address. Each operation already has a real function in migrations
+(`20260815000100_thresholds_and_shift_defaults.sql` for `daily_mileage`;
+`20260811000300_audit_log.sql` for the other four), so frontend is **not asking for a new endpoint**.
+The frontend can't tell from the tree whether those functions were written for an MR caller or a
+manager caller, or whether their output matches what the screens parse. If the answer is yes, the
+switch is frontend-only. If it's no, what's needed is exactly what this entry asks for.
