@@ -54,6 +54,14 @@ const styles = StyleSheet.create({
     fontWeight: tokens.typography.value.weight,
     fontFamily: fontFamilyFor(tokens.typography.value.weight),
   },
+  /** §03's 27/600 — the title of a day screen, as Phase 2 draws B1, B3, C1, C5, C6 and B7. */
+  title: {
+    fontSize: tokens.typography.title.size,
+    lineHeight: tokens.typography.title.lineHeight,
+    fontWeight: tokens.typography.title.weight,
+    fontFamily: fontFamilyFor(tokens.typography.title.weight),
+    letterSpacing: tokens.typography.title.letterSpacing,
+  },
   heading: {
     fontSize: tokens.typography.heading.size,
     lineHeight: tokens.typography.heading.lineHeight,
@@ -82,6 +90,9 @@ export const Figure = ({ children }: TextProps): ReactNode => {
 /**
  * The one large line a screen is about. Phase 3's consent question, and nothing on
  * a working screen — §03 keeps `figure` for the money role and this for the words.
+ *
+ * FE-D7 4: also the title of a first-run screen (A2–A9, S4) and of a visit (B5), which Phase 2
+ * draws at 29–32px. A day screen's title is `Title`.
  */
 export const Display = ({ children }: TextProps): ReactNode => {
   const color = useSurfaceInk(false);
@@ -98,6 +109,15 @@ export const Display = ({ children }: TextProps): ReactNode => {
 export const Statement = ({ children, muted = false }: TextProps): ReactNode => {
   const color = useSurfaceInk(muted);
   return <RnText style={[styles.statement, { color }]}>{children}</RnText>;
+};
+
+/**
+ * FE-D7 4. What a day screen is — "Thursday", "Today's route", "Your report". The first line on
+ * the screen, at the size the design gives it. `Heading` stays for sections inside a screen.
+ */
+export const Title = ({ children }: TextProps): ReactNode => {
+  const color = useSurfaceInk(false);
+  return <RnText style={[styles.title, { color }]}>{children}</RnText>;
 };
 
 export const Heading = ({ children }: TextProps): ReactNode => {

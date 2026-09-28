@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { PermissionsAndroid } from 'react-native';
 import { useRouter } from 'expo-router';
-import { BodyText, Button, Heading, Label, Screen } from '@fieldforce/ui';
+import { BodyText, Button, Display, Label, Screen } from '@fieldforce/ui';
 import { RECORD_AUDIO } from '../../src/onboarding/microphone-gate';
 import { markMicrophoneRationaleAnswered } from '../../src/onboarding/progress';
 
@@ -63,7 +63,7 @@ export default function MicrophoneRationale(): ReactNode {
 
   return (
     <Screen scrollable>
-      <Heading>Your note, in your own words</Heading>
+      <Display>Your note, in your own words</Display>
 
       <BodyText>
         Your note is yours. It records only while you hold the button, and it stops the moment you

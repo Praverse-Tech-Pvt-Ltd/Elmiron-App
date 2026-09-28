@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { PermissionsAndroid } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Banner, BodyText, Button, Card, Heading, Label, Screen } from '@fieldforce/ui';
+import { Banner, BodyText, Button, Card, Display, Label, Screen } from '@fieldforce/ui';
 import { requestLocationPermission } from '../../src/onboarding/location-permission';
 import { hasCompletedFirstRun } from '../../src/onboarding/progress';
 
@@ -74,7 +74,7 @@ export default function LocationRationale(): ReactNode {
 
   return (
     <Screen scrollable>
-      <Heading>Stop filling in where you were.</Heading>
+      <Display>Stop filling in where you were.</Display>
       <BodyText muted>Turn location on and two things stop being your job.</BodyText>
 
       <Card>

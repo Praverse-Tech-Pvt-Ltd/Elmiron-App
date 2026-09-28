@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Banner } from './Banner';
-import { BodyText, Heading, Label } from './Text';
+import { BodyText, Display, Label } from './Text';
 import { PrimaryButton } from './PrimaryButton';
 import { Screen } from './Screen';
 import { SetupStepList } from './SetupStepList';
@@ -73,7 +73,7 @@ export const OemBatteryScreen = ({
 }: OemBatteryScreenProps): ReactNode => (
   <Screen scrollable>
     <Label muted>{skin}</Label>
-    <Heading>{headline}</Heading>
+    <Display>{headline}</Display>
 
     {/*
       The consequence is body text, not a warning banner. It is a true statement about

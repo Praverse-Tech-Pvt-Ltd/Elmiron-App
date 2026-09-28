@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Figure, Heading, Label } from './Text';
+import { BodyText, Figure, Heading, Label, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Spinner } from './Spinner';
@@ -125,7 +125,7 @@ export const DayEndScreen = ({
   if (failure !== null) {
     return (
       <>
-        <Heading>{dayLabel}</Heading>
+        <Title>{dayLabel}</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </>
     );
@@ -134,7 +134,7 @@ export const DayEndScreen = ({
   return (
     <>
       <View style={styles.head}>
-        <Heading>{`${dayLabel} — that's the day`}</Heading>
+        <Title>{`${dayLabel} — that's the day`}</Title>
       </View>
 
       {/*
@@ -161,7 +161,11 @@ export const DayEndScreen = ({
       */}
       {loading ? <Spinner label="Getting your day" /> : null}
 
-      <Label muted>{`Your ${dayLabel}`}</Label>
+      {/*
+        FE-D7 4. The design's "Your Thursday". The route passes "Today", and prefixing that gave
+        "Your Today"; the title above already names the day.
+      */}
+      <Label muted>Your day</Label>
 
       <Card>
         <Label muted>Visits</Label>

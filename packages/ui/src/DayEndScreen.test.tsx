@@ -1,5 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
+import { tokens } from '@fieldforce/ui-tokens';
 import { DayEndScreen } from './DayEndScreen';
 
 const noop = (): void => undefined;
@@ -19,6 +21,23 @@ const props = {
   onOpenQueue: noop,
   onOpenTransparency: noop,
 };
+
+describe('FE-D7 4 — how the screen reads', () => {
+  it('heads the totals "Your day", never "Your Today"', async () => {
+    // The route passes "Today", and "Your ${dayLabel}" made it "Your Today".
+    await render(<DayEndScreen {...props} dayLabel="Today" />);
+    expect(screen.queryByText('Your Today')).toBeNull();
+    expect(screen.getByText('Your day')).toBeTruthy();
+  });
+
+  it('titles the screen at the design’s 27px day-screen title, not the section heading', async () => {
+    await render(<DayEndScreen {...props} dayLabel="Today" />);
+    const title = StyleSheet.flatten(screen.getByText("Today — that's the day").props['style']) as {
+      fontSize?: number;
+    };
+    expect(title.fontSize).toBe(tokens.typography.title.size);
+  });
+});
 
 describe('C11 — the stop confirmation outranks the day’s numbers', () => {
   it('states that nothing is being recorded, and why', async () => {

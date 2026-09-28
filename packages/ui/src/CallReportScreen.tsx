@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Heading, Label } from './Text';
+import { BodyText, Label, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { TextField } from './TextField';
@@ -79,7 +79,7 @@ export const CallReportScreen = ({
 }: CallReportScreenProps): ReactNode => (
   <>
     <View style={styles.head}>
-      <Heading>Your report</Heading>
+      <Title>Your report</Title>
       <Label muted>{`${doctorName} · ${dateLabel}`}</Label>
     </View>
 

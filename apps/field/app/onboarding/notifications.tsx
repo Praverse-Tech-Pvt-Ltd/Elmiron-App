@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { requestNotificationPermission } from '../../src/onboarding/notification-permission';
-import { BodyText, Button, Heading, ListRow, Screen } from '@fieldforce/ui';
+import { BodyText, Button, Display, ListRow, Screen } from '@fieldforce/ui';
 import { capSentence, NOTIFICATION_TYPES } from '../../src/onboarding/notifications';
 
 /**
@@ -50,7 +50,7 @@ export default function NotificationsRationale(): ReactNode {
 
   return (
     <Screen scrollable>
-      <Heading>What we&apos;ll send you</Heading>
+      <Display>What we&apos;ll send you</Display>
       <BodyText>{capSentence()}</BodyText>
 
       {NOTIFICATION_TYPES.map((type) => (
