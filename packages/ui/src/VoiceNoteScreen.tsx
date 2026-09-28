@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
 import { BodyText, Display, Figure, Heading, Label, Statement } from './Text';
@@ -78,9 +79,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexDirection: 'row',
     gap: tokens.space.sm,
-    backgroundColor: tokens.color.successFill,
+    backgroundColor: tokens.color.sage,
   },
-  holding: { backgroundColor: tokens.color.success },
+  // FE-D7 2. Phase 3 D7: sage #B8CDB8, pressed #9EB89E. Holding is pressing, so the pressed
+  // value holds for the whole recording.
+  holding: { backgroundColor: tokens.color.sagePressed },
   dot: {
     width: 14,
     height: 14,
@@ -88,6 +91,15 @@ const styles = StyleSheet.create({
     backgroundColor: tokens.color.textPrimary,
   },
 });
+
+/**
+ * The hold button's ground. `held` is a finger on it, or a recording still running. Exported so
+ * the press can be asserted: a fired press event does not flip React Native's `pressed`.
+ */
+export const holdStyle = (held: boolean): StyleProp<ViewStyle> => [
+  styles.hold,
+  held ? styles.holding : null,
+];
 
 export const VoiceNoteScreen = ({
   subject,
@@ -150,10 +162,16 @@ export const VoiceNoteScreen = ({
                 accessibilityState={{ busy: recording }}
                 onPressIn={onHoldStart}
                 onPressOut={onHoldEnd}
-                style={[styles.hold, recording ? styles.holding : null]}
+                style={({ pressed }) => holdStyle(pressed || recording)}
               >
-                {recording ? <View style={styles.dot} /> : null}
-                <BodyText>{recording ? 'Holding — recording' : 'Hold to record'}</BodyText>
+                {/*
+                  A light ground inside the dark card: its words are ink, as the design draws
+                  them. Inherited from the hero they were white on pale sage.
+                */}
+                <SurfaceContext.Provider value="paper">
+                  {recording ? <View style={styles.dot} /> : null}
+                  <BodyText>{recording ? 'Holding — recording' : 'Hold to record'}</BodyText>
+                </SurfaceContext.Provider>
               </Pressable>
 
               {onSave === undefined ? null : (

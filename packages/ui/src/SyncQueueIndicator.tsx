@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { BodyText, Label } from './Text';
 import { StatusGlyph } from './StatusGlyph';
@@ -112,8 +113,18 @@ const styles = StyleSheet.create({
     borderColor: tokens.color.offlineEdge,
   },
   pressed: { backgroundColor: tokens.color.wash },
+  // FE-D7 2. Offline is the wash already, so it presses one step darker, as the design does.
+  offlinePressed: { backgroundColor: tokens.color.washPressed },
   message: { flex: 1 },
 });
+
+/** The chip's ground, pressed or not. Exported so the press can be asserted (see `ListItem`). */
+export const syncQueueStyle = (status: StatusKind, pressed: boolean): StyleProp<ViewStyle> => [
+  styles.base,
+  status === 'critical' ? styles.failed : null,
+  status === 'offline' ? styles.offline : null,
+  pressed ? (status === 'offline' ? styles.offlinePressed : styles.pressed) : null,
+];
 
 export const SyncQueueIndicator = ({
   state,
@@ -128,12 +139,7 @@ export const SyncQueueIndicator = ({
       accessibilityRole="button"
       accessibilityLabel={trailing === '' ? message : `${message}. ${trailing}`}
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.base,
-        status === 'critical' ? styles.failed : null,
-        status === 'offline' ? styles.offline : null,
-        pressed ? styles.pressed : null,
-      ]}
+      style={({ pressed }) => syncQueueStyle(status, pressed)}
     >
       <StatusGlyph kind={status} />
       <View style={styles.message}>

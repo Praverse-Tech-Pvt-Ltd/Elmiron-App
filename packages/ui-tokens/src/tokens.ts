@@ -52,6 +52,10 @@ export interface ColorTokens {
   readonly attentionFill: string;
   readonly success: string;
   readonly successFill: string;
+  readonly successFillPressed: string;
+  /** The voice note's hold-to-record button, with ink on it. Not an action colour. */
+  readonly sage: string;
+  readonly sagePressed: string;
   readonly info: string;
   readonly infoFill: string;
   /**
@@ -236,6 +240,9 @@ export const tokens: DesignTokens = {
     attentionFill: brandPalette.attentionFill,
     success: brandPalette.accent,
     successFill: brandPalette.successFill,
+    successFillPressed: brandPalette.successFillPressed,
+    sage: brandPalette.sage,
+    sagePressed: brandPalette.sagePressed,
     info: brandPalette.info,
     infoFill: brandPalette.infoFill,
     offlineFill: brandPalette.offlineFill,
@@ -417,6 +424,38 @@ export const requiredContrastPairs: readonly ContrastPair[] = [
     name: 'secondary button label on wash',
     foreground: tokens.color.textPrimary,
     background: tokens.color.wash,
+    usage: 'text',
+  },
+  // FE-D7 2. The pressed grounds. A label stays on screen while a finger is on it, so each pressed
+  // fill carries the same obligation as the fill it replaces.
+  {
+    name: 'primary text on the pressed wash',
+    foreground: tokens.color.textPrimary,
+    background: tokens.color.washPressed,
+    usage: 'text',
+  },
+  {
+    name: 'secondary text on the pressed wash',
+    foreground: tokens.color.textSecondary,
+    background: tokens.color.washPressed,
+    usage: 'text',
+  },
+  {
+    name: 'secondary text on the pressed success tint',
+    foreground: tokens.color.textSecondary,
+    background: tokens.color.successFillPressed,
+    usage: 'text',
+  },
+  {
+    name: 'hold-to-record label on the sage',
+    foreground: tokens.color.textPrimary,
+    background: tokens.color.sage,
+    usage: 'text',
+  },
+  {
+    name: 'hold-to-record label on the pressed sage, for the whole recording',
+    foreground: tokens.color.textPrimary,
+    background: tokens.color.sagePressed,
     usage: 'text',
   },
   {
