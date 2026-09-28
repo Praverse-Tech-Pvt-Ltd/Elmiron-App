@@ -2434,3 +2434,76 @@ real change: `#18` (`C3`) sat at rank 3 of the unblocking table in `docs/ai-plat
 
 **Not deferred:** `#1` (UCPMP cap, CI red 6 November), `#2` (per-company settings), `#3` (registered
 legal name, cost accrues daily), `#4`–`#11`, `#14`, `#17`, and `#27`–`#36`.
+
+
+## Operator decisions — 28 September 2026 (recorded in W1-B)
+
+**Two rulings, `C30` and `C31`.** `C29` was the previous highest (W1-A, after the `BE-W118`
+renumbering). **Recorded after Part A rather than before it**, because CI had produced no run for
+four commits and nothing else in the session could be evidenced until that was fixed; the ordering
+deviation is noted rather than presented as the plan.
+
+
+### C30 — The AI gateway runs as a Supabase Edge Function
+
+**Decided (operator). This answers register `#4` / `D1`, the decision that gated every AI
+feature.** Approved as recommended in `docs/ai-platform/phase-a-recon.md` §4's option (a).
+
+**The gateway stays deliberately dumb, and that is the whole design.** It holds the vendor key,
+calls the model, validates the output, and writes results back through RPCs **as the user's token**.
+**It may not grant anything the database would refuse.**
+
+**Why that constraint is the point, not a detail.** `.ai-collab/constraints.md`: *"RLS is the
+enforcement layer, never application code."* A gateway calling RPCs with a `service_role` key would
+move every authorisation decision out of Postgres and into a TypeScript file — the feature would
+appear to work and the tenant boundary would be gone. Passing the caller's JWT through keeps
+`ai_begin_request` deciding, as it does for a database test today.
+
+**What this unblocks:** the runtime half of `product_qa`, `mr_chat`, `lms_tutor`, `ai_doctor` and
+`ai_coach`. **What it does NOT unblock:** any of them actually answering, because `#5` is still
+open — see `C31`. Rank 1 of `INVENTORY.md` §D3 is now closed; rank 2 is not.
+
+**Not chosen:** a separate Node service (option b — *"exactly the second backend the prompt and
+`architecture.md` both warn against"*) and workers-only (option c — *"cannot serve interactive
+chat or a live AI Doctor"*). `BE-W7`'s original objection to Edge Functions was re-measured on
+24 September and no longer holds on testability; its second point — one more place for logic to
+live — stands and is answered by keeping the function dumb.
+
+
+### C31 — `#5` / `D2` is NOT answered, and was not guessed
+
+**Recorded (operator). India / Mumbai data residency STANDS.** The operator asked for a shortlist
+of providers that can meet it, text **and** voice, judged on quality, latency, cost, and data and
+privacy terms, and will finalise immediately after reading it.
+
+**Delivered: `docs/ai-platform/PROVIDER-SHORTLIST.md`**, with every claim carrying the vendor URL
+and the date read, and **17 cells marked UNVERIFIED** rather than filled in.
+
+**The three findings the operator should read before choosing.**
+
+1. **OpenAI's direct API fails the requirement on its own documentation.** India is a **storage**
+   residency region and **not a processing** region; regional processing is US, Europe and the UAE
+   only, and the docs say OpenAI *"may also process and temporarily store Customer Content outside
+   of the Region"*. Storing in Mumbai while inferring in Virginia is not residency.
+2. **AWS Bedrock in the India geography is the only candidate documenting both halves** — routing
+   *only* within India (`ap-south-1`/`ap-south-2`) and zero data retention by default. **Its one
+   documented exception — abuse-flagged content retained for offline review — does not say where
+   that copy lives**, and that is the most important unverified cell in the document.
+3. **Voice is not funded.** On the cheapest verified vendor, at 20 reps practising 80 minutes a
+   month, voice costs **≈$58/month against a $10–40 budget**, and text-to-speech is five times the
+   speech-to-text half. There is no volume at which it fits. **Recommendation: Sarvam for voice,
+   and voice waits** — it also has nothing to run on, since AI Doctor does not exist.
+
+**Recommendation for text: AWS Bedrock India, with Sarvam beside it once Sarvam's written
+no-training and retention terms exist.** Sarvam is cheaper, Indian and best on Indian languages on
+a published third-party benchmark it did not author (**5.0% Hindi WER against OpenAI's 33.9%**),
+but its retention and training terms are absent from every vendor page I could read, and a
+marketing summary is not a term.
+
+**Not decided, and engineering must not decide it:** the vendor. `C30`'s adapter ships as a stub
+that cannot run outside a local target, so the repository still names no vendor.
+
+**One item that is NOT deferred by `C29`, and the operator must resolve it about their own
+organisation:** a vendor contract needs a **signatory**. `C29` deferred register `#18`, the
+PV/DPDP signatory, for *real doctor* work. A data processing agreement with an AI vendor needs
+someone to sign it whether or not a doctor is ever recorded.

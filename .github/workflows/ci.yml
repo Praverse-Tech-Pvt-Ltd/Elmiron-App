@@ -169,6 +169,40 @@ jobs:
       - name: Log lock waits, so a deadlock names its relations
         run: node services/api/scripts/enable-lock-logging.mjs
 
+      # W1-B C5 -- CI must actually RUN the Edge Function, or `ai-gateway.spec.ts` skips itself
+      # and a green run means nothing about the gateway.
+      #
+      # THE ORDER OF THESE TWO COMMANDS IS THE WHOLE STEP, and it was established by a mutation
+      # that failed to fail. `functions serve` hot-reloads the FUNCTION directory; it does NOT
+      # reload `packages/core/dist`, which the function imports from outside that directory. With
+      # the server already running, W1-B rebuilt core with the patient guardrail deliberately
+      # removed, re-ran the suite, and got NINE PASSES -- the server was still executing the old
+      # bundle. Restarting it turned the same mutant into two failures, which is the result that
+      # proved the test was real.
+      #
+      # So: BUILD, then SERVE. A build after a serve is invisible, and the symptom is the worst
+      # one available -- a suite that passes while testing code that is no longer in the tree.
+      # Registered as `BE-W119`.
+      #
+      # The wait loop is not a sleep. `supabase functions serve` prints its banner before the
+      # runtime can answer, so a fixed sleep either wastes CI time or races; polling until the
+      # function returns ANY status code -- 401 from the no-token path is a perfectly good
+      # "something is listening" -- fails fast and explains itself if it never does.
+      - name: Serve the AI gateway Edge Function
+        run: |
+          pnpm --filter @fieldforce/core build
+          pnpm exec supabase --workdir services/api functions serve --no-verify-jwt &
+          for _ in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X POST               http://127.0.0.1:54321/functions/v1/ai-gateway               -H 'content-type: application/json' -d '{}' || true)
+            if [ -n "$code" ] && [ "$code" != "000" ]; then
+              echo "ai-gateway answered HTTP $code"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "FAILED: the ai-gateway function never answered on :54321" >&2
+          exit 1
+
       # Includes services/api/tests/rls.spec.ts — the Gate 0 adversarial suite.
       # SUPABASE_DB_URL being set does not make the tests run; db.ts hard-fails in CI
       # if the database is unreachable, so a green run always means they executed.

@@ -1422,3 +1422,125 @@ deferral is visible rather than implied by silence.
 everything not started, and both are answerable in a meeting. The third is not a decision at all —
 it is a provisioning task, and without it **four-eyes refuses every approval `42501`**, which means
 `C24`'s entire draft-to-approved path cannot be exercised by a human even once.
+
+---
+
+## W1-B — Part D: `BE-W115`, and what it does and does not put at risk
+
+### D1. The defect, in one paragraph
+
+**Approved knowledge is the only thing an AI feature is allowed to answer from, and approval is
+supposed to require two people.** W1-A closed the obvious way round that: a plain `INSERT` claiming
+`status = 'approved'` now fails loudly, for the database owner as much as for an admin, and a test
+proves it. **What is still open is a slower route.** Anyone connecting to the database with the
+highest-privilege account — which is what a migration, a seed script or a maintenance session runs
+as — can take a draft and *update* it to "in review", then update it again to "approved", writing
+whatever attestation text they like. Every constraint on the table is satisfied, because the rule
+that a second person must approve lives inside the approval **function**, not on the table itself.
+**Closing it needs the table to be able to tell "this update came from the approval function" from
+"this update came from a person with a database connection", and this schema has no mechanism for
+that anywhere.**
+
+### D2. The options, their costs, and what I recommend
+
+| # | Option | Cost | What it would need permission for |
+| --- | --- | --- | --- |
+| **(a)** | **A session-scoped flag.** `approve_knowledge_version` sets a marker for the duration of its own transaction; the update trigger refuses a move into `approved` unless the marker is set | **0.5d.** The mechanism is small | **A new mechanism this schema has nowhere.** `.ai-collab/constraints.md` requires asking before introducing one. It also has its own failure mode — a flag left set — so it needs its own two-sided test |
+| **(b)** | **Move the four-eyes check onto the table**, re-implementing it in the update trigger | ~1d | **Two copies of the same rule**, in the function and the trigger, which is the duplication the repo's own "one side computes, the other is told" rule exists to prevent. When they drift, the safe-looking one wins |
+| **(c)** | **Revoke the ability to update the table from every role that holds it**, leaving only the RPCs | **Unsizable without a survey.** It would also block legitimate maintenance | Would need each revocation checked against what still has to work |
+| **(d)** | **Accept it and detect instead.** The table is already fully audited (`knowledge_versions_audit`), so every such update leaves a row naming the actor | **~0.25d** for a check that reports approvals whose audit trail shows no RPC call | Nothing — it adds a report, removes no capability |
+
+**Recommendation: (a), with (d) alongside.** (a) is the only option that actually closes the hole,
+and it is small. (d) is worth doing regardless, because a control that cannot be exercised is not a
+control and a trail nobody reads is the same failure from the other side — and (d) is the thing
+that would tell you the hole had been used.
+
+**What (a) needs permission for, stated plainly: introducing a session-scoped configuration flag as
+a security mechanism, which does not exist anywhere in this schema today.** That is the
+ask-before-doing item. **It was not built in W1-A or W1-B.**
+
+### D3. What it does and does not put at risk, given `C24`
+
+**Not at risk: everything that goes through the application.** The four-eyes path is sound for every
+route a person can actually take from the console or the field app. A signed-in admin — including
+the operator under `C26` — reaches `approve_knowledge_version`, and that function refuses an author
+approving their own work, refuses an empty attestation, and refuses a version that is not in review.
+The W1-B review screen calls exactly that function. **`C24`'s promise that AI-generated text cannot
+become approved without a second human holds for every path an application offers.**
+
+**At risk: the claim that it is impossible.** `C24` says *"No seed, script or migration may insert
+approved knowledge."* After W1-A that sentence is **true as written** — an insert fails. It is
+**not** true of an update. So the honest statement is: **AI-generated text cannot be born approved,
+and cannot be approved through the app without a second person; it can still be walked to approved
+by someone with a database connection, and the audit log would record that they did.**
+
+**Why that is a smaller risk than it sounds, and still worth closing.** `.ai-collab/constraints.md`
+already forbids granting a direct production database session at all, and names the audit log as
+the mitigation for the roles that hold `BYPASSRLS`. So the exposure is not "anyone can do this" —
+it is "the people who already have the most dangerous access have one more thing they can do
+quietly." Option (d) is what turns "quietly" into "visibly".
+
+---
+
+## W1-B — Part E: two numbers, and the order they have to happen in
+
+### E1. Production is 62 migrations behind, not 45
+
+**Corrected where the old figure appeared.** The number rests on two facts, one measured and one
+unmeasurable from here:
+
+| | |
+| --- | --- |
+| Migrations on this branch | **81**, including W1-A's `20260928000100_knowledge_authorship.sql`; W1-B adds none — re-derive with `ls services/api/supabase/migrations/*.sql \| wc -l` |
+| Applied to production | **19**, applied **14 August 2026** at `BE-W8` |
+| **Pending** | **62** |
+
+**When it was last measured: 15 September 2026**, by `BE-W40`, reading `schema_migrations` over
+the pooler (`docs/blocked-on-you.md` §6.1). **Nothing has measured production since**, and nothing
+in this repository can: `.ai-collab/constraints.md` records that the remote project is not linked,
+and `INVENTORY.md` records that the Elmiron-App project is absent from the Supabase account
+connected to this machine.
+
+**So "62" is arithmetic on a 13-day-old reading, not a current measurement.** The one command that
+would settle it needs the production connection string:
+
+```bash
+node services/api/scripts/check-migration-drift.mjs
+```
+
+**A correction made while writing this section, and left visible because it is the argument.** This
+paragraph first said **82 files and 63 pending**. Running the command gave **81**, because W1-B adds
+no migration and W1-A's was already counted. The brief's own figure was **45**, W1-A corrected it to
+**62**, and I nearly moved it to 63 by arithmetic rather than by measurement — **three different
+numbers in two weeks for one fact, twice wrong by assuming rather than running one command.** That
+is `constraints.md`'s FIX-07 rule exactly: *"a count that changes is recorded as the command that
+produces it, not as a number."*
+
+### E2. The deploy order, for the operator, in one place
+
+**pre-flight query → shift hours → migrate → reference data → paid plan.**
+
+**Why the order and not the list.** Each step's failure mode is what makes it non-negotiable.
+
+| # | Step | If it is skipped |
+| --- | --- | --- |
+| **0** | **The pre-flight query.** One query against production: how many migrations are applied, and are there any territories, doctors or user profiles? | You deploy without knowing whether an exposure is already live. **If the counts are not zero, this is an incident, not a deployment** — production is at a schema with a known, still-open cross-tenant admin read (`BE-W76`), closed by two migrations that are **not** on production, so any data loaded since 14 August has been mutually readable between organisations. The deploy would close the hole **and destroy the evidence of how long it was open.** Nobody has run this query |
+| **1** | **Configure shift hours** | **Capture refuses.** An MR cannot check in at all. The organisation-wide default also **expires 60 days after it is configured** and then refuses again, so this is a dated step, not a one-off. Register `#28` |
+| **2** | **Deploy the migrations** | Reference data lands on a schema with no tenant boundary — the whole of escalation `6.1`, register `#31`. **One thing to know first:** `20260908000800` once aborted the deploy outright rather than failing gracefully, so nothing ordered after it would run. It was fixed under the single named exception in `constraints.md`, and **the deploy has been rehearsed against seeded databases and never run against production** |
+| **3** | **Load reference data** — territories, doctors, the product catalogue | See step 2. Register `#28`, open since sprint 3 |
+| **4** | **The paid plan**, about $25/month | The free tier **auto-paused production for two weeks in August**. It also makes `G-PILOT` unachievable by definition, since that gate requires *"a database that does not pause itself"*. Register `#35` |
+
+**Why this blocks `C28`'s 4 October target and cannot be worked around by engineering.**
+
+**The frontend cannot be tested against a backend that is 63 migrations behind.** Everything built
+since 14 August — the tenant boundary, organisation scoping, the audio path, the recording-permission
+read, the entire AI, LMS and knowledge layer, and W1-A's authorship rule — is absent from production.
+A screen tested against production today is tested against a schema that does not contain the
+features it calls.
+
+**What the frontend does until then: build and test entirely against the local stack**, which is
+complete (82 migrations applied and verified this session) and which is where every number in this
+repository comes from. **A green result there is evidence about the local stack and nothing else.**
+
+**Every step above needs someone with production access. None of them is an engineering task**, and
+that is the point of listing them here rather than in a backlog.

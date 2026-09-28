@@ -19902,3 +19902,207 @@ profile than on this machine's one-run-in-two.
 **Adding `workflow_dispatch` to `ci.yml` would have made this diagnosable and is the obvious small
 fix. It is not done here:** it changes a CI trigger, which is a change to the mechanism that guards
 every branch, and it belongs in a commit whose subject is that and not this.
+
+
+---
+
+### W1-B — the gateway
+
+**28 September 2026.** Checkout guard first: namespace `@fieldforce/core`, remote
+`Praverse-Tech-Pvt-Ltd/Elmiron-App`, `f34ceef` an ancestor of HEAD — **exit 0**, toplevel
+`D:/Praverse/Elmiron-App/.claude/worktrees/ai-platform-phase-a`, branch
+`worktree-ai-platform-phase-a` (PR #2).
+
+#### Part A — why CI stopped, which was none of the things it looked like
+
+**The cause: PR #2 conflicted with `main`, so GitHub could not build `refs/pull/2/merge`, and a
+`pull_request` workflow has nothing to run against.** No run object is created and nothing anywhere
+says so.
+
+```
+gh pr view 2 --json mergeable,mergeStateStatus
+{"mergeable":"CONFLICTING","mergeStateStatus":"DIRTY"}
+```
+
+**`ci.yml` carries no filters at all** — `on: pull_request:` is bare and `push:` is `main`-only — so
+A1's "filter question before a permissions question" resolves to neither. The timing is exact:
+
+| When | What |
+| --- | --- |
+| **06:41Z** | `cb604e0` — the last CI run on this branch, **success** |
+| **08:07Z / 08:12Z / 08:17Z** | PRs **#3, #4, #5** merge to `main`, adding **27 commits** and conflicting this branch |
+| 09:23Z, 09:47Z, 09:52Z, 09:57Z | four pushes, **no run created** |
+| **09:59Z** | PR #6 on `fe-d4-demo`, **not** conflicting, runs green |
+
+**That last row is what ruled out the alternatives**: the fleet was working, billing was fine, and
+PR #2 has been a **draft since 24 September** and ran fine until 06:41Z, so draft state was not it
+either.
+
+**A3 — fixed two ways.** `origin/main` merged (commit `9f7538e`), and **`workflow_dispatch` added
+to `ci.yml`**, which is worth having on its own: `gh workflow run CI --ref <branch>` distinguishes
+"CI is broken" from "CI was never asked" in one command, and this session had no way to do that.
+
+**A4 — the green run, by workflow name, SHA equal to HEAD:**
+
+```
+CI | pull_request | 9f7538e638a13e5059116e9c998b34a5963004aa | completed/success
+```
+
+**The database job passed, so `BE-W116` and `BE-W117` did not bite this run.** They remain real at
+roughly one run in two, and one green run is not evidence that they are gone.
+
+#### The merge exposed an id collision, and it is the more consequential half
+
+**Both sessions minted `C20`.** W1-A's nine rulings and the FE-D1 session's send-first ruling took
+the same id from the same high-water mark of `C19`. **FE-D1's reached `main` first, so it keeps
+`C20`**, and W1-A's shift to **`C21`–`C29`** across 15 files. The mapping is written into
+`.ai-collab/decisions.md` so a reader holding the old numbers can follow it, and
+`docs/demo-path-2026-10-01.md`'s references to ruling `C20` are **theirs** and untouched.
+
+**`BE-W118`** — ids are minted by reading a file's own highest, which is only correct on one branch
+at a time, and nothing reserves a range or detects a duplicate. The same applies to `BE-W`/`FE-W`.
+Recommended fix: a CI check that fails on a duplicate `### C<n>` heading.
+
+**The merge also produced the right jest config by itself** — W1-A's `testMatch` fix, which restores
+discovery inside a worktree, plus `main`'s `testTimeout: 20_000` on `packages/ui`, the asymmetry
+W1-A flagged and deliberately did not fix.
+
+#### Part B — `docs/ai-platform/PROVIDER-SHORTLIST.md`
+
+**Recommendation in one line: AWS Bedrock in the India geography for text, with Sarvam beside it
+once Sarvam's written no-training and retention terms exist; Sarvam for voice, and voice waits.**
+**17 cells are marked UNVERIFIED** and listed together at the end.
+
+**Three findings worth reading even if the document is not.**
+
+1. **OpenAI's direct API fails the residency requirement on its own documentation.** India is a
+   **storage** residency region and **not a processing** region — regional processing is US, Europe
+   (EEA + Switzerland) and the UAE only, and the docs say OpenAI *"may also process and temporarily
+   store Customer Content outside of the Region"*. Storing in Mumbai while inferring in Virginia is
+   the exact failure the residency question exists to catch.
+2. **AWS Bedrock is the only candidate documenting both halves** — *"routes requests only within the
+   India geography"* across `ap-south-1`/`ap-south-2`, and *"zero data retention… does not store
+   model inputs or outputs"*. **Its one documented exception — abuse-flagged content retained for
+   offline review — does not say where that copy lives.** That is the most important UNVERIFIED cell
+   in the document.
+3. **Voice is not funded, and the arithmetic is the finding.** At 20 reps × 80 minutes a month on
+   the cheapest verified vendor: speech-in ≈ $9, **speech-out ≈ $49**, before the model turns —
+   **≈$58/month against a $10–40 budget**, scaling linearly. There is no volume at which it fits.
+   Text is the opposite: Product Q&A at 4,400 calls/month costs **≈₹354 ≈ $4**.
+
+**Quality evidence is a published third-party benchmark, not a vendor claim.** *Voice of India*
+(arXiv 2604.19151v2, 24 May 2026, AI4Bharat/IIT Madras with Josh Talks): **Sarvam 5.0% Hindi WER,
+best on 13 of 15 languages; Gemini 3 Pro 6.0%; Microsoft 11.4%; OpenAI GPT-4o Transcribe 33.9% and
+~64.2% average.** The conflict of interest is stated in the document: Sarvam co-authored the
+*second* benchmark, *Indic DiarBench*, but not the one carrying these numbers.
+
+**`C30` and `C31` recorded** — the Edge Function approved, `#5` explicitly not guessed.
+
+#### Part C — the gateway, built and proven through HTTP
+
+**`services/api/supabase/functions/ai-gateway/`.** The property it exists to preserve: **it calls the
+control plane as the USER'S token, never as a service role.** `SUPABASE_SERVICE_ROLE_KEY` is not
+read in the function at all — not read and ignored, so it cannot be reached for later by someone
+fixing a 401 in a hurry.
+
+**The flow is imported, not rewritten.** `answerProductQuestion` has 35 tests over it including the
+order of its steps; a second copy in Deno would be a second set of guarantees.
+
+**C2 — one adapter, a stub that says so.** It returns `supported: false` on every call, which
+`answerProductQuestion` maps to the "approved information not available" sentence, and it names
+itself `stub` in the request log. **It throws on construction against a non-local target**, for the
+same reason `loadAppConfig` throws on `APP_RECORDING_ENABLED`: silently ignoring the request leaves
+whoever set it believing the feature is on. **No vendor is named anywhere in the repository.**
+
+**C3/C4 — `services/api/tests/ai-gateway.spec.ts`, 9 tests, all passing.** The first test in this
+repository that reaches the gateway as a phone would: a real GoTrue password sign-in, a real `POST`
+to `:54321/functions/v1/ai-gateway`, and the function's own Deno process calling the RPCs as that
+user. Proven end to end: the approved prompt version the database chose is on the audit row; the
+row is attributed to the **MR**, not a service role; `45011` arrives as HTTP 403 with the flag off
+and `45012` as HTTP 429 over the allowance; and the cost fields are populated.
+
+**C4's assertion is about state, not a message, and that was the point.** The stub sets
+`provider = 'stub'` with non-null token counts on **every** call, so
+
+> **`ai_requests.model_provider IS NULL` on a blocked request is a fact only reachable if
+> `generate` never ran.**
+
+Asserted with its positive control — the same call without patient details records `stub` and
+non-null tokens — so a null cannot mean a broken insert.
+
+**C5 — CI now serves the function**, and **the order of the two commands in that step is the whole
+step.** See below.
+
+#### `BE-W119` — the mutation that failed to fail, and what it exposed
+
+**The first attempt at C7's mutation passed, and that was the finding.** With `functions serve`
+already running, `product-qa.ts` was mutated to remove the patient guardrail **entirely** and core
+was rebuilt. The suite returned **9 passed**.
+
+**`functions serve` hot-reloads the function directory. It does not reload
+`packages/core/dist`, which the function imports from outside it.** The server was still executing
+the old bundle. **A green gateway suite can be testing code that is no longer in the tree** — the
+worst shape a test-infrastructure defect can take, and the exact thing this repo's "a command that
+exits 0 is not a command that worked" rule is about.
+
+**Restarting the server turned the same mutant into the right answer.** Registered as `BE-W119`;
+mitigated in CI by building **before** serving, with the reasoning written into the step.
+
+#### Mutation — two-sided, and one that kills exactly one test
+
+| Mutant | Result |
+| --- | --- |
+| **Guardrail removed** from `answerProductQuestion`, server restarted | **2 failed, 7 passed** — both "blocked with NO provider recorded" tests died and **the POSITIVE CONTROL survived**, so the table is not merely refusing everything |
+| **Guardrail removed**, server **not** restarted | **9 passed** — `BE-W119`, above |
+| **`STUB_MODEL_NAME` changed** | **exactly 1 failed, 8 passed** — the cost-fields test alone |
+
+#### Parts D and E, in `docs/blocked-on-you.md`
+
+**D — `BE-W115`.** Four options costed. **Recommend (a) a session-scoped flag, with (d) a detection
+report alongside**; (a) is the only one that closes it and needs permission for a mechanism this
+schema has nowhere. **What is and is not at risk:** the four-eyes path is **sound for every route an
+application offers**, including the operator's review screen. What fails is the claim that it is
+*impossible* — `C24`'s "no seed, script or migration may **insert** approved knowledge" is true as
+written, and is not true of an **update**.
+
+**E1 — 62 pending, and a correction left visible.** 81 migration files, 19 applied to production on
+**14 August 2026**, last measured **15 September** by `BE-W40` over the pooler; nothing has measured
+production since and nothing here can. **This section's own first draft said 82 and 63** — the brief
+said 45, W1-A corrected it to 62, and I nearly moved it to 63 by arithmetic instead of running one
+command. Three numbers in two weeks for one fact.
+
+**E2 — the order: pre-flight query → shift hours → migrate → reference data → paid plan**, each with
+what breaks if skipped. **The pre-flight query is one query nobody has run, and if it returns
+non-zero counts this is an incident, not a deployment.**
+
+#### Counts, from each runner's own summary lines
+
+| Workspace / runner | Summary line |
+| --- | --- |
+| core / vitest | `Test Files 5 passed (5)` · `Tests 106 passed \| 4 skipped (110)` |
+| ui-tokens / vitest | `Test Files 3 passed (3)` · `Tests 54 passed (54)` |
+| ui / vitest | `Test Files 1 passed (1)` · `Tests 4 passed (4)` |
+| console / vitest | `Test Files 7 passed (7)` · `Tests 52 passed (52)` |
+| field / vitest | `Test Files 44 passed (44)` · `Tests 637 passed (637)` |
+| **api / vitest — the gateway suite** | **`Test Files 1 passed (1)` · `Tests 9 passed (9)`** |
+
+`typecheck` **9 successful, 9 total**. `lint` **7 successful, 7 total**, exit 0, one pre-existing
+warning in `@fieldforce/field` untouched. `prettier --check .` **"All matched files use Prettier code
+style!"**
+
+**One thing the counts do not show, and it is worth stating:** the Edge Function's own TypeScript is
+**not** typechecked by `pnpm typecheck` — it sits outside every workspace `tsconfig`, and `Deno` and
+`jsr:` specifiers would not resolve there anyway. Its correctness rests entirely on
+`ai-gateway.spec.ts` exercising it over HTTP. That is a real gap and it is the reason C5's CI step
+matters more than it looks.
+
+#### Where this stopped
+
+**Parts A, B, C, D and E are complete.** The stop is `BE-W115`, unchanged from W1-A and still an
+**ASK-BEFORE-DOING** stop: option (a) needs permission for a mechanism this schema has nowhere, and
+D2 costs it rather than building it.
+
+**Two things a reader should not conclude.** The gateway runs against a **stub**, so nothing in this
+session is evidence that any model works — `#5` is open and `C31` did not guess it. And every number
+above is from **this machine's local stack**; there is still no handset result anywhere in this
+repository and no result of any kind against a hosted Supabase project.
