@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Heading, Label } from './Text';
+import { BodyText, Label, Title } from './Text';
 import { Banner } from './Banner';
 import { Button } from './Button';
 import { Screen } from './Screen';
@@ -360,7 +360,7 @@ export const QueueScreen = ({
 
   return (
     <Screen scrollable>
-      <Heading>Your upload queue</Heading>
+      <Title>Your upload queue</Title>
 
       {retryFailure === undefined ? null : (
         <Banner detail={retryFailure} title="Nothing could be sent" tone="critical" />

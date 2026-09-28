@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Heading, Label } from './Text';
+import { BodyText, Display, Heading, Label } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { StatusGlyph } from './StatusGlyph';
@@ -82,7 +82,7 @@ export const TransparencyScreen = ({
 }: TransparencyScreenProps): ReactNode => (
   <>
     <View style={styles.intro}>
-      <Heading>Everything, before you ask.</Heading>
+      <Display>Everything, before you ask.</Display>
       <Label muted>Open this any time from home. It never changes without telling you.</Label>
     </View>
 

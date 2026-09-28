@@ -172,6 +172,13 @@ const styles = StyleSheet.create({
 });
 
 /**
+ * FE-D7 2. "Give the phone back" presses from muted to ink, as Phase 3 draws it
+ * (`color:#585B52` → `#1F211C`), rather than fading: a fade lightens words that are already the
+ * quietest on the screen. Exported so the press can be asserted.
+ */
+export const handBackMuted = (pressed: boolean): boolean => !pressed;
+
+/**
  * The pair, the third way out, and the notice — identical in every variant.
  *
  * Extracted so it cannot drift between the three. Two buttons, same variant, same
@@ -201,12 +208,8 @@ const Answers = ({
       }}
       variant="secondary"
     />
-    <Pressable
-      accessibilityRole="button"
-      onPress={onHandBack}
-      style={({ pressed }) => [styles.handBack, pressed ? styles.pressed : null]}
-    >
-      <Label muted>Give the phone back</Label>
+    <Pressable accessibilityRole="button" onPress={onHandBack} style={styles.handBack}>
+      {({ pressed }) => <Label muted={handBackMuted(pressed)}>Give the phone back</Label>}
     </Pressable>
   </View>
 );

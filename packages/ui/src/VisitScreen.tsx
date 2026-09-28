@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Figure, Heading, Label } from './Text';
+import { BodyText, Display, Figure, Label } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { RecordingIndicator } from './RecordingIndicator';
@@ -229,7 +229,7 @@ export const VisitScreen = ({
       )}
 
       <View style={styles.head}>
-        <Heading>{doctorName}</Heading>
+        <Display>{doctorName}</Display>
         {clinic === null ? null : <Label muted>{clinic}</Label>}
       </View>
 

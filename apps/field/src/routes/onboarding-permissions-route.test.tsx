@@ -114,8 +114,10 @@ describe('A4 — the microphone, and the separation that must not collapse', () 
     // neither control is dressed as the expected answer. Same assertion as its two
     // sibling screens, because the claim is the same on all three.
     await render(<MicrophoneRationale />);
-    expect(fillAndHeightOf('Allow the microphone')).toEqual(fillAndHeightOf('Not now'));
-    expect(fillAndHeightOf('Allow the microphone').backgroundColor).not.toBe(tokens.color.accent);
+    expect(fillAndHeightOf('Turn on the microphone')).toEqual(
+      fillAndHeightOf("I'll type my reports"),
+    );
+    expect(fillAndHeightOf('Turn on the microphone').backgroundColor).not.toBe(tokens.color.accent);
   });
 });
 

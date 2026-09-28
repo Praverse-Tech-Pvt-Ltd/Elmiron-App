@@ -9,8 +9,9 @@ import { DoctorSchema, VisitSchema } from '@fieldforce/core';
  *
  * Operator ruling (28 September): the first time the rep OPENS a visit, if the microphone is not
  * already granted and A4 has not been answered, A4 is shown, then the rep is back on the visit.
- * "Allow the microphone" requests RECORD_AUDIO; "Not now" requests nothing. Either answer is
- * remembered, and A4 never shows again.
+ * "Turn on the microphone" requests RECORD_AUDIO; "I'll type my reports" requests nothing. Either
+ * answer is remembered, and A4 never shows again. (FE-D7 4: the design's labels; until then they
+ * were "Allow the microphone" and "Not now".)
  *
  * Until now A4 was built and unreachable: nothing navigated to it, and both of its buttons only
  * went back.
@@ -139,7 +140,7 @@ describe('A4 — shown before the first visit', () => {
 
   it('once A4 has been answered, a visit does not show it again', async () => {
     await render(<MicrophoneRationale />);
-    await fireEvent.press(screen.getByText('Not now'));
+    await fireEvent.press(screen.getByText("I'll type my reports"));
     await waitFor(() => {
       expect(mockBack).toHaveBeenCalledTimes(1);
     });
@@ -167,10 +168,10 @@ describe('A4 — shown before the first visit', () => {
 });
 
 describe('A4 — its two answers', () => {
-  it('"Allow the microphone" requests RECORD_AUDIO, and nothing else, then goes back', async () => {
+  it('"Turn on the microphone" requests RECORD_AUDIO, and nothing else, then goes back', async () => {
     await render(<MicrophoneRationale />);
 
-    await fireEvent.press(screen.getByText('Allow the microphone'));
+    await fireEvent.press(screen.getByText('Turn on the microphone'));
 
     await waitFor(() => {
       expect(mockBack).toHaveBeenCalledTimes(1);
@@ -179,10 +180,10 @@ describe('A4 — its two answers', () => {
     expect(request).toHaveBeenCalledWith(RECORD_AUDIO);
   });
 
-  it('"Not now" requests nothing, then goes back', async () => {
+  it('"I\'ll type my reports" requests nothing, then goes back', async () => {
     await render(<MicrophoneRationale />);
 
-    await fireEvent.press(screen.getByText('Not now'));
+    await fireEvent.press(screen.getByText("I'll type my reports"));
 
     await waitFor(() => {
       expect(mockBack).toHaveBeenCalledTimes(1);
