@@ -147,6 +147,27 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # W1-B C5 -- BUILD `@fieldforce/core` BEFORE `supabase start`, not before `functions serve`.
+      #
+      # This step exists because putting the build in the serve step was WRONG and CI said so:
+      #
+      #   failed to read file: open packages/core/dist/field/gateway/providers.js:
+      #   no such file or directory
+      #
+      # `supabase start` does not just start containers -- it RESOLVES THE EDGE FUNCTIONS' IMPORT
+      # GRAPH as it brings the edge runtime up. `supabase/functions/_shared/core.ts` imports
+      # `packages/core/dist`, which is gitignored, and `pnpm run build` runs in the OTHER job. So
+      # the database job reached `supabase start` with no `dist` and the whole job died before a
+      # single migration test ran.
+      #
+      # It passed locally only because `dist` was already there from an earlier build -- the exact
+      # shape of "a command that exits 0 is not a command that worked".
+      #
+      # Only `@fieldforce/core` is built, not the whole graph: it is the one thing the functions
+      # import, and the static job already builds everything else.
+      - name: Build @fieldforce/core, which the Edge Function imports
+        run: pnpm --filter @fieldforce/core build
+
       # Proves every migration applies to an empty database, in order.
       # auth is required: the Gate 0 suite signs a fixture user in through GoTrue
       # to prove the hand-built JWT claims match the ones the auth hook really mints.
@@ -172,8 +193,11 @@ jobs:
       # W1-B C5 -- CI must actually RUN the Edge Function, or `ai-gateway.spec.ts` skips itself
       # and a green run means nothing about the gateway.
       #
-      # THE ORDER OF THESE TWO COMMANDS IS THE WHOLE STEP, and it was established by a mutation
-      # that failed to fail. `functions serve` hot-reloads the FUNCTION directory; it does NOT
+      # THE BUILD IS NOT IN THIS STEP, and that is the corrected version of this comment.
+      # `packages/core` is built in its own step ABOVE, before `supabase start`, because
+      # `supabase start` resolves the functions' imports itself -- see that step. What remains true,
+      # and was established by a mutation that failed to fail: `functions serve` hot-reloads the
+      # FUNCTION directory; it does NOT
       # reload `packages/core/dist`, which the function imports from outside that directory. With
       # the server already running, W1-B rebuilt core with the patient guardrail deliberately
       # removed, re-ran the suite, and got NINE PASSES -- the server was still executing the old
@@ -190,7 +214,6 @@ jobs:
       # "something is listening" -- fails fast and explains itself if it never does.
       - name: Serve the AI gateway Edge Function
         run: |
-          pnpm --filter @fieldforce/core build
           pnpm exec supabase --workdir services/api functions serve --no-verify-jwt &
           for _ in $(seq 1 60); do
             code=$(curl -s -o /dev/null -w '%{http_code}' -X POST               http://127.0.0.1:54321/functions/v1/ai-gateway               -H 'content-type: application/json' -d '{}' || true)
