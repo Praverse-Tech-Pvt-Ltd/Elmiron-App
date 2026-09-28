@@ -19373,3 +19373,121 @@ either: `git diff fe-d1-enqueue..HEAD` on those paths is empty.
   loading. Mileage shows "0.0 km" while loading. `index` spins forever on a failed disk read.
   Analysis has no empty state. (Inventory §c.)
 - The six mock-only screens stay on the mock until CR-3 is answered.
+
+### FE-D2 — closed: the app tells the truth, and first run in the design's order
+
+**28 September 2026, branch `fe-d2-daily`, PR
+[#4](https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App/pull/4) against `fe-d1-enqueue`**
+(PR #3 is still open, so this stacks on it and its diff is FE-D2 only). **Not merged.** Items 1–7
+are recorded in "FE-D2 (progress)" above. This section closes the branch and adds first run.
+
+**CI on PR #4:** run `36391150522`, **success**. `typecheck · lint · format · unit tests` passed,
+and `migrations · Gate 0 RLS suite · rollbacks` passed. This was at `f458b2b`; the commit adding
+this section follows it.
+
+#### Every item
+
+Each was written test-first, shown red on the old code, then fixed and shown green. Each is one
+commit, pushed as soon as it landed.
+
+| # | Item | Commit | Red on the old code | Green |
+| --- | --- | --- | --- | --- |
+| 1 | `packages/ui` jest timeout = field's 20 s | `8471253` | effective `testTimeout` absent (5000 ms); `ci:local` timed out two suites | `testTimeout: 20000`; 253/253 |
+| 2 | Release build, no real API address → configuration error | `a796a47` | module absent; the app mounted behind a missing address | 8/8, 2/2 |
+| 3 | Beat-plan stop opens its visit | `fd122dc` | "Expected `/visit/…`, Received `/doctor/…`" | 11/11 |
+| 4 | Queue claims nothing before reading the queue | `c88eb70` | no "Reading your queue"; unreadable showed "Everything is sent" | 10/10 |
+| 5 | Reply send failure keeps the reply | `5d9ffce` | the reply text and the field were gone after a failed send | 4/4 |
+| 6 | Failed press gives the screen back (visit, samples, voice-note) | `93c70d0` | button, form or recorder gone behind the banner (6 tests) | 31/31 |
+| 7 | Day-end: unknown is not zero; 0 of 0 is not a congratulation | `38f842c` | "0 of 0" in flight and on failure; no "nothing was planned" | 9/9 |
+| 8 | A3 "Allow notifications" really asks, Android 13+ only | `9193a41` | API 33: "Expected number of calls: 1, Received: 0" | 5/5 unit, 4/4 route |
+| 9 | Guard: background location asked for nowhere | `3d89883` | negative control — a temporary request made it red: `app\onboarding\notifications.tsx:45 ACCESS_BACKGROUND_LOCATION` | 3/3 |
+| 10 | First run in the design's order: A2 second, S4 on denial | `48c4aeb` | index went to notifications; A2 still called `takeFix`; "Not now" and S4 pushed nothing | 6/6 unit, 10/10 route |
+| 11 | A4 microphone before the first visit, once | `f458b2b` | opening a visit pushed nothing; "Allow" requested nothing | 5/5 |
+
+**First-run rulings applied (operator, 28 September, answered in session):**
+- A2 asks with `PermissionsAndroid` for fine and coarse location and reads **no position**. It
+  used to call `takeFix`, which took a fix at onboarding.
+- An approximate-only grant counts as granted.
+- A denial lands on S4, once, as the response to the rep's own press.
+- On S4, "Turn location back on" re-asks, and opens the app's settings when Android answers
+  `never_ask_again`. "Carry on by hand" continues first run.
+- A4 appears the first time a visit is opened, if the microphone isn't granted and A4 hasn't been
+  answered. "Allow" requests `RECORD_AUDIO`; "Not now" requests nothing; either answer is
+  remembered.
+- POST_NOTIFICATIONS is requested only on API 33 and above. Below that it's treated as allowed
+  and nothing is asked. Both branches are tested.
+
+The first-run order is now sign in → **A2 location** → A3 notifications → battery → A9
+transparency → home, with A4 before the first visit.
+
+**Tests corrected rather than regressed**, each named in its commit:
+- `queue-route.test.tsx:65-70`
+- `day-end-route.test.tsx:84`
+- `route.test.ts` (the stop-keys guard now lists `visitId`)
+- `index-route.test.tsx:43` (first run starts at A2, not notifications, by ruling)
+
+#### The manifest check
+
+Verified by a clean `npx expo prebuild --platform android --no-install --clean`, diffed against a
+baseline prebuild taken before any first-run change. Per `docs/gotchas.md`, config-level
+resolution is not proof.
+
+```
+== permission lines, baseline -> final (HEAD f458b2b):
+6a7
+> android:name="android.permission.POST_NOTIFICATIONS"
+== ACCESS_BACKGROUND_LOCATION in manifest: 0
+== the four first-run permissions:
+2:  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+3:  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+8:  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+10:  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+== tracked files changed by prebuild:
+(none)
+```
+
+- `POST_NOTIFICATIONS` is the only addition, from `app.json` `android.permissions`. Nothing was
+  removed.
+- Fine and coarse location and `RECORD_AUDIO` were already declared, by `expo-location` and
+  `expo-audio`.
+- `apps/field/android/` is gitignored and untracked. Prebuild rewrote no tracked file: in
+  particular, not the `package.json` script that `gotchas.md` warns about.
+
+**Suite totals at close:** field vitest **635**, field jest **203**, ui vitest **4**, ui jest
+**253**, all passing. `tsc` is clean for field and ui; lint has 0 errors.
+
+#### Boundary
+
+```
+$ git status --porcelain --untracked-files=all -- services packages/core .github scripts
+(exit 0, 0 lines)
+$ git diff --name-only fe-d1-enqueue...fe-d2-daily -- services packages/core .github scripts
+(exit 0, 0 files)
+```
+
+The branch changes `apps/field`, `packages/ui` and `PROJECT-OVERVIEW.md`, and nothing else:
+49 files, +2002 / −176. There are no new dependencies. Every permission goes through
+`PermissionsAndroid` and `Linking`, which are part of React Native.
+
+#### Open items, written down and not acted on
+
+- **CR-3 is unanswered**, so six screens still read the mock.
+- **A4's button labels** are the existing "Allow the microphone" / "Not now". The design says "Turn
+  on the microphone" / "I'll type my reports". Only placement was ruled; the copy is unchanged.
+- **A2's copy** keeps its existing two true benefits, not the design's three. The
+  automatic-check-in and nearest-doctor benefits need background location, which is open.
+- **S4 is a standalone screen.** The design draws it as Home in "manual mode". It is reached as
+  ruled; the layout was not rebuilt.
+- **Remaining collapsed states (inventory §c):**
+  - day-end swallows non-denial errors (`day-end.tsx:103`), and a mileage failure reads "No
+    distance yet";
+  - beat-plan shows "failed" as "syncing";
+  - the doctor profile says "not visited yet" while loading;
+  - mileage shows "0.0 km" while loading;
+  - `index` spins forever on a failed disk read;
+  - analysis has no empty state.
+- **Pre-existing, left alone:**
+  - `packages/ui/jest.config.cjs:39` fails eslint; CI never lints it (`eslint src`);
+  - an unused `eslint-disable` in `beat-plan-route.test.tsx`;
+  - `visit-route.test.tsx`'s location mock has no `capturedAt`.
+- **The stale 30 September line** is still in `handoff-frontend.md:259`; CR-2 is open.
