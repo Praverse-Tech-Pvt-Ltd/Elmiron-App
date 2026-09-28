@@ -2193,3 +2193,27 @@ auditing unauthenticated calls lets anon grow an append-only table at one row pe
 **Not closed, and the register says so:** grant-level refusals happen before the function body
 runs. Closing those needs a change at or in front of the PostgREST layer, which is the route MR-40
 costed as "moves part of the trail outside the database" — still true, still not chosen.
+
+
+### C20 — FE-D1: the send-first in-flight window is accepted, and send semantics do not change under deadline
+
+**Decided (operator ruling, 28 September 2026, recorded by the frontend session).** All six writing
+screens (`visit/[id].tsx` check-in/check-out and recording, `consent`, `samples`, `report`,
+`voice-note`) **try the send first and queue only when it gets no answer** (`sendOrQueue`,
+`apps/field/src/sync/outbox.ts:323`). That leaves a lost-write window: if the process dies *during*
+the send, before either the success branch or the catch-block enqueue runs, nothing is on disk, and
+the server may or may not hold the write.
+
+**Accepted for now.** No change to send semantics during the week ending in the demo. FE-D1's test
+(`apps/field/src/routes/offline-day.test.tsx`) proves that **queued writes survive process death and
+flush exactly once**. It does **not** prove that no write is lost, and the file says so.
+
+**If enqueue-first is adopted later, it is all six screens in one pass**, not one screen at a time.
+Doing it screen by screen leaves the app with two send paths and two sets of durability guarantees,
+and an MR cannot tell which screen they are on.
+
+**Recorded alongside, not acted on:** the whole queue is **one AsyncStorage value under one key**
+(`sync.queue.v1.<userId>`, `async-storage-store.ts:111`). If that write is ever interrupted partway,
+the loss is the entire queue, not one item. `loadQueueState` would read the torn value as
+`unreadable` (FE-W44), so every writer refuses rather than overwrites, and that stops a second loss.
+It does not recover the first.
