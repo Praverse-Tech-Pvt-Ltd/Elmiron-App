@@ -111,15 +111,13 @@ function Test-Healthy([string]$Url) {
   }
 }
 
-# Native commands run through cmd so their stderr cannot become a PowerShell error record.
+# Native commands run through cmd so their stderr cannot become a PowerShell error record. The
+# directory is set inside cmd itself, and anything run from it is named with .\ -- with
+# NoDefaultCurrentDirectoryInExePath set, cmd will not run a bare `gradlew.bat` from the current
+# directory (found on the first real run).
 function Invoke-Native([string]$WorkingDir, [string]$CommandLine, [string]$LogFile) {
-  Push-Location $WorkingDir
-  try {
-    & cmd.exe /d /c "$CommandLine > `"$LogFile`" 2>&1"
-    return $LASTEXITCODE
-  } finally {
-    Pop-Location
-  }
+  & cmd.exe /d /c "cd /d `"$WorkingDir`" && $CommandLine > `"$LogFile`" 2>&1"
+  return $LASTEXITCODE
 }
 
 function Get-GitDirt {
@@ -339,7 +337,7 @@ function Invoke-Build {
 
   Write-Step 'Building: :app:createBundleReleaseJsAndAssets --rerun assembleRelease (about 5-10 min)'
   $log = Join-Path $logDir 'gradle.log'
-  $gradle = 'gradlew.bat :app:createBundleReleaseJsAndAssets --rerun assembleRelease --no-daemon --max-workers=3'
+  $gradle = '.\gradlew.bat :app:createBundleReleaseJsAndAssets --rerun assembleRelease --no-daemon --max-workers=3'
   if ((Invoke-Native $AndroidDir $gradle $log) -ne 0) {
     Get-Content $log -Tail 40 | ForEach-Object { Write-Host "      $_" }
     throw "the Gradle build failed; full log: $log"
