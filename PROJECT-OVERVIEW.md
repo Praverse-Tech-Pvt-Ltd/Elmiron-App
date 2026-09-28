@@ -19282,3 +19282,40 @@ git status --porcelain --untracked-files=all -- services packages .github   # ex
 
 **ROOM.** FE-D1 is done as ruled. Nothing is blocked on frontend. The next calendar event in CI is
 backend's: the BE-W106 warning on 10 October.
+
+### FE-D1 — closed
+
+**28 September 2026.** FE-D1 is accepted and delivered as PR
+[#3](https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App/pull/3) against `main`, **not merged**.
+
+| | |
+| --- | --- |
+| Commit 1 | `0cea0f8` — the offline-day test, ruling C20, `docs/contract-requests.md` (CR-1, CR-2), the FE-D1 section |
+| Commit 2 | `fba2572` — `docs/screen-inventory-2026-09-28.md` (accepted) and CR-3 |
+| PR | https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App/pull/3 |
+| CI | run `36386592890`: **success**. `typecheck · lint · format · unit tests` passed, and `migrations · Gate 0 RLS suite · rollbacks` passed. The `packages/ui` jest timeout seen once locally under load did **not** recur on CI |
+| Screen inventory | `docs/screen-inventory-2026-09-28.md` |
+
+**Commit identity.** Until now this repository had no local git identity, and the machine had no
+global one. It is now set **repo-locally** to `Devpt1904 <138771880+Devpt1904@users.noreply.github.com>`,
+the account `gh` is signed in as, using its GitHub noreply address, as the operator chose.
+Authorship of the frontend paths (`apps/field`, `packages/ui`, `packages/ui-tokens`), reported and
+not rewritten:
+
+```
+     24 Dev Patel <softwares@praversetech.com>
+     61 Maanav Shah <126866160+Rabbitshah@users.noreply.github.com>
+     13 Pratham Shrivastav <152979348+coutprat@users.noreply.github.com>
+```
+
+40 of Maanav's 61 commits under those paths touch **only** frontend paths and docs. One earlier
+commit (`a60423a`, 2026-09-07, "Frontend: the field app and manager console, all four design
+phases") is already authored as `Devpt1904`. This is recorded for the operator's attention. No
+history was changed.
+
+**Boundary, corrected by the operator.** `packages/ui` and `packages/ui-tokens` are
+frontend-owned. The shared contract is `packages/core`. From FE-D2 on, the check is:
+
+```
+git status --porcelain --untracked-files=all -- services packages/core .github scripts
+```
