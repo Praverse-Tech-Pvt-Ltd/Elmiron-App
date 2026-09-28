@@ -19130,3 +19130,155 @@ to do. What remains is the operator's: `BE-W21`, `BE-W32`, `BE-W93`, `BE-W106`, 
 `BE-W109`, and `BE-W95` behind `FE-W70`'s decision — plus the grant-level half of `BE-W102`, which
 no in-function mechanism can close and which would need a change at the PostgREST layer or in front
 of it.
+
+### FE-D1 — the offline day, proven across process death; and the 30 September correction
+
+**28 September 2026, frontend track, branch `fe-d1-enqueue`.** The brief was written from records
+that turned out to be wrong in two places. The code won both times, and this section says where.
+
+#### Correction — 30 September is retired, and it is not the first red
+
+**30 September 2026 cannot turn CI red.** MR-50 B3 (22 September) removed the date check from
+`packages/core/src/field/transcript-v0.expiry.test.ts`. The file now only checks that the
+`TranscriptV1` contract accepts a Hinglish fixture. Earlier sections of this file still describe it
+as a live deadline, and they are left as written because they were true when written. Read them
+through this correction:
+
+- `PROJECT-OVERVIEW.md:73`: "carries a CI deadline of 30 September 2026"
+- `PROJECT-OVERVIEW.md:1756`: "fails after **30 September 2026** unless a `TranscriptV1Schema` is exported"
+- `PROJECT-OVERVIEW.md:1936`: "has a CI deadline of 30 September"
+
+The same stale claim is in `handoff-frontend.md:259` (not ours, so filed as
+`docs/contract-requests.md` CR-2) and `docs/escalations-week8.md:127`.
+
+**What can actually turn CI red on a future date.** Every entry below compares against the real
+clock, and each was checked in code. **All five are backend-owned. None are frontend's.**
+
+| File:line | Literal | What fires | First red | Owner |
+| --- | --- | --- | --- | --- |
+| `.github/workflows/backup.yml:85` | `DEFERRAL_EXPIRES: '2026-10-15'` | `TODAY > DEFERRAL_EXPIRES` (`:107`), **only if `BACKUP_DESTINATION` is unset** (`:100-104`) | **Conditional:** from 2026-10-16 UTC; weekly cron first on Mon 2026-10-19. Asked as CR-1 | BE-W11 |
+| `services/api/supabase/migrations/20260923000300_…:44-45` | `be_w106_settings_model_decision_due = 2026-10-31T00:00:00Z` | `ci.yml:208` `check:decision-debt`, every push/PR; `due_at <= now()` | 2026-10-31 00:00 UTC (**warns from 2026-10-10**) | BE-W106 |
+| `.github/workflows/migration-drift.yml:117` | `--accept-undeployed-until 2026-10-31` | `today > acceptUntil` (`check-migration-drift.mjs:190`), push and daily | 2026-11-01 UTC, if production is still undeployed | BE-W40 / MR-42 |
+| `services/api/supabase/migrations/20260907000900_…:67-68` | `ucpmp_sample_cap_decision_due = 2026-11-06T00:00:00Z` | the same `check:decision-debt` step, cap unset and `due_at <= now()` | 2026-11-06 00:00 UTC (**warns from 2026-10-16**) | BE-W21 |
+| ~~`packages/core/src/field/transcript-v0.expiry.test.ts`~~ | ~~`2026-09-30T23:59:59+05:30`~~ | retired MR-50 B3 | never | — |
+
+Checked and inert: fixture `expiresAt` / `hardExpiresAt` / `purgeAfter` in
+`services/mock/src/fixtures.ts:463,589,591` (nothing compares them to the clock); the
+`2026-09-30T18:35Z` month-boundary fixtures in `server-window.test.ts` and `doctors-route.test.tsx`
+(fixed inputs); `pulled-store.test.tsx`'s `Date.now() - offset` (relative).
+
+#### Correction — the queue was never unwritten
+
+The brief said "nothing writes to the sync queue". **Six screen actions write to it**, all through
+`sendOrQueue` (`apps/field/src/sync/outbox.ts:323`): check-in / check-out and recording on
+`visit/[id].tsx` (`:376`, `:322`), consent (`consent/[visitId].tsx:240`), samples
+(`samples/[visitId].tsx:183`), call report (`report/[visitId].tsx:101`) and voice note
+(`voice-note/[visitId].tsx:232`).
+
+- **Persisted by:** AsyncStorage (SQLite on Android), one key per signed-in user,
+  `sync.queue.v1.<userId>`, with the whole state written as a single value (`async-storage-store.ts:51-52, 111`).
+- **Unique across a restart by:** `SyncQueueItem.id` (`packages/core/src/field/sync.ts:97-98`). This
+  is the request body's `id`, minted with `uuid.v4()` when the button is pressed
+  (`visit/[id].tsx:364`), copied into the queue row unchanged, and deduped server-side with
+  `on conflict (id) do nothing` (`20260813000200_offline_sync.sql:192, 240, 259, 273`).
+
+What was really missing is narrower, and it's what this session built: **no test crossed the full
+cycle** of real screen, process death, rebuild from disk, flush.
+
+#### What was built
+
+**No production code changed.** Option A was chosen (see C20). The wiring was left alone, and one
+test was added: `apps/field/src/routes/offline-day.test.tsx`.
+
+- **Screen:** `app/visit/[id].tsx`, the **check-in / check-out** buttons, pressed as real buttons.
+- **Offline day:** Visit A check-in and check-out → **process death** → the new process opens Visit
+  A and must offer neither action (its stage is rebuilt from disk alone) → Visit B check-in and
+  check-out → **death** → signal returns, a fresh process flushes → one more flush in the same
+  process, then another after a further death.
+- **Death is `jest.resetModules()`.** It discards every module's memory: the queue owner, reducer
+  state, and the stock AsyncStorage mock, whose data lives *inside* its module. The only survivor is
+  a test-scope `mockDisk` standing in for SQLite. Every runtime module is `require`d fresh after each
+  reset.
+- **Asserted:** each minted id is on disk the moment its press resolves; four distinct ids,
+  `queued`, in press order with the right entity; the server receives exactly
+  `[check_in A, check_out A, check_in B, check_out B]` under the ids minted two deaths earlier; both
+  later flushes send nothing. The fake server deliberately does **not** dedupe, so a client
+  double-send would be counted.
+- **Legal constraint, asserted:** every stored payload's keys are exactly
+  `__queueEntity, coordinates, id, occurredAt, source, visitId`, and coordinates are
+  `accuracyMetres, capturedAt, latitude, longitude`. A visit id, a position and a time. Nothing
+  prescribing- or patient-shaped fits, and the test fails if a field is added.
+
+**What it does not prove, and the file says so first.** It proves that *queued writes survive
+process death and flush exactly once*. It does **not** prove that *no write is lost*: the screens
+send first and queue only on no answer, so a death **during** the send leaves nothing on disk. That
+in-flight window is accepted as ruling **C20** (`.ai-collab/decisions.md`). It also does not prove
+server-side dedupe, device behaviour, or survival of a torn AsyncStorage write.
+
+#### Negative control, run against the final file
+
+The `sendOrQueue` call at `visit/[id].tsx:376` was replaced with a bare send
+(`await createCheckIn/Out(body)`, outcome forced to `sent`), then restored from a byte copy.
+`git diff --quiet` on the screen confirmed no diff against HEAD afterwards.
+
+```
+== before   PASS  √ queued writes rebuild from disk after death and flush exactly once, by the id minted at press (1140 ms)
+            Tests: 1 passed, 1 total
+== unwired  FAIL  × queued writes rebuild from disk after death and flush exactly once, by the id minted at press (2218 ms)
+            Expected value: "99f311da-1471-4766-88ba-ed9752fbc630"
+            Received array: []
+            Tests: 1 failed, 1 total
+== restored PASS  √ queued writes rebuild from disk after death and flush exactly once, by the id minted at press (1114 ms)
+            Tests: 1 passed, 1 total
+```
+
+It fails at the first press: the id the screen minted never reaches the disk.
+
+#### A defect of mine the test caught
+
+The first draft copied `visit-route.test.tsx`'s location mock, which leaves out
+`coordinates.capturedAt`. `checkInRequest` takes `occurredAt` from it (`capture/visit.ts:144-150`),
+so the stored rows had no `occurredAt`. A real flush would have refused them as
+`unreadable_payload` (`outbox.ts:752-758`). The payload-key assertion caught this before the flush
+ran. The real `takeFix` does supply `capturedAt` (`capture/location.ts:87`), so the fixture was
+corrected to match. **Written down, not fixed:** `visit-route.test.tsx`'s mock has the same
+omission. It is harmless there, because that suite never replays a row.
+
+#### Recorded, not acted on
+
+- **The queue is one AsyncStorage value under one key.** A write interrupted partway loses the
+  entire queue, not one item. FE-W44 makes it read as `unreadable`, so nothing then overwrites it,
+  but nothing recovers it either. Noted in C20.
+- **Enqueue-first**, if adopted, is all six screens in one pass (C20).
+
+#### Environment, stated because it cost time and will cost the next session the same
+
+- **The local install was a half-installed mix.** Root `node_modules` had 10 entries, and
+  `apps/console/node_modules` held `next 16.3.3` / `react 19.2.8`, which the lockfile never declares.
+  `pnpm install --frozen-lockfile` then failed with `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY … next@16.3.3`.
+  **The lockfile is fine**: CI installs it frozen on the same commit. The error came from pnpm's
+  installed-state record (`node_modules/.pnpm/lock.yaml`). Every `node_modules` was **moved** (not
+  deleted) to the session scratchpad, and a fresh frozen install succeeded. `pnpm-lock.yaml` was not
+  modified. With `nodeLinker: hoisted`, the runners are in the **root** `node_modules`, not the app's.
+- **`packages/ui-tokens/dist` was stale** (no `typography.figure`), so jest failed on import.
+  `pnpm turbo run build --filter "@fieldforce/field^..."` fixed it.
+- An early `npx jest` found no local jest and fetched `jest@30` into the **global npx cache**.
+  Nothing in the repo was touched. Use `pnpm exec jest` from `apps/field`.
+
+#### Evidence
+
+`@fieldforce/field`: vitest **40 files / 613 tests**, jest **22 suites / 163 tests**, all passing.
+`tsc --noEmit` clean; `eslint` and `prettier --check` clean on the new file.
+
+**Boundary.** Nothing under `services/` or `packages/` changed, and nothing in `.github/`. Checked
+against the working tree **including untracked files**. A `main...branch` diff would be empty for
+uncommitted work whatever it touched, which is a check that cannot fail:
+
+```
+git status --porcelain --untracked-files=all -- services packages .github   # expect: empty
+```
+
+#### Where it stopped, and why
+
+**ROOM.** FE-D1 is done as ruled. Nothing is blocked on frontend. The next calendar event in CI is
+backend's: the BE-W106 warning on 10 October.
