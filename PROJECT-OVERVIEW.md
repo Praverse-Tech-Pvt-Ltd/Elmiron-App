@@ -19370,3 +19370,41 @@ investigated to a named mechanism rather than re-run to green.
 api project; an actor filter versus an id watermark — and making that choice silently inside an
 unrelated commit is how a test architecture drifts. The cost of leaving them is stated in the
 register: **CI's database job fails roughly one run in two.**
+
+#### W1-A — CI DID NOT RUN on HEAD, and I could not make it
+
+**The brief asked for CI by workflow name with a SHA equal to HEAD. There is no such run, and that
+is the record.**
+
+| | |
+| --- | --- |
+| HEAD | **`325fcc0`**, pushed to `worktree-ai-platform-phase-a` (draft PR #2, head confirmed `325fcc0`) |
+| Runs for `325fcc0` | **none** |
+| Runs for `fd52f24` and `4388541` | **none** |
+| Last run on this branch | **`CI` · `pull_request` · `cb604e0` · success**, 28 Sep **06:41Z** — the previous session's commit |
+
+**What was ruled out, each by a command rather than a guess.** The `CI` workflow is `active`
+(`actions/workflows`); Actions is enabled for the repo with `allowed_actions: all`
+(`actions/permissions`); `ci.yml`'s trigger is a bare `on: pull_request:` with **no** path or draft
+filter; the PR is open and its `headRefOid` **is** `325fcc0`; and the account is a normal user token
+with `repo` and `workflow` scope, not a `GITHUB_TOKEN` (which would explain it, since pushes made
+with one do not create runs). **Other branches ran the same morning** — `fe-d4-demo` at 08:30Z,
+08:43Z, 08:52Z and 09:03Z, all green — so the runner fleet was working within the hour.
+
+**Not determinable from this machine:** org-level Actions billing, which is the remaining plausible
+cause and needs `admin:org` to read. `gh pr checks 2` reports *"no checks reported"*.
+
+**And I cannot force it: `ci.yml` has no `workflow_dispatch` trigger.** The routes a human has are
+to re-push, to mark PR #2 ready for review, or to close and reopen it — all of which fire
+`pull_request`, and none of which I should do unasked to a shared PR.
+
+**So the strongest statement this session can make about the pushed commits is the LOCAL one**, and
+it is deliberately not dressed up as CI: `pnpm ci:local` steps 1–16 pass and **step 17, the database
+job, fails on the two pre-existing intermittents registered as `BE-W116` and `BE-W117`**. Whether CI
+would go green is unknown, and note that CI has been green on this branch throughout — including at
+`cb604e0` — which is itself weak evidence that those two intermittents bite less often on CI's load
+profile than on this machine's one-run-in-two.
+
+**Adding `workflow_dispatch` to `ci.yml` would have made this diagnosable and is the obvious small
+fix. It is not done here:** it changes a CI trigger, which is a change to the mechanism that guards
+every branch, and it belongs in a commit whose subject is that and not this.
