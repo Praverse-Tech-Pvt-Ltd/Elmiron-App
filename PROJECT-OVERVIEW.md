@@ -19491,3 +19491,137 @@ The branch changes `apps/field`, `packages/ui` and `PROJECT-OVERVIEW.md`, and no
   - an unused `eslint-disable` in `beat-plan-route.test.tsx`;
   - `visit-route.test.tsx`'s location mock has no `capturedAt`.
 - **The stale 30 September line** is still in `handoff-frontend.md:259`; CR-2 is open.
+
+### FE-D3 — three read-only checks, the remaining state fixes, the Android offline day, the demo path
+
+**28 September 2026, branch `fe-d3-states` off `fe-d2-daily`** (PRs #3 and #4 are both still
+open). PR [#5](https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App/pull/5) targets
+`fe-d2-daily`. **Not merged.**
+
+**CI on PR #5:** run `36393477043`, **success**. Both `typecheck · lint · format · unit tests` and
+`migrations · Gate 0 RLS suite · rollbacks` passed, at `7c75c98`. The commit adding this section
+follows.
+
+**How the session ran.** The first session stopped after two permission-check no-verdicts, as the
+rule then required, with only A1 done. The operator dropped that rule and resumed. The first
+calls of the resumed session also got no verdict, and the session was still in auto mode rather
+than manual approval. A2 and A3 were done read-only in the meantime; writes then went through.
+
+#### Part A — read-only findings
+
+**A1 — Jest platform. Measured nothing; open for next week (operator ruling).**
+- As configured today (jest-expo's default preset, which runs as iOS): **27 suites, 203 tests,
+  all passing.**
+- With the jest-expo **Android** preset, run once through a temporary config outside the repo:
+  **27 of 27 suites fail at load, and 0 tests run.** Every file fails the same way:
+  `SyntaxError … @react-native/jest-preset/jest/setup.js: Unexpected token (31:12)`. That is Flow
+  type syntax, which the Android preset's Babel transform (caller `platform: 'android'`) does not
+  strip. It is a harness incompatibility, not app behaviour, so the Android gap is **unmeasured**.
+- The tree was clean afterwards. The preset was not switched and not debugged. **Open item.**
+  Part B item 0 stands in for it this week.
+
+**A2 — Location accuracy.**
+- **The payload records it.** `takeFix` sets `coordinates.accuracyMetres` from the fix
+  (`capture/location.ts:83`). That is the radius; nothing records "approximate" as such.
+- **The server stores it.** `record_check_in` and `record_check_out` write `p_accuracy_metres` to
+  `check_ins.accuracy_metres` and `check_outs.accuracy_metres`
+  (`20260811000100_commercial_schema.sql:322, 339`; latest definition
+  `20260911000300_check_in_starts_the_visit.sql:20, 76-81`).
+- **So the condition for CR-4 ("neither does") is not met, and CR-4 was not added.**
+- **What remains, as a question for the operator to rule on:** the geofence verdict **ignores
+  accuracy** (`…000300….sql:70-74`, `v_distance <= geofence_radius_metres`). An approximate fix a
+  few kilometres wide is judged inside or outside on its centre point, and nothing marks a check-in
+  as approximate except the size of the number.
+
+**A3 — The analysis screen.**
+- **What it shows:** one AI coaching analysis of a visit. Findings with titles and details, cited
+  transcript quotes with timestamps, "Written by the system from the transcript", and a Reply
+  action (`app/analysis/[id].tsx`).
+- **Who writes it:** the **AI track**. That is `public.analyses`, with model, provider and rubric
+  fields. Managers review it in the console; they do not write it. **Nothing real produces an
+  analysis:** only test fixtures insert rows, and the speech vendor (BE-W32) is blocked on
+  labelled audio.
+- **Where the data comes from:** the **mock only**. It is `services/mock/src/fixtures.ts:507`,
+  with `modelProvider: 'gemini'`, `modelVersion: 'flash-3'` and realistic findings.
+- **Gate or flag:** none. The Coaching tab is always shown.
+- **Could it be mistaken for working AI output?** **Yes.** It is therefore **out of the demo path**
+  (it is not labelled as sample content), and **Part B item 6 (its empty state) was skipped** as
+  out of scope.
+
+#### Part B — state fixes
+
+Each item was written test-first, shown red on the old code, then green. One commit each, pushed
+as it landed.
+
+| # | Item | Commit | Red on the old code | Green |
+| --- | --- | --- | --- | --- |
+| 0 | The offline day on **Android**, through A4 | `c119268` | **Negative control:** A4's `router.back()` replaced with a no-op gave "Expected: 1, Received: 0" back-navigations | 1/1, before and after the control. Field jest 204 |
+| B1 | A failed storage read never leaves launch spinning | `010572f` | **No defect on the current code.** `hasCompletedFirstRun` catches internally (`progress.ts:27-35`) and so does the session restore (MR-28 C2); the inventory's survey read the call site and missed the catch. A **pinning test** was added. Negative control: rethrowing in that catch reproduced the spin ("Unable to find … redirect:/onboarding/location") | 5/5, with no diff to `progress.ts` |
+| B2 | Beat plan: a failed sync is not "still syncing" | `3b53b84` | unit: "expected 'syncing' to be 'stops-unreachable'"; route: "Unable to find … Your stops could not be loaded" | 33/33 unit, 12/12 route |
+| B3 | Doctor profile says "not visited yet" only when it is true | `1aa984e` | while loading, and when visited but with no server clock, both rendered "You have not visited this doctor yet." | 4/4 (new route test) |
+| B4 | Day-end: a failed mileage fetch is not "no distance yet" | `8d78a96` | route: "Unable to find … /Distance not available/"; ui: "No distance yet. It appears once …" for a null distance, including while loading | route 9/9, ui 10/10 |
+| B5 | Mileage shows no total until the month is known | `47f6b59` | in flight rendered `<Text>0.0 km</Text>` | 3/3 (new route test) |
+| B6 | Analysis empty state | — | **Skipped**, per A3 | — |
+
+**Item 0, in detail.** This is the same day and the same assertions as FE-D1's offline test: four
+writes, two process deaths, one flush, no loss, no duplicates, exact order. The difference is that
+`Platform.OS` is `'android'` on every launch. A small stack stands in for the router:
+- The first visit pushes A4, and the test answers it on the real screen.
+- A4 must return to the visit before the day carries on.
+- A4's answer persists on the same disk as the queue, so it is shown once and not again after
+  either death.
+
+Nothing is pre-seeded to skip A4.
+
+**Tests corrected rather than regressed**, each named in its commit:
+- `day-end-route.test.tsx` ("keeps the visit counts when only the mileage window is refused")
+  asserted "No distance yet" for a *failed* fetch.
+- `packages/ui` `DayEndScreen.test.tsx` ("says the distance is absent rather than showing a zero")
+  asserted the same for a null distance.
+
+**Suite totals at close:** field vitest **637**, field jest **213**, ui vitest **4**, ui jest
+**254**, all passing. `tsc` is clean for field and ui; lint has 0 errors.
+
+#### Part C — demo path
+
+**`docs/demo-path-2026-10-01.md`** (`7c75c98`). It covers the ordered walkthrough, what each screen
+really talks to, its known gaps, and its dependence on CR-3 or the demo API address.
+- **SAMPLE DATA:** day-end, and call report's visit and doctor labels.
+- **Left out:** coaching and analysis (A3), mileage, and consultation recording.
+- **Preconditions it lists, with owners:**
+  - the app points at the **local Supabase by LAN address**, because production is unseeded
+    (`supabase.ts:6-12`);
+  - seed coverage is **for the backend owner to confirm**;
+  - `EXPO_PUBLIC_API_BASE_URL` is set to the mock's LAN address;
+  - the recording flag is unset.
+
+#### Boundary
+
+```
+$ git status --porcelain --untracked-files=all -- services packages/core .github scripts
+(exit 0, 0 lines)
+$ git diff --name-only fe-d2-daily...fe-d3-states -- services packages/core .github scripts
+(exit 0, 0 files)
+```
+
+The branch changes 16 files (+799 / −16) in `apps/field`, `packages/ui` and `docs`. There are no
+new dependencies, and the jest preset is not switched.
+
+#### Open items, written down and not acted on
+
+- **A1:** the jest-expo Android preset does not load (Flow syntax in
+  `@react-native/jest-preset/jest/setup.js:31`). For next week.
+- **A2:** the geofence ignores accuracy, and there is no approximate flag. This is for the operator
+  to decide whether to raise with the backend owner; CR-4 was not added because its condition was
+  not met.
+- **A3:** the Coaching tab is always visible and shows mock AI output that nothing labels as sample
+  data. It is excluded from the demo; labelling or hiding it is not ruled.
+- **CR-3** is unanswered: day-end, mileage, call-report labels, coaching, analysis and reply read
+  the mock.
+- **Call report's labels** could come from the pulled store instead of the mock (inventory §d).
+  That is a frontend change, not done.
+- **The day-end visits fetch still discards the error detail.** It now says "not available", but
+  not why.
+- **Carried from FE-D2:** A4 and A2 copy versus the design; S4's layout versus Home-in-manual-mode;
+  `packages/ui/jest.config.cjs:39` eslint; `visit-route.test.tsx`'s location mock without
+  `capturedAt`; the stale 30 September line in `handoff-frontend.md:259` (CR-2).
