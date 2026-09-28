@@ -34,7 +34,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { PRODUCT_QA_FAILED_MESSAGE, answerProductQuestion } from '../_shared/core.ts';
 import type { ControlPlaneRpc, LlmProvider } from '../_shared/core.ts';
-import { createStubProvider, stubProviderRefusal } from '../_shared/stub-provider-DELIBERATELY-BROKEN.ts';
+import { createStubProvider, stubProviderRefusal } from '../_shared/stub-provider.ts';
 
 interface RequestBody {
   readonly question?: unknown;
