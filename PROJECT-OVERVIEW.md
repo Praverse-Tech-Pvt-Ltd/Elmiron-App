@@ -20606,3 +20606,57 @@ D2 costs it rather than building it.
 session is evidence that any model works — `#5` is open and `C31` did not guess it. And every number
 above is from **this machine's local stack**; there is still no handset result anywhere in this
 repository and no result of any kind against a hosted Supabase project.
+
+#### W1-B postscript — C5's CI step, proven both ways, and the two defects it caught on the way
+
+**The step was wrong the first time, and CI is what said so.** Recorded in this order because the
+order is the lesson.
+
+| Run | SHA | Result |
+| --- | --- | --- |
+| 1 | `20e727a` | **FAILURE** at `Start Supabase and apply migrations` — `failed to read file: open packages/core/dist/field/gateway/providers.js: no such file or directory` |
+| 2 | `af3ef26` | **SUCCESS**, both jobs. Serve step printed `ai-gateway answered HTTP 401`; the suite reported `✓ tests/ai-gateway.spec.ts (9 tests)` |
+| 3 | `147c4e7` | **FAILURE**, deliberately — the red proof |
+| 4 | `f8c4f7c` | the revert |
+
+**Defect 1, mine: `supabase start` resolves the Edge Functions' import graph.** It does not merely
+start containers. `_shared/core.ts` imports `packages/core/dist`, which is gitignored and built in
+the *other* job, so the database job died before a single migration test ran — and **building inside
+the serve step was two steps too late.** The build is now its own step before `supabase start`.
+
+**It passed locally only because `dist` was already present from an earlier build.** That is the
+canonical shape of *"a command that exits 0 is not a command that worked"*, and it is the second
+time in one session that a local green was an artefact of stale state — `BE-W119` was the first.
+
+**The green run answers the question C5 exists to ask.** The risk was never that the gateway tests
+fail; it was that they **skip themselves** and a green CI means nothing about the gateway.
+`✓ tests/ai-gateway.spec.ts (9 tests)` — not `9 skipped` — is the evidence that they ran on a clean
+runner where `BE-W119`'s stale-bundle problem cannot occur. The full API suite in CI:
+**`Tests 938 passed | 4 skipped (942)`**.
+
+**The red proof, with the prediction made before the run.** `147c4e7` pointed the function's import
+at a module that does not exist, and its commit message named the two steps that could catch it. It
+failed at the earlier one:
+
+```
+failed to read file: open
+services/api/supabase/functions/_shared/stub-provider-DELIBERATELY-BROKEN.ts:
+no such file or directory
+```
+
+**One honest correction, because "CI went red" is worthless if two causes are collapsed into one.**
+That run *also* failed `format:check`, and that was my mistake rather than part of the proof — the
+break was written with a PowerShell `-NoNewline` write that stripped the file's trailing newline.
+**The import failure is the proof; the missing newline is noise.**
+
+**What is proven and what is not.** Proven: a function that cannot resolve its imports fails CI
+before any test runs, and the gateway suite genuinely executes. **Not provoked: a function that
+resolves but never answers** — the case the wait loop exists for. The loop is written and
+commented; it has not been made to fire.
+
+**And the Part A finding got stronger without being asked.** `main` moved again mid-session (PR #6,
+10:45Z), PR #2 went `CONFLICTING` a second time, and CI stopped again. **This branch loses CI
+silently on a cadence set by other people's merges**, because both sides append to the same shared
+documents and an append conflicts with every other append at the same end of a file. `BE-W118`
+covers the id half of that root cause; the CI half is why `workflow_dispatch` matters more than it
+looked.
