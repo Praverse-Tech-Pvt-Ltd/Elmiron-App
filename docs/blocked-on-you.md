@@ -1331,3 +1331,94 @@ row below is a decision.
 2. **5.13** — it is the only one whose cost is larger tomorrow than today, and the damage cannot
    be repaired afterwards because the ledger is append-only by design.
 3. **`FE-W70`** — the current behaviour keeps audio of a doctor who said stop.
+
+
+---
+
+## W1-A — 28 September 2026: eight answers, and what is still open
+
+**Eight rulings were given and recorded as `C20`–`C28` in `.ai-collab/decisions.md`** (nine ids —
+`C26` is the scores default this session was told to build to). This section marks the register rows
+they touch and restates, in one place, what remains.
+
+### Rows now RESOLVED
+
+| Row | Question | Answer | Recorded |
+| --- | --- | --- | --- |
+| **`#15` / `X4`** | Does "coaching is out of v1" cover AI Coach and AI Doctor on practice? | **No.** Practice simulations with no real doctor are **in scope**. `C4` is scoped to real visits | **`C21`**, `C22` |
+| **`#12` / `X1`** | Patient-detail detection, patient details in safety reports, patient-facing assistant | **No patient information anywhere in this app.** Any patient-related data is admin-only. No patient-facing assistant here — it belongs in the clinical project | **`C24`** |
+| **`#9` / `D8`** | Named medical / scientific approver for knowledge and AI prompts | **The operator.** `#16`'s built mechanism (a named admin + stored written attestation, three roles kept) is ratified | **`C25`** |
+| **`#16` / `X5`** | Content approver role | **Ratified as built.** No fourth role | **`C25`** |
+
+### Row PARTLY resolved — the one question that still needs you
+
+| Row | Resolved | Still open |
+| --- | --- | --- |
+| **`#14` / `X2`** | Scores exist on **practice simulations** and **LMS assessments**, visible to the **MR** and the **company admin**. No manager surface, no team averages, no rankings. Built to this default (`C26`) | **May a manager see an MR's practice scores?** |
+
+**The question, in one line: may a manager see an MR's practice simulation and assessment scores?**
+
+- **(a) MR-only** — *the default already built.* Keeps `constraints.md` intact
+  (*"Never add a ranking, score, rank, percentile or grade to `analyses` or the manager surface"*,
+  asserted by tests). Nothing to amend. §34's team averages stay out of scope permanently.
+- **(b) Manager-visible** — requires the recorded rule to be **formally amended in writing**, and it
+  **is employee monitoring**, which brings the `C8` reasoning and an HR/legal question with it. It
+  also makes register **`#17`** (may a manager see which AI features an MR used?) load-bearing
+  rather than adjacent.
+
+**No manager-facing score surface was built this session, in either case.**
+
+### Rows DEFERRED — `C28`
+
+**`#18` to `#26` are deferred, not blocking.** No work waits on them. They are listed here so the
+deferral is visible rather than implied by silence.
+
+| Row | Subject |
+| --- | --- |
+| `#18` | The named PV / DPDP signatory (`C3`, `blocked-on-you` 5.8) |
+| `#19` | Speech-to-text provider for **real** visits, on measured Hinglish accuracy (`BE-W32`, 4.2) |
+| `#20` | Consent from employees whose voices join the bake-off corpus (`E1`) |
+| `#21` | The notice a **doctor** reads before being recorded (`BE-W109`, `E2`) |
+| `#22` | May an adverse-event report carry patient information, and may it leave the platform (4.1) |
+| `#23` | Is a doctor's second answer a withdrawal or a separate answer (`BE-W95`, 5.14) |
+| `#24` | On withdrawal, must audio already on the phone be destroyed (`FE-W70`, 3.2) |
+| `#25` | Which consent-notice language an MR sees first (5.12) |
+| `#26` | The 72-hour and 120-second clock thresholds (5.10) |
+
+**Two things the deferral does not do, and both matter.**
+
+1. **`#26`'s two unratified numbers still bound `recorded_at` on every audio upload** (`C18`), not
+   only consent captures. Deferring the ratification ships two figures nobody has confirmed. That is
+   tolerable **only** because `C20` keeps the recording path switched off — it stops being tolerable
+   the moment the flag moves.
+2. **`#21` is the DOCTOR's notice. The REPS' notice is a different row and is NOT deferred.**
+   `blocked-on-you` **2.6** / `FE-W52` — six of eight claims in the reps' transparency notice false
+   or partly false, truthful wording sitting on branch `mr-46/fe-w52-notice-pending-approval` and
+   **not on `main`** since 21 September — is outside the `#18`–`#26` range and still needs approval.
+   It is the oldest thing on this page that a signature alone would close.
+
+### Rows STILL OPEN, and what each blocks
+
+**The two at the top block everything AI.** Neither is an engineering task.
+
+| Row | Question | Blocks |
+| --- | --- | --- |
+| **`#4` / `D1`** | **Where does the AI gateway run?** | **Every AI feature.** Nothing in this release that needs a model can start |
+| **`#5` / `D2`** | **Which AI provider, and may questions and answers leave India?** | **Every live AI call.** Residency is `ap-south-1`. For voice practice, an employee's recorded voice is the payload |
+| `#6` / `D3` | Approve `pgvector` | Vector retrieval only. Keyword search is the deliberate working fallback — **not blocking** |
+| `#7` / `D5` | The product catalogue, and who supplies approved labels / prescribing information | All real product content. **And it is the boundary `C23` must not cross** — a model may draft training text, never a product claim |
+| `#8` / `D6` | Market on the company or on the content | Built as *on the content*. An answer of "company" **reworks** AI-B1 rather than unblocking |
+| `#10` / `D9` | Notifications — build them, and by which channel | Anything in LMS or AI that wants to tell a user something. Measured in `AI-SPEC.md`; none exist |
+| `#11` | A PDF-reading component for knowledge upload | Document ingestion. Text can be pasted today |
+| `#14` | See above — the manager-score half | A manager-facing score surface |
+| `#17` | May a manager see which AI features an MR used, and when? | Built as **no**. Please confirm. Becomes load-bearing if `#14` is answered (b) |
+| `#2` / `BE-W106` | Should settings belong to a company? | Per-company AI entitlements and cost limits. **Dated 2026-10-31** |
+| `#1` / `BE-W21` | The UCPMP sample cap — value, dimension, whether `input` counts | Nothing downstream, but **CI goes red on 6 November**, warning from 16 October |
+| `#3` / `BE-W93` | The organisation's registered legal name for the consent notice | **The only item whose cost is larger tomorrow than today.** `consent_records` is append-only, so every consent captured before the name exists is permanently defective and cannot be amended |
+
+### If you answer only three
+
+**`#4`, `#5`, and your own admin account (`C25`).** The first two unblock roughly two-thirds of
+everything not started, and both are answerable in a meeting. The third is not a decision at all —
+it is a provisioning task, and without it **four-eyes refuses every approval `42501`**, which means
+`C23`'s entire draft-to-approved path cannot be exercised by a human even once.

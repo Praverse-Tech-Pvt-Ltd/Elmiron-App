@@ -2193,3 +2193,192 @@ auditing unauthenticated calls lets anon grow an append-only table at one row pe
 **Not closed, and the register says so:** grant-level refusals happen before the function body
 runs. Closing those needs a change at or in front of the PostgREST layer, which is the route MR-40
 costed as "moves part of the trail outside the database" — still true, still not chosen.
+
+
+## Operator decisions — 28 September 2026 (recorded in W1-A)
+
+**Nine rulings, recorded before any work started.** Eight are the operator's `R1`–`R8`; the ninth
+(`C26`) is the safe default this session was instructed to build to on scores. They are numbered
+`C20`–`C28`, continuing the existing namespace — the highest previously used was `C19` (MR-54).
+
+Each names the register row it resolves or defers. The register numbering `#1`–`#36` is the
+client-facing one in `docs/ai-platform/decisions-pending.html`; `D`/`X` ids are
+`docs/ai-platform/phase-a-recon.md` §3/§4.
+
+| Ruling | Id | Resolves / defers |
+| --- | --- | --- |
+| R1 no real recording | **C20** | ratifies the `C3`/`#18` posture; makes it a decision |
+| R2 simulation in scope | **C21** | **resolves `X4` / `#15`** |
+| R3 AI analysis in scope | **C22** | resolves the in-scope half of `X4` / `#15` |
+| R4 LMS AI draft text | **C23** | new hard rule; bounded by `#7` / `D5` |
+| R5 no patient information | **C24** | **resolves `X1` / `#12`** |
+| R6 operator approves content | **C25** | **resolves `D8` / `#9`**; ratifies `X5` / `#16` |
+| (F1) scores, safe default | **C26** | resolves the buildable half of `X2` / `#14`; `#14` stays open |
+| R7 target 4 October 2026 | **C27** | — |
+| R8 real-doctor rows deferred | **C28** | **defers `#18`–`#26`** |
+
+**What these nine do NOT do.** They do not unblock a single live AI call. `#4` / `D1` (where the
+gateway runs) and `#5` / `D2` (which provider, and may data leave India) remain open, and every
+feature below needs both. That is stated here so a reader of this section alone cannot conclude
+that AI is now startable.
+
+
+### C20 — No real doctor conversation or recording in this release
+
+**Decided (operator).** The consultation-recording feature stays **built and switched off**. Its
+feature flag stays `false` in the repository and its production guard stays enforced — the app
+refuses to start if the flag is turned on against anything but a local target.
+
+**Resolves nothing. Ratifies** the posture that `C3` (the PV/DPDP signatory, register `#18`)
+forced. The difference is that the posture is now a decision rather than a consequence of a
+missing signature, so a later signature does not automatically switch it on.
+
+**What follows.** `transcript_analysis`, `pv_screening` and `complaint_screening` stay out of scope
+for this release whatever `#18` does later, because there is no real conversation for them to
+analyse. Their flags stay off.
+
+**Not chosen:** removing the feature. It is built, tested and flag-guarded; deleting it would throw
+away work that `#18` may release, and a deletion is not reversible the way a flag is.
+
+
+### C21 — AI doctor SIMULATION / PRACTICE is in scope
+
+**Decided (operator).** Practice simulations with no real doctor are in scope for this release.
+
+**Resolves `X4` / register `#15`.** The recorded rule *"coaching is out of v1"* (`C4`) is hereby
+**scoped**: it covers coaching on **real doctor visits**, which is employee monitoring (`C8`). It
+does **not** cover practice simulations an MR chose to run against a synthetic persona.
+
+**Why the distinction holds.** `C4`'s reasoning was about analysing a real consultation without a
+written §3.6 and a named human. A simulation has no doctor, no patient, no consent ledger and no
+clinical content — none of `C4`'s reasons reach it.
+
+**Not chosen:** reading `C4` as covering everything coaching-shaped. That reading would have
+blocked the only AI work this release can do.
+
+
+### C22 — AI analysis is in scope for practice and learning
+
+**Decided (operator).** AI analysis is in scope for practice simulations, performance feedback on
+those simulations, product knowledge, objection handling, communication, and learning progress.
+
+**Resolves** the in-scope half of `X4` / `#15`, with `C21`.
+
+**Bounded by `C26`.** "Performance feedback" does **not** authorise a manager-facing score.
+
+**Bounded by `C20`.** No analysis of a real visit, a real transcript or real audio.
+
+
+### C23 — LMS may use AI-generated text as DRAFT knowledge
+
+**Decided (operator).** The LMS may use AI-generated text extensively, **as draft knowledge to be
+refined and finalised later**.
+
+**The hard rule this creates, and it is the most dangerous line in this release.**
+**AI-generated text is never born approved.** It enters as a **draft** version, is labelled with
+the fact that a model produced it, and can only become approved through the existing four-eyes
+path (`20260924000600_knowledge.sql`). **No seed, script or migration may insert approved
+knowledge.**
+
+**The line `C23` does not cross, and it is a regulatory line, not an engineering preference.**
+`C23` permits AI-generated **training** text. **Product claims, indications and prescribing
+information are regulated promotional content and must come from the client** (register `#7` /
+`D5`). A model may draft how to *explain* a product; it may not be the source of what the product
+*does*. A draft must therefore show which market and which product it claims to be about, so a
+reviewer can see when a draft has crossed from training into promotion.
+
+**Not chosen:** trusting the approver to notice. A review screen that does not show the market and
+product a draft claims makes four-eyes a formality.
+
+
+### C24 — No patient information anywhere in the MR app
+
+**Decided (operator).** No patient information anywhere in this app. Where patient-related data
+exists at all, it is **admin-only**.
+
+**Resolves `X1` / register `#12`.** The existing guardrails stay —
+`packages/core/src/field/gateway/guardrails.ts` refuses before any model call — and **no
+patient-facing assistant is built in this repository**. `patient_education` stays absent from
+`AI_FEATURES`.
+
+**Not chosen:** adding patient tables "for later". `constraints.md` — *"Zero patient or clinical
+data in this repo. Not even placeholder tables."* — is untouched.
+
+
+### C25 — Content approval is performed by the operator
+
+**Decided (operator).** The operator is the named approver for knowledge and for AI prompt
+versions.
+
+**Resolves `D8` / register `#9`**, and ratifies `X5` / `#16` — the mechanism (a named `admin`
+holding the approve action plus a stored written attestation, three roles kept) was already built
+by AI-C1 and is now confirmed as the intended shape.
+
+**The consequence the operator must act on.** The four-eyes rule holds: the author may never
+approve their own content. **So the operator needs their own `admin` account, separate from whoever
+drafts.** With one admin account, every approval is refused `42501`. This is account provisioning
+for a human, not an engineering task.
+
+**Not chosen:** a medical-reviewer role. A fourth role may never exist here (`constraints.md`).
+Medical sign-off is a **process** fact — a named admin who is the medical reviewer — recorded in
+the attestation text.
+
+
+### C26 — Scores: the safe default, and the question that remains
+
+**Decided (build to the safe default; one question still open).** Scores exist on **practice
+simulations** and **LMS assessments**, visible to **the MR themselves** and to the **company
+admin**. **Not on any manager surface**, and **no team averages or rankings**, until the recorded
+rule is amended in writing.
+
+**Resolves the buildable half of `X2` / register `#14`. Does not resolve `#14`.** The open question
+is put to the operator in `docs/blocked-on-you.md`: *may a manager see an MR's practice scores?*
+
+**Why the default is the safe one.** `constraints.md` — *"Never add a ranking, score, rank,
+percentile or grade to `analyses` or the manager surface"* — is asserted by tests
+(`packages/core/src/field/analysis.ts:7-10`). Building to MR-and-admin visibility keeps that rule
+intact. Building to manager visibility would break it, and a build may not break it.
+
+**What each answer costs.** (a) MR-only — the rule stands, nothing to amend, §34's team averages
+stay out. (b) Manager-visible — the rule must be **formally amended in writing**, and it becomes
+**employee monitoring**, which brings the `C8` reasoning and an HR/legal question with it. Register
+`#17` is the adjacent unanswered question about whether a manager may see AI usage at all.
+
+**Not built this session, in either case:** a manager-facing score surface.
+
+
+### C27 — Target: the MR field app functionally complete by 4 October 2026
+
+**Decided (operator).** The target is 4 October 2026.
+
+**Recorded with its limit, because a target met on paper and not in the app is this project's named
+failure mode.** `docs/ai-platform/AI-SPEC.md` carries a page headed *"What 4 October can and cannot
+include"* setting each in-scope feature against this date. The short form: **nothing that needs a
+live model can be built until `#4` and `#5` are answered**, and neither is an engineering task.
+What is buildable without them is the draft-labelling and approval path, the route wiring, and the
+console review screen.
+
+
+### C28 — The real-doctor decisions are DEFERRED, not blockers
+
+**Decided (operator).** Register rows **`#18` to `#26`** — the PV/DPDP signatory, the speech vendor
+for real visits, the doctor's notice, what a withdrawal means, and the consent clocks — are
+**deferred**. No work waits on them.
+
+**Resolves nothing. Changes the status** of nine rows from *blocking* to *deferred*, which is a
+real change: `#18` (`C3`) sat at rank 3 of the unblocking table in `docs/ai-platform/INVENTORY.md`
+§D3, gating ~9 items. Those items are now **out of this release** rather than waiting.
+
+**Two consequences recorded rather than deferred with them.**
+
+1. **`#26`'s two clocks still decide whether a recording can be filed at all**, and since `C18`
+   they also bound `recorded_at` on every audio upload. Deferring the ratification does not make
+   the unratified defaults go away; it means the app ships with two numbers nobody has confirmed.
+   That is acceptable **only** because `C20` keeps the recording path off.
+2. **`#21` is the DOCTOR's notice. The reps' notice is a different row and is not deferred.**
+   `blocked-on-you` 2.6 / `FE-W52` — the reps' transparency notice, six of eight claims false or
+   partly false — is outside the `#18`–`#26` range, is still live on `main`, and `C28` does not
+   touch it.
+
+**Not deferred:** `#1` (UCPMP cap, CI red 6 November), `#2` (per-company settings), `#3` (registered
+legal name, cost accrues daily), `#4`–`#11`, `#14`, `#17`, and `#27`–`#36`.

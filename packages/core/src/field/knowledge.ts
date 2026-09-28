@@ -38,6 +38,17 @@ export const KNOWLEDGE_DOCUMENT_TYPES = [
 export const KnowledgeDocumentTypeSchema = z.enum(KNOWLEDGE_DOCUMENT_TYPES);
 export type KnowledgeDocumentType = z.infer<typeof KnowledgeDocumentTypeSchema>;
 
+/**
+ * W1-A E1 / `C23`. Who produced the text.
+ *
+ * `C23` permits AI-generated text as DRAFT knowledge. An approver applies different care to a
+ * model's draft than to a colleague's, and cannot if it is not labelled — so the label is a
+ * column, not a convention. `human` is the default; a model's draft must say so.
+ */
+export const KNOWLEDGE_AUTHORSHIPS = ['human', 'ai_generated'] as const;
+export const KnowledgeAuthorshipSchema = z.enum(KNOWLEDGE_AUTHORSHIPS);
+export type KnowledgeAuthorship = z.infer<typeof KnowledgeAuthorshipSchema>;
+
 export const KNOWLEDGE_VERSION_STATUSES = [
   'draft',
   'in_review',
@@ -77,6 +88,10 @@ export const KnowledgeDocumentVersionSchema = z.object({
   body: z.string().min(1),
   /** Where the text came from — the source document, edition, page. */
   sourceReference: z.string().min(1),
+  /** W1-A E1 / `C23`. `human` or `ai_generated`. Shown on the review screen before approval. */
+  authorship: KnowledgeAuthorshipSchema,
+  /** The model that produced the draft, as the vendor names it. Null iff `authorship` is human. */
+  authoringModel: z.string().nullable(),
   effectiveFrom: IsoDateSchema,
   /** Past this date the version is excluded from search. Computed at read, never stored. */
   reviewDueOn: IsoDateSchema.nullable(),
