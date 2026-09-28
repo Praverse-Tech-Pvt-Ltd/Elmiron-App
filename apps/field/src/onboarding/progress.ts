@@ -23,6 +23,30 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  */
 const FIRST_RUN_KEY = 'onboarding.firstRunCompletedAt';
 const BATTERY_STEPS_KEY = 'onboarding.batteryStepsDone';
+const MICROPHONE_ANSWERED_KEY = 'onboarding.microphoneRationaleAnsweredAt';
+
+/**
+ * FE-D2 first run — whether A4 (the microphone rationale) has been answered, either way.
+ *
+ * **A read that fails answers "answered", the opposite of `hasCompletedFirstRun`, on purpose.**
+ * Showing A4 twice is the nag the permission rules forbid; not showing it costs nothing, because
+ * the microphone is still asked inline the moment the rep records.
+ */
+export const hasAnsweredMicrophoneRationale = async (): Promise<boolean> => {
+  try {
+    return (await AsyncStorage.getItem(MICROPHONE_ANSWERED_KEY)) !== null;
+  } catch {
+    return true;
+  }
+};
+
+export const markMicrophoneRationaleAnswered = async (at: string): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(MICROPHONE_ANSWERED_KEY, at);
+  } catch {
+    // Lost on this launch only. A4 may show once more, which the read-failure rule above limits.
+  }
+};
 
 export const hasCompletedFirstRun = async (): Promise<boolean> => {
   try {
@@ -68,7 +92,7 @@ export const saveBatteryStepsDone = async (ids: readonly string[]): Promise<void
 /** Test seam, and the reset an MR would need if they changed phones. */
 export const forgetOnboarding = async (): Promise<void> => {
   try {
-    await AsyncStorage.multiRemove([FIRST_RUN_KEY, BATTERY_STEPS_KEY]);
+    await AsyncStorage.multiRemove([FIRST_RUN_KEY, BATTERY_STEPS_KEY, MICROPHONE_ANSWERED_KEY]);
   } catch {
     // Nothing to do. The caller cannot act on this either.
   }

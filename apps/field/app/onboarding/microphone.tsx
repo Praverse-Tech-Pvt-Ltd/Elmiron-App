@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react';
+import { PermissionsAndroid } from 'react-native';
 import { useRouter } from 'expo-router';
 import { BodyText, Button, Heading, Label, Screen } from '@fieldforce/ui';
+import { RECORD_AUDIO } from '../../src/onboarding/microphone-gate';
+import { markMicrophoneRationaleAnswered } from '../../src/onboarding/progress';
 
 /**
  * A4 — the microphone, asked at the first real visit and never at sign-in.
@@ -8,9 +11,14 @@ import { BodyText, Button, Heading, Label, Screen } from '@fieldforce/ui';
  * **Two design decisions are load-bearing here. Neither is cosmetic.**
  *
  * **1. The deferral.** Asking for a microphone before the MR has seen a single
- * benefit is the abandonment moment. This route is reached from a visit that has
- * already started — `shouldPromptForMicrophone` in `src/onboarding/permissions.ts`
- * returns false for `'sign-in'` and that is asserted by a test.
+ * benefit is the abandonment moment. `shouldPromptForMicrophone` in
+ * `src/onboarding/permissions.ts` returns false for `'sign-in'` and that is asserted by a test.
+ *
+ * **FE-D2 — how it is reached (operator ruling).** The design's "Before your first visit": the
+ * first time a visit is OPENED, `visit/[id].tsx` shows this screen if the microphone is not
+ * granted and it has not been answered (`microphone-gate.ts`). "Allow the microphone" raises the
+ * system prompt for RECORD_AUDIO; "Not now" raises nothing. Either answer is remembered, and this
+ * screen is not shown again. Until FE-D2 nothing navigated here and both buttons only went back.
  *
  * **2. The separation, which must not be collapsed into one line.** The MR's own
  * voice note and recording a consultation are different things with different
@@ -38,8 +46,19 @@ import { BodyText, Button, Heading, Label, Screen } from '@fieldforce/ui';
  */
 export default function MicrophoneRationale(): ReactNode {
   const router = useRouter();
-  const next = (): void => {
-    router.back();
+
+  /** Remember the answer, whichever it was, then back to the visit. */
+  const done = (): void => {
+    // eslint-disable-next-line no-restricted-syntax -- a RECORD of when this phone was answered
+    void markMicrophoneRationaleAnswered(new Date().toISOString()).then(() => {
+      router.back();
+    });
+  };
+
+  const allow = (): void => {
+    void PermissionsAndroid.request(RECORD_AUDIO)
+      .catch(() => 'denied')
+      .then(done);
   };
 
   return (
@@ -61,8 +80,8 @@ export default function MicrophoneRationale(): ReactNode {
         and you will be asked about it there — not here.
       </BodyText>
 
-      <Button label="Allow the microphone" onPress={next} variant="secondary" />
-      <Button label="Not now" onPress={next} variant="secondary" />
+      <Button label="Allow the microphone" onPress={allow} variant="secondary" />
+      <Button label="Not now" onPress={done} variant="secondary" />
     </Screen>
   );
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import { PermissionsAndroid, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 // The idempotency key for the request, generated on the device because the
 // contract says so: `id` "doubles as the server-side idempotency key", so a
@@ -48,6 +49,8 @@ import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { clockIn } from '../../src/today/territory-day';
 import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
+import { RECORD_AUDIO, microphoneRationaleDue } from '../../src/onboarding/microphone-gate';
+import { hasAnsweredMicrophoneRationale } from '../../src/onboarding/progress';
 
 /**
  * B4 / B5 / B6 — one visit, from arriving to leaving.
@@ -83,6 +86,27 @@ const SENT: Record<SendOutcome['kind'], (message: string) => string> = {
 export default function VisitRoute(): ReactNode {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+
+  /**
+   * FE-D2 first run — A4, "Before your first visit" (operator ruling). The first time a visit is
+   * opened, if the microphone is not granted and A4 has not been answered, A4 is shown; the rep
+   * comes back here from it. Nothing is requested by this: the prompt waits for A4's "Allow".
+   */
+  useEffect(() => {
+    let live = true;
+    void microphoneRationaleDue({
+      isAndroid: Platform.OS === 'android',
+      answered: hasAnsweredMicrophoneRationale,
+      granted: () => PermissionsAndroid.check(RECORD_AUDIO),
+    }).then((due) => {
+      if (live && due) router.push('/onboarding/microphone');
+    });
+    return () => {
+      live = false;
+    };
+    // Once per opening of the screen, by design.
+  }, []);
+
   /**
    * MR-21 B1. The visit and the doctor come from the store the pull maintains.
    *
