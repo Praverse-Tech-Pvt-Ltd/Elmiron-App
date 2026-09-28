@@ -19944,3 +19944,185 @@ dependency, and no real keystore.
 - **Re-seed on Thursday after 05:30 IST.**
 - Still running on this machine: Docker Desktop, the local Supabase stack, and the mock
   (`node services/mock/dist/index.js`, on `127.0.0.1:4010`).
+
+### FE-D6 — the demo APK: built, installed, smoke-tested on the emulator
+
+**28 September 2026, branch `fe-d4-demo`** (PR #6, not merged). The operator approved CMake
+3.31.6 and confirmed the demo address, **192.168.1.15**. The message carried the literal
+placeholder `<DEMO_IP>`, so it was asked rather than assumed. The operator had already tested
+that address **from a phone browser**: the Supabase health endpoint and the mock on 4010 both
+answered.
+
+**A correction from the operator, recorded as given:** resetting the local database in FE-D5 needed
+the operator's approval, even with a backup taken first. **Any destructive step, local or not, is
+stop-and-ask.** The outcome was fine; the process was not. This is now a standing rule for this
+work.
+
+#### 1 — The backup, kept outside the repo
+
+**`C:\dev\backups\local-db-before-reset-2026-09-28.dump`**. It is a copy of the FE-D5 scratchpad
+dump: **2,510,735 bytes**, with SHA-256 `e9ae5cc5…` matching the source. The source was left in
+place.
+
+#### 2 — CMake 3.31.6: installed, and pinned
+
+- **`sdkmanager` was not on this machine.** There was no `cmdline-tools` in the SDK and none
+  bundled with Android Studio. At the operator's choice (asked, not assumed), Google's **Android
+  SDK Command-line Tools** were installed:
+  - it is `cmdline-tools;latest` from the official repository manifest,
+    `commandlinetools-win-16111833_latest.zip`;
+  - **its SHA-1 was verified against the manifest before extracting**
+    (`57d04f2d75eb8e8fffc5000a987e5de4b5a63e9d`);
+  - it is installed at `Android/Sdk/cmdline-tools/latest`, and nothing existing was overwritten.
+- `sdkmanager.bat` now forwards to Google's new **`android` CLI**, and the Windows batch layer split
+  `cmake;3.31.6` at the `;`. The install used `android sdk install cmake/3.31.6`, the new CLI's
+  package naming. No licence prompt appeared, and none was accepted on the operator's behalf.
+- **Installed:** `cmake version 3.31.6`, with **ninja 1.12.1**, which is long-path-capable.
+  CMake 3.22.1 is untouched.
+- **The pin**, inside `android { }` in the generated, gitignored `apps/field/android/app/build.gradle`,
+  as `docs/gotchas.md` describes:
+
+  ```gradle
+  externalNativeBuild { cmake { version '3.31.6' } }
+  ```
+
+#### 3 — The build
+
+- **Prebuild:** a clean prebuild with `DEMO_CLEARTEXT_HOSTS=192.168.1.15`, at `900f9c8`:
+  - `app_name` = "Field Force (demo)";
+  - the network security config allows exactly one domain, `192.168.1.15`, and the manifest
+    references it once;
+  - **no tracked file changed** (`git status` before and after: identical);
+  - the CMake pin was absent after the prebuild, as expected, and was re-applied.
+- **The Gradle build** (`assembleRelease`, `--no-daemon --max-workers=3`):
+  - build environment: `JAVA_TOOL_OPTIONS=--enable-native-access=ALL-UNNAMED` (JDK 25), and
+    `ANDROID_HOME` set in the environment only;
+  - `EXPO_PUBLIC_SUPABASE_URL=http://192.168.1.15:54321` and
+    `EXPO_PUBLIC_API_BASE_URL=http://192.168.1.15:4010`;
+  - **the Supabase publishable key was read from `supabase status` straight into the environment:
+    never printed, never written to disk**;
+  - Coaching and recording unset.
+  - Result: **`BUILD SUCCESSFUL in 7m 33s`**.
+
+| | |
+| --- | --- |
+| APK | `C:\Users\devp0\StudioProjects\Elmiron-App\apps\field\android\app\build\outputs\apk\release\app-release.apk` |
+| Copy, safe from the next `prebuild --clean` | `C:\dev\demo-apk\field-force-demo-192.168.1.15-0.1.0.apk` |
+| Size | 102,069,979 bytes (98 MB) |
+| applicationId | `com.praversetech.fieldforce` |
+| Display name | **Field Force (demo)** |
+| versionName / versionCode | `0.1.0` / `1` (targetSdk 36) |
+| Signed with | **the debug key only**: `CN=Android Debug`, SHA-256 `fa:c6:17:45…3b:9c`, identical to `android/app/debug.keystore`. No real keystore was created |
+| Baked into the bundle | `http://192.168.1.15:54321`, `http://192.168.1.15:4010` (once each) |
+
+The one `127.0.0.1:4010` string in the bundle is `DEV_FALLBACK_API` in `src/api-target.ts`, which
+a release build never returns (FE-D2 2).
+
+#### 4 — Emulator smoke test
+
+On the `sdk_gphone16k_x86_64` emulator, at API 36.
+
+- **Install:** `adb install -r` gave **Success, with no signature clash.** The installed dev
+  client was signed with the same debug key, so Android treated the APK as an update and **nothing
+  was uninstalled**.
+  - Consequence: **the dev client's app data was kept** (its session, the first-run flag, its
+    queue).
+  - So this was **not a fresh install**, and first run and A4 were not exercised. Clearing the
+    data would have been a destructive step, so it wasn't done.
+- **Launch:** it did **not** stop at "not set up". It opened on **Sign in**; the old session was
+  not valid against the reset database.
+- **Sign-in:** as the local fixture MR (`demo-15eb525c-mr@example.test`; the password was typed
+  from the scratchpad and never printed). **It succeeded.**
+- **Home**, from local Supabase over `http://192.168.1.15`:
+  - "2 of 3 visits attended";
+  - next visit "Dr Asha Deshpande (DEMO)", Main clinic, Pune, scheduled 13:00;
+  - "Everything sent";
+  - **tab bar: Today, Doctors, Me, with no Coaching.**
+- **Beat plan:** "3 planned · 2 done", "Submitted — not yet approved". The stops are Dr Asha
+  Deshpande (next stop), Dr Vikram Rao (✓ 11:49 · 45 min) and Dr Meera Iyer (✓ 12:49 · 40 min):
+  the seeded day.
+- **Screenshots, outside the repo:**
+  - `C:\dev\demo-screenshots\fe-d6-home.png`
+  - `C:\dev\demo-screenshots\fe-d6-beat-plan.png`
+- **Logcat:** the app process (pid 7861, 211 lines, saved to
+  `C:\dev\demo-screenshots\fe-d6-logcat-app.txt`) has **no cleartext or network-security errors**.
+  The device-wide log has none for this app either.
+  - Its only E-level lines are platform noise: `ashmem: Pinning is deprecated since Android Q` and
+    WebView's `variations_seed_loader … Seed missing signature`.
+  - Android logged no explicit "network security config loaded" line. The positive evidence is
+    that **a release build targeting API 36 loaded real data over plain http from 192.168.1.15**,
+    which the platform otherwise blocks (FE-D4 4).
+- **What this proves, and what it doesn't:** it proves **the build**: the baked address, the
+  cleartext allowance for that one host, the debug-key release build, sign-in and the pull.
+  **It does not prove the network.** The emulator reaches `192.168.1.15` through the laptop's own
+  network stack (its virtual NAT), not across the Wi-Fi and not through Windows Firewall's inbound
+  rules, which is the route a phone takes. The phone route is covered by the operator's own
+  phone-browser test. Day end, the one screen that reads the mock, was not opened.
+
+#### 5 — Seed behaviour (read-only; not run again, not edited)
+
+- **Every run creates a NEW MR account with new credentials.**
+  - Each run draws a fresh `runId`, and the MR, manager and admin emails and the password are
+    derived from it (`seed-day.mjs:174, 182-185`).
+  - `--email` and `--password` exist, but reusing an email that already exists would collide.
+  - Sign in with the account the day's run prints.
+- **Earlier runs' data stays.** Each run is its own organisation, and nothing is torn down
+  (`consent_records` and `audit_log` are append-only by trigger). Only `pnpm db:reset` clears it,
+  and that is destructive, so it needs the operator's approval.
+- **A plain second run REFUSES:** "seed:day has already run against this database"
+  (`seed-day.mjs:196-226`). A 28 September run now exists, so **a plain `seed:day` on Thursday
+  will refuse.**
+- **The exact Thursday command**, from the repo root, **after 05:30 IST** (the plan uses the
+  database's UTC `current_date`), with `SUPABASE_DB_URL` unset:
+
+  ```
+  pnpm --filter @fieldforce/api run seed:day -- --another
+  ```
+
+  It adds a second demo organisation, on purpose, and destroys nothing. The script refuses any
+  non-localhost database.
+
+#### 6 — Demo document (`6c583ff`)
+
+"Before the demo" in `docs/demo-path-2026-10-01.md` gains:
+
+- **§0:** the phone-browser network test, and why it comes before any build. The address is baked
+  in, a build takes about ten minutes, and the laptop cannot test itself across its own firewall.
+- **§3.3:** the Thursday seed command, corrected to the script's real behaviour: `--another`, a new
+  account to sign in with, and `db:reset` only with approval.
+- **§3.4:** the two `netsh` commands to set up the mock (port proxy and firewall rule) and the two
+  to remove them, with `<DEMO_IP>` as a placeholder.
+- **§3.5:** local Supabase uses the CLI's well-known default keys and is reachable on the network
+  while it runs, so load fixture data only, and stop it afterwards.
+- **§5a:** every prebuild wipes the CMake pin, so re-apply it before building. The build
+  environment is listed, with the key in the environment only.
+- **§7:** Coaching stays hidden; the tab bar shows Today, Doctors and Me only.
+
+The document contains no credentials.
+
+#### Boundary
+
+```
+$ git status --porcelain --untracked-files=all -- services packages/core .github scripts
+(exit 0, 0 lines)
+```
+
+No change to `services`, `packages/core`, the migrations or the seed script. No new project
+dependency. The command-line tools and CMake are machine tools, as ruled. No real keystore.
+Nothing was uninstalled.
+
+#### Open items
+
+- **For next week: make the CMake pin permanent**, so a prebuild can't wipe it. For example, a
+  config plugin that writes `externalNativeBuild { cmake { version '3.31.6' } }` into the generated
+  `app/build.gradle`, proven at prebuild like the cleartext plugin.
+- **The smoke test did not exercise first run or A4**, because the dev client's app data was kept.
+  A fresh-install run on the phone will show them (demo-path P5). Clearing the emulator's data
+  needs approval.
+- **Re-seed on Thursday after 05:30 IST** with `-- --another`, and sign in with the new account.
+- **Day end (the mock) is untested on a device.** It needs the operator's port proxy and firewall
+  rule (§3.4). The operator's phone-browser test already reached 4010.
+- **Still running on this machine:** Docker Desktop, the local Supabase stack, the mock
+  (`127.0.0.1:4010`) and the emulator. Newly installed: Android SDK Command-line Tools and CMake
+  3.31.6.
+- **Carried:** CR-3 and CR-4 are open, and so is A1 (the jest Android preset).
