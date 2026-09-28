@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Linking, PermissionsAndroid } from 'react-native';
 import { useRouter } from 'expo-router';
-import { BodyText, Button, Heading, Label, Screen } from '@fieldforce/ui';
+import { BodyText, Button, Display, Label, Screen } from '@fieldforce/ui';
 import { requestLocationPermission } from '../../src/onboarding/location-permission';
 import { hasCompletedFirstRun } from '../../src/onboarding/progress';
 
@@ -80,7 +80,7 @@ export default function LocationDenied(): ReactNode {
 
   return (
     <Screen scrollable>
-      <Heading>Location is off, so you&apos;re doing this by hand</Heading>
+      <Display>Location is off, so you&apos;re doing this by hand</Display>
 
       <BodyText>
         Check-ins need a tap each and mileage won&apos;t add itself up. That&apos;s about 14 minutes

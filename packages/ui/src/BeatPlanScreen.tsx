@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Heading, Label } from './Text';
+import { BodyText, Heading, Label, Title } from './Text';
 import { Card } from './Card';
 import { ListItem } from './ListItem';
 import { Spinner } from './Spinner';
@@ -130,7 +130,7 @@ export const BeatPlanScreen = ({
   if (failure !== null) {
     return (
       <>
-        <Heading>Today&apos;s route</Heading>
+        <Title>Today&apos;s route</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </>
     );
@@ -139,7 +139,7 @@ export const BeatPlanScreen = ({
   return (
     <>
       <View style={styles.head}>
-        <Heading>Today&apos;s route</Heading>
+        <Title>Today&apos;s route</Title>
         {/*
           "9 planned · 6 done". The design also carries "31.7 km" here; that is
           `daily_mileage()`, server-side and without an endpoint, so it is absent

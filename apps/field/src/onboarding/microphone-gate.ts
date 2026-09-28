@@ -10,7 +10,7 @@
  * and `PermissionsAndroid.check`.
  *
  * This decides whether to SHOW the rationale. It never requests anything: the system prompt waits
- * for "Allow the microphone" on A4 itself.
+ * for "Turn on the microphone" on A4 itself.
  */
 
 export const RECORD_AUDIO = 'android.permission.RECORD_AUDIO';

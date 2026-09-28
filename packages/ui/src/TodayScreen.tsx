@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Figure, Heading, Label } from './Text';
+import { BodyText, Figure, Heading, Label, Title } from './Text';
 import { Banner } from './Banner';
 import { Button } from './Button';
 import { Card } from './Card';
@@ -192,7 +192,7 @@ export const TodayScreen = ({
   return (
     <>
       <View style={styles.head}>
-        <Heading>{dayLabel}</Heading>
+        <Title>{dayLabel}</Title>
         {dayAsOfLabel === null ? null : <Label muted>{dayAsOfLabel}</Label>}
         {startedLabel === null ? null : <Label muted>{startedLabel}</Label>}
       </View>

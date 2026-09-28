@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Figure, Heading, Label } from './Text';
+import { BodyText, Figure, Label, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Select } from './Select';
@@ -150,7 +150,7 @@ export const SamplesScreen = ({
   if (failure !== null) {
     return (
       <>
-        <Heading>Leave samples</Heading>
+        <Title>Leave samples</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </>
     );
@@ -161,7 +161,7 @@ export const SamplesScreen = ({
   return (
     <>
       <View style={styles.head}>
-        <Heading>Leave samples</Heading>
+        <Title>Leave samples</Title>
         <Label muted>{`${doctorName} · ${dateLabel}`}</Label>
       </View>
 

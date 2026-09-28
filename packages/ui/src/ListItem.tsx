@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { BodyText, Label } from './Text';
 import { StatusGlyph } from './StatusGlyph';
@@ -45,6 +46,10 @@ const styles = StyleSheet.create({
   detail: { flexDirection: 'row', alignItems: 'center', gap: tokens.space.xs },
   pressed: { backgroundColor: tokens.color.wash },
   selected: { backgroundColor: tokens.color.successFill },
+  // FE-D7 2. Each ground presses to its own darker step, as the design's `style-active` does. The
+  // offline row used to press to `wash`, which is `offlineFill` — a press that changed nothing.
+  offlinePressed: { backgroundColor: tokens.color.washPressed },
+  selectedPressed: { backgroundColor: tokens.color.successFillPressed },
   offline: {
     backgroundColor: tokens.color.offlineFill,
     borderWidth: 1,
@@ -53,6 +58,31 @@ const styles = StyleSheet.create({
   },
   disabled: { opacity: 0.5 },
 });
+
+/**
+ * The row's ground, pressed or not. Exported so the press can be asserted: React Native drives
+ * `pressed` through the responder system, and a fired press event does not flip it.
+ */
+export const listItemStyle = (
+  status: StatusKind,
+  {
+    pressed = false,
+    selected = false,
+    disabled = false,
+  }: { readonly pressed?: boolean; readonly selected?: boolean; readonly disabled?: boolean },
+): StyleProp<ViewStyle> => [
+  styles.base,
+  status === 'offline' ? styles.offline : null,
+  selected ? styles.selected : null,
+  disabled ? styles.disabled : null,
+  pressed
+    ? selected
+      ? styles.selectedPressed
+      : status === 'offline'
+        ? styles.offlinePressed
+        : styles.pressed
+    : null,
+];
 
 export const ListItem = ({
   title,
@@ -76,16 +106,12 @@ export const ListItem = ({
     </>
   );
 
-  const ground = [
-    styles.base,
-    status === 'offline' ? styles.offline : null,
-    selected ? styles.selected : null,
-    disabled ? styles.disabled : null,
-  ];
-
   if (onPress === undefined || disabled) {
     return (
-      <View accessibilityState={{ disabled, selected }} style={ground}>
+      <View
+        accessibilityState={{ disabled, selected }}
+        style={listItemStyle(status, { selected, disabled })}
+      >
         {body}
       </View>
     );
@@ -96,7 +122,7 @@ export const ListItem = ({
       accessibilityRole="button"
       accessibilityState={{ selected }}
       onPress={onPress}
-      style={({ pressed }) => [...ground, pressed ? styles.pressed : null]}
+      style={({ pressed }) => listItemStyle(status, { pressed, selected })}
     >
       {body}
     </Pressable>

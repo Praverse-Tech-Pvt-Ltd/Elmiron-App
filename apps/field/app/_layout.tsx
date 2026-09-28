@@ -18,6 +18,7 @@ import { PulledStoreProvider } from '../src/sync/pulled-store';
 import { ZoneCaveatBanner } from '../src/today/ZoneCaveatBanner';
 import { apiTarget } from '../src/config';
 import { ConfigurationError } from '../src/config-error';
+import { useReduceMotion } from '../src/reduce-motion';
 
 /**
  * The four faces Phase 1's scale actually asks for.
@@ -66,6 +67,7 @@ export default function RootLayout(): ReactNode {
 
 function App(): ReactNode {
   const [fontsLoaded, fontError] = useFonts(FACES);
+  const reduceMotion = useReduceMotion();
 
   /**
    * The first paint waits for the faces — but never indefinitely.
@@ -124,7 +126,18 @@ function App(): ReactNode {
                 reason the flusher and the store are here: this is where the zone lives.
               */}
               <ZoneCaveatBanner />
-              <Stack screenOptions={{ headerShown: false }} />
+              {/*
+                FE-D7 3. ONE transition for every stack screen. The design specifies none, and
+                the native stack's 'default' is whatever the Android version does, so it would
+                differ between the emulator and a rep's phone. With "Remove animations" on,
+                none at all. Tab switches stay instant, as before.
+              */}
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  animation: reduceMotion ? 'none' : 'slide_from_right',
+                }}
+              />
             </PulledStoreProvider>
           </OutboxFlusher>
         </AuthGate>

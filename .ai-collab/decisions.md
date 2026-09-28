@@ -2507,3 +2507,82 @@ that cannot run outside a local target, so the repository still names no vendor.
 organisation:** a vendor contract needs a **signatory**. `C29` deferred register `#18`, the
 PV/DPDP signatory, for *real doctor* work. A data processing agreement with an AI vendor needs
 someone to sign it whether or not a doctor is ever recorded.
+
+
+## Reviewer rulings — 28 September 2026 (recorded in W1-C)
+
+**Three rulings, and they are the first to use the new per-track id namespace `BE-C<n>`** — which
+is itself one of them (`BE-C3`). `C1`–`C31` keep their names; nothing is renumbered again.
+
+
+### BE-C1 — `BE-W115`: build the detection report, not the session-scoped flag
+
+**Decided (reviewer).** Build the **detection report** now. **Do not** build the session-scoped flag.
+
+**The reasoning, which is the part worth keeping.** A `BYPASSRLS` caller is an **insider holding the
+service key**. That is a different threat from the one four-eyes exists to stop — a colleague
+approving their own draft — and defending against it with a session flag buys little while adding a
+mechanism this schema has nowhere, with its own failure mode (a flag left set). **Detection is
+cheap, honest, and does not pretend the hole is closed.**
+
+**`BE-W115` stays OPEN** with this reasoning attached, rather than being closed by a partial fix.
+
+**The note that travels with it, restated because it is the load-bearing half:** the four-eyes path
+is **sound for every route an application offers**. A signed-in admin — including the operator under
+`C26` — reaches `approve_knowledge_version`, which refuses an author approving their own work, an
+empty attestation, and a version not in review. **What fails is the claim that bypass is
+impossible**, not the control itself. `C24`'s wording — *"no seed, script or migration may INSERT
+approved knowledge"* — is true as written and is not true of an **update**.
+
+**Not chosen:** closing `BE-W115` because detection exists. A report is evidence after the fact, not
+prevention, and recording it as closed would be the "a flag nobody displays is a log line with extra
+steps" failure in reverse.
+
+
+### BE-C2 — CR-4: the geofence verdict keeps the centre point; the check-in is FLAGGED as approximate
+
+**Decided (reviewer).** The geofence **verdict** keeps using the centre point. Do **not** widen or
+narrow it by accuracy. Instead, **flag the check-in as approximate when `accuracy_metres` exceeds the
+clinic's geofence radius.** Nothing is refused on the flag.
+
+**Why the verdict is left alone, in the reviewer's words: a verdict that silently changes meaning
+with fix quality is worse than one that is wrong the same way every time.** An accuracy-widened
+geofence would mean "inside" meant something different for every check-in, and no screen or report
+could say which. Wrong-but-consistent is auditable; wrong-but-variable is not.
+
+**The division of labour this sets, and it matches the repository's standing rule** (`constraints.md`,
+FIX-02 — *"Re-derive facts the server owns. Record facts the client witnessed."*):
+
+| | |
+| --- | --- |
+| **The flag** | a fact the **device reported**. Recorded, not re-derived |
+| **The verdict** | the **server's rule**. Re-derived at write time, ignoring what the client thinks |
+
+**Not chosen:** refusing an approximate check-in. A rep who granted approximate-only location (which
+the operator ruled acceptable at first run, FE-D2 10) would otherwise be unable to work at all.
+
+
+### BE-C3 — Ids are minted per track: `BE-C<n>` and `FE-C<n>`
+
+**Decided (reviewer). This is the fix for `BE-W118`.** Two tracks minted `C20` independently on
+28 September because each read the same file's highest id, which is only correct on one branch at a
+time.
+
+**From now on: the backend track mints `BE-C<n>`, the frontend track mints `FE-C<n>`, each from its
+own sequence, starting at 1.** The existing `C1`–`C31` **stay as they are** — they are cited in
+migrations, tests, screens and three registers, and renaming them would cost more than the ambiguity
+they carry.
+
+**Where this rule lives, because a rule only one track reads is not a rule.** It is recorded in
+three places on purpose:
+
+1. **`CLAUDE.md`** — loaded into every session of **both** tracks before any code is read. This is
+   the only file with that property, and an id-namespace rule is exactly the kind of claim that
+   belongs there: it holds for all time and needs no command to check it.
+2. **`docs/contract-requests.md`** — the file the two tracks use to talk to each other.
+3. **here**, because this is where decisions are recorded.
+
+**What it does not fix:** `BE-W` and `FE-W` work-item ids are minted the same way from
+`COMPLETION-PLAN.md`, and they are **already** per-track by prefix, so the same collision cannot
+happen to them. `BE-W118` stays open for the CI half of its root cause — two tracks appending to the
+same documents — which `W1-C` Part B addresses separately.

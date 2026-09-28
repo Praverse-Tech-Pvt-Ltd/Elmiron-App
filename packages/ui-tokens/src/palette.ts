@@ -47,6 +47,14 @@ export const brandPalette = {
   accentPressed: '#2F5233',
   /** Tint behind a success message. */
   successFill: '#E9F0E9',
+  /** Pressed state for `successFill` — a selected row under a finger. Phase 1's `style-active`. */
+  successFillPressed: '#DDE7DC',
+  /**
+   * The voice note's hold-to-record button (Phase 3 D7), with ink on it, and its pressed state.
+   * Holding IS pressing, so the pressed value is what the MR sees for the whole recording.
+   */
+  sage: '#B8CDB8',
+  sagePressed: '#9EB89E',
   /** Attention — "battery saver is on". Not a failure. */
   attention: '#7A5510',
   attentionFill: '#F7EFDD',

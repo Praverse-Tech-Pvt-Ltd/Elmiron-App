@@ -20126,6 +20126,184 @@ Nothing was uninstalled.
   (`127.0.0.1:4010`) and the emulator. Newly installed: Android SDK Command-line Tools and CMake
   3.31.6.
 - **Carried:** CR-3 and CR-4 are open, and so is A1 (the jest Android preset).
+
+### FE-D7 — polish pass on the demo-path screens, against the design files
+
+**28 September 2026, branch `fe-d7-polish`**, PR #7 against `main`, **not merged**.
+
+- The rehearsal APK in `C:\dev\demo-apk` was neither rebuilt nor replaced: still 102,069,979 bytes,
+  dated 15:36.
+- No behaviour changes.
+- Nothing changed in `services`, `packages/core`, the migrations or the seed script.
+- No new dependency. Coaching stays hidden.
+
+#### 0 — Merge of PR #6
+
+- PR #6 (`fe-d4-demo`) was merged **with a merge commit**, `25034f9`.
+- Its CI was green at its head `ab73370` (run 36409615455).
+- Every FE-D4…D6 hash cited in this file is an ancestor of `main`.
+- `fe-d7-polish` was branched off `main` at `25034f9`.
+
+#### 1 — The audit (`71b13e3`)
+
+**`docs/polish-audit-2026-09-29.md`**:
+
+- It compares every demo-path screen against `docs/design/phase1–3`: spacing, type, colour token,
+  copy, pressed state, transition, loading and empty.
+- **23 deviations**, ranked by how visible they are in a walkthrough.
+- Each is marked visual, copy, meaning or deliberate.
+- **No design file contains a `transition` rule**, so the designs specify no screen transition.
+
+#### 2 — Pressed states (`1022425`)
+
+In `packages/ui`, from the designs' `style-active` rules:
+
+- **The invisible presses.** `ListItem` and `SyncQueueIndicator` pressed to `wash`, which is the
+  same colour as `offlineFill` (`#F1EFE8`), so pressing an offline row or chip changed nothing.
+  - Offline now presses to `washPressed` (`#E5E2D9`).
+  - A selected row presses to `successFillPressed` (`#DDE7DC`).
+- **The D7 hold-to-record button** had no pressed state, and its label rendered white on the pale
+  sage fill.
+  - It is now sage `#B8CDB8`, and pressed and held `#9EB89E`: holding is pressing.
+  - Its label is ink.
+- **"Give the phone back"** presses from muted to ink, as Phase 3 draws it, instead of fading.
+- **Tokens.** `ui-tokens` gains `successFillPressed`, `sage` and `sagePressed`.
+  - It also gains **five contrast pairs** for the pressed grounds.
+  - `contrast.test.ts` and `tokens.test.ts` are green (59/59).
+- **Test:** `packages/ui/src/pressed-states.test.tsx` (10 tests).
+  - Each component exports its style function, `listItemStyle`, `syncQueueStyle`, `holdStyle` and
+    `handBackMuted`, which is the `Button.test.tsx` pattern (a fired press does not flip RN's
+    `pressed`).
+  - Each value is asserted, and so is that pressed differs from unpressed for every status.
+  - **Red:** the functions were first extracted unchanged. The run then failed on the real
+    defects: offline pressed `#F1EFE8`, expected `#E5E2D9`, and the hold label white, expected ink.
+  - **Then green.**
+
+#### 3 — Transitions (`5c975a6`)
+
+- Every stack screen uses **one** animation, `slide_from_right`. The native stack's `'default'`
+  varies by Android version.
+- With Android's **"Remove animations"** on, the animation is **`none`**, and the setting is
+  followed live.
+- Tab switches stay instant.
+- **Libraries, already installed:**
+  - expo-router's `Stack`, which is react-navigation's native stack on **react-native-screens**;
+  - React Native's **`AccessibilityInfo`**. `isReduceMotionEnabled` reads Android's global
+    transition animation scale, and a `reduceMotionChanged` event follows it.
+- Files: `apps/field/src/reduce-motion.ts` and `app/_layout.tsx`.
+- **Test:** `apps/field/src/routes/transitions.test.tsx` (3 tests).
+  - Red: "Unable to find ANIMATION slide_from_right".
+  - Then green.
+
+#### 4 — Top deviations fixed (visual or copy only)
+
+| Deviation (audit #) | Fix | Test | Commit |
+| --- | --- | --- | --- |
+| Screen titles 16.5px (1) | New `Title` (the unused 27px step) for Home, Beat plan, Samples, Call report, Queue and Day end. `Display` (30px) for A2, A3, A4, S4, A5–A8, A9 and the visit (B5), which the design draws at 29–32px | `DayEndScreen.test.tsx`: 16.5 → 27 | `01316c7` |
+| "Your Today" on Day end (2) | "Your day" | `DayEndScreen.test.tsx` | `01316c7` |
+| A4 labels (3) | "Turn on the microphone" / "I'll type my reports". Both stay secondary | Lookups changed in `first-run-microphone.test.tsx`, `offline-day-android.test.tsx` and `onboarding-permissions-route.test.tsx`: 5 red, then green. Demo path step 8 updated | `1a7086d` |
+| D7 hold label and pressed state (4, 5) | See item 2 | `pressed-states.test.tsx` | `1022425` |
+| Invisible offline press (6) | See item 2 | `pressed-states.test.tsx` | `1022425` |
+| B7 "See everything recorded today" primary (9) | Secondary | `DayEndScreen.test.tsx`: red `#35593A`, then green `#F1EFE8` | `8d26f90` |
+| Fiduciary line in lower case, "your rep's employer…" (12) | The sentence opens with a capital | `content.test.ts`, red then green | `8d26f90` |
+| "Give the phone back" fades (13) | Darkens to ink | `pressed-states.test.tsx` | `1022425` |
+
+#### Skipped deviations
+
+- **Meaning, skipped by rule:**
+  - Upcoming and cancelled beat-plan stops drawn as "saved on phone" (audit 7);
+  - A2's two benefits;
+  - A3's notification list (`NAMES_ARE_DERIVED` stays `true`, and so does its stale "design not in
+    repo" comment, in `onboarding/notifications.ts`);
+  - S4 as a standalone screen;
+  - B1, B3 and B7 counts and statuses;
+  - C5's inert cap;
+  - C6's "This visit".
+- **Deliberate:**
+  - consent answer buttons secondary, not white with an ink border (`ConsentScreen.tsx:25-28`);
+  - A4's two equal secondary buttons, not primary plus secondary.
+- **Visual, left:**
+  - side padding 16 vs 22 (every screen);
+  - the banner action variant (needs a new `Button` variant);
+  - the `Button` 6px focus-ring inset (it changes the hit area);
+  - "Back to the question" and the consent details link fade;
+  - the recording indicator tint;
+  - the consent spinner colour;
+  - `Select` pressed and open border;
+  - the failed queue item's pressed hue;
+  - the text field's clear ✕ fade.
+- **Visual, unreached:** the hero `Card` pressed colour (no hero card on the demo path is
+  tappable).
+
+#### 5 — Visual check
+
+At the operator's choice (asked first), the path was a **release build** of `fe-d7-polish`,
+installed over the emulator's release build.
+
+- **The update:** `adb install -r` gave `Success`. It is the same debug key, so nothing was
+  uninstalled, and the session was kept.
+- **The first build crashed on launch:** "Invalid application configuration: jwtAudience, siteUrl,
+  deepLinkScheme". Three `EXPO_PUBLIC_APP_*` values FE-D6 had set were missing from the environment.
+- **The rebuild with them set reused the stale JS bundle.** The environment is not a Gradle input,
+  and the bundle was still dated 16:47.
+- **The fix was `:app:createBundleReleaseJsAndAssets --rerun`.** Nothing was deleted.
+  - The bundle then carried both demo addresses and the new copy.
+  - The app launched with no crash.
+- **Worth knowing for the final APK:**
+  - the build needs all four `EXPO_PUBLIC_APP_*` values, as well as the Supabase URL, key and API
+    URL;
+  - after changing any `EXPO_PUBLIC_*` value, force the bundle task to re-run.
+
+Screenshots, outside the repo, in `C:\dev\demo-screenshots\fe-d7\`:
+
+- `01-home.png`
+- `02-beat-plan.png`
+- `03-beat-plan-row-pressed.png` (a row held under a finger)
+- `04-visit.png`
+- `05-voice-note.png` (sage hold button, ink label)
+- `06-call-report.png`
+- `07-queue.png`
+- `08-transparency.png`
+- `09-day-end.png` ("Your day", secondary button; the mock is unreachable, so the counts show as
+  not available)
+- `10-location-a2.png`
+- `11-battery.png`
+
+**Not shown on a device, covered by tests only:**
+
+- **A3, S4 and A4.** They are first-run or first-visit only, and already answered on this phone.
+  Showing them needs cleared app data, which is destructive.
+- **Samples and Consent.** They need a check-in, which writes data.
+- **The hold button pressed.** Holding it records audio.
+- **"Remove animations".** This was not toggled on the emulator.
+
+**The emulator now runs the FE-D7 build.** To go back to the rehearsal build:
+`adb install -r C:\dev\demo-apk\field-force-demo-192.168.1.15-0.1.0.apk`.
+
+#### Boundary
+
+```
+$ git status --porcelain --untracked-files=all -- services packages/core .github scripts
+(exit 0, 0 lines)
+```
+
+#### CI
+
+PR #7 at `8d26f90`, run **36414158453**: both jobs **pass**.
+
+- typecheck · lint · format · unit tests;
+- migrations · Gate 0 RLS suite · rollbacks.
+
+Locally:
+
+- `packages/ui`: 267/267;
+- `apps/field`: vitest 648/648 and jest 226/226;
+- `ui-tokens`: 59/59.
+
+#### Open items
+
+- Rehearsal findings, to be fixed before the final APK.
+- Carried: the CMake pin made permanent; the Thursday re-seed with `--another`; CR-3 and CR-4; A1.
 ---
 
 ### W1-A — simulation-only AI

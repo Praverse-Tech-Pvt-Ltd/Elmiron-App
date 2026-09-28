@@ -15,6 +15,26 @@
 > demonstration: a stale count had been reaching every session unchallenged. The snapshots
 > now live in `docs/graphify-notes.md`.
 
+## Decision ids are minted PER TRACK — `BE-C<n>` and `FE-C<n>`
+
+**This is here because it is the only file both tracks load before reading any code, and because it
+holds for all time and needs no command to check it.** Ruling `BE-C3`, 28 September 2026.
+
+| Track | Mints |
+| --- | --- |
+| Backend / AI platform | **`BE-C<n>`** |
+| Frontend / field app | **`FE-C<n>`** |
+
+Each sequence starts at 1 and is independent. **`C1`–`C31` keep their names** — they are cited in
+migrations, tests, screens and three registers, and renaming them would cost more than the ambiguity
+they carry.
+
+**Why the rule exists, so nobody "simplifies" it away.** On 28 September two sessions ran in parallel
+and **both minted `C20`** — each read the highest id in `.ai-collab/decisions.md`, which is only
+correct on one branch at a time. The frontend's reached `main` first, so nine backend rulings were
+renumbered across 15 files during a merge. **Nothing in the repository reserved a range or detected
+the duplicate.** `BE-W118`.
+
 ## The knowledge graph — CHECK WHETHER ONE EXISTS BEFORE RELYING ON IT
 
 **There is no checked-in graph. `graphify-out/` is gitignored, so its state is a fact about

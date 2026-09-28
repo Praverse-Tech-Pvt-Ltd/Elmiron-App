@@ -81,7 +81,7 @@ export { SyncQueueIndicator } from './SyncQueueIndicator';
 export type { SyncQueueIndicatorProps, SyncQueueState } from './SyncQueueIndicator';
 export { TOAST_DURATION_MS, Toast } from './Toast';
 export type { ToastAction, ToastProps } from './Toast';
-export { BodyText, Display, Figure, Heading, Label, Statement } from './Text';
+export { BodyText, Display, Figure, Heading, Label, Statement, Title } from './Text';
 export type { TextProps } from './Text';
 export { ListRow } from './ListRow';
 export type { ListRowProps } from './ListRow';

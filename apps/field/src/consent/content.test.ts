@@ -112,6 +112,12 @@ describe('the rep is named, never the logo alone', () => {
     expect(note).not.toMatch(/your rep/iu);
     expect(note).toMatch(/Data Protection Board of India/u);
   });
+
+  it('starts the sentence with a capital, whatever name it is given', () => {
+    // FE-D7 4. The consent route passes 'your rep' while no name reaches the client, and the
+    // doctor read "your rep's employer is the Data Fiduciary…" in lower case.
+    expect(fiduciaryNote(null, 'your rep')).toMatch(/^Your rep's employer is the Data Fiduciary/u);
+  });
 });
 
 describe('language names', () => {

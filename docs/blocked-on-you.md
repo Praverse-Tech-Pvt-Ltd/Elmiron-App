@@ -1544,3 +1544,153 @@ repository comes from. **A green result there is evidence about the local stack 
 
 **Every step above needs someone with production access. None of them is an engineering task**, and
 that is the point of listing them here rather than in a backlog.
+
+---
+
+## W1-C — 28 September 2026: one operator question, with a date
+
+### `BACKUP_DESTINATION` — is it an ORGANISATION secret? The repository does not have it.
+
+**One line, one command, and a date attached.**
+
+**The question.** Is `BACKUP_DESTINATION` set as an **organisation** secret scoped to this
+repository? Answer with `gh secret list --org Praverse-Tech-Pvt-Ltd` — it needs org admin, which this
+session does not have (`HTTP 403`).
+
+**Why it is asked this way rather than "is it set".** Two of the three levels were settled by command
+on 28 September and only the third is unreadable from here:
+
+| Level | Verdict |
+| --- | --- |
+| **Repository** | **NOT SET.** `gh secret list` returns exactly three: `SUPABASE_DB_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_URL` |
+| **Environment** | **cannot apply** — no environments exist, and `backup.yml` declares no `environment:` |
+| **Organisation** | **UNVERIFIED** — 403 |
+
+**The date, and it is no longer conditional.** `backup.yml:85` sets `DEFERRAL_EXPIRES: '2026-10-15'`.
+Unless an org secret supplies the value, the **Database backup** workflow goes **red from
+2026-10-16 UTC on any run, and first on the weekly schedule on Monday 2026-10-19.**
+
+**What the red means, and what it does not.** It is **not a broken backup**. The backup mechanism is
+built and proven end to end — it produces a dump, restores it into a scratch database and compares
+counts. **The artefact has nowhere lawful to go** (`BE-W11`, register `#33`). The workflow goes red to
+say that out loud on a date rather than let it be forgotten.
+
+**Engineering will not pick a destination.** A dump of this database holds the consent ledger,
+doctors' names, adverse-event report text and every auth identity. Choosing where that goes is
+register `#33` and it is yours.
+
+**Answered for the frontend as CR-1** in `docs/contract-requests.md`.
+
+---
+
+## W1-C Part B — stop losing CI, and the merge question
+
+### B1. Reducing the collision surface — the cheapest change that keeps one durable record
+
+**The mechanism, stated first because the fix follows from it.** Three documents are appended to by
+**both** tracks: `PROJECT-OVERVIEW.md`, `.ai-collab/decisions.md` and `docs/blocked-on-you.md`. An
+append goes at the **end of the file**, and two appends at the same end of the same file is a textbook
+git conflict. So every session on a long-lived branch conflicts with every session on the other track,
+and the conflict silently kills CI (`refs/pull/N/merge` cannot be built).
+
+**Measured, not argued: this happened FOUR times in one day.** 06:41Z green → conflict → merge →
+conflict → merge → conflict, the last one discovered while building the very check meant to catch it.
+
+#### The proposal: one append file per track per document, and the shared document points at them
+
+| Today | Proposed |
+| --- | --- |
+| `PROJECT-OVERVIEW.md` — both tracks append | `PROJECT-OVERVIEW.md` keeps everything up to today and gains a short, **stable** index at the end pointing at `docs/log/backend.md` and `docs/log/frontend.md`. New sections go in the per-track file |
+| `.ai-collab/decisions.md` — both tracks append | same split: `decisions-backend.md`, `decisions-frontend.md`, with the existing file keeping `C1`–`C31` and the pointer |
+| `docs/blocked-on-you.md` — both tracks append | unchanged. It is **operator-facing**, one voice is the point, and it is appended to far less often |
+
+**Two properties that make it cheap.** The index is *stable text* — it changes only when a track is
+added, so it does not conflict. And **nothing already written moves**, so no citation anywhere in the
+repository breaks; `PROJECT-OVERVIEW.md` stays the entry point and stays append-only.
+
+**What it costs a future reader, stated honestly because this is the real trade.** Today one file is
+the whole history in one chronological order. After the split, **a reader must open two files and
+interleave them by date to reconstruct what happened in a week.** That is a genuine loss — the
+`FE-D7` / `W1-B` interleaving in the current file is how a reader sees that two tracks were racing.
+The mitigation is that both files stay dated and append-only, so the interleave is mechanical; the
+cost is that it is no longer free.
+
+**Would it have prevented the CI loss? Yes, for these three files — and that was every conflict
+observed.** All four conflicts were in `PROJECT-OVERVIEW.md` and `.ai-collab/decisions.md`, nothing
+else. It does **not** prevent conflicts in shared *code*, and it should not be sold as doing so.
+
+**Would it have prevented the `C20` collision? No — and that matters.** Two tracks reading the same
+file's highest id would still both read `C19` if the sequences lived in separate files; in fact
+separate files make it *easier* to miss the other's high-water mark. **The id collision needed a
+different fix and got one: `BE-C3`'s per-track prefixes.** Recording that these are two problems with
+two fixes, rather than one, is the point of this paragraph — `BE-W118` conflated them and the
+conflation is what made the C20 renumbering a surprise.
+
+**Not done in this session, and deliberately.** Splitting `PROJECT-OVERVIEW.md` while PR #2 is open
+would itself be a large diff to the most conflict-prone file in the repository — the change would
+collide with the thing it is meant to fix. **It should land immediately after PR #2 merges, on `main`,
+as its own commit.** Registered as **`BE-W120`**.
+
+### B2. Should PR #2 merge to `main` now?
+
+**The case FOR.** PR #2 carries 82 migrations, the approval pipeline, the deployed gateway, the
+console review screen and a green CI run on HEAD with both jobs passing; it is 100-plus commits of
+work that `main` does not have, and **every day it stays open it costs more than it did the day
+before.** It conflicted four times in one session, and each conflict silently removed CI from the
+branch — so the longer it is open, the more of its own verification it loses, and the more of the
+frontend's merges it has to absorb one at a time. The frontend is also now **unblocked by its
+contents**: CR-3's answer is that six screens can leave the mock, and CR-4's answer ships as a
+migration that only exists on this branch. Nothing about the code argues for waiting — it is tested,
+CI-green, and the risky parts (the AI features) are behind flags that ship off.
+
+**The case AGAINST.** `main` is what the **4 October demo** is built from, and PR #2 changes the
+database under it: 82 migrations including a rewrite of `record_check_in`, which is on the demo's
+critical path (check-in is item 9 of the demo script). A merge four days before a demo puts a large,
+unrehearsed schema change beneath the one flow that must work, and **production is 63 migrations
+behind regardless**, so merging does not make the demo environment any more real — it only moves the
+risk closer. The AI work it carries is **inert without `#5`**, so merging buys no capability, only
+tidiness. And PR #2 is still marked **draft**, which is the author's own signal that it was not
+offered for merge.
+
+**Recommendation: merge it, but after the 4 October demo, and un-draft it now.** The conflict cost is
+real and compounding, and the AGAINST case is entirely about timing rather than content — which means
+it expires on 5 October. Until then, **merge `origin/main` into the branch at the start of every
+session** (this brief already requires it) and keep `BE-W120` and the mergeability check ready to land
+immediately afterwards. **Taking it out of draft now costs nothing and makes it reviewable**, which is
+the one thing that should not wait.
+
+**I have not merged it.** The brief forbids it and the decision is the operator's.
+
+### B3. The check that makes a conflicting PR loud — `.github/workflows/pr-mergeable.yml`
+
+**The trap this had to avoid.** A mergeability job inside `ci.yml` would be suppressed by the very
+condition it reports: if the PR conflicts, `ci.yml` does not run at all. **A workflow that cannot
+report its own absence is the exact shape this project keeps finding.**
+
+So it runs **from the default branch**, where no PR's conflict state can reach it: on a daily
+schedule (06:15 UTC, before the IST working day), **on every push to `main`** — which is *when* a PR
+becomes conflicting, because merging one PR is what conflicts the others — and by hand.
+
+**It reports on every open PR, not a hard-coded number**, so it does not go stale when #2 merges. It
+polls, because GitHub computes `mergeable` lazily and returns `UNKNOWN` until it finishes: **a null
+read is otherwise indistinguishable from `CLEAN`, and the check would pass on exactly the PRs it
+exists to catch.** An `UNKNOWN` that survives polling is a **warning**, not a failure — calling it a
+conflict would cry wolf on a PR opened seconds earlier.
+
+**Verified against live data rather than a fixture**, which was possible because the condition
+recurred while the check was being written:
+
+```
+$ gh pr list --state open --json number,title,mergeable,isDraft
+PR #2  CONFLICTING  draft=true  AI platform: recon, catalogue, LMS, ...
+conflicting=1   unknown=0
+```
+
+With that input the job prints a `::error` naming PR #2 and **exits 1**.
+
+**The limitation, stated because it is load-bearing: this check does nothing until PR #2 merges.**
+`schedule`, `push: branches: [main]` and `workflow_dispatch` all resolve against the **default
+branch**, and this file is on `worktree-ai-platform-phase-a`. GitHub will not run it — or offer it
+for dispatch — until it is on `main`. **So B3's protection is gated on B2's merge**, which is itself
+an argument for B2 that the FOR paragraph above does not make: the fix for the silent-CI problem
+cannot be switched on while the problem is happening.

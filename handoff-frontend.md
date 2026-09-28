@@ -256,8 +256,19 @@ Each now has a regression test naming the run that found it.
 
 1. **Do your own `handoff.md` §6 first.** It is unchanged and still correct: set the
    three GitHub secrets, dispatch `Audio retention` once by hand, seed production
-   reference data, chase contract I3 (CI deadline **30 September 2026**) and the
-   PV/privacy sign-off. Nothing in this document supersedes it.
+   reference data, chase contract I3 (~~CI deadline **30 September 2026**~~ — **RETIRED, see
+   below**) and the PV/privacy sign-off. Nothing else in this document supersedes it.
+
+   > **CORRECTION, 28 September 2026 (W1-C A4, answering CR-2). The 30 September CI deadline
+   > was RETIRED on 22 September** (MR-50 B3, ruling `C7`). `transcript-v0.expiry.test.ts` no
+   > longer checks a date — it validates a realistic Hinglish fixture instead, so **there is no
+   > date left that can fire.** Anyone following the line above would chase a deadline that
+   > cannot arrive. Contract I3 itself — the speech vendor — is still open and is now register
+   > `#19`, **deferred** by `C29`; it has no deadline attached.
+   >
+   > The deadline was retired _by answering its question_, which is the repository's own rule for
+   > retiring a deadline test rather than moving its date.
+
 2. **Ship the resumable upload as something a client can call.** This is the
    frontend's largest blocker: audio is recorded and never sent. Acceptance: a
    voice note recorded on the dev build reaches storage and the app stops saying
