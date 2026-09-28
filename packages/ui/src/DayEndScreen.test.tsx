@@ -65,8 +65,20 @@ describe('the day’s totals', () => {
   it('says the distance is absent rather than showing a zero', async () => {
     // A zero would read as "you travelled nowhere today", which is a different
     // claim from "the server has not computed a distance for this day".
+    //
+    // FE-D3 B4 — corrected. This asserted "No distance yet … once you have checked into more
+    // than one visit". A null distance with loading finished only ever means the fetch FAILED (a
+    // real zero arrives as a number), so that sentence gave a false reason. It now says the
+    // distance is not available.
     await render(<DayEndScreen {...props} distanceLabel={null} />);
-    expect(screen.getByText(/No distance yet/u)).toBeTruthy();
+    expect(screen.getByText(/Distance not available/u)).toBeTruthy();
+    expect(screen.queryByText(/No distance yet/u)).toBeNull();
+  });
+
+  it('FE-D3 B4: while loading, claims nothing about the distance', async () => {
+    await render(<DayEndScreen {...props} loading distanceLabel={null} />);
+    expect(screen.queryByText(/No distance yet/u)).toBeNull();
+    expect(screen.queryByText(/Distance not available/u)).toBeNull();
   });
 });
 

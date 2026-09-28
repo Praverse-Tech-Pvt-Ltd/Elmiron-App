@@ -98,7 +98,11 @@ describe('app/day-end.tsx — B7', () => {
     await render(<DayEnd />);
 
     expect(await screen.findByText('1 of 1')).toBeTruthy();
-    expect(screen.getByText(/No distance yet/u)).toBeTruthy();
+    // FE-D3 B4 — corrected. This asserted "No distance yet … once you have checked into more than
+    // one visit" for a mileage fetch that FAILED: it asserted the defect, a false reason given for
+    // a real error. The distance is unknown, and the screen now says it could not be fetched.
+    expect(screen.getByText(/Distance not available/u)).toBeTruthy();
+    expect(screen.queryByText(/No distance yet/u)).toBeNull();
   });
 });
 
