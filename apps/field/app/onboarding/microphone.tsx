@@ -16,9 +16,9 @@ import { markMicrophoneRationaleAnswered } from '../../src/onboarding/progress';
  *
  * **FE-D2 — how it is reached (operator ruling).** The design's "Before your first visit": the
  * first time a visit is OPENED, `visit/[id].tsx` shows this screen if the microphone is not
- * granted and it has not been answered (`microphone-gate.ts`). "Allow the microphone" raises the
- * system prompt for RECORD_AUDIO; "Not now" raises nothing. Either answer is remembered, and this
- * screen is not shown again. Until FE-D2 nothing navigated here and both buttons only went back.
+ * granted and it has not been answered (`microphone-gate.ts`). "Turn on the microphone" raises the
+ * system prompt for RECORD_AUDIO; "I'll type my reports" raises nothing. Either answer is
+ * remembered, and this screen is not shown again. Until FE-D2 nothing navigated here and both buttons only went back.
  *
  * **2. The separation, which must not be collapsed into one line.** The MR's own
  * voice note and recording a consultation are different things with different
@@ -80,8 +80,9 @@ export default function MicrophoneRationale(): ReactNode {
         and you will be asked about it there — not here.
       </BodyText>
 
-      <Button label="Allow the microphone" onPress={allow} variant="secondary" />
-      <Button label="Not now" onPress={done} variant="secondary" />
+      {/* FE-D7 4. The design's labels. Both stay `secondary`, for the reason above. */}
+      <Button label="Turn on the microphone" onPress={allow} variant="secondary" />
+      <Button label="I'll type my reports" onPress={done} variant="secondary" />
     </Screen>
   );
 }

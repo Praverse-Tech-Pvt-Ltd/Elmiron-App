@@ -259,16 +259,16 @@ const launch = () => {
    * it must send the rep BACK to the visit.
    */
   const throughA4 = async (view: Awaited<ReturnType<typeof open>>): Promise<void> => {
-    await view.findByText('Allow the microphone');
+    await view.findByText('Turn on the microphone');
     const backsBefore = mockBack.mock.calls.length;
-    await rtl.fireEvent.press(view.getByText('Allow the microphone'));
+    await rtl.fireEvent.press(view.getByText('Turn on the microphone'));
     expect(request).toHaveBeenCalledWith('android.permission.RECORD_AUDIO');
     // The interaction under test: A4 returns the rep to the visit.
     await rtl.waitFor(() => {
       expect(mockBack.mock.calls.length).toBe(backsBefore + 1);
     });
     await rtl.waitFor(() => {
-      expect(view.queryByText('Allow the microphone')).toBeNull();
+      expect(view.queryByText('Turn on the microphone')).toBeNull();
     });
     expect(view.getByText(/Dr Asha Deshpande/u)).toBeTruthy();
   };
