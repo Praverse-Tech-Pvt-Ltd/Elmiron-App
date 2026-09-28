@@ -363,7 +363,8 @@ function Invoke-Build {
   Write-Host ''
   Write-Host 'DEMO APK READY' -ForegroundColor Green
   Write-Host "  path:   $target"
-  Write-Host ("  size:   {0:N0} bytes ({1:N1} MB)" -f $size, ($size / 1MB))
+  # Invariant culture: on this laptop's en-IN culture {0:N0} printed 102,073,371 as "10,20,73,371".
+  Write-Host ([string]::Format([Globalization.CultureInfo]::InvariantCulture, '  size:   {0:N0} bytes ({1:N1} MB)', $size, ($size / 1MB)))
   Write-Host "  commit: $commit"
 }
 
