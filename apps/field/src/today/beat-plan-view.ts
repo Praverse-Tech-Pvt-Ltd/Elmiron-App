@@ -98,6 +98,11 @@ export type BeatPlanView =
   | { readonly kind: 'unreachable' }
   | { readonly kind: 'no-plan' }
   | { readonly kind: 'syncing'; readonly statusLine: string }
+  /**
+   * FE-D3 B2. The plan arrived, its stops did not, and the pull FAILED. Not `syncing`: nothing is
+   * on its way. The plan's own status is still stated, because that part did arrive.
+   */
+  | { readonly kind: 'stops-unreachable'; readonly statusLine: string }
   | { readonly kind: 'no-stops'; readonly statusLine: string }
   | { readonly kind: 'route'; readonly statusLine: string; readonly route: DayRoute };
 
@@ -149,7 +154,11 @@ export const beatPlanView = (input: BeatPlanViewInput): BeatPlanView => {
   const entries = input.entries.filter((entry) => entry.beatPlanId === plan.id);
 
   if (entries.length === 0) {
-    return status === 'ready' ? { kind: 'no-stops', statusLine } : { kind: 'syncing', statusLine };
+    // FE-D3 B2. Three answers, not two: settled with none, still arriving, or FAILED. `failed`
+    // used to fall into "syncing", presenting a sync that had stopped as one under way.
+    if (status === 'ready') return { kind: 'no-stops', statusLine };
+    if (status === 'failed') return { kind: 'stops-unreachable', statusLine };
+    return { kind: 'syncing', statusLine };
   }
 
   // `consents` is empty on purpose, not by omission. The pull does not carry consent RECORDS
@@ -194,6 +203,7 @@ export const onPlanDoctorIds = (view: BeatPlanView): ReadonlySet<string> | null 
     case 'unreachable':
     case 'no-plan':
     case 'syncing':
+    case 'stops-unreachable':
       return null;
   }
 };

@@ -190,6 +190,23 @@ describe('BE-W89 B4 — a plan whose stops have not arrived', () => {
     expect(screen.queryByText('Your stops are still syncing')).toBeNull();
   });
 
+  it('FE-D3 B2: when the pull FAILED, says the stops could not be loaded — not "syncing"', async () => {
+    mockStore.mockReturnValue(
+      pulled({
+        status: 'failed',
+        failure: { kind: 'unreachable' },
+        store: store({ entries: [] }),
+      }),
+    );
+    await render(<BeatPlanRoute />);
+
+    expect(screen.getByText('Your stops could not be loaded')).toBeTruthy();
+    expect(screen.queryByText('Your stops are still syncing')).toBeNull();
+    expect(screen.queryByText('This plan has no stops')).toBeNull();
+    // The plan that DID arrive is still stated.
+    expect(screen.getByText('Submitted — not yet approved')).toBeTruthy();
+  });
+
   it('says no route when there is genuinely no plan for today', async () => {
     mockStore.mockReturnValue(pulled({ store: store({ plans: [], entries: [] }) }));
     await render(<BeatPlanRoute />);

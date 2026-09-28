@@ -201,6 +201,17 @@ describe('BE-W89 B4 — a plan whose stops have not arrived is not an empty plan
   it('refuses to guess when the pull failed and no server date exists', () => {
     expect(beatPlanView(input({ status: 'failed', today: null })).kind).toBe('unreachable');
   });
+
+  it('FE-D3 B2: plan here, stops not, and the pull FAILED — that is not "syncing"', () => {
+    // Every status other than `ready` read as `syncing`, `failed` included, so a sync that had
+    // stopped was presented as one still under way. Nothing is arriving; the stops could not be
+    // loaded, and the plan it DID get is still stated.
+    const view = beatPlanView(input({ status: 'failed', entries: [] }));
+    expect(view.kind).toBe('stops-unreachable');
+    expect(view.kind === 'stops-unreachable' ? view.statusLine : null).toBe(
+      'Submitted — not yet approved',
+    );
+  });
 });
 
 describe('BE-W89 — the route uses the server’s stop order and names', () => {
@@ -362,6 +373,10 @@ describe('BE-W89 D1 — "On plan" keeps exactly the doctors on the plan the Beat
 
   it('is NOT OFFERED while the stops are still syncing — an empty filter there would be false', () => {
     expect(onPlan(crowded({ status: 'loading', entries: [] }))).toBeNull();
+  });
+
+  it('FE-D3 B2: is NOT OFFERED when the stops could not be loaded either', () => {
+    expect(onPlan(crowded({ status: 'failed', entries: [] }))).toBeNull();
   });
 
   it('is NOT OFFERED when there is no plan today, while loading, or when the pull failed', () => {
