@@ -60,8 +60,13 @@ export interface DayEndScreenProps {
    * it is a claim the MR has to take on trust.
    */
   readonly captureNote: string;
-  readonly planned: number;
-  readonly done: number;
+  /**
+   * FE-D2 7. **Null means UNKNOWN, and unknown is not zero.** The day is still loading, or it
+   * could not be fetched. It used to arrive as 0, and `done + notMet === planned` read 0 of 0 as
+   * "you went to all of them". A real zero (nothing planned) is 0, and says so plainly.
+   */
+  readonly planned: number | null;
+  readonly done: number | null;
   /**
    * **MR-12 D3. Visits attended where the doctor was not available.**
    *
@@ -76,7 +81,7 @@ export interface DayEndScreenProps {
    * it is attributed to the territory or the doctor and never scored against the MR, which
    * is the term the MR-11 C5 decision was taken on.
    */
-  readonly notMet: number;
+  readonly notMet: number | null;
   /** "48.2 km" from the server's metres, or null when the day has none. */
   readonly distanceLabel: string | null;
   /** Why there is no rupee figure. Required — see the note above. */
@@ -157,13 +162,25 @@ export const DayEndScreen = ({
 
       <Card>
         <Label muted>Visits</Label>
-        <View style={styles.figureRow}>
-          <Figure>{`${String(done + notMet)} of ${String(planned)}`}</Figure>
-          <Label muted>
-            {done + notMet === planned ? 'you went to all of them' : 'visits attended'}
-          </Label>
-        </View>
-        {notMet === 0 ? null : (
+        {planned === null || done === null || notMet === null ? (
+          // FE-D2 7. Unknown. While loading the spinner above already says so; once loading has
+          // finished and the counts are still absent, the day could not be fetched.
+          loading ? null : (
+            <BodyText>Not available — the day could not be fetched.</BodyText>
+          )
+        ) : (
+          <View style={styles.figureRow}>
+            <Figure>{`${String(done + notMet)} of ${String(planned)}`}</Figure>
+            <Label muted>
+              {planned === 0
+                ? 'nothing was planned'
+                : done + notMet === planned
+                  ? 'you went to all of them'
+                  : 'visits attended'}
+            </Label>
+          </View>
+        )}
+        {notMet === null || notMet === 0 ? null : (
           <Label muted>
             {notMet === 1
               ? 'One doctor was not available. That is recorded against the visit, not against you.'

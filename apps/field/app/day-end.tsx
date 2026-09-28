@@ -117,8 +117,10 @@ export default function DayEnd(): ReactNode {
         captureNote={CAPTURE_NOTE}
         dayLabel="Today"
         distanceLabel={distanceMetres === null ? null : KM(distanceMetres)}
-        done={summary?.done ?? 0}
-        notMet={summary?.notMet ?? 0}
+        // FE-D2 7. Null, not 0, when there is no summary: still loading, or the fetch failed. The
+        // comment above always said a failure leaves "the totals absent"; `?? 0` made them present.
+        done={summary?.done ?? null}
+        notMet={summary?.notMet ?? null}
         failure={denial}
         firstCaptureLabel={
           summary?.firstCaptureAt == null
@@ -137,7 +139,7 @@ export default function DayEnd(): ReactNode {
         onOpenTransparency={() => {
           router.push('/transparency');
         }}
-        planned={summary?.planned ?? 0}
+        planned={summary?.planned ?? null}
         rateNote={RATE_NOTE}
         sync={indicatorStateFor(queue)}
       />
