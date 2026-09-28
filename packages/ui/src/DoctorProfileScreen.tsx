@@ -37,7 +37,11 @@ export interface DoctorProfileVisitRow {
 export interface DoctorProfileScreenProps {
   readonly name: string;
   readonly detail: string;
-  /** "6 weeks" — the figure. Null when this doctor has never been visited. */
+  /**
+   * "6 weeks" — the figure. Null when it cannot be stated: never visited, OR still loading, OR
+   * visited with no server clock to measure from. The screen tells those apart (FE-D3 B3) using
+   * `loading` and `recentVisits`; only a settled, empty history reads "not visited yet".
+   */
   readonly sinceLabel: string | null;
   readonly recentVisits: readonly DoctorProfileVisitRow[];
   /**
@@ -90,9 +94,15 @@ export const DoctorProfileScreen = ({
 
       <Card>
         <Label muted>Since your last visit</Label>
-        {sinceLabel === null ? (
+        {sinceLabel !== null ? null : !loading && recentVisits.length === 0 ? (
+          // FE-D3 B3. Only a SETTLED history with no completed visit is "not visited". This used to
+          // show for every null `sinceLabel`: while loading, and when the rep HAD visited but
+          // there was no server clock to say how long ago.
           <BodyText>You have not visited this doctor yet.</BodyText>
         ) : (
+          <BodyText>When you last visited is not known yet.</BodyText>
+        )}
+        {sinceLabel === null ? null : (
           <View style={styles.since}>
             <Figure>{sinceLabel}</Figure>
           </View>
