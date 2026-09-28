@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Tabs } from 'expo-router';
 import { tokens } from '@fieldforce/ui-tokens';
 import { TabIcon } from '@fieldforce/ui';
+import { coachingEnabled } from '../../src/features';
 
 /**
  * B1's tab bar: Today · Doctors · Coaching · Me.
@@ -67,6 +68,9 @@ export default function TabsLayout(): ReactNode {
         options={{
           title: 'Coaching',
           tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="coaching" />,
+          // FE-D4 1. Out of the bar unless `coachingEnabled` (off by default): its content is mock
+          // AI output nothing real produces. `href: null` is expo-router's way to hide a tab.
+          ...(coachingEnabled ? {} : { href: null }),
         }}
       />
       <Tabs.Screen

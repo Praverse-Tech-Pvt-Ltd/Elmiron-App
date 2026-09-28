@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { ApiRequestError } from '@fieldforce/core';
 import type { Analysis } from '@fieldforce/core';
 import { AnalysisReplyScreen, Screen } from '@fieldforce/ui';
 import { createClientForScenario } from '../../src/api';
+import { coachingEnabled } from '../../src/features';
 import { NO_AUDIO_NOTE, REPLY_NOTE } from '../../src/coaching/content';
 import { orderedFindings } from '../../src/coaching/feed';
 
@@ -25,7 +26,16 @@ import { orderedFindings } from '../../src/coaching/feed';
  * right failure for something they have just composed, and the wrong one for a
  * check-in, which is why this does not go through `sendOrQueue`.
  */
+/**
+ * FE-D4 1. Unreachable unless `coachingEnabled` (off by default): a deep link lands on Today, and
+ * nothing is fetched. A wrapper, so `Reply`'s hooks never run conditionally. Nothing below is
+ * changed.
+ */
 export default function ReplyRoute(): ReactNode {
+  return coachingEnabled ? <Reply /> : <Redirect href="/home" />;
+}
+
+function Reply(): ReactNode {
   const { analysisId } = useLocalSearchParams<{ analysisId: string }>();
   const router = useRouter();
 

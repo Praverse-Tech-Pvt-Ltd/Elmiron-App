@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { ApiRequestError } from '@fieldforce/core';
 import type { Analysis, Doctor, Visit } from '@fieldforce/core';
 import { CoachingFeedScreen, Screen } from '@fieldforce/ui';
 import type { CoachingFeedRow } from '@fieldforce/ui';
 import { createClientForScenario } from '../../src/api';
+import { coachingEnabled } from '../../src/features';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { recentMonthsIn } from '../../src/today/server-window';
 import { reviewedNote, SEEN_FIRST, TREND_NOTE } from '../../src/coaching/content';
@@ -47,7 +48,16 @@ import { clockFrom } from '../../src/today/plan';
  */
 const MONTHS_SHOWN = 3;
 
+/**
+ * FE-D4 1. Unreachable unless `coachingEnabled` (off by default): the tab is hidden, and a deep
+ * link lands on Today. A wrapper rather than an early return, so `CoachingFeed`'s hooks never run
+ * conditionally. Nothing below is changed.
+ */
 export default function Coaching(): ReactNode {
+  return coachingEnabled ? <CoachingFeed /> : <Redirect href="/home" />;
+}
+
+function CoachingFeed(): ReactNode {
   const router = useRouter();
   // `FE-W42` C1. Which months the trend names, from the server and in the territory.
   const { serverTime, zone } = usePulledStore();

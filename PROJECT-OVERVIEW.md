@@ -19626,6 +19626,506 @@ new dependencies, and the jest preset is not switched.
   `packages/ui/jest.config.cjs:39` eslint; `visit-route.test.tsx`'s location mock without
   `capturedAt`; the stale 30 September line in `handoff-frontend.md:259` (CR-2).
 
+### FE-D4 — demo prep: stacked PRs merged, Coaching hidden, call-report labels real, CR-4, demo network check
+
+**28 September 2026, branch `fe-d4-demo` off `main` at `9ce42b3`.** PR
+[#6](https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App/pull/6) targets `main`. **Not merged.**
+Stopped after the network check, as instructed. **No APK has been built.**
+
+**CI on PR #6:** run `36397352190`, **success**. Both `typecheck · lint · format · unit tests` and
+`migrations · Gate 0 RLS suite · rollbacks` passed, at `fa52f56`. The commit adding this section
+follows.
+
+#### 0 — Merges
+
+The PRs were merged in order, each with a merge commit (no squash, no rebase). After each merge,
+the next PR was retarget to `main` and run through CI against `main` before it was merged.
+Changing a PR's base does not start a run, so each retargeted PR was closed and reopened to fire
+`reopened`. No code was changed to get a run. There were no conflicts and no red.
+
+| PR | Merge commit | CI against `main` before merging |
+| --- | --- | --- |
+| #3 `fe-d1-enqueue` | `3360ef0` | run `36386923105` at head `6e7bfe7` (base was already `main`) |
+| #4 `fe-d2-daily` | `a8e5e4d` | run `36395594076`, success |
+| #5 `fe-d3-states` | `9ce42b3` | run `36395975886`, success |
+
+Every commit hash cited in this file's FE-D1 to FE-D3 sections is an ancestor of `main`. For
+example, `0cea0f8`, `fba2572`, `6e7bfe7`, `8471253`, `36575b1`, `c119268` and `33e68bb` were each
+checked with `git merge-base --is-ancestor`.
+
+#### Items 1–3
+
+Each item was written test-first, shown red on the old code, then green. One commit each, pushed.
+
+| # | Item | Commit | Red on the old code | Green |
+| --- | --- | --- | --- | --- |
+| 1 | Coaching hidden unless `EXPO_PUBLIC_COACHING_ENABLED=true` | `09e89e3` | with the flag module present but not wired, the tab bar rendered "TAB coaching" and the three routes had no `redirect:/home` (4 failed) | 6/6. **Negative control:** forcing the flag ON in the OFF tests failed 4, and removing it gave 6/6 |
+| 2 | Call-report labels from the pulled store, not the mock | `b58d0fc` | with the mock never answering: "Unable to find … /Dr Asha Deshpande/" and "… /21 Sep/" | 4/4 |
+| 3 | CR-4 appended to `docs/contract-requests.md` | `fa52f56` | — (a document) | +36 / −0 |
+
+**Item 1, in detail.**
+- `src/features.ts` holds `coachingEnabled = process.env.EXPO_PUBLIC_COACHING_ENABLED === 'true'`,
+  read with dot access so Expo inlines it.
+- With the flag off:
+  - the Coaching `Tabs.Screen` gets `href: null`;
+  - `(tabs)/coaching.tsx`, `analysis/[id].tsx` and `reply/[analysisId].tsx` each export a wrapper
+    that renders `<Redirect href="/home" />`.
+- With the flag on, the wrapper renders the unchanged screen, now an inner function.
+- The Coaching route itself is included because a hidden tab is still reachable by deep link.
+- Nothing was deleted.
+- **Corrected test:** `reply-route.test.tsx` (FE-D2 5) mocks `coachingEnabled: true`. It tests the
+  reply screen itself, which is now flag-on behaviour.
+
+**Item 2, in detail.**
+- It is frontend-only. The visit and doctor are already in the pulled store, which the visit,
+  samples and consent screens read; no backend or contract change was needed.
+- The date is now `dayMonthIn(completedAt, zone)`, the conversion MR-25 C1's comment asked for, so
+  the lint exception and the `dayMonthFrom` character slice are gone.
+- `docs/demo-path-2026-10-01.md` step 14 is now **REAL**.
+- Corrected in the same commit, because item 1 had made it false: the demo document said "The
+  Coaching tab is always visible … do not tap it". It now says Coaching is hidden, and adds build
+  precondition **P6** (`EXPO_PUBLIC_COACHING_ENABLED` unset).
+
+**Item 3.** CR-4 is in the operator's wording, with the evidence:
+- accuracy is sent (`location.ts:83`) and stored (`check_ins.accuracy_metres`,
+  `check_outs.accuracy_metres`);
+- the verdict does not read it (`20260911000300_check_in_starts_the_visit.sql:70-74`).
+
+**Suite totals:** field vitest **637**, field jest **223**, ui vitest **4**, ui jest **254**, all
+passing. `tsc` is clean for field and ui; lint has 0 errors.
+
+#### Item 4 — the demo network check (read-only)
+
+A clean `npx expo prebuild --platform android --no-install --clean` at `fa52f56`. **Prebuild
+changed no tracked file** (`git status` before and after, compared: identical).
+
+**What the generated manifests say:**
+
+| Manifest | Line | Cleartext |
+| --- | --- | --- |
+| `android/app/src/main/AndroidManifest.xml` (release) | 21: `<application android:name=".MainApplication" … android:enableOnBackInvokedCallback="false">` | **No `usesCleartextTraffic`, and no `networkSecurityConfig`.** No `network_security_config` XML exists |
+| `android/app/src/debug/AndroidManifest.xml` | 6: `<application android:usesCleartextTraffic="true" tools:targetApi="28" … tools:replace="android:usesCleartextTraffic" />` | allowed |
+| `android/app/src/debugOptimized/AndroidManifest.xml` | 6: the same line | allowed |
+
+**`targetSdkVersion` is 36.** `android/app/build.gradle:94` reads `rootProject.ext.targetSdkVersion`,
+which `ExpoRootProjectPlugin.kt:55` sets from React Native's version catalog,
+`node_modules/react-native/gradle/libs.versions.toml:4` (`targetSdk = "36"`). For apps targeting
+API 28 and up, Android's default is to **block cleartext** when the manifest says nothing.
+
+**Verdict: the operator's belief is right.** A **release** build, as the demo plan has it, blocks
+`http://<laptop-LAN-IP>:54321` (local Supabase) and `http://<laptop-LAN-IP>:4010` (the mock).
+Sign-in would fail on the phone. Only the debug variants allow cleartext.
+
+**Options considered, with the evidence for each:**
+
+| Option | Evidence | Meets the constraints? | Risk |
+| --- | --- | --- | --- |
+| **A. A local config plugin that allows cleartext to ONE host, the laptop's LAN IP, and only when a build-time variable is set** | It would be written with `withAndroidManifest` / `withDangerousMod` from **`expo/config-plugins`, which ships inside the already-installed `expo` package** (`node_modules/expo/config-plugins.js`, exports checked). **No new dependency.** It would write `res/xml/network_security_config.xml`, with a base config that keeps cleartext off and a `domain-config` for that one IP, and point the manifest's `android:networkSecurityConfig` at it. Applied from `app.config.ts` only when, for example, `DEMO_CLEARTEXT_HOST` is set, so every other build is byte-identical to today | Release build: no Metro, no dev menu, no LogBox. The release config guard (FE-D2 2) is untouched: it governs `EXPO_PUBLIC_API_BASE_URL`, and a LAN address already passes it | **Lowest.** Cleartext is opened to one private IP, in demo builds only, and checkable at prebuild. **Unverified:** that an IP literal in `<domain>` matches on the phone. Prove it at prebuild and on the phone before Thursday |
+| B. `expo-build-properties` `android.usesCleartextTraffic: true` | **Not installed** (not in `apps/field/package.json`, not in `node_modules`) | **New dependency: needs asking** | Opens cleartext to *every* host in that build, which is broader than A |
+| C. Serve local Supabase over HTTPS | `services/api/supabase/config.toml:26-28`: `[api.tls] enabled = false`, and it would use a **self-signed** pair. Apps targeting API 24+ do not trust user-installed CAs | It needs a network security config anyway, plus a certificate on the phone, plus a mock with TLS | Strictly more work than A, for the same manifest change |
+| D. An HTTPS tunnel to the laptop (e.g. a hosted tunnel) | No app change; a public certificate works in release as-is | **A new tool on the laptop** (to be asked about). It needs internet at the venue | It exposes the local stack's API, and its publishable key, on a public URL for the demo |
+| E. Demo a debug / debugOptimized build | Both allow cleartext (lines above) | **Fails:** debuggable variants load JS from Metro and carry the dev menu and LogBox (`__DEV__`) | Violates two constraints |
+| F. A hosted Supabase over HTTPS | Production is unseeded (`supabase.ts:6-12`). No staging project is known to this repo | Depends on the backend owner | Needs a seeded HTTPS environment the backend doesn't have yet |
+
+**Recommendation: A.**
+- Write it as a local config plugin, with no new dependency, gated on a build-time variable and
+  scoped to the single LAN IP.
+- Verify it at prebuild (the `networkSecurityConfig` attribute and the XML appear only when the
+  variable is set, and the manifest is unchanged otherwise).
+- Then verify it on the phone against the laptop, before Thursday.
+- Keep D as the fallback, if the IP-literal match fails on the device. It needs your approval for
+  the tunnel tool, and it has the exposure noted above.
+- **Not built. It waits for the operator's reply.**
+
+#### Boundary
+
+```
+$ git status --porcelain --untracked-files=all -- services packages/core .github scripts
+(exit 0, 0 lines)
+$ git diff --name-only origin/main...fe-d4-demo -- services packages/core .github scripts
+(exit 0, 0 files)
+```
+
+The branch changes 11 files (+372 / −44) in `apps/field` and `docs`. There are no new dependencies.
+
+#### Open items, written down and not acted on
+
+- **Item 4 is waiting for a decision.** Recommendation A, if chosen, is a new file in
+  `apps/field` and a line in `app.config.ts`, and it must be proven on the phone.
+- **P2 (seed coverage)** and **CR-3** are unanswered. Day-end is still SAMPLE DATA.
+- **CR-4** is open with the backend owner.
+- **A1:** the jest-expo Android preset does not load. For next week.
+- **Carried:** A4 and A2 copy versus the design; S4's layout; `packages/ui/jest.config.cjs:39`
+  eslint; `visit-route.test.tsx`'s location mock without `capturedAt`; CR-2 (the stale 30
+  September line in `handoff-frontend.md:259`).
+
+### FE-D5 — the demo APK: plugin done and proven, local stack readied, build blocked on CMake
+
+**28 September 2026, branch `fe-d4-demo`** (PR #6, not merged). **Stopped at item 5: the release
+build fails on a known toolchain limit whose fix installs an SDK component, which needs the
+operator's approval.** Item 6 (the emulator smoke test) could not run without an APK. Items 1, 2,
+3, 4 and 7 are done.
+
+#### 1 — The demo cleartext plugin (`3724a03`)
+
+- **`apps/field/plugins/demo-cleartext.cjs`.** It is built only on `expo/config-plugins` from the
+  installed `expo` package, so there is **no new dependency**.
+  - It is controlled by **`DEMO_CLEARTEXT_HOSTS`**, a build-time list that is deliberately not
+    `EXPO_PUBLIC_`, so it is never inlined into the app.
+  - **Unset or empty:** the very same config comes back, and nothing changes.
+  - **Set:** it writes `res/xml/network_security_config.xml`, with a base config that sets
+    `cleartextTrafficPermitted="false"` and one `domain-config` allowing exactly the listed hosts
+    (no subdomains). It also sets `android:networkSecurityConfig` on `<application>`.
+  - Anything that is not a bare host (a scheme, port, path, spaces or markup) is refused loudly.
+- **`app.config.ts`** applies it, and suffixes the existing display-name value
+  (`EXPO_PUBLIC_APP_DISPLAY_NAME`) with **" (demo)"** when hosts are set.
+- The release config guard (`src/api-target.ts`) is untouched.
+- **Test** (`src/demo-cleartext.test.ts`, 10 cases):
+  - **Red** first as "Cannot find module". Then, with the plugin present but not wired: "expected
+    'Field Force' to be 'Field Force (demo)'", and the same for a configured name.
+  - **Green** 10/10.
+  - Expo's own loader agrees: `expo config` gives `Field Force` without the variable and
+    `Field Force (demo)` with it.
+
+#### 2 — Prebuild proof, both ways (no commit: a measurement)
+
+The baseline is the FE-D4 prebuild's `main/AndroidManifest.xml`, generated at `fa52f56` and
+untouched on disk since.
+
+- **Without the variable** (at `3724a03`):
+  - the main manifest is **byte-identical to the FE-D4 baseline** (`diff`: no output);
+  - `networkSecurityConfig` references: **0**;
+  - there is **no** `res/xml/network_security_config.xml`, and no file under `android/app/src`
+    contains `network-security-config`;
+  - `app_name` = `Field Force`.
+- **With `DEMO_CLEARTEXT_HOSTS=192.168.1.15`**, the generated XML:
+
+```xml
+<network-security-config>
+  <base-config cleartextTrafficPermitted="false" />
+  <domain-config cleartextTrafficPermitted="true">
+    <domain includeSubdomains="false">192.168.1.15</domain>
+  </domain-config>
+</network-security-config>
+```
+
+  The only change to the main manifest is line 21, which gains
+  `android:networkSecurityConfig="@xml/network_security_config"`. `app_name` = `Field Force (demo)`.
+- **Prebuild changed no tracked file either way** (`git status` before and after each run:
+  identical).
+
+#### 3 — Reachability (no commit: a measurement)
+
+**The active adapter** is **Wi-Fi**, network "NexGen PSPPL 5G", **IPv4 `192.168.1.15`**. Ethernet
+and both hotspot adapters ("Local Area Connection*") are disconnected. The Windows profile for
+this network is **Public**.
+
+**Calls from the laptop, to the LAN address and to localhost:**
+
+| Service | `192.168.1.15` | `127.0.0.1` | Bound to |
+| --- | --- | --- | --- |
+| Supabase `auth/v1/health` | **200** (also without a key) | 200 | `0.0.0.0:54321` (Docker) |
+| Supabase `rest/v1/` | **200** | 200 | as above |
+| Mock `/visits` | **no answer** (curl exit 7, refused) | 200 | **`127.0.0.1:4010` only** |
+
+- **The mock is bound to loopback in code:** `services/mock/src/server.ts:1028`,
+  `server.listen(port, '127.0.0.1', …)`. `MOCK_PORT` sets the port; nothing sets the host, and
+  `services/` is off-limits.
+- **Laptop-side command to expose it, given and not run (Administrator):**
+  `netsh interface portproxy add v4tov4 listenaddress=192.168.1.15 listenport=4010 connectaddress=127.0.0.1 connectport=4010`
+- **Windows Firewall, inbound, Public profile:**
+  - **"Docker Desktop Backend"** (`com.docker.backend.exe`) allows TCP on any port, which covers
+    Supabase's 54321.
+  - **"Node.js JavaScript Runtime"** allows TCP on any port, but the mock isn't on the LAN, and a
+    port proxy listens as a Windows service, not as `node.exe`.
+  - **No Block rules.**
+  - **Rule needed for the proxied mock, given and not run (Administrator):**
+    `netsh advfirewall firewall add rule name="Elmiron demo mock 4010" dir=in action=allow protocol=TCP localport=4010 localip=192.168.1.15 profile=public`
+  - Calls from the laptop to its own address don't cross the firewall, so **reachability from the
+    phone is unproven** until a device on the Wi-Fi tries it.
+
+#### 4 — Seed for the demo date (no commit: a measurement)
+
+**The local stack was not current, and making it current reset it.**
+- Docker Desktop was not running. It was started, and `supabase start` brought the stack up.
+- The local database had **19 of the repo's 75 migrations** (last `20260817000200`), so
+  `seed:day` failed: `column p.organisation_id does not exist`.
+- `supabase migration up --local` applied pending migrations up to 36 and then **stopped by
+  design** at `20260908000800_user_profiles_organisation.sql`: *"290 user(s) have no territory and
+  there are 354 organisations, so their tenant cannot be derived … Choosing one for them is
+  choosing whose data they may read."* That was accumulated local seed data. I did **not**
+  hand-assign tenants.
+- **A full backup was taken first**: `pg_dump -Fc`, 2.5 MB, 36 public table-data entries
+  (verified with `pg_restore -l`). It is saved **outside the repo**, in the session scratchpad, as
+  `local-db-before-reset-2026-09-28.dump`. It held 354 organisations, 1,723 users and 1,206 visits.
+- Then the repo's documented `pnpm db:reset`, which is local only (`seed-day.mjs:486`:
+  "`pnpm db:reset` clears the accumulation"). The local stack now has **75 of 75 migrations**
+  (latest `20260924000300`).
+- `seed:day` was run with `SUPABASE_DB_URL` unset. The script itself refuses any non-localhost
+  host (`seed-day.mjs:95-115`). **Hosted projects were never touched.**
+- It minted a fixture MR (`demo-15eb525c-mr@example.test`; the password is only in the terminal
+  output, in the scratchpad, never in the repo), 3 doctors and 5 visits.
+
+**The date:**
+- **The seed dates the beat plan for the day it runs, not the demo day.**
+- The plan uses the database's **`current_date`, in UTC** (`seed-day.mjs:349-350`); the visits use
+  day offsets from the laptop's clock (`dayAt`, `:143-148`). There is no date flag.
+- Run today, it produced plan **2026-09-28**, status `submitted`, **3 stops**. In IST the visits
+  fall one completed on 27 Sep, two completed and one planned on 28 Sep, and one planned on 29 Sep.
+- **For Thursday 1 October it must be re-run on Thursday after 05:30 IST.** Before then, UTC's
+  `current_date` is still 30 September.
+- The script was not edited.
+
+#### 5 — The build: FAILED, blocked on an SDK component
+
+- **Environment:** JDK 25 (Android Studio's JBR) with `JAVA_TOOL_OPTIONS=--enable-native-access=ALL-UNNAMED`
+  (`gotchas.md`); `ANDROID_HOME` set in the build environment only (`local.properties` not
+  written); `--no-daemon --max-workers=3`.
+- **The `EXPO_PUBLIC_*` values** were set in the environment for the bundle:
+  - Supabase and API at `192.168.1.15`;
+  - the publishable key read from `supabase status` straight into the environment, never printed
+    or written;
+  - Coaching and recording unset.
+- **Signing:** release is signed with `signingConfigs.debug`, the template's `debug.keystore`
+  (`android/app/build.gradle:115`). No real keystore was created.
+- **Attempt 1** failed at configuration: `SDK location not found` (`ANDROID_HOME` was unset).
+- **Attempt 2** gave `BUILD FAILED in 9m 35s` at `:app:buildCMakeRelWithDebInfo[arm64-v8a]`:
+  `ninja: error: Stat(…/RNGestureHandlerDetectorShadowNode.cpp.o): Filename longer than 260 characters`.
+  This is the **known** trap in `gotchas.md` ("The SDK's CMake 3.22.1 cannot build this app"). The
+  only CMake installed here is **3.22.1**.
+- **A shorter checkout path does not rescue it.** The path is 394 characters, and 316 even through
+  a `subst` drive letter, because the object path inside the build directory is 249 characters on
+  its own.
+- **The documented fix:** `sdkmanager "cmake;3.31.6"`, then pin `externalNativeBuild { cmake { version '3.31.6' } }`
+  in the regenerated, gitignored `android/app/build.gradle`. **That installs a new SDK component,
+  which waits for the operator.** No APK was produced.
+
+#### 6 — Emulator smoke test
+
+**Not run.** There is no APK. The AVD `Pixel_10` exists.
+
+#### 7 — "Before the demo" (`8e3802f`)
+
+A new section in `docs/demo-path-2026-10-01.md`, covering:
+- the network and why;
+- the address baked in, and that the APK must be rebuilt if it changes;
+- starting and checking Supabase and the mock at the LAN address, including the mock's loopback
+  bind and the port-proxy command;
+- seeding after 05:30 IST;
+- the firewall rule;
+- keeping the laptop awake;
+- installing, and uninstalling a dev client only after checking its queue is empty;
+- that Coaching is hidden and must stay hidden.
+
+No credentials.
+
+**Suite totals:** field vitest **647**, field jest **223**, ui vitest **4**, ui jest **254**, all
+passing.
+
+#### Boundary
+
+```
+$ git status --porcelain --untracked-files=all -- services packages/core .github scripts
+(exit 0, 0 lines)
+```
+
+No file under `services`, `packages/core` or the migrations changed, and the seed script was not
+edited. The local database was reset; its prior contents are in the scratchpad backup. No new
+dependency, and no real keystore.
+
+#### Open items
+
+- **Approve or refuse `sdkmanager "cmake;3.31.6"`.** It is the only thing blocking the APK. After
+  that: the pin, `assembleRelease`, and the smoke test (items 5 and 6).
+- **The mock is loopback-only**, and only the port proxy exposes it. Day end is the only demo
+  screen that needs it.
+- **Reachability from the phone** (Wi-Fi client isolation, the firewall) is unproven until a device
+  tries it.
+- **Re-seed on Thursday after 05:30 IST.**
+- Still running on this machine: Docker Desktop, the local Supabase stack, and the mock
+  (`node services/mock/dist/index.js`, on `127.0.0.1:4010`).
+
+### FE-D6 — the demo APK: built, installed, smoke-tested on the emulator
+
+**28 September 2026, branch `fe-d4-demo`** (PR #6, not merged). The operator approved CMake
+3.31.6 and confirmed the demo address, **192.168.1.15**. The message carried the literal
+placeholder `<DEMO_IP>`, so it was asked rather than assumed. The operator had already tested
+that address **from a phone browser**: the Supabase health endpoint and the mock on 4010 both
+answered.
+
+**A correction from the operator, recorded as given:** resetting the local database in FE-D5 needed
+the operator's approval, even with a backup taken first. **Any destructive step, local or not, is
+stop-and-ask.** The outcome was fine; the process was not. This is now a standing rule for this
+work.
+
+#### 1 — The backup, kept outside the repo
+
+**`C:\dev\backups\local-db-before-reset-2026-09-28.dump`**. It is a copy of the FE-D5 scratchpad
+dump: **2,510,735 bytes**, with SHA-256 `e9ae5cc5…` matching the source. The source was left in
+place.
+
+#### 2 — CMake 3.31.6: installed, and pinned
+
+- **`sdkmanager` was not on this machine.** There was no `cmdline-tools` in the SDK and none
+  bundled with Android Studio. At the operator's choice (asked, not assumed), Google's **Android
+  SDK Command-line Tools** were installed:
+  - it is `cmdline-tools;latest` from the official repository manifest,
+    `commandlinetools-win-16111833_latest.zip`;
+  - **its SHA-1 was verified against the manifest before extracting**
+    (`57d04f2d75eb8e8fffc5000a987e5de4b5a63e9d`);
+  - it is installed at `Android/Sdk/cmdline-tools/latest`, and nothing existing was overwritten.
+- `sdkmanager.bat` now forwards to Google's new **`android` CLI**, and the Windows batch layer split
+  `cmake;3.31.6` at the `;`. The install used `android sdk install cmake/3.31.6`, the new CLI's
+  package naming. No licence prompt appeared, and none was accepted on the operator's behalf.
+- **Installed:** `cmake version 3.31.6`, with **ninja 1.12.1**, which is long-path-capable.
+  CMake 3.22.1 is untouched.
+- **The pin**, inside `android { }` in the generated, gitignored `apps/field/android/app/build.gradle`,
+  as `docs/gotchas.md` describes:
+
+  ```gradle
+  externalNativeBuild { cmake { version '3.31.6' } }
+  ```
+
+#### 3 — The build
+
+- **Prebuild:** a clean prebuild with `DEMO_CLEARTEXT_HOSTS=192.168.1.15`, at `900f9c8`:
+  - `app_name` = "Field Force (demo)";
+  - the network security config allows exactly one domain, `192.168.1.15`, and the manifest
+    references it once;
+  - **no tracked file changed** (`git status` before and after: identical);
+  - the CMake pin was absent after the prebuild, as expected, and was re-applied.
+- **The Gradle build** (`assembleRelease`, `--no-daemon --max-workers=3`):
+  - build environment: `JAVA_TOOL_OPTIONS=--enable-native-access=ALL-UNNAMED` (JDK 25), and
+    `ANDROID_HOME` set in the environment only;
+  - `EXPO_PUBLIC_SUPABASE_URL=http://192.168.1.15:54321` and
+    `EXPO_PUBLIC_API_BASE_URL=http://192.168.1.15:4010`;
+  - **the Supabase publishable key was read from `supabase status` straight into the environment:
+    never printed, never written to disk**;
+  - Coaching and recording unset.
+  - Result: **`BUILD SUCCESSFUL in 7m 33s`**.
+
+| | |
+| --- | --- |
+| APK | `C:\Users\devp0\StudioProjects\Elmiron-App\apps\field\android\app\build\outputs\apk\release\app-release.apk` |
+| Copy, safe from the next `prebuild --clean` | `C:\dev\demo-apk\field-force-demo-192.168.1.15-0.1.0.apk` |
+| Size | 102,069,979 bytes (98 MB) |
+| applicationId | `com.praversetech.fieldforce` |
+| Display name | **Field Force (demo)** |
+| versionName / versionCode | `0.1.0` / `1` (targetSdk 36) |
+| Signed with | **the debug key only**: `CN=Android Debug`, SHA-256 `fa:c6:17:45…3b:9c`, identical to `android/app/debug.keystore`. No real keystore was created |
+| Baked into the bundle | `http://192.168.1.15:54321`, `http://192.168.1.15:4010` (once each) |
+
+The one `127.0.0.1:4010` string in the bundle is `DEV_FALLBACK_API` in `src/api-target.ts`, which
+a release build never returns (FE-D2 2).
+
+#### 4 — Emulator smoke test
+
+On the `sdk_gphone16k_x86_64` emulator, at API 36.
+
+- **Install:** `adb install -r` gave **Success, with no signature clash.** The installed dev
+  client was signed with the same debug key, so Android treated the APK as an update and **nothing
+  was uninstalled**.
+  - Consequence: **the dev client's app data was kept** (its session, the first-run flag, its
+    queue).
+  - So this was **not a fresh install**, and first run and A4 were not exercised. Clearing the
+    data would have been a destructive step, so it wasn't done.
+- **Launch:** it did **not** stop at "not set up". It opened on **Sign in**; the old session was
+  not valid against the reset database.
+- **Sign-in:** as the local fixture MR (`demo-15eb525c-mr@example.test`; the password was typed
+  from the scratchpad and never printed). **It succeeded.**
+- **Home**, from local Supabase over `http://192.168.1.15`:
+  - "2 of 3 visits attended";
+  - next visit "Dr Asha Deshpande (DEMO)", Main clinic, Pune, scheduled 13:00;
+  - "Everything sent";
+  - **tab bar: Today, Doctors, Me, with no Coaching.**
+- **Beat plan:** "3 planned · 2 done", "Submitted — not yet approved". The stops are Dr Asha
+  Deshpande (next stop), Dr Vikram Rao (✓ 11:49 · 45 min) and Dr Meera Iyer (✓ 12:49 · 40 min):
+  the seeded day.
+- **Screenshots, outside the repo:**
+  - `C:\dev\demo-screenshots\fe-d6-home.png`
+  - `C:\dev\demo-screenshots\fe-d6-beat-plan.png`
+- **Logcat:** the app process (pid 7861, 211 lines, saved to
+  `C:\dev\demo-screenshots\fe-d6-logcat-app.txt`) has **no cleartext or network-security errors**.
+  The device-wide log has none for this app either.
+  - Its only E-level lines are platform noise: `ashmem: Pinning is deprecated since Android Q` and
+    WebView's `variations_seed_loader … Seed missing signature`.
+  - Android logged no explicit "network security config loaded" line. The positive evidence is
+    that **a release build targeting API 36 loaded real data over plain http from 192.168.1.15**,
+    which the platform otherwise blocks (FE-D4 4).
+- **What this proves, and what it doesn't:** it proves **the build**: the baked address, the
+  cleartext allowance for that one host, the debug-key release build, sign-in and the pull.
+  **It does not prove the network.** The emulator reaches `192.168.1.15` through the laptop's own
+  network stack (its virtual NAT), not across the Wi-Fi and not through Windows Firewall's inbound
+  rules, which is the route a phone takes. The phone route is covered by the operator's own
+  phone-browser test. Day end, the one screen that reads the mock, was not opened.
+
+#### 5 — Seed behaviour (read-only; not run again, not edited)
+
+- **Every run creates a NEW MR account with new credentials.**
+  - Each run draws a fresh `runId`, and the MR, manager and admin emails and the password are
+    derived from it (`seed-day.mjs:174, 182-185`).
+  - `--email` and `--password` exist, but reusing an email that already exists would collide.
+  - Sign in with the account the day's run prints.
+- **Earlier runs' data stays.** Each run is its own organisation, and nothing is torn down
+  (`consent_records` and `audit_log` are append-only by trigger). Only `pnpm db:reset` clears it,
+  and that is destructive, so it needs the operator's approval.
+- **A plain second run REFUSES:** "seed:day has already run against this database"
+  (`seed-day.mjs:196-226`). A 28 September run now exists, so **a plain `seed:day` on Thursday
+  will refuse.**
+- **The exact Thursday command**, from the repo root, **after 05:30 IST** (the plan uses the
+  database's UTC `current_date`), with `SUPABASE_DB_URL` unset:
+
+  ```
+  pnpm --filter @fieldforce/api run seed:day -- --another
+  ```
+
+  It adds a second demo organisation, on purpose, and destroys nothing. The script refuses any
+  non-localhost database.
+
+#### 6 — Demo document (`6c583ff`)
+
+"Before the demo" in `docs/demo-path-2026-10-01.md` gains:
+
+- **§0:** the phone-browser network test, and why it comes before any build. The address is baked
+  in, a build takes about ten minutes, and the laptop cannot test itself across its own firewall.
+- **§3.3:** the Thursday seed command, corrected to the script's real behaviour: `--another`, a new
+  account to sign in with, and `db:reset` only with approval.
+- **§3.4:** the two `netsh` commands to set up the mock (port proxy and firewall rule) and the two
+  to remove them, with `<DEMO_IP>` as a placeholder.
+- **§3.5:** local Supabase uses the CLI's well-known default keys and is reachable on the network
+  while it runs, so load fixture data only, and stop it afterwards.
+- **§5a:** every prebuild wipes the CMake pin, so re-apply it before building. The build
+  environment is listed, with the key in the environment only.
+- **§7:** Coaching stays hidden; the tab bar shows Today, Doctors and Me only.
+
+The document contains no credentials.
+
+#### Boundary
+
+```
+$ git status --porcelain --untracked-files=all -- services packages/core .github scripts
+(exit 0, 0 lines)
+```
+
+No change to `services`, `packages/core`, the migrations or the seed script. No new project
+dependency. The command-line tools and CMake are machine tools, as ruled. No real keystore.
+Nothing was uninstalled.
+
+#### Open items
+
+- **For next week: make the CMake pin permanent**, so a prebuild can't wipe it. For example, a
+  config plugin that writes `externalNativeBuild { cmake { version '3.31.6' } }` into the generated
+  `app/build.gradle`, proven at prebuild like the cleartext plugin.
+- **The smoke test did not exercise first run or A4**, because the dev client's app data was kept.
+  A fresh-install run on the phone will show them (demo-path P5). Clearing the emulator's data
+  needs approval.
+- **Re-seed on Thursday after 05:30 IST** with `-- --another`, and sign in with the new account.
+- **Day end (the mock) is untested on a device.** It needs the operator's port proxy and firewall
+  rule (§3.4). The operator's phone-browser test already reached 4010.
+- **Still running on this machine:** Docker Desktop, the local Supabase stack, the mock
+  (`127.0.0.1:4010`) and the emulator. Newly installed: Android SDK Command-line Tools and CMake
+  3.31.6.
+- **Carried:** CR-3 and CR-4 are open, and so is A1 (the jest Android preset).
 ---
 
 ### W1-A — simulation-only AI

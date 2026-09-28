@@ -26,6 +26,10 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ analysisId: '55555555-5555-4555-8555-555555555511' }),
   useRouter: () => ({ replace: mockReplace, push: jest.fn() }),
 }));
+// FE-D4 1 — corrected. Reply now sits behind `coachingEnabled`, OFF by default, where the route
+// redirects to Today (`coaching-flag.test.tsx`). This suite tests the reply screen itself, i.e.
+// the flag-ON behaviour, so it turns the flag on.
+jest.mock('../features', () => ({ coachingEnabled: true }));
 
 import ReplyRoute from '../../app/reply/[analysisId]';
 

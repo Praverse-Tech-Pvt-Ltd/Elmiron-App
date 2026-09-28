@@ -1,4 +1,7 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
+import demoCleartext from './plugins/demo-cleartext.cjs';
+
+const { demoCleartextHosts, withDemoCleartext } = demoCleartext;
 
 /**
  * The display name is configuration, not a constant.
@@ -17,8 +20,22 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
  * name — the trademark position is still open, and an internally-circulated APK
  * carrying somebody else's mark is a small exposure taken for no reason.
  */
-export default ({ config }: ConfigContext): ExpoConfig => ({
-  ...config,
-  name: process.env.EXPO_PUBLIC_APP_DISPLAY_NAME ?? 'Field Force',
-  slug: config.slug ?? 'field-force',
-});
+export default ({ config }: ConfigContext): ExpoConfig => {
+  /**
+   * FE-D5 1 — DEMO BUILDS ONLY. `DEMO_CLEARTEXT_HOSTS` (a build-time list, never inlined into the
+   * app) lets plain http reach exactly those hosts — the laptop's LAN address — and marks the
+   * build " (demo)" on the home screen, so nobody mistakes it for a production install. Unset or
+   * empty: nothing here changes. See `plugins/demo-cleartext.cjs`.
+   */
+  const demoHosts = demoCleartextHosts(process.env['DEMO_CLEARTEXT_HOSTS']);
+  const name = process.env.EXPO_PUBLIC_APP_DISPLAY_NAME ?? 'Field Force';
+
+  return withDemoCleartext(
+    {
+      ...config,
+      name: demoHosts.length === 0 ? name : `${name} (demo)`,
+      slug: config.slug ?? 'field-force',
+    },
+    demoHosts,
+  );
+};
