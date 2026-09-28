@@ -134,7 +134,14 @@ export interface VisitScreenProps {
    */
   readonly onRecordSamples?: () => void;
   readonly loading?: boolean;
+  /** The visit cannot be shown at all. Replaces the screen: there is nothing to act on. */
   readonly failure?: { readonly title: string; readonly detail: string } | null;
+  /**
+   * FE-D2 6. What the last press produced when it failed: refused, not saved, recording failed.
+   * Shown under the heading and never instead of the visit, so the rep can try again, check out
+   * or record. The caller clears it when the next action starts.
+   */
+  readonly actionFailure?: { readonly title: string; readonly detail: string } | null;
 }
 
 const styles = StyleSheet.create({
@@ -189,6 +196,7 @@ export const VisitScreen = ({
   consent,
   loading = false,
   failure = null,
+  actionFailure = null,
 }: VisitScreenProps): ReactNode => {
   if (failure !== null) {
     return <Banner detail={failure.detail} title={failure.title} tone="critical" />;
@@ -224,6 +232,10 @@ export const VisitScreen = ({
         <Heading>{doctorName}</Heading>
         {clinic === null ? null : <Label muted>{clinic}</Label>}
       </View>
+
+      {actionFailure === null ? null : (
+        <Banner detail={actionFailure.detail} title={actionFailure.title} tone="critical" />
+      )}
 
       {loading ? <Spinner label="Getting this visit" /> : null}
 

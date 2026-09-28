@@ -34,6 +34,11 @@ export default function ReplyRoute(): ReactNode {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
+  // FE-D2 5. A SEND failure is not a LOAD failure. It went into `failure`, which replaces the form,
+  // so the banner "What you wrote is still on the screen" appeared on a screen where it was not,
+  // and nothing ever cleared it. It is its own state now: shown above the form, cleared by the
+  // next edit or send.
+  const [sendFailure, setSendFailure] = useState<{ title: string; detail: string } | null>(null);
 
   useEffect(() => {
     const client = createClientForScenario();
@@ -85,6 +90,7 @@ export default function ReplyRoute(): ReactNode {
     if (busy || analysis === null || value.trim() === '') return;
     setBusy(true);
     setSaved(null);
+    setSendFailure(null);
 
     void createClientForScenario()
       .respondToAnalysis(analysis.id, { response: value.trim() })
@@ -94,7 +100,7 @@ export default function ReplyRoute(): ReactNode {
         router.replace(`/analysis/${analysis.id}`);
       })
       .catch((error: unknown) => {
-        setFailure({
+        setSendFailure({
           title: 'Your reply was not sent',
           detail:
             error instanceof Error
@@ -116,6 +122,7 @@ export default function ReplyRoute(): ReactNode {
         onChangeText={(next) => {
           setValue(next);
           setSaved(null);
+          setSendFailure(null);
         }}
         onSaveDraft={() => {
           setSaved('Kept on this screen. It is not sent, and it is not saved if you leave.');
@@ -123,6 +130,7 @@ export default function ReplyRoute(): ReactNode {
         onSend={send}
         replyNote={REPLY_NOTE}
         saved={saved}
+        sendFailure={sendFailure}
         voiceNote={NO_AUDIO_NOTE}
         value={value}
       />

@@ -179,6 +179,9 @@ describe('each stop carries what happened there', () => {
       'minutes',
       'startedAt',
       'state',
+      // FE-D2 3. The matched visit's id, so the stop can open it. An id, not a position:
+      // it carries no distance and no travel estimate, which is what this guard is for.
+      'visitId',
     ]);
   });
 });

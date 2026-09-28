@@ -69,6 +69,7 @@ jest.mock('expo-router', () => ({
 }));
 
 import { setQueueOwner } from '../sync/async-storage-store';
+import { SyncPushRefusal } from '../sync/push-client';
 import VisitRoute from '../../app/visit/[id]';
 
 const visit = VisitSchema.parse({
@@ -242,5 +243,55 @@ describe('app/visit/[id].tsx — defect 12, the stage after a SENT check-in', ()
     expect(screen.queryByText('This check-out cannot be sent yet')).toBeNull();
     // Not vacuous: the stage really did move — the check-out action is now what is offered.
     expect(screen.getByText('Leaving — check out')).toBeTruthy();
+  });
+});
+
+/**
+ * FE-D2 6 — an action's failure is shown, and then the screen is given back.
+ *
+ * Every press outcome on this screen (refused, not saved, recording failed) went into the one
+ * `failure` that `VisitScreen` renders INSTEAD of the visit, and nothing ever set it back to null.
+ * A rep whose check-in was refused was left looking at a banner, with no button, until they left
+ * the screen — and could not try again, check out, or record.
+ */
+describe('app/visit/[id].tsx — FE-D2 6, a refused press does not take the screen away', () => {
+  const refused = (): SyncPushRefusal =>
+    new SyncPushRefusal({
+      message: 'You were outside your shift window.',
+      sqlState: '45007',
+      rejectionCode: null,
+      deadLettered: false,
+    });
+
+  it('shows the refusal and keeps the check-in button', async () => {
+    await AsyncStorage.clear();
+    loaded();
+    mockCreateCheckIn.mockRejectedValue(refused());
+    await render(<VisitRoute />);
+    await screen.findByText(/Dr Asha Deshpande/u);
+
+    await fireEvent.press(screen.getByText('I am here — check in'));
+
+    expect(await screen.findByText('That was refused')).toBeTruthy();
+    expect(screen.getByText('I am here — check in')).toBeTruthy();
+    expect(screen.getByText(/Dr Asha Deshpande/u)).toBeTruthy();
+  });
+
+  it('the next press clears it', async () => {
+    await AsyncStorage.clear();
+    loaded();
+    mockCreateCheckIn.mockRejectedValue(refused());
+    await render(<VisitRoute />);
+    await screen.findByText(/Dr Asha Deshpande/u);
+    await fireEvent.press(screen.getByText('I am here — check in'));
+    await screen.findByText('That was refused');
+
+    mockCreateCheckIn.mockResolvedValue({});
+    await fireEvent.press(screen.getByText('I am here — check in'));
+
+    await waitFor(() => {
+      expect(mockCreateCheckIn).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.queryByText('That was refused')).toBeNull();
   });
 });

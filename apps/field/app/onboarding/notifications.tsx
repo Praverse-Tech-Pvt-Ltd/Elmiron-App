@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
+import { PermissionsAndroid, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
+import { requestNotificationPermission } from '../../src/onboarding/notification-permission';
 import { BodyText, Button, Heading, ListRow, Screen } from '@fieldforce/ui';
 import { capSentence, NOTIFICATION_TYPES } from '../../src/onboarding/notifications';
 
@@ -33,6 +35,19 @@ export default function NotificationsRationale(): ReactNode {
     router.push('/onboarding/battery');
   };
 
+  /**
+   * FE-D2 first run. "Allow notifications" used to call `next` and nothing else, so it asked
+   * Android for nothing. It raises the system prompt now (Android 13+; below that there is no
+   * permission to ask for), and continues whatever the answer: the app works without them.
+   * "Not now" still calls `next` alone and requests nothing.
+   */
+  const allow = (): void => {
+    void requestNotificationPermission({
+      apiLevel: typeof Platform.Version === 'number' ? Platform.Version : 0,
+      request: (permission) => PermissionsAndroid.request(permission),
+    }).then(next);
+  };
+
   return (
     <Screen scrollable>
       <Heading>What we&apos;ll send you</Heading>
@@ -43,11 +58,11 @@ export default function NotificationsRationale(): ReactNode {
       ))}
 
       {/*
-        The system prompt is raised by the caller of this screen, not here. This
-        screen is the rationale that precedes it — showing the reasons after Android
-        has already asked is the pattern that produces a reflexive "deny".
+        The rationale comes first and the system prompt only on "Allow" — showing the
+        reasons after Android has already asked is the pattern that produces a reflexive
+        "deny". (FE-D2: this comment said the caller raised the prompt; nothing did.)
       */}
-      <Button label="Allow notifications" onPress={next} variant="secondary" />
+      <Button label="Allow notifications" onPress={allow} variant="secondary" />
       <Button label="Not now" onPress={next} variant="secondary" />
     </Screen>
   );

@@ -45,6 +45,16 @@ module.exports = {
   // The other half of the boundary. Narrower than jest's default on purpose.
   testMatch: ['<rootDir>/**/*.test.tsx'],
 
+  // FE-D2 — the same fix `apps/field/jest.config.cjs` made in MR-22 A2, for the same cause.
+  // Jest's 5000 ms default is paid by the FIRST test in each file, which carries module
+  // resolution, the babel transform and the first render of a whole screen. Under load that
+  // cold start exceeds 5000 ms: `pnpm ci:local` on 28 September failed
+  // `ConsentScreen.test.tsx` and `field-states.test.tsx` with "Exceeded timeout of 5000 ms"
+  // (both files took ~12.5 s), and the same suite then passed 253/253 twice when run alone.
+  // A timeout that depends on what else the machine is doing turns unrelated PRs red. 20 s is
+  // field's measured choice, so the two render suites stay on one rule.
+  testTimeout: 20_000,
+
   // Build artifacts are not source. apps/field/dist holds a compiled Hermes bundle
   // that contains supabase-js's entire SDK; a runner walking it is slow at best and
   // misleading at worst. See the search convention in docs/gotchas.md.

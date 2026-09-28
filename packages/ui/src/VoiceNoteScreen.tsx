@@ -54,7 +54,13 @@ export interface VoiceNoteScreenProps {
   readonly saved?: string | null;
   /** Why the microphone cannot open. Blocks the control entirely. */
   readonly blocked?: string | null;
+  /** The microphone could not be opened. Replaces the screen: there is nothing to record with. */
   readonly failure?: { readonly title: string; readonly detail: string } | null;
+  /**
+   * FE-D2 6. What the last press produced when it failed. Shown above the recorder and never
+   * instead of it, so "Start again" and "Save this note" stay reachable.
+   */
+  readonly actionFailure?: { readonly title: string; readonly detail: string } | null;
 }
 
 const styles = StyleSheet.create({
@@ -97,6 +103,7 @@ export const VoiceNoteScreen = ({
   saved = null,
   blocked = null,
   failure = null,
+  actionFailure = null,
 }: VoiceNoteScreenProps): ReactNode => {
   if (failure !== null) {
     return (
@@ -108,49 +115,59 @@ export const VoiceNoteScreen = ({
   }
 
   return (
-    <SurfaceContext.Provider value="hero">
-      <View style={styles.dark}>
-        <Label>{subject}</Label>
-        {saved === null ? null : <Statement>{saved}</Statement>}
-        <Display>{prompt}</Display>
-        <Statement>{hint}</Statement>
+    <>
+      {/*
+        FE-D2 6. Outside the hero surface on purpose: a critical banner is the default surface's
+        tone, and inside the dark card it would read as part of the recorder rather than a verdict
+        on the last press.
+      */}
+      {actionFailure === null ? null : (
+        <Banner detail={actionFailure.detail} title={actionFailure.title} tone="critical" />
+      )}
+      <SurfaceContext.Provider value="hero">
+        <View style={styles.dark}>
+          <Label>{subject}</Label>
+          {saved === null ? null : <Statement>{saved}</Statement>}
+          <Display>{prompt}</Display>
+          <Statement>{hint}</Statement>
 
-        <View style={styles.centre}>
-          <Figure>{elapsed}</Figure>
-          <Label>
-            {blocked !== null
-              ? 'nothing is being recorded'
-              : recording
-                ? 'keep holding · release to finish'
-                : 'hold the button to start'}
-          </Label>
+          <View style={styles.centre}>
+            <Figure>{elapsed}</Figure>
+            <Label>
+              {blocked !== null
+                ? 'nothing is being recorded'
+                : recording
+                  ? 'keep holding · release to finish'
+                  : 'hold the button to start'}
+            </Label>
+          </View>
+
+          {blocked === null ? (
+            <>
+              <Pressable
+                accessibilityLabel="Hold to record your note"
+                accessibilityRole="button"
+                accessibilityState={{ busy: recording }}
+                onPressIn={onHoldStart}
+                onPressOut={onHoldEnd}
+                style={[styles.hold, recording ? styles.holding : null]}
+              >
+                {recording ? <View style={styles.dot} /> : null}
+                <BodyText>{recording ? 'Holding — recording' : 'Hold to record'}</BodyText>
+              </Pressable>
+
+              {onSave === undefined ? null : (
+                <Button label="Save this note" loading={busy} onPress={onSave} />
+              )}
+              <Button label="Start again" onPress={onStartAgain} variant="secondary" />
+            </>
+          ) : (
+            // Not `critical`: a microphone the MR has not granted is a condition with
+            // a remedy, not a failure of theirs. §02.
+            <Banner detail={blocked} title="No note can be recorded yet" tone="attention" />
+          )}
         </View>
-
-        {blocked === null ? (
-          <>
-            <Pressable
-              accessibilityLabel="Hold to record your note"
-              accessibilityRole="button"
-              accessibilityState={{ busy: recording }}
-              onPressIn={onHoldStart}
-              onPressOut={onHoldEnd}
-              style={[styles.hold, recording ? styles.holding : null]}
-            >
-              {recording ? <View style={styles.dot} /> : null}
-              <BodyText>{recording ? 'Holding — recording' : 'Hold to record'}</BodyText>
-            </Pressable>
-
-            {onSave === undefined ? null : (
-              <Button label="Save this note" loading={busy} onPress={onSave} />
-            )}
-            <Button label="Start again" onPress={onStartAgain} variant="secondary" />
-          </>
-        ) : (
-          // Not `critical`: a microphone the MR has not granted is a condition with
-          // a remedy, not a failure of theirs. §02.
-          <Banner detail={blocked} title="No note can be recorded yet" tone="attention" />
-        )}
-      </View>
-    </SurfaceContext.Provider>
+      </SurfaceContext.Provider>
+    </>
   );
 };

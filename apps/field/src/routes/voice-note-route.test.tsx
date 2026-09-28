@@ -241,3 +241,35 @@ describe('D2 — audio that was not kept leaves the phone', () => {
     expect([...mockFiles]).toEqual([]);
   });
 });
+
+/**
+ * FE-D2 6 — a note that could not be kept is said so, and the screen is given back.
+ *
+ * Start, stop and save failures went into the one `failure` that `VoiceNoteScreen` renders
+ * INSTEAD of the recorder, and nothing cleared it: after "Your note was not saved" the rep had no
+ * "Start again" and no way to record, short of leaving. (The microphone-open failure is not a
+ * press and still replaces the screen: with no microphone there is nothing to give back.)
+ */
+describe('FE-D2 6 — a failed save does not take the recorder away', () => {
+  it('shows the failure and keeps "Start again"', async () => {
+    await recordOne('eight');
+    // The recorder's file is gone before Save: keeping it fails, as it would on the device.
+    mockFiles.delete(recorderFile('eight'));
+
+    await fireEvent.press(screen.getByText('Save this note'));
+
+    expect(await screen.findByText('Your note was not saved')).toBeTruthy();
+    expect(screen.getByText('Start again')).toBeTruthy();
+  });
+
+  it('"Start again" clears it', async () => {
+    await recordOne('nine');
+    mockFiles.delete(recorderFile('nine'));
+    await fireEvent.press(screen.getByText('Save this note'));
+    await screen.findByText('Your note was not saved');
+
+    await fireEvent.press(screen.getByText('Start again'));
+
+    expect(screen.queryByText('Your note was not saved')).toBeNull();
+  });
+});

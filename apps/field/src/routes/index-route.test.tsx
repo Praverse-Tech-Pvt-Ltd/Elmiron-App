@@ -40,7 +40,9 @@ describe('app/index.tsx — where a cold start lands', () => {
     // keeps their check-ins working when the OEM sleeps the app.
     mockSession.mockReturnValue({ status: 'signed-in' });
     await render(<Index />);
-    expect(await screen.findByText('redirect:/onboarding/notifications')).toBeTruthy();
+    // FE-D2 — corrected by operator ruling (design order: A2 location is first run's second
+    // screen, after sign-in). This asserted the old start, A3 notifications.
+    expect(await screen.findByText('redirect:/onboarding/location')).toBeTruthy();
   });
 
   /*

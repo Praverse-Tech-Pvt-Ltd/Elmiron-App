@@ -95,7 +95,18 @@ export default function VoiceNoteRoute(): ReactNode {
   } | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // The microphone could not be opened. Not a press: with no microphone there is nothing to give
+  // back, so this one still replaces the screen.
   const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
+  /**
+   * FE-D2 6. What the last press produced when it failed: recording did not start, did not save,
+   * the note was not kept. It used to go into `failure`, which replaces the recorder, and nothing
+   * cleared it — after "Your note was not saved" there was no "Start again". It is shown above
+   * the recorder now and cleared by the next start, stop, save or "Start again".
+   */
+  const [actionFailure, setActionFailure] = useState<{ title: string; detail: string } | null>(
+    null,
+  );
   /** MR-52 C2: how many notes from before the upload existed were removed on opening. */
   const [removed, setRemoved] = useState(0);
 
@@ -167,6 +178,8 @@ export default function VoiceNoteRoute(): ReactNode {
     unsaved.current = null;
     setCaptured(null);
     setSaved(null);
+    // "Start again" and a new recording both start here, so both clear the last failure.
+    setActionFailure(null);
   };
 
   const start = (): void => {
@@ -177,7 +190,7 @@ export default function VoiceNoteRoute(): ReactNode {
       await recorder.prepareToRecordAsync();
       recorder.record();
     })().catch((error: unknown) => {
-      setFailure({
+      setActionFailure({
         title: 'Recording did not start',
         detail: error instanceof Error ? error.message : 'Unknown failure',
       });
@@ -186,6 +199,7 @@ export default function VoiceNoteRoute(): ReactNode {
 
   const stop = (): void => {
     if (!state.isRecording) return;
+    setActionFailure(null);
     const seconds = Math.round(state.durationMillis / 1000);
     void recorder
       .stop()
@@ -201,7 +215,7 @@ export default function VoiceNoteRoute(): ReactNode {
         }
       })
       .catch((error: unknown) => {
-        setFailure({
+        setActionFailure({
           title: 'Recording did not save',
           detail: error instanceof Error ? error.message : 'Unknown failure',
         });
@@ -210,8 +224,9 @@ export default function VoiceNoteRoute(): ReactNode {
 
   const save = (): void => {
     if (busy || captured === null) return;
+    setActionFailure(null);
     if (visit === null || userId === null) {
-      setFailure(VISIT_NOT_HERE);
+      setActionFailure(VISIT_NOT_HERE);
       return;
     }
     setBusy(true);
@@ -236,7 +251,7 @@ export default function VoiceNoteRoute(): ReactNode {
         setSaved(SAVED[outcome.kind](outcome.kind === 'refused' ? outcome.message : ''));
       })
       .catch((error: unknown) => {
-        setFailure({
+        setActionFailure({
           title: 'Your note was not saved',
           detail: error instanceof Error ? error.message : 'Unknown failure',
         });
@@ -262,6 +277,7 @@ export default function VoiceNoteRoute(): ReactNode {
           state.isRecording ? state.durationMillis / 1000 : (captured?.seconds ?? 0),
         )}
         failure={failure ?? (visitMissing ? VISIT_NOT_HERE : null)}
+        actionFailure={actionFailure}
         hint="Try covering — what they asked, what you promised, what to do next time."
         onHoldEnd={stop}
         onHoldStart={start}
