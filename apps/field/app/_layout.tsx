@@ -16,6 +16,8 @@ import { AuthGate } from '../src/auth-gate';
 import { OutboxFlusher } from '../src/sync/flusher';
 import { PulledStoreProvider } from '../src/sync/pulled-store';
 import { ZoneCaveatBanner } from '../src/today/ZoneCaveatBanner';
+import { apiTarget } from '../src/config';
+import { ConfigurationError } from '../src/config-error';
 
 /**
  * The four faces Phase 1's scale actually asks for.
@@ -48,7 +50,21 @@ const FACES = {
  */
 const FONT_DEADLINE_MS = 3_000;
 
+/**
+ * FE-D2 2. A release build with no real API address stops HERE, before the session, the pull, the
+ * outbox or any screen mounts: each of those would start talking to an address that does not
+ * exist. A wrapper rather than an early return inside `App`, so `App`'s hooks never run
+ * conditionally.
+ */
 export default function RootLayout(): ReactNode {
+  return apiTarget.kind === 'misconfigured' ? (
+    <ConfigurationError reason={apiTarget.reason} />
+  ) : (
+    <App />
+  );
+}
+
+function App(): ReactNode {
   const [fontsLoaded, fontError] = useFonts(FACES);
 
   /**
