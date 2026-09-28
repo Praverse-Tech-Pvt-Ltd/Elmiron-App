@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { ApiRequestError } from '@fieldforce/core';
 import type { Analysis, ConsentRecord, Doctor, Visit } from '@fieldforce/core';
 import { AnalysisScreen, Screen } from '@fieldforce/ui';
 import type { AnalysisFinding } from '@fieldforce/ui';
 import type { CitationSpanProps } from '@fieldforce/ui';
 import { createClientForScenario } from '../../src/api';
+import { coachingEnabled } from '../../src/features';
 import { NO_AUDIO_NOTE, retentionNote } from '../../src/coaching/content';
 import { isWorkedWell, orderedFindings, statusNote, timestampFrom } from '../../src/coaching/feed';
 // MR-25 C1. This screen still READS from the mock at :4010, which sends the territory's
@@ -31,7 +32,16 @@ import { dayMonthFrom } from '../../src/doctors/profile';
  * recording was ever made. A play button that did nothing would tell the MR a
  * recording of them exists.
  */
+/**
+ * FE-D4 1. Unreachable unless `coachingEnabled` (off by default): a deep link lands on Today, and
+ * nothing is fetched. A wrapper, so `Analysis`'s hooks never run conditionally. Nothing below is
+ * changed.
+ */
 export default function AnalysisRoute(): ReactNode {
+  return coachingEnabled ? <Analysis /> : <Redirect href="/home" />;
+}
+
+function Analysis(): ReactNode {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
