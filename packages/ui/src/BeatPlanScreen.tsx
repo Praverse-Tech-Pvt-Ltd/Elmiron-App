@@ -27,6 +27,11 @@ export interface BeatPlanStop {
   readonly state: 'done' | 'current' | 'upcoming' | 'cancelled' | 'not_met';
   /** "09:20 · consented · 8 min" — assembled by the caller. */
   readonly detail: string;
+  /**
+   * FE-D2 3. The visit this stop is, when there is one. A stop with a visit opens the VISIT; a
+   * stop without one (the plan names a doctor with no visit row yet) opens the doctor.
+   */
+  readonly visitId?: string | null;
 }
 
 export interface BeatPlanScreenProps {
@@ -36,6 +41,12 @@ export interface BeatPlanScreenProps {
   readonly loading?: boolean;
   readonly failure?: { readonly title: string; readonly detail: string } | null;
   readonly onOpenDoctor?: (doctorId: string) => void;
+  /**
+   * FE-D2 3 (operator ruling). Tapping a stop that has a visit opens that visit. Before this,
+   * every stop opened the doctor, whose profile has no visit action, so the only visit a rep
+   * could open all day was the single "next" one on Today.
+   */
+  readonly onOpenVisit?: (visitId: string) => void;
   /**
    * MR-45 (`BE-W89`). The plan's state, in the MR's words — *"Submitted — not yet
    * approved"*. Null when there is no plan to describe.
@@ -92,9 +103,30 @@ export const BeatPlanScreen = ({
   loading = false,
   failure = null,
   onOpenDoctor,
+  onOpenVisit,
   statusLine = null,
   notice = null,
 }: BeatPlanScreenProps): ReactNode => {
+  /** The visit when the stop has one and the caller can open it; otherwise the doctor, as before. */
+  const pressFor = (stop: BeatPlanStop): { onPress: () => void } | Record<string, never> => {
+    const visitId = stop.visitId ?? null;
+    if (visitId !== null && onOpenVisit !== undefined) {
+      return {
+        onPress: () => {
+          onOpenVisit(visitId);
+        },
+      };
+    }
+    if (onOpenDoctor !== undefined) {
+      return {
+        onPress: () => {
+          onOpenDoctor(stop.id);
+        },
+      };
+    }
+    return {};
+  };
+
   if (failure !== null) {
     return (
       <>
@@ -136,16 +168,7 @@ export const BeatPlanScreen = ({
       <View style={styles.rows}>
         {stops.map((stop) =>
           stop.state === 'current' ? (
-            <Card
-              key={stop.id}
-              {...(onOpenDoctor === undefined
-                ? {}
-                : {
-                    onPress: () => {
-                      onOpenDoctor(stop.id);
-                    },
-                  })}
-            >
+            <Card key={stop.id} {...pressFor(stop)}>
               <Label muted>Next stop</Label>
               <View style={styles.currentLines}>
                 <Heading>{stop.doctorName}</Heading>
@@ -159,13 +182,7 @@ export const BeatPlanScreen = ({
               key={stop.id}
               status={STATUS[stop.state]}
               title={stop.doctorName}
-              {...(onOpenDoctor === undefined
-                ? {}
-                : {
-                    onPress: () => {
-                      onOpenDoctor(stop.id);
-                    },
-                  })}
+              {...pressFor(stop)}
             />
           ),
         )}

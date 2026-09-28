@@ -114,10 +114,15 @@ export default function BeatPlanRoute(): ReactNode {
         onOpenDoctor={(doctorId) => {
           router.push(`/doctor/${doctorId}`);
         }}
+        // FE-D2 3. A stop with a visit opens that visit; one without still opens the doctor.
+        onOpenVisit={(visitId) => {
+          router.push(`/visit/${visitId}`);
+        }}
         planned={route?.planned ?? 0}
         statusLine={statusLineOf(view)}
         stops={(route?.stops ?? []).map((stop) => ({
           id: stop.doctorId,
+          visitId: stop.visitId,
           doctorName: stop.doctorName,
           clinic: stop.clinic,
           state: stop.state,
