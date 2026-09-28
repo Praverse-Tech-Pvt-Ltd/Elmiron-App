@@ -83,8 +83,10 @@ keeps recording about itself.*
 - The **console screen** where you review and approve a draft. *Built this session.*
 - **Route wiring and contract guards**, so the AI and knowledge endpoints are declared and typed
   for the app team. *Done this session.*
-- **Audit rows on the AI and learning tables**, so approvals and changes leave a trail. *Done
-  this session.*
+- **Audit rows on the AI and learning tables**, so approvals and changes leave a trail. *Already
+  existed.* We checked before building and found 15 of the 16 tables already had them — our own
+  inventory, five days old, had recorded a gap that was already closed. The 16th is a derived table
+  that should stay unaudited, and the reasoning is in `W1-A-recon.md`.
 
 **What that adds up to, said plainly.** By 4 October the app can have a **working approval
 pipeline with no AI in it**. That is genuinely useful — it is the thing that makes AI-generated
