@@ -41,6 +41,16 @@ const SYNCING = {
     'Your plan for today arrived. Its stops have not yet — they will appear here when they do.',
 };
 
+/**
+ * FE-D3 B2. The plan arrived and its stops did not, and the last sync FAILED. It used to show
+ * SYNCING above, which told the rep the stops were on their way when nothing was arriving.
+ */
+const STOPS_UNREACHABLE = {
+  title: 'Your stops could not be loaded',
+  detail:
+    'Your plan for today arrived, but the last sync did not finish before its stops came through. They are not on this phone yet.',
+};
+
 const NO_STOPS = {
   title: 'This plan has no stops',
   detail: 'Your plan for today came through with no doctors on it.',
@@ -74,7 +84,10 @@ const stopDetail = (stop: RouteStop, zone: TerritoryZone): string =>
     .join(' · ');
 
 const statusLineOf = (view: BeatPlanView): string | null =>
-  view.kind === 'route' || view.kind === 'syncing' || view.kind === 'no-stops'
+  view.kind === 'route' ||
+  view.kind === 'syncing' ||
+  view.kind === 'no-stops' ||
+  view.kind === 'stops-unreachable'
     ? view.statusLine
     : null;
 
@@ -82,6 +95,8 @@ const noticeOf = (view: BeatPlanView): { title: string; detail: string } | null 
   switch (view.kind) {
     case 'syncing':
       return SYNCING;
+    case 'stops-unreachable':
+      return STOPS_UNREACHABLE;
     case 'no-stops':
       return NO_STOPS;
     default:

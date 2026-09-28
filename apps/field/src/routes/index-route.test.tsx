@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import { BodyText as mockBodyText } from '@fieldforce/ui';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
  * Route tests live in `src/routes/`, NOT beside the routes in `app/`.
@@ -65,5 +66,22 @@ describe('app/index.tsx — where a cold start lands', () => {
     mockSession.mockReturnValue({ status: 'signed-out' });
     await render(<Index />);
     expect(screen.getByText('redirect:/sign-in')).toBeTruthy();
+  });
+
+  it('FE-D3 B1: a storage read that FAILS still lands somewhere — it never spins forever', async () => {
+    // The inventory (§c) said a rejected first-run read would leave "Restoring your session" up
+    // for good. It cannot: `hasCompletedFirstRun` catches inside and answers "not done", and the
+    // session restore catches too (`session.tsx`, MR-28 C2). This pins that, so removing either
+    // catch shows up here. A failed read sends the rep through setup again, which is recoverable.
+    const failing = jest
+      .spyOn(AsyncStorage, 'getItem')
+      .mockRejectedValue(new Error('The storage on this phone could not be read.'));
+    mockSession.mockReturnValue({ status: 'signed-in' });
+    await render(<Index />);
+
+    expect(await screen.findByText('redirect:/onboarding/location')).toBeTruthy();
+    expect(screen.queryByText('Restoring your session')).toBeNull();
+    expect(failing).toHaveBeenCalled();
+    failing.mockRestore();
   });
 });

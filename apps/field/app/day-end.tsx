@@ -88,6 +88,8 @@ export default function DayEnd(): ReactNode {
       client.listVisits(),
       // Settled separately: a mileage window the server refuses must not take the
       // visit counts down with it. The day still happened.
+      // FE-D3 B4. A failure here leaves the distance null, which the screen now reports as "not
+      // available" rather than "no distance yet".
       client.listMileage({ fromDate: day, toDate: day }).catch(() => null),
     ])
       .then(([visits, mileage]) => {

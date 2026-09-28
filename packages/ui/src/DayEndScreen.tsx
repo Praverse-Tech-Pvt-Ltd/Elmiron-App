@@ -82,7 +82,10 @@ export interface DayEndScreenProps {
    * is the term the MR-11 C5 decision was taken on.
    */
   readonly notMet: number | null;
-  /** "48.2 km" from the server's metres, or null when the day has none. */
+  /**
+   * "48.2 km" from the server's metres (a real zero is "0.0 km"), or null when it is UNKNOWN —
+   * still loading, or the mileage fetch failed (FE-D3 B4).
+   */
   readonly distanceLabel: string | null;
   /** Why there is no rupee figure. Required — see the note above. */
   readonly rateNote: string;
@@ -192,9 +195,13 @@ export const DayEndScreen = ({
       <Card>
         <Label muted>On your claim</Label>
         {distanceLabel === null ? (
-          <BodyText>
-            No distance yet. It appears once you have checked into more than one visit.
-          </BodyText>
+          // FE-D3 B4. Null is UNKNOWN: still loading (the spinner above says so) or the mileage
+          // fetch failed. A real zero arrives as a figure. This used to read "No distance yet. It
+          // appears once you have checked into more than one visit" — a false reason for a
+          // fetch that had failed.
+          loading ? null : (
+            <BodyText>Distance not available — it could not be fetched.</BodyText>
+          )
         ) : (
           <View style={styles.figureRow}>
             <Figure>{distanceLabel}</Figure>
