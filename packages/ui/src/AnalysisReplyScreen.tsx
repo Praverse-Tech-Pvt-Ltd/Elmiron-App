@@ -42,7 +42,14 @@ export interface AnalysisReplyScreenProps {
   readonly busy?: boolean;
   /** "Saved as a draft on this phone." — a completion, not a warning. */
   readonly saved?: string | null;
+  /** The finding could not be LOADED. There is nothing to reply to, so it replaces the form. */
   readonly failure?: { readonly title: string; readonly detail: string } | null;
+  /**
+   * FE-D2 5. The reply could not be SENT. It is shown above the form and never replaces it: the
+   * reply is still being written, and a banner saying "what you wrote is still on the screen"
+   * must be on a screen where it is.
+   */
+  readonly sendFailure?: { readonly title: string; readonly detail: string } | null;
 }
 
 const styles = StyleSheet.create({
@@ -62,6 +69,7 @@ export const AnalysisReplyScreen = ({
   busy = false,
   saved = null,
   failure = null,
+  sendFailure = null,
 }: AnalysisReplyScreenProps): ReactNode => {
   if (failure !== null) {
     return (
@@ -80,6 +88,10 @@ export const AnalysisReplyScreen = ({
         <Heading>Your reply</Heading>
         <Label muted>Goes with the finding, wherever it appears</Label>
       </View>
+
+      {sendFailure === null ? null : (
+        <Banner detail={sendFailure.detail} title={sendFailure.title} tone="critical" />
+      )}
 
       {saved === null ? null : <Banner detail={saved} title="Saved" tone="info" />}
 
