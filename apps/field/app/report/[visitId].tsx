@@ -1,24 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import uuid from 'expo-modules-core/src/uuid';
-import type { Doctor, Visit } from '@fieldforce/core';
 import { CallReportScreen, Screen } from '@fieldforce/ui';
-// The WRITE is converted; the READS on this screen are not. `listVisits`/`listDoctors`
-// below still come from the mock, and this screen is named as such in the MR-18 C7 table.
-// Part B is the write conversion, and pretending otherwise here would be the single-column
-// table all over again.
-import { createClientForScenario } from '../../src/api';
+// FE-D4 2. The READS are converted too now: the visit and the doctor come from the pulled store,
+// like every other visit screen, instead of `createClientForScenario().listVisits()/listDoctors()`
+// from the mock at :4010. The WRITE was converted in MR-18.
 import { createPushClient } from '../../src/sync/push-client';
 import { QUEUE_UNREADABLE } from '../../src/sync/async-storage-store';
 import { callReportQueueItem, sendOrQueue } from '../../src/sync/outbox';
-// MR-25 C1. This screen still READS from the mock at :4010, which sends the territory's
-// own offset, so the character slice is correct here. **DELETE THE DISABLE BELOW WHEN
-// THIS SCREEN IS CONVERTED** and move to dayMonthIn / clockIn with the zone from
-// usePulledStore(). MR-21 converted app/visit/[id].tsx and kept clockFrom; the gotcha
-// entry did not stop it, and this line sitting on the import is what will.
-// eslint-disable-next-line no-restricted-imports
-import { dayMonthFrom } from '../../src/doctors/profile';
+import { usePulledStore } from '../../src/sync/pulled-store';
+import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
+// MR-25 C1 asked for this on conversion: the day in the TERRITORY's zone, not a character slice of
+// the ISO string (which was right only for the mock's own offset). The lint exception is gone.
+import { dayMonthIn } from '../../src/today/territory-day';
 
 /**
  * C6 — the call report binding, for one visit.
@@ -31,34 +26,19 @@ import { dayMonthFrom } from '../../src/doctors/profile';
  */
 export default function CallReport(): ReactNode {
   const { visitId } = useLocalSearchParams<{ visitId: string }>();
-  const [doctorName, setDoctorName] = useState('This visit');
-  const [dateLabel, setDateLabel] = useState('');
+  // FE-D4 2. From the phone. A visit or doctor the phone does not hold leaves the heading as
+  // "This visit" and the report writable, as before: the label is not worth the MR's words.
+  const { store, zone } = usePulledStore();
+  const visit = visitsFromStore(store).find((candidate) => candidate.id === visitId);
+  const doctor = doctorsFromStore(store).find((candidate) => candidate.id === visit?.doctorId);
+  const doctorName = doctor?.fullName ?? 'This visit';
+  const dateLabel = visit?.completedAt == null ? '' : dayMonthIn(visit.completedAt, zone);
   const [summary, setSummary] = useState('');
   const [objections, setObjections] = useState('');
   const [nextStep, setNextStep] = useState('');
   const [sending, setSending] = useState(false);
   const [sentNote, setSentNote] = useState<{ title: string; detail: string } | null>(null);
   const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const client = createClientForScenario();
-    void Promise.all([client.listVisits(), client.listDoctors()])
-      .then(([visits, doctors]: [{ items: readonly Visit[] }, { items: readonly Doctor[] }]) => {
-        if (cancelled) return;
-        const visit = visits.items.find((candidate) => candidate.id === visitId);
-        const doctor = doctors.items.find((candidate) => candidate.id === visit?.doctorId);
-        if (doctor !== undefined) setDoctorName(doctor.fullName);
-        if (visit?.completedAt != null) setDateLabel(dayMonthFrom(visit.completedAt));
-      })
-      .catch(() => {
-        // The report is still writable without the doctor's name. Failing the whole
-        // screen because a label could not be fetched would lose the MR's words.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [visitId]);
 
   const send = (): void => {
     if (sending) return;
