@@ -30,6 +30,14 @@ describe('FE-D7 4 — how the screen reads', () => {
     expect(screen.getByText('Your day')).toBeTruthy();
   });
 
+  it('offers "See everything recorded today" as a secondary button, as B7 draws it', async () => {
+    await render(<DayEndScreen {...props} />);
+    const button = screen.getByRole('button', { name: 'See everything recorded today' });
+    expect(
+      (StyleSheet.flatten(button.props['style']) as { backgroundColor?: string }).backgroundColor,
+    ).toBe(tokens.color.wash);
+  });
+
   it('titles the screen at the design’s 27px day-screen title, not the section heading', async () => {
     await render(<DayEndScreen {...props} dayLabel="Today" />);
     const title = StyleSheet.flatten(screen.getByText("Today — that's the day").props['style']) as {

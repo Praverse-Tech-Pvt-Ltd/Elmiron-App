@@ -153,7 +153,9 @@ export const consentDetails = (firstName: string): readonly ConsentDetailItem[] 
  */
 export const fiduciaryNote = (organisation: string | null, repFirstName: string): string => {
   const who = organisation ?? `${repFirstName}'s employer`;
-  return `${who} is the Data Fiduciary for this recording. A complaint can be made to the Data Protection Board of India.`;
+  // FE-D7 4. It opens the sentence, and the route's fallback name is 'your rep'.
+  const opening = `${who.charAt(0).toUpperCase()}${who.slice(1)}`;
+  return `${opening} is the Data Fiduciary for this recording. A complaint can be made to the Data Protection Board of India.`;
 };
 
 /**

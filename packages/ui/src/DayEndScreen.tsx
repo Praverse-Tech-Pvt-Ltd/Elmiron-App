@@ -225,7 +225,12 @@ export const DayEndScreen = ({
           so a "Start day tomorrow" button would switch on nothing and tell the MR
           it had.
         */}
-        <Button label="See everything recorded today" onPress={onOpenTransparency} />
+        {/* FE-D7 4. Secondary, as B7 draws it: the day is over, and nothing here is the next step. */}
+        <Button
+          label="See everything recorded today"
+          onPress={onOpenTransparency}
+          variant="secondary"
+        />
       </View>
     </>
   );
