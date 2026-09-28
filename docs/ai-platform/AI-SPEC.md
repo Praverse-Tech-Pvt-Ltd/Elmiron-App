@@ -49,18 +49,18 @@ waiting on engineering.**
 
 ## The three things we are asking you to confirm, not decide
 
-1. **Recording stays off** (`C20`). The consultation-recording feature stays built and switched
+1. **Recording stays off** (`C21`). The consultation-recording feature stays built and switched
    off. Nothing in this document records a real doctor.
-2. **No patient information, anywhere** (`C24`). Confirmed and already enforced in code.
-3. **AI-generated training text is never approved automatically** (`C23`). It enters as a draft,
+2. **No patient information, anywhere** (`C25`). Confirmed and already enforced in code.
+3. **AI-generated training text is never approved automatically** (`C24`). It enters as a draft,
    labelled as machine-written, and only a second human can approve it. **We are asking you to
-   confirm you understand that you are the second human** (`C25`).
+   confirm you understand that you are the second human** (`C26`).
 
 ---
 
 # WHAT 4 OCTOBER CAN AND CANNOT INCLUDE
 
-*The target is 4 October 2026 (`C27`). This page sets each capability against it. It is not
+*The target is 4 October 2026 (`C28`). This page sets each capability against it. It is not
 softened, because a target met on paper and not in the app is the exact failure this project
 keeps recording about itself.*
 
@@ -105,7 +105,7 @@ and it still needs approved product content to answer from.
 
 # SCOPE
 
-## In scope (after `C21`, `C22`, `C23`)
+## In scope (after `C22`, `C23`, `C24`)
 
 `product_qa` · `mr_chat` · `lms_tutor` · `ai_doctor` (simulation) · `ai_coach` (on simulations
 only) · **voice for practice only** — speech in and speech out **inside a simulation**, never in a
@@ -114,13 +114,13 @@ real consultation.
 ## Out of scope, one line each
 
 - **`transcript_analysis`** — analysing a recording of a real consultation. **Out:** there are no
-  real recordings in this release (`C20`), so there is nothing to analyse. Flag stays off.
+  real recordings in this release (`C21`), so there is nothing to analyse. Flag stays off.
 - **`pv_screening`** — scanning a real conversation for safety signals. **Out:** same reason, and
-  it additionally needs the named PV/DPDP signatory (`#18`, deferred by `C28`). Flag stays off.
+  it additionally needs the named PV/DPDP signatory (`#18`, deferred by `C29`). Flag stays off.
 - **`complaint_screening`** — scanning a real conversation for product complaints. **Out:** same
   reason as `pv_screening`. Flag stays off.
 - **`patient_education`** — a patient-facing assistant. **Out permanently, from this repository:**
-  `C24` keeps all patient-facing AI in the separate clinical system. It is deliberately absent
+  `C25` keeps all patient-facing AI in the separate clinical system. It is deliberately absent
   from the feature list in code (`packages/core/src/field/ai.ts:24`).
 
 ---
@@ -169,7 +169,7 @@ from naming a doctor.
 
 **Can an input contain an employee's voice?** No. This capability is text only.
 
-**Patient data: refused, by name.** `C24` forbids patient information anywhere in this app. The
+**Patient data: refused, by name.** `C25` forbids patient information anywhere in this app. The
 guardrail that enforces it is **`detectPatientSignals`**
 (`packages/core/src/field/gateway/guardrails.ts:59`). It runs at **step 4 — before the search and
 before any model call** — and looks for Indian phone numbers, dates of birth, patient-identifier
@@ -320,7 +320,7 @@ An explanation grounded in the lesson, or the standard refusals. **Shape not yet
 
 ## A6. What leaves India — the learner's question and the lesson text. `#5` decides.
 
-**One thing to notice.** Under `C23` a lesson's text may itself have been **drafted by AI and then
+**One thing to notice.** Under `C24` a lesson's text may itself have been **drafted by AI and then
 approved by you**. That is allowed. What is *not* allowed is that draft reaching a learner without
 your approval — see the hard rule below.
 
@@ -375,7 +375,7 @@ whoever writes the scenarios, and it is the operator's to enforce, not something
 **Can an input contain an employee's voice?** **Yes — this is the one that does.** If voice
 practice is built, **the rep's recorded voice is the payload sent to a speech vendor.** See A6.
 
-**Patient data: refused.** `C24` applies. The same guardrail must run on the rep's turns. **It
+**Patient data: refused.** `C25` applies. The same guardrail must run on the rep's turns. **It
 does not run today because none of this exists** — this is a requirement on the build, not a
 description of one.
 
@@ -390,7 +390,7 @@ The synthetic doctor's reply, as text and (if voice is built) as audio. Refusals
 a speech-to-text vendor, and a text-to-speech vendor. **None is chosen and none is named.**
 
 **A note on the speech vendor.** `#19` in the register is the speech vendor for **real visits**,
-and `C28` defers it. **A speech vendor for practice is a different question with a different
+and `C29` defers it. **A speech vendor for practice is a different question with a different
 answer**, because the payload is an employee's voice rather than a doctor's — a much lighter
 consent problem, but not a zero one.
 
@@ -430,7 +430,7 @@ an employee-voice answer under `#5`. Plus: **it does not exist**, and it is the 
 
 After a **practice** session ends, the rep gets feedback: what they covered, what they missed, how
 they handled the objection, how clearly they communicated. **It never analyses a real doctor
-visit** — that is coaching on real visits, which `C4` puts out of v1 and `C20` makes impossible
+visit** — that is coaching on real visits, which `C4` puts out of v1 and `C21` makes impossible
 anyway.
 
 ## A2. The flow
@@ -463,7 +463,7 @@ Written feedback, and a **score** — under the strict limits below. Plus the st
 
 ## The scores rule, which is the part to read twice
 
-**`C26`, built to the safe default.** A score may exist on a **practice simulation** and on an
+**`C27`, built to the safe default.** A score may exist on a **practice simulation** and on an
 **LMS assessment**. It is visible to **the MR themselves** and to the **company admin**.
 
 **It is NOT visible on any manager surface. There are no team averages and no rankings.**
@@ -494,7 +494,7 @@ until the amendment exists.**
 ## A1. What it does
 
 Inside a practice simulation, the rep **speaks** instead of typing and **hears** the synthetic
-doctor reply. **Only inside a simulation. Never in a real consultation** (`C20`).
+doctor reply. **Only inside a simulation. Never in a real consultation** (`C21`).
 
 ## A2. The flow
 
@@ -503,7 +503,7 @@ AI Doctor flow → the reply text is sent to a text-to-speech vendor → audio p
 
 | Step | Function | Built? |
 | --- | --- | --- |
-| Capturing audio on the phone | the existing recording code | **Built, and switched off** (`C20`). It was built for real consultations and is guarded accordingly — see the warning below |
+| Capturing audio on the phone | the existing recording code | **Built, and switched off** (`C21`). It was built for real consultations and is guarded accordingly — see the warning below |
 | Speech to text | `TranscriptionProvider` | **Interface only** (`providers.ts:53`) |
 | Speech to speech reply | `SpeechSynthesisProvider` | **Interface only** (`providers.ts:61`) |
 | Everything between | — | **Does not exist** |
@@ -615,7 +615,7 @@ flowchart TD
     L["Rep hears the reply<br/><b>DOES NOT EXIST</b>"]
     E["Session ends and is stored<br/><b>DOES NOT EXIST</b>"]
     C["AI Coach analyses the session<br/><b>DOES NOT EXIST</b>"]
-    R["Rep sees feedback + score<br/><b>DOES NOT EXIST</b><br/>visible to the MR and the<br/>company admin ONLY — C26"]
+    R["Rep sees feedback + score<br/><b>DOES NOT EXIST</b><br/>visible to the MR and the<br/>company admin ONLY — C27"]
     X["Manager sees scores<br/><b>DELIBERATELY NOT BUILT</b><br/>blocked on #14 and a written<br/>amendment to the recorded rule"]
 
     S --> P --> V1 --> T1 --> G --> M --> T2 --> L
@@ -638,9 +638,9 @@ not be planned as one.
 
 # THE HARD RULE — AI-generated text is never born approved
 
-**This is `C23`, and it is the one place this release could go badly wrong.**
+**This is `C24`, and it is the one place this release could go badly wrong.**
 
-`C23` permits AI-generated text to be used extensively in the learning platform. That is a
+`C24` permits AI-generated text to be used extensively in the learning platform. That is a
 reasonable decision and it is also the decision most capable of putting unreviewed machine-written
 claims in front of a rep who will repeat them to a doctor.
 
@@ -672,7 +672,7 @@ right-hand column, and the reviewer sees that before approving rather than after
 
 ## The account problem you must solve before any of this works
 
-**Four eyes means two people.** The operator is the approver (`C25`). The author is whoever — or
+**Four eyes means two people.** The operator is the approver (`C26`). The author is whoever — or
 whatever — drafted. **They cannot be the same account.**
 
 | Account | Held by | Does |

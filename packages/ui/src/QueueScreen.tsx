@@ -5,6 +5,7 @@ import { BodyText, Heading, Label } from './Text';
 import { Banner } from './Banner';
 import { Button } from './Button';
 import { Screen } from './Screen';
+import { Spinner } from './Spinner';
 
 /**
  * The upload queue — the MR's only proof their day's work is safe.
@@ -94,6 +95,15 @@ export interface QueueScreenProps {
    * which is why it arrives as a prop rather than being derived from `items`.
    */
   readonly retryFailure?: string;
+  /**
+   * FE-D2 4 — whether the queue has been READ, which is not the same as whether it is empty.
+   *
+   * `reading`: the disk read has not answered, so nothing about what was sent is known. The screen
+   * says it is reading and makes no claim. `unreadable`: the read failed; the caller's banner says
+   * so, and "Everything is sent" must not appear under it. `read` (the default): `items` is the
+   * queue, and an empty one really is "Everything is sent".
+   */
+  readonly readState?: 'reading' | 'unreadable' | 'read';
 }
 
 export type QueueRowState = 'sent' | 'waiting' | 'waiting-long' | 'refused' | 'needs-attention';
@@ -343,6 +353,7 @@ export const QueueScreen = ({
   onRetry,
   onContactSupport,
   retryFailure,
+  readState = 'read',
 }: QueueScreenProps): ReactNode => {
   const outstanding = items.filter((item) => item.status !== 'synced');
   const summary = stuckSummaryFor(items, rejections, longRetryAfterAttempts);
@@ -359,7 +370,9 @@ export const QueueScreen = ({
         <StuckBlock onContactSupport={onContactSupport} onRetry={onRetry} summary={summary} />
       )}
 
-      {outstanding.length === 0 ? (
+      {readState === 'reading' ? <Spinner label="Reading your queue" /> : null}
+
+      {readState !== 'read' ? null : outstanding.length === 0 ? (
         <View style={styles.empty}>
           <View style={styles.statusLine}>
             <Text importantForAccessibility="no" accessibilityElementsHidden style={styles.glyph}>

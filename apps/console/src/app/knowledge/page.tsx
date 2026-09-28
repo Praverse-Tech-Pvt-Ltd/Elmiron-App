@@ -7,7 +7,7 @@ import { Body, MissingNote, Title } from '../../lib/ui';
 import { KnowledgeReviewList } from '../../lib/knowledge-review-list';
 
 /**
- * W1-A E3 — the knowledge review queue. The screen `C25` needs to exist.
+ * W1-A E3 — the knowledge review queue. The screen `C26` needs to exist.
  *
  * **Why this route exists and is not just a component.** The central finding of
  * `docs/ai-platform/INVENTORY.md` is that **zero of PR #2's eight pieces has ever been called by an
@@ -23,10 +23,10 @@ import { KnowledgeReviewList } from '../../lib/knowledge-review-list';
  *
  * **What it deliberately does NOT do.**
  *
- * * It does not seed, generate or draft anything. `C23` permits AI-generated drafts; producing them
+ * * It does not seed, generate or draft anything. `C24` permits AI-generated drafts; producing them
  *   needs the gateway (`#4`) and a model (`#5`), neither of which exists. This screen reviews
  *   whatever is there, including nothing.
- * * It shows no score and no count per author. `C26` keeps scores off every manager surface, and a
+ * * It shows no score and no count per author. `C27` keeps scores off every manager surface, and a
  *   "drafts rejected per person" figure is a score with a different name.
  */
 

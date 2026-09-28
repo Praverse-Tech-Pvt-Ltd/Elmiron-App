@@ -98,6 +98,11 @@ export interface SamplesScreenProps {
   readonly saved?: string | null;
   readonly loading?: boolean;
   readonly failure?: { readonly title: string; readonly detail: string } | null;
+  /**
+   * FE-D2 6. Why the last press could not go ahead. Shown above the form and never instead of
+   * it; the caller clears it on the next press.
+   */
+  readonly actionFailure?: { readonly title: string; readonly detail: string } | null;
 }
 
 const KIND_OPTIONS = [
@@ -140,6 +145,7 @@ export const SamplesScreen = ({
   saved = null,
   loading = false,
   failure = null,
+  actionFailure = null,
 }: SamplesScreenProps): ReactNode => {
   if (failure !== null) {
     return (
@@ -158,6 +164,10 @@ export const SamplesScreen = ({
         <Heading>Leave samples</Heading>
         <Label muted>{`${doctorName} · ${dateLabel}`}</Label>
       </View>
+
+      {actionFailure === null ? null : (
+        <Banner detail={actionFailure.detail} title={actionFailure.title} tone="critical" />
+      )}
 
       {loading ? <Spinner label="Getting this visit" /> : null}
 

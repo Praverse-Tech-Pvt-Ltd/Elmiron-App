@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
 /**
  * `BE-W89`, client half — MR-45. The beat-plan SCREEN, bound to the pulled store.
@@ -16,7 +16,8 @@ import { render, screen } from '@testing-library/react-native';
 
 const mockStore = jest.fn();
 jest.mock('../sync/pulled-store', () => ({ usePulledStore: () => mockStore() }));
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
+const mockPush = jest.fn();
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 
 // eslint-disable-next-line import/first
 import BeatPlanRoute from '../../app/beat-plan';
@@ -123,6 +124,7 @@ const pulled = (over: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   mockStore.mockReset();
+  mockPush.mockReset();
 });
 
 describe('BE-W89 — the screen renders the plan from the pulled store', () => {
@@ -188,10 +190,76 @@ describe('BE-W89 B4 — a plan whose stops have not arrived', () => {
     expect(screen.queryByText('Your stops are still syncing')).toBeNull();
   });
 
+  it('FE-D3 B2: when the pull FAILED, says the stops could not be loaded — not "syncing"', async () => {
+    mockStore.mockReturnValue(
+      pulled({
+        status: 'failed',
+        failure: { kind: 'unreachable' },
+        store: store({ entries: [] }),
+      }),
+    );
+    await render(<BeatPlanRoute />);
+
+    expect(screen.getByText('Your stops could not be loaded')).toBeTruthy();
+    expect(screen.queryByText('Your stops are still syncing')).toBeNull();
+    expect(screen.queryByText('This plan has no stops')).toBeNull();
+    // The plan that DID arrive is still stated.
+    expect(screen.getByText('Submitted — not yet approved')).toBeTruthy();
+  });
+
   it('says no route when there is genuinely no plan for today', async () => {
     mockStore.mockReturnValue(pulled({ store: store({ plans: [], entries: [] }) }));
     await render(<BeatPlanRoute />);
 
     expect(screen.getByText('No route for today')).toBeTruthy();
+  });
+});
+
+/**
+ * FE-D2 3 — tapping a stop opens THAT VISIT (operator ruling, 28 September).
+ *
+ * Until now a stop opened the doctor's profile, and the profile has no visit action, so the only
+ * visit a rep could open all day was the single "next" one on Today. A rep seeing doctors out of
+ * order had no way to check in anywhere else.
+ */
+const PLANNED_D2 = {
+  ...VISIT,
+  id: '44444444-4444-4444-8444-444444444402',
+  doctorId: D2,
+  status: 'planned',
+  startedAt: null,
+  completedAt: null,
+};
+
+describe('FE-D2 3 — a stop opens its visit', () => {
+  it('an upcoming stop with a planned visit opens that visit, not the doctor', async () => {
+    mockStore.mockReturnValue(pulled({ store: store({ visits: [VISIT, PLANNED_D2] }) }));
+    await render(<BeatPlanRoute />);
+
+    await fireEvent.press(screen.getByText('Dr Vikram Rao'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith(`/visit/${PLANNED_D2.id}`);
+  });
+
+  it('a done stop opens its visit too', async () => {
+    mockStore.mockReturnValue(pulled({ store: store({ visits: [VISIT, PLANNED_D2] }) }));
+    await render(<BeatPlanRoute />);
+
+    await fireEvent.press(screen.getByText('Dr Asha Deshpande'));
+
+    expect(mockPush).toHaveBeenCalledWith(`/visit/${VISIT.id}`);
+  });
+
+  it('UNCHANGED ON PURPOSE: a stop with no visit row still opens the doctor', async () => {
+    // The ruling covers a stop that HAS a visit. With no visit row there is nothing to open, and
+    // creating one is a new kind of write, so this keeps today's behaviour and is raised with the
+    // operator rather than decided here.
+    mockStore.mockReturnValue(pulled());
+    await render(<BeatPlanRoute />);
+
+    await fireEvent.press(screen.getByText('Dr Vikram Rao'));
+
+    expect(mockPush).toHaveBeenCalledWith(`/doctor/${D2}`);
   });
 });

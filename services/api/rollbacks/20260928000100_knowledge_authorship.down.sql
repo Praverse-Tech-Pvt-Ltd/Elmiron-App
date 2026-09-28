@@ -3,7 +3,7 @@
 -- **What rolling back MEANS, and it is not neutral.**
 --
 -- 1. **The authorship label is DROPPED, and the information in it is lost.** Any version marked
---    `ai_generated` becomes indistinguishable from a person's text. `C23`'s labelling half stops
+--    `ai_generated` becomes indistinguishable from a person's text. `C24`'s labelling half stops
 --    existing. If any AI-drafted content has been loaded, roll back only if you are willing for
 --    an approver to be unable to tell machine text from human text.
 -- 2. **The insert path returns to COERCING.** An insert claiming `status = 'approved'` will once

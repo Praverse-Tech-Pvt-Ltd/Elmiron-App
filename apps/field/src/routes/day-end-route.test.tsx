@@ -81,7 +81,11 @@ describe('app/day-end.tsx — B7', () => {
     await render(<DayEnd />);
 
     expect(await screen.findByText('Nothing is being recorded.')).toBeTruthy();
-    expect(screen.getByText('0 of 0')).toBeTruthy();
+    // FE-D2 7 — corrected. This asserted '0 of 0' after a FAILED load: it asserted the defect.
+    // The counts are unknown, not zero, and the screen now says they are not available.
+    expect(await screen.findByText(/Not available/u)).toBeTruthy();
+    expect(screen.queryByText('0 of 0')).toBeNull();
+    expect(screen.queryByText('you went to all of them')).toBeNull();
   });
 
   it('keeps the visit counts when only the mileage window is refused', async () => {
@@ -94,7 +98,11 @@ describe('app/day-end.tsx — B7', () => {
     await render(<DayEnd />);
 
     expect(await screen.findByText('1 of 1')).toBeTruthy();
-    expect(screen.getByText(/No distance yet/u)).toBeTruthy();
+    // FE-D3 B4 — corrected. This asserted "No distance yet … once you have checked into more than
+    // one visit" for a mileage fetch that FAILED: it asserted the defect, a false reason given for
+    // a real error. The distance is unknown, and the screen now says it could not be fetched.
+    expect(screen.getByText(/Distance not available/u)).toBeTruthy();
+    expect(screen.queryByText(/No distance yet/u)).toBeNull();
   });
 });
 
@@ -149,5 +157,46 @@ describe("app/day-end.tsx — FE-W42, the day is the server's", () => {
       fromDate: '2026-08-13',
       toDate: '2026-08-13',
     });
+  });
+});
+
+/**
+ * FE-D2 7 — an unknown count is not a zero, and a zero is not a congratulation.
+ *
+ * The route passed `summary?.planned ?? 0`, so a day still loading and a day that failed to load
+ * both rendered "0 of 0", and `DayEndScreen` read `done + notMet === planned` as attendance:
+ * 0 === 0, "you went to all of them". The route's own comment says a failed fetch leaves "the
+ * totals absent"; the `?? 0` made them present, and wrong.
+ */
+describe('FE-D2 7 — day-end: unknown vs zero', () => {
+  it('while the day is still loading, shows no count and no verdict', async () => {
+    withDay();
+    mockListVisits.mockReturnValue(new Promise(() => undefined));
+    mockListMileage.mockReturnValue(new Promise(() => undefined));
+    await render(<DayEnd />);
+    await screen.findByText('Nothing is being recorded.');
+
+    expect(screen.queryByText('0 of 0')).toBeNull();
+    expect(screen.queryByText('you went to all of them')).toBeNull();
+  });
+
+  it('a day with nothing planned says so, and does not congratulate', async () => {
+    withDay();
+    mockListVisits.mockResolvedValue({ items: [] });
+    mockListMileage.mockResolvedValue({ days: [], totalDistanceMetres: 0 });
+    await render(<DayEnd />);
+
+    expect(await screen.findByText('nothing was planned')).toBeTruthy();
+    expect(screen.queryByText('you went to all of them')).toBeNull();
+  });
+
+  it('POSITIVE CONTROL: a day where every planned visit was attended still says so', async () => {
+    withDay();
+    mockListVisits.mockResolvedValue({ items: [visit()] });
+    mockListMileage.mockResolvedValue({ days: [], totalDistanceMetres: 0 });
+    await render(<DayEnd />);
+
+    expect(await screen.findByText('1 of 1')).toBeTruthy();
+    expect(screen.getByText('you went to all of them')).toBeTruthy();
   });
 });

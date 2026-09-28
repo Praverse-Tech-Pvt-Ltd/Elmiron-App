@@ -265,3 +265,41 @@ describe('MR-20 B3 — a tap on an unusable screen is never silent', () => {
     expect(screen.queryByText('This visit is not on your phone')).toBeNull();
   });
 });
+
+/**
+ * FE-D2 6 — the press's failure is shown, and the form is given back.
+ *
+ * `setFailure(unavailable)` replaced the whole form with a banner, and nothing ever cleared it. A
+ * doctor who synced a second later still left the rep looking at "has not synced yet", with no
+ * form and no button, until they left the screen.
+ */
+describe('FE-D2 6 — an unusable press does not take the form away', () => {
+  it('shows why, and keeps the form and the button', async () => {
+    mockStore.mockReturnValue(pulled([visit], []));
+    await render(<SamplesRoute />);
+
+    await fireEvent.press(await screen.findByText('Record what I left'));
+
+    expect(await screen.findByText('This doctor has not synced yet')).toBeTruthy();
+    expect(screen.getByText('Record what I left')).toBeTruthy();
+    expect(screen.getByLabelText('What you left')).toBeTruthy();
+  });
+
+  it('once the doctor arrives, the next press clears it and sends', async () => {
+    mockStore.mockReturnValue(pulled([visit], []));
+    mockCreateSampleAndInput.mockClear();
+    mockCreateSampleAndInput.mockResolvedValue({});
+    const view = await render(<SamplesRoute />);
+    await fireEvent.press(await screen.findByText('Record what I left'));
+    await screen.findByText('This doctor has not synced yet');
+
+    loaded();
+    await view.rerender(<SamplesRoute />);
+    await fireEvent.changeText(screen.getByLabelText('What you left'), 'Elmiron 100 mg, 30s');
+    await fireEvent.changeText(screen.getByLabelText('Declared value, ₹ each'), '240');
+    await fireEvent.press(screen.getByText('Record what I left'));
+
+    expect(screen.queryByText('This doctor has not synced yet')).toBeNull();
+    expect(mockCreateSampleAndInput).toHaveBeenCalledTimes(1);
+  });
+});

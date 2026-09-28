@@ -1,11 +1,11 @@
 -- W1-A E1 -- AI-generated knowledge is never born approved, and it says who wrote it.
 --
--- `C23` (`.ai-collab/decisions.md`, 28 September 2026) permits AI-generated text to be used
+-- `C24` (`.ai-collab/decisions.md`, 28 September 2026) permits AI-generated text to be used
 -- extensively in the LMS **as draft knowledge**. That is the single most dangerous permission in
 -- this release: it is the one that could put unreviewed, machine-written product statements in
 -- front of a rep who will repeat them to a doctor.
 --
--- `C23`'s hard rule, in full: AI-generated text enters as a DRAFT, is LABELLED with the fact that
+-- `C24`'s hard rule, in full: AI-generated text enters as a DRAFT, is LABELLED with the fact that
 -- a model produced it, and can only become approved through the existing four-eyes path. No seed,
 -- script or migration may insert approved knowledge.
 --
@@ -15,13 +15,13 @@
 -- 1. **Nothing recorded who — or what — wrote the text.** `knowledge_document_versions` carried
 --    `created_by_user_id` and `source_reference`, and a model's draft was indistinguishable from
 --    a colleague's. An approver cannot apply more care to machine-written text they cannot
---    identify, so `C23`'s labelling half had no column to live in.
+--    identify, so `C24`'s labelling half had no column to live in.
 --
 -- 2. **The insert trigger COERCED where it should have REFUSED.** `new.status := 'draft'` meant an
 --    insert claiming `status = 'approved'` **succeeded**, silently, as a draft. The stored outcome
 --    was correct and the signal was wrong, which is the worse of the two failures: a seed asking
 --    for approved knowledge received a success, and whoever wrote it would believe the content was
---    approved and live. `C23` requires that attempt to FAIL. The same applies to every lifecycle
+--    approved and live. `C24` requires that attempt to FAIL. The same applies to every lifecycle
 --    column — a caller who sets `approval_attestation` on an insert is asking for something the
 --    four-eyes path exists to refuse, and should be told so.
 --
@@ -51,7 +51,7 @@ alter table public.knowledge_document_versions
 
 alter table public.knowledge_document_versions
   -- The two columns cannot disagree. 'ai_generated' with no model names nothing an approver can
-  -- weigh; 'human' with a model is a mislabelled machine draft, which is the exact thing `C23`
+  -- weigh; 'human' with a model is a mislabelled machine draft, which is the exact thing `C24`
   -- exists to prevent.
   add constraint knowledge_versions_authorship_names_its_model
     check (
@@ -60,10 +60,10 @@ alter table public.knowledge_document_versions
     );
 
 comment on column public.knowledge_document_versions.authorship is
-  'W1-A E1 / C23. Whether a person or a model produced this text. A model''s draft must say so: an '
+  'W1-A E1 / C24. Whether a person or a model produced this text. A model''s draft must say so: an '
   'approver applies different care to machine-written text, and cannot if it is not labelled.';
 comment on column public.knowledge_document_versions.authoring_model is
-  'W1-A E1 / C23. The model that produced the draft, as the vendor names it. Null for human text, '
+  'W1-A E1 / C24. The model that produced the draft, as the vendor names it. Null for human text, '
   'required for ai_generated -- enforced by knowledge_versions_authorship_names_its_model.';
 
 /**
@@ -90,7 +90,7 @@ begin
   select coalesce(max(v.version_number), 0) + 1 into new.version_number
     from public.knowledge_document_versions v where v.document_id = new.document_id;
 
-  -- W1-A E1 / `C23`. REFUSE, do not coerce.
+  -- W1-A E1 / `C24`. REFUSE, do not coerce.
   --
   -- The column defaults to 'draft', so an ordinary insert that says nothing about status arrives
   -- here already correct and passes. Only a caller who ASKED for another status is refused, and
@@ -100,7 +100,7 @@ begin
     raise exception
       'knowledge version cannot be created as %; every version is born a draft', new.status
       using errcode = '23514',
-            hint = 'C23: AI-generated text is never born approved. Insert a draft, then submit it '
+            hint = 'C24: AI-generated text is never born approved. Insert a draft, then submit it '
                    'and have a SECOND admin approve it through approve_knowledge_version.';
   end if;
 
@@ -113,7 +113,7 @@ begin
     raise exception
       'knowledge version: the review and approval columns are set by the RPCs, never on insert'
       using errcode = '23514',
-            hint = 'C23 / four eyes: submit_knowledge_version and approve_knowledge_version own '
+            hint = 'C24 / four eyes: submit_knowledge_version and approve_knowledge_version own '
                    'these columns. An insert that sets them is asking to bypass the approver.';
   end if;
 

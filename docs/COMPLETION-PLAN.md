@@ -2550,7 +2550,7 @@ made.** None of it blocks engineering; all of it blocks the first real doctor.
 
 **Two status notes from the same session, recorded because the register is where a reader looks.**
 
-- **`FE-W52` is unchanged and is NOT covered by `C28`.** `C28` defers register rows `#18`–`#26`,
+- **`FE-W52` is unchanged and is NOT covered by `C29`.** `C29` defers register rows `#18`–`#26`,
   which includes `#21`, the **doctor's** notice. `FE-W52` is the **reps'** notice — six of eight
   claims false or partly false, truthful wording on branch
   `mr-46/fe-w52-notice-pending-approval`, **not on `main`**, awaiting approval since 21 September.
@@ -2599,3 +2599,9 @@ watermark for `BE-W117` — and picking one silently inside an unrelated commit 
 architecture drifts. **The cost of leaving them is real and should not be understated: `pnpm test`
 and CI's database job fail roughly one run in two, which teaches people to re-run until green —
 the exact habit `BE-W114`'s register row warned about.**
+
+### Added by W1-B — 28 September 2026
+
+| id | One line | Type | Estimate |
+| --- | --- | --- | --- |
+| **`BE-W118`** | **Two parallel branches can mint the same decision id, and did.** W1-A and the FE-D1 session both took **`C20`** from the same high-water mark of `C19`; FE-D1 reached `main` first (PRs #3–#5, 08:07Z–08:17Z), so W1-A's nine rulings were renumbered to `C21`–`C29` during the merge, across 15 files. **The cause is structural:** `.ai-collab/decisions.md` mints an id by reading its own highest, which is only correct on one branch at a time, and **nothing reserves a range or detects a duplicate**. The same argument applies to `BE-W`/`FE-W` ids, which are minted the same way from `COMPLETION-PLAN.md`. **Options:** (a) a CI check that fails when a `### C<n>` heading appears twice in the merged file — cheap, catches it at the point a PR is opened rather than at merge; (b) per-branch id prefixes; (c) nothing, and pay the renumbering each time. **Recommend (a)**, and note it would have caught this one before it cost a cross-file rename | **ENGINEERING** | **0.5d** for (a) |

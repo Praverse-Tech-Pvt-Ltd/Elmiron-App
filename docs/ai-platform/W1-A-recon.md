@@ -288,7 +288,7 @@ is wrong today.**
 
 **The honest framing for the operator: in-app covers everything in the LMS and the queue, and
 covers nothing in the adverse-event path.** And the adverse-event path is blocked on `#18`
-anyway (deferred by `C28`), so **in-app is sufficient for everything in scope this release** — and
+anyway (deferred by `C29`), so **in-app is sufficient for everything in scope this release** — and
 choosing it now does not foreclose push later, because push would read the same table.
 
 **DECISION REQUIRED — C3.** *Do we build push (which needs a Firebase project and a named account
@@ -312,7 +312,7 @@ release.**
 
 # PART D — THE INTEGRATION ENVIRONMENT
 
-`C27` targets 4 October and the frontend needs to test against a real backend as screens land.
+`C28` targets 4 October and the frontend needs to test against a real backend as screens land.
 
 ## D1. How far behind production is — and the number in the brief is stale
 
@@ -432,7 +432,7 @@ real device, since `localhost` on a handset is the handset (`apps/field/src/conf
 | Screen work | Testable now? |
 | --- | --- |
 | Anything on the local stack — every screen, every write path, the AI/LMS/knowledge layer | **Yes** |
-| **The knowledge approval screen** (W1-A E3) | **Yes**, on the local stack — and it needs **two admin accounts** or four eyes refuses every approval (`C25`, `E2`) |
+| **The knowledge approval screen** (W1-A E3) | **Yes**, on the local stack — and it needs **two admin accounts** or four eyes refuses every approval (`C26`, `E2`) |
 | The six mock-reading surfaces, repointed to real | **Yes**, and `INVENTORY.md` §C3 warns that `/analyses/:id/response` is a **mock-only route** — PostgREST serves `/rpc/<name>` and would 404. That one cannot simply be repointed |
 | Anything needing **real** reference data, real territories, real shift hours | **Only after D2 steps 1–3** |
 | Anything needing a **live model** | **Not this week, and not after D2 either.** `#4` and `#5` |

@@ -34,6 +34,11 @@ export type StopState = 'done' | 'current' | 'upcoming' | 'cancelled' | 'not_met
 
 export interface RouteStop {
   readonly doctorId: string;
+  /**
+   * FE-D2 3. The visit this stop matched, so tapping the stop opens it. Null when the plan names
+   * a doctor with no visit row yet; that stop still opens the doctor (operator ruling).
+   */
+  readonly visitId: string | null;
   readonly doctorName: string;
   readonly clinic: string | null;
   readonly state: StopState;
@@ -125,6 +130,7 @@ export const buildDayRoute = (
     const doctor = doctorById.get(entry.doctorId);
     return {
       doctorId: entry.doctorId,
+      visitId: visit?.id ?? null,
       doctorName: doctor?.fullName ?? 'Doctor not in your list',
       clinic: clinicOf(doctor, entry.clinicAddressId),
       state: stateOf(visit),

@@ -1,14 +1,27 @@
+import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { Linking, PermissionsAndroid } from 'react-native';
 import { useRouter } from 'expo-router';
 import { BodyText, Button, Heading, Label, Screen } from '@fieldforce/ui';
+import { requestLocationPermission } from '../../src/onboarding/location-permission';
+import { hasCompletedFirstRun } from '../../src/onboarding/progress';
 
 /**
  * S4 — location denied.
  *
- * **A destination, not an interruption.** Nothing routes an MR here automatically.
- * There is no launch check, no timer, no focus effect and no banner on other screens
- * that leads here — see the three rules in `src/onboarding/permissions.ts`, each with
- * a test. The MR arrives because they went looking for it.
+ * **A destination, not an interruption.** There is no launch check, no timer, no focus effect and
+ * no banner on other screens that leads here — see the three rules in
+ * `src/onboarding/permissions.ts`, each with a test.
+ *
+ * **FE-D2 — one route in, and it is the rep's own answer (operator ruling).** A rep who presses
+ * "Turn location on" on A2 and says no lands here, once, as the response to that press. That is
+ * not a nag: nothing brings them back here later, and nothing re-asks unless they press
+ * "Turn location back on".
+ *
+ * **"Turn location back on" asks again** (`explicit-user-request`, the one trigger
+ * `shouldPromptForLocation` allows). If Android answers "never ask again" it will not show the
+ * prompt, so this opens the app's system settings instead of asking into silence (operator
+ * ruling). Foreground only; never background.
  *
  * **Two equal actions, and they are equal in the markup, not just in the copy.** Both
  * are the same `Button` variant. Rendering "Carry on by hand" as the quieter of the
@@ -32,6 +45,38 @@ import { BodyText, Button, Heading, Label, Screen } from '@fieldforce/ui';
  */
 export default function LocationDenied(): ReactNode {
   const router = useRouter();
+  const [note, setNote] = useState<string | null>(null);
+
+  /** On to A3 in first run; back where they came from otherwise. */
+  const carryOn = (): void => {
+    void hasCompletedFirstRun().then((done) => {
+      if (done) router.back();
+      else router.push('/onboarding/notifications');
+    });
+  };
+
+  const turnBackOn = (): void => {
+    setNote(null);
+    void requestLocationPermission({
+      requestMultiple: (permissions) => PermissionsAndroid.requestMultiple(permissions),
+    }).then((answer) => {
+      switch (answer) {
+        case 'granted':
+          carryOn();
+          return;
+        case 'blocked':
+          // Android will not show the prompt again. The setting is the only way back.
+          void Linking.openSettings();
+          return;
+        case 'denied':
+          setNote('Location is still off. You can carry on by hand — everything works.');
+          return;
+        case 'unanswered':
+          setNote('The phone did not show the question. Nothing has changed.');
+          return;
+      }
+    });
+  };
 
   return (
     <Screen scrollable>
@@ -55,25 +100,10 @@ export default function LocationDenied(): ReactNode {
       */}
       <Label muted>Estimates from the product design, not measured from your visits.</Label>
 
-      <Button
-        label="Turn location back on"
-        variant="secondary"
-        onPress={() => {
-          // The only path in the app that raises the location prompt —
-          // `shouldPromptForLocation` is true for 'explicit-user-request' and nothing
-          // else. The request itself lands with the geolocation work in plan W5; this
-          // sprint does not read a position, and does not request background
-          // location at all.
-          router.back();
-        }}
-      />
-      <Button
-        label="Carry on by hand"
-        variant="secondary"
-        onPress={() => {
-          router.back();
-        }}
-      />
+      {note === null ? null : <Label muted>{note}</Label>}
+
+      <Button label="Turn location back on" variant="secondary" onPress={turnBackOn} />
+      <Button label="Carry on by hand" variant="secondary" onPress={carryOn} />
     </Screen>
   );
 }

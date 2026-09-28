@@ -38,8 +38,11 @@ export interface MileageDayRow {
 
 export interface MileageScreenProps {
   readonly days: readonly MileageDayRow[];
-  /** "148.7 km" across the period. */
-  readonly totalLabel: string;
+  /**
+   * "148.7 km" across the period, or null when it is not known yet (FE-D3 B5). A real zero is
+   * "0.0 km" and is shown; null shows no figure, because the unknown is not a zero.
+   */
+  readonly totalLabel: string | null;
   /** Why there is no rupee figure. Required — see the note above. */
   readonly rateNote: string;
   readonly loading?: boolean;
@@ -75,9 +78,11 @@ export const MileageScreen = ({
 
       <Card>
         <Label muted>This month, on your claim</Label>
-        <View style={styles.total}>
-          <Figure>{totalLabel}</Figure>
-        </View>
+        {totalLabel === null ? null : (
+          <View style={styles.total}>
+            <Figure>{totalLabel}</Figure>
+          </View>
+        )}
         <Label muted>
           Measured in straight lines between the visits you checked into, so it counts less than the
           roads you actually rode.

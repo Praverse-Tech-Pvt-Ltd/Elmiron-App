@@ -19131,6 +19131,500 @@ to do. What remains is the operator's: `BE-W21`, `BE-W32`, `BE-W93`, `BE-W106`, 
 no in-function mechanism can close and which would need a change at the PostgREST layer or in front
 of it.
 
+### FE-D1 — the offline day, proven across process death; and the 30 September correction
+
+**28 September 2026, frontend track, branch `fe-d1-enqueue`.** The brief was written from records
+that turned out to be wrong in two places. The code won both times, and this section says where.
+
+#### Correction — 30 September is retired, and it is not the first red
+
+**30 September 2026 cannot turn CI red.** MR-50 B3 (22 September) removed the date check from
+`packages/core/src/field/transcript-v0.expiry.test.ts`. The file now only checks that the
+`TranscriptV1` contract accepts a Hinglish fixture. Earlier sections of this file still describe it
+as a live deadline, and they are left as written because they were true when written. Read them
+through this correction:
+
+- `PROJECT-OVERVIEW.md:73`: "carries a CI deadline of 30 September 2026"
+- `PROJECT-OVERVIEW.md:1756`: "fails after **30 September 2026** unless a `TranscriptV1Schema` is exported"
+- `PROJECT-OVERVIEW.md:1936`: "has a CI deadline of 30 September"
+
+The same stale claim is in `handoff-frontend.md:259` (not ours, so filed as
+`docs/contract-requests.md` CR-2) and `docs/escalations-week8.md:127`.
+
+**What can actually turn CI red on a future date.** Every entry below compares against the real
+clock, and each was checked in code. **All five are backend-owned. None are frontend's.**
+
+| File:line | Literal | What fires | First red | Owner |
+| --- | --- | --- | --- | --- |
+| `.github/workflows/backup.yml:85` | `DEFERRAL_EXPIRES: '2026-10-15'` | `TODAY > DEFERRAL_EXPIRES` (`:107`), **only if `BACKUP_DESTINATION` is unset** (`:100-104`) | **Conditional:** from 2026-10-16 UTC; weekly cron first on Mon 2026-10-19. Asked as CR-1 | BE-W11 |
+| `services/api/supabase/migrations/20260923000300_…:44-45` | `be_w106_settings_model_decision_due = 2026-10-31T00:00:00Z` | `ci.yml:208` `check:decision-debt`, every push/PR; `due_at <= now()` | 2026-10-31 00:00 UTC (**warns from 2026-10-10**) | BE-W106 |
+| `.github/workflows/migration-drift.yml:117` | `--accept-undeployed-until 2026-10-31` | `today > acceptUntil` (`check-migration-drift.mjs:190`), push and daily | 2026-11-01 UTC, if production is still undeployed | BE-W40 / MR-42 |
+| `services/api/supabase/migrations/20260907000900_…:67-68` | `ucpmp_sample_cap_decision_due = 2026-11-06T00:00:00Z` | the same `check:decision-debt` step, cap unset and `due_at <= now()` | 2026-11-06 00:00 UTC (**warns from 2026-10-16**) | BE-W21 |
+| ~~`packages/core/src/field/transcript-v0.expiry.test.ts`~~ | ~~`2026-09-30T23:59:59+05:30`~~ | retired MR-50 B3 | never | — |
+
+Checked and inert: fixture `expiresAt` / `hardExpiresAt` / `purgeAfter` in
+`services/mock/src/fixtures.ts:463,589,591` (nothing compares them to the clock); the
+`2026-09-30T18:35Z` month-boundary fixtures in `server-window.test.ts` and `doctors-route.test.tsx`
+(fixed inputs); `pulled-store.test.tsx`'s `Date.now() - offset` (relative).
+
+#### Correction — the queue was never unwritten
+
+The brief said "nothing writes to the sync queue". **Six screen actions write to it**, all through
+`sendOrQueue` (`apps/field/src/sync/outbox.ts:323`): check-in / check-out and recording on
+`visit/[id].tsx` (`:376`, `:322`), consent (`consent/[visitId].tsx:240`), samples
+(`samples/[visitId].tsx:183`), call report (`report/[visitId].tsx:101`) and voice note
+(`voice-note/[visitId].tsx:232`).
+
+- **Persisted by:** AsyncStorage (SQLite on Android), one key per signed-in user,
+  `sync.queue.v1.<userId>`, with the whole state written as a single value (`async-storage-store.ts:51-52, 111`).
+- **Unique across a restart by:** `SyncQueueItem.id` (`packages/core/src/field/sync.ts:97-98`). This
+  is the request body's `id`, minted with `uuid.v4()` when the button is pressed
+  (`visit/[id].tsx:364`), copied into the queue row unchanged, and deduped server-side with
+  `on conflict (id) do nothing` (`20260813000200_offline_sync.sql:192, 240, 259, 273`).
+
+What was really missing is narrower, and it's what this session built: **no test crossed the full
+cycle** of real screen, process death, rebuild from disk, flush.
+
+#### What was built
+
+**No production code changed.** Option A was chosen (see C20). The wiring was left alone, and one
+test was added: `apps/field/src/routes/offline-day.test.tsx`.
+
+- **Screen:** `app/visit/[id].tsx`, the **check-in / check-out** buttons, pressed as real buttons.
+- **Offline day:** Visit A check-in and check-out → **process death** → the new process opens Visit
+  A and must offer neither action (its stage is rebuilt from disk alone) → Visit B check-in and
+  check-out → **death** → signal returns, a fresh process flushes → one more flush in the same
+  process, then another after a further death.
+- **Death is `jest.resetModules()`.** It discards every module's memory: the queue owner, reducer
+  state, and the stock AsyncStorage mock, whose data lives *inside* its module. The only survivor is
+  a test-scope `mockDisk` standing in for SQLite. Every runtime module is `require`d fresh after each
+  reset.
+- **Asserted:** each minted id is on disk the moment its press resolves; four distinct ids,
+  `queued`, in press order with the right entity; the server receives exactly
+  `[check_in A, check_out A, check_in B, check_out B]` under the ids minted two deaths earlier; both
+  later flushes send nothing. The fake server deliberately does **not** dedupe, so a client
+  double-send would be counted.
+- **Legal constraint, asserted:** every stored payload's keys are exactly
+  `__queueEntity, coordinates, id, occurredAt, source, visitId`, and coordinates are
+  `accuracyMetres, capturedAt, latitude, longitude`. A visit id, a position and a time. Nothing
+  prescribing- or patient-shaped fits, and the test fails if a field is added.
+
+**What it does not prove, and the file says so first.** It proves that *queued writes survive
+process death and flush exactly once*. It does **not** prove that *no write is lost*: the screens
+send first and queue only on no answer, so a death **during** the send leaves nothing on disk. That
+in-flight window is accepted as ruling **C20** (`.ai-collab/decisions.md`). It also does not prove
+server-side dedupe, device behaviour, or survival of a torn AsyncStorage write.
+
+#### Negative control, run against the final file
+
+The `sendOrQueue` call at `visit/[id].tsx:376` was replaced with a bare send
+(`await createCheckIn/Out(body)`, outcome forced to `sent`), then restored from a byte copy.
+`git diff --quiet` on the screen confirmed no diff against HEAD afterwards.
+
+```
+== before   PASS  √ queued writes rebuild from disk after death and flush exactly once, by the id minted at press (1140 ms)
+            Tests: 1 passed, 1 total
+== unwired  FAIL  × queued writes rebuild from disk after death and flush exactly once, by the id minted at press (2218 ms)
+            Expected value: "99f311da-1471-4766-88ba-ed9752fbc630"
+            Received array: []
+            Tests: 1 failed, 1 total
+== restored PASS  √ queued writes rebuild from disk after death and flush exactly once, by the id minted at press (1114 ms)
+            Tests: 1 passed, 1 total
+```
+
+It fails at the first press: the id the screen minted never reaches the disk.
+
+#### A defect of mine the test caught
+
+The first draft copied `visit-route.test.tsx`'s location mock, which leaves out
+`coordinates.capturedAt`. `checkInRequest` takes `occurredAt` from it (`capture/visit.ts:144-150`),
+so the stored rows had no `occurredAt`. A real flush would have refused them as
+`unreadable_payload` (`outbox.ts:752-758`). The payload-key assertion caught this before the flush
+ran. The real `takeFix` does supply `capturedAt` (`capture/location.ts:87`), so the fixture was
+corrected to match. **Written down, not fixed:** `visit-route.test.tsx`'s mock has the same
+omission. It is harmless there, because that suite never replays a row.
+
+#### Recorded, not acted on
+
+- **The queue is one AsyncStorage value under one key.** A write interrupted partway loses the
+  entire queue, not one item. FE-W44 makes it read as `unreadable`, so nothing then overwrites it,
+  but nothing recovers it either. Noted in C20.
+- **Enqueue-first**, if adopted, is all six screens in one pass (C20).
+
+#### Environment, stated because it cost time and will cost the next session the same
+
+- **The local install was a half-installed mix.** Root `node_modules` had 10 entries, and
+  `apps/console/node_modules` held `next 16.3.3` / `react 19.2.8`, which the lockfile never declares.
+  `pnpm install --frozen-lockfile` then failed with `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY … next@16.3.3`.
+  **The lockfile is fine**: CI installs it frozen on the same commit. The error came from pnpm's
+  installed-state record (`node_modules/.pnpm/lock.yaml`). Every `node_modules` was **moved** (not
+  deleted) to the session scratchpad, and a fresh frozen install succeeded. `pnpm-lock.yaml` was not
+  modified. With `nodeLinker: hoisted`, the runners are in the **root** `node_modules`, not the app's.
+- **`packages/ui-tokens/dist` was stale** (no `typography.figure`), so jest failed on import.
+  `pnpm turbo run build --filter "@fieldforce/field^..."` fixed it.
+- An early `npx jest` found no local jest and fetched `jest@30` into the **global npx cache**.
+  Nothing in the repo was touched. Use `pnpm exec jest` from `apps/field`.
+
+#### Evidence
+
+`@fieldforce/field`: vitest **40 files / 613 tests**, jest **22 suites / 163 tests**, all passing.
+`tsc --noEmit` clean; `eslint` and `prettier --check` clean on the new file.
+
+**Boundary.** Nothing under `services/` or `packages/` changed, and nothing in `.github/`. Checked
+against the working tree **including untracked files**. A `main...branch` diff would be empty for
+uncommitted work whatever it touched, which is a check that cannot fail:
+
+```
+git status --porcelain --untracked-files=all -- services packages .github   # expect: empty
+```
+
+#### Where it stopped, and why
+
+**ROOM.** FE-D1 is done as ruled. Nothing is blocked on frontend. The next calendar event in CI is
+backend's: the BE-W106 warning on 10 October.
+
+### FE-D1 — closed
+
+**28 September 2026.** FE-D1 is accepted and delivered as PR
+[#3](https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App/pull/3) against `main`, **not merged**.
+
+| | |
+| --- | --- |
+| Commit 1 | `0cea0f8` — the offline-day test, ruling C20, `docs/contract-requests.md` (CR-1, CR-2), the FE-D1 section |
+| Commit 2 | `fba2572` — `docs/screen-inventory-2026-09-28.md` (accepted) and CR-3 |
+| PR | https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App/pull/3 |
+| CI | run `36386592890`: **success**. `typecheck · lint · format · unit tests` passed, and `migrations · Gate 0 RLS suite · rollbacks` passed. The `packages/ui` jest timeout seen once locally under load did **not** recur on CI |
+| Screen inventory | `docs/screen-inventory-2026-09-28.md` |
+
+**Commit identity.** Until now this repository had no local git identity, and the machine had no
+global one. It is now set **repo-locally** to `Devpt1904 <138771880+Devpt1904@users.noreply.github.com>`,
+the account `gh` is signed in as, using its GitHub noreply address, as the operator chose.
+Authorship of the frontend paths (`apps/field`, `packages/ui`, `packages/ui-tokens`), reported and
+not rewritten:
+
+```
+     24 Dev Patel <softwares@praversetech.com>
+     61 Maanav Shah <126866160+Rabbitshah@users.noreply.github.com>
+     13 Pratham Shrivastav <152979348+coutprat@users.noreply.github.com>
+```
+
+40 of Maanav's 61 commits under those paths touch **only** frontend paths and docs. One earlier
+commit (`a60423a`, 2026-09-07, "Frontend: the field app and manager console, all four design
+phases") is already authored as `Devpt1904`. This is recorded for the operator's attention. No
+history was changed.
+
+**Boundary, corrected by the operator.** `packages/ui` and `packages/ui-tokens` are
+frontend-owned. The shared contract is `packages/core`. From FE-D2 on, the check is:
+
+```
+git status --porcelain --untracked-files=all -- services packages/core .github scripts
+```
+
+### FE-D2 (progress) — the app tells the truth: items 1–7
+
+**28 September 2026, branch `fe-d2-daily` off `fe-d1-enqueue`.** This is the progress note the
+operator asked for after item 7. The closing section follows once first run is done. Each item
+was written test-first, shown red on the code before the fix, then green, then committed and
+pushed on its own.
+
+**Rulings this rests on:**
+- A beat-plan stop with no visit row keeps opening the doctor.
+- The two tests that asserted defects are corrected with their fixes, and each commit names the
+  change.
+- The unused module-level `api` client is removed.
+- `packages/ui` and `packages/ui-tokens` are frontend-owned.
+
+| # | Item | Commit | Red on the old code | Green |
+| --- | --- | --- | --- | --- |
+| 1 | `packages/ui` jest timeout = field's 20 s (MR-22 A2) | `8471253` | effective `testTimeout` absent, so jest's 5000 ms default; `ci:local` failed `ConsentScreen` and `field-states` with "Exceeded timeout of 5000 ms" | effective `testTimeout: 20000`; ui jest 253/253 |
+| 2 | Release build with no real API address stops at a configuration error | `a796a47` | `api-target.test.ts`: module absent. `config-gate.test.tsx`: "Unable to find … This copy of the app is not set up", because the app mounted | 8/8 and 2/2 |
+| 3 | Tapping a beat-plan stop opens that visit | `fd122dc` | "Expected `/visit/4444…402`, Received `/doctor/3333…302`" (upcoming stop) and the same for a done stop | 11/11; the no-visit stop still opens the doctor, pinned |
+| 4 | Queue claims nothing before it has read the queue | `c88eb70` | "Unable to find … Reading your queue" in flight; unreadable showed `<Text>Everything is sent</Text>` | 10/10 |
+| 5 | Reply send failure keeps the reply | `5d9ffce` | "Unable to find … displayValue: I did answer it …" and "… accessibility label: What you want to say" after a failed send | 4/4 (new route test) |
+| 6 | Failed press on visit / samples / voice-note gives the screen back | `93c70d0` | 6 tests: "Unable to find … I am here — check in" (×2), "… Record what I left", "… What you left", "… Start again" (×2), each after its banner rendered | 31/31 in the three files |
+| 7 | Day-end: unknown is not zero; 0 of 0 is not a congratulation | `38f842c` | "Unable to find … /Not available/" (failed load); in flight `<Text>0 of 0</Text>`; "Unable to find … nothing was planned" | 9/9 |
+
+**Suite totals after item 7:** field vitest **621**, field jest **184**, ui vitest **4**, ui jest
+**253**, all passing. `tsc` is clean for field and ui. Lint has 0 errors; the one field warning is
+pre-existing (an unused `eslint-disable` in `beat-plan-route.test.tsx`, left alone).
+
+**Tests corrected rather than regressed:**
+- `queue-route.test.tsx:65-70` asserted "Everything is sent" before the read resolved. It now waits
+  for an empty queue to be read.
+- `day-end-route.test.tsx:84` asserted "0 of 0" after a failed load. It now asserts "Not available".
+- `route.test.ts` pins a stop's keys. It now lists `visitId`, which is an id, not a position.
+
+**Boundary, after item 7:**
+
+```
+$ git status --porcelain --untracked-files=all -- services packages/core .github scripts
+(exit 0, 0 lines)
+```
+
+Nothing under `services`, `packages/core`, `.github` or `scripts` has been committed on this branch
+either: `git diff fe-d1-enqueue..HEAD` on those paths is empty.
+
+**Open items, written down and not acted on:**
+- `packages/ui/jest.config.cjs:39` fails `eslint` on its own `require.resolve` line. This is
+  pre-existing, and CI never sees it because ui's `lint` is `eslint src`.
+- Day-end still swallows non-denial fetch errors (`day-end.tsx:103`), and a mileage failure
+  still reads "No distance yet".
+- Beat-plan "failed" still reads as "syncing". The doctor profile says "not visited yet" while
+  loading. Mileage shows "0.0 km" while loading. `index` spins forever on a failed disk read.
+  Analysis has no empty state. (Inventory §c.)
+- The six mock-only screens stay on the mock until CR-3 is answered.
+
+### FE-D2 — closed: the app tells the truth, and first run in the design's order
+
+**28 September 2026, branch `fe-d2-daily`, PR
+[#4](https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App/pull/4) against `fe-d1-enqueue`**
+(PR #3 is still open, so this stacks on it and its diff is FE-D2 only). **Not merged.** Items 1–7
+are recorded in "FE-D2 (progress)" above. This section closes the branch and adds first run.
+
+**CI on PR #4:** run `36391150522`, **success**. `typecheck · lint · format · unit tests` passed,
+and `migrations · Gate 0 RLS suite · rollbacks` passed. This was at `f458b2b`; the commit adding
+this section follows it.
+
+#### Every item
+
+Each was written test-first, shown red on the old code, then fixed and shown green. Each is one
+commit, pushed as soon as it landed.
+
+| # | Item | Commit | Red on the old code | Green |
+| --- | --- | --- | --- | --- |
+| 1 | `packages/ui` jest timeout = field's 20 s | `8471253` | effective `testTimeout` absent (5000 ms); `ci:local` timed out two suites | `testTimeout: 20000`; 253/253 |
+| 2 | Release build, no real API address → configuration error | `a796a47` | module absent; the app mounted behind a missing address | 8/8, 2/2 |
+| 3 | Beat-plan stop opens its visit | `fd122dc` | "Expected `/visit/…`, Received `/doctor/…`" | 11/11 |
+| 4 | Queue claims nothing before reading the queue | `c88eb70` | no "Reading your queue"; unreadable showed "Everything is sent" | 10/10 |
+| 5 | Reply send failure keeps the reply | `5d9ffce` | the reply text and the field were gone after a failed send | 4/4 |
+| 6 | Failed press gives the screen back (visit, samples, voice-note) | `93c70d0` | button, form or recorder gone behind the banner (6 tests) | 31/31 |
+| 7 | Day-end: unknown is not zero; 0 of 0 is not a congratulation | `38f842c` | "0 of 0" in flight and on failure; no "nothing was planned" | 9/9 |
+| 8 | A3 "Allow notifications" really asks, Android 13+ only | `9193a41` | API 33: "Expected number of calls: 1, Received: 0" | 5/5 unit, 4/4 route |
+| 9 | Guard: background location asked for nowhere | `3d89883` | negative control — a temporary request made it red: `app\onboarding\notifications.tsx:45 ACCESS_BACKGROUND_LOCATION` | 3/3 |
+| 10 | First run in the design's order: A2 second, S4 on denial | `48c4aeb` | index went to notifications; A2 still called `takeFix`; "Not now" and S4 pushed nothing | 6/6 unit, 10/10 route |
+| 11 | A4 microphone before the first visit, once | `f458b2b` | opening a visit pushed nothing; "Allow" requested nothing | 5/5 |
+
+**First-run rulings applied (operator, 28 September, answered in session):**
+- A2 asks with `PermissionsAndroid` for fine and coarse location and reads **no position**. It
+  used to call `takeFix`, which took a fix at onboarding.
+- An approximate-only grant counts as granted.
+- A denial lands on S4, once, as the response to the rep's own press.
+- On S4, "Turn location back on" re-asks, and opens the app's settings when Android answers
+  `never_ask_again`. "Carry on by hand" continues first run.
+- A4 appears the first time a visit is opened, if the microphone isn't granted and A4 hasn't been
+  answered. "Allow" requests `RECORD_AUDIO`; "Not now" requests nothing; either answer is
+  remembered.
+- POST_NOTIFICATIONS is requested only on API 33 and above. Below that it's treated as allowed
+  and nothing is asked. Both branches are tested.
+
+The first-run order is now sign in → **A2 location** → A3 notifications → battery → A9
+transparency → home, with A4 before the first visit.
+
+**Tests corrected rather than regressed**, each named in its commit:
+- `queue-route.test.tsx:65-70`
+- `day-end-route.test.tsx:84`
+- `route.test.ts` (the stop-keys guard now lists `visitId`)
+- `index-route.test.tsx:43` (first run starts at A2, not notifications, by ruling)
+
+#### The manifest check
+
+Verified by a clean `npx expo prebuild --platform android --no-install --clean`, diffed against a
+baseline prebuild taken before any first-run change. Per `docs/gotchas.md`, config-level
+resolution is not proof.
+
+```
+== permission lines, baseline -> final (HEAD f458b2b):
+6a7
+> android:name="android.permission.POST_NOTIFICATIONS"
+== ACCESS_BACKGROUND_LOCATION in manifest: 0
+== the four first-run permissions:
+2:  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+3:  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+8:  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+10:  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+== tracked files changed by prebuild:
+(none)
+```
+
+- `POST_NOTIFICATIONS` is the only addition, from `app.json` `android.permissions`. Nothing was
+  removed.
+- Fine and coarse location and `RECORD_AUDIO` were already declared, by `expo-location` and
+  `expo-audio`.
+- `apps/field/android/` is gitignored and untracked. Prebuild rewrote no tracked file: in
+  particular, not the `package.json` script that `gotchas.md` warns about.
+
+**Suite totals at close:** field vitest **635**, field jest **203**, ui vitest **4**, ui jest
+**253**, all passing. `tsc` is clean for field and ui; lint has 0 errors.
+
+#### Boundary
+
+```
+$ git status --porcelain --untracked-files=all -- services packages/core .github scripts
+(exit 0, 0 lines)
+$ git diff --name-only fe-d1-enqueue...fe-d2-daily -- services packages/core .github scripts
+(exit 0, 0 files)
+```
+
+The branch changes `apps/field`, `packages/ui` and `PROJECT-OVERVIEW.md`, and nothing else:
+49 files, +2002 / −176. There are no new dependencies. Every permission goes through
+`PermissionsAndroid` and `Linking`, which are part of React Native.
+
+#### Open items, written down and not acted on
+
+- **CR-3 is unanswered**, so six screens still read the mock.
+- **A4's button labels** are the existing "Allow the microphone" / "Not now". The design says "Turn
+  on the microphone" / "I'll type my reports". Only placement was ruled; the copy is unchanged.
+- **A2's copy** keeps its existing two true benefits, not the design's three. The
+  automatic-check-in and nearest-doctor benefits need background location, which is open.
+- **S4 is a standalone screen.** The design draws it as Home in "manual mode". It is reached as
+  ruled; the layout was not rebuilt.
+- **Remaining collapsed states (inventory §c):**
+  - day-end swallows non-denial errors (`day-end.tsx:103`), and a mileage failure reads "No
+    distance yet";
+  - beat-plan shows "failed" as "syncing";
+  - the doctor profile says "not visited yet" while loading;
+  - mileage shows "0.0 km" while loading;
+  - `index` spins forever on a failed disk read;
+  - analysis has no empty state.
+- **Pre-existing, left alone:**
+  - `packages/ui/jest.config.cjs:39` fails eslint; CI never lints it (`eslint src`);
+  - an unused `eslint-disable` in `beat-plan-route.test.tsx`;
+  - `visit-route.test.tsx`'s location mock has no `capturedAt`.
+- **The stale 30 September line** is still in `handoff-frontend.md:259`; CR-2 is open.
+
+### FE-D3 — three read-only checks, the remaining state fixes, the Android offline day, the demo path
+
+**28 September 2026, branch `fe-d3-states` off `fe-d2-daily`** (PRs #3 and #4 are both still
+open). PR [#5](https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App/pull/5) targets
+`fe-d2-daily`. **Not merged.**
+
+**CI on PR #5:** run `36393477043`, **success**. Both `typecheck · lint · format · unit tests` and
+`migrations · Gate 0 RLS suite · rollbacks` passed, at `7c75c98`. The commit adding this section
+follows.
+
+**How the session ran.** The first session stopped after two permission-check no-verdicts, as the
+rule then required, with only A1 done. The operator dropped that rule and resumed. The first
+calls of the resumed session also got no verdict, and the session was still in auto mode rather
+than manual approval. A2 and A3 were done read-only in the meantime; writes then went through.
+
+#### Part A — read-only findings
+
+**A1 — Jest platform. Measured nothing; open for next week (operator ruling).**
+- As configured today (jest-expo's default preset, which runs as iOS): **27 suites, 203 tests,
+  all passing.**
+- With the jest-expo **Android** preset, run once through a temporary config outside the repo:
+  **27 of 27 suites fail at load, and 0 tests run.** Every file fails the same way:
+  `SyntaxError … @react-native/jest-preset/jest/setup.js: Unexpected token (31:12)`. That is Flow
+  type syntax, which the Android preset's Babel transform (caller `platform: 'android'`) does not
+  strip. It is a harness incompatibility, not app behaviour, so the Android gap is **unmeasured**.
+- The tree was clean afterwards. The preset was not switched and not debugged. **Open item.**
+  Part B item 0 stands in for it this week.
+
+**A2 — Location accuracy.**
+- **The payload records it.** `takeFix` sets `coordinates.accuracyMetres` from the fix
+  (`capture/location.ts:83`). That is the radius; nothing records "approximate" as such.
+- **The server stores it.** `record_check_in` and `record_check_out` write `p_accuracy_metres` to
+  `check_ins.accuracy_metres` and `check_outs.accuracy_metres`
+  (`20260811000100_commercial_schema.sql:322, 339`; latest definition
+  `20260911000300_check_in_starts_the_visit.sql:20, 76-81`).
+- **So the condition for CR-4 ("neither does") is not met, and CR-4 was not added.**
+- **What remains, as a question for the operator to rule on:** the geofence verdict **ignores
+  accuracy** (`…000300….sql:70-74`, `v_distance <= geofence_radius_metres`). An approximate fix a
+  few kilometres wide is judged inside or outside on its centre point, and nothing marks a check-in
+  as approximate except the size of the number.
+
+**A3 — The analysis screen.**
+- **What it shows:** one AI coaching analysis of a visit. Findings with titles and details, cited
+  transcript quotes with timestamps, "Written by the system from the transcript", and a Reply
+  action (`app/analysis/[id].tsx`).
+- **Who writes it:** the **AI track**. That is `public.analyses`, with model, provider and rubric
+  fields. Managers review it in the console; they do not write it. **Nothing real produces an
+  analysis:** only test fixtures insert rows, and the speech vendor (BE-W32) is blocked on
+  labelled audio.
+- **Where the data comes from:** the **mock only**. It is `services/mock/src/fixtures.ts:507`,
+  with `modelProvider: 'gemini'`, `modelVersion: 'flash-3'` and realistic findings.
+- **Gate or flag:** none. The Coaching tab is always shown.
+- **Could it be mistaken for working AI output?** **Yes.** It is therefore **out of the demo path**
+  (it is not labelled as sample content), and **Part B item 6 (its empty state) was skipped** as
+  out of scope.
+
+#### Part B — state fixes
+
+Each item was written test-first, shown red on the old code, then green. One commit each, pushed
+as it landed.
+
+| # | Item | Commit | Red on the old code | Green |
+| --- | --- | --- | --- | --- |
+| 0 | The offline day on **Android**, through A4 | `c119268` | **Negative control:** A4's `router.back()` replaced with a no-op gave "Expected: 1, Received: 0" back-navigations | 1/1, before and after the control. Field jest 204 |
+| B1 | A failed storage read never leaves launch spinning | `010572f` | **No defect on the current code.** `hasCompletedFirstRun` catches internally (`progress.ts:27-35`) and so does the session restore (MR-28 C2); the inventory's survey read the call site and missed the catch. A **pinning test** was added. Negative control: rethrowing in that catch reproduced the spin ("Unable to find … redirect:/onboarding/location") | 5/5, with no diff to `progress.ts` |
+| B2 | Beat plan: a failed sync is not "still syncing" | `3b53b84` | unit: "expected 'syncing' to be 'stops-unreachable'"; route: "Unable to find … Your stops could not be loaded" | 33/33 unit, 12/12 route |
+| B3 | Doctor profile says "not visited yet" only when it is true | `1aa984e` | while loading, and when visited but with no server clock, both rendered "You have not visited this doctor yet." | 4/4 (new route test) |
+| B4 | Day-end: a failed mileage fetch is not "no distance yet" | `8d78a96` | route: "Unable to find … /Distance not available/"; ui: "No distance yet. It appears once …" for a null distance, including while loading | route 9/9, ui 10/10 |
+| B5 | Mileage shows no total until the month is known | `47f6b59` | in flight rendered `<Text>0.0 km</Text>` | 3/3 (new route test) |
+| B6 | Analysis empty state | — | **Skipped**, per A3 | — |
+
+**Item 0, in detail.** This is the same day and the same assertions as FE-D1's offline test: four
+writes, two process deaths, one flush, no loss, no duplicates, exact order. The difference is that
+`Platform.OS` is `'android'` on every launch. A small stack stands in for the router:
+- The first visit pushes A4, and the test answers it on the real screen.
+- A4 must return to the visit before the day carries on.
+- A4's answer persists on the same disk as the queue, so it is shown once and not again after
+  either death.
+
+Nothing is pre-seeded to skip A4.
+
+**Tests corrected rather than regressed**, each named in its commit:
+- `day-end-route.test.tsx` ("keeps the visit counts when only the mileage window is refused")
+  asserted "No distance yet" for a *failed* fetch.
+- `packages/ui` `DayEndScreen.test.tsx` ("says the distance is absent rather than showing a zero")
+  asserted the same for a null distance.
+
+**Suite totals at close:** field vitest **637**, field jest **213**, ui vitest **4**, ui jest
+**254**, all passing. `tsc` is clean for field and ui; lint has 0 errors.
+
+#### Part C — demo path
+
+**`docs/demo-path-2026-10-01.md`** (`7c75c98`). It covers the ordered walkthrough, what each screen
+really talks to, its known gaps, and its dependence on CR-3 or the demo API address.
+- **SAMPLE DATA:** day-end, and call report's visit and doctor labels.
+- **Left out:** coaching and analysis (A3), mileage, and consultation recording.
+- **Preconditions it lists, with owners:**
+  - the app points at the **local Supabase by LAN address**, because production is unseeded
+    (`supabase.ts:6-12`);
+  - seed coverage is **for the backend owner to confirm**;
+  - `EXPO_PUBLIC_API_BASE_URL` is set to the mock's LAN address;
+  - the recording flag is unset.
+
+#### Boundary
+
+```
+$ git status --porcelain --untracked-files=all -- services packages/core .github scripts
+(exit 0, 0 lines)
+$ git diff --name-only fe-d2-daily...fe-d3-states -- services packages/core .github scripts
+(exit 0, 0 files)
+```
+
+The branch changes 16 files (+799 / −16) in `apps/field`, `packages/ui` and `docs`. There are no
+new dependencies, and the jest preset is not switched.
+
+#### Open items, written down and not acted on
+
+- **A1:** the jest-expo Android preset does not load (Flow syntax in
+  `@react-native/jest-preset/jest/setup.js:31`). For next week.
+- **A2:** the geofence ignores accuracy, and there is no approximate flag. This is for the operator
+  to decide whether to raise with the backend owner; CR-4 was not added because its condition was
+  not met.
+- **A3:** the Coaching tab is always visible and shows mock AI output that nothing labels as sample
+  data. It is excluded from the demo; labelling or hiding it is not ruled.
+- **CR-3** is unanswered: day-end, mileage, call-report labels, coaching, analysis and reply read
+  the mock.
+- **Call report's labels** could come from the pulled store instead of the mock (inventory §d).
+  That is a frontend change, not done.
+- **The day-end visits fetch still discards the error detail.** It now says "not available", but
+  not why.
+- **Carried from FE-D2:** A4 and A2 copy versus the design; S4's layout versus Home-in-manual-mode;
+  `packages/ui/jest.config.cjs:39` eslint; `visit-route.test.tsx`'s location mock without
+  `capturedAt`; the stale 30 September line in `handoff-frontend.md:259` (CR-2).
 
 ---
 
@@ -19149,24 +19643,24 @@ it remains unanswered.
 
 #### The operator's eight rulings, recorded before any work started
 
-Nine ids, `C20`–`C28` (`C19` was the previous highest). `C26` is the ninth: the scores default this
+Nine ids, `C21`–`C29` (`C19` was the previous highest). `C27` is the ninth: the scores default this
 session was told to build to.
 
 | Ruling | Id | Register effect |
 | --- | --- | --- |
-| R1 no real recording | **`C20`** | ratifies the `C3`/`#18` posture as a decision rather than a consequence |
-| R2 simulation in scope | **`C21`** | **resolves `X4` / `#15`** — `C4` is scoped to real visits |
-| R3 AI analysis in scope | **`C22`** | resolves the in-scope half of `X4` / `#15` |
-| R4 LMS AI draft text | **`C23`** | new hard rule; bounded by `#7`/`D5` |
-| R5 no patient information | **`C24`** | **resolves `X1` / `#12`** |
-| R6 operator approves | **`C25`** | **resolves `D8` / `#9`**; ratifies `X5` / `#16` |
-| (F1) scores, safe default | **`C26`** | resolves the buildable half of `X2` / `#14`; `#14` stays open |
-| R7 target 4 October | **`C27`** | — |
-| R8 real-doctor rows deferred | **`C28`** | **defers `#18`–`#26`** |
+| R1 no real recording | **`C21`** | ratifies the `C3`/`#18` posture as a decision rather than a consequence |
+| R2 simulation in scope | **`C22`** | **resolves `X4` / `#15`** — `C4` is scoped to real visits |
+| R3 AI analysis in scope | **`C23`** | resolves the in-scope half of `X4` / `#15` |
+| R4 LMS AI draft text | **`C24`** | new hard rule; bounded by `#7`/`D5` |
+| R5 no patient information | **`C25`** | **resolves `X1` / `#12`** |
+| R6 operator approves | **`C26`** | **resolves `D8` / `#9`**; ratifies `X5` / `#16` |
+| (F1) scores, safe default | **`C27`** | resolves the buildable half of `X2` / `#14`; `#14` stays open |
+| R7 target 4 October | **`C28`** | — |
+| R8 real-doctor rows deferred | **`C29`** | **defers `#18`–`#26`** |
 
-**Two things `C28` does not do, recorded because silence would imply it did.** `#26`'s two
+**Two things `C29` does not do, recorded because silence would imply it did.** `#26`'s two
 unratified clocks still bound `recorded_at` on every audio upload (`C18`) — tolerable only while
-`C20` keeps the path off. And `#21` is the **doctor's** notice: the **reps'** notice (`FE-W52`,
+`C21` keeps the path off. And `#21` is the **doctor's** notice: the **reps'** notice (`FE-W52`,
 `blocked-on-you` 2.6) is outside the deferred range, still wrong on `main`, and still waiting.
 
 #### Part A — `docs/ai-platform/AI-SPEC.md`, the week's gate
@@ -19195,8 +19689,8 @@ different question from `#19` (the vendor for **real** visits, deferred) and it 
 | **B3 audit gap** | **THE PREMISE IS FALSE. Measured, not assumed: 15 of the 16 tables the five PR #2 migrations create already carry `write_audit_row`.** The one that does not is `knowledge_chunks`, and it should stay that way on `C17`'s reasoning. **No migration written.** `INVENTORY.md` is five days old and registered a gap its own subject had closed — the third recorded instance in this repo of a register asserting a stale claim with more authority than the code |
 | **B4 the 17 grants** | **All 17 are necessary. None revoked.** The reason is structural: three application roles (`mr`, `field_manager`, `admin`) collapse into one Postgres role (`authenticated`), so revoking does not restrict a function to admins — it makes it callable by nobody. The real exposure is `anon`, and `privilege-posture.spec.ts` already guards it as a **mechanism with three positive controls**. Adding a weaker assertion beside it would be noise. Two of the 17 now have a real consumer (E3) |
 | **B5 jest** | **FIXED. `testMatch: ['<rootDir>/**/*.test.tsx']` matched an ABSOLUTE path, and `**` does not traverse a dot-segment — so every worktree under `.claude/worktrees/` discovered ZERO tests.** Dropping the `<rootDir>/` prefix makes jest glob from `roots` instead. Measured both ways: `jest --listTests` printed **0 paths before**, the full suite after. **415 render tests restored** |
-| **B6 seeding** | **Nothing seeded.** No product, no approved knowledge, no prompt version. `#7` and `C23` |
-| **B7 `C20` in code** | **Confirmed, nothing built.** No tracked file sets the flag (only `.env.example` and `apps/console/.env.example` are tracked; the flag lives in the git-ignored `apps/field/.env`). `readRecordingFlag` **throws** rather than quietly returning false against a non-local target. The server half ships `false` and `20260923000400:152` **raises** if it is ever true. `config.test.ts` — 13 cases including *"is OFF when nothing asks for it — the shipping state"*, *"a production-shaped target REFUSES to start"*, and a **positive control** that a local stack may enable it |
+| **B6 seeding** | **Nothing seeded.** No product, no approved knowledge, no prompt version. `#7` and `C24` |
+| **B7 `C21` in code** | **Confirmed, nothing built.** No tracked file sets the flag (only `.env.example` and `apps/console/.env.example` are tracked; the flag lives in the git-ignored `apps/field/.env`). `readRecordingFlag` **throws** rather than quietly returning false against a non-local target. The server half ships `false` and `20260923000400:152` **raises** if it is ever true. `config.test.ts` — 13 cases including *"is OFF when nothing asks for it — the shipping state"*, *"a production-shaped target REFUSES to start"*, and a **positive control** that a local stack may enable it |
 | **`purge_expired_sync_events`** | Still has no runner. Registered by `INVENTORY.md` B4-3; **not fixed.** Cost to register one: a workflow step beside the retention job, ~0.5d, and it needs a retention answer for `sync_events` that nobody has given |
 
 #### Part E — the hard rule, and the screen
@@ -19230,7 +19724,7 @@ central finding is that zero of PR #2's eight pieces had ever been called by an 
 
 **E4 rendered, not just written:** the screen shows the **market** and the **product** a draft
 claims to be about, and a draft naming a product carries the regulated-content caution — because
-`C23` permits AI-drafted *training* text and product claims must come from the client (`#7`), and
+`C24` permits AI-drafted *training* text and product claims must come from the client (`#7`), and
 code cannot tell those apart. A human can, given those two facts.
 
 **E2, the account list, which is a task for a human and not for engineering:**
@@ -19240,12 +19734,12 @@ code cannot tell those apart. A human can, given those two facts.
 | Drafting admin | whoever writes or generates content | creates and submits drafts. **Cannot approve** |
 | Approving admin | **the operator, personally** | reviews, attests, approves or rejects |
 
-**With one admin account, four eyes refuses every approval `42501`, and `C23`'s whole path cannot
+**With one admin account, four eyes refuses every approval `42501`, and `C24`'s whole path cannot
 be exercised once.**
 
 #### Part F — scores
 
-**`C26` built to the safe default, and the honest shape of that: there was nothing to add a score
+**`C27` built to the safe default, and the honest shape of that: there was nothing to add a score
 to.** No `sim_*` table exists in any migration (verified by search) and the LMS has no assessment,
 score, grade or pass mark — `contract.test.ts` already asserted the absence for nine LMS schemas.
 So "build to the safe default" meant **keeping scores out and pinning that**, which W1-A extended

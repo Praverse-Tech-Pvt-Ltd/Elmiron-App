@@ -34,7 +34,11 @@ export default function Queue(): ReactNode {
   // `FE-W44`. The LOAD, not the state. This is the screen an MR opens when they already
   // suspect something is wrong, and an empty list here used to be what an unreadable store
   // looked like -- the most reassuring possible rendering of the least reassuring fact.
-  const [load, setLoad] = useState<QueueLoad>({ kind: 'loaded', state: emptyQueue });
+  //
+  // FE-D2 4. It started as `{ kind: 'loaded', state: emptyQueue }`, so until the read answered
+  // the screen said "Everything is sent" about a queue nobody had looked at. It starts as
+  // `reading` now, and the screen claims nothing until the read settles.
+  const [load, setLoad] = useState<QueueLoad | { readonly kind: 'reading' }>({ kind: 'reading' });
   const [retryFailed, setRetryFailed] = useState<string | null>(null);
   const state = load.kind === 'loaded' ? load.state : emptyQueue;
 
@@ -47,6 +51,9 @@ export default function Queue(): ReactNode {
   return (
     <QueueScreen
       items={state.items}
+      readState={
+        load.kind === 'reading' ? 'reading' : load.kind === 'unreadable' ? 'unreadable' : 'read'
+      }
       // `QueueScreen` renders its own `Screen`, so this route must not wrap it in a second
       // one -- that would nest two scroll views and double the page padding. The banner
       // therefore belongs to the screen, as a prop, which is also where it belongs

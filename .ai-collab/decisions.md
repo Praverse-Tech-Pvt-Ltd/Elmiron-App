@@ -2195,11 +2195,63 @@ runs. Closing those needs a change at or in front of the PostgREST layer, which 
 costed as "moves part of the trail outside the database" — still true, still not chosen.
 
 
+### C20 — FE-D1: the send-first in-flight window is accepted, and send semantics do not change under deadline
+
+**Decided (operator ruling, 28 September 2026, recorded by the frontend session).** All six writing
+screens (`visit/[id].tsx` check-in/check-out and recording, `consent`, `samples`, `report`,
+`voice-note`) **try the send first and queue only when it gets no answer** (`sendOrQueue`,
+`apps/field/src/sync/outbox.ts:323`). That leaves a lost-write window: if the process dies *during*
+the send, before either the success branch or the catch-block enqueue runs, nothing is on disk, and
+the server may or may not hold the write.
+
+**Accepted for now.** No change to send semantics during the week ending in the demo. FE-D1's test
+(`apps/field/src/routes/offline-day.test.tsx`) proves that **queued writes survive process death and
+flush exactly once**. It does **not** prove that no write is lost, and the file says so.
+
+**If enqueue-first is adopted later, it is all six screens in one pass**, not one screen at a time.
+Doing it screen by screen leaves the app with two send paths and two sets of durability guarantees,
+and an MR cannot tell which screen they are on.
+
+**Recorded alongside, not acted on:** the whole queue is **one AsyncStorage value under one key**
+(`sync.queue.v1.<userId>`, `async-storage-store.ts:111`). If that write is ever interrupted partway,
+the loss is the entire queue, not one item. `loadQueueState` would read the torn value as
+`unreadable` (FE-W44), so every writer refuses rather than overwrites, and that stops a second loss.
+It does not recover the first.
+
+### An id collision, and why W1-A's nine rulings moved to C21-C29
+
+**Recorded because a renumbering that is not explained looks like a mistake later.**
+
+Two sessions ran in parallel on 28 September 2026 and **both minted `C20`** from the same
+high-water mark of `C19`. The frontend session's `C20` (FE-D1, immediately above) **merged to `main`
+first** -- PRs #3, #4 and #5 landed between 08:07Z and 08:17Z -- so it keeps the id, and W1-A's
+nine rulings, which were still on an unmerged branch, shift by one to **`C21`-`C29`**.
+
+**The mapping, for anyone holding the earlier numbers:**
+
+| W1-A originally | Now | Ruling |
+| --- | --- | --- |
+| `C20` | **`C21`** | R1 -- no real doctor conversation or recording |
+| `C21` | **`C22`** | R2 -- practice simulation is in scope |
+| `C22` | **`C23`** | R3 -- AI analysis in scope for practice and learning |
+| `C23` | **`C24`** | R4 -- AI-generated text is never born approved |
+| `C24` | **`C25`** | R5 -- no patient information anywhere |
+| `C25` | **`C26`** | R6 -- the operator is the approver |
+| `C26` | **`C27`** | scores, the safe default |
+| `C27` | **`C28`** | R7 -- target 4 October 2026 |
+| `C28` | **`C29`** | R8 -- the real-doctor rows are deferred |
+
+**The cause was structural, not carelessness, and it will recur.** `.ai-collab/decisions.md` mints
+ids by reading its own highest, and two branches cannot both do that safely. Nothing in the repo
+reserves a range or detects a duplicate. Registered as **`BE-W118`**.
+
 ## Operator decisions — 28 September 2026 (recorded in W1-A)
 
 **Nine rulings, recorded before any work started.** Eight are the operator's `R1`–`R8`; the ninth
-(`C26`) is the safe default this session was instructed to build to on scores. They are numbered
-`C20`–`C28`, continuing the existing namespace — the highest previously used was `C19` (MR-54).
+(`C27`) is the safe default this session was instructed to build to on scores. They are numbered
+`C21`–`C29`. They were **originally minted as `C20`–`C28`** against a high-water mark of `C19`
+(MR-54) and shifted by one when the frontend session's `C20` reached `main` first — the collision
+note immediately above this section has the mapping and the cause.
 
 Each names the register row it resolves or defers. The register numbering `#1`–`#36` is the
 client-facing one in `docs/ai-platform/decisions-pending.html`; `D`/`X` ids are
@@ -2207,15 +2259,15 @@ client-facing one in `docs/ai-platform/decisions-pending.html`; `D`/`X` ids are
 
 | Ruling | Id | Resolves / defers |
 | --- | --- | --- |
-| R1 no real recording | **C20** | ratifies the `C3`/`#18` posture; makes it a decision |
-| R2 simulation in scope | **C21** | **resolves `X4` / `#15`** |
-| R3 AI analysis in scope | **C22** | resolves the in-scope half of `X4` / `#15` |
-| R4 LMS AI draft text | **C23** | new hard rule; bounded by `#7` / `D5` |
-| R5 no patient information | **C24** | **resolves `X1` / `#12`** |
-| R6 operator approves content | **C25** | **resolves `D8` / `#9`**; ratifies `X5` / `#16` |
-| (F1) scores, safe default | **C26** | resolves the buildable half of `X2` / `#14`; `#14` stays open |
-| R7 target 4 October 2026 | **C27** | — |
-| R8 real-doctor rows deferred | **C28** | **defers `#18`–`#26`** |
+| R1 no real recording | **C21** | ratifies the `C3`/`#18` posture; makes it a decision |
+| R2 simulation in scope | **C22** | **resolves `X4` / `#15`** |
+| R3 AI analysis in scope | **C23** | resolves the in-scope half of `X4` / `#15` |
+| R4 LMS AI draft text | **C24** | new hard rule; bounded by `#7` / `D5` |
+| R5 no patient information | **C25** | **resolves `X1` / `#12`** |
+| R6 operator approves content | **C26** | **resolves `D8` / `#9`**; ratifies `X5` / `#16` |
+| (F1) scores, safe default | **C27** | resolves the buildable half of `X2` / `#14`; `#14` stays open |
+| R7 target 4 October 2026 | **C28** | — |
+| R8 real-doctor rows deferred | **C29** | **defers `#18`–`#26`** |
 
 **What these nine do NOT do.** They do not unblock a single live AI call. `#4` / `D1` (where the
 gateway runs) and `#5` / `D2` (which provider, and may data leave India) remain open, and every
@@ -2223,7 +2275,7 @@ feature below needs both. That is stated here so a reader of this section alone 
 that AI is now startable.
 
 
-### C20 — No real doctor conversation or recording in this release
+### C21 — No real doctor conversation or recording in this release
 
 **Decided (operator).** The consultation-recording feature stays **built and switched off**. Its
 feature flag stays `false` in the repository and its production guard stays enforced — the app
@@ -2241,7 +2293,7 @@ analyse. Their flags stay off.
 away work that `#18` may release, and a deletion is not reversible the way a flag is.
 
 
-### C21 — AI doctor SIMULATION / PRACTICE is in scope
+### C22 — AI doctor SIMULATION / PRACTICE is in scope
 
 **Decided (operator).** Practice simulations with no real doctor are in scope for this release.
 
@@ -2257,19 +2309,19 @@ clinical content — none of `C4`'s reasons reach it.
 blocked the only AI work this release can do.
 
 
-### C22 — AI analysis is in scope for practice and learning
+### C23 — AI analysis is in scope for practice and learning
 
 **Decided (operator).** AI analysis is in scope for practice simulations, performance feedback on
 those simulations, product knowledge, objection handling, communication, and learning progress.
 
-**Resolves** the in-scope half of `X4` / `#15`, with `C21`.
+**Resolves** the in-scope half of `X4` / `#15`, with `C22`.
 
-**Bounded by `C26`.** "Performance feedback" does **not** authorise a manager-facing score.
+**Bounded by `C27`.** "Performance feedback" does **not** authorise a manager-facing score.
 
-**Bounded by `C20`.** No analysis of a real visit, a real transcript or real audio.
+**Bounded by `C21`.** No analysis of a real visit, a real transcript or real audio.
 
 
-### C23 — LMS may use AI-generated text as DRAFT knowledge
+### C24 — LMS may use AI-generated text as DRAFT knowledge
 
 **Decided (operator).** The LMS may use AI-generated text extensively, **as draft knowledge to be
 refined and finalised later**.
@@ -2280,8 +2332,8 @@ the fact that a model produced it, and can only become approved through the exis
 path (`20260924000600_knowledge.sql`). **No seed, script or migration may insert approved
 knowledge.**
 
-**The line `C23` does not cross, and it is a regulatory line, not an engineering preference.**
-`C23` permits AI-generated **training** text. **Product claims, indications and prescribing
+**The line `C24` does not cross, and it is a regulatory line, not an engineering preference.**
+`C24` permits AI-generated **training** text. **Product claims, indications and prescribing
 information are regulated promotional content and must come from the client** (register `#7` /
 `D5`). A model may draft how to *explain* a product; it may not be the source of what the product
 *does*. A draft must therefore show which market and which product it claims to be about, so a
@@ -2291,7 +2343,7 @@ reviewer can see when a draft has crossed from training into promotion.
 product a draft claims makes four-eyes a formality.
 
 
-### C24 — No patient information anywhere in the MR app
+### C25 — No patient information anywhere in the MR app
 
 **Decided (operator).** No patient information anywhere in this app. Where patient-related data
 exists at all, it is **admin-only**.
@@ -2305,7 +2357,7 @@ patient-facing assistant is built in this repository**. `patient_education` stay
 data in this repo. Not even placeholder tables."* — is untouched.
 
 
-### C25 — Content approval is performed by the operator
+### C26 — Content approval is performed by the operator
 
 **Decided (operator).** The operator is the named approver for knowledge and for AI prompt
 versions.
@@ -2324,7 +2376,7 @@ Medical sign-off is a **process** fact — a named admin who is the medical revi
 the attestation text.
 
 
-### C26 — Scores: the safe default, and the question that remains
+### C27 — Scores: the safe default, and the question that remains
 
 **Decided (build to the safe default; one question still open).** Scores exist on **practice
 simulations** and **LMS assessments**, visible to **the MR themselves** and to the **company
@@ -2347,7 +2399,7 @@ stay out. (b) Manager-visible — the rule must be **formally amended in writing
 **Not built this session, in either case:** a manager-facing score surface.
 
 
-### C27 — Target: the MR field app functionally complete by 4 October 2026
+### C28 — Target: the MR field app functionally complete by 4 October 2026
 
 **Decided (operator).** The target is 4 October 2026.
 
@@ -2359,7 +2411,7 @@ What is buildable without them is the draft-labelling and approval path, the rou
 console review screen.
 
 
-### C28 — The real-doctor decisions are DEFERRED, not blockers
+### C29 — The real-doctor decisions are DEFERRED, not blockers
 
 **Decided (operator).** Register rows **`#18` to `#26`** — the PV/DPDP signatory, the speech vendor
 for real visits, the doctor's notice, what a withdrawal means, and the consent clocks — are
@@ -2374,10 +2426,10 @@ real change: `#18` (`C3`) sat at rank 3 of the unblocking table in `docs/ai-plat
 1. **`#26`'s two clocks still decide whether a recording can be filed at all**, and since `C18`
    they also bound `recorded_at` on every audio upload. Deferring the ratification does not make
    the unratified defaults go away; it means the app ships with two numbers nobody has confirmed.
-   That is acceptable **only** because `C20` keeps the recording path off.
+   That is acceptable **only** because `C21` keeps the recording path off.
 2. **`#21` is the DOCTOR's notice. The reps' notice is a different row and is not deferred.**
    `blocked-on-you` 2.6 / `FE-W52` — the reps' transparency notice, six of eight claims false or
-   partly false — is outside the `#18`–`#26` range, is still live on `main`, and `C28` does not
+   partly false — is outside the `#18`–`#26` range, is still live on `main`, and `C29` does not
    touch it.
 
 **Not deferred:** `#1` (UCPMP cap, CI red 6 November), `#2` (per-company settings), `#3` (registered

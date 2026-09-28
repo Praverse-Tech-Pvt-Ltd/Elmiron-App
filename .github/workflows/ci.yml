@@ -4,6 +4,16 @@ on:
   pull_request:
   push:
     branches: [main]
+  # W1-B A3 -- a workflow nobody can trigger by hand is one nobody can re-run after a flake,
+  # and it is also the fastest way to tell "CI is broken" apart from "CI was never asked".
+  #
+  # This session lost time to exactly that distinction. Four pushed commits produced NO run,
+  # and with only the two triggers above there was no way to ask for one: `pull_request` fires
+  # against `refs/pull/N/merge`, and **GitHub cannot build that ref while the PR conflicts with
+  # its base**, so a conflicting PR silently stops producing runs. It looks identical to a
+  # disabled workflow, a billing stop or a permissions problem, and none of those was true.
+  # `gh workflow run CI --ref <branch>` now distinguishes them in one command.
+  workflow_dispatch:
 
 # MR-41 B1 -- `set -o pipefail`, as a mechanism rather than a reminder.
 #

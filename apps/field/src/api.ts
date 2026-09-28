@@ -1,6 +1,6 @@
 import { createApiClient } from '@fieldforce/core';
 import type { ApiClient } from '@fieldforce/core';
-import { apiBaseUrl } from './config';
+import { apiTarget } from './config';
 import { supabase } from './supabase';
 
 /**
@@ -27,9 +27,19 @@ const getAccessToken = async (): Promise<string | null> => {
   return data.session?.access_token ?? null;
 };
 
+/**
+ * FE-D2 2. Refused here, when a client is made, and never at import. A release build with no real
+ * address never reaches this: `app/_layout.tsx` shows the configuration error and mounts no screen.
+ * If something does, it gets a named error instead of a request to the phone's own loopback.
+ */
+const baseUrl = (): string => {
+  if (apiTarget.kind === 'misconfigured') throw new Error(apiTarget.reason);
+  return apiTarget.baseUrl;
+};
+
 export const createClientForScenario = (scenario?: MockScenario): ApiClient =>
   createApiClient({
-    baseUrl: apiBaseUrl,
+    baseUrl: baseUrl(),
     getAccessToken,
     // Spread rather than `fetch: undefined` — the repo sets
     // `exactOptionalPropertyTypes`, under which an explicit undefined is not the
@@ -46,5 +56,3 @@ export const createClientForScenario = (scenario?: MockScenario): ApiClient =>
           },
         }),
   });
-
-export const api: ApiClient = createClientForScenario();

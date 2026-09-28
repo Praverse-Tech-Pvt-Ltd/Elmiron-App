@@ -8,9 +8,9 @@ import { seedFixtures } from './fixtures.js';
 import type { FixtureWorld } from './fixtures.js';
 
 /**
- * W1-A E1 / E5 — **AI-generated text is never born approved** (`C23`).
+ * W1-A E1 / E5 — **AI-generated text is never born approved** (`C24`).
  *
- * `C23` permits AI-generated text to be used extensively in the LMS as DRAFT knowledge. This suite
+ * `C24` permits AI-generated text to be used extensively in the LMS as DRAFT knowledge. This suite
  * is the mechanism behind that permission. The property, in one sentence:
  *
  *   **There is no route from an INSERT to approved knowledge, for anybody, and a caller who tries
@@ -172,7 +172,7 @@ describe.skipIf(!reachable)('W1-A E1 — no INSERT reaches approved knowledge', 
   });
 });
 
-describe.skipIf(!reachable)('W1-A E1 — the authorship label, C23', () => {
+describe.skipIf(!reachable)('W1-A E1 — the authorship label, C24', () => {
   it('an AI-generated draft must name its model, and a human draft must not', async () => {
     await inRolledBackTransaction(async (client) => {
       await asUser(client, world.users.admin);
@@ -195,7 +195,7 @@ describe.skipIf(!reachable)('W1-A E1 — the authorship label, C23', () => {
            values ${VERSION_VALUES}, 'human', 'some-model')`,
           [documentId, world.users.admin.id],
         ),
-        'human WITH a model is a mislabelled machine draft, which is what C23 prevents',
+        'human WITH a model is a mislabelled machine draft, which is what C24 prevents',
       ).toBe('23514');
 
       // POSITIVE CONTROL: the labelled AI draft is accepted.
@@ -210,7 +210,7 @@ describe.skipIf(!reachable)('W1-A E1 — the authorship label, C23', () => {
     });
   });
 
-  it('an AI-generated draft still lands as a DRAFT — C23 in one assertion', async () => {
+  it('an AI-generated draft still lands as a DRAFT — C24 in one assertion', async () => {
     await inRolledBackTransaction(async (client) => {
       await asUser(client, world.users.admin);
       const documentId = await makeDoc(client);

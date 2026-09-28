@@ -62,11 +62,47 @@ const parsed = SyncQueueItemSchema.parse({
 });
 
 describe('app/queue.tsx — the binding', () => {
-  it('renders the empty state, which is the honest state today', async () => {
-    // Nothing enqueues until FE-W3 and there is no store, so the queue really is
-    // empty. A binding that faked a populated one would be a screen that lies.
+  it('renders the empty state once an empty queue has been READ', async () => {
+    // FE-D2 4 — corrected. This asserted "Everything is sent" synchronously, straight after
+    // render and before the disk read resolved: it was asserting the defect. The empty state is
+    // still the honest answer for an empty queue, but only after the queue has been read.
+    mockLoadQueueState.mockResolvedValue({ kind: 'loaded', state: emptyQueue });
     await render(<Queue />);
-    expect(screen.getByText('Everything is sent')).toBeTruthy();
+    expect(await screen.findByText('Everything is sent')).toBeTruthy();
+  });
+});
+
+/**
+ * FE-D2 4 — the queue never says "Everything is sent" before it knows.
+ *
+ * The route started from `{ kind: 'loaded', state: emptyQueue }`, so until the disk read
+ * resolved the screen said "Everything is sent" — on the screen a rep opens when they already
+ * suspect something did not go. And an UNREADABLE queue rendered the error banner with
+ * "Everything is sent" underneath it: two opposite claims, one of them false.
+ */
+describe('FE-D2 4 — no verdict before the queue has been read', () => {
+  it('while the read is in flight, says it is reading and claims nothing is sent', async () => {
+    mockLoadQueueState.mockReturnValue(new Promise(() => undefined));
+    await render(<Queue />);
+
+    expect(screen.getByText('Reading your queue')).toBeTruthy();
+    expect(screen.queryByText('Everything is sent')).toBeNull();
+  });
+
+  it('an unreadable queue does not also say everything is sent', async () => {
+    mockLoadQueueState.mockResolvedValue({ kind: 'unreadable' });
+    await render(<Queue />);
+
+    expect(await screen.findByText(/could not read your queue/iu)).toBeTruthy();
+    expect(screen.queryByText('Everything is sent')).toBeNull();
+  });
+
+  it('POSITIVE CONTROL: once read and empty, it does say so, and stops reading', async () => {
+    mockLoadQueueState.mockResolvedValue({ kind: 'loaded', state: emptyQueue });
+    await render(<Queue />);
+
+    expect(await screen.findByText('Everything is sent')).toBeTruthy();
+    expect(screen.queryByText('Reading your queue')).toBeNull();
   });
 });
 

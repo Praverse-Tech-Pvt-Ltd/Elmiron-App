@@ -144,14 +144,14 @@ describe('LMS (AI-B2) — no score on the manager surface until X2 is decided', 
 });
 
 describe('AI control plane (AI-D0) — W1-A B2', () => {
-  it('has no patient-facing feature, and C24 is the reason', () => {
-    // `C24` / X1: patient-facing AI lives in the clinical project. A feature id here is the only
+  it('has no patient-facing feature, and C25 is the reason', () => {
+    // `C25` / X1: patient-facing AI lives in the clinical project. A feature id here is the only
     // thing `ai_begin_request` will accept, so its absence is the enforcement, not a convention.
     expect(AI_FEATURES).not.toContain('patient_education');
   });
 
   it('names every feature this release declared in scope', () => {
-    // `C21`/`C22` put simulation, coaching-on-simulation and the tutor in scope. If a feature id
+    // `C22`/`C23` put simulation, coaching-on-simulation and the tutor in scope. If a feature id
     // were renamed, the spec's flow tables would point at nothing.
     for (const feature of [
       'mr_chat',
@@ -165,7 +165,7 @@ describe('AI control plane (AI-D0) — W1-A B2', () => {
   });
 
   it('keeps the out-of-scope features declared but off — deleting an id would lose the flag', () => {
-    // `C20`/`C28`: these three stay OUT this release. They remain declared so their flags exist
+    // `C21`/`C29`: these three stay OUT this release. They remain declared so their flags exist
     // and can be asserted false; an undeclared feature has no flag to keep off.
     for (const feature of ['transcript_analysis', 'pv_screening', 'complaint_screening'] as const) {
       expect(AI_FEATURES).toContain(feature);
@@ -186,21 +186,21 @@ describe('AI control plane (AI-D0) — W1-A B2', () => {
     expect(keys.filter((k) => textish.test(k) && k !== 'promptVersionId')).toEqual([]);
   });
 
-  it('carries no score, rank or rating on an AI request — C26 holds here too', () => {
+  it('carries no score, rank or rating on an AI request — C27 holds here too', () => {
     const forbidden = /(score|grade|rank|percent|rating)/i;
     expect(Object.keys(AiRequestSchema.shape).filter((k) => forbidden.test(k))).toEqual([]);
   });
 });
 
 describe('approved knowledge (AI-C1) — W1-A B2', () => {
-  it('has a draft state, because C23 requires AI text to enter as one', () => {
+  it('has a draft state, because C24 requires AI text to enter as one', () => {
     expect(KNOWLEDGE_VERSION_STATUSES).toContain('draft');
     expect(KNOWLEDGE_VERSION_STATUSES).toContain('in_review');
     expect(KNOWLEDGE_VERSION_STATUSES).toContain('approved');
   });
 
   it('carries the four-eyes columns the approval path depends on', () => {
-    // `C25`: the operator approves and cannot approve their own. The author, the submitter and
+    // `C26`: the operator approves and cannot approve their own. The author, the submitter and
     // the decider must be separately recorded or the rule cannot be checked at all.
     const keys = Object.keys(KnowledgeDocumentVersionSchema.shape);
     for (const field of [
@@ -213,14 +213,14 @@ describe('approved knowledge (AI-C1) — W1-A B2', () => {
     }
   });
 
-  it('records where the text came from, which C23 makes load-bearing', () => {
+  it('records where the text came from, which C24 makes load-bearing', () => {
     // A reviewer approving AI-drafted training text needs to see its provenance. `sourceReference`
     // is required (never nullable) so a version cannot exist without saying where it came from.
     expect(Object.keys(KnowledgeDocumentVersionSchema.shape)).toContain('sourceReference');
     expect(KnowledgeDocumentVersionSchema.shape.sourceReference.safeParse('').success).toBe(false);
   });
 
-  it('a version about a product can name its market — C23 and §47', () => {
+  it('a version about a product can name its market — C24 and §47', () => {
     // The market is what lets a reviewer see that a draft has crossed from training text into
     // regulated promotional content for a particular country.
     expect(Object.keys(KnowledgeDocumentVersionSchema.shape)).toContain('marketId');

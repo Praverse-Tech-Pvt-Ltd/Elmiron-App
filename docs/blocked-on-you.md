@@ -1337,24 +1337,24 @@ row below is a decision.
 
 ## W1-A — 28 September 2026: eight answers, and what is still open
 
-**Eight rulings were given and recorded as `C20`–`C28` in `.ai-collab/decisions.md`** (nine ids —
-`C26` is the scores default this session was told to build to). This section marks the register rows
+**Eight rulings were given and recorded as `C21`–`C29` in `.ai-collab/decisions.md`** (nine ids —
+`C27` is the scores default this session was told to build to). This section marks the register rows
 they touch and restates, in one place, what remains.
 
 ### Rows now RESOLVED
 
 | Row | Question | Answer | Recorded |
 | --- | --- | --- | --- |
-| **`#15` / `X4`** | Does "coaching is out of v1" cover AI Coach and AI Doctor on practice? | **No.** Practice simulations with no real doctor are **in scope**. `C4` is scoped to real visits | **`C21`**, `C22` |
-| **`#12` / `X1`** | Patient-detail detection, patient details in safety reports, patient-facing assistant | **No patient information anywhere in this app.** Any patient-related data is admin-only. No patient-facing assistant here — it belongs in the clinical project | **`C24`** |
-| **`#9` / `D8`** | Named medical / scientific approver for knowledge and AI prompts | **The operator.** `#16`'s built mechanism (a named admin + stored written attestation, three roles kept) is ratified | **`C25`** |
-| **`#16` / `X5`** | Content approver role | **Ratified as built.** No fourth role | **`C25`** |
+| **`#15` / `X4`** | Does "coaching is out of v1" cover AI Coach and AI Doctor on practice? | **No.** Practice simulations with no real doctor are **in scope**. `C4` is scoped to real visits | **`C22`**, `C23` |
+| **`#12` / `X1`** | Patient-detail detection, patient details in safety reports, patient-facing assistant | **No patient information anywhere in this app.** Any patient-related data is admin-only. No patient-facing assistant here — it belongs in the clinical project | **`C25`** |
+| **`#9` / `D8`** | Named medical / scientific approver for knowledge and AI prompts | **The operator.** `#16`'s built mechanism (a named admin + stored written attestation, three roles kept) is ratified | **`C26`** |
+| **`#16` / `X5`** | Content approver role | **Ratified as built.** No fourth role | **`C26`** |
 
 ### Row PARTLY resolved — the one question that still needs you
 
 | Row | Resolved | Still open |
 | --- | --- | --- |
-| **`#14` / `X2`** | Scores exist on **practice simulations** and **LMS assessments**, visible to the **MR** and the **company admin**. No manager surface, no team averages, no rankings. Built to this default (`C26`) | **May a manager see an MR's practice scores?** |
+| **`#14` / `X2`** | Scores exist on **practice simulations** and **LMS assessments**, visible to the **MR** and the **company admin**. No manager surface, no team averages, no rankings. Built to this default (`C27`) | **May a manager see an MR's practice scores?** |
 
 **The question, in one line: may a manager see an MR's practice simulation and assessment scores?**
 
@@ -1368,7 +1368,7 @@ they touch and restates, in one place, what remains.
 
 **No manager-facing score surface was built this session, in either case.**
 
-### Rows DEFERRED — `C28`
+### Rows DEFERRED — `C29`
 
 **`#18` to `#26` are deferred, not blocking.** No work waits on them. They are listed here so the
 deferral is visible rather than implied by silence.
@@ -1389,7 +1389,7 @@ deferral is visible rather than implied by silence.
 
 1. **`#26`'s two unratified numbers still bound `recorded_at` on every audio upload** (`C18`), not
    only consent captures. Deferring the ratification ships two figures nobody has confirmed. That is
-   tolerable **only** because `C20` keeps the recording path switched off — it stops being tolerable
+   tolerable **only** because `C21` keeps the recording path switched off — it stops being tolerable
    the moment the flag moves.
 2. **`#21` is the DOCTOR's notice. The REPS' notice is a different row and is NOT deferred.**
    `blocked-on-you` **2.6** / `FE-W52` — six of eight claims in the reps' transparency notice false
@@ -1406,7 +1406,7 @@ deferral is visible rather than implied by silence.
 | **`#4` / `D1`** | **Where does the AI gateway run?** | **Every AI feature.** Nothing in this release that needs a model can start |
 | **`#5` / `D2`** | **Which AI provider, and may questions and answers leave India?** | **Every live AI call.** Residency is `ap-south-1`. For voice practice, an employee's recorded voice is the payload |
 | `#6` / `D3` | Approve `pgvector` | Vector retrieval only. Keyword search is the deliberate working fallback — **not blocking** |
-| `#7` / `D5` | The product catalogue, and who supplies approved labels / prescribing information | All real product content. **And it is the boundary `C23` must not cross** — a model may draft training text, never a product claim |
+| `#7` / `D5` | The product catalogue, and who supplies approved labels / prescribing information | All real product content. **And it is the boundary `C24` must not cross** — a model may draft training text, never a product claim |
 | `#8` / `D6` | Market on the company or on the content | Built as *on the content*. An answer of "company" **reworks** AI-B1 rather than unblocking |
 | `#10` / `D9` | Notifications — build them, and by which channel | Anything in LMS or AI that wants to tell a user something. Measured in `AI-SPEC.md`; none exist |
 | `#11` | A PDF-reading component for knowledge upload | Document ingestion. Text can be pasted today |
@@ -1418,7 +1418,7 @@ deferral is visible rather than implied by silence.
 
 ### If you answer only three
 
-**`#4`, `#5`, and your own admin account (`C25`).** The first two unblock roughly two-thirds of
+**`#4`, `#5`, and your own admin account (`C26`).** The first two unblock roughly two-thirds of
 everything not started, and both are answerable in a meeting. The third is not a decision at all —
 it is a provisioning task, and without it **four-eyes refuses every approval `42501`**, which means
-`C23`'s entire draft-to-approved path cannot be exercised by a human even once.
+`C24`'s entire draft-to-approved path cannot be exercised by a human even once.

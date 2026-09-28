@@ -9,11 +9,11 @@ import { Body, Card, Heading, Label, MissingNote, Pill } from './ui';
 /**
  * W1-A E3 — the screen the operator actually uses to review and approve a draft.
  *
- * **Why this screen exists at all.** `C23` (28 September 2026) permits AI-generated text to be used
- * extensively in the LMS as draft knowledge, and `C25` names the operator as the approver. Those two
+ * **Why this screen exists at all.** `C24` (28 September 2026) permits AI-generated text to be used
+ * extensively in the LMS as draft knowledge, and `C26` names the operator as the approver. Those two
  * together are the most dangerous permission in this release: without a screen, the only way to
  * approve is a hand-written SQL call, and the four-eyes attestation becomes a string somebody typed
- * into a terminal. This is the screen that makes `C23` safe rather than merely permitted.
+ * into a terminal. This is the screen that makes `C24` safe rather than merely permitted.
  *
  * **THE SERVER IS THE CONTROL. This component draws; it does not decide.**
  *
@@ -30,7 +30,7 @@ import { Body, Card, Heading, Label, MissingNote, Pill } from './ui';
  * file must never be cited as the thing that enforces four eyes.** It is the thing that explains,
  * before the click, why a control is absent — which is the only part a database cannot do.
  *
- * **E4 — the product-claim caution, rendered.** `C23` permits AI-generated TRAINING text. Product
+ * **E4 — the product-claim caution, rendered.** `C24` permits AI-generated TRAINING text. Product
  * claims, indications and prescribing information are regulated promotional content and must come
  * from the client (`#7`). Code cannot tell those apart. So the screen shows the reviewer the two
  * facts that let a HUMAN tell them apart — **which market and which product this draft claims to be

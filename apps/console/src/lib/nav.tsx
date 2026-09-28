@@ -17,7 +17,7 @@ import { SignOut } from './sign-out';
 const ITEMS: readonly { readonly label: string; readonly href?: string }[] = [
   { label: 'Coaching queue', href: '/coaching' },
   // W1-A E3. A link, not plain text, because the screen behind it exists — the rule this list
-  // already keeps. It is the operator's own destination under `C25`.
+  // already keeps. It is the operator's own destination under `C26`.
   { label: 'Knowledge approvals', href: '/knowledge' },
   { label: 'Consent versions', href: '/admin' },
   { label: 'Users & roles' },

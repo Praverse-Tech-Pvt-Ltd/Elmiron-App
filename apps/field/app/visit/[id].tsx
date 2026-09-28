@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import { PermissionsAndroid, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 // The idempotency key for the request, generated on the device because the
 // contract says so: `id` "doubles as the server-side idempotency key", so a
@@ -48,6 +49,8 @@ import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { clockIn } from '../../src/today/territory-day';
 import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
+import { RECORD_AUDIO, microphoneRationaleDue } from '../../src/onboarding/microphone-gate';
+import { hasAnsweredMicrophoneRationale } from '../../src/onboarding/progress';
 
 /**
  * B4 / B5 / B6 — one visit, from arriving to leaving.
@@ -83,6 +86,27 @@ const SENT: Record<SendOutcome['kind'], (message: string) => string> = {
 export default function VisitRoute(): ReactNode {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+
+  /**
+   * FE-D2 first run — A4, "Before your first visit" (operator ruling). The first time a visit is
+   * opened, if the microphone is not granted and A4 has not been answered, A4 is shown; the rep
+   * comes back here from it. Nothing is requested by this: the prompt waits for A4's "Allow".
+   */
+  useEffect(() => {
+    let live = true;
+    void microphoneRationaleDue({
+      isAndroid: Platform.OS === 'android',
+      answered: hasAnsweredMicrophoneRationale,
+      granted: () => PermissionsAndroid.check(RECORD_AUDIO),
+    }).then((due) => {
+      if (live && due) router.push('/onboarding/microphone');
+    });
+    return () => {
+      live = false;
+    };
+    // Once per opening of the screen, by design.
+  }, []);
+
   /**
    * MR-21 B1. The visit and the doctor come from the store the pull maintains.
    *
@@ -151,7 +175,15 @@ export default function VisitRoute(): ReactNode {
    * moment a check-in is queued, so reading it at render named the wrong write.
    */
   const [blockedWrite, setBlockedWrite] = useState<'check-in' | 'check-out'>('check-in');
-  const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
+  /**
+   * FE-D2 6. What the LAST PRESS produced when it failed: refused, not saved, recording did not
+   * start or was not filed. It used to be `failure`, which `VisitScreen` renders INSTEAD of the
+   * visit, and nothing ever cleared it — a refused check-in left the rep with a banner and no
+   * button. It is shown above the visit now, and cleared when the next action starts.
+   */
+  const [actionFailure, setActionFailure] = useState<{ title: string; detail: string } | null>(
+    null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -225,6 +257,7 @@ export default function VisitRoute(): ReactNode {
 
   const startRecording = (): void => {
     if (authorising === null) return;
+    setActionFailure(null);
     void (async () => {
       const permission = await AudioModule.requestRecordingPermissionsAsync();
       setMicGranted(permission.granted);
@@ -240,7 +273,7 @@ export default function VisitRoute(): ReactNode {
       // eslint-disable-next-line no-restricted-syntax -- allowlisted above
       setRecordingStartedAt(new Date().toISOString());
     })().catch((error: unknown) => {
-      setFailure({
+      setActionFailure({
         title: 'Recording did not start',
         detail: error instanceof Error ? error.message : 'Unknown failure',
       });
@@ -257,6 +290,7 @@ export default function VisitRoute(): ReactNode {
    */
   const stopRecording = (keep: boolean): void => {
     if (!recorderState.isRecording) return;
+    setActionFailure(null);
     const seconds = Math.round(recorderState.durationMillis / 1000);
     const startedAt = recordingStartedAt;
     setRecordingStartedAt(null);
@@ -281,7 +315,7 @@ export default function VisitRoute(): ReactNode {
         // What changes is that the MR is told, through the same channel the `.catch` below
         // already uses for exactly this outcome.
         if (visit === null || authorising === null || startedAt === null || userId === null) {
-          setFailure({
+          setActionFailure({
             title: 'The recording was not filed',
             detail:
               'The visit or the consent it belongs to is not on this phone, so there is nothing to file it against. The audio has been discarded. Sync and record again if the doctor is still willing.',
@@ -298,7 +332,7 @@ export default function VisitRoute(): ReactNode {
         // withdrawal between stopping and sending refuses the upload rather than filing it.
         const uri = recorder.uri;
         if (uri === null) {
-          setFailure({
+          setActionFailure({
             title: 'The recording was not filed',
             detail:
               'The phone did not finish writing the audio, so there is nothing to send. Nothing was filed.',
@@ -326,7 +360,7 @@ export default function VisitRoute(): ReactNode {
         setRecordingOutcome(SENT[outcome.kind](outcome.kind === 'refused' ? outcome.message : ''));
       })
       .catch((error: unknown) => {
-        setFailure({
+        setActionFailure({
           title: keep ? 'The recording was not filed' : 'Recording did not stop cleanly',
           detail: error instanceof Error ? error.message : 'Unknown failure',
         });
@@ -340,9 +374,10 @@ export default function VisitRoute(): ReactNode {
     // and MR-19 found exactly that -- the button did nothing at all, with nothing on screen
     // and nothing on the wire.
     if (busy) return;
+    setActionFailure(null);
     const unavailable = unavailableReason(visit, doctor);
     if (unavailable !== null) {
-      setFailure(unavailable);
+      setActionFailure(unavailable);
       return;
     }
     if (visit === null) return;
@@ -383,7 +418,7 @@ export default function VisitRoute(): ReactNode {
           // `FE-W44`. Neither sent nor queued. Saying nothing here is defect 12's shape
           // again -- the MR presses "I am here", the stage does not move, and they press
           // it a second time.
-          setFailure({ title: 'This was NOT saved', detail: QUEUE_UNREADABLE });
+          setActionFailure({ title: 'This was NOT saved', detail: QUEUE_UNREADABLE });
           return;
         }
         if (sendResult.kind === 'sent') {
@@ -409,7 +444,7 @@ export default function VisitRoute(): ReactNode {
         }
         if (sendResult.kind === 'refused') {
           // The server answered and said no. That is a decision, shown as one.
-          setFailure({ title: 'That was refused', detail: sendResult.message });
+          setActionFailure({ title: 'That was refused', detail: sendResult.message });
           return;
         }
         // QUEUED, and the type system now says so: `sent` and `refused` both returned
@@ -429,7 +464,7 @@ export default function VisitRoute(): ReactNode {
         return;
       } catch (error: unknown) {
         if (error instanceof ApiRequestError && error.code === 'permission_denied') {
-          setFailure({ title: 'That was refused', detail: error.message });
+          setActionFailure({ title: 'That was refused', detail: error.message });
           return;
         }
         setBlocked(
@@ -456,9 +491,9 @@ export default function VisitRoute(): ReactNode {
         busy={busy}
         clinic={clinic === undefined ? null : `${clinic.label}, ${clinic.city}`}
         doctorName={doctor?.fullName ?? 'This visit'}
+        actionFailure={actionFailure}
         failure={
-          failure ??
-          (pullFailure === null
+          pullFailure === null
             ? // MR-50 E2 / `FE-W64`. The pull has SETTLED and this visit is not in it -- reached
               // by a direct link to a visit this phone does not hold (MR-49 opened rep A's visit
               // as rep B). The screen drew "This visit · Not started · I am here" with nothing
@@ -485,7 +520,7 @@ export default function VisitRoute(): ReactNode {
                       title: 'Could not load this visit',
                       detail: 'The app could not reach the server. It will try again.',
                     }
-                  : null)
+                  : null
         }
         loading={loading}
         onAction={advance}

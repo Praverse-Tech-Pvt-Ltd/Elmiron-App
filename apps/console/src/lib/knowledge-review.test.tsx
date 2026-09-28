@@ -20,9 +20,9 @@ import {
  * 1. **The controls appear only when the server would allow the decision.** Not because this
  *    enforces anything — `approve_knowledge_version` refuses `42501` regardless — but because a
  *    button that always fails for the author is a worse screen than no button.
- * 2. **`C23` and E4 are visible on the screen, not just in a document.** A machine-written draft
+ * 2. **`C24` and E4 are visible on the screen, not just in a document.** A machine-written draft
  *    says so; a draft about a product carries the regulated-content caution. If those two notes
- *    ever stop rendering, `C23` silently becomes "AI text gets approved like anything else".
+ *    ever stop rendering, `C24` silently becomes "AI text gets approved like anything else".
  */
 
 afterEach(cleanup);
@@ -136,7 +136,7 @@ describe('the rendered screen', () => {
     expect(screen.queryByText(AI_DRAFT_CAUTION)).toBeNull();
   });
 
-  it('C23: says a MODEL wrote it, names the model, and carries the caution', () => {
+  it('C24: says a MODEL wrote it, names the model, and carries the caution', () => {
     draw({ authorship: 'ai_generated', authoringModel: 'some-model-v2' });
     expect(screen.getByText(/A model: some-model-v2/)).toBeTruthy();
     expect(screen.getByText(AI_DRAFT_CAUTION)).toBeTruthy();

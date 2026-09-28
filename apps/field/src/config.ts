@@ -1,5 +1,7 @@
 import { loadAppConfig } from '@fieldforce/core';
 import type { AppConfig } from '@fieldforce/core';
+import { resolveApiTarget } from './api-target';
+import type { ApiTarget } from './api-target';
 
 /**
  * The first caller of `loadAppConfig` in this repository.
@@ -38,5 +40,12 @@ export const appConfig: AppConfig = loadAppConfig({
  * On a physical device `localhost` is the phone, not the laptop, so this has to be
  * the machine's LAN address. It is configuration rather than a constant for exactly
  * that reason.
+ *
+ * FE-D2 2. It used to fall back to `http://127.0.0.1:4010` in every build. It still does in a
+ * dev build; a release build with no real address is `misconfigured`, and `app/_layout.tsx`
+ * shows that instead of the app. `__DEV__` is React Native's build flag: false in a release
+ * bundle.
  */
-export const apiBaseUrl: string = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:4010';
+export const apiTarget: ApiTarget = resolveApiTarget(process.env.EXPO_PUBLIC_API_BASE_URL, {
+  dev: __DEV__,
+});

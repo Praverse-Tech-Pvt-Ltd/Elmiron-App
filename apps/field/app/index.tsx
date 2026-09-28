@@ -37,14 +37,17 @@ export default function Index(): ReactNode {
   if (status !== 'signed-in') return <Redirect href="/sign-in" />;
 
   /*
-    First run goes through Flow A. The order is the design's, minus one screen:
-    A2 (location) is NOT here, because `shouldPromptForLocation` is only ever true
-    for an explicit user request. Putting location in a forced sequence would be
-    the nag loop that `src/onboarding/permissions.ts` exists to prevent, and the
-    ask now happens where it belongs — on the check-in press that needs a position.
+    First run goes through Flow A, in the design's order: A2 location → A3
+    notifications → battery → A9 transparency.
 
-    The microphone is absent for the same kind of reason: `shouldPromptForMicrophone`
-    is false at sign-in and true at the first visit.
+    FE-D2 (operator ruling, 28 September). This comment used to explain why A2 was left
+    OUT, as a nag loop. It is back in as the second screen. It is not a loop: A2 is shown
+    once, the system prompt appears only when the rep presses "Turn location on" (an
+    explicit request — the one trigger `shouldPromptForLocation` allows), and "Not now"
+    is a full-weight answer that simply goes on. A denial lands on S4, once.
+
+    The microphone is still absent here: `shouldPromptForMicrophone` is false at sign-in,
+    and A4 comes before the rep's first visit.
   */
-  return firstRunDone ? <Redirect href="/home" /> : <Redirect href="/onboarding/notifications" />;
+  return firstRunDone ? <Redirect href="/home" /> : <Redirect href="/onboarding/location" />;
 }
