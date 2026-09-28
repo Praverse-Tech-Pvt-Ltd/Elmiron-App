@@ -19319,3 +19319,57 @@ frontend-owned. The shared contract is `packages/core`. From FE-D2 on, the check
 ```
 git status --porcelain --untracked-files=all -- services packages/core .github scripts
 ```
+
+### FE-D2 (progress) — the app tells the truth: items 1–7
+
+**28 September 2026, branch `fe-d2-daily` off `fe-d1-enqueue`.** This is the progress note the
+operator asked for after item 7. The closing section follows once first run is done. Each item
+was written test-first, shown red on the code before the fix, then green, then committed and
+pushed on its own.
+
+**Rulings this rests on:**
+- A beat-plan stop with no visit row keeps opening the doctor.
+- The two tests that asserted defects are corrected with their fixes, and each commit names the
+  change.
+- The unused module-level `api` client is removed.
+- `packages/ui` and `packages/ui-tokens` are frontend-owned.
+
+| # | Item | Commit | Red on the old code | Green |
+| --- | --- | --- | --- | --- |
+| 1 | `packages/ui` jest timeout = field's 20 s (MR-22 A2) | `8471253` | effective `testTimeout` absent, so jest's 5000 ms default; `ci:local` failed `ConsentScreen` and `field-states` with "Exceeded timeout of 5000 ms" | effective `testTimeout: 20000`; ui jest 253/253 |
+| 2 | Release build with no real API address stops at a configuration error | `a796a47` | `api-target.test.ts`: module absent. `config-gate.test.tsx`: "Unable to find … This copy of the app is not set up", because the app mounted | 8/8 and 2/2 |
+| 3 | Tapping a beat-plan stop opens that visit | `fd122dc` | "Expected `/visit/4444…402`, Received `/doctor/3333…302`" (upcoming stop) and the same for a done stop | 11/11; the no-visit stop still opens the doctor, pinned |
+| 4 | Queue claims nothing before it has read the queue | `c88eb70` | "Unable to find … Reading your queue" in flight; unreadable showed `<Text>Everything is sent</Text>` | 10/10 |
+| 5 | Reply send failure keeps the reply | `5d9ffce` | "Unable to find … displayValue: I did answer it …" and "… accessibility label: What you want to say" after a failed send | 4/4 (new route test) |
+| 6 | Failed press on visit / samples / voice-note gives the screen back | `93c70d0` | 6 tests: "Unable to find … I am here — check in" (×2), "… Record what I left", "… What you left", "… Start again" (×2), each after its banner rendered | 31/31 in the three files |
+| 7 | Day-end: unknown is not zero; 0 of 0 is not a congratulation | `38f842c` | "Unable to find … /Not available/" (failed load); in flight `<Text>0 of 0</Text>`; "Unable to find … nothing was planned" | 9/9 |
+
+**Suite totals after item 7:** field vitest **621**, field jest **184**, ui vitest **4**, ui jest
+**253**, all passing. `tsc` is clean for field and ui. Lint has 0 errors; the one field warning is
+pre-existing (an unused `eslint-disable` in `beat-plan-route.test.tsx`, left alone).
+
+**Tests corrected rather than regressed:**
+- `queue-route.test.tsx:65-70` asserted "Everything is sent" before the read resolved. It now waits
+  for an empty queue to be read.
+- `day-end-route.test.tsx:84` asserted "0 of 0" after a failed load. It now asserts "Not available".
+- `route.test.ts` pins a stop's keys. It now lists `visitId`, which is an id, not a position.
+
+**Boundary, after item 7:**
+
+```
+$ git status --porcelain --untracked-files=all -- services packages/core .github scripts
+(exit 0, 0 lines)
+```
+
+Nothing under `services`, `packages/core`, `.github` or `scripts` has been committed on this branch
+either: `git diff fe-d1-enqueue..HEAD` on those paths is empty.
+
+**Open items, written down and not acted on:**
+- `packages/ui/jest.config.cjs:39` fails `eslint` on its own `require.resolve` line. This is
+  pre-existing, and CI never sees it because ui's `lint` is `eslint src`.
+- Day-end still swallows non-denial fetch errors (`day-end.tsx:103`), and a mileage failure
+  still reads "No distance yet".
+- Beat-plan "failed" still reads as "syncing". The doctor profile says "not visited yet" while
+  loading. Mileage shows "0.0 km" while loading. `index` spins forever on a failed disk read.
+  Analysis has no empty state. (Inventory §c.)
+- The six mock-only screens stay on the mock until CR-3 is answered.
