@@ -19340,3 +19340,33 @@ this schema has nowhere, and `constraints.md` requires asking before introducing
 **except** the knowledge approval path, which now has exactly one consumer. And every number above
 is from **this machine's local stack**; there is still no `handset` result anywhere in this
 repository, and no result of any kind against a hosted Supabase project.
+
+#### W1-A postscript — `pnpm ci:local --with-db` failed, and the api row above needs its caveat
+
+**Run after the W1-A commit, because the pre-commit hook says to.** Steps **1–16 passed** —
+including the `PROJECT-OVERVIEW.md` append-only guard, `pnpm install --frozen-lockfile`, build,
+typecheck, lint, format:check, the rollback guard, and **every workspace test suite**. **Step 17,
+the database job, failed.**
+
+**Two pre-existing intermittent failures, registered as `BE-W116` and `BE-W117`.** Neither is
+`BE-W114`, which was closed with a different mechanism. **Measured over four runs — two with W1-A's
+new spec file present, two with it excluded — two of four failed in each condition**, so the rate is
+roughly one in two and adding a 70th spec file did not cause it.
+
+- **`BE-W116`** — a Postgres **deadlock** between `ai-control-plane.spec.ts:72` and
+  `ai-product-qa.spec.ts:97`, both creating a reviewer admin through `asOwner` in concurrent
+  rolled-back transactions.
+- **`BE-W117`** — `refused-reads-audited.spec.ts` asserts an **absolute** `audit_log` count
+  (`expected '4845' to be '4843'`), so any other spec's legitimate audit rows fail it. The property
+  it checks still holds; the assertion is wrong.
+
+**So the api count in the table above — `69 files, 929 passed, 4 skipped` — is one green run of a
+suite that fails about half the time, and is reported that way rather than as a green suite.** It
+remains the first time PR #2's five specs have run against a database at all, which was the point;
+it is not evidence that the api job is reliable. `docs/gotchas.md`'s rule applied: both were
+investigated to a named mechanism rather than re-run to green.
+
+**Neither is fixed here.** Both contain a choice — a shared fixture reviewer versus serialising the
+api project; an actor filter versus an id watermark — and making that choice silently inside an
+unrelated commit is how a test architecture drifts. The cost of leaving them is stated in the
+register: **CI's database job fails roughly one run in two.**

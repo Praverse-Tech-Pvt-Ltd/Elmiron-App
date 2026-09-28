@@ -2561,3 +2561,41 @@ made.** None of it blocks engineering; all of it blocks the first real doctor.
   immutable, insert-only table whose parent version is audited; one audit row per chunk would bury
   the meaningful transitions). Details and the re-derivation commands are in
   `docs/ai-platform/W1-A-recon.md`.
+
+### Added by W1-A — two intermittent api failures, measured and NOT fixed
+
+**Found by running `pnpm ci:local --with-db`, which the pre-commit hook tells you to run and which
+nothing in this session's brief asked for.** Steps 1–16 passed; **step 17, the database job,
+failed.** Both failures below are **pre-existing** and neither is `BE-W114`, which was closed with
+a different mechanism (a poisoned retention backlog, explicitly *not* load).
+
+**The measurement that establishes they are not W1-A's doing** — four runs of
+`services/api`, two with W1-A's new spec file present and two with it excluded:
+
+| Run | W1-A's spec | Result |
+| --- | --- | --- |
+| 1 | present | **green** — 69 files, 929 passed, 4 skipped |
+| 2 | present | **failed** — the deadlock below, 2 tests |
+| 3 | **excluded** | **failed** — the audit-count below, 1 test |
+| 4 | **excluded** | **green** — 916 passed, 4 skipped |
+
+**Two of four runs failed, with the new file present and absent alike.** So the rate is roughly one
+in two under `vitest run`'s default parallelism, and adding a 70th spec file did not cause it.
+
+**This is why the session's own green api run is reported with this caveat attached.** One green run
+of a suite that fails half the time is not evidence that the suite passes, and
+`docs/gotchas.md` already has the rule: *"treat them as real and investigate rather than
+re-running."* Both have identified mechanisms below, so neither is a flake.
+
+| id | One line | Type | Estimate |
+| --- | --- | --- | --- |
+| **`BE-W116`** | **A Postgres DEADLOCK between two test files both creating a reviewer admin.** `error: deadlock detected` at `pg/lib/client.js:694` → `asOwner` (`tests/auth.ts:380`) → `insert into public.user_profiles`, raised from **`ai-control-plane.spec.ts:72`** (`makeReviewer`, reached from `:477`) and **`ai-product-qa.spec.ts:97`** in the same run. Both run inside `inRolledBackTransaction` (`db.ts:122`), so two concurrent transactions each insert an `auth.users` row and then a `user_profiles` row and take locks — plausibly on a shared index or an FK parent — **in an order that can invert**. It surfaced as 2 failed tests: `ai-product-qa` › *correct-answer* and an `ai-control-plane` case. **Not fixed:** the cheap fix is to make the two suites not create a reviewer concurrently (a shared fixture reviewer seeded once, or `--no-file-parallelism` for the api project), and the right fix depends on which is wanted — a fixture change touches every spec that calls `makeReviewer`, and serialising the api project costs wall-clock on CI. **Both are decisions about the test architecture, not one-line fixes.** `log_lock_waits` is already on (`BE-W92`), so a re-run should name the relations | **ENGINEERING** | **1d** |
+| **`BE-W117`** | **A test asserts an ABSOLUTE `audit_log` row count in a parallel suite.** `refused-reads-audited.spec.ts` › *"BE-W102 — what is deliberately NOT recorded > an unauthenticated call writes nothing, so anon cannot grow an append-only table"* failed with `expected '4845' to be '4843'`. The assertion is correct in intent — an anon call must add **no** audit rows — but it compares a **global** count before and after, so **any other spec file committing two audit rows in that window fails it**, and the suite runs files in parallel against one database. **The defect is the test, not `BE-W102`**: the property it checks still holds, and the off-by-two is another file's legitimate work. **Not fixed:** the fix is to count only rows attributable to the probe (by actor, or by `id > the pre-read maximum`) rather than every row in the table, which is a change to a test whose subject W1-A did not touch. Same class as `constraints.md`'s FIX-07 rule — *"a count that changes is recorded as the command that produces it, not as a number"* — applied to an assertion instead of a document | **ENGINEERING** | **0.5d** |
+
+**Why both are registered rather than fixed here.** Every changed line in this session traces to
+the W1-A brief, and neither of these specs is in it. More importantly, both have a **choice** in
+them — a shared fixture versus serialising the project for `BE-W116`, an actor filter versus an id
+watermark for `BE-W117` — and picking one silently inside an unrelated commit is how a test
+architecture drifts. **The cost of leaving them is real and should not be understated: `pnpm test`
+and CI's database job fail roughly one run in two, which teaches people to re-run until green —
+the exact habit `BE-W114`'s register row warned about.**
