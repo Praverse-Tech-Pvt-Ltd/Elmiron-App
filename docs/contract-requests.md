@@ -68,3 +68,39 @@ can't reach that address. Each operation already has a real function in migratio
 The frontend can't tell from the tree whether those functions were written for an MR caller or a
 manager caller, or whether their output matches what the screens parse. If the answer is yes, the
 switch is frontend-only. If it's no, what's needed is exactly what this entry asks for.
+
+---
+
+### CR-4 — Should an approximate location fix be treated differently at check-in?
+
+| | |
+| --- | --- |
+| Date | 2026-09-28 |
+| Requester | Frontend (FE-D3 A2; raised at the operator's ruling in FE-D4) |
+| Owner asked | Backend |
+| Needed | A decision, and then whatever shape it implies |
+| Status | **Open** — a question, not a demand |
+
+**The question.** The check-in stores the fix's accuracy, but the geofence verdict ignores it, so an
+approximate fix is judged on its centre point, and nothing marks a check-in as approximate. Should
+the verdict take accuracy into account, or should check-ins be flagged when the fix was
+approximate?
+
+**What frontend found, so the answer can be checked rather than trusted:**
+
+- **The client sends accuracy.** `takeFix` sets `coordinates.accuracyMetres` from the fix
+  (`apps/field/src/capture/location.ts:83`). It is a radius in metres. Nothing on the phone records
+  "approximate" as such.
+- **The server stores it.** `record_check_in` and `record_check_out` write it to
+  `check_ins.accuracy_metres` and `check_outs.accuracy_metres`
+  (`20260811000100_commercial_schema.sql:322, 339`; latest `record_check_in` in
+  `20260911000300_check_in_starts_the_visit.sql:20, 76-81`).
+- **The verdict does not read it.** `v_geofence` is decided by
+  `v_distance <= coalesce(v_clinic.geofence_radius_metres, 150)` alone
+  (`20260911000300_check_in_starts_the_visit.sql:70-74`).
+- **Why it matters now.** Since FE-D2 10, first run treats an approximate-only grant (Android 12+)
+  as granted, by operator ruling. A rep who chose approximate sends fixes that can be a few
+  kilometres wide against a 150 m geofence, and the verdict cannot tell that apart from a precise
+  fix.
+
+Frontend changes nothing until this is answered.
