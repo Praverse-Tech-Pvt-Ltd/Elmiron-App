@@ -92,7 +92,8 @@ export default function Mileage(): ReactNode {
         failure={failure}
         loading={loading}
         rateNote={RATE_NOTE}
-        totalLabel={KM(data?.totalDistanceMetres ?? 0)}
+        // FE-D3 B5. Null until the server has answered. `?? 0` showed "0.0 km" while loading.
+        totalLabel={data === null ? null : KM(data.totalDistanceMetres)}
       />
     </Screen>
   );
