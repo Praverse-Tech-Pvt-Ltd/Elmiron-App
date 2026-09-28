@@ -44,7 +44,14 @@ export default function SamplesRoute(): ReactNode {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const [lines, setLines] = useState<readonly SampleLine[]>([blankLine('line-1')]);
-  const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
+  /**
+   * FE-D2 6. Why the last press could not go ahead. It used to be `failure`, which replaces the
+   * form, and nothing cleared it: a doctor who synced a second later still left the rep with a
+   * banner and no form. It is shown above the form now, and cleared by the next press.
+   */
+  const [actionFailure, setActionFailure] = useState<{ title: string; detail: string } | null>(
+    null,
+  );
 
   /**
    * MR-21 B1. The visit and the doctor come from the store the pull maintains.
@@ -116,8 +123,7 @@ export default function SamplesRoute(): ReactNode {
   // server has just refused them is the failure this screen must never have.
   const lacksWhatItNeeds = visit === null || doctor === null;
   const shownFailure =
-    failure ??
-    (pullFailure === null
+    pullFailure === null
       ? null
       : sessionExpired(pullFailure)
         ? SESSION_EXPIRED
@@ -131,15 +137,16 @@ export default function SamplesRoute(): ReactNode {
                 title: 'Could not load this visit',
                 detail: 'The app could not reach the server. It will try again.',
               }
-            : null);
+            : null;
 
   const record = (): void => {
     // MR-20 B2. See `preconditions.ts`: `busy` is silent on purpose, a missing visit or
     // doctor is not.
     if (busy) return;
+    setActionFailure(null);
     const unavailable = unavailableReason(visit, doctor);
     if (unavailable !== null) {
-      setFailure(unavailable);
+      setActionFailure(unavailable);
       return;
     }
     if (visit === null || doctor === null) return;
@@ -248,6 +255,7 @@ export default function SamplesRoute(): ReactNode {
         }
         doctorName={doctor?.fullName ?? 'This visit'}
         failure={shownFailure}
+        actionFailure={actionFailure}
         lines={lines}
         loading={loading}
         onAddLine={() => {
