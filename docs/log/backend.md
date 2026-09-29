@@ -772,3 +772,19 @@ deleted, then the build step, then `CI=true` so the config takes the `next start
 **The through-line of this whole session, stated once:** *a bundle, a function body, a database, a
 knowledge graph, a test report and now a build cache have each reported success for work they did
 not do.* Every one was found by making something run somewhere it had not run before.
+
+#### D1 — what the browser suite costs in CI, measured
+
+From the green run on `e82baa9`:
+
+| Step | Duration |
+| --- | --- |
+| Install Chromium | **25s** |
+| Build the console and its workspace packages | **18s** |
+| Browser suite (7 tests) | **16s** |
+| Prove it executed | **<1s** |
+| **Total added to the database job** | **≈ 59 seconds** |
+
+**Under a minute**, for the only check in this repository that loads the built application in a
+browser. The `Install Chromium` step is the largest single item and is the one a runner cache would
+remove if it ever matters.
