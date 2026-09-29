@@ -77,3 +77,17 @@ It was not measured.
 | V3 | `841c17d` | `Button`: the focus-ring wrapper keeps its reserved 6 dp, but outside the button's edge (a horizontal negative margin), so a button lines up with the content around it. The vertical spacing is unchanged |
 | V4 | `2a3b508` | `VoiceNoteScreen`: with a captured, unsaved note the caption says "recorded · save it, or start again" |
 | V5 | `9f44211` | `SettingsScreen`: "Settings" uses `Title`, like every other screen title |
+
+## Follow-up: skipped items taken up on the operator's instruction
+
+The operator asked for S1, S2, S3, S5 and S6 to be fixed, and for S4 to be diagnosed only.
+
+| # | Outcome | Commit |
+| --- | --- | --- |
+| S1 | **Fixed.** A9 says what this build records. Every claim is cited in the commit and in `PROJECT-OVERVIEW.md` FE-D12. Copy is factually accurate but needs privacy/legal review; no owner named | `116acf6` |
+| S2 | **Fixed.** A3 names only the types this build can send. The coaching and recording lines follow their flags | `5b571ca` |
+| S3 | **Fixed.** The placeholder is hidden until a video exists. The code path is kept (`showPendingVideo`) | `dc5003f` |
+| S4 | **Diagnosed, not fixed.** It is not a cursor refusal: every `sync_pull` returned 200. The server marks every null-cursor pull as omitting deletes (`20260921000200_one_day_rule.sql:369-383`), and the client shows this notice for that (`pull.ts:138-151`). **So it appears on every account's first pull on a phone, including Thursday's fresh install**, until the next pull. The line above that says "On Thursday's path … no stored cursor exists" drew the wrong conclusion: no cursor is exactly what triggers it | — |
+| S5 | **Fixed.** "Recorded" sits immediately above "Record what I left" | `bf3a766` |
+| S6 | **Fixed.** A sent or queued report shows its outcome where the button was, and cannot be sent again. A failure keeps the button | `051aaaf` |
+| S7 | Still skipped (data) | — |
