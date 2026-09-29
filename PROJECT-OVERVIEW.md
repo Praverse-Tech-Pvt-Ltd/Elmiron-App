@@ -20708,3 +20708,199 @@ PR #9 at `2fe3db7`, run **36527103255**. Both jobs passed on the first attempt:
 - Still open from FE-D8: extend the release config guard; make the CMake pin permanent.
 - Carried: the Thursday re-seed with `--another`, then the reinstall in §3.3; CR-3 and CR-4; A1.
 - **Not established:** why fresh-launch sign-in did not crash on the old code (see Diagnosis).
+
+### FE-D10 — sweep of the demo path for the FE-D9 crash pattern
+
+**29 September 2026, branch `fe-d10-sweep`.** The sweep is read-only, and no code changed.
+
+#### 0 — Merge of PR #9
+
+- PR #9 (`fe-d9-signout`) was merged **with a merge commit**, `ef4d53d`.
+- Its CI was green at its head `ad8440a` (run 36527458481, both jobs), and the merge used
+  `--match-head-commit`.
+- `fe-d10-sweep` was branched off `main` at `ef4d53d`.
+
+#### 1 — The two conditions the crash needs
+
+Both come from FE-D9's diagnosis. Both must hold, on the same screen, in the same window:
+
+- **(A) The screen is being REMOVED from a stack** when its action finishes, by `router.back()`,
+  `router.replace()` or a pop.
+  - react-native-screens starts the view transition that holds removed children only in
+    `ScreenStackViewManager.removeViewAt` → `prepareOutTransition` → `startRemovalTransition`
+    (4.26.2, `ScreenStackViewManager.kt:35-47`).
+  - **A `router.push` does not start it**: the screen underneath is not removed.
+- **(B) While it leaves, a state change flips a plain `View` between flattened and not.** That
+  means a conditional `opacity`, `transform`, `overflow: hidden` or `collapsable` on a view that
+  is not otherwise a stacking context (`ViewShadowNode.cpp`), and a view that is only sometimes a
+  concrete view (a conditional background or border on a view with neither otherwise).
+  - **Not a flip:**
+    - a `Pressable`. It is always `accessible` (`Pressable.js:252`, `accessible !== false`), so it
+      always forms a stacking context whatever its style says;
+    - inserting or removing a view (a banner, a spinner). That is a create and a delete, never a
+      reparent;
+    - swapping one component type for another. That is an unmount and a mount.
+
+#### 2 — Sweep table
+
+`busy` = the screen's in-flight flag, whatever it is called. "Leaves when done" = condition A.
+"Flips" = condition B.
+
+| Screen (demo step) | Busy set / cleared | Leaves when done? | What changes with busy | Flips? | At risk? |
+| --- | --- | --- | --- | --- | --- |
+| **Sign in** (1). Fixed in FE-D9 | `sign-in.tsx` `setBusy` in `submit`, `.finally` | **Yes**: `AuthGate` `replace('/')` | `TextField editable={!busy}` ×2 (`sign-in.tsx:71,79`), which changed the wrapper's `opacity` 0.7↔1; `Button` label and note | **No longer.** The wrapper is `collapsable={false}` (`TextField.tsx`, FE-D9) | **No** (fixed) |
+| **Visit: check-in and check-out** (9, 13) | `visit/[id].tsx:384` / `:476` (`finally`) | **No.** Stays on the visit. Its navigations (`:540`, `:558`, `:579`, `:582`) are later `push`es, pressed by the rep | `Button label/loading={busy}` (`VisitScreen.tsx:338-339`) | No. `Button` fades only on `disabled` (`Button.tsx:135`), not on `loading`; the faded element is the `Pressable`; `loading` inserts or removes an `ActivityIndicator` (`Button.tsx:189`) | **No** |
+| **Consent** (10) | `consent/[visitId].tsx:218` / `:247` | **Yes**: `router.replace('/visit/…')` (`:302`), **after** `setBusy(false)` and an awaited `recordWitnessedConsent` | `Answers` → two `Button loading={busy}` (`ConsentScreen.tsx:197,205`). "Give the phone back" fades only when pressed, on a `Pressable` (`:211`) | No | **No.** A holds; B does not. busy also clears before it leaves |
+| **Samples** (11) | `samples/[visitId].tsx:165` / `:218` | **No.** Stays and shows the "recorded"/"saved" note | `Button loading={busy}` (`SamplesScreen.tsx:260-261`). The `TextField`s (`:183`, `:211`) take no `editable` | No | **No** |
+| **Voice note** (12) | `voice-note/[visitId].tsx:232` / `:260` (`finally`) | **No.** Stays and shows the saved note | `Button loading={busy}` (`VoiceNoteScreen.tsx:178`) | No | **No** |
+| **Call report** (14) | `report/[visitId].tsx:45` / `:124` (`finally`) | **No.** The route has no router call; it stays and shows "Report sent"/"Report saved" | `Button label/loading={sending}` (`CallReportScreen.tsx:138-139`). The three `TextField`s (`:103`, `:109`, `:115`) take no `editable` | No | **No** |
+| **Reply** (hidden since FE-D4 1) | `reply/[analysisId].tsx:101` / `:122` (`finally`) | **Yes**: `.then(() => router.replace('/analysis/…'))` (`:110`), then `.finally(setBusy(false))`. **The same order as sign-in was** | `Button loading={busy}` (`AnalysisReplyScreen.tsx:143-144`). The `TextField` (`:103`) takes no `editable` | No | **No.** A holds; B does not. Hidden in this build (`:35` redirects to `/home`), so it cannot run on APK 3 |
+| First run: location, S4, notifications, battery (2–4) | none | `location.tsx:44` and `location-denied.tsx:53` `back()`; the rest are `push`es | no busy state; nothing is set after the navigation | No | **No** |
+| What we record → "Start my first day" (5) | none | `transparency.tsx:66` `replace('/home')` after `markFirstRunComplete` | no busy state; nothing is set after | No | **No** |
+| A4 microphone (8) | none | `microphone.tsx:54` `back()` after `markMicrophoneRationaleAnswered` | no busy state; nothing is set after | No | **No** |
+
+**Also checked, outside the demo-path screens:**
+
+- `Select`, `IconButton` and `Stepper` fade on a `Pressable`, so they never flip.
+- `ListItem` swaps a `Pressable` for a plain `View` when disabled (`ListItem.tsx:110-131`). That is
+  a type change, an unmount and a mount, not a reparent, and it is not tied to a busy flag
+  anywhere on the path.
+- **`editable=` appears in exactly two app call sites, both in `sign-in.tsx`.** So the FE-D9
+  trigger existed nowhere else. `TextField` is now protected wherever it is used.
+
+**Result: no screen on the demo path is at risk.** Only two leave after a busy write: consent and
+reply. In both, what changes with busy is a `Button`'s `loading`, which never flips flattening.
+
+#### 3 — Emulator check
+
+**The sweep marked no screen at risk**, so the brief's per-screen check list is empty. As a
+control, I ran on APK 3 (`8607101`, the build installed in FE-D9; nothing was reinstalled) the one
+demo-path flow that meets condition A. I also ran the check-in needed to reach it. Writes went to
+the local fixture database at `192.168.1.15:54321` only.
+
+| Flow | Action completes | Navigates away | Crash? | Repeat |
+| --- | --- | --- | --- | --- |
+| **Check-in** (control; stays on the visit) | "You are checked in — Checked in 11:28" | No, by design | **No.** Process alive, crash buffer 0 lines | Not repeated: the visit is checked in once. Three earlier presses answered "could not find your position in time", with no crash; see below |
+| **Consent → "No, don't record"** | Sent: the app returned to the visit, and Today then showed **"Everything sent"** | **Yes**: `replace` to the visit | **No.** Process alive, crash buffer 0 lines | **Repeated once.** Same result, no crash |
+
+- **Screenshot:** `C:\dev\demo-screenshots\fe-d10\consent-1-back-on-visit.png`.
+- **The sign-out → sign-in flow**, the only other removal on the path while state changes, was
+  checked twice on APK 3 in FE-D9. The (tabs) screens are replaced while the pulled store empties.
+- **Reply** is not runnable on APK 3 (Coaching hidden), and no other build may be installed. Its
+  "no" verdict rests on the sweep alone.
+- **Mock location, for the next reader.** Neither `adb emu geo fix` nor a `fused` test provider
+  alone reached the app on this boot. It worked with `appops set 2000 android:mock_location
+  allow`, then test providers **added and enabled for `fused`, `gps` and `network`**, with
+  `set-test-provider-location <p> --location 18.5204,73.8567 --accuracy 12` pushed to all three in
+  a loop while the check-in was asking.
+  - **Left on the emulator:** those test providers and the shell's mock-location appop. They reset
+    on reboot, and removing them was not asked for.
+
+**Emulator state after this run:**
+
+- APK 3 installed, signed in as the fixture MR;
+- today's Dr Vikram Rao visit **checked in**, not checked out;
+- two "no" consent answers recorded against it, both sent.
+
+**Nothing was deleted.**
+
+#### Boundary
+
+No code changed. This commit is `PROJECT-OVERVIEW.md` only. Nothing under `services`,
+`packages/core`, migrations or the seed script changed. No build was installed. Coaching stays
+hidden.
+
+### FE-D11 — check-in indoors, away from the seeded clinic (read-only)
+
+**29 September 2026, branch `fe-d10-sweep`**, PR #10 against `main`, **not merged**. PR #10
+carries the FE-D10 record and this one. No code changed, and nothing was run on a device. The
+findings are also in `docs/demo-path-2026-10-01.md`, in a new section "Check-in indoors, away from
+the seeded clinic (FE-D11)".
+
+#### 1 — The timeout
+
+- **10 seconds.** `FIX_TIMEOUT_MS = 10_000` (`apps/field/src/capture/location.ts:42`), raced
+  against `getCurrentPositionAsync` (`:69-72`). A timeout becomes `{ kind: 'unavailable', reason:
+  'The phone could not find your position in time.' }` (`:74-76`). Before that,
+  `requestForegroundPermissionsAsync` (`:66`) answers at once when the permission is already
+  granted.
+- **A network or Wi-Fi fix is accepted.** `Accuracy.Balanced` (`location.ts:70`) maps to the fused
+  provider's `PRIORITY_BALANCED_POWER_ACCURACY` (expo-location 57.0.14,
+  `LocationHelpers.kt:126`), which uses Wi-Fi and cell as well as GPS. Nothing on the client
+  filters by accuracy.
+- **What the rep sees on a timeout:**
+  - `app/visit/[id].tsx:390-394` passes the outcome to `blockedReason`, which appends the remedy
+    (`src/capture/visit.ts:125-126`).
+  - `VisitScreen` renders it as an **`attention`** banner: amber, `#7A5510` edge on `#F7EFDD`
+    (`packages/ui/src/VisitScreen.tsx:279-303`).
+  - The banner reads **"This check-in cannot be sent yet"**, then **"The phone could not find your
+    position in time. Move somewhere with a clearer view of the sky and press again."**
+  - Nothing is sent or queued.
+  - **They can retry.** "I am here — check in" stays, and each press is another 10 s.
+  - Seen on the emulator in FE-D10: three presses answered this way before a mock fix was
+    injected.
+
+#### 2 — A valid fix, 5 km from the clinic
+
+- **Accepted, with a flag that is recorded but never shown.**
+- **Server.** `record_check_in` is last redefined in
+  `services/api/supabase/migrations/20260911000300_check_in_starts_the_visit.sql:20-121`:
+  - it computes `distance_metres` to the visit's clinic (`:65-68`);
+  - it sets `geofence_status` to `inside` when that is within `coalesce(geofence_radius_metres,
+    150)`, and to `outside` otherwise (`:70-74`);
+  - it inserts both with the check-in (`:76-82`);
+  - **it refuses nothing on distance.** Its only refusals are authentication, ownership (`42501`)
+    and the shift window (`45003`, `:57-61`);
+  - the visit becomes `in_progress` "whatever `geofence_status` says" (`:108-117`). Whether an
+    `outside` check-in should start a visit is registered there as an open product question;
+  - `accuracy_metres` is stored but does not enter the decision (FE-D3 A2).
+- **Client.** An accepted check-in re-pulls (`app/visit/[id].tsx:442`). The screen then shows the
+  stage label **"You are checked in"** (`VisitScreen.tsx:156`) and "Checked in HH:MM".
+  - Nothing in `apps/field` or `packages/ui` reads `geofenceStatus` or
+    `distanceFromClinicMetres`: `git grep` finds them only in `packages/core`'s schemas.
+  - **So an off-site check-in looks exactly like an on-site one.** The same holds offline:
+    **"Checked in — waiting to send"** (`VisitScreen.tsx:173`), and "Saved on this phone. It will
+    send by itself when you have signal — nothing is lost." (`app/visit/[id].tsx:462`).
+- **Refusals, for completeness.** A `45003` shows a **`critical`** (red) "That was refused"
+  (`app/visit/[id].tsx:447`), with "This was recorded outside your territory's working hours. If
+  the hours are wrong, your manager can change them." (`src/sync/explanation.ts:80-81`). The seed's
+  hours are 04:00–23:59 IST, every day (`services/api/scripts/seed-day.mjs:300-304`).
+- **What a manager could see as "off-site":**
+  - **the data exists:** `check_ins.geofence_status = 'outside'` and
+    `distance_from_clinic_metres`;
+  - **a manager can read it:** row-level security allows it (`20260811000400_rls_policies.sql:236-237`,
+    `mr_id in (select public.visible_user_ids())`, plus the restrictive tenant boundary from
+    `20260922000300_tenant_boundary_direct_tables.sql:54-59`);
+  - **no product surface shows it:** `apps/console` has no visits or check-in page, and `git
+    grep` finds neither field in it. Today a manager sees "off-site" only by querying.
+- **The seeded clinics:** all three are at **18.5204, 73.8567** (`seed-day.mjs:343`), with no
+  `geofence_radius_metres`, so the radius is 150 m. A demo room more than 150 m away is `outside`
+  for every visit.
+
+#### 3 — Demo options (not chosen; the operator decides)
+
+1. **Demo it as it really behaves, and say so.** It will likely be accepted indoors on a Wi-Fi fix
+   and look normal, while being recorded `outside`.
+   - **Cost:** the phone gives no signal of it, so the presenter must say it, and must not call
+     check-in "geofence-verified".
+   - Rehearse the 10 s timeout in the room.
+2. **Ask the backend owner whether the seed can take the clinic's coordinates** (their script; not
+   edited).
+   - **Cost:** their time before Thursday, plus the re-seed Thursday needs anyway.
+   - **Buys:** a truthful `inside` row. It changes nothing on the phone.
+3. **Show the recorded row on the laptop**, with a read-only query against the local database.
+   - **Cost:** a step off the phone, and a query prepared in advance.
+   - **Buys:** the only visible proof today that the server judged the position.
+4. **Check in before the demo**, where the fix is good.
+   - **Cost:** the live check-in is lost, and it is still `outside` if the spot is more than 150 m
+     from the seeded point.
+   - Skipping check-in entirely is not an option: consent, samples, the voice note and check-out
+     all need a checked-in visit.
+5. **Listed as not honest:** a mock location on the demo phone. It fabricates the position the
+   product records, and it is an install.
+
+#### Boundary
+
+No code changed. This commit is `docs/demo-path-2026-10-01.md` and `PROJECT-OVERVIEW.md` only. Nothing
+under `services`, `packages/core`, migrations or the seed script changed: they were read, not
+edited. No build was installed. Nothing was deleted.
