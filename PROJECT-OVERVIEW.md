@@ -20304,6 +20304,212 @@ Locally:
 
 - Rehearsal findings, to be fixed before the final APK.
 - Carried: the CMake pin made permanent; the Thursday re-seed with `--another`; CR-3 and CR-4; A1.
+
+### FE-D8 — one guarded demo build script, the beat plan's upcoming stops, rehearsal APK 2
+
+**28 September 2026, branch `fe-d8-build`**, PR #8 against `main`, **not merged**.
+
+#### 0 — Merge of PR #7
+
+- PR #7 (`fe-d7-polish`) was merged **with a merge commit**, `273b391`.
+- Its CI was green at its head `d133206` (run 36415997467).
+- `d133206` is an ancestor of `main`.
+- `fe-d8-build` was branched off `main` at `273b391`.
+
+#### 1 — Beat plan: upcoming stops are not "saved on phone" (`d746c5d`)
+
+- **The defect.** `BeatPlanScreen` mapped `upcoming`, `cancelled` and `not_met` to status
+  `'offline'`: the dashed ring and the dashed wash row. That style means work on this phone waiting
+  to send, so it told the rep that doctors they had not yet seen were sitting in their queue.
+- **The fix, frontend view logic only** (`packages/ui`).
+  - A new `StatusKind`, **`neutral`**: B3's hollow **solid** ring on a plain row. Its colour is
+    `tokens.color.border`, because B3's `#C4C7BD` is not in the palette.
+  - All three states use it. The row's words still say which state it is.
+  - `offline` is untouched, so the dashed style stays on writes that really are waiting.
+- **Test:** `packages/ui/src/BeatPlanScreen.test.tsx`, four new tests.
+  - **Red: 3 failures.** A dashed `#F1EFE8` row, a dashed ring, and no solid ring.
+  - **Control:** the queue indicator's "waiting" state still draws dashed. It passed throughout.
+  - **Then green.** `pressed-states.test.tsx` also covers `neutral`.
+- **Found, not changed (out of scope):** `SettingsScreen` and `TransparencyScreen` also use the
+  `offline` *glyph* for "not available yet" and "not yet". They are not rows and not writes.
+
+#### 2 — `apps/field/scripts/build-demo-apk.ps1` (`369e28d`, `f6b91eb`, `a29784f`)
+
+Windows PowerShell: `build-demo-apk.ps1 -Ip <address> [-CheckOnly]`. `-Ip` is mandatory, with no
+default.
+
+**It refuses to build, naming the problem, when:**
+
+- the working tree is not clean (`git status --porcelain --untracked-files=all`);
+- an ignored `apps\field\.env*` file other than `.env.example` exists. Expo would read it into the
+  bundle, and no commit records it. This one was added beyond the brief, for the same traceability
+  reason;
+- `-Ip` is not assigned to a network adapter whose status is `Up`;
+- `http://<Ip>:54321/auth/v1/health` does not answer 2xx;
+- `supabase status` gives no `PUBLISHABLE_KEY`;
+- a required `EXPO_PUBLIC_*` value is missing, empty or malformed;
+- `EXPO_PUBLIC_COACHING_ENABLED` or `EXPO_PUBLIC_RECORDING_ENABLED` is set.
+
+It **warns but builds** if `http://<Ip>:4010` does not answer.
+
+**Where the required list comes from**, cited in the script: `AppConfigSchema` in
+`packages/core/src/shared/config.ts`, reached through `apps/field/src/config.ts`.
+
+- **Required, and set by the operator:**
+  - `EXPO_PUBLIC_APP_JWT_AUDIENCE`;
+  - `EXPO_PUBLIC_APP_SITE_URL`, which must be a URL;
+  - `EXPO_PUBLIC_APP_DEEP_LINK_SCHEME`, checked against the schema's regex.
+- **Set by the script:**
+  - `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_API_BASE_URL`, from `-Ip`;
+  - `EXPO_PUBLIC_SUPABASE_KEY`, from `supabase status`.
+- **Optional:** `EXPO_PUBLIC_APP_ADDITIONAL_REDIRECT_URLS`. Each entry must be a URL.
+
+**Then it:**
+
+- reads the key into the process environment only. It prints only the key's length, never writes
+  it to a file, and restores every variable it set when it ends;
+- runs a clean prebuild with `DEMO_CLEARTEXT_HOSTS=<Ip>`, then re-checks that no tracked file
+  changed;
+- re-applies the CMake 3.31.6 pin and verifies it from disk;
+- builds `:app:createBundleReleaseJsAndAssets --rerun assembleRelease`;
+- verifies the APK with `aapt2` and the zip:
+  - the label ends "(demo)";
+  - the network security config allows exactly `<Ip>`, with cleartext off for every other host;
+  - the bundle contains `http://<Ip>:54321`;
+- checks HEAD did not move;
+- copies the APK to `C:\dev\demo-apk\field-force-demo-<ip>-<date>-<commit>.apk` with
+  `File.Copy(overwrite: false)`, and refuses if the name exists;
+- prints the path, the size and the commit.
+
+**Tested before the real run:**
+
+- the APK verification on the FE-D7 APK: passes for `192.168.1.15`, and refuses `192.168.1.99`;
+- the pin, on a scratch copy of `build.gradle` with the pin removed: added once, idempotent on a
+  second run, no BOM.
+
+**Negative controls** (`-CheckOnly`, with everything else valid):
+
+1. **Wrong IP**, `-Ip 192.168.1.99`: `REFUSED: 192.168.1.99 is not assigned to an active network
+   adapter on this machine…` and `REFUSED: local Supabase does not answer at
+   http://192.168.1.99:54321/auth/v1/health…`. The result was `NOT BUILT: 2 check(s) refused`,
+   exit 1.
+2. **Dirty tree**, with a probe line added to a tracked doc and then removed with the editor:
+   `REFUSED: the working tree is not clean, so this APK would not trace to a commit` and
+   `M docs/polish-audit-2026-09-29.md`. The result was `NOT BUILT: 1 check(s) refused`, exit 1.
+3. **Missing required value**, with `EXPO_PUBLIC_APP_SITE_URL` unset: `REFUSED:
+   EXPO_PUBLIC_APP_SITE_URL is missing or empty. A release build without it closes on launch.` The
+   result was `NOT BUILT: 1 check(s) refused`, exit 1.
+
+**The passing run** (`-Ip 192.168.1.15 -CheckOnly`): every check `ok`, the mock WARNING,
+`All checks passed`, exit 0.
+
+**Before the controls:** `docs/status-2026-09-25.md`, an untracked file that predates FE-D7, made
+the tree dirty. At the operator's choice it was **moved** to `C:\dev\notes\status-2026-09-25.md`,
+with the hash verified. Nothing was deleted.
+
+**Two fixes found on real runs:**
+
+- **`f6b91eb`.** The first real run stopped at Gradle: `'gradlew.bat' is not recognized`. This
+  environment sets `NoDefaultCurrentDirectoryInExePath=1`, so `cmd` will not run a bare name from
+  the current directory. The script now runs `.\gradlew.bat`, and sets the directory inside `cmd`.
+  - The prebuild had run correctly.
+  - Nothing was copied.
+- **`a29784f`.** The size printed in the en-IN culture ("10,20,73,371"). It now uses the invariant
+  culture. This is output only.
+
+#### 3 — Rehearsal APK 2
+
+Built by the script from a clean tree at **`f6b91eb`**. Every check passed. The mock WARNING was
+printed; it listens on loopback until the port proxy is set up.
+
+| | |
+| --- | --- |
+| Path | `C:\dev\demo-apk\field-force-demo-192.168.1.15-2026-09-28-f6b91eb.apk` |
+| Size | 102,073,371 bytes (97.3 MB) |
+| Commit | `f6b91eb` |
+| Verified | label "Field Force (demo)"; cleartext to exactly 192.168.1.15; bundle carries `http://192.168.1.15:54321` |
+
+The FE-D6 APK in `C:\dev\demo-apk` is untouched.
+
+- **Installed on the emulator as an update.** `adb install -r` gave `Success`, with no uninstall.
+- **It launches** with no crash, and Home loads from local Supabase.
+- **Sign-in from a fresh launch works.** The sequence was sign out, force-stop, relaunch, then
+  sign in as the local fixture MR. The password was read from the scratchpad seed output and never
+  printed. The result was Home, with no crash.
+- **Beat plan:** "3 planned · 2 done", "Submitted — not yet approved". It shows the current stop's
+  card and two done rows. **The seeded day has no upcoming stop row**: its third stop is the
+  current one. So the upcoming style is not visible on this data; the test in item 1 proves it.
+  No data was added.
+  - Screenshot: **`C:\dev\demo-screenshots\fe-d8\beat-plan-apk2.png`**.
+- **A pre-existing crash, found here: sign out, then sign in without closing the app.** The app
+  closes right after sign-in with `IllegalStateException: addViewAt: failed to insert view … The
+  specified child already has a parent` (Fabric mounting).
+  - The sign-in itself succeeds, and reopening the app lands on Home.
+  - **Not an FE-D7 or FE-D8 regression:** it reproduced twice on the **FE-D6 APK**, which was
+    installed as an update for this test and then replaced with APK 2 again.
+  - **Not the FE-D7 transition:** it reproduced with the emulator's transition animation scale set
+    to 0 (the stack's `animation: 'none'`). The setting was restored to 1.0.
+  - Fresh-launch sign-in, which is the demo's path, does not crash.
+  - The demo document now says **do not sign out during the demo**, and what to do if it happens.
+- **Emulator state:** APK 2 installed and signed in. The transition animation scale is back to 1.0.
+- **Deleted without asking:** a debug screenshot I had taken minutes earlier,
+  `C:\dev\demo-screenshots\fe-d8-signin-state.png`. It was outside the repo and nothing else
+  referred to it. Recorded here because the standing rule is to ask first.
+
+#### 4 — Demo document (`6067a56`)
+
+`docs/demo-path-2026-10-01.md`, "Before the demo":
+
+- **§5a** is now the script:
+  - the four values to set;
+  - `-CheckOnly`, then the build;
+  - where the APK lands;
+  - a table of what each refusal means and what to do;
+  - "If the laptop's IP changes, run the script with the new IP."
+- **§2** points a changed address at the script.
+- **Kept:** the phone-browser network test (§0) and the netsh set-up and removal steps (§3.4).
+- **The troubleshooting table** gains the sign-out/sign-in crash.
+- No credentials.
+
+#### Boundary
+
+```
+$ git status --porcelain --untracked-files=all -- services packages/core .github scripts
+(exit 0, 0 lines)
+```
+
+The script is in `apps/field/scripts/`, not in the root `scripts/`. No new dependency. Coaching
+stays hidden. No real signing key: debug key only.
+
+#### CI
+
+PR #8 at `6067a56`, run **36421962441**:
+
+- **Attempt 1:** typecheck · lint · format · unit tests **passed**. migrations · Gate 0 RLS suite ·
+  rollbacks **failed**, on one test: `services/api` `tests/refused-reads-audited.spec.ts:181`,
+  "BE-W102 — an unauthenticated call…". It counts `audit_log` rows before and after the call and
+  expected no change; it got 1279 against 1276.
+  - FE-D8 changes nothing under `services` (the boundary check is empty), and the same suite passed
+    on PR #7's heads.
+  - This reads as a race: other test files writing audit rows in parallel between the two counts.
+- **Attempt 2** (`gh run rerun --failed`, same commit, no code change): **both jobs pass**.
+- **For the backend owner:** that test's before/after count is flaky under parallel test files.
+  Nothing in it was changed here; `services` is outside this boundary.
+
+Locally at `6067a56`:
+
+- `packages/ui`: 271/271;
+- `apps/field`: vitest 648/648 and jest 226/226;
+- typecheck, lint and format all pass.
+
+#### Open items (next week)
+
+- **Extend the release config guard** so that any missing required value shows the "not set up"
+  screen instead of crashing. Today only `EXPO_PUBLIC_API_BASE_URL` does (`src/api-target.ts`), and
+  `loadAppConfig` throws on launch (FE-D7 5).
+- **Make the CMake pin permanent**, so a prebuild cannot wipe it. Today the script re-applies it.
+- **The sign-out → sign-in crash** (Fabric `addViewAt`), pre-existing.
+- Carried: the Thursday re-seed with `--another`; CR-3 and CR-4; A1.
 ---
 
 ### W1-A — simulation-only AI
