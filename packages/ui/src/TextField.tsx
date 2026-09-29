@@ -95,7 +95,17 @@ export const TextField = ({
   return (
     <View style={styles.group}>
       <Label>{label}</Label>
+      {/*
+        **FE-D9. `collapsable={false}` is load-bearing.** The disabled style's `opacity` makes this
+        view a Fabric stacking context only while the field is disabled, and that flip makes Fabric
+        reparent the input. On a screen that is leaving the stack, react-native-screens holds every
+        view in an Android view transition, the reparent's remove does not take, and the insert
+        kills the app: signing back in after a sign-out did exactly that. Pinned to always form a
+        stacking context, a disabled field is a prop change, never a reparent. It draws the same.
+        `text-field-flattening.test.tsx`.
+      */}
       <View
+        collapsable={false}
         style={[
           styles.field,
           focused ? styles.focused : null,
