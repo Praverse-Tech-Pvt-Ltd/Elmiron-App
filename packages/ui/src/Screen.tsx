@@ -43,10 +43,18 @@ export const Screen = ({ children, scrollable = false }: ScreenProps): ReactNode
     paddingRight: tokens.space.md + insets.right,
   };
 
+  // FE-D12 V1. When the screen scrolls, the status bar's height sits on a wrapper that does not
+  // scroll. Inside the content it scrolled away with it, and scrolled content passed under the
+  // clock -- over "May we record this" on the consent screen. The first paint is unchanged.
   return scrollable ? (
-    <ScrollView style={styles.fill} contentContainerStyle={[styles.content, inset]}>
-      {children}
-    </ScrollView>
+    <View style={[styles.fill, { paddingTop: insets.top }]}>
+      <ScrollView
+        style={styles.fill}
+        contentContainerStyle={[styles.content, inset, { paddingTop: tokens.space.md }]}
+      >
+        {children}
+      </ScrollView>
+    </View>
   ) : (
     <View style={[styles.fill, styles.content, inset]}>{children}</View>
   );
