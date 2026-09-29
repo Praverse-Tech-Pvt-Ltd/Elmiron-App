@@ -115,3 +115,20 @@ describe('the offline note', () => {
     expect(note['color']).not.toBe(tokens.color.critical);
   });
 });
+
+/**
+ * **FE-D12 V2.** On Home, "Start the visit to Dr Asha Deshpande (DEMO)" wraps, and the two lines
+ * were left-aligned inside a button whose one-line labels are centred -- the row centres the
+ * text box, not the lines inside it.
+ */
+describe('a label that wraps', () => {
+  it('centres its lines, like a one-line label', async () => {
+    await render(
+      <Button label="Start the visit to Dr Asha Deshpande (DEMO)" onPress={() => undefined} />,
+    );
+    const label = flatten(
+      screen.getByText('Start the visit to Dr Asha Deshpande (DEMO)').props['style'],
+    );
+    expect(label['textAlign']).toBe('center');
+  });
+});

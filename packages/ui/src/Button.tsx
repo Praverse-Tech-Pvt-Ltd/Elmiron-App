@@ -93,6 +93,9 @@ const styles = StyleSheet.create({
     lineHeight: tokens.typography.control.lineHeight,
     fontWeight: tokens.typography.control.weight,
     fontFamily: fontFamilyFor(tokens.typography.control.weight),
+    // FE-D12 V2. The row centres the text box; this centres the lines in it when a doctor's
+    // name makes the label wrap.
+    textAlign: 'center',
   },
   onAccent: { color: tokens.color.onAccent },
   onWash: { color: tokens.color.textPrimary },
