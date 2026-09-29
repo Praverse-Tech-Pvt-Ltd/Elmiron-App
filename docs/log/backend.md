@@ -312,3 +312,30 @@ global until `BE-W106` gives them an organisation.
 **What this costs until it is fixed:** every full-suite run has a chance of one red for a reason
 that has nothing to do with the change under test, and `verify-clean-db` will refuse those pushes.
 **That is the correct behaviour of the gate and the wrong behaviour of the suite.**
+
+#### And a second one, found by the push itself — `BE-W125`
+
+**CI went red on `33d8450`, which is a DOCS-ONLY commit** — three markdown files, 71 lines added,
+no code. So the change cannot be the cause, and that is the useful part of the observation.
+
+The failure was a **deadlock**, `40P01`, in `tenant-boundary-restrictive.spec.ts`:
+
+> Process A waits for **AccessExclusiveLock** on relation X; blocked by process B.
+> Process B waits for **RowExclusiveLock** on relation Y; blocked by process A.
+
+**A rerun of the same SHA went green**, and the green is worth exactly as much as that sentence
+suggests. **`HEAD` is green because it was retried**, not because the suite is sound. Recorded
+rather than banked.
+
+**That file already documents this class of trap in its own header** — an earlier version created a
+policy on `public.doctors`, `create policy` takes ACCESS EXCLUSIVE, and a dozen suites read
+`doctors`, so it was rewritten to build throwaway tables. It still builds them in `public`, inside a
+transaction, and that is evidently enough.
+
+**Same family as `BE-W124`:** two suites sharing one database under file parallelism. Registered
+together, because one fix — a per-suite schema, or a serialised DDL group — would close both.
+
+**The rule this leaves behind:** a red on `ai-control-plane.spec.ts` or
+`tenant-boundary-restrictive.spec.ts` is **not evidence about the change under test** until those
+two are fixed. Check the failing test name against the register before believing it — and do not
+rerun a red without reading it first, which is how these two stayed invisible.
