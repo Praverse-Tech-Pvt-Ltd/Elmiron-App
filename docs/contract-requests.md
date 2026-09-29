@@ -403,3 +403,178 @@ the working model; a persona/scenario equivalent is the obvious next backend-con
 **not blocked by `#5`.**
 
 **Nothing on this list is engineering-blocked. All of it is content and two accounts.**
+
+---
+
+## Answers — 29 September 2026 (backend, W1-G)
+
+> **Read this section first if you are the frontend track.** Three of the four items below are
+> answers to things you have already asked, and one of them — **CR-3 — was answered on
+> 28 September and you are still building against a mock because of it.**
+
+### ⚠ CR-3 IS ANSWERED. You can leave `127.0.0.1:4010` today, with no backend change.
+
+**It was answered on 28 September and it is in this file, above, under "Answers — 28 September".**
+It is repeated here because a buried answer is an unanswered question, and because your developer
+leaves after the demo.
+
+**All five functions work for an MR, over real HTTP, with a real GoTrue token.** Proven in
+`services/api/tests/cr3-mr-reads.spec.ts` — **10 tests, all passing** — not read off a grant.
+
+| Function | An MR may call it | Parse with |
+| --- | --- | --- |
+| `daily_mileage` | **YES** | **`MileageRowSchema` + `fromMileageRow`** — see the warning below |
+| `list_analyses` | **YES**, their own. **No `p_reason`** — only an `admin` must supply one | `ListAnalysesPageSchema` |
+| `read_analysis` | **YES**, their own. Out of scope is **`data: null` with HTTP 200**, an absence rather than an error | `ReadAnalysisResponseSchema` |
+| `respond_to_analysis` | **YES**, their own; refused for another MR's, asserted two-sided | — |
+| `list_consent_records` | **YES**, in scope | `ListConsentRecordsPageSchema` |
+
+**The one trap, and it is the "or" in your original question.** `daily_mileage` is the only one that
+is not a `jsonb` builder — it is `returns table (mr_id, travel_date, check_in_count,
+distance_metres)`, so PostgREST serialises those column names literally and **the wire is
+snake_case.** **`MileageDaySchema` alone will NOT parse it.** Use `MileageRowSchema` for the wire
+and `fromMileageRow(row)` to get a `MileageDay` — which is what
+`apps/field/src/capture/visits.ts:102` already does through `listMileage`. The suite asserts the
+failure as a negative control, so a future camelCase conversion becomes a red test rather than a
+silent bug.
+
+**Six screens can leave the mock with no backend change, and the switch is yours alone.** It is also
+not optional for the demo: **`127.0.0.1` on a handset is the handset**, so a real device cannot
+reach the mock at all. Every screen still pointed at `:4010` is a screen that works only in an
+emulator.
+
+---
+
+### `BE-C4` — CR ids are colliding. Per-track prefixes, as `BE-C3` did for decisions.
+
+**What happened.** You called the voice-note retention item **CR-5**. `CR-5` in this file is **the
+practice session API**, filed by the backend on 28 September. **Two tracks are minting CR ids from
+one sequence, and each reads the highest id in a file that is only correct on one branch at a time.**
+
+**This is the same collision class as `C20`**, where both tracks minted the same decision id in
+parallel and nine backend rulings had to be renumbered across 15 files during a merge. That was
+fixed by per-track prefixes (`BE-C3`). **The fix was applied to decisions and not to contract
+requests, which is why it has happened again.**
+
+**Ruling `BE-C4`, effective now:**
+
+| Track | Mints |
+| --- | --- |
+| Backend / AI platform | **`BE-CR<n>`** |
+| Frontend / field app | **`FE-CR<n>`** |
+
+Each sequence starts at 1 and is independent. **`CR-1`–`CR-5` keep their names** — they are cited in
+tests, commits and both registers, and renaming them costs more than the ambiguity they carry. The
+same call `BE-C3` made for `C1`–`C31`.
+
+**Your voice-note item is therefore `FE-CR-1`, and it is answered in this session's Part A** —
+short version: the retention jobs are **not** off, they have run **126 times without a failure since
+7 September**, they **do** cover `voice_notes`, and production holds **zero** audio objects of any
+age. The long version, with the run history and the production numbers, is in
+`docs/log/backend.md` → W1-G Part A.
+
+**Recorded in `CLAUDE.md`**, because that is the only file both tracks load before reading any code
+— the same place `BE-C3` was put, for the same reason.
+
+---
+
+### `BE-CR-1` — off-site check-ins: what the rep is told, whether the visit starts, when a manager sees it
+
+**What exists today, measured rather than recalled.** `check_ins.geofence_status` is a **NOT NULL**
+enum `('inside','outside','unavailable')`, so a verdict is recorded for **every** check-in and always
+has been. `check_ins.location_is_approximate` was added on 28 September by
+`20260928000200_approximate_check_in.sql` (ruling `BE-C2`, the answer to CR-4). **No screen in
+`apps/field` reads either column** — `grep` over `apps/field/src` and `apps/field/app` returns
+nothing for both.
+
+**1. Should the rep be told? YES, and clearly.**
+
+It is a fact about **their own** check-in, recorded about them, and it can be read later by someone
+who decides things about their job. **Hiding it is precisely the failure the privacy notice is
+being corrected for** — see the next item, where a notice currently tells a rep the app "cannot do
+this today" about things it does every day. A rep who discovers months later that "outside" was
+recorded every time they stood in the car park has been misled by omission, and the fix costs one
+line under the check-in confirmation.
+
+**Say it plainly and without threat.** Not a warning, not a blocking dialog, not red:
+
+> *Checked in — we could not confirm you were at the clinic.*
+
+and, when the fix was coarse:
+
+> *Checked in — your phone gave an approximate location.*
+
+**Do not** tell the rep what it will be used for, because nobody has decided that yet, and a screen
+that invents a consequence is worse than one that states a fact.
+
+**2. Should an off-site check-in still start a visit? YES. Unconditionally.**
+
+**The server already does**, and this is the answer to "what should the app do": nothing in
+`record_check_in` refuses on `geofence_status = 'outside'`. The verdict is recorded beside the
+check-in, not used as a gate.
+
+**Refusing would strand a rep standing in front of a doctor** — because the clinic's stored
+coordinates are wrong, because they are on the third floor, because the GPS is poor indoors, or
+because the doctor moved rooms. The app would then be punishing a rep for the accuracy of a number
+somebody else typed into a clinic record. **A check-in that is recorded and flagged is strictly more
+useful than one that never happened**, and the flag survives to be looked at; a refusal leaves no
+trace at all.
+
+**3. When does a manager see it? Not in v1.**
+
+There is no manager surface for it and there should not be one yet, for two reasons that are
+independent:
+
+* **Nothing decides what "outside" means.** 150 metres is a default radius, not a policy. Until
+  somebody rules on what an off-site check-in signifies, a manager screen showing it would invite a
+  conclusion the data does not support — and the first such conclusion will be about a person's pay
+  or job.
+* **The manager console is out of v1 entirely**, with the rest of the manager surface. This is not a
+  special exclusion for geofencing.
+
+**The data is not lost while that is decided** — it is on every check-in row from the beginning, so
+the surface can be built at any time against a complete history. **Building the screen is cheap
+later; recording nothing now would be unrecoverable.** That asymmetry is the whole argument.
+
+---
+
+### `BE-CR-2` — the privacy notice: what a rep sees TODAY is not the corrected one
+
+**You said the "What we record" screen is now accurate. It is accurate on YOUR BRANCH, and that
+branch is not merged.** Measured, not recalled:
+
+| | `origin/main` — **what a rep sees today** | `origin/mr-46/fe-w52-notice-pending-approval` |
+| --- | --- | --- |
+| entries marked `state: 'active'` | **0** | **5** |
+| entries marked `state: 'not-yet'` | **4** | 1 |
+| merged into `main`? | — | **NO** (`git branch -r --merged origin/main` does not list it) |
+| commits ahead of `main` | — | 6, last one `75dd570`, 23 September |
+
+**There is exactly one copy of the file**, `apps/field/src/transparency/content.ts`, with a single
+commit in its history on `main` (`2536862`). **PR #2's branch carries `main`'s version too**, so the
+correction is not arriving through the backend branch either.
+
+**What that means on a handset today, and it is worse than "out of date".** `not-yet` renders, from
+`packages/ui/src/TransparencyScreen.tsx:72`, as:
+
+> **"Not yet — this app cannot do this today."**
+
+So a rep opening **"What this app records"** is currently told that the app **cannot** record where
+they are during their shift, which doctors they saw and when, or their voice notes and reports —
+**while check-in with a geofence verdict, voice notes and call reports are all built and working.**
+
+**The screen is not merely stale. It states the opposite of the truth, in the one place the product
+promises transparency.** And it is the same omission as the previous item: the corrected version is
+the one that says *"whether you were inside the clinic's area"*, and `main`'s does not mention the
+geofence verdict at all.
+
+**What is actually blocking it: operator approval, not engineering.** The branch name says
+`pending-approval` and `MR-46 A` is titled *"FE-W52 truthful transparency notice, PENDING OPERATOR
+APPROVAL"*. The text is written. **Nobody has approved it, and while nobody approves it the untrue
+version is the one shipping.**
+
+**Recommendation, and the backend has no veto here:** approve the notice or reject it, this week and
+before the demo. If the objection is to a specific line, ship the rest — **four entries that say
+"this app cannot do this today" about things it does daily is not a safer position than an imperfect
+correction.** Merging it also needs `main` merged into that branch first; it is six commits behind a
+month of work.

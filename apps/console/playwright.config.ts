@@ -29,7 +29,14 @@ export default defineConfig({
   retries: 0,
   timeout: 60_000,
   expect: { timeout: 10_000 },
-  reporter: [['list']],
+  // The JSON report is configured HERE, not with `--reporter=list,json` plus
+  // `PLAYWRIGHT_JSON_OUTPUT_NAME` on the CI step. That is how it was first written and the env var
+  // did not reach the reporter: the report went to STDOUT, the CI gate read a *stale*
+  // `playwright-results.json` left by an earlier local run, and reported 5 tests for a run that
+  // had just passed 7. **A gate that a leftover file can answer is not a gate.** Declaring the
+  // output path in the config makes it deterministic, and the CI step deletes the file first so a
+  // stale one cannot survive to be read.
+  reporter: [['list'], ['json', { outputFile: 'playwright-results.json' }]],
   use: {
     baseURL: 'http://127.0.0.1:3100',
     trace: 'retain-on-failure',
@@ -39,7 +46,9 @@ export default defineConfig({
   webServer: {
     command: 'pnpm dev',
     url: 'http://127.0.0.1:3100/sign-in',
-    reuseExistingServer: true,
+    // Reuse a developer's already-running `next dev`; never in CI, where reusing something
+    // would mean reusing a server this job did not start.
+    reuseExistingServer: !process.env['CI'],
     timeout: 120_000,
   },
 });

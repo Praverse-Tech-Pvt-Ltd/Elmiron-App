@@ -67,9 +67,21 @@ beforeAll(async () => {
 const mirrorTable = async (client: Client): Promise<string> => {
   const name = `mr07_d2_mirror_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
   await client.query(
+    // W1-G C1 / BE-W125. NO foreign key to public.organisations, deliberately.
+    //
+    // `create table ... references public.organisations` takes a SHARE ROW EXCLUSIVE lock on
+    // `organisations` -- the one table nearly every other suite inserts into through
+    // `seedFixtures()`. That is the cycle CI reported on a DOCS-ONLY commit: this suite waiting
+    // for a lock on its own new table while another waited for RowExclusive on `organisations`,
+    // each blocking the other (40P01).
+    //
+    // The key is that the FK buys this test NOTHING. It asserts how a RESTRICTIVE policy composes
+    // with a PERMISSIVE one; referential integrity is not part of the claim, and the ids below are
+    // real organisation ids either way. Removing it removes the only lock this suite takes on a
+    // table anybody else touches.
     `create table public.${name} (
        id uuid primary key,
-       organisation_id uuid not null references public.organisations (id)
+       organisation_id uuid not null
      )`,
   );
   await client.query(`alter table public.${name} enable row level security`);

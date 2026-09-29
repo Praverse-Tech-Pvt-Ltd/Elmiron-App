@@ -247,6 +247,72 @@ jobs:
         # the tests actually execute.
         run: pnpm turbo run test --filter @fieldforce/api --force
 
+      # ----------------------------------------------------------------------
+      # W1-G D1/D2 -- THE BROWSER SUITE RUNS HERE, not only on one laptop.
+      #
+      # Why it must run in CI at all. `apps/console/e2e` was kept out of `turbo run test` because
+      # CI had no browser, and that was right -- a suite that cannot run is worse than one that is
+      # not wired up. But LOCAL-ONLY is how this repository loses checks: the graph rotted, the
+      # pre-push hook never fired from a worktree, and `verify-clean-db` had to be run by hand.
+      # Three instances of the same failure. A check only one machine can run is a check that
+      # stops being run.
+      #
+      # It lives in the DATABASE job because it needs the whole stack: Postgres, PostgREST and
+      # GoTrue are already up here, and the suite signs real people in through the real sign-in
+      # form. The static job has none of that.
+      #
+      # It is NOT in `turbo run test`, still, and deliberately: `turbo.json` would then demand a
+      # browser in every context that runs tests, including a developer's laptop mid-edit.
+      # ----------------------------------------------------------------------
+      - name: Install Chromium for the console browser suite
+        run: pnpm --filter @fieldforce/console exec playwright install --with-deps chromium
+
+      - name: Browser suite — the console, in a real browser
+        env:
+          CI: 'true'
+          # `next dev` reads these from the environment. The publishable key is public by design:
+          # every row it can reach is decided by the signed-in user's JWT and the RLS policies.
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_KEY: sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
+        # The stale report is DELETED before the run. Without this the proof step below can read a
+        # report from an earlier run and pass — which it did, reporting 5 tests for a run that had
+        # just passed 7. The reporter's output path is declared in `playwright.config.ts`.
+        run: |
+          rm -f apps/console/playwright-results.json
+          pnpm --filter @fieldforce/console test:e2e
+
+      # W1-G D2 -- PROVE IT RAN, the way the serve step proves the function is live.
+      #
+      # A green Playwright step and a Playwright step that executed tests are different claims.
+      # `playwright test` exits 0 when it matches NO test files at all -- a renamed directory, a
+      # bad `testDir`, a `grep` left in the config -- and the job would go green having checked
+      # nothing. This reads the run's own report and fails if fewer than five tests were expected
+      # or any were skipped, and it PRINTS the number so a human reading the log sees it.
+      # The floor rises when specs are added; it is a floor, not an exact count, so adding a test
+      # never fails the build and DELETING the suite always does.
+      - name: Prove the browser suite actually executed
+        run: |
+          f=apps/console/playwright-results.json
+          test -f "$f" || { echo "FAILED: $f does not exist, so the browser suite produced no report" >&2; exit 1; }
+          # An absolute path: `require('./x')` resolves relative to the module, and for `node -e`
+          # that is the CWD -- which is easy to get wrong when a step's CWD changes.
+          expected=$(node -e "const r=require(process.argv[1]);console.log(r.stats.expected)" "$PWD/$f")
+          skipped=$(node -e "const r=require(process.argv[1]);console.log(r.stats.skipped)" "$PWD/$f")
+          unexpected=$(node -e "const r=require(process.argv[1]);console.log(r.stats.unexpected)" "$PWD/$f")
+          echo "browser suite: $expected passed, $skipped skipped, $unexpected failed"
+          if [ "$expected" -lt 7 ] || [ "$skipped" -ne 0 ] || [ "$unexpected" -ne 0 ]; then
+            echo "FAILED: expected at least 7 passing browser tests and no skips." >&2
+            exit 1
+          fi
+
+      - name: Keep the browser suite's traces when it fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: apps/console/test-results/
+          retention-days: 7
+
       # BE-W21. `ucpmp_sample_cap_quantity` is null on purpose -- nothing in this
       # repository states the UCPMP ceiling, and a constraint built on an invented
       # number looks enforced while being wrong invisibly. The cost of that honesty is

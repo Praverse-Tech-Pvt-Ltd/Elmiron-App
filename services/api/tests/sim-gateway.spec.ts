@@ -9,6 +9,7 @@ import {
 import { requireDatabase, withClient } from './db.js';
 import { API_URL, asUser, signIn, withIdentityLock } from './auth.js';
 import type { ProfileLike } from './auth.js';
+import { acquireGlobalThresholds } from './global-thresholds.js';
 import { seedFixtures } from './fixtures.js';
 import type { FixtureWorld } from './fixtures.js';
 
@@ -57,6 +58,7 @@ if (reachable && !functionIsServed) {
 const live = reachable && functionIsServed;
 
 let world: FixtureWorld;
+let releaseGlobalThresholds: (() => Promise<void>) | null = null;
 let runId = '';
 let reviewer: ProfileLike;
 let personaId: string;
@@ -159,6 +161,8 @@ const approvedPrompt = async (db: Client, feature: string, schemaName: string): 
 
 beforeAll(async () => {
   if (!live) return;
+  // W1-G C1 / BE-W124. Before seedFixtures(), for the lock ordering in global-thresholds.ts.
+  releaseGlobalThresholds = await acquireGlobalThresholds();
   world = await seedFixtures();
   runId = randomUUID().slice(0, 8);
 
@@ -244,41 +248,48 @@ beforeAll(async () => {
 }, 180_000);
 
 afterAll(async () => {
-  if (!live || runId === '') return;
-  await withClient(async (db) => {
-    // `app_thresholds` is append-only, so the revert is a later row carrying its own note.
-    await setThreshold(
-      db,
-      'ai_feature_enabled:ai_doctor',
-      'false',
-      `W1-D revert (${runId}). The flag returns to its shipped state: OFF.`,
-    );
-    await setThreshold(
-      db,
-      'ai_feature_enabled:ai_coach',
-      'false',
-      `W1-D revert (${runId}). The flag returns to its shipped state: OFF.`,
-    );
-    // THE DAILY LIMIT MUST BE REVERTED TOO, and forgetting it broke another suite on CI.
-    //
-    // `ai_daily_requests_per_user` is a GLOBAL row and this suite COMMITS it, because the Edge
-    // Function reads from another connection and cannot see an open transaction. Leaving it set
-    // made `ai-control-plane.spec.ts`'s "never unlimited by default" case pass where it must
-    // refuse: that test asserts an UNSET limit raises 45011, and this suite had quietly set one.
-    //
-    // It went unnoticed locally because this machine's database already carried state from earlier
-    // sessions. CI starts clean, which is exactly why CI found it and the local run did not.
-    //
-    // `'null'::jsonb` rather than a number: `threshold() #>> '{}'` yields SQL NULL for it, which is
-    // what "no limit configured" means to `ai_begin_request`. The row cannot be DELETED -- the
-    // table is append-only by design -- so restoring an absence means asserting it.
-    await setThreshold(
-      db,
-      'ai_daily_requests_per_user',
-      'null',
-      `W1-D revert (${runId}). Restores the UNSET state: an unlimited allowance is never the default.`,
-    );
-  });
+  // W1-G C1. Released LAST and in a `finally`: a stranded lock would block every later run of
+  // the other two suites for as long as this process lives.
+  try {
+    if (!live || runId === '') return;
+    await withClient(async (db) => {
+      // `app_thresholds` is append-only, so the revert is a later row carrying its own note.
+      await setThreshold(
+        db,
+        'ai_feature_enabled:ai_doctor',
+        'false',
+        `W1-D revert (${runId}). The flag returns to its shipped state: OFF.`,
+      );
+      await setThreshold(
+        db,
+        'ai_feature_enabled:ai_coach',
+        'false',
+        `W1-D revert (${runId}). The flag returns to its shipped state: OFF.`,
+      );
+      // THE DAILY LIMIT MUST BE REVERTED TOO, and forgetting it broke another suite on CI.
+      //
+      // `ai_daily_requests_per_user` is a GLOBAL row and this suite COMMITS it, because the Edge
+      // Function reads from another connection and cannot see an open transaction. Leaving it set
+      // made `ai-control-plane.spec.ts`'s "never unlimited by default" case pass where it must
+      // refuse: that test asserts an UNSET limit raises 45011, and this suite had quietly set one.
+      //
+      // It went unnoticed locally because this machine's database already carried state from earlier
+      // sessions. CI starts clean, which is exactly why CI found it and the local run did not.
+      //
+      // `'null'::jsonb` rather than a number: `threshold() #>> '{}'` yields SQL NULL for it, which is
+      // what "no limit configured" means to `ai_begin_request`. The row cannot be DELETED -- the
+      // table is append-only by design -- so restoring an absence means asserting it.
+      await setThreshold(
+        db,
+        'ai_daily_requests_per_user',
+        'null',
+        `W1-D revert (${runId}). Restores the UNSET state: an unlimited allowance is never the default.`,
+      );
+    });
+  } finally {
+    await releaseGlobalThresholds?.();
+    releaseGlobalThresholds = null;
+  }
 });
 
 const gateway = async (

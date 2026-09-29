@@ -206,6 +206,10 @@ export default tseslint.config(
             '**/*.test.tsx',
             '**/*.spec.ts',
             '**/tests/**',
+            // W1-G D1: the browser suite and its helpers. `e2e/` is the console's test directory
+            // the way `tests/` is the api's -- a helper beside a spec is still test code, and it
+            // must be allowed the same devDependencies the spec next to it uses.
+            '**/e2e/**',
             '**/*.config.ts',
             '**/*.config.mjs',
           ],

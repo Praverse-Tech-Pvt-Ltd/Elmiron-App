@@ -238,6 +238,17 @@
 > repository already knows where that leads — red became routine on 22 August, the workflows
 > were disabled on 23 August **with no reason recorded**, and production auto-paused unnoticed
 > for two weeks. See `docs/gotchas.md`.
+>
+> **THAT IS HISTORY, NOT THE STATE TODAY — verified 29 September 2026 (W1-G A1).** The blackout
+> ran **23 Aug 08:16 → 7 Sep 14:49 UTC** and ended there. Since 7 September `retention.yml` has
+> run **126 times with 126 successes** and `retention-watchdog.yml` **125 with 125**, both are
+> `state=active`, and the last run of each was **today**. The frontend track read the sentence
+> above as current and reported retention as still off; it is not. **Check before citing it —
+> one command, and it needs no credentials:**
+>
+> ```bash
+> gh run list --workflow retention.yml --limit 5 --json createdAt,conclusion
+> ```
 
 
 > # ⚠ ONE QUERY, AND NOBODY HAS RUN IT
@@ -1788,3 +1799,68 @@ There are exactly two, and **they are different jobs**:
 
 **An engineer's only part is step 2 — storing the text somebody else wrote.** Once `BE-W122` ships,
 even that is a form.
+
+---
+
+## W1-G Part E2 — turning practice on, end to end, with no engineer at any step
+
+> **This supersedes the W1-F Part C checklist above.** That one had a step marked
+> **"⚠ ENGINEER NEEDED"** because there was no screen for the AI prompt. **`BE-W122` built it
+> (`/prompts`), so that step is now a form like every other one.** Nothing in this list requires
+> SQL, a terminal, or a developer.
+
+### Before you start
+
+* **Two admin accounts belonging to two different people.** Not one person with two logins. The
+  database refuses an approval by whoever wrote or submitted the thing, on every screen below, and
+  there is no way around it from any screen.
+* **One rep account** in the same company.
+* The console, in a browser, signed in.
+
+### The checklist
+
+| # | What you do | Where |
+| --- | --- | --- |
+| **1** | **Confirm AI is switched on for your company.** If it is off, step 9 answers *"this feature is not enabled"* and nothing else in this list is wrong | operator/engineering — the one remaining flag, see the note below |
+| **2** | **Admin 1 → "AI prompts" → "New prompt".** Choose **`ai_doctor`**. Type the instructions the practice doctor is given. **No product claim, no indication, no prescribing information** — those are regulated and must come from an approved label. **Save draft** | **`/prompts`** |
+| **3** | **Admin 1 → the same card → "Submit for review"** | **`/prompts`** |
+| **4** | **Admin 2 → "AI prompts" → type an attestation → "Approve"**. Admin 1 will not be shown an Approve button at all; the screen says why | **`/prompts`** |
+| **5** | **Admin 1 → "Practice doctors" → "New practice doctor".** Name shown to the rep — a **label** such as *"Dr A. Sharma (practice)"*, **never a real doctor's name**; no rule anywhere can check that, and this step is the only place it is checked. Specialty. How they behave. Brief. **Save draft**, then **Submit for review** | **`/practice`** |
+| **6** | **Admin 2 → approve the practice doctor**, with an attestation | **`/practice`** |
+| **7** | **Admin 1 → "New practice scenario".** Choose the approved doctor. Title, what the rep should achieve, the objection the doctor will raise. **Product is optional — but if you choose one you must also choose a market**, and the form will not let you save without it. **Save draft**, then **Submit for review** | **`/practice`** |
+| **8** | **Admin 2 → approve the scenario** | **`/practice`** |
+| **9** | **The rep opens practice in the field app and starts the scenario.** Before step 8 this refuses with *"scenario is draft, not approved"*. After it, it starts | field app |
+
+**Step 1 is the only line that is not a screen.** The AI feature flag lives in `app_thresholds` as a
+global row and there is no admin screen for it — that is `BE-W106`, and it is the last of these.
+Ask your engineer once, per company. It is not a per-session step.
+
+### What the rep will actually see today, with decision `#5` still open
+
+**No model is called, and the screen does not pretend one was.** Every reply from the practice
+doctor is the same sentence:
+
+> `[PRACTICE STUB - no AI provider is configured; decision #5 is open, so no model was called]`
+
+and every coaching score is **0**.
+
+**That is deliberate.** A stub returning plausible conversation would be the most dangerous object in
+this system — somebody would demo it, and nobody downstream could tell it from a real model. A score
+of 72 would be read as a judgement of a real person.
+
+**Everything except the words is real:** the session is created, the turns are stored in order, the
+audit trail is written, the rep's scores stay visible to the rep and the company admin **only**, and
+no manager sees a team average. **Answering `#5` swaps the words and nothing else.**
+
+### Who writes the two prompt texts
+
+| | **The practice doctor's prompt** (`ai_doctor`) | **The coach's prompt** (`ai_coach`) |
+| --- | --- | --- |
+| What it controls | how the doctor behaves in character, what they concede, how hard they push | what the coaching looks at, and the words it uses back to the rep |
+| Who writes it | **your sales training lead**, with a medical person reading it | **your sales training lead**, alone |
+| Why not an engineer | an engineer does not know what a real urologist says at minute four of a cold call | the five things it scores are a training judgement, not a technical one |
+| Why not a model | `C24`. A model may draft it; **a second human approves it**, and the approval is stored with their name |
+| The hard limit | **no product claim, no indication, no prescribing information** in either. Regulated content comes from an approved label (`#7`), never from a model and never from the prompt box |
+
+**Both are typed into `/prompts` by whoever wrote them, and approved by a second admin.** No
+engineer is involved in either.

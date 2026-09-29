@@ -3851,3 +3851,82 @@ Registered as `BE-W124`. Reproduce with:
 pnpm --filter @fieldforce/api exec vitest run \
   tests/ai-control-plane.spec.ts tests/ai-gateway.spec.ts tests/sim-gateway.spec.ts
 ```
+
+---
+
+## 29 September 2026 — every check in this repository can pass against a console that is broken in a browser
+
+**The class.** `jsdom` render tests **import a module and mount a component**. They never fetch a
+URL, never run the built bundle, and never execute the page the browser is actually served. So the
+entire local check suite is blind to any defect that lives between "the module is correct" and "the
+page works" — which is where framework boundaries, hydration and the build output live.
+
+**It is not hypothetical. It happened twice in two days.**
+
+1. `/practice` returned **500** on its first real request: a pure function exported from a
+   `'use client'` module is a client *reference* on the server, and calling it throws.
+2. The console **did not hydrate at all**: `/_next/static/chunks/main-app.js` answered **404**, so
+   React never attached and the sign-in form fell back to a native submit that silently reloaded
+   the page with the fields cleared.
+
+**The checks that would each have passed, by name, on both:**
+
+| Check | Why it cannot see this |
+| --- | --- |
+| `tsc --noEmit` (9 workspaces) | the `'use client'` boundary is a build-time convention TypeScript does not model, and a 404 is not a type |
+| `eslint` (7 workspaces) | no rule covers either |
+| `prettier --check` | formatting |
+| `vitest` render tests (jsdom) | they import the module **as a client**, the one context where it works, and mount it directly |
+| `vitest` node tests | no DOM at all |
+| the API suite, 976 tests, on a reset database | tests the server; the console is not involved |
+| an HTTP proof against PostgREST | talks to the database's API, never to the web app |
+| `verify-clean-db` | runs the above, on a clean database — the same blindness, more slowly |
+
+**Every one of those was green while the console could not be signed into.**
+
+> **A suite that never loads the page cannot tell you the page works.** Keep at least one check that
+> opens a real browser, requests a real URL, and interacts. `apps/console/e2e/practice.spec.ts`
+> is that check, and `.github/workflows/ci.yml` runs it so it does not depend on one laptop.
+
+**The assertion that catches it specifically**, rather than by luck: a control that is `disabled`
+until React state changes. Typing into the form can only enable it if `onChange` handlers are
+attached, which only happens after the bundle loads and hydrates. **Server HTML can never satisfy
+it.** The suite carries its own negative control — a second test that blocks every
+`/_next/static/**` request and asserts the button *stays* disabled — so the first test cannot
+quietly stop being a hydration check.
+
+**One measurement worth keeping:** blocking only `main-app.js` was **not** enough — the dev build
+boots React from more than one chunk and the page hydrated anyway. *"The client bundle does not
+load"* has to mean all of it.
+
+---
+
+## 29 September 2026 — a gate that a leftover file can answer is not a gate
+
+W1-G D2 added a CI step to prove the browser suite had actually executed: read the run's JSON
+report, fail if fewer than N tests passed. The reasoning was sound — `playwright test` exits 0 when
+it matches **no test files at all**, so a green step is not evidence that anything ran.
+
+**Then the gate failed a run that had just passed all 7 tests, reporting `5 passed`.**
+
+Two mistakes, and the second is the one worth keeping:
+
+1. `PLAYWRIGHT_JSON_OUTPUT_NAME` did not reach the reporter, so the JSON went to **stdout** and no
+   file was written.
+2. **A `playwright-results.json` from an earlier local run was still on disk**, with 5 tests in it,
+   from before the second spec file existed. The gate read that.
+
+**So the proof-of-execution step was itself satisfiable by an artefact of a previous run.** Had the
+stale file said 7, the gate would have passed a run in which nothing executed — the exact failure it
+was built to catch, in the thing built to catch it.
+
+> **A check that reads an artefact must own that artefact's lifetime.** Delete it before the run
+> that is supposed to produce it, or verify it is newer than the run. Otherwise the check answers a
+> question about the past.
+
+The fix is both halves: the output path is declared in `playwright.config.ts` so it cannot depend on
+an environment variable arriving, and the CI step `rm -f`s the report before running.
+
+**The general shape, which this repository has now found in a bundle, a function body, a database,
+a knowledge graph and a test report:** *when a check reads something it did not just produce, ask
+what produced it and when.*

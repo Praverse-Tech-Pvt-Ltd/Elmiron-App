@@ -339,3 +339,382 @@ together, because one fix — a per-suite schema, or a serialised DDL group — 
 `tenant-boundary-restrictive.spec.ts` is **not evidence about the change under test** until those
 two are fixed. Check the failing test name against the register before believing it — and do not
 rerun a red without reading it first, which is how these two stayed invisible.
+
+### W1-G — retention, and answering the frontend · 29 September 2026 · Model: Claude Opus 5
+
+#### A — is anything actually being deleted?
+
+**The headline, before the numbers: nobody is wrong, and nobody is right.** The retention jobs
+**are** running, have run **126 consecutive times without a failure since 7 September**, and **do**
+cover voice notes. They have also **destroyed nothing, ever** — because production holds **zero
+audio objects**. The promise is not being broken. It has never been tested either.
+
+##### A1 — the run history, read from the API rather than the file
+
+| | `retention.yml` | `retention-watchdog.yml` |
+| --- | --- | --- |
+| workflow state | **`active`** | **`active`** |
+| total runs | **337** | **330** |
+| last run | **29 Sep 04:29 UTC — success** | **29 Sep 08:24 UTC — success** |
+| scheduled runs since 23 Aug | **134** | **131** |
+| of those | **126 success, 8 failure** | **125 success, 6 failure** |
+| **every one of those failures** | **on 23 August itself** | **on 23 August itself** |
+| since 7 Sep | **126 runs, 126 success, 0 failure** | **125 runs, 125 success, 0 failure** |
+
+**Neither workflow was ever disabled at the workflow level** — the API reports `state=active` for
+both. So "switched off" is not what happened to the *workflow*.
+
+**What did happen is a 15-day blackout, and it was repository-wide, not retention-specific.**
+Between **23 Aug 08:16 UTC and 7 Sep 14:49 UTC**:
+
+| | runs in that window |
+| --- | --- |
+| `retention.yml` (schedule) | **0** |
+| `retention-watchdog.yml` (schedule) | **0** |
+| `backup.yml` (schedule) | **0** |
+| `migration-drift.yml` (schedule) | **0** |
+| **`ci.yml`, any event at all** | **0** |
+
+**Zero GitHub Actions runs of any workflow, of any trigger, for fifteen days.** That is the
+measurement. It matches, exactly, what the record already carries in two places: `COMPLETION-PLAN`
+R6 — *"Free-plan auto-pause. Production paused 23 Aug – 7 Sep and was found by a failed connection,
+not an alert"* — and `blocked-on-you.md` — *"red became routine on 22 August, the workflows were
+disabled on 23 August **with no reason recorded**, and production auto-paused unnoticed for two
+weeks."*
+
+**Two things stopped in the same fortnight and the record conflates them.** The Supabase project
+auto-paused (that is R6, and it is about the database) **and** Actions stopped creating runs (that
+is this measurement, and it is about GitHub). They share a window and a cause is not established
+for the second by the run history alone. **I am not certain why Actions stopped** — the state was
+`active` throughout, so it was not a workflow-level disable, and the cause is not recoverable from
+what the API exposes. The Actions billing history or the organisation audit log would decide it.
+
+##### A2 — the data, and which database
+
+**I could not reach production, and that is the honest answer to "which database".**
+`~/.elmiron-prod.env` does not exist, `services/api/supabase/.temp/project-ref` does not exist,
+`SUPABASE_DB_URL` is unset in this shell, and the three production secrets exist **only** as GitHub
+Actions secrets (`SUPABASE_DB_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, all set
+14 Aug), which cannot be read back. `HANDOVER-2026-09-08.md` says the same and adds that the project
+is not in the Supabase account connected to this machine.
+
+**So I measured production the only way it can be measured from here: I dispatched the watchdog
+myself and read its output.** Run **36551995393**, `workflow_dispatch`, 29 Sep **09:52 UTC**,
+conclusion **success** — not a scheduled run I found lying around, a measurement taken for this
+question:
+
+```
+{ "stalled": false,
+  "lastRunAt": "2026-09-29T04:29:30.33316+00:00",
+  "destroyedTotal": 0,
+  "liveObjectCount": 0,
+  "openSessionCount": 0,
+  "overdueObjectCount": 0,
+  "abandonedPartialCount": 0 }
+Audio retention is healthy.
+```
+
+**The query behind `overdueObjectCount`**, read from
+`20260815000300_audio_consent_retention.sql` → `public.audio_purge_health()`:
+
+```sql
+(select count(*) from public.recordings  where purge_state <> 'destroyed' and purge_after <= now())
++
+(select count(*) from public.voice_notes where purge_state <> 'destroyed' and purge_after <= now())
+```
+
+**So the answer to "how many voice notes are past `purge_after` and still present" is zero, and the
+count provably includes voice notes** — they are the second half of that sum.
+
+| Measure | Production, 29 Sep 09:53 UTC |
+| --- | --- |
+| audio objects past `purge_after`, not destroyed (recordings **+ voice notes**) | **0** |
+| live audio objects of any age | **0** |
+| open upload sessions | **0** |
+| **objects ever destroyed, all time** | **0** |
+| abandoned partial uploads | 0 |
+| worker stalled | false |
+
+**I did not report a local number as though it answered the question.** A freshly reset local
+database says nothing about a promise made to doctors in production.
+
+##### A3 — the jobs are ON, so why does the other track believe otherwise
+
+**Because their claim was true when it was written and nobody re-checked it.** 23 August is a real
+date: it is the last day retention ran before the blackout, and the day every one of the 14 failures
+happened. Between then and 7 September, **nothing deleted anything, and nothing said so.**
+
+**The record they read is `blocked-on-you.md`:** *"the workflows were disabled on 23 August with no
+reason recorded."* That sentence is **past tense about a state that has since changed**, sitting in
+an operator-facing document, with no date of last verification beside it. **It is not wrong. It
+reads as current, and it was read as current** — which is the same failure mode `CLAUDE.md` opens by
+describing: a point-in-time snapshot that the next reader trusts.
+
+**Neither record is wrong; one of them is undated.** The fix is a date and a command, not a
+correction — and it is applied below.
+
+**The earliest overdue object: there is none.** `overdueObjectCount` is 0, so the question has no
+answer rather than an uncomfortable one.
+
+##### A3b — the finding that matters more than the schedule
+
+**`destroyedTotal` is 0. The destruction path has never run against production data.**
+
+`audio_destruction_log` is append-only and counts every object ever destroyed. It is empty. So:
+
+* the 126 successful runs since 7 September each found nothing to do and exited cleanly;
+* **"the retention job is green" and "the retention job works" are not the same claim**, and only
+  the first has evidence;
+* the doctor-facing consent notice promises destruction at 90 days, and that promise currently
+  rests on **code that has never destroyed a real object**.
+
+**And the watchdog could not have told anyone.** During the blackout the watchdog was a scheduled
+workflow with **zero runs** — so the control that exists to report the purge's absence was absent by
+the same cause, at the same moment. **A watchdog that shares a failure domain with the thing it
+watches cannot report that thing's absence.** This repository has now found that shape four times.
+
+##### A4 — nothing fixed here
+
+Per the brief, and per the reasoning: if audio promised to be destroyed still existed, that is the
+operator's to know before it is anyone's to change. **It does not exist. There is nothing to
+destroy and nothing to repair**, so the finding is the deliverable.
+
+##### A5 — what closing it actually requires
+
+**Engineering can do, without asking anybody:**
+
+| | |
+| --- | --- |
+| **Date the claim** | Put the last-verified date and the one command beside the sentence in `blocked-on-you.md`, so the next reader checks instead of trusting. Done in this commit |
+| **Prove the destruction path once** | It has never destroyed a real object. A staging object, uploaded, aged past `purge_after`, and observed leaving Storage **and** appearing in `audio_destruction_log`. Until that exists, `destroyedTotal: 0` is ambiguous between "nothing to do" and "cannot do it" |
+| **Give the watchdog a second home** | It cannot report its own absence while it runs only as a GitHub schedule. A dead-man's check from a different system — or `BE-W69`'s in-database half — removes the shared failure domain |
+
+**Only the operator can do:**
+
+| | |
+| --- | --- |
+| **The paid Supabase plan, about $25/month** | `blocked-on-you.md` item 5.2. **The free tier auto-paused production for two weeks and nobody noticed**; the same pause will happen again on the next quiet fortnight, and a paused database deletes nothing while the calendar keeps moving. **This is the free-tier pause's part in the story, and it is the whole of it:** it is not what broke retention this time — there was nothing to delete — it is what guarantees retention will break silently the first time there *is* |
+| **Decide whether 90 days is the promise** | The notice says it. Nothing has tested it |
+| **Whether production should hold data at all before the demo** | Today it holds no audio. Every claim about retention is therefore untested, and that is a choice, not an accident |
+
+**The one-line summary for an operator:** *nothing promised to a doctor has been kept late, because
+nothing has been recorded yet — and the machinery that would keep the promise has never once had to.*
+
+#### B — answering the frontend, before its developer leaves
+
+All four answers are appended to `docs/contract-requests.md` under **"Answers — 29 September 2026"**.
+
+**B1 — CR-3 was answered on 28 September and they are still on the mock.** The answer was in the
+file all along, under "Answers — 28 September". **A buried answer is an unanswered question**, so it
+is repeated at the end of the file with the one trap spelled out: `daily_mileage` is the only one of
+the five that is not a `jsonb` builder, its wire is snake_case, and `MileageDaySchema` alone will not
+parse it — `MileageRowSchema` + `fromMileageRow`. Six screens can leave `127.0.0.1:4010` with no
+backend change, and **a real device cannot reach `127.0.0.1` at all**, so it is not optional for the
+demo.
+
+**B2 — `BE-C4`: contract-request ids are minted per track now.** The frontend filed a voice-note
+item as `CR-5`; `CR-5` was already the practice session API. **`BE-C3` fixed this for decisions and
+stopped there**, and contract requests are minted the same way from the same kind of file — so the
+`C20` collision happened again in a different register. Backend mints `BE-CR<n>`, frontend
+`FE-CR<n>`, `CR-1`–`CR-5` keep their names. Recorded in `CLAUDE.md` beside `BE-C3`, and in
+`.ai-collab/decisions-backend.md`.
+
+**The lesson worth more than the ruling: a rule that names one register does not cover the next one
+somebody invents.** `BE-W118` conflated two problems; `BE-C3` fixed one of them in one place.
+
+**B3 — `BE-C5`, off-site check-ins.** `check_ins.geofence_status` is a **NOT NULL** enum, so a
+verdict has been recorded for every check-in since August; `location_is_approximate` arrived on
+28 September with `BE-C2`. **No screen in `apps/field` reads either** — grep over `src` and `app`
+returns nothing for both. The three answers: **tell the rep** (it is a fact about their own
+check-in, and hiding it is the same omission that makes the privacy notice untrue), **still start
+the visit** (the server already does not refuse; refusing would strand a rep standing in front of a
+doctor because a clinic's stored coordinates are wrong), and **no manager surface in v1** (nothing
+has ruled what "outside" *means*, and the first conclusion drawn from such a screen will be about
+somebody's pay). The data is on every row from the start, so the screen can be built later against a
+complete history — **that asymmetry is the whole argument**.
+
+**B4 — the privacy notice: the frontend's claim is true of their branch and false of `main`.**
+Measured:
+
+| | `origin/main` — **what a rep sees today** | `origin/mr-46/fe-w52-notice-pending-approval` |
+| --- | --- | --- |
+| entries `state: 'active'` | **0** | **5** |
+| entries `state: 'not-yet'` | **4** | 1 |
+| merged into `main`? | — | **NO** |
+
+There is **one** copy of `apps/field/src/transparency/content.ts`, single commit `2536862`, and
+**PR #2's branch carries `main`'s version too**. `not-yet` renders, from
+`packages/ui/src/TransparencyScreen.tsx:72`, as **"Not yet — this app cannot do this today."**
+
+**So a rep opening "What this app records" is told the app cannot record where they are, which
+doctors they saw, or their voice notes — while all three are built and working.** It is not stale;
+**it states the opposite of the truth in the one place the product promises transparency.** The
+branch is `pending-approval` and the blocker is an operator decision, not engineering.
+
+#### C — `BE-W124` and `BE-W125`, one cause, fixed at the cause
+
+**`BE-W124`.** `tests/global-thresholds.ts` — an advisory lock held by the three suites that must
+COMMIT global `app_thresholds` rows, taken **before** the identity lock so the two orderings cannot
+form a cycle. **The assertion was not weakened**: "every feature is off out of the box" still means
+*no row*, because a row saying `false` and no row at all are different states and only one is what a
+new organisation gets.
+
+**Four cheaper answers were rejected, and why, is in that file's header** — territory scope (the
+resolver is called with no territory, so isolating that way means changing production SQL to suit a
+test), a database per worker (`create database … template` needs no other session on the template,
+and PostgREST, GoTrue and the edge runtime hold connections all run), `fileParallelism: false`
+(55 seconds becomes about fifteen minutes), and weakening the assertion.
+
+**`BE-W125` was a foreign key.** `mirrorTable` created its throwaway table with
+`references public.organisations (id)`, which takes a lock on **the one table nearly every other
+suite inserts into** through `seedFixtures()`. That is exactly the cycle CI reported on a docs-only
+commit. **The FK bought the test nothing** — it asserts how a RESTRICTIVE policy composes with a
+PERMISSIVE one, and referential integrity is not part of that claim. Removed.
+
+##### C2 — the rate, both sides, measured not impressed
+
+Four files — `ai-control-plane`, `ai-gateway`, `sim-gateway`, `tenant-boundary-restrictive` — on a
+reset database with the Edge Function served, because a gateway failure for an unserved function
+would have polluted the baseline.
+
+| | Result |
+| --- | --- |
+| **BEFORE**, 5 runs | **5 × `Tests 1 failed \| 48 passed (49)`** — deterministic, not flaky |
+| **AFTER**, 5 runs | **5 × `Test Files 4 passed (4)` · `Tests 49 passed (49)`** |
+| **full API suite, 3 runs** | **3 × `Test Files 73 passed (73)` · `Tests 972 passed \| 4 skipped (976)`** |
+
+##### C3 — the mutant
+
+Removing `acquireGlobalThresholds()` from **one** holder (`ai-gateway.spec.ts`) and leaving the
+other two: **exactly 1 test failed, in 3 runs of 3**, always
+`AI-D0 … each missing prerequisite alone refuses`, with the other **48 passing** as the positive
+control. Restored; `git diff` shows only the intended wiring and the full suite is green.
+
+#### D — the browser suite runs in CI now
+
+**D1.** Two steps in the **database job**, which already has Postgres, PostgREST and GoTrue up:
+`playwright install --with-deps chromium`, then `test:e2e`. **Cost: measured in the CI run recorded
+below.** It stays out of `turbo run test` — putting it there would demand a browser in every context
+that runs tests, including a developer's laptop mid-edit.
+
+**D2 — proof it RAN, in the shape of the serve step.** `playwright test` **exits 0 when it matches
+no test files at all** — a renamed directory, a bad `testDir`, a stray `grep` — and the job would go
+green having checked nothing. So the run writes a JSON report and a step reads it, prints
+`browser suite: N passed, N skipped, N failed`, and **fails if fewer than 7 passed or anything was
+skipped**. **The gate was itself checked two-sided** before being committed: it passes on the real
+report, and fails on a hand-made report with `expected: 0` and on one with `skipped: 1`.
+
+**D3 — the hydration assertion, with its own permanent negative control.** `Save draft` is disabled
+until React state says three fields are filled; typing can only change that if `onChange` is
+attached, which only happens after the bundle hydrates. **Server HTML can never satisfy it.** The
+second test blocks every `/_next/static/**` request and asserts the button **stays** disabled — so
+the first cannot quietly stop being a hydration check.
+
+**A measurement from building it:** blocking only `main-app.js` was **not enough** — the dev build
+boots React from more than one chunk and the page hydrated anyway. *"The client bundle does not
+load"* has to mean all of it.
+
+**D4 — the class is recorded in `docs/gotchas.md`** with the eight checks that would each have
+passed while the console could not be signed into: `tsc` across 9 workspaces, `eslint` across 7,
+`prettier --check`, the jsdom render tests, the node tests, the 976-test API suite on a reset
+database, an HTTP proof against PostgREST, and `verify-clean-db` — which runs the others, more
+slowly, with the same blindness.
+
+#### E
+
+**E1 — `BE-W122` closed, and a correction to my own register entry.** `/prompts` drafts, submits and
+approves a prompt, reusing `approvalAffordance` for the **third** time. **The entry I wrote said the
+table had "no RPC and no console route". The RPCs existed all along** — `submit`, `approve`,
+`reject` and `retire_ai_prompt_version`, in `AI_RPC` since `20260924000700`. Only the route was
+missing. **I registered a defect without grepping for the thing I claimed was absent**, and it made
+the work sound twice as large as it was.
+
+**Should the seed go? The prompt half of it already has.** `seed-practice-world.mjs` no longer
+writes a prompt at all: the browser suite creates and approves one **through the screen**, as two
+admins, via `e2e/prompt-through-the-screen.ts`. **The fixture now walks the operator's documented
+path, so the two cannot drift** — and if `/prompts` breaks, the practice suite breaks, which is true
+of the product too. **What remains in the seeder is only what no screen can do**: minting auth
+identities and organisations, which is a GoTrue admin-API operation and correctly not exposed to any
+console. **That part should stay.**
+
+**E2 — the checklist is in `docs/blocked-on-you.md`** and supersedes W1-F Part C. **Every step is a
+screen.** One line is not: the AI feature flag is a global `app_thresholds` row with no admin screen
+— `BE-W106`, and it is now the last of these.
+
+#### A correction to Part C, made by the clean-database check before the push
+
+**`BE-W124` is fixed. `BE-W125` is not, and I closed it prematurely.**
+
+The clean-database check **refused this push**, which is the second time it has earned its place.
+Two separate things were in that refusal and only one was real:
+
+**1. Eleven of the twelve failures were my own environment.** A `functions serve` I had left running
+held the `supabase_edge_runtime_Elmiron-App` container, so `ci-local`'s serve step could not start
+its own — `docker: Conflict. The container name … is already in use` — and every gateway test got
+**503 "name resolution failed"**. Not a defect. **It is also exactly why a red must be read before
+it is rerun**, which is the rule I wrote into `BE-W125` the day before.
+
+**2. The twelfth was `BE-W125`, in a file I had declared fixed.**
+
+**What I got wrong, precisely.** I found the foreign key to `public.organisations` in `mirrorTable`,
+removed it, ran the full suite **three times green**, and wrote CLOSED. **Three green runs of a
+failure that fires roughly one run in three is not evidence of anything** — and the entry I was
+closing said so in its own text.
+
+**Then two more attempts, both measured, both reverted or downgraded:**
+
+| Attempt | Result |
+| --- | --- |
+| remove the FK | the same file deadlocked again, on a **different** test, through a helper that never had a foreign key |
+| bounded retry on `40P01` in `inDdlTransaction` | `tenant-boundary-restrictive` stopped failing — and the deadlock **moved** to `ai-product-qa.spec.ts`, then `refused-reads-audited.spec.ts`. **2 failures in 6 runs before, 3 in 8 after.** Reverted |
+
+**The finding worth more than all three attempts: the deadlock is a property of 73 spec files
+sharing one Postgres, and adding a lock relocates the victim instead of reducing the rate.**
+`app_thresholds` alone is written by **15** suites — enumerated from the catalogue, not from
+memory:
+
+```bash
+grep -l 'insert into public.app_thresholds' services/api/tests/*.ts | wc -l   # 15
+```
+
+and `audit_log` is written by all of them through `write_audit_row`. Serialising fifteen suites is
+`fileParallelism: false` wearing a different hat. **The only fix at the cause is not sharing a
+database**, which is a harness change — per-worker databases need a template with no session
+connected to it, so the harness would have to start and own the stack rather than borrow the
+developer's.
+
+**Residual, measured over 8 full-suite runs on a clean database with the Edge Function served:
+5 clean, 3 with exactly one deadlock, never the same test twice.**
+
+**The FK removal stays** — it takes a real lock off a hot table and costs the test nothing. **The
+retry does not**: a retry in a test helper that does not move the number is a liability the next
+reader will extend.
+
+**What this costs until `BE-W125` is done:** roughly one full-suite run in three goes red for a
+reason unrelated to the change under test, and `verify-clean-db` will refuse those pushes. **Read
+the failing test name before rerunning.** If it is a `40P01` deadlock, it is this.
+
+#### D2's gate caught its own defect before the push
+
+**The clean-database check refused again, and this time the thing it caught was the gate itself.**
+
+Step 22 reported **`browser suite: 5 passed`** and failed the floor of 7 — for a run in which
+**step 21 had just passed all 7**, visible in its own output. Two mistakes:
+
+* `PLAYWRIGHT_JSON_OUTPUT_NAME` never reached the reporter, so the JSON went to **stdout** and no
+  file was written;
+* a `playwright-results.json` from an earlier local run — **5 tests, `practice.spec.ts` only,
+  timestamped 10:39 UTC** — was still on disk, and the gate read that.
+
+**The proof-of-execution step was satisfiable by an artefact of a previous run.** Had that stale
+file said 7, the gate would have passed a run in which nothing executed — which is precisely the
+failure it exists to catch.
+
+**Fixed in both halves**: the output path is declared in `playwright.config.ts` so it cannot depend
+on an environment variable arriving, and the CI step deletes the report before running. Verified:
+the report now names **both** spec files and reads `expected: 7, skipped: 0, unexpected: 0`.
+
+**This is the fifth instance of one shape in this repository** — a stale bundle, a stale function
+body, a stale database, a stale knowledge graph, and now a stale test report. Recorded in
+`docs/gotchas.md` as the general rule: **when a check reads something it did not just produce, ask
+what produced it and when.**

@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
 import { requireDatabase, withClient } from './db.js';
 import { API_URL, asUser, signIn, withIdentityLock } from './auth.js';
+import { acquireGlobalThresholds } from './global-thresholds.js';
 import type { ProfileLike } from './auth.js';
 import { seedFixtures } from './fixtures.js';
 import type { FixtureWorld } from './fixtures.js';
@@ -69,6 +70,7 @@ if (reachable && !functionIsServed) {
 const live = reachable && functionIsServed;
 
 let world: FixtureWorld;
+let releaseGlobalThresholds: (() => Promise<void>) | null = null;
 let runId = '';
 let marketId: string;
 let productId: string;
@@ -152,6 +154,9 @@ const setThreshold = async (
 
 beforeAll(async () => {
   if (!live) return;
+  // W1-G C1 / BE-W124. Taken BEFORE seedFixtures(), which takes the identity lock: one
+  // consistent order across every holder, so the two locks cannot deadlock.
+  releaseGlobalThresholds = await acquireGlobalThresholds();
   world = await seedFixtures();
   runId = randomUUID().slice(0, 8);
 
@@ -264,25 +269,33 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
-  if (!live || runId === '') return;
-  await withClient(async (db) => {
-    // app_thresholds is append-only by design, so the revert is a later row, not a delete.
-    await setThreshold(
-      db,
-      'ai_feature_enabled:product_qa',
-      'false',
-      `W1-B C3 revert (${runId}). The flag returns to its shipped state: OFF.`,
-    );
-    // Best-effort teardown. A failure here must not fail the suite, but it must be visible.
-    try {
-      await db.query(`delete from public.ai_requests where prompt_version_id = $1`, [
-        promptVersionId,
-      ]);
-      await db.query(`delete from public.product_markets where product_id = $1`, [productId]);
-    } catch (error) {
-      console.warn('ai-gateway teardown left rows behind:', (error as Error).message);
-    }
-  });
+  // W1-G C1. The global-threshold lock is released LAST and in a `finally`, so a teardown failure
+  // cannot strand it — a stranded lock would block every later run of the other two suites for as
+  // long as this process lives, which is a worse failure than the one it guards against.
+  try {
+    if (!live || runId === '') return;
+    await withClient(async (db) => {
+      // app_thresholds is append-only by design, so the revert is a later row, not a delete.
+      await setThreshold(
+        db,
+        'ai_feature_enabled:product_qa',
+        'false',
+        `W1-B C3 revert (${runId}). The flag returns to its shipped state: OFF.`,
+      );
+      // Best-effort teardown. A failure here must not fail the suite, but it must be visible.
+      try {
+        await db.query(`delete from public.ai_requests where prompt_version_id = $1`, [
+          promptVersionId,
+        ]);
+        await db.query(`delete from public.product_markets where product_id = $1`, [productId]);
+      } catch (error) {
+        console.warn('ai-gateway teardown left rows behind:', (error as Error).message);
+      }
+    });
+  } finally {
+    await releaseGlobalThresholds?.();
+    releaseGlobalThresholds = null;
+  }
 });
 
 /** POST to the function as the signed-in MR. */

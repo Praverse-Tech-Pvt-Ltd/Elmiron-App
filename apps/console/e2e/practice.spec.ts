@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test, type Page } from '@playwright/test';
+import { approvePromptThroughTheScreen } from './prompt-through-the-screen';
 
 /**
  * W1-F B5/B6 — the authoring screens, driven by a real browser.
@@ -92,10 +93,25 @@ test('a practice session becomes startable only after a second admin approves it
 }) => {
   const authorContext = await browser.newContext();
   const author = await authorContext.newPage();
+  const approverContext = await browser.newContext();
+  const approver = await approverContext.newPage();
+
+  await signIn(author, world.authorAdmin);
+  await signIn(approver, world.approverAdmin);
+
+  // W1-G E1. The approved ai_doctor prompt `start_sim_session` requires, created THROUGH THE
+  // SCREEN rather than by the seeder's SQL. This used to be three raw statements in
+  // `seed-practice-world.mjs`; `BE-W122` removed the need for them, so the fixture now walks the
+  // operator's documented path and cannot drift from it.
+  await approvePromptThroughTheScreen(
+    author,
+    approver,
+    'ai_doctor',
+    `Practice prompt for run ${world.run}. You are a doctor in a practice conversation.`,
+  );
 
   // --- the author drafts a persona -----------------------------------------
 
-  await signIn(author, world.authorAdmin);
   await author.goto('/practice');
   await expect(author.getByRole('heading', { name: 'New practice doctor' })).toBeVisible();
 
@@ -123,9 +139,6 @@ test('a practice session becomes startable only after a second admin approves it
 
   // --- the second admin approves the persona --------------------------------
 
-  const approverContext = await browser.newContext();
-  const approver = await approverContext.newPage();
-  await signIn(approver, world.approverAdmin);
   await approver.goto('/practice');
 
   const approverPersonaCard = cardFor(approver, personaName);
@@ -234,4 +247,75 @@ test('nothing on this screen offers a real doctor, a recording or patient data',
   for (const forbidden of ['patient', 'recording', 'audio', 'consent']) {
     expect(text, `the word "${forbidden}" must not appear on this screen`).not.toContain(forbidden);
   }
+});
+
+/**
+ * W1-G D3 — the assertion that fails when the client bundle does not load.
+ *
+ * **Why this exists.** On the first browser run of W1-F every spec failed at the sign-in form:
+ * `/_next/static/chunks/main-app.js` answered **404**, React never attached, and the form fell
+ * back to a native submit. **Typecheck, lint and 76 unit and render tests were all green**, because
+ * none of them fetches a page. A console can be completely broken in a browser with every check
+ * passing.
+ *
+ * **What makes this assertion specifically about hydration.** `Save draft` is `disabled` until
+ * React state says three fields are non-empty. Typing only changes that state if `onChange`
+ * handlers are attached — which happens only after the client bundle loads and hydrates. **Server
+ * HTML alone can never satisfy it**: the markup ships with the button disabled, and without React
+ * nothing can enable it.
+ *
+ * **The pair below is the two-sided proof, and it is permanent rather than a mutation somebody ran
+ * once.** The second test blocks the bundle and asserts the button STAYS disabled. If the first
+ * test could pass without hydration, the second would fail.
+ */
+test('D3 — the page is INTERACTIVE, not just server-rendered', async ({ page }) => {
+  await signIn(page, world.authorAdmin);
+  await page.goto('/practice');
+
+  const save = page
+    .locator('section', { has: page.getByRole('heading', { name: 'New practice doctor' }) })
+    .getByRole('button', { name: 'Save draft' });
+
+  await expect(save).toBeDisabled();
+
+  await page.getByLabel('Name shown to the rep').fill(`Dr Hydration ${world.run} (practice)`);
+  await page.getByLabel('Specialty').fill('Urology');
+  await page.getByLabel('Brief').fill('Typed into a form that only React can be listening to.');
+
+  // Only reachable if onChange fired, which means the bundle loaded and hydrated.
+  await expect(save).toBeEnabled();
+});
+
+test('D3 — and that assertion is REAL: with the client bundle blocked, it stays dead', async ({
+  browser,
+}) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await signIn(page, world.authorAdmin);
+
+  // Exactly the failure W1-F hit by accident, reproduced on purpose.
+  //
+  // EVERY client chunk is blocked, not just `main-app`. Blocking that one entry alone was tried
+  // first and the page hydrated anyway — the dev build boots React from more than one chunk, so a
+  // single-file block proves nothing. "The client bundle does not load" has to mean all of it.
+  await page.route('**/_next/static/**', (route) => route.abort());
+
+  await page.goto('/practice');
+  const save = page
+    .locator('section', { has: page.getByRole('heading', { name: 'New practice doctor' }) })
+    .getByRole('button', { name: 'Save draft' });
+
+  // The page still SERVES: this is a hydration failure, not a blank screen, which is exactly what
+  // makes it invisible to everything except a browser.
+  await expect(page.getByRole('heading', { name: 'New practice doctor' })).toBeVisible();
+
+  await page.getByLabel('Name shown to the rep').fill('Typed into nothing');
+  await page.getByLabel('Specialty').fill('Urology');
+  await page.getByLabel('Brief').fill('No handler is attached to any of these.');
+
+  // Still disabled, because no React state changed. If this ever passes as ENABLED, the test above
+  // has stopped being a hydration check.
+  await expect(save).toBeDisabled();
+
+  await context.close();
 });

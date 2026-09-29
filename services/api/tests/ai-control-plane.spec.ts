@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
 import {
   AiBeginRequestResponseSchema,
@@ -13,6 +13,7 @@ import {
 import { inRolledBackTransaction, requireDatabase } from './db.js';
 import { asOwner, asUser, withIdentityLock } from './auth.js';
 import type { ProfileLike } from './auth.js';
+import { acquireGlobalThresholds } from './global-thresholds.js';
 import { seedFixtures } from './fixtures.js';
 import type { FixtureUser, FixtureWorld } from './fixtures.js';
 
@@ -32,10 +33,32 @@ const reachable = await requireDatabase();
 
 let world: FixtureWorld;
 
+let releaseGlobalThresholds: (() => Promise<void>) | null = null;
+
+/**
+ * W1-G C1 / `BE-W124`. **This suite asserts about GLOBAL state, so it must own the global state
+ * while it does.**
+ *
+ * The header above says flags written here are invisible to other suites. That is true of what
+ * this file WRITES and says nothing about what it READS — and `ai-gateway.spec.ts` and
+ * `sim-gateway.spec.ts` must COMMIT `ai_feature_enabled:*` rows, because the Edge Function runs
+ * out of process and cannot see a transaction. While one of them held its flag `true`, the "no
+ * flag" case here saw it: **5 failures in 5 runs.**
+ *
+ * The lock is taken BEFORE `seedFixtures()`, which takes the identity lock — one consistent order
+ * across all three holders, so the two locks cannot deadlock. The timeout is generous because
+ * WAITING for a gateway suite to finish is the mechanism working, not a hang.
+ */
 beforeAll(async () => {
   if (!reachable) return;
+  releaseGlobalThresholds = await acquireGlobalThresholds();
   world = await seedFixtures();
-}, 60_000);
+}, 180_000);
+
+afterAll(async () => {
+  await releaseGlobalThresholds?.();
+  releaseGlobalThresholds = null;
+});
 
 const sqlstate = async (client: Client, sql: string, params: unknown[] = []) => {
   await client.query('savepoint probe');

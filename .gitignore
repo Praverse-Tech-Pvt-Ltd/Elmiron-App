@@ -107,3 +107,4 @@ backups/
 # browser suite; none of them is reproducible from the repository and none belongs in it.
 test-results/
 playwright-report/
+playwright-results.json

@@ -29,6 +29,17 @@ Each sequence starts at 1 and is independent. **`C1`–`C31` keep their names** 
 migrations, tests, screens and three registers, and renaming them would cost more than the ambiguity
 they carry.
 
+**The same rule applies to CONTRACT REQUESTS — ruling `BE-C4`, 29 September 2026.** The frontend
+filed a voice-note item as `CR-5`; `CR-5` was already the practice session API. **`BE-C3` fixed
+decisions and not contract requests, so the same collision happened again.**
+
+| Track | Mints |
+| --- | --- |
+| Backend / AI platform | **`BE-CR<n>`** |
+| Frontend / field app | **`FE-CR<n>`** |
+
+**`CR-1`–`CR-5` keep their names**, for the reason `C1`–`C31` do.
+
 **Why the rule exists, so nobody "simplifies" it away.** On 28 September two sessions ran in parallel
 and **both minted `C20`** — each read the highest id in `.ai-collab/decisions.md`, which is only
 correct on one branch at a time. The frontend's reached `main` first, so nine backend rulings were
