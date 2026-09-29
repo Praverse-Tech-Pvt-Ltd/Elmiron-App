@@ -740,3 +740,35 @@ shortest — which is the on-demand compilation that was never being measured, n
 **The general point, and it is the one this session keeps making: a check that has only ever run on
 one machine has only ever been measured on one machine.** The browser suite passed locally seven
 times before CI ran it once and found something local runs structurally could not.
+
+#### Two more CI-only failures, both in the new browser step, both worth the trip
+
+**The browser suite took three CI runs to go green, and each red was a different real defect that no
+local run could have produced.**
+
+| Attempt | What CI said | What it actually was |
+| --- | --- | --- |
+| 1 | `Timed out waiting 120000ms from config.webServer` | `next dev` compiling a route on a cold runner. Raising the timeout would have moved the failure to the per-test timeout, not removed it |
+| 2 | `Process from config.webServer was not able to start. Exit code: 1` | `next build` failing with `Can't resolve '@fieldforce/ui-tokens'` on six files. **This job builds only `@fieldforce/core`** — its own step comment says the static job builds everything else |
+| 3 | *(caught locally before pushing)* | `pnpm turbo run build --filter @fieldforce/console` reported **`3 successful`** and produced **no build at all** |
+
+**The third is the one worth keeping.** `turbo.json` declared `outputs: ["dist/**"]` for every
+workspace, and the console builds with Next, which writes `.next/`. **Turbo cached nothing, then
+replayed that nothing as a success** — `3 successful, 2 cached` — and `next start` died with *"Could
+not find a production build"*. Turbo warns (`no output files found for task …#build`) and the
+warning scrolls past; `3 successful` is the line a human reads.
+
+Fixed as `outputs: ["dist/**", ".next/**", "!.next/cache/**"]`, and **verified two-sided**: a cold
+build writes `.next/BUILD_ID`; deleting `.next` and re-running restores it **from the cache** rather
+than producing nothing.
+
+**CI now builds the console in a NAMED step** rather than inside `config.webServer`, so the next
+failure of this kind names itself instead of arriving as `Exit code: 1`.
+
+**Verified locally through the exact CI sequence from a cold state** — every `dist/` and `.next`
+deleted, then the build step, then `CI=true` so the config takes the `next start` branch:
+**7 passed in 14.6s**, against 36s through `next dev`.
+
+**The through-line of this whole session, stated once:** *a bundle, a function body, a database, a
+knowledge graph, a test report and now a build cache have each reported success for work they did
+not do.* Every one was found by making something run somewhere it had not run before.

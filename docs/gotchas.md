@@ -3930,3 +3930,37 @@ an environment variable arriving, and the CI step `rm -f`s the report before run
 **The general shape, which this repository has now found in a bundle, a function body, a database,
 a knowledge graph and a test report:** *when a check reads something it did not just produce, ask
 what produced it and when.*
+
+---
+
+## 29 September 2026 — a turbo task whose `outputs` do not match what it writes caches NOTHING, and replays it
+
+`turbo.json` declared `build: { outputs: ["dist/**"] }` for every workspace. `@fieldforce/console`
+builds with **Next**, which writes `.next/`, not `dist/`. So turbo recorded a cache entry
+**containing nothing**, and on the next run reported:
+
+```
+ Tasks:    3 successful, 3 total
+ Cached:    2 cached, 3 total
+```
+
+**while producing no build at all.** `next start` then died with *"Could not find a production build
+in the '.next' directory"*, surfacing to Playwright as the entirely uninformative
+`Process from config.webServer was not able to start. Exit code: 1`.
+
+**Turbo does warn** — `WARNING no output files found for task @fieldforce/console#build` — and the
+warning scrolls past in the middle of a build log, which is where warnings go to die. `3 successful`
+is the line a human reads.
+
+> **A cache key without matching outputs is a cache that stores absence and replays it as success.**
+> When adding a task to turbo, check that `outputs` matches what the tool actually writes — and
+> check it by **deleting the output, forcing a cache hit, and confirming the output comes back**.
+
+Fixed as `outputs: ["dist/**", ".next/**", "!.next/cache/**"]` — `.next/cache` excluded because it
+is Next's own incremental cache, not build output. Verified two-sided: a cold build produces
+`.next/BUILD_ID`, and deleting `.next` then re-running restores it **from the cache** rather than
+silently producing nothing.
+
+**This is the same family as the stale bundle, the stale database and the stale test report.** The
+common shape: **something reported success for work it did not do, because what it checked was not
+what mattered.**

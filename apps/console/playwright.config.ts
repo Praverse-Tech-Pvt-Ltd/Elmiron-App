@@ -58,7 +58,11 @@ export default defineConfig({
     // `next build` is safe here for a specific, checkable reason: **every route is `ƒ (Dynamic)`**
     // — each carries `export const dynamic = 'force-dynamic'`, and `sign-in` is a client component
     // — so nothing is prerendered and the build never reaches for a database.
-    command: isCI ? 'pnpm build && pnpm start' : 'pnpm dev',
+    // In CI the build is a SEPARATE, named workflow step, so a compile failure is attributed to
+    // the build rather than surfacing here as the opaque `Process from config.webServer was not
+    // able to start. Exit code: 1` — which is exactly how the first attempt reported a missing
+    // workspace package.
+    command: isCI ? 'pnpm start' : 'pnpm dev',
     url: 'http://127.0.0.1:3100/sign-in',
     // Reuse a developer's already-running `next dev`; never in CI, where reusing something
     // would mean reusing a server this job did not start.

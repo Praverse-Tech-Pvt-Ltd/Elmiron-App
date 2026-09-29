@@ -267,10 +267,25 @@ jobs:
       - name: Install Chromium for the console browser suite
         run: pnpm --filter @fieldforce/console exec playwright install --with-deps chromium
 
+      # THIS JOB BUILDS ONLY `@fieldforce/core`, by design — the step above says so, and says the
+      # static job builds everything else. The console needs `@fieldforce/ui-tokens` too, and the
+      # first attempt at this discovered that the hard way: `next build` failed with
+      # `Can't resolve '@fieldforce/ui-tokens'` on six files, reported to Playwright only as
+      # `Process from config.webServer was not able to start. Exit code: 1`.
+      #
+      # `--filter @fieldforce/console` with turbo's `build: { dependsOn: ["^build"] }` builds the
+      # workspace dependencies first and the console last. It is a NAMED step so the next failure
+      # of this kind names itself.
+      - name: Build the console and the workspace packages it imports
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_KEY: sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
+        run: pnpm turbo run build --filter @fieldforce/console
+
       - name: Browser suite — the console, in a real browser
         env:
           CI: 'true'
-          # `next dev` reads these from the environment. The publishable key is public by design:
+          # `next start` reads these from the environment. The publishable key is public by design:
           # every row it can reach is decided by the signed-in user's JWT and the RLS policies.
           NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
           NEXT_PUBLIC_SUPABASE_KEY: sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
