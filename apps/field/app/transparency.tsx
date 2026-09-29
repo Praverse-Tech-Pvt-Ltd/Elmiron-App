@@ -6,7 +6,7 @@ import { hasCompletedFirstRun, markFirstRunComplete } from '../src/onboarding/pr
 import {
   NEVER_RECORDED,
   TRANSPARENCY_ENTRIES,
-  TRANSPARENCY_PREAMBLE,
+  transparencyEntries,
 } from '../src/transparency/content';
 
 /**
@@ -39,12 +39,29 @@ export default function Transparency(): ReactNode {
     };
   }, []);
 
+  /**
+   * FE-D12 item 1. The recordings row follows the build's recording flag. `../src/config` is
+   * imported on use, as `recording-permission.ts` does: it throws at import on a misconfigured
+   * build, and a flag that cannot be read is OFF. This build ships with recording off.
+   */
+  const [entries, setEntries] = useState(TRANSPARENCY_ENTRIES);
+  useEffect(() => {
+    let live = true;
+    void import('../src/config')
+      .then(({ appConfig }) => {
+        if (live) setEntries(transparencyEntries({ recordingEnabled: appConfig.recordingEnabled }));
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+
   return (
     <Screen scrollable>
       <TransparencyScreen
-        entries={TRANSPARENCY_ENTRIES}
+        entries={entries}
         neverRecorded={NEVER_RECORDED}
-        preamble={TRANSPARENCY_PREAMBLE}
         {...(inFirstRun === true
           ? {
               onContinue: () => {
