@@ -32,15 +32,49 @@
  */
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { PRODUCT_QA_FAILED_MESSAGE, answerProductQuestion } from '../_shared/core.ts';
+import {
+  PRODUCT_QA_FAILED_MESSAGE,
+  analyseSimSession,
+  answerProductQuestion,
+  takeDoctorTurn,
+} from '../_shared/core.ts';
 import type { ControlPlaneRpc, LlmProvider } from '../_shared/core.ts';
 import { createStubProvider, stubProviderRefusal } from '../_shared/stub-provider.ts';
+import type { StubShape } from '../_shared/stub-provider.ts';
+
+/**
+ * W1-D B4 — the gateway now serves three features, and it is still ONE function.
+ *
+ * **No second Edge Function, no second upload path, no second mechanism.** `feature` selects a flow;
+ * everything around it — the caller's token passed through unparsed, the absence of any service-role
+ * key, the SQLSTATE mapping — is shared, so a property proved once holds for all three. A second
+ * function would have been a second place for the token handling to drift, and the token handling is
+ * the whole security model.
+ */
+type Feature = 'product_qa' | 'ai_doctor' | 'ai_coach';
 
 interface RequestBody {
+  /** Defaults to `product_qa` so the W1-B contract is unchanged for existing callers. */
+  readonly feature?: unknown;
   readonly question?: unknown;
   readonly marketId?: unknown;
   readonly productId?: unknown;
+  // ai_doctor / ai_coach
+  readonly sessionId?: unknown;
+  readonly repText?: unknown;
+  readonly personaBrief?: unknown;
+  readonly personaStance?: unknown;
+  readonly objective?: unknown;
+  readonly objection?: unknown;
+  readonly history?: unknown;
+  readonly turns?: unknown;
 }
+
+const STUB_SHAPE: Record<Feature, StubShape> = {
+  product_qa: 'product_qa',
+  ai_doctor: 'sim_doctor',
+  ai_coach: 'sim_coach',
+};
 
 const json = (status: number, body: unknown): Response =>
   new Response(JSON.stringify(body), {
@@ -90,8 +124,27 @@ Deno.serve(async (req: Request): Promise<Response> => {
   } catch {
     return json(400, { code: '22023', message: 'body is not JSON' });
   }
+  const rawFeature = typeof body.feature === 'string' ? body.feature : 'product_qa';
+  if (rawFeature !== 'product_qa' && rawFeature !== 'ai_doctor' && rawFeature !== 'ai_coach') {
+    // An unknown feature is refused here rather than passed to `ai_begin_request`, which would
+    // refuse it too -- but with a message about a feature flag, which would send whoever typoed it
+    // looking in `app_thresholds` for a row that was never the problem.
+    return json(400, { code: '22023', message: `unknown feature ${rawFeature}` });
+  }
+  const feature: Feature = rawFeature;
+
   const question = typeof body.question === 'string' ? body.question.trim() : '';
-  if (question.length === 0) return json(400, { code: '22023', message: 'question is required' });
+  if (feature === 'product_qa' && question.length === 0) {
+    return json(400, { code: '22023', message: 'question is required' });
+  }
+  if (feature === 'ai_doctor') {
+    if (typeof body.sessionId !== 'string' || String(body.repText ?? '').trim().length === 0) {
+      return json(400, { code: '22023', message: 'sessionId and repText are required' });
+    }
+  }
+  if (feature === 'ai_coach' && typeof body.sessionId !== 'string') {
+    return json(400, { code: '22023', message: 'sessionId is required' });
+  }
 
   const rpc: ControlPlaneRpc = {
     call: async (fn: string, args: Record<string, unknown>): Promise<unknown> => {
@@ -109,7 +162,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   let provider: LlmProvider;
   try {
-    provider = createStubProvider();
+    provider = createStubProvider(STUB_SHAPE[feature]);
   } catch (error) {
     // The stub refuses to exist outside a local target (`C2`). That is a deployment-shaped
     // refusal, not a user-shaped one, and it must not read as "the assistant is busy".
@@ -120,6 +173,34 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   try {
+    if (feature === 'ai_doctor') {
+      const result = await takeDoctorTurn({
+        rpc,
+        provider,
+        sessionId: String(body.sessionId),
+        repText: String(body.repText),
+        personaBrief: String(body.personaBrief ?? ''),
+        personaStance: String(body.personaStance ?? 'receptive'),
+        objection: String(body.objection ?? ''),
+        history: Array.isArray(body.history)
+          ? (body.history as { role: 'rep' | 'doctor'; text: string }[])
+          : [],
+      });
+      return json(200, result);
+    }
+    if (feature === 'ai_coach') {
+      const result = await analyseSimSession({
+        rpc,
+        provider,
+        sessionId: String(body.sessionId),
+        objective: String(body.objective ?? ''),
+        objection: String(body.objection ?? ''),
+        turns: Array.isArray(body.turns)
+          ? (body.turns as { turnIndex: number; role: 'rep' | 'doctor'; text: string }[])
+          : [],
+      });
+      return json(200, result);
+    }
     const result = await answerProductQuestion({
       rpc,
       provider,

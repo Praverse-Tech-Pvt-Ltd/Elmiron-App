@@ -61,16 +61,66 @@ export const resetStubProviderCallCount = (): void => {
   callCount = 0;
 };
 
-export const createStubProvider = (): LlmProvider => {
+/**
+ * Which output shape the stub must produce. W1-D B4 made this necessary: `ai_doctor` and `ai_coach`
+ * validate against different schemas, and a stub returning `product_qa`'s shape fails both --
+ * indistinguishably from a real model returning nonsense, which would make the gateway's validation
+ * untestable.
+ */
+export type StubShape = 'product_qa' | 'sim_doctor' | 'sim_coach';
+
+/**
+ * **Every stub reply SAYS it is a stub, in the text a human would read.**
+ *
+ * This is W1-C E2's ruling applied in code rather than in a document: *a plausible sentence teaches
+ * the room the thing works.* A stubbed doctor that said "Yes, tell me more about the dosing" would be
+ * indistinguishable from a working feature to anyone watching, including the person who built it.
+ */
+const STUB_MARKER =
+  '[PRACTICE STUB - no AI provider is configured; decision #5 is open, so no model was called]';
+
+const stubBody = (shape: StubShape): string => {
+  switch (shape) {
+    case 'product_qa':
+      // `supported: false` is the whole design: the one reply that cannot be mistaken for an answer.
+      // `answerProductQuestion` maps it to KNOWLEDGE_NOT_AVAILABLE_MESSAGE, verbatim.
+      return JSON.stringify({ supported: false, answer: '', citedChunkIds: [] });
+    case 'sim_doctor':
+      // Schema-valid so the gateway's validation is exercised, and visibly a stub so nobody mistakes
+      // it for a doctor. `objectionAddressed: false` keeps the practice loop honest -- a stub cannot
+      // judge whether the rep answered anything.
+      return JSON.stringify({ reply: STUB_MARKER, objectionAddressed: false });
+    case 'sim_coach':
+      // Scores are all zero ON PURPOSE. A stub returning 72/100 would be read as a judgement, and a
+      // rep would believe it. Zero with a stub summary cannot be mistaken for feedback.
+      return JSON.stringify({
+        overallScore: 0,
+        dimensionScores: {
+          opening: 0,
+          product_knowledge: 0,
+          objection_handling: 0,
+          communication: 0,
+          closing: 0,
+        },
+        strengths: [
+          { dimension: 'opening', title: STUB_MARKER, detail: STUB_MARKER, turnIndex: 1 },
+        ],
+        improvements: [
+          { dimension: 'closing', title: STUB_MARKER, detail: STUB_MARKER, turnIndex: 1 },
+        ],
+        summary: STUB_MARKER,
+      });
+  }
+};
+
+export const createStubProvider = (shape: StubShape = 'product_qa'): LlmProvider => {
   if (!isLocalTarget(Deno.env.get('SUPABASE_URL'))) {
     throw new Error(stubProviderRefusal);
   }
   return {
     generate: (request: LlmGenerateRequest): Promise<LlmResult> => {
       callCount += 1;
-      // `supported: false` is the whole design. It is the one reply that cannot be mistaken for an
-      // answer: `answerProductQuestion` maps it to KNOWLEDGE_NOT_AVAILABLE_MESSAGE, verbatim.
-      const text = JSON.stringify({ supported: false, answer: '', citedChunkIds: [] });
+      const text = stubBody(shape);
       return Promise.resolve({
         text,
         usage: {

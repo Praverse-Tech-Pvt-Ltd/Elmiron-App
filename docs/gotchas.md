@@ -3629,3 +3629,41 @@ three of fifteen: `seed:mr` says *"against **API URL** host"*, and `backup:datab
 
 **A sweep that returns a round, small, satisfying number and that you did not have to reject
 anything from.** Every one of the three above returned exactly that.
+
+### Replacing a SQL function: GENERATE the new body from the live definition, never retype it
+
+**The rule.** When a migration replaces an existing function, produce the new body from
+`pg_proc.prosrc` (or `pg_get_functiondef`) and apply the change to *that*, rather than transcribing
+the function from a migration file by reading it.
+
+```bash
+# The authoritative body of what is actually installed:
+psql "$SUPABASE_DB_URL" -At -c "select prosrc from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public' and p.proname = '<fn>'" > /tmp/orig.sql
+# then patch /tmp/orig.sql programmatically and paste the result into the migration
+```
+
+**Why this is a rule and not a preference — three defects in ONE hand-transcribed function body,
+W1-C A2, `record_check_in`.** The draft was written by reading
+`20260911000300_check_in_starts_the_visit.sql`, and it:
+
+1. **Dropped the idempotency block entirely.** The live function begins
+   `select * into v_existing from public.check_ins c where c.id = p_id; if found then … return
+   v_existing; end if;` — which is what makes a replayed check-in return the existing row instead of
+   colliding on the primary key. **Removing it would have broken the offline replay path the frontend
+   had just proved** (FE-D1: queued writes survive process death and flush exactly once). Nothing in
+   the API suite asserted it, so nothing would have caught it.
+2. **Renamed a helper.** It called `public.within_shift_window`; the real name is
+   `public.is_within_shift`. That one would have failed loudly, which is the least bad of the three.
+3. **Changed a refusal message.** The live text names the timestamp and the territory; the draft did
+   not. A client mapping messages would have drifted silently.
+
+**Why reading the file is not equivalent to reading the function.** A function may have been
+redefined by a LATER migration than the one you found — `record_check_in` is defined in at least two
+— so the file you are reading may not be what is installed. `prosrc` cannot be stale by construction.
+
+**The tell that this rule was needed:** defect 1 was invisible. The migration applied, the suite
+passed, and the loss would have surfaced on a rep's phone in an area with no signal. A test asserting
+idempotency was added in the same session **because nothing else in the suite would have noticed its
+absence.**

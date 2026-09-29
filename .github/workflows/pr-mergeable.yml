@@ -1,5 +1,38 @@
 name: PR mergeability
 
+# ============================================================================
+# W1-D A3 — THIS WORKFLOW IS INERT UNTIL IT IS ON THE DEFAULT BRANCH. READ THIS FIRST.
+#
+# **It cannot run from a feature branch, and that is not a bug in it — it is how GitHub resolves
+# triggers.** `schedule`, `push` and `workflow_dispatch` are all read from the DEFAULT branch's copy
+# of a workflow file. While this file exists only on `worktree-ai-platform-phase-a`, GitHub will
+# neither schedule it nor offer it for dispatch. **It does nothing. It protects nothing.**
+#
+# **Why it was not made to work from here.** The obvious fix is to put the check inside `ci.yml`,
+# which does run on the pull request — and that fix is void, because `ci.yml` is suppressed by
+# exactly the condition this check reports: a conflicting PR produces no run at all. A check that
+# is silent precisely when it is needed is worse than one that is honestly absent, and this
+# repository has a documented history of inert controls that looked like protection
+# (`docs/gotchas.md`, FIX-07: *"a control that cannot be exercised is not a control"*).
+#
+# So the honest state is declared here rather than assumed away: **inert until PR #2 merges.**
+#
+# ## WHAT A SESSION MUST DO BY HAND UNTIL THEN — two commands, every session, before trusting CI
+#
+#   gh pr view 2 --json mergeable,mergeStateStatus
+#   # CONFLICTING -> re-read after 30s before believing it (see the re-verify step below), then:
+#   git fetch origin main && git merge origin/main   # resolve, commit, push
+#
+# And if a push produced no CI run at all:
+#
+#   gh api "repos/Praverse-Tech-Pvt-Ltd/Elmiron-App/actions/runs?head_sha=$(git rev-parse HEAD)" #     --jq '.workflow_runs[] | "\(.name) \(.status)/\(.conclusion)"'
+#   # empty output = no run was ever CREATED. That is the silent-conflict signature, not a slow run.
+#
+# **This block should be deleted the day the file reaches `main`**, because from that moment the
+# statement above becomes false — and a stale warning in a workflow is the same failure class as a
+# stale count in `CLAUDE.md`.
+# ============================================================================
+
 # W1-C B3 — the check that makes a CONFLICTING pull request LOUD instead of silent.
 #
 # **The defect this exists for.** A `pull_request` workflow runs against `refs/pull/N/merge`. GitHub

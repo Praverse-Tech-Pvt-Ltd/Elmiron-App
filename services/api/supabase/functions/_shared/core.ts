@@ -29,6 +29,12 @@ export { KNOWLEDGE_NOT_AVAILABLE_MESSAGE } from '../../../../../packages/core/di
 
 export { PATIENT_SPECIFIC_REFUSAL_MESSAGE } from '../../../../../packages/core/dist/field/gateway/guardrails.js';
 
+// W1-D B4 -- `ai_doctor` and `ai_coach`, from the same built output and the same interfaces.
+export {
+  analyseSimSession,
+  takeDoctorTurn,
+} from '../../../../../packages/core/dist/field/gateway/sim-doctor.js';
+
 export type {
   ControlPlaneRpc,
   LlmGenerateRequest,

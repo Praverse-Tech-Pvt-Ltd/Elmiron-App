@@ -21062,3 +21062,233 @@ before D3 so the turn exchange has a shape to validate against.
 here is evidence that any model works. And every number above is from **this machine's local stack**;
 there is still no handset result anywhere in this repository and no result of any kind against a
 hosted Supabase project.
+
+
+---
+
+### W1-D — the practice foundation
+
+**29 September 2026.** Checkout guard first: namespace `@fieldforce/core`, remote
+`Praverse-Tech-Pvt-Ltd/Elmiron-App`, `f34ceef` an ancestor of HEAD — **exit 0**, branch
+`worktree-ai-platform-phase-a`, HEAD `ea08768` at session start.
+
+**Was a merge of `main` needed first? NO.** `main` had not moved (`git log HEAD..origin/main` empty)
+and `gh pr view 2` reported **`MERGEABLE / CLEAN`** on the first read, so the 30-second re-read this
+project's own correction introduced was not needed. Recorded because "no merge was needed" is a
+measurement here, not an assumption.
+
+#### Part A — four small things
+
+**A1 — the approximate flag reaches the contract.** `CheckInSchema` gains
+`locationIsApproximate: z.boolean().nullable().optional()`.
+
+**Both modifiers are load-bearing and they mean different things.** `.optional()` because a response
+that does not carry the field must still parse — `sync_pull` does not carry it, and a required key
+would have broken every existing consumer the moment it was added. `.nullable()` because the column
+is. **Absent = this response does not carry the field. Null = the server has no answer.** And
+**null never means "the fix was fine"**: three cases produce it — a check-in written before
+`20260928000200`, a device that sent no accuracy, and a visit with no clinic to compare against.
+Rendering any of those as "precise" would be the overstatement `FE-W52` had to correct.
+
+**A2 — the pg_proc rule is in `docs/gotchas.md`**, with the three defects that make it persuasive
+rather than as a preference: transcribing `record_check_in` by reading it **dropped the idempotency
+block** (which would have broken the offline replay path FE-D1 had just proved), **renamed
+`is_within_shift`**, and **changed a refusal message**. A function may also have been redefined by a
+later migration than the one you find, so the file you read may not be what is installed; `prosrc`
+cannot be stale by construction.
+
+**A3 — the inert guard, decided rather than left ambiguous.** `pr-mergeable.yml` **cannot** run from
+a feature branch: `schedule`, `push` and `workflow_dispatch` all resolve against the default branch's
+copy. **Making it work from here is impossible in the way that matters** — the only place it could
+run is `ci.yml`, which is suppressed by exactly the condition it reports. So the file now **declares
+its own inertness at the top**, with the two commands a session must run by hand instead, and with
+the instruction to delete that block the day it reaches `main` — because from that moment the warning
+becomes false, which is the same failure class as a stale count in `CLAUDE.md`.
+
+**A4 — already delivered in W1-C** and deliberately **not duplicated**: `docs/blocked-on-you.md`
+carries the organisation-secret question with the settling command and the **16 October** date. A
+second entry in an append-only file would be noise.
+
+#### Part B — AI Doctor, contract first
+
+**Order: D4 → D1 → D2 → D3 → D5, so nothing existed without something reaching it.**
+
+**B1 — the coach analysis contract** (`packages/core/src/field/simulation.ts`), written before
+anything could produce one. Overall score and five dimension scores, all 0–100 integers; at least one
+strength **and** one improvement; a summary; and **every finding must cite the turn it is about** —
+the same rule `analysis.ts` already enforces for real-visit findings, because an unciteable criticism
+is one a rep cannot check or argue with.
+
+**Why a score is permitted here when `constraints.md` forbids one elsewhere, and neither half is
+bent.** That rule says *"never add a ranking, score, rank, percentile or grade to `analyses` or the
+manager surface."* **This is not `analyses`** — that table holds analyses of real doctor visits, which
+is employee monitoring (`C8`). **And it is not a manager surface** — `C27` puts practice scores in
+front of the MR and the company admin and nobody else, enforced in RLS rather than in a client filter.
+**There is deliberately no team, cohort, percentile, rank or comparison field anywhere**, so a score
+cannot become a leaderboard by someone writing a `GROUP BY`, and `contract.test.ts` asserts their
+absence by name.
+
+**B2 — personas and scenarios are admin-editable rows**, addable without a deployment, carrying the
+**same** lifecycle as approved knowledge: the same `knowledge_version_status` enum imported rather
+than redeclared, the same arrows, the same four-eyes rule expressed as a **table CHECK as well as** an
+RPC refusal, the same stored attestation, and W1-A E1's refuse-don't-coerce insert rule applied from
+the start. `submit/approve/reject_sim_content` cover **both** tables with one implementation.
+**Registered honestly:** this is the third place the pattern appears, and extracting one generic
+helper across knowledge, prompt versions and simulation content is **`BE-W121`** — not attempted here,
+because doing it would rewrite two working subsystems in a session whose job was to add a third.
+
+**B3 — the session** records who, which scenario and persona, product, market, **the approved prompt
+version pinned for its whole life**, the knowledge versions accumulated across turns, start, end and
+turn count. Turns are server-indexed, contiguous and append-only.
+
+**B4 — the turn exchange goes through the W1-B gateway, and it is still ONE function.** No second
+Edge Function, no second upload path, **no service-role key** — the only occurrence of
+`SUPABASE_SERVICE_ROLE_KEY` in the file is the comment explaining why it is absent. `feature` selects
+a flow; the token handling, which is the whole security model, is shared, so a property proved once
+holds for all three features.
+
+**The stub had to become shape-aware**, and the shapes carry W1-C E2's ruling in code: every stubbed
+reply contains **`[PRACTICE STUB …]`** and **the coach's scores are all zero**. A stubbed doctor saying
+"Yes, tell me more about the dosing" would be indistinguishable from a working feature to anyone
+watching, including the person who built it.
+
+#### B5 — proven end to end, over HTTP
+
+`services/api/tests/sim-gateway.spec.ts` — **18 tests, all passing.** Real GoTrue sign-in, real
+`POST` to `:54321/functions/v1/ai-gateway`, the function's own Deno process calling the RPCs as that
+user. **start → turn → end → analysis**, with the analysis row parsed through
+`SimCoachAnalysisSchema`, attributed to the rep rather than a service role, and carrying
+`modelProvider = 'stub'`.
+
+**Cross-tenant, two-sided with positive controls:** the rival organisation cannot start a session,
+cannot add a turn over HTTP, and reads **0 sessions, 0 turns, 0 analyses** — while our own rep reads
+more than zero with the same query, so the zeros mean something. **And `C27` is asserted where it is
+enforced: a FIELD MANAGER reads 0 sessions and 0 analyses**, because `visible_user_ids()` is
+deliberately absent from those policies. That is the test that fails if someone adds it "for
+consistency" — which is exactly the mutation run below.
+
+**B6 — asserted, not commented.** Read from `information_schema` rather than from the migration: **no
+`sim_*` foreign key reaches `doctors`, `visits`, `consent_records`, `analyses`, `recordings`,
+`voice_notes`, `upload_grants` or `transcripts`**; **no column could hold audio** (no `audio`,
+`storage_key`, `bucket`, `mime`, `duration_seconds`); **no column is named for a patient**. Each has
+a positive control so a broken query cannot read as a pass. And a rep turn carrying patient details is
+**refused before any provider call** — proved by `model_provider IS NULL` on the blocked request,
+which is only reachable if `generate` never ran — **and the refused turn is not stored at all**, so
+the details never enter the rep's history.
+
+#### B7 — mutation, two-sided, and BE-W119 caught me again
+
+| Mutant | Result |
+| --- | --- |
+| **Patient guardrail disabled** in the `ai_doctor` flow (rebuilt **and** restarted) | **exactly 1 failed, 17 passed** — the guardrail assertion alone |
+| **`visible_user_ids()` added** to the session RLS policy — the "for consistency" change | **the `C27` manager test failed**, as designed |
+
+**And the second run exposed my own mistake, which is worth more than the mutation.** After mutant 2
+I restored `sim-doctor.ts` **but did not rebuild and restart**, and the guardrail test failed a second
+time — against source that was already correct. **`functions serve` was still executing the previous
+bundle.** That is `BE-W119` exactly, on a session that had the rule written in front of it, and it is
+the second time in three sessions that a local result was an artefact of stale state. The rule is not
+"remember to rebuild"; it is **treat any unexpected gateway result as a stale-bundle suspicion first.**
+
+#### Part C — the demo, 1 October
+
+**C1 stands: no stubbed AI answer is shown.** Unchanged.
+
+**C2 — the console approval screen, opened in a browser with a real signed-in session.** Not the route
+existing; the page rendering. A second admin was created (four eyes needs two), an **AI-drafted**
+knowledge version was authored and submitted by the *other* admin, and the page was fetched twice with
+real `@supabase/ssr` session cookies.
+
+**What the OPERATOR (the second admin) actually sees — HTTP 200:**
+
+> Knowledge awaiting your approval · *"Nothing here is answerable to a rep until you approve it. You
+> cannot approve a version you wrote or submitted — a second admin must."* · **Probexa storage guidance
+> (demo)** · `version 1` `in_review` `no market` `not about a product` · **Who produced this text: A
+> model: demo-model-v1** · *"A model produced this text. Approving it makes it answerable to reps as
+> company-approved material. Read it as a draft, not as a summary you are confirming."* · Where it came
+> from: Training deck, edition 4, page 11 · the text, line breaks intact · **Your attestation —
+> required to approve** · **Or a reason — required to reject** · **[Approve] [Reject]**
+
+**What the AUTHOR sees — the same page, HTTP 200, controls ABSENT:**
+
+> …the same draft and provenance… then *"You drafted this version, so you cannot approve it. Four eyes:
+> a second admin must review it. The server refuses an author's own approval whatever this screen
+> shows."*
+>
+> `Approve button: False` · `Reject button: False`
+
+**C3 — what on PR #2 could affect the demo path, measured rather than assumed.**
+
+| | |
+| --- | --- |
+| Field app source changed by PR #2 | **None.** `git diff origin/main...HEAD -- apps/field packages/ui packages/ui-tokens` touches only the two `jest.config.cjs` files — test discovery, not runtime |
+| `packages/core` | **+1,961 lines, all additive** — new files plus two additions: `refusals.ts` gains `45011`/`45012`, `entities.ts` gains one **optional** field |
+| Demo-path functions **redefined** | **Exactly one: `record_check_in`** (`20260928000200`), which is demo item 9 |
+| `record_check_out`, `sync_pull` | **Comment mentions only** — checked by excluding comment lines; no redefinition |
+| `capture_consent`, `sync_push`, `begin_upload`, `my_shift_window` | **untouched** |
+| New `sim_*` tables | not on the demo path, and asserted to reference nothing the field app uses |
+
+**So the honest answer is not "it should be fine" — it is one named function, with one named
+residual risk.** `record_check_in` was **generated from `pg_proc.prosrc`** rather than retyped, adds
+one nullable column, and its idempotency is now asserted by a test that did not exist before. The
+field app does not read the new column.
+
+**The residual risk is which branch the demo laptop runs.** The demo uses the **local stack**, built
+by `db:reset` from the migrations in the checked-out tree. **On `main`, none of PR #2's migrations
+exist and nothing changes. On this branch, `record_check_in` is the rewritten one.** That is a choice
+somebody must make explicitly before Thursday, and it has not been made.
+
+#### Part D — two lines for the operator
+
+**D1 — the vendor emails are ready to send without editing**, in
+`docs/ai-platform/PROVIDER-SHORTLIST.md` §10.1: one to AWS (where abuse-flagged content is processed
+and stored; training use), one to Sarvam (written retention, no-training, sub-processors, and whether
+the published rates are current). Both are quoted blocks with a subject line, answerable with a yes, a
+no or a clause reference. **Neither is engineering's to send: both need someone who can sign what comes
+back.**
+
+**D2 — what is waiting on a person, in one place:**
+
+| | Waiting on | Date, only where one is already wired |
+| --- | --- | --- |
+| **`#5`** | the AI provider, and whether data may leave India | — |
+| **`#7`** | the product catalogue, and who supplies approved labels | — |
+| **`#1`** | the UCPMP cap value | **CI red 6 November**, warning from 16 October |
+| **`#3`** | the organisation's registered legal name | cost accrues daily; consent rows are append-only and cannot be repaired |
+| **the organisation secret** | is `BACKUP_DESTINATION` an org secret? | **backup job red from 16 October** |
+| **the production deploy** | pre-flight query → shift hours → migrate → reference data → paid plan | — |
+
+#### Counts, from each runner's own summary lines
+
+| Workspace / runner | Summary line |
+| --- | --- |
+| core / vitest | `Test Files 5 passed (5)` · `Tests 111 passed \| 4 skipped (115)` |
+| **api / vitest — `sim-gateway.spec.ts`** | **`Test Files 1 passed (1)` · `Tests 18 passed (18)`** |
+| api / vitest — the four gateway/contract suites together | `Test Files 4 passed (4)` · `Tests 43 passed (43)` |
+
+`typecheck` **9 successful, 9 total**. `lint` **7 successful, 7 total**, exit 0. `prettier --check .`
+**"All matched files use Prettier code style!"** `verify-rollbacks --files-only` — **every one of 84
+migrations has a rollback file**, and both new ones state what rolling back *means*, including that
+`20260929000200` must be run **before** `20260929000100` because the functions reference the tables.
+
+#### WHERE THIS STOPPED, and what reaches what
+
+**Parts A, B, C and D are complete.** Part B ran through **D5**, so the stop rule's condition is
+satisfied: **nothing here is a table with no consumer.**
+
+| What exists | What reaches it |
+| --- | --- |
+| `sim_personas`, `sim_scenarios` | `submit/approve/reject_sim_content`, exercised by 5 tests |
+| `sim_sessions`, `sim_turns` | `start_sim_session`, `record_sim_turn` via the **deployed Edge Function** over HTTP |
+| `sim_coach_analyses` | `record_sim_coach_analysis` via the gateway's `ai_coach` flow |
+| the coach contract | validated **twice** — in Zod inside the gateway, and again in the database, because a future caller that is not the gateway cannot skip the second |
+
+**What is NOT reached by an app screen: all of it.** There is no AI Doctor UI in `apps/field`, and
+this session did not build one — the brief did not ask for it and `AI-SPEC.md` already records the
+screen as DOES NOT EXIST. **So the §56 status of AI Doctor is UNVERIFIED**, exactly as `product_qa`'s
+was after W1-B: built, tested, reached by a test rather than by a rep.
+
+**Two things a reader should not conclude.** The gateway still answers through a **stub**, so nothing
+here is evidence that any model works — the doctor's every reply literally says so. And every number
+above is from **this machine's local stack**; there is still no handset result anywhere in this
+repository and no result of any kind against a hosted Supabase project.

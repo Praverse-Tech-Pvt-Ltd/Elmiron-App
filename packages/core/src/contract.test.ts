@@ -30,6 +30,12 @@ import {
   detectPatientSignals,
 } from './field/gateway/guardrails.js';
 import { API_PATHS } from './field/endpoints.js';
+import {
+  SIM_COACH_DIMENSIONS,
+  SimCoachAnalysisSchema,
+  SimCoachFindingSchema,
+  SimSessionSchema,
+} from './field/simulation.js';
 
 /**
  * These are contract guards, not unit tests. Each one fails if someone later
@@ -279,6 +285,60 @@ describe('route wiring — W1-A B1', () => {
     // that choice, so removing it is a decision rather than an oversight.
     expect(declared).not.toContain(`/rpc/${AI_RPC.aiBeginRequest}`);
     expect(declared).not.toContain(`/rpc/${AI_RPC.aiCompleteRequest}`);
+  });
+});
+
+describe('AI Doctor (W1-D) — a practice score is not a leaderboard', () => {
+  it('carries no team, cohort, rank, percentile or comparison field', () => {
+    // `C27` permits a score on a PRACTICE session, visible to the MR and the company admin. What it
+    // does not permit is a manager surface or a team average -- and the cheapest way to get one by
+    // accident is a field that invites a GROUP BY. Asserted by name so adding one is a red test.
+    const forbidden =
+      /(team|cohort|rank|percentile|average|median|peer|comparison|leaderboard|position)/i;
+    const offenders = Object.keys(SimCoachAnalysisSchema.shape).filter((k) => forbidden.test(k));
+    expect(offenders).toEqual([]);
+  });
+
+  it('a session carries no score at all — the score lives on the analysis', () => {
+    // Two places to read a score from is one place for them to disagree.
+    const scoreish = /(score|grade|rating|rank)/i;
+    expect(Object.keys(SimSessionSchema.shape).filter((k) => scoreish.test(k))).toEqual([]);
+  });
+
+  it('every coach finding must cite a turn — an unciteable criticism is not feedback', () => {
+    const uncited = { dimension: 'opening', title: 'T', detail: 'D' };
+    expect(SimCoachFindingSchema.safeParse(uncited).success).toBe(false);
+    expect(SimCoachFindingSchema.safeParse({ ...uncited, turnIndex: 1 }).success).toBe(true);
+  });
+
+  it('the five dimensions are a closed set', () => {
+    // If a model could invent a dimension, two analyses would not be comparable and no screen could
+    // label them -- the same reason `ai_complete_request` refuses an invented flag.
+    expect([...SIM_COACH_DIMENSIONS]).toEqual([
+      'opening',
+      'product_knowledge',
+      'objection_handling',
+      'communication',
+      'closing',
+    ]);
+  });
+
+  it('a score outside 0-100 is refused, both ends', () => {
+    const base = {
+      overallScore: 50,
+      dimensionScores: {
+        opening: 1,
+        product_knowledge: 1,
+        objection_handling: 1,
+        communication: 1,
+        closing: 1,
+      },
+    };
+    expect(SimCoachAnalysisSchema.shape.overallScore.safeParse(-1).success).toBe(false);
+    expect(SimCoachAnalysisSchema.shape.overallScore.safeParse(101).success).toBe(false);
+    expect(SimCoachAnalysisSchema.shape.overallScore.safeParse(base.overallScore).success).toBe(
+      true,
+    );
   });
 });
 
