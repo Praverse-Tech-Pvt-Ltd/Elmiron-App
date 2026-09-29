@@ -20809,3 +20809,98 @@ the local fixture database at `192.168.1.15:54321` only.
 No code changed. This commit is `PROJECT-OVERVIEW.md` only. Nothing under `services`,
 `packages/core`, migrations or the seed script changed. No build was installed. Coaching stays
 hidden.
+
+### FE-D11 — check-in indoors, away from the seeded clinic (read-only)
+
+**29 September 2026, branch `fe-d10-sweep`**, PR #10 against `main`, **not merged**. PR #10
+carries the FE-D10 record and this one. No code changed, and nothing was run on a device. The
+findings are also in `docs/demo-path-2026-10-01.md`, in a new section "Check-in indoors, away from
+the seeded clinic (FE-D11)".
+
+#### 1 — The timeout
+
+- **10 seconds.** `FIX_TIMEOUT_MS = 10_000` (`apps/field/src/capture/location.ts:42`), raced
+  against `getCurrentPositionAsync` (`:69-72`). A timeout becomes `{ kind: 'unavailable', reason:
+  'The phone could not find your position in time.' }` (`:74-76`). Before that,
+  `requestForegroundPermissionsAsync` (`:66`) answers at once when the permission is already
+  granted.
+- **A network or Wi-Fi fix is accepted.** `Accuracy.Balanced` (`location.ts:70`) maps to the fused
+  provider's `PRIORITY_BALANCED_POWER_ACCURACY` (expo-location 57.0.14,
+  `LocationHelpers.kt:126`), which uses Wi-Fi and cell as well as GPS. Nothing on the client
+  filters by accuracy.
+- **What the rep sees on a timeout:**
+  - `app/visit/[id].tsx:390-394` passes the outcome to `blockedReason`, which appends the remedy
+    (`src/capture/visit.ts:125-126`).
+  - `VisitScreen` renders it as an **`attention`** banner: amber, `#7A5510` edge on `#F7EFDD`
+    (`packages/ui/src/VisitScreen.tsx:279-303`).
+  - The banner reads **"This check-in cannot be sent yet"**, then **"The phone could not find your
+    position in time. Move somewhere with a clearer view of the sky and press again."**
+  - Nothing is sent or queued.
+  - **They can retry.** "I am here — check in" stays, and each press is another 10 s.
+  - Seen on the emulator in FE-D10: three presses answered this way before a mock fix was
+    injected.
+
+#### 2 — A valid fix, 5 km from the clinic
+
+- **Accepted, with a flag that is recorded but never shown.**
+- **Server.** `record_check_in` is last redefined in
+  `services/api/supabase/migrations/20260911000300_check_in_starts_the_visit.sql:20-121`:
+  - it computes `distance_metres` to the visit's clinic (`:65-68`);
+  - it sets `geofence_status` to `inside` when that is within `coalesce(geofence_radius_metres,
+    150)`, and to `outside` otherwise (`:70-74`);
+  - it inserts both with the check-in (`:76-82`);
+  - **it refuses nothing on distance.** Its only refusals are authentication, ownership (`42501`)
+    and the shift window (`45003`, `:57-61`);
+  - the visit becomes `in_progress` "whatever `geofence_status` says" (`:108-117`). Whether an
+    `outside` check-in should start a visit is registered there as an open product question;
+  - `accuracy_metres` is stored but does not enter the decision (FE-D3 A2).
+- **Client.** An accepted check-in re-pulls (`app/visit/[id].tsx:442`). The screen then shows the
+  stage label **"You are checked in"** (`VisitScreen.tsx:156`) and "Checked in HH:MM".
+  - Nothing in `apps/field` or `packages/ui` reads `geofenceStatus` or
+    `distanceFromClinicMetres`: `git grep` finds them only in `packages/core`'s schemas.
+  - **So an off-site check-in looks exactly like an on-site one.** The same holds offline:
+    **"Checked in — waiting to send"** (`VisitScreen.tsx:173`), and "Saved on this phone. It will
+    send by itself when you have signal — nothing is lost." (`app/visit/[id].tsx:462`).
+- **Refusals, for completeness.** A `45003` shows a **`critical`** (red) "That was refused"
+  (`app/visit/[id].tsx:447`), with "This was recorded outside your territory's working hours. If
+  the hours are wrong, your manager can change them." (`src/sync/explanation.ts:80-81`). The seed's
+  hours are 04:00–23:59 IST, every day (`services/api/scripts/seed-day.mjs:300-304`).
+- **What a manager could see as "off-site":**
+  - **the data exists:** `check_ins.geofence_status = 'outside'` and
+    `distance_from_clinic_metres`;
+  - **a manager can read it:** row-level security allows it (`20260811000400_rls_policies.sql:236-237`,
+    `mr_id in (select public.visible_user_ids())`, plus the restrictive tenant boundary from
+    `20260922000300_tenant_boundary_direct_tables.sql:54-59`);
+  - **no product surface shows it:** `apps/console` has no visits or check-in page, and `git
+    grep` finds neither field in it. Today a manager sees "off-site" only by querying.
+- **The seeded clinics:** all three are at **18.5204, 73.8567** (`seed-day.mjs:343`), with no
+  `geofence_radius_metres`, so the radius is 150 m. A demo room more than 150 m away is `outside`
+  for every visit.
+
+#### 3 — Demo options (not chosen; the operator decides)
+
+1. **Demo it as it really behaves, and say so.** It will likely be accepted indoors on a Wi-Fi fix
+   and look normal, while being recorded `outside`.
+   - **Cost:** the phone gives no signal of it, so the presenter must say it, and must not call
+     check-in "geofence-verified".
+   - Rehearse the 10 s timeout in the room.
+2. **Ask the backend owner whether the seed can take the clinic's coordinates** (their script; not
+   edited).
+   - **Cost:** their time before Thursday, plus the re-seed Thursday needs anyway.
+   - **Buys:** a truthful `inside` row. It changes nothing on the phone.
+3. **Show the recorded row on the laptop**, with a read-only query against the local database.
+   - **Cost:** a step off the phone, and a query prepared in advance.
+   - **Buys:** the only visible proof today that the server judged the position.
+4. **Check in before the demo**, where the fix is good.
+   - **Cost:** the live check-in is lost, and it is still `outside` if the spot is more than 150 m
+     from the seeded point.
+   - Skipping check-in entirely is not an option: consent, samples, the voice note and check-out
+     all need a checked-in visit.
+5. **Listed as not honest:** a mock location on the demo phone. It fabricates the position the
+   product records, and it is an install.
+
+#### Boundary
+
+No code changed. This commit is `docs/demo-path-2026-10-01.md` and `PROJECT-OVERVIEW.md` only. Nothing
+under `services`, `packages/core`, migrations or the seed script changed: they were read, not
+edited. No build was installed. Nothing was deleted.
