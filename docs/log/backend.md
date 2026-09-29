@@ -718,3 +718,25 @@ the report now names **both** spec files and reads `expected: 7, skipped: 0, une
 body, a stale database, a stale knowledge graph, and now a stale test report. Recorded in
 `docs/gotchas.md` as the general rule: **when a check reads something it did not just produce, ask
 what produced it and when.**
+
+#### And the first CI run of the browser suite failed, in a way only CI could show
+
+**`Timed out waiting 120000ms from config.webServer`.** Not a deadlock, not a defect in the screens
+— `next dev` on a cold runner with no `.next` cache has to compile the route before it can answer,
+and that is neither fast nor bounded.
+
+**Raising the timeout would have moved the failure rather than removed it.** Dev mode compiles every
+*further* route on first navigation, so the 60-second per-test timeout was the next thing in line.
+
+**CI now builds and serves instead: `next build && next start`.** That is safe here for a reason
+that can be checked rather than assumed — `next build` reports **every route as `ƒ (Dynamic)`**,
+because each carries `export const dynamic = 'force-dynamic'` and `sign-in` is a client component,
+so nothing is prerendered and the build never reaches for a database.
+
+**Verified locally through the CI path** (`CI=true`, so the config takes the build-and-serve branch):
+**7 passed**. The per-test times also fell — 9.9s to 5.4s on the longest, 2.2s to 0.8s on the
+shortest — which is the on-demand compilation that was never being measured, now absent.
+
+**The general point, and it is the one this session keeps making: a check that has only ever run on
+one machine has only ever been measured on one machine.** The browser suite passed locally seven
+times before CI ran it once and found something local runs structurally could not.

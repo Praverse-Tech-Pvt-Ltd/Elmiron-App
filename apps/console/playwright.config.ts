@@ -18,6 +18,9 @@ import { defineConfig, devices } from '@playwright/test';
  * **`reuseExistingServer` is on for local runs only.** A developer usually already has `next dev`
  * up; starting a second one on the same port fails and the failure looks like a test failure.
  */
+/** Set by GitHub Actions, and by `ci-local.mjs` for the steps it derives from `ci.yml`. */
+const isCI = process.env['CI'] !== undefined && process.env['CI'] !== '';
+
 export default defineConfig({
   testDir: './e2e',
   // One worker. The specs sign in, approve and start sessions against ONE local database, and two
@@ -44,11 +47,23 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    command: 'pnpm dev',
+    // **CI builds and serves; a developer's machine uses `next dev`.**
+    //
+    // The first CI run of this suite failed with `Timed out waiting 120000ms from
+    // config.webServer`. `next dev` on a cold runner with no `.next` cache must compile the route
+    // before it can answer, which is neither fast nor bounded — and dev mode then compiles every
+    // FURTHER route on first navigation, so the 60-second per-test timeout would have been the
+    // next thing to fail. Raising the timeout would have moved the failure, not removed it.
+    //
+    // `next build` is safe here for a specific, checkable reason: **every route is `ƒ (Dynamic)`**
+    // — each carries `export const dynamic = 'force-dynamic'`, and `sign-in` is a client component
+    // — so nothing is prerendered and the build never reaches for a database.
+    command: isCI ? 'pnpm build && pnpm start' : 'pnpm dev',
     url: 'http://127.0.0.1:3100/sign-in',
     // Reuse a developer's already-running `next dev`; never in CI, where reusing something
     // would mean reusing a server this job did not start.
-    reuseExistingServer: !process.env['CI'],
-    timeout: 120_000,
+    reuseExistingServer: !isCI,
+    // The build happens inside this window in CI, so it is generous on purpose.
+    timeout: isCI ? 300_000 : 120_000,
   },
 });
