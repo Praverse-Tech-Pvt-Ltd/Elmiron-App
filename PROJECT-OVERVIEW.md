@@ -22123,3 +22123,30 @@ strongest local evidence this project can produce, and **it is still not CI.** `
 everything in this section are unpushed, no workflow has judged them, and the last CI verdict on this
 branch is a red one on a commit whose defects are now fixed. **That gap closes when the network
 does.**
+
+---
+
+## Where the phase log continues, from 29 September 2026 — `BE-W120`
+
+**This index is deliberately short and stable.** It changes only when a track is added, so two
+sessions cannot conflict in it.
+
+| Track | Appends to |
+| --- | --- |
+| Backend / AI platform | **`docs/log/backend.md`** — starts at **W1-F** |
+| Frontend / field app | **`docs/log/frontend.md`** |
+
+**Everything above this line stays here.** Nothing moved, so no citation anywhere in the repository
+breaks, and this file remains the entry point and remains append-only.
+
+**Why.** Both tracks appended here, and **every conflict observed on 28 September — four in one
+day — was in this file or `.ai-collab/decisions.md`.** A conflicting pull request gets **no CI run
+at all**, because GitHub cannot build `refs/pull/N/merge`; so a conflict in a *log file* was
+silently removing PR #2's verification. `docs/blocked-on-you.md` is **not** split: it is
+operator-facing, one voice is the point, and it is appended to far less often.
+
+**What this does not fix:** conflicts in shared **code**, and the `C20` id collision — which needed
+per-track *prefixes* and got them (`BE-C3`). Two problems, two fixes.
+
+**What it costs:** a reader must now interleave two dated files to reconstruct a week. The
+interleaving in this file is how the racing of two tracks was visible, and that is no longer free.

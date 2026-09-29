@@ -1694,3 +1694,97 @@ branch**, and this file is on `worktree-ai-platform-phase-a`. GitHub will not ru
 for dispatch — until it is on `main`. **So B3's protection is gated on B2's merge**, which is itself
 an argument for B2 that the FOR paragraph above does not make: the fix for the silent-CI problem
 cannot be switched on while the problem is happening.
+
+---
+
+## W1-F Part C — running one practice session, start to finish, without an engineer
+
+**Read this first, because it changes what the rest of the list means.** Until today, **steps 3 to 7
+below were impossible for anybody**. The tables existed, the AI Doctor worked end to end, and the
+one thing nobody could do was create a doctor for a rep to practise against. That is now a screen.
+
+**One step still needs an engineer, and it is named rather than hidden: step 2.** Everything else is
+a form.
+
+### What you need before you start
+
+* **Two admin accounts, belonging to two different people.** Not one person with two logins. The
+  database refuses an approval by the person who wrote or submitted the thing, and there is no way
+  around it from any screen.
+* **One rep account** in the same company.
+* The console, signed in.
+
+### The checklist
+
+1. **Decide whether AI is on for your company.** Practice is behind a feature flag. If it is off,
+   step 8 answers *"this feature is not enabled"* and nothing else in the list is wrong.
+
+2. **⚠ ENGINEER NEEDED — the practice prompt.** Somebody has to store the instructions the
+   practice doctor is given. **There is no screen for this today** (`BE-W122`, half a day of work),
+   so an engineer writes it directly into the database and a second admin approves it there. Until
+   that exists, ask your engineer for *"an approved `ai_doctor` prompt version"* once, per company.
+   It is a one-off, not a per-session step.
+
+3. **Admin 1 → Practice doctors → "New practice doctor".** Fill in four things:
+   * **Name shown to the rep** — a label such as *"Dr A. Sharma (practice)"*.
+     **Never a real doctor's name.** No rule anywhere can check this. This step is the only place it
+     is checked at all, by you.
+   * **Specialty.**
+   * **How they behave** — receptive, sceptical, rushed or hostile.
+   * **Brief** — what this doctor knows and cares about.
+
+   Press **Save draft**. It saves as a *draft*. No rep can reach it.
+
+4. **Admin 1 → the same page, the card for that doctor → "Submit for review".**
+
+5. **Admin 2 signs in → the same card → type an attestation → "Approve".**
+   The attestation is a sentence saying what you checked. It is stored and it is not optional.
+   **Admin 1 will not see an Approve button at all** — the screen tells them why. That is the rule,
+   not a fault.
+
+6. **Admin 1 → "New practice scenario".** Choose the doctor you just approved, then:
+   * **Title.**
+   * **What the rep should achieve.**
+   * **The objection the doctor will raise** — this is what the practice is actually for.
+   * **Product** — optional. **If you choose one, you must also choose a market.** One country's
+     promotional rules never apply everywhere, and the form will not let you save without it.
+
+   **Save draft**, then **Submit for review**.
+
+7. **Admin 2 → approve the scenario**, the same way as step 5.
+
+8. **The rep opens practice in the field app and starts the scenario.** Before step 7 this refuses
+   with *"scenario is draft, not approved"*. After it, it starts.
+
+### What the rep will actually see today, with decision `#5` still open
+
+**No model is called, and the screen does not pretend one was.** Every reply from the practice
+doctor is the same sentence:
+
+> `[PRACTICE STUB - no AI provider is configured; decision #5 is open, so no model was called]`
+
+and every coaching score is **0**.
+
+**That is a deliberate choice, not a bug.** A stub that returned plausible conversation would be the
+most dangerous thing in this system — somebody would demo it, and nobody downstream would be able to
+tell it apart from a real model. A score of 72 would be read as a judgement of a real person's
+performance. So the stub is unmistakable and the scores are zero.
+
+**Everything except the words is real**: the session is created, the turns are stored in order, the
+audit trail is written, the rep's own scores stay visible to the rep and the company admin only, and
+no manager sees a team average. **Answering `#5` swaps the words and nothing else.**
+
+### Who writes the two prompt texts
+
+There are exactly two, and **they are different jobs**:
+
+| | **The practice doctor's prompt** | **The coach's prompt** |
+| --- | --- | --- |
+| What it controls | how the doctor behaves in character, what they will and will not concede, how hard they push | what the coaching looks at, and the words it uses back to the rep |
+| Who should write it | **your sales training lead**, with a medical person reading it | **your sales training lead**, alone |
+| Why not an engineer | an engineer does not know what a real urologist says at minute four of a cold call | the five things it scores are a training judgement, not a technical one |
+| Why not a model | `C24`: the never-born-approved rule. A model may draft it; **a second human approves it**, and the approval is stored with their name |
+| The hard limit | **neither prompt may contain a product claim, an indication or prescribing information.** Those are regulated promotional content and must come from you, from an approved label (`#7`). The model must never be the source of one |
+
+**An engineer's only part is step 2 — storing the text somebody else wrote.** Once `BE-W122` ships,
+even that is a form.

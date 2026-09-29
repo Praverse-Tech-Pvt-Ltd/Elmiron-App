@@ -3729,3 +3729,54 @@ people pass `--no-verify` to.*
 
 > **Before trusting a green, name the state it ran against — the bundle, the file, the database —
 > and ask whether CI will have the same one. If the answer is "probably", it is not evidence.**
+
+---
+
+## 29 September 2026 — a pure function in a `'use client'` module is not a function on the server
+
+`/practice` typechecked, linted, and passed 24 render tests. The first request with a real cookie
+returned **500**:
+
+> Attempted to call `simPersonaRow()` from the server but `simPersonaRow` is on the client. It's not
+> possible to invoke a client function from the server.
+
+`simPersonaRow` is pure — it takes a row and returns a row. It lived in `sim-content.tsx`, which
+starts with `'use client'`, and **a `'use client'` module's exports are client *references*, not
+values.** The Server Component that imported it got a proxy, and calling it threw at request time.
+
+**Why nothing caught it.** `tsc` sees a function with the right type, because the boundary is a
+build-time convention TypeScript does not model. `eslint` had no rule for it. The render tests
+import the module *as a client*, which is the one context where it works. **Nothing in the local
+checks requests a page**, and requesting a page is the only thing that fails.
+
+**The fix:** the pure part moved to `sim-content-row.ts`, with no directive, so both sides can call
+it. The rule generalises:
+
+> **Put pure helpers a page will call in a module with no `'use client'` directive, even when only
+> client components use them today.** The directive is about *who may execute this module*, not
+> about where the code happens to sit.
+
+**And the wider one, which this repository keeps re-learning:** this is the "built and never called"
+failure in its exact shape. Everything was green; nothing had requested the page. **A green suite
+tells you what the suite exercised, and a page nobody fetched is not exercised.**
+
+---
+
+## 29 September 2026 — a check a page can satisfy by accident is not a check
+
+The cross-tenant assertion for `/practice` looked for `"Dr A. Sharma (practice)"` in the HTML served
+to an admin of a *different* company, and expected it to be absent. It was present, which looked
+like a tenancy leak.
+
+It was not. That exact string is **example text inside the form's own caution** — *"Use a label such
+as 'Dr A. Sharma (practice)'"* — so the check was matching static copy that every visitor is served,
+and would have failed identically against an empty database.
+
+The fix was to assert on a name unique to that run (`Dr Practice <run-id> (practice)`), which no
+page can contain unless a row put it there.
+
+> **Before believing a negative assertion, ask what else could satisfy it.** A string that appears
+> in the page's own copy, a default, a placeholder, an error page — any of these makes
+> `expect(html).not.toContain(x)` a coin toss. **Assert on something only the thing under test could
+> have produced**, and prefer a value minted by the run over a literal you also wrote into the
+> source.

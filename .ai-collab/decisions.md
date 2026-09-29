@@ -2586,3 +2586,25 @@ three places on purpose:
 `COMPLETION-PLAN.md`, and they are **already** per-track by prefix, so the same collision cannot
 happen to them. `BE-W118` stays open for the CI half of its root cause — two tracks appending to the
 same documents — which `W1-C` Part B addresses separately.
+
+---
+
+## Where new decisions go, from 29 September 2026 — `BE-W120`
+
+**This index is the only part of this file that is meant to stay short and stable.** It changes only
+when a track is added, so two sessions cannot conflict in it.
+
+| Track | Appends to |
+| --- | --- |
+| Backend / AI platform | **`.ai-collab/decisions-backend.md`** |
+| Frontend / field app | **`.ai-collab/decisions-frontend.md`** |
+
+**Everything above this line stays here, including `C1`–`C31`.** Nothing moved, so no citation
+breaks.
+
+**Why**, in one paragraph, so it is not re-litigated: both tracks appended here and to
+`PROJECT-OVERVIEW.md`, and **all four conflicts observed on 28 September were in those two files**.
+A conflicting pull request gets **no CI run at all** — GitHub cannot build `refs/pull/N/merge` — so
+a conflict in a *log file* was silently removing the branch's verification. It does **not** fix id
+collisions; `BE-C3`'s per-track prefixes did that, and `BE-W118` conflating the two is what made the
+`C20` renumbering a surprise.
