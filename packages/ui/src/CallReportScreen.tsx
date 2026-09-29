@@ -87,10 +87,6 @@ export const CallReportScreen = ({
       <Banner detail={failure.detail} title={failure.title} tone="critical" />
     )}
 
-    {sentNote === null ? null : (
-      <Banner detail={sentNote.detail} title={sentNote.title} tone="info" />
-    )}
-
     <Card>
       <BodyText>Every word here is yours.</BodyText>
       <Label muted>
@@ -125,8 +121,14 @@ export const CallReportScreen = ({
         One button, in one of two states. `Button`'s disabled variant requires a
         reason line — §05 — so the branch exists to supply it; rendering both would
         put two Send buttons on the screen.
+
+        FE-D12 item 3. A third state: once the report is sent (or saved to send by itself), the
+        button gives way to that outcome, where the rep's thumb is. It stayed enabled before, and a
+        second press made a second report of the same visit.
       */}
-      {summary.trim() === '' ? (
+      {sentNote !== null ? (
+        <Banner detail={sentNote.detail} title={sentNote.title} tone="info" />
+      ) : summary.trim() === '' ? (
         <Button
           disabled
           label="Send the report"
