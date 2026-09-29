@@ -271,3 +271,44 @@ is no screen for that table (`BE-W122`) and without an approved prompt the thing
 start. The prompt text identifies itself as a placeholder, and the approval goes through the real
 `draft → in_review → approved` transition with two different admins, because the table's four-eyes
 CHECK refuses anything else.
+
+#### The clean-database check refused this push — `BE-W124`
+
+**It worked.** `verify-clean-db.mjs` reset the database, ran what CI runs, and stopped the push on
+**1 failed of 976**. The wrapper reported exit 0 because of how the command was chained; the
+verdict line in the log is `PUSH REFUSED`. **An exit code is not a verdict** — the same lesson as
+every other entry in this log.
+
+**What failed, and it is not this commit.** `ai-control-plane.spec.ts` asserts that a feature with
+**no** `app_thresholds` row refuses `45011`. It got `null` — the call succeeded, so a flag was on.
+
+**The mechanism, established two-sidedly rather than guessed:**
+
+| Run | Result |
+| --- | --- |
+| `vitest run tests/ai-control-plane.spec.ts` **alone** | **15 passed** |
+| the same file **with `ai-gateway.spec.ts` and `sim-gateway.spec.ts`** | **fails**, `no flag: expected null to be '45011'` |
+
+`ai-gateway.spec.ts` and `sim-gateway.spec.ts` **must commit** `ai_feature_enabled:*` globally,
+because the Edge Function runs out of process and cannot see a transaction. While one of them holds
+its flag `true`, the control-plane suite's absence assertion sees it.
+
+**Why it is intermittent rather than always red, which is the part worth understanding.**
+`app_thresholds` is append-only, so the gateway suites' `afterAll` "revert" appends a **`false`**
+row rather than deleting. After that, the absence assertion passes again — **for the wrong reason**:
+it is now reading a row that says off, not the absence of a row. The failure window is only the
+gateway suite's true-window. **CI has been lucky, not correct.**
+
+**This suite's own header claims the property in one direction only** — *"Flags and limits are
+`app_thresholds` rows written as the owner inside that transaction, so no other suite ever sees
+them."* That is true of what it writes and says nothing about what it reads. The rows it reads are
+somebody else's.
+
+**Not fixed here, on the operator's instruction, and the reasoning is sound**: the failure exists on
+the parent commit too — the one CI passed — so it is not this commit's to carry, and none of the
+four available fixes is free. They are written out in `BE-W124`. The root cause is that flags are
+global until `BE-W106` gives them an organisation.
+
+**What this costs until it is fixed:** every full-suite run has a chance of one red for a reason
+that has nothing to do with the change under test, and `verify-clean-db` will refuse those pushes.
+**That is the correct behaviour of the gate and the wrong behaviour of the suite.**

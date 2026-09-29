@@ -3822,3 +3822,32 @@ The related trap: **new test files are not covered by anything unless something 
 `tsconfig.json` included `src/**` only and `lint` was `eslint src`, so the new spec and the
 Playwright config were typechecked and linted by nothing until both were widened. **A test file that
 is not typechecked is a test file that silently rots.**
+
+---
+
+## 29 September 2026 — two suites cannot both own a global row, and append-only hides it
+
+`ai-control-plane.spec.ts` asserts that a feature with **no** `app_thresholds` row refuses `45011`.
+`ai-gateway.spec.ts` and `sim-gateway.spec.ts` must **commit** `ai_feature_enabled:*` rows
+globally, because the Edge Function runs out of process and cannot see a transaction. Run together,
+the absence assertion sees the other suite's flag and fails.
+
+The suite's own header says *"written as the owner inside that transaction, so no other suite ever
+sees them"* — **true of what it writes, silent about what it reads.**
+
+**The part that made it rare instead of always red.** `app_thresholds` is append-only, so the
+gateway suites revert by appending a `false` row rather than deleting. After they finish, the
+absence assertion passes again — **for the wrong reason**: it is reading a row that says off, not
+the absence of a row. So the test is wrong far more often than it is red.
+
+> **Isolation is a claim about reads as well as writes.** A suite that writes only inside a
+> transaction can still be broken by a row somebody else committed, and an append-only table makes
+> that breakage intermittent — the "cleanup" leaves a row behind that satisfies the assertion for a
+> different reason.
+
+Registered as `BE-W124`. Reproduce with:
+
+```bash
+pnpm --filter @fieldforce/api exec vitest run \
+  tests/ai-control-plane.spec.ts tests/ai-gateway.spec.ts tests/sim-gateway.spec.ts
+```
