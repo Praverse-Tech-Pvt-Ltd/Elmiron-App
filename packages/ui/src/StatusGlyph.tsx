@@ -20,7 +20,20 @@ import { tokens } from '@fieldforce/ui-tokens';
  * is what keeps that promise true everywhere instead of in the first component
  * somebody wrote.
  */
-export type StatusKind = 'success' | 'attention' | 'critical' | 'info' | 'offline' | 'recording';
+export type StatusKind =
+  | 'success'
+  | 'attention'
+  | 'critical'
+  | 'info'
+  | 'offline'
+  | 'recording'
+  /**
+   * FE-D8 1. Nothing has happened here and nothing is waiting: a stop not reached yet, called
+   * off, or where the doctor was not met — the row's words say which. A hollow SOLID ring, as B3
+   * draws an upcoming stop. It exists so those stops stop borrowing `offline`'s dashed ring,
+   * which means work on this phone waiting to send.
+   */
+  | 'neutral';
 
 export interface StatusGlyphProps {
   readonly kind: StatusKind;
@@ -35,6 +48,9 @@ export const STATUS_COLOR: Record<StatusKind, string> = {
   info: tokens.color.info,
   offline: tokens.color.textSecondary,
   recording: tokens.color.recording,
+  // B3 draws this ring in #C4C7BD, which is not in the palette; `border` is the palette's control
+  // edge and meets the non-text contrast bar on paper and card.
+  neutral: tokens.color.border,
 };
 
 export const STATUS_FILL: Record<StatusKind, string> = {
@@ -44,6 +60,7 @@ export const STATUS_FILL: Record<StatusKind, string> = {
   info: tokens.color.infoFill,
   offline: tokens.color.offlineFill,
   recording: '#F6EDE9',
+  neutral: tokens.color.surface,
 };
 
 /** The character for each kind. `offline` and `recording` are drawn, not typed. */
@@ -54,6 +71,7 @@ const MARK: Record<StatusKind, string> = {
   info: 'i',
   offline: '',
   recording: '',
+  neutral: '',
 };
 
 const styles = StyleSheet.create({
@@ -74,6 +92,7 @@ const styles = StyleSheet.create({
   mark: { fontWeight: '700', textAlign: 'center' },
   dot: { borderRadius: tokens.radius.pill },
   ring: { borderRadius: tokens.radius.pill, borderStyle: 'dashed' },
+  hollow: { borderRadius: tokens.radius.pill, borderStyle: 'solid' },
 });
 
 export const StatusGlyph = ({ kind, large = false }: StatusGlyphProps): ReactNode => {
@@ -86,6 +105,16 @@ export const StatusGlyph = ({ kind, large = false }: StatusGlyphProps): ReactNod
         accessibilityElementsHidden
         importantForAccessibility="no"
         style={[styles.ring, { width: size, height: size, borderWidth: 1.8, borderColor: color }]}
+      />
+    );
+  }
+
+  if (kind === 'neutral') {
+    return (
+      <View
+        accessibilityElementsHidden
+        importantForAccessibility="no"
+        style={[styles.hollow, { width: size, height: size, borderWidth: 1.6, borderColor: color }]}
       />
     );
   }

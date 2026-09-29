@@ -76,12 +76,17 @@ const styles = StyleSheet.create({
 /**
  * `cancelled` is a state, not a failure: a visit called off is a normal thing that
  * happens to a plan, and §02 forbids dressing a normal state as an error.
+ *
+ * FE-D8 1. **None of these is `offline`.** `offline` is the dashed "saved on phone" mark —
+ * work on this phone waiting to send — and a stop not reached, called off or not met has
+ * nothing waiting. Drawing them with it told the rep their upcoming doctors were in the queue.
+ * `neutral` is B3's hollow ring on a plain row.
  */
 const STATUS = {
   done: 'success',
   current: 'info',
-  upcoming: 'offline',
-  cancelled: 'offline',
+  upcoming: 'neutral',
+  cancelled: 'neutral',
   /**
    * MR-12 D3. **Not `success` and not `critical`.**
    *
@@ -93,7 +98,7 @@ const STATUS = {
    * Neutral, with the reason carried in the row's detail text, which is where a manager
    * reading the plan actually learns what happened.
    */
-  not_met: 'offline',
+  not_met: 'neutral',
 } as const;
 
 export const BeatPlanScreen = ({
