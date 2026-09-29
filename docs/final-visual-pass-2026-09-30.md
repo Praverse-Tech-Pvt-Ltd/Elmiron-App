@@ -72,8 +72,8 @@ It was not measured.
 
 | # | Commit | Change |
 | --- | --- | --- |
-| V1 | see `PROJECT-OVERVIEW.md` FE-D12 | `Screen`: when scrolling, the top inset is on a fixed wrapper outside the `ScrollView`, so content clips below the status bar instead of passing under it |
-| V2 | 〃 | `Button`: the label is centred when it wraps |
-| V3 | 〃 | `Button`: the focus-ring wrapper keeps its reserved 6 dp, but outside the button's edge (negative margin), so a button lines up with the content around it |
-| V4 | 〃 | `VoiceNoteScreen`: with a captured, unsaved note the caption says "recorded · save it, or start again" |
-| V5 | 〃 | `SettingsScreen`: "Settings" uses `Title`, like every other screen title |
+| V1 | `5ae5b40` | `Screen`: when scrolling, the top inset is on a fixed wrapper outside the `ScrollView`, so content clips below the status bar instead of passing under it |
+| V2 | `a1c294e` | `Button`: the label is centred when it wraps |
+| V3 | `841c17d` | `Button`: the focus-ring wrapper keeps its reserved 6 dp, but outside the button's edge (a horizontal negative margin), so a button lines up with the content around it. The vertical spacing is unchanged |
+| V4 | `2a3b508` | `VoiceNoteScreen`: with a captured, unsaved note the caption says "recorded · save it, or start again" |
+| V5 | `9f44211` | `SettingsScreen`: "Settings" uses `Title`, like every other screen title |
