@@ -11,7 +11,7 @@ import {
   refusalForSqlState,
 } from '@fieldforce/core';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
-import { asOwner, asUser } from './auth.js';
+import { asOwner, asUser, withIdentityLock } from './auth.js';
 import type { ProfileLike } from './auth.js';
 import { seedFixtures } from './fixtures.js';
 import type { FixtureUser, FixtureWorld } from './fixtures.js';
@@ -62,20 +62,39 @@ const rpc = async <T = Record<string, unknown>>(
   return r.rows[0]?.result as T;
 };
 
+/**
+ * W1-D / `BE-W116` — reviewer creation is SERIALISED across worker processes.
+ *
+ * **The defect this closes.** Four spec files each create a second admin to satisfy four eyes, each
+ * inserting into `auth.users` and then `public.user_profiles`. Run concurrently, two of those
+ * transactions take locks on the shared index and FK pages in an order that can invert, and Postgres
+ * resolves it as `deadlock detected` — observed in `ai-product-qa.spec.ts` and `ai-control-plane`
+ * at roughly one run in two, registered as `BE-W116` in W1-B and left unfixed.
+ *
+ * **W1-D added a FOURTH such suite, which made it likelier rather than finding it.** Fixing it here
+ * is therefore not scope creep: this session increased the rate.
+ *
+ * **The fix is the one `tests/auth.ts` already made for identity bursts**, and it is a mechanism
+ * rather than a tuned constant: hold the same advisory lock that serialises `POST /admin/users`.
+ * At most one reviewer is created at a time across all workers, whatever the suite count — there is
+ * no number here for the author of the fifth suite to re-tune.
+ */
 const makeReviewer = async (client: Client): Promise<ProfileLike> => {
-  const id = randomUUID();
-  await asOwner(client, async () => {
-    await client.query(
-      `insert into auth.users (id, email, aud, role) values ($1, $2, 'authenticated', 'authenticated')`,
-      [id, `ai-reviewer-${id.slice(0, 8)}@example.test`],
-    );
-    await client.query(
-      `insert into public.user_profiles (id, full_name, role, territory_id, is_active, organisation_id)
-       values ($1, 'AI Reviewer', 'admin', null, true, $2)`,
-      [id, world.organisationId],
-    );
+  return withIdentityLock(async () => {
+    const id = randomUUID();
+    await asOwner(client, async () => {
+      await client.query(
+        `insert into auth.users (id, email, aud, role) values ($1, $2, 'authenticated', 'authenticated')`,
+        [id, `ai-reviewer-${id.slice(0, 8)}@example.test`],
+      );
+      await client.query(
+        `insert into public.user_profiles (id, full_name, role, territory_id, is_active, organisation_id)
+         values ($1, 'AI Reviewer', 'admin', null, true, $2)`,
+        [id, world.organisationId],
+      );
+    });
+    return { id, role: 'admin', territoryId: null, isActive: true };
   });
-  return { id, role: 'admin', territoryId: null, isActive: true };
 };
 
 /**
@@ -189,6 +208,21 @@ describe.skipIf(!reachable)(
         const reviewer = await makeReviewer(client);
         await setThreshold(client, 'ai_feature_enabled:product_qa', true);
         await approvedPrompt(client, reviewer);
+        // W1-D: assert the ABSENCE rather than rely on it.
+        //
+        // This case used to depend on no `ai_daily_requests_per_user` row existing anywhere in the
+        // database. `app_thresholds` is GLOBAL and append-only, so any suite that COMMITS one --
+        // and both gateway suites must, because an Edge Function reads on its own connection and
+        // cannot see an open transaction -- silently turned this refusal into a pass. It went
+        // unnoticed while only one such suite existed and became reliably fatal when a second
+        // arrived, which is the shape of a latent defect rather than a new one.
+        //
+        // Setting it to JSON null INSIDE this rolled-back transaction makes the case deterministic
+        // on any machine, whatever else is committed: `threshold_number` yields SQL NULL and
+        // `ai_begin_request` raises 45011 for the reason this test is about. Same fix as BE-W114's
+        // `onlyOurOverdueRows` -- push the pre-existing state out of the window rather than hope it
+        // is absent.
+        await setThreshold(client, 'ai_daily_requests_per_user', null);
         expect(
           await begin(client, world.users.puneMr),
           'no limit: never unlimited by default',

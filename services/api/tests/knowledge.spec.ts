@@ -9,7 +9,7 @@ import {
   SubmitKnowledgeVersionResponseSchema,
 } from '@fieldforce/core';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
-import { asOwner, asUser } from './auth.js';
+import { asOwner, asUser, withIdentityLock } from './auth.js';
 import type { ProfileLike } from './auth.js';
 import { seedFixtures } from './fixtures.js';
 import type { FixtureUser, FixtureWorld } from './fixtures.js';
@@ -62,20 +62,39 @@ const rpc = async <T = Record<string, unknown>>(
 };
 
 /** A second admin in the fixture organisation: the reviewer four-eyes requires. */
+/**
+ * W1-D / `BE-W116` — reviewer creation is SERIALISED across worker processes.
+ *
+ * **The defect this closes.** Four spec files each create a second admin to satisfy four eyes, each
+ * inserting into `auth.users` and then `public.user_profiles`. Run concurrently, two of those
+ * transactions take locks on the shared index and FK pages in an order that can invert, and Postgres
+ * resolves it as `deadlock detected` — observed in `ai-product-qa.spec.ts` and `ai-control-plane`
+ * at roughly one run in two, registered as `BE-W116` in W1-B and left unfixed.
+ *
+ * **W1-D added a FOURTH such suite, which made it likelier rather than finding it.** Fixing it here
+ * is therefore not scope creep: this session increased the rate.
+ *
+ * **The fix is the one `tests/auth.ts` already made for identity bursts**, and it is a mechanism
+ * rather than a tuned constant: hold the same advisory lock that serialises `POST /admin/users`.
+ * At most one reviewer is created at a time across all workers, whatever the suite count — there is
+ * no number here for the author of the fifth suite to re-tune.
+ */
 const makeReviewer = async (client: Client): Promise<ProfileLike> => {
-  const id = randomUUID();
-  await asOwner(client, async () => {
-    await client.query(
-      `insert into auth.users (id, email, aud, role) values ($1, $2, 'authenticated', 'authenticated')`,
-      [id, `reviewer-${id.slice(0, 8)}@example.test`],
-    );
-    await client.query(
-      `insert into public.user_profiles (id, full_name, role, territory_id, is_active, organisation_id)
-       values ($1, 'Reviewer Admin', 'admin', null, true, $2)`,
-      [id, world.organisationId],
-    );
+  return withIdentityLock(async () => {
+    const id = randomUUID();
+    await asOwner(client, async () => {
+      await client.query(
+        `insert into auth.users (id, email, aud, role) values ($1, $2, 'authenticated', 'authenticated')`,
+        [id, `reviewer-${id.slice(0, 8)}@example.test`],
+      );
+      await client.query(
+        `insert into public.user_profiles (id, full_name, role, territory_id, is_active, organisation_id)
+         values ($1, 'Reviewer Admin', 'admin', null, true, $2)`,
+        [id, world.organisationId],
+      );
+    });
+    return { id, role: 'admin', territoryId: null, isActive: true };
   });
-  return { id, role: 'admin', territoryId: null, isActive: true };
 };
 
 interface Scope {

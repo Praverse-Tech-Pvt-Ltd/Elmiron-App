@@ -7,7 +7,7 @@ import {
   StartSimSessionResponseSchema,
 } from '@fieldforce/core';
 import { requireDatabase, withClient } from './db.js';
-import { API_URL, asUser, signIn } from './auth.js';
+import { API_URL, asUser, signIn, withIdentityLock } from './auth.js';
 import type { ProfileLike } from './auth.js';
 import { seedFixtures } from './fixtures.js';
 import type { FixtureWorld } from './fixtures.js';
@@ -96,19 +96,38 @@ const setThreshold = async (
   );
 };
 
+/**
+ * W1-D / `BE-W116` — reviewer creation is SERIALISED across worker processes.
+ *
+ * **The defect this closes.** Four spec files each create a second admin to satisfy four eyes, each
+ * inserting into `auth.users` and then `public.user_profiles`. Run concurrently, two of those
+ * transactions take locks on the shared index and FK pages in an order that can invert, and Postgres
+ * resolves it as `deadlock detected` — observed in `ai-product-qa.spec.ts` and `ai-control-plane`
+ * at roughly one run in two, registered as `BE-W116` in W1-B and left unfixed.
+ *
+ * **W1-D added a FOURTH such suite, which made it likelier rather than finding it.** Fixing it here
+ * is therefore not scope creep: this session increased the rate.
+ *
+ * **The fix is the one `tests/auth.ts` already made for identity bursts**, and it is a mechanism
+ * rather than a tuned constant: hold the same advisory lock that serialises `POST /admin/users`.
+ * At most one reviewer is created at a time across all workers, whatever the suite count — there is
+ * no number here for the author of the fifth suite to re-tune.
+ */
 const makeReviewer = async (db: Client, organisationId: string): Promise<string> => {
-  const id = randomUUID();
-  await db.query(
-    `insert into auth.users (id, email, aud, role)
-     values ($1, $2, 'authenticated', 'authenticated')`,
-    [id, `sim-reviewer-${id.slice(0, 8)}@example.test`],
-  );
-  await db.query(
-    `insert into public.user_profiles (id, full_name, role, territory_id, is_active, organisation_id)
-     values ($1, 'Sim Reviewer', 'admin', null, true, $2)`,
-    [id, organisationId],
-  );
-  return id;
+  return withIdentityLock(async () => {
+    const id = randomUUID();
+    await db.query(
+      `insert into auth.users (id, email, aud, role)
+       values ($1, $2, 'authenticated', 'authenticated')`,
+      [id, `sim-reviewer-${id.slice(0, 8)}@example.test`],
+    );
+    await db.query(
+      `insert into public.user_profiles (id, full_name, role, territory_id, is_active, organisation_id)
+       values ($1, 'Sim Reviewer', 'admin', null, true, $2)`,
+      [id, organisationId],
+    );
+    return id;
+  });
 };
 
 /** An APPROVED prompt version for a feature, with the output schema name its flow requires. */
@@ -239,6 +258,25 @@ afterAll(async () => {
       'ai_feature_enabled:ai_coach',
       'false',
       `W1-D revert (${runId}). The flag returns to its shipped state: OFF.`,
+    );
+    // THE DAILY LIMIT MUST BE REVERTED TOO, and forgetting it broke another suite on CI.
+    //
+    // `ai_daily_requests_per_user` is a GLOBAL row and this suite COMMITS it, because the Edge
+    // Function reads from another connection and cannot see an open transaction. Leaving it set
+    // made `ai-control-plane.spec.ts`'s "never unlimited by default" case pass where it must
+    // refuse: that test asserts an UNSET limit raises 45011, and this suite had quietly set one.
+    //
+    // It went unnoticed locally because this machine's database already carried state from earlier
+    // sessions. CI starts clean, which is exactly why CI found it and the local run did not.
+    //
+    // `'null'::jsonb` rather than a number: `threshold() #>> '{}'` yields SQL NULL for it, which is
+    // what "no limit configured" means to `ai_begin_request`. The row cannot be DELETED -- the
+    // table is append-only by design -- so restoring an absence means asserting it.
+    await setThreshold(
+      db,
+      'ai_daily_requests_per_user',
+      'null',
+      `W1-D revert (${runId}). Restores the UNSET state: an unlimited allowance is never the default.`,
     );
   });
 });

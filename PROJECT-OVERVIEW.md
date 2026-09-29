@@ -21498,3 +21498,55 @@ was after W1-B: built, tested, reached by a test rather than by a rep.
 here is evidence that any model works — the doctor's every reply literally says so. And every number
 above is from **this machine's local stack**; there is still no handset result anywhere in this
 repository and no result of any kind against a hosted Supabase project.
+
+#### W1-D postscript — CI found three defects the local run could not, and BE-W116 is closed
+
+**The W1-D push was green on the static job and RED on the database job.** All three causes were
+mine, all three were caught by guards this repository already had, and **all three were invisible
+locally because this machine's database carried state from earlier sessions while CI starts clean.**
+
+| # | What broke | Why local passed |
+| --- | --- | --- |
+| 1 | `sim_content_before_insert` / `_before_update` left **`anon`-executable** — named by `rls.spec.ts` AND `privilege-posture.spec.ts` B1 | nothing local re-checks the grant population between runs |
+| 2 | my suite **leaked a committed global threshold** into `ai-control-plane.spec.ts`, turning its `45011` refusal into a pass | this database already had a limit row from earlier sessions |
+| 3 | **`BE-W116`** — the reviewer-creation deadlock, at `ai-product-qa.spec.ts:97` | it is one run in two, and the local run was the other one |
+
+**On (1).** `20260929000200` revoked the seven RPCs and forgot the two trigger functions, because a
+trigger function feels like something nobody calls — **it is callable by name, by anyone.** Neither
+is dangerous to invoke directly; both read trigger-only variables and error outside a trigger. **That
+is not the point.** The guard exists because the next un-revoked function might not be harmless, and
+*a posture that holds by luck is not a posture*. Fixed in a **new** migration, `20260929000300`,
+because `constraints.md` permits editing an applied one only under the MR-35 B3 exception whose first
+condition — that no database has applied it — is false here.
+
+**On (2), and it was LATENT rather than new.** `sim-gateway.spec.ts` must COMMIT
+`ai_daily_requests_per_user`, because an Edge Function reads on its own connection and cannot see an
+open transaction. `ai-control-plane.spec.ts` asserts that an **unset** limit raises `45011`, and a
+committed row makes it set. **`ai-gateway.spec.ts` has committed the same key since W1-B** — the
+collision was a race nobody had lost yet, and a second such suite made it reliably fatal.
+
+**The fix is at the source, because `services/api/vitest.config.ts` rejects tuned constants in as
+many words** — its own comment records `maxWorkers: 6` being re-tuned four times before the burst was
+removed at its source. So the parallelism was **not** capped. Instead that case now sets the
+threshold to JSON null **inside its own rolled-back transaction**, making it deterministic on any
+machine whatever else is committed. **Same fix as `BE-W114`'s `onlyOurOverdueRows`:** push the
+pre-existing state out of the window rather than hope it is absent.
+
+**On (3) — `BE-W116` is closed, and W1-D is why it had to be.** Four spec files each create a second
+admin for four eyes, each inserting `auth.users` then `user_profiles`; run concurrently, two invert
+their lock order. It was registered in W1-B at roughly one run in two and left unfixed — **and W1-D
+added a fourth such suite, which made it likelier rather than finding it. Fixing it here is therefore
+not scope creep: this session increased the rate.**
+
+The fix is the one `tests/auth.ts` already made for identity bursts: **hold the same advisory lock
+that serialises `POST /admin/users`.** At most one reviewer is created at a time across all workers,
+whatever the suite count — **there is no number for the author of the fifth suite to re-tune.**
+
+**Full API suite, one run, after the fixes: `Test Files 73 passed (73)` · `Tests 972 passed | 4
+skipped (976)`.** The run before it was 72 passed / 1 failed on `BE-W116`; the run before that failed
+on all three.
+
+**The lesson this session keeps re-learning, now three times over.** `BE-W119` was a stale bundle;
+the W1-C migration draft was a stale reading of a function; these three were stale database state.
+**Every one of them made a local green mean less than it appeared to, and in every case CI or a
+deliberate mutation was what said so.**
