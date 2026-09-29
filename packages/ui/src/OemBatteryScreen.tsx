@@ -52,6 +52,11 @@ export interface OemBatteryScreenProps {
    * Defaults to `false`. Shipping the asset is this flag plus a handler.
    */
   readonly videoAvailable?: boolean;
+  /**
+   * FE-D12 item 5. With no video, the control is hidden unless this is set, which brings back the
+   * disabled "not recorded yet" placeholder described above. Off by default.
+   */
+  readonly showPendingVideo?: boolean;
   readonly onWatchVideo?: () => void;
   readonly onContinue: () => void;
   readonly continueLabel?: string;
@@ -67,6 +72,7 @@ export const OemBatteryScreen = ({
   onToggleDone,
   notice = null,
   videoAvailable = false,
+  showPendingVideo = false,
   onWatchVideo,
   onContinue,
   continueLabel = 'Continue',
@@ -86,17 +92,25 @@ export const OemBatteryScreen = ({
 
     {notice === null ? null : <Banner tone="info" title={notice} />}
 
-    <PrimaryButton
-      label={videoAvailable ? 'Show me a 20-second video' : VIDEO_PENDING_LABEL}
-      disabled={!videoAvailable}
-      // The label already carries the fact; the reason line carries what happens
-      // next, so the disabled control is not a dead end. §05 requires the line and
-      // this one earns its place rather than repeating the label.
-      note="It will appear here once it has been recorded. The steps above work without it."
-      onPress={() => {
-        onWatchVideo?.();
-      }}
-    />
+    {/*
+      FE-D12 item 5. Hidden until a video exists. The disabled placeholder below was the largest
+      thing on the screen in a walkthrough, apologising for a missing asset. The path is kept
+      whole: `videoAvailable` renders the working button, and `showPendingVideo` brings the
+      disabled placeholder back.
+    */}
+    {!videoAvailable && !showPendingVideo ? null : (
+      <PrimaryButton
+        label={videoAvailable ? 'Show me a 20-second video' : VIDEO_PENDING_LABEL}
+        disabled={!videoAvailable}
+        // The label already carries the fact; the reason line carries what happens
+        // next, so the disabled control is not a dead end. §05 requires the line and
+        // this one earns its place rather than repeating the label.
+        note="It will appear here once it has been recorded. The steps above work without it."
+        onPress={() => {
+          onWatchVideo?.();
+        }}
+      />
+    )}
 
     {/*
       Always enabled. The MR may leave this screen with nothing marked done and
