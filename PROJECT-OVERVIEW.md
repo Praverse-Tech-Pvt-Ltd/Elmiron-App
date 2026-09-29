@@ -21550,3 +21550,182 @@ on all three.
 the W1-C migration draft was a stale reading of a function; these three were stale database state.
 **Every one of them made a local green mean less than it appeared to, and in every case CI or a
 deliberate mutation was what said so.**
+
+
+---
+
+### W1-E — clean database, clean grants
+
+**29 September 2026.** Checkout guard first: namespace `@fieldforce/core`, remote
+`Praverse-Tech-Pvt-Ltd/Elmiron-App`, `f34ceef` an ancestor of HEAD — **exit 0**, branch
+`worktree-ai-platform-phase-a`.
+
+#### Part A — the push is still blocked. BLOCKAGE, and not re-diagnosed.
+
+**`ac9ed20` remains stranded.** `git push` → *"Failed to connect to github.com port 443 after 21044
+ms"*. The diagnosis from the previous session stands and was not repeated: DNS resolves
+(`20.207.73.82`), `google.com` and `registry.npmjs.org` return 200, `githubstatus.com` reports **All
+Systems Operational**, and every GitHub route — HTTPS 443, `ssh.github.com:443`, `github.com:22` —
+times out. **GitHub is up; this machine cannot reach it.**
+
+**So A2 and A3 cannot be answered, and no CI result is claimed for any SHA.** The last CI result that
+exists is `4346511`'s, which was red on three defects — all three fixed in `ac9ed20` and verified
+locally, and verified again this session **on a database that was reset**.
+
+**A merge of `origin/main` could not be attempted either**, for the same reason. Everything below
+therefore rests on the `origin/main` last fetched at **10:28 IST today**, and that is stated wherever
+it matters rather than left implicit.
+
+#### Part B — the third staleness failure becomes a mechanism
+
+**All three of W1-D's defects were invisible locally because this machine's database carried state
+from earlier sessions while CI starts clean.** That was the third distinct staleness failure in one
+run of sessions, after `BE-W119`'s stale bundle and W1-C's stale reading of a function body.
+**Three failures of discipline is this repository's threshold for a mechanism.**
+
+**B1 — `scripts/verify-clean-db.mjs`, wired to `.githooks/pre-push`.** It does two things and only
+one of them is new:
+
+1. `pnpm db:reset` — **drops the database and re-applies every migration onto an empty one.**
+2. `node scripts/ci-local.mjs --with-db` — **the existing path, unchanged**, which derives its steps
+   by reading `.github/workflows/ci.yml`.
+
+**There is deliberately no second list of steps.** `ci-local.mjs` argues that case at length and a
+hand-kept parallel list has already drifted three times here — always in the direction of claiming
+more coverage than it has.
+
+**B2 — it gates the PUSH, not the commit, and the reason is in the repo already.**
+`.githooks/pre-commit` states it: *"a hook that costs minutes is a hook people pass `--no-verify` to,
+and a bypassed control is not a control."* A reset re-applies **85 migrations** and the database job
+then runs the whole API suite. A commit is cheap and frequent; **a push is the moment the work
+becomes somebody else's problem and the moment CI will judge it.**
+
+It **fails loudly** when the stack is unreachable rather than skipping — *a check that passes when it
+did not run is the inert control this repository keeps finding* — and it does **not** try to guess
+when it can be skipped, because any such heuristic would have skipped a TypeScript test file leaking
+a database row.
+
+**B3 — the positive control, same commit, same guard, opposite answers.** W1-D defect 1's shape was
+reproduced exactly: the revoke migration was moved aside, and the revoke applied **by hand** as an
+earlier session would have.
+
+| Run | `rls.spec.ts` |
+| --- | --- |
+| **DIRTY** — hand-fixed database, no migration performing the revoke | **`Tests 98 passed (98)`** — green |
+| **CLEAN** — `db reset`, migrations only | **`Tests 1 failed | 97 passed (98)`**, naming `sim_content_before_insert` |
+
+The leaked `ai_daily_requests_per_user` row planted alongside it also vanished in the reset, so the
+one mechanism addresses both shapes. Migration restored afterwards; `98 passed` again.
+
+**A correction to my own first attempt at B3, left visible.** I first planted the threshold row and
+expected the dirty run to *pass* — it **failed**. I had the direction backwards: a leaked limit makes
+a correct refusal test go red, which is a **false red**, not a false green. The demonstration B3 asks
+for — *dirty passes, clean catches* — is the grant case above, and that is why it was used.
+
+**B4 — `docs/gotchas.md` gains one entry with all three worked examples**, because the pattern is
+what generalises: *before trusting a green, name the state it ran against — the bundle, the file, the
+database — and ask whether CI will have the same one.* **The tell is that the result was better than
+it should have been.** Staleness rarely produces a red.
+
+#### Part C — grants, enumerated from the catalogue
+
+**C1 — 160 functions in `public`, enumerated from `pg_proc`**, not from any list anyone wrote:
+
+```sql
+select p.oid::regprocedure, p.prokind from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public';
+```
+
+**All 160 are `prokind = 'f'`. anon-executable: 0. PUBLIC-executable: 0.** That is the count
+**checked**, which is the number the brief asked for — the count *fixed* was two, and it is the less
+interesting figure.
+
+**C2 — why the guard did not catch it locally. Two reasons, and only one is Part B's.**
+
+1. **It was never run.** Before the W1-D push I ran the new suite and the suites I thought it
+   touched. `rls.spec.ts` and `privilege-posture.spec.ts` were not among them. **That is a
+   discipline failure, not a staleness one** — the guard worked perfectly the first time it was
+   asked, which was on CI.
+2. **Had it been run, the answer would have depended on the database.** B3 demonstrates exactly
+   that: the same guard, same commit, green on a dirty database and red on a clean one.
+
+**Part B's mechanism closes both**, and that is the argument for gating rather than remembering:
+`verify-clean-db.mjs` runs *everything CI runs* on a reset database, so neither "I did not run that
+one" nor "my database disagreed with CI's" survives it.
+
+**C3 — mutation on a clean database.** One function granted to `anon`:
+
+| | |
+| --- | --- |
+| mutant | `grant execute on function public.sim_content_before_insert() to anon` |
+| result | **2 suites failed** — `rls.spec.ts` *"fails the build if a new function is left anon-executable"* naming `sim_content_before_insert`, and `privilege-posture.spec.ts` B1 |
+| restored | **`Tests 104 passed (104)`** |
+
+#### Part D — the practice API, handed to the frontend
+
+**`docs/contract-requests.md` → CR-5.** All four calls with who may call them, the schema names in
+`packages/core`, every refusal with its SQLSTATE, and what a screen shows for each. Three are
+ordinary RPCs; one is the Edge Function. **No new transport, no new auth, no upload path.**
+
+**D2 — build the screen against the stub, do not ship it.** The reasoning rather than a preference:
+the contract will not move when `#5` is answered — swapping the stub for a real adapter is **one
+file**, and 18 tests pin the shapes — so **building early costs nothing if the contract holds**,
+while **shipping early costs the feature's credibility with the first reps who touch it**, because
+every stubbed reply is the same marker string. Build it behind a flag that ships off, the same shape
+as `C21`'s recording feature.
+
+**D3 — what is missing is content and two accounts, not engineering.** Eight items, none blocked by
+`#5`: a second admin (four eyes refuses every approval with one), a persona and a scenario each
+drafted and approved by the *other* admin, approved `ai_doctor` and `ai_coach` prompt versions with
+the right `outputSchemaName`, and three `app_thresholds` keys that all ship off or unset.
+**Steps 2–5 need a console screen that does not exist** — the knowledge approval screen is the
+working model, and building its persona/scenario equivalent is the obvious next piece.
+
+#### Part E — the merge question
+
+**E1 — the case against has NOT expired: today is 29 September and the demo is 1 October.** The
+recommendation is unchanged — **merge after the demo, un-draft now.**
+
+**What merging would involve, measured against the `origin/main` last fetched at 10:28 IST:**
+
+| | |
+| --- | --- |
+| Commits | **29** |
+| Migrations landing on `main` | **10** |
+| Diff | **80 files, 19,125 insertions, 7 deletions** |
+| `apps/field` runtime | **untouched** — only the two `jest.config.cjs` files |
+| Mergeable? | **UNKNOWN.** `gh pr view` is unreachable, and this branch has conflicted five times in three days |
+
+**What CI would run afterwards that it does not run today.** The workflow is the same — `ci.yml`
+fires on `push: branches: [main]`. **What changes is that two things stop being inert:**
+`pr-mergeable.yml` begins to run at all (its `schedule`, `push` and `workflow_dispatch` triggers all
+resolve against the **default branch**, so today it protects nothing), and CI begins running these
+ten migrations on every `main` push rather than only on this PR.
+
+**E2 — not merged.** That is the operator's.
+
+**E3 — until the merge, the manual check is the only protection.** `pr-mergeable.yml` is inert, and
+its own file says so at the top. The two commands are in that header and at the top of this brief.
+
+#### Counts, from each runner's own summary lines
+
+| Runner | Summary line |
+| --- | --- |
+| **api / vitest, full, on a RESET database** | **`Test Files 73 passed (73)`** · **`Tests 972 passed \| 4 skipped (976)`** |
+| api / vitest — `rls` + `privilege-posture`, after the C3 mutant was reverted | `Test Files 2 passed (2)` · `Tests 104 passed (104)` |
+| api / vitest — `rls.spec.ts`, dirty (B3) | `Tests 98 passed (98)` |
+| api / vitest — `rls.spec.ts`, clean (B3) | `Tests 1 failed \| 97 passed (98)` |
+
+`typecheck` **9 successful, 9 total**. `lint` **7 successful, 7 total**, exit 0. `prettier --check .`
+**"All matched files use Prettier code style!"**
+
+#### WHERE THIS STOPPED
+
+**Parts B, C, D and E are complete. Part A is a BLOCKAGE** — environmental, outside this session's
+control, and already diagnosed.
+
+**One thing a reader should not conclude.** The full API suite passing on a reset database is the
+strongest local evidence this project can produce, and **it is still not CI.** `ac9ed20` and
+everything in this section are unpushed, no workflow has judged them, and the last CI verdict on this
+branch is a red one on a commit whose defects are now fixed. **That gap closes when the network
+does.**

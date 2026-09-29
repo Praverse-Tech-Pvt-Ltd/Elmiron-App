@@ -3667,3 +3667,65 @@ redefined by a LATER migration than the one you found — `record_check_in` is d
 passed, and the loss would have surfaced on a rep's phone in an area with no signal. A test asserting
 idempotency was added in the same session **because nothing else in the suite would have noticed its
 absence.**
+
+### STALE STATE: a local green means nothing until the state it ran against is known
+
+**One class, three worked examples, all in the same run of sessions (W1-B → W1-D).** They look
+unrelated — a server, a file, a database — and they are the same failure: **something the run
+depended on was left over from earlier, so the result described the machine rather than the code.**
+
+**The tell is always the same: the result was BETTER than it should have been.** Staleness does not
+usually produce a red; it produces a green that has not earned itself.
+
+#### 1. A stale BUNDLE — `BE-W119`
+
+`supabase functions serve` hot-reloads the function directory. It does **not** reload
+`packages/core/dist`, which the Edge Function imports from outside it.
+
+**Measured:** with the server running, the patient guardrail was removed from
+`answerProductQuestion` **entirely** and core was rebuilt — the gateway suite returned **9 passed**.
+Restarting the server turned the same mutant into **2 failed, 7 passed** with the positive control
+still green.
+
+> **A mutation that kills nothing is a stale-bundle suspicion before it is a proof of anything.**
+
+Rebuild **and restart** before believing any gateway result. It caught the same session twice: the
+second time, a mutant was reverted in source without a rebuild, and the test failed against code
+that was already correct.
+
+#### 2. A stale READING — W1-C A2
+
+A migration replaced `record_check_in` by transcribing it from the migration file that appeared to
+define it. **Three defects in one body:** it dropped the idempotency block (which would have broken
+the offline replay path the frontend had just proved), renamed `is_within_shift`, and changed a
+refusal message.
+
+**Why reading the file is not reading the function:** a later migration may have redefined it, so
+the file you found may not be what is installed. **Generate the body from `pg_proc.prosrc`.**
+`prosrc` cannot be stale by construction.
+
+#### 3. A stale DATABASE — W1-D
+
+Three defects shipped green locally and red on CI, **all three for the same reason**: this machine's
+database carried state from earlier sessions while CI starts clean.
+
+**Demonstrated deliberately (W1-E B3), same commit, same guard, opposite answers:**
+
+| Run | `rls.spec.ts` |
+| --- | --- |
+| **dirty** — the revoke applied by hand in an earlier session, no migration doing it | **98 passed** |
+| **clean** — `db reset`, migrations only | **1 failed**, naming `sim_content_before_insert` |
+
+The clean run reproduces CI exactly, because it is what CI does.
+
+#### What to do about it
+
+**`pnpm hooks:install`, and the pre-push hook resets the database and runs what CI runs**
+(`scripts/verify-clean-db.mjs`). It gates the **push**, not the commit: a reset plus the API suite
+is minutes, and `.githooks/pre-commit` already records that *a hook that costs minutes is a hook
+people pass `--no-verify` to.*
+
+**The generalisation, which is the point of collecting these three:**
+
+> **Before trusting a green, name the state it ran against — the bundle, the file, the database —
+> and ask whether CI will have the same one. If the answer is "probably", it is not evidence.**

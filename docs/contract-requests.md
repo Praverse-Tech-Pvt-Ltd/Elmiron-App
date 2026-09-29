@@ -240,3 +240,166 @@ frontend can request or make:
 4. **Nothing to change on the write path.** `takeFix` already sends `accuracyMetres`
    (`apps/field/src/capture/location.ts:83`) and the server already stored it; only the reading side
    is new.
+
+---
+
+### CR-5 — The practice session API (AI Doctor), from backend to frontend
+
+| | |
+| --- | --- |
+| Date | 2026-09-29 |
+| Requester | **Backend** (W1-D / W1-E) |
+| Owner asked | **Frontend** — this is an offer, not a demand |
+| Needed | Nothing from you yet. This is the API as it actually is, so a screen can be built against it without asking, **and the reasons not to build one yet** |
+| Status | **Open — informational** |
+
+**Why this exists.** AI Doctor is built and proven end to end over HTTP — a real sign-in, a real
+session, a turn through the deployed Edge Function, an analysis row — and **no screen can reach any
+of it.** That is the same shape as six MR screens sitting on the mock, and it is solvable the same
+way: by telling the other track what to call.
+
+**Everything below is exercised by `services/api/tests/sim-gateway.spec.ts` (18 tests), which ran in
+CI rather than skipping.**
+
+---
+
+#### The four calls
+
+**Three are Postgres RPCs through PostgREST, exactly like every other write in the app. One is the
+Edge Function.** No new transport, no new auth, no upload path.
+
+##### 1. Start a session — `start_sim_session`
+
+| | |
+| --- | --- |
+| Who | **Anyone signed in, for themselves.** There is no parameter for whose session it is: `mr_id` is `auth.uid()` |
+| Call | `supabase.rpc('start_sim_session', { p_scenario_id })` |
+| Request | one uuid |
+| Response | **`StartSimSessionResponseSchema`** — `sessionId`, `personaId`, `personaDisplayName`, `personaStance`, `objective`, `objection`, `promptVersionId`, `startedAt` |
+
+**Refusals**
+
+| SQLSTATE | When | What the screen shows |
+| --- | --- | --- |
+| `28000` | no session | Sign in again — `refusalForSqlState` already maps this |
+| `42501` | the scenario is not yours / does not exist — **deliberately the same answer**, so it is not a cross-tenant existence oracle | *"That practice scenario is not available."* Do not say "not found"; you do not know that |
+| `22023` | the scenario or its persona is **not approved** | *"This scenario is not ready yet."* It is waiting on an approver, not on the rep |
+| **`45011`** | **no approved `ai_doctor` prompt version for this company** | *"Practice is not switched on for your company yet."* Not an error the rep can act on |
+
+**`personaStance` is one of `receptive`, `sceptical`, `rushed`, `hostile`** — a closed set, safe to
+switch on for an avatar or a tone indicator.
+
+##### 2. Take a turn — the **Edge Function**, not an RPC
+
+| | |
+| --- | --- |
+| Who | the rep who owns the session |
+| Call | `POST {SUPABASE_URL}/functions/v1/ai-gateway` with the user's bearer token |
+| Body | `{ feature: 'ai_doctor', sessionId, repText, personaBrief, personaStance, objection, history }` |
+| `history` | `[{ role: 'rep' \| 'doctor', text }]`, oldest first, so the doctor remembers the conversation |
+| Response | **`SimTurnResult`** — a discriminated union on `kind` |
+
+| `kind` | Meaning | What the screen shows |
+| --- | --- | --- |
+| `replied` | `reply`, `objectionAddressed`, `turnCount` | the doctor's line. **`turnCount` counts BOTH turns**, so it goes up by 2 |
+| `patient_specific` | the guardrail refused **before any model call** | `message`, verbatim. **Do not echo what the rep typed** — that is the point of the refusal |
+| `failed` | timeout, provider error, or a reply that failed validation | `message`, verbatim. **The session stays open**; a retry is safe and costs a turn, not the practice |
+
+**HTTP-level refusals from the same endpoint:** `401` + `{code:'28000'}` with no bearer token;
+`403` + `{code:'45011'}` feature off; `429` + `{code:'45012'}` daily allowance spent —
+*"You have used today's practice allowance. It resets at midnight."*
+
+**Two properties worth relying on.** A refused turn is **not stored at all**, so patient details a
+rep was stopped from sending never enter their history. And **both turns are written atomically**,
+so you will never see a rep turn with no reply.
+
+##### 3. End a session — `end_sim_session`
+
+| | |
+| --- | --- |
+| Who | the owner. **An admin cannot end a rep's session** — practice is the rep's own |
+| Response | **`EndSimSessionResponseSchema`** — `sessionId`, `state: 'ended'`, `endedAt`, `turnCount` |
+| Idempotent | **yes.** Ending twice returns the same answer, because a phone that lost its reply will retry |
+| Refusal | `42501` if it is not yours |
+
+##### 4. The coach analysis
+
+**Produced** by the same Edge Function with `feature: 'ai_coach'` and `{ sessionId, objective,
+objection, turns }`, after the session has ended (`22023` if it has not).
+
+**Read** as an ordinary table read of `sim_coach_analyses`, parsed with
+**`SimCoachAnalysisSchema`**: `overallScore` and five `dimensionScores`
+(`opening`, `product_knowledge`, `objection_handling`, `communication`, `closing`), all 0–100
+integers; `strengths` and `improvements`, **at least one of each**, every finding carrying
+`dimension`, `title`, `detail` and **`turnIndex`**; `summary`; and `modelProvider` / `modelName`.
+
+**Every finding cites a turn, and the server refuses one that does not** — so you can and should
+link each piece of feedback to the turn it is about. A finding citing a turn outside the session is
+refused `23514`.
+
+**One per session**, enforced by a unique constraint. There is no "latest analysis" question.
+
+---
+
+#### Who can see a score — read this before designing anything
+
+**`C27`: a practice session, its turns and its coach analysis are visible to the MR who owns it and
+to a company admin. To nobody else.** A **field manager sees nothing** — asserted by a test, because
+`visible_user_ids()` is deliberately absent from those RLS policies.
+
+**So: no team view, no averages, no ranking, no comparison, and no "how did I do against my
+colleagues".** The row has no field that would support one, and `contract.test.ts` fails the build if
+one is added by name. If a manager-facing score is ever wanted, that is register `#14` and it needs
+the recorded rule amended **in writing** first.
+
+---
+
+#### What a screen would show TODAY, and whether to build one
+
+**The doctor's replies are not real.** `#5` — which AI provider, and may data leave India — is open,
+so the gateway runs a **stub**. Every stubbed reply is literally the text
+`[PRACTICE STUB - no AI provider is configured; decision #5 is open, so no model was called]`, and
+every stubbed coach analysis scores **0 on every dimension** with the same marker as its summary.
+
+**That is deliberate.** A stub that said *"Yes, tell me more about the dosing"* would be
+indistinguishable from a working feature to anyone watching, including the person who built it.
+
+**Recommendation: build the screen against the stub, but do not put it in front of a rep or a
+demo audience.** The reasoning, rather than a preference:
+
+- **For building now:** the contract will not change when a vendor is chosen. Swapping the stub for
+  a real adapter is **one file** in `supabase/functions/_shared/`, and nothing in the request or
+  response shapes moves. A screen built now is a screen that works the day `#5` is answered, and the
+  screen is the larger piece of work.
+- **For not shipping it now:** a practice screen whose doctor says the same marker every time
+  teaches nothing, and a rep who tries it once will not come back when it becomes real.
+- **The deciding asymmetry:** building early costs nothing if the contract holds, and the contract is
+  pinned by 18 tests. **Shipping early costs the feature's credibility with the first reps who
+  touch it.** So: build behind a flag that ships off, the same shape as `C21`'s recording feature.
+
+---
+
+#### What does NOT exist yet, and what is needed to run ONE practice session
+
+**No persona and no scenario exist as content.** The tables are there and empty. **`C24` applies:
+neither is born approved** — both enter as drafts and need a **second admin** to approve them, which
+is the same four-eyes path knowledge uses.
+
+**To run one practice session end to end, someone must create and approve:**
+
+| # | What | Who | Note |
+| --- | --- | --- | --- |
+| 1 | **A second admin account** | operator | Four eyes refuses every approval with one admin. Same blocker as `C26`, still open |
+| 2 | **One persona** — display name, specialty, stance, brief | an admin drafts | The display name is a **label**, never a real doctor's name. No constraint can check that; the approver enforces it |
+| 3 | **Approve the persona** | the **other** admin | attestation required |
+| 4 | **One scenario** — title, objective, objection, optional product + market | an admin drafts | If it names a product it **must** name a market (§47) |
+| 5 | **Approve the scenario** | the **other** admin | attestation required |
+| 6 | **An approved `ai_doctor` prompt version** | an admin drafts, the other approves | `outputSchemaName` must be `SimDoctorTurnOutputSchema`, or every reply fails validation |
+| 7 | **An approved `ai_coach` prompt version** | same | `outputSchemaName` must be `SimCoachOutputSchema` |
+| 8 | **`ai_feature_enabled:ai_doctor` and `:ai_coach` set true**, and **`ai_daily_requests_per_user` set** | operator | All three ship **off/unset**; an unlimited allowance is never the default |
+
+**Steps 2–5 need a console screen that does not exist.** The knowledge approval screen (W1-A E3) is
+the working model; a persona/scenario equivalent is the obvious next backend-console piece, and it is
+**not blocked by `#5`.**
+
+**Nothing on this list is engineering-blocked. All of it is content and two accounts.**
