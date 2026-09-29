@@ -20708,3 +20708,104 @@ PR #9 at `2fe3db7`, run **36527103255**. Both jobs passed on the first attempt:
 - Still open from FE-D8: extend the release config guard; make the CMake pin permanent.
 - Carried: the Thursday re-seed with `--another`, then the reinstall in §3.3; CR-3 and CR-4; A1.
 - **Not established:** why fresh-launch sign-in did not crash on the old code (see Diagnosis).
+
+### FE-D10 — sweep of the demo path for the FE-D9 crash pattern
+
+**29 September 2026, branch `fe-d10-sweep`.** The sweep is read-only, and no code changed.
+
+#### 0 — Merge of PR #9
+
+- PR #9 (`fe-d9-signout`) was merged **with a merge commit**, `ef4d53d`.
+- Its CI was green at its head `ad8440a` (run 36527458481, both jobs), and the merge used
+  `--match-head-commit`.
+- `fe-d10-sweep` was branched off `main` at `ef4d53d`.
+
+#### 1 — The two conditions the crash needs
+
+Both come from FE-D9's diagnosis. Both must hold, on the same screen, in the same window:
+
+- **(A) The screen is being REMOVED from a stack** when its action finishes, by `router.back()`,
+  `router.replace()` or a pop.
+  - react-native-screens starts the view transition that holds removed children only in
+    `ScreenStackViewManager.removeViewAt` → `prepareOutTransition` → `startRemovalTransition`
+    (4.26.2, `ScreenStackViewManager.kt:35-47`).
+  - **A `router.push` does not start it**: the screen underneath is not removed.
+- **(B) While it leaves, a state change flips a plain `View` between flattened and not.** That
+  means a conditional `opacity`, `transform`, `overflow: hidden` or `collapsable` on a view that
+  is not otherwise a stacking context (`ViewShadowNode.cpp`), and a view that is only sometimes a
+  concrete view (a conditional background or border on a view with neither otherwise).
+  - **Not a flip:**
+    - a `Pressable`. It is always `accessible` (`Pressable.js:252`, `accessible !== false`), so it
+      always forms a stacking context whatever its style says;
+    - inserting or removing a view (a banner, a spinner). That is a create and a delete, never a
+      reparent;
+    - swapping one component type for another. That is an unmount and a mount.
+
+#### 2 — Sweep table
+
+`busy` = the screen's in-flight flag, whatever it is called. "Leaves when done" = condition A.
+"Flips" = condition B.
+
+| Screen (demo step) | Busy set / cleared | Leaves when done? | What changes with busy | Flips? | At risk? |
+| --- | --- | --- | --- | --- | --- |
+| **Sign in** (1). Fixed in FE-D9 | `sign-in.tsx` `setBusy` in `submit`, `.finally` | **Yes**: `AuthGate` `replace('/')` | `TextField editable={!busy}` ×2 (`sign-in.tsx:71,79`), which changed the wrapper's `opacity` 0.7↔1; `Button` label and note | **No longer.** The wrapper is `collapsable={false}` (`TextField.tsx`, FE-D9) | **No** (fixed) |
+| **Visit: check-in and check-out** (9, 13) | `visit/[id].tsx:384` / `:476` (`finally`) | **No.** Stays on the visit. Its navigations (`:540`, `:558`, `:579`, `:582`) are later `push`es, pressed by the rep | `Button label/loading={busy}` (`VisitScreen.tsx:338-339`) | No. `Button` fades only on `disabled` (`Button.tsx:135`), not on `loading`; the faded element is the `Pressable`; `loading` inserts or removes an `ActivityIndicator` (`Button.tsx:189`) | **No** |
+| **Consent** (10) | `consent/[visitId].tsx:218` / `:247` | **Yes**: `router.replace('/visit/…')` (`:302`), **after** `setBusy(false)` and an awaited `recordWitnessedConsent` | `Answers` → two `Button loading={busy}` (`ConsentScreen.tsx:197,205`). "Give the phone back" fades only when pressed, on a `Pressable` (`:211`) | No | **No.** A holds; B does not. busy also clears before it leaves |
+| **Samples** (11) | `samples/[visitId].tsx:165` / `:218` | **No.** Stays and shows the "recorded"/"saved" note | `Button loading={busy}` (`SamplesScreen.tsx:260-261`). The `TextField`s (`:183`, `:211`) take no `editable` | No | **No** |
+| **Voice note** (12) | `voice-note/[visitId].tsx:232` / `:260` (`finally`) | **No.** Stays and shows the saved note | `Button loading={busy}` (`VoiceNoteScreen.tsx:178`) | No | **No** |
+| **Call report** (14) | `report/[visitId].tsx:45` / `:124` (`finally`) | **No.** The route has no router call; it stays and shows "Report sent"/"Report saved" | `Button label/loading={sending}` (`CallReportScreen.tsx:138-139`). The three `TextField`s (`:103`, `:109`, `:115`) take no `editable` | No | **No** |
+| **Reply** (hidden since FE-D4 1) | `reply/[analysisId].tsx:101` / `:122` (`finally`) | **Yes**: `.then(() => router.replace('/analysis/…'))` (`:110`), then `.finally(setBusy(false))`. **The same order as sign-in was** | `Button loading={busy}` (`AnalysisReplyScreen.tsx:143-144`). The `TextField` (`:103`) takes no `editable` | No | **No.** A holds; B does not. Hidden in this build (`:35` redirects to `/home`), so it cannot run on APK 3 |
+| First run: location, S4, notifications, battery (2–4) | none | `location.tsx:44` and `location-denied.tsx:53` `back()`; the rest are `push`es | no busy state; nothing is set after the navigation | No | **No** |
+| What we record → "Start my first day" (5) | none | `transparency.tsx:66` `replace('/home')` after `markFirstRunComplete` | no busy state; nothing is set after | No | **No** |
+| A4 microphone (8) | none | `microphone.tsx:54` `back()` after `markMicrophoneRationaleAnswered` | no busy state; nothing is set after | No | **No** |
+
+**Also checked, outside the demo-path screens:**
+
+- `Select`, `IconButton` and `Stepper` fade on a `Pressable`, so they never flip.
+- `ListItem` swaps a `Pressable` for a plain `View` when disabled (`ListItem.tsx:110-131`). That is
+  a type change, an unmount and a mount, not a reparent, and it is not tied to a busy flag
+  anywhere on the path.
+- **`editable=` appears in exactly two app call sites, both in `sign-in.tsx`.** So the FE-D9
+  trigger existed nowhere else. `TextField` is now protected wherever it is used.
+
+**Result: no screen on the demo path is at risk.** Only two leave after a busy write: consent and
+reply. In both, what changes with busy is a `Button`'s `loading`, which never flips flattening.
+
+#### 3 — Emulator check
+
+**The sweep marked no screen at risk**, so the brief's per-screen check list is empty. As a
+control, I ran on APK 3 (`8607101`, the build installed in FE-D9; nothing was reinstalled) the one
+demo-path flow that meets condition A. I also ran the check-in needed to reach it. Writes went to
+the local fixture database at `192.168.1.15:54321` only.
+
+| Flow | Action completes | Navigates away | Crash? | Repeat |
+| --- | --- | --- | --- | --- |
+| **Check-in** (control; stays on the visit) | "You are checked in — Checked in 11:28" | No, by design | **No.** Process alive, crash buffer 0 lines | Not repeated: the visit is checked in once. Three earlier presses answered "could not find your position in time", with no crash; see below |
+| **Consent → "No, don't record"** | Sent: the app returned to the visit, and Today then showed **"Everything sent"** | **Yes**: `replace` to the visit | **No.** Process alive, crash buffer 0 lines | **Repeated once.** Same result, no crash |
+
+- **Screenshot:** `C:\dev\demo-screenshots\fe-d10\consent-1-back-on-visit.png`.
+- **The sign-out → sign-in flow**, the only other removal on the path while state changes, was
+  checked twice on APK 3 in FE-D9. The (tabs) screens are replaced while the pulled store empties.
+- **Reply** is not runnable on APK 3 (Coaching hidden), and no other build may be installed. Its
+  "no" verdict rests on the sweep alone.
+- **Mock location, for the next reader.** Neither `adb emu geo fix` nor a `fused` test provider
+  alone reached the app on this boot. It worked with `appops set 2000 android:mock_location
+  allow`, then test providers **added and enabled for `fused`, `gps` and `network`**, with
+  `set-test-provider-location <p> --location 18.5204,73.8567 --accuracy 12` pushed to all three in
+  a loop while the check-in was asking.
+  - **Left on the emulator:** those test providers and the shell's mock-location appop. They reset
+    on reboot, and removing them was not asked for.
+
+**Emulator state after this run:**
+
+- APK 3 installed, signed in as the fixture MR;
+- today's Dr Vikram Rao visit **checked in**, not checked out;
+- two "no" consent answers recorded against it, both sent.
+
+**Nothing was deleted.**
+
+#### Boundary
+
+No code changed. This commit is `PROJECT-OVERVIEW.md` only. Nothing under `services`,
+`packages/core`, migrations or the seed script changed. No build was installed. Coaching stays
+hidden.
