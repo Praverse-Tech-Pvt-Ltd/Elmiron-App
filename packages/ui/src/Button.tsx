@@ -69,6 +69,10 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
     borderRadius: tokens.radius.control + 3,
     padding: 3,
+    // FE-D12 V3. Sideways, the 6 reserved above sit OUTSIDE the button's slot, so the button lines
+    // up with the cards and fields around it instead of 6dp inside them. Vertically they stay
+    // where they were, so the spacing between stacked buttons is unchanged. No reflow on focus.
+    marginHorizontal: -6,
   },
   ringFocused: { borderColor: tokens.color.accent },
   base: {

@@ -132,3 +132,25 @@ describe('a label that wraps', () => {
     expect(label['textAlign']).toBe('center');
   });
 });
+
+/**
+ * **FE-D12 V3.** The focus ring's wrapper reserves 3px of border and 3px of offset so that focus
+ * never reflows the layout. Reserved INSIDE the button's slot, it drew every button 6dp narrower
+ * than the cards, fields and hold control around it -- plainest on the voice-note card, where
+ * "Save this note" sat inside "Hold to record"'s edges. The space is still reserved, but outside
+ * the edge: the wrapper's negative margin cancels its border and padding exactly.
+ */
+describe('the focus-ring wrapper', () => {
+  it('reserves its space outside the button, so the button lines up with its neighbours', async () => {
+    await render(<Button label="Save this note" onPress={() => undefined} />);
+    const ring = screen.getByRole('button').parent;
+    if (ring === null) throw new Error('no wrapper above the button');
+    const style = flatten(ring.props['style']);
+    const reserved = Number(style['borderWidth'] ?? 0) + Number(style['padding'] ?? 0);
+    expect(reserved).toBeGreaterThan(0);
+    expect(Number(style['marginHorizontal'] ?? 0) + reserved).toBe(0);
+    // Sideways only: the vertical rhythm between stacked buttons is not this fix's business.
+    expect(style['margin']).toBeUndefined();
+    expect(style['marginVertical']).toBeUndefined();
+  });
+});
