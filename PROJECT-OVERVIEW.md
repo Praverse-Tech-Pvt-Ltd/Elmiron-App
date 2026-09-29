@@ -20510,3 +20510,201 @@ Locally at `6067a56`:
 - **Make the CMake pin permanent**, so a prebuild cannot wipe it. Today the script re-applies it.
 - **The sign-out → sign-in crash** (Fabric `addViewAt`), pre-existing.
 - Carried: the Thursday re-seed with `--another`; CR-3 and CR-4; A1.
+
+### FE-D9 — the sign-out → sign-in crash
+
+**29 September 2026, branch `fe-d9-signout`**, PR #9 against `main`, **not merged**.
+
+#### 0 — Merge of PR #8
+
+- PR #8 (`fe-d8-build`) was merged **with a merge commit**, `dac59fa`.
+- Its CI was green at its head `6ec6d4b` (run 36422783190, both jobs), and the merge used
+  `--match-head-commit`.
+- `fe-d9-signout` was branched off `main` at `dac59fa`.
+
+#### 1 — Diagnosis
+
+**Reproduced on APK 2** (`f6b91eb`) on the Pixel_10 emulator: Me → Sign out → Sign in with the
+fixture MR. The crash log is in the session scratchpad, not the repo.
+
+- **Sign-out itself is clean.** The session clears, `AuthGate` replaces the route with
+  `/sign-in`, and the sign-in screen renders. The process stays alive. The FE-D8 wording was
+  right: the app dies on the **sign-in that follows**, not on the sign-out.
+- **The stack trace** (main thread, fatal):
+
+  ```
+  java.lang.IllegalStateException: addViewAt: failed to insert view [502] into parent [532] at index 5
+    at com.facebook.react.fabric.mounting.SurfaceMountingManager.addViewAt(SurfaceMountingManager.kt:384)
+    at com.facebook.react.fabric.mounting.mountitems.IntBufferBatchMountItem.execute(IntBufferBatchMountItem.kt:122)
+    at com.facebook.react.fabric.mounting.MountItemDispatcher.dispatchMountItems(MountItemDispatcher.kt:250)
+    at com.facebook.react.fabric.FabricUIManager$DispatchUIFrameCallback.doFrameGuarded(FabricUIManager.java:1624)
+    ...
+  Caused by: java.lang.IllegalStateException: The specified child already has a parent. You must call removeView() on the child's parent first.
+    at android.view.ViewGroup.addViewInner(ViewGroup.java:5286)
+    at com.facebook.react.views.view.ReactClippingViewManager.addView(ReactClippingViewManager.kt:36)
+  ```
+
+  The soft exception just before it, with the mounting manager's view dump, named the views:
+  `addViewAt: cannot insert view [502] into parent [532]: View already has a parent: [504]
+  Parent: ReactViewGroup View: ReactEditText`.
+  - **502** is the sign-in screen's **Email `TextInput`**.
+  - **504** is `TextField`'s bordered wrapper around it.
+  - **532** is the form's content view inside the sign-in `ScrollView`.
+  - The sign-in `RNSScreen` (540) had `parentTag=-1`: it was being removed from the stack. The
+    index route's `Spinner` (`AndroidProgressBar` 550) was being created.
+- **What runs, and what it trips on.** No screen reads missing session data; nothing is
+  `undefined`. The chain is:
+  1. `signInWithPassword` resolves. `onAuthStateChange` sets the session, and `AuthGate`
+     `router.replace('/')`s off `/sign-in`.
+  2. **react-native-screens starts the sign-in screen's removal** and calls `startViewTransition`
+     on every descendant (`Screen.startTransitionRecursive`, `react-native-screens` 4.26.2,
+     `Screen.kt:442-497`). Android then keeps a removed child attached to its old parent until the
+     transition ends.
+  3. In the same frame, `sign-in.tsx`'s `.finally(() => setBusy(false))` re-enables the form.
+     `TextField`'s `disabled` style is removed, so the wrapper's **`opacity` goes 0.7 → 1**.
+  4. `opacity != 1` is one of the conditions for a Fabric view to **form a stacking context**
+     (`ViewShadowNode::initialize`, react-native 0.86.2). The flip makes Fabric's differ
+     reparent the wrapper's children (the flatten/unflatten path, `Differentiator.cpp:201-215` and
+     `664-668`): remove 502 from 504, insert 502 into 532.
+  5. The remove does not take, because the view transition holds 502 on 504. The insert throws.
+- **Why a fresh-launch sign-in escapes** is not established. The same code runs there, and FE-D8
+  saw it pass. Steps 2 and 3 have to land in one mount batch, so it is timing-dependent; I did not
+  instrument it further.
+
+**It was already there before FE-D1.** `git log -S` dates both halves to before the series:
+
+| Half | Commit | Date |
+| --- | --- | --- |
+| `editable={!busy}` and `.finally(() => setBusy(false))` in `sign-in.tsx` | `99da110` (FE-W1 §4) | 14 August |
+| `disabled: { backgroundColor: tokens.color.wash, opacity: 0.7 }` in `TextField.tsx` | `2536862` (FE-W3 + Phase 3) | 3 September |
+
+FE-D1's first commit is `0cea0f8` (28 September). FE-D8 also reproduced the crash on the FE-D6
+APK. Nothing FE-D1 to FE-D8 changed is on the path: `git log` shows no FE-D commit to
+`TextField.tsx` or `sign-in.tsx`. FE-D7's stack transition was already ruled out by FE-D8's run
+with animations off.
+
+**The signed-out user's data is not touched by the fix.** Existing code already handles it:
+- the queue stays under that user's account (`setQueueOwner`, MR-49 / `FE-W61`), and Me warns
+  before sign-out;
+- the pulled store empties on sign-out;
+- the flusher stops with no user.
+
+The emulator's queue showed "Everything sent" before each sign-out. Nothing here was ambiguous
+enough to ask about.
+
+#### 2 — Fix (`8607101`)
+
+- **`packages/ui/src/TextField.tsx`:** the bordered wrapper is `collapsable={false}`. It now
+  forms a stacking context whether or not the field is editable, so disabling or re-enabling a
+  field is a prop change, never a reparent. The look is unchanged: still `opacity: 0.7` and the
+  wash when disabled.
+- **Why here and not in `sign-in.tsx`:** the reparent comes from `TextField`, so every form that
+  disables a field and then leaves (mileage, samples, reply) carried the same risk. Keeping the
+  form busy after success would have fixed only this screen.
+- **Checked, not changed:** `Select`, `Button`, `IconButton`, `Stepper` and `ListItem` also fade
+  with `opacity`. In each, the faded element is a `Pressable`, which is always accessible and so
+  always forms a stacking context. None of them flips.
+- **Test:** `packages/ui/src/text-field-flattening.test.tsx`. It applies react-native's own
+  stacking-context rule (the subset a plain `View`'s props can reach, cited to
+  `ViewShadowNode.cpp`) to the wrapper, editable and then disabled. A second test pins that the
+  disabled field still fades.
+  - A jest renderer has no Fabric, so the native crash cannot happen in jest. The test pins its
+    precondition; the emulator run below is the crash's own red/green.
+  - **Red, on the old `TextField`:**
+
+    ```
+    × forms a stacking context both when editable and when not
+      - Expected  - 1
+      + Received  + 1
+        Object {
+          "whileBusy": true,
+      -   "whileEditable": true,
+      +   "whileEditable": false,
+        }
+    Tests: 1 failed, 1 passed, 2 total
+    ```
+
+  - **Green, after the fix:** `Tests: 2 passed, 2 total`. It was re-run red with the fix stashed,
+    after the test's final edit.
+- **Suites:**
+  - `packages/ui` jest: 273/273 (24 suites);
+  - `apps/field` vitest: 648/648 (45 files);
+  - `apps/field` jest: 226/226 (33 suites);
+  - typecheck, lint and format pass.
+  - The one lint **warning** (unused `eslint-disable` in `beat-plan-route.test.tsx:22`) predates
+    FE-D9.
+
+#### 3 — APK 3
+
+Built by `apps/field/scripts/build-demo-apk.ps1 -Ip 192.168.1.15` from a clean tree at **`8607101`**.
+Every check passed. The mock WARNING was printed: the mock was not running, and only Day end needs
+it.
+
+| | |
+| --- | --- |
+| Path | `C:\dev\demo-apk\field-force-demo-192.168.1.15-2026-09-29-8607101.apk` |
+| Size | 102,073,371 bytes (97.3 MB). The same byte count as APK 2, but a different SHA-256 |
+| Commit | `8607101` |
+| Verified | label "Field Force (demo)"; cleartext to exactly 192.168.1.15; bundle carries `http://192.168.1.15:54321` |
+
+APK 2 and the FE-D6 APK in `C:\dev\demo-apk` are untouched.
+
+#### Emulator check
+
+- **Getting there, each step asked first:**
+  - The emulator was stuck on "authorizing" and then offline. With the operator's approval it was
+    restarted, with no wipe.
+  - Docker Desktop and local Supabase were started. They were down; nothing was reset.
+  - Installing APK 3 over APK 2 (`adb install -r` → `Success`, no uninstall) was **asked first**.
+- **Red on APK 2:** sign out → sign-in screen → sign in. The process died with the trace above.
+- **Green on APK 3, twice:**
+  - Me → Sign out lands on the sign-in screen, with the process alive.
+  - Signing in with the fixture MR loads **Today** ("Next visit", Dr Vikram Rao (DEMO)).
+  - The process stayed alive, with **0 lines** in the crash buffer.
+  - The second cycle, with no screenshots, gave the same result.
+- **Screenshots**, outside the repo, in `C:\dev\demo-screenshots\fe-d9\`:
+  - `1-me-before-sign-out.png`;
+  - `2-sign-in-after-sign-out.png`;
+  - `3-home-after-sign-in.png`.
+- **Emulator state:** APK 3 installed and signed in as the fixture MR.
+- **Nothing was deleted.** No file, screenshot, app or app data. My scratchpad files (crash log,
+  UI dumps, build log) are kept.
+
+#### 4 — Demo document (`2fe3db7`)
+
+`docs/demo-path-2026-10-01.md`, "Before the demo", §3.3 gains the steps **after Thursday's
+re-seed**:
+
+1. Uninstall the app, after checking the queue says "Everything is sent".
+2. Install the latest demo APK.
+3. Sign in with the new account.
+
+The **"do not sign out during the demo"** advice is removed, because the emulator check passed. The
+troubleshooting row now names an APK older than `8607101` as the cause. No credentials.
+
+#### Boundary
+
+```
+$ git diff --name-only origin/main...HEAD
+docs/demo-path-2026-10-01.md
+packages/ui/src/TextField.tsx
+packages/ui/src/text-field-flattening.test.tsx
+```
+
+Nothing under `services`, `packages/core`, migrations or the seed script changed. No new
+dependency. Coaching stays hidden. No other behaviour change: a disabled field draws exactly as
+before.
+
+#### CI
+
+PR #9 at `2fe3db7`, run **36527103255**. Both jobs passed on the first attempt:
+
+- typecheck · lint · format · unit tests;
+- migrations · Gate 0 RLS suite · rollbacks.
+
+#### Open items
+
+- **Remove from FE-D8's list:** the sign-out → sign-in crash is fixed here.
+- Still open from FE-D8: extend the release config guard; make the CMake pin permanent.
+- Carried: the Thursday re-seed with `--another`, then the reinstall in §3.3; CR-3 and CR-4; A1.
+- **Not established:** why fresh-launch sign-in did not crash on the old code (see Diagnosis).
