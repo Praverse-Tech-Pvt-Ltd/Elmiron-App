@@ -177,3 +177,97 @@ append instead of a rewrite. `pr-mergeable.yml` stays **inert** until PR #2 merg
 says so, and until then the two manual commands at the top of every brief are the only protection.
 
 **I have not merged it. The decision is the operator's.**
+
+#### A correction to W1-E, found by pushing this commit — `BE-W123`
+
+**The pre-push clean-database check did not run, and the push said nothing.** `git push` printed the
+two remote lines and exited 0. That is the shape `verify-clean-db.mjs`'s own header warns about:
+*"a check that silently skips is the inert control this repository keeps finding."* It was written
+to fail loudly when the stack is down. It was never reached at all.
+
+**The cause.** `core.hooksPath` is set to `D:\Praverse\Elmiron-App\.githooks` — an **absolute path
+into the MAIN checkout's working tree**, shared by every worktree through the common `.git`
+directory. `.githooks/pre-push` is tracked on **this branch**, so it exists in this worktree; the
+main checkout is on `main`, which does not have it yet. **A hook added on a branch is invisible from
+every worktree until that branch reaches `main`'s checkout.** `pre-commit` ran because it has been
+on `main` since 24 September.
+
+**Why W1-E did not catch it.** W1-E installed the hook and verified it by running
+`node scripts/verify-clean-db.mjs` directly. That proves the script works. **It does not prove the
+hook fires** — and those are different claims, which is the same distinction `FIX-07` makes: *a
+control that cannot be exercised is not a control.*
+
+**The verification was done by hand instead**, against a reset database, and is recorded above.
+
+**The one-line fix on this machine**, until the branch merges:
+
+```bash
+cp .claude/worktrees/ai-platform-phase-a/.githooks/pre-push D:/Praverse/Elmiron-App/.githooks/
+```
+
+**The durable fix is `BE-W123`:** the hook in `main`'s `.githooks` should be a thin shim that runs
+the hook from the pushing worktree's own tree, so a branch that changes a hook is exercised by the
+branch that changes it. **Not done here** — it is a change to the thing that guards every push, it
+belongs in its own commit, and it needs its own two-sided proof that the shim fires and that a
+deliberately failing hook blocks a push.
+
+**Until then, before any push from a worktree, run the check by hand:**
+
+```bash
+node scripts/verify-clean-db.mjs
+```
+
+#### The browser gap is closed — Playwright, on the operator's approval
+
+**Correction to B5/B6 above.** That section says no click was simulated and offers to install a
+browser driver. **The operator approved it, and it is done.** The paragraph stays as written because
+this file is append-only; this is what is true now.
+
+`@playwright/test` **1.63.0** with Chromium, in `apps/console`. Three specs in
+`apps/console/e2e/practice.spec.ts`, **3 passed**:
+
+1. **the whole flow, in one browser, in two browser contexts** — the author signs in through the
+   real sign-in form, types a persona into the real form, submits it, **is shown knowledge's own
+   four-eyes note and no Approve control at all**; a second context signs in as the other admin,
+   finds Approve **disabled until an attestation is typed**, approves; the author then drafts and
+   submits a scenario; `start_sim_session` **refuses it**; the second admin approves it in the
+   browser; `start_sim_session` **accepts the same scenario id**.
+2. **`B6`** — an admin of the other organisation is served `/practice` and neither this run's
+   persona nor its scenario appears.
+3. **no real doctor, recording or patient data** — asserted against the rendered `main`, not
+   promised in a comment.
+
+**The mutant, because three passing browser tests prove nothing on their own.** Replacing
+`approvalAffordance(row, viewerUserId)` with a constant `may_decide` — i.e. offering the author the
+Approve button — **killed exactly spec 1**, on the assertion that the author is served no Approve
+control, while specs 2 and 3 passed as the positive control. Restored; `git diff` on
+`sim-content.tsx` is empty and 3 pass again.
+
+**It is deliberately outside `turbo run test`.** The workspace `test` script is `vitest run`, whose
+include is `src/**`; these live in `e2e/`. **CI has no browser binary**, and a suite that cannot run
+is worse than one that is not wired up — the first goes red for the wrong reason and the second is
+silent and says so in `playwright.config.ts`. Run it with
+`pnpm --filter @fieldforce/console test:e2e` against a local stack.
+
+**Two things the browser found within minutes that nothing else had.**
+
+**1. The sign-in page was not hydrating, and every spec failed at the sign-in form.**
+`/_next/static/chunks/main-app.js` answered **404**, so React never attached, so the form fell back
+to a native submit and the URL became `/sign-in?` with nothing having happened. **The cause was
+environmental** — the dev server had been running since before `pnpm add` relinked `node_modules`,
+and its build output was stale — not a product defect. But note what it means: **every check in this
+repository until today could have passed against an application whose client bundle does not load at
+all.** Nothing else requests a page, and nothing else runs the page's JavaScript.
+
+**2. `tsconfig.json` and `eslint` did not cover the new files.** `include` was `src/**` only, so the
+spec and the Playwright config were typechecked by nothing; `lint` was `eslint src`. Both now name
+`e2e` and `playwright.config.ts`, and the spec's first lint run found a forbidden non-null
+assertion. **A test file that is not typechecked is a test file that silently rots.**
+
+**`seed-practice-world.mjs` is now committed** rather than thrown away, because the browser suite
+needs it every run. It refuses any non-localhost target on both URLs before touching either, and its
+header states plainly why it seeds one `ai_prompt_versions` row when the brief says not to — there
+is no screen for that table (`BE-W122`) and without an approved prompt the thing under test cannot
+start. The prompt text identifies itself as a placeholder, and the approval goes through the real
+`draft → in_review → approved` transition with two different admins, because the table's four-eyes
+CHECK refuses anything else.

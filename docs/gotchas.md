@@ -3780,3 +3780,45 @@ page can contain unless a row put it there.
 > `expect(html).not.toContain(x)` a coin toss. **Assert on something only the thing under test could
 > have produced**, and prefer a value minted by the run over a literal you also wrote into the
 > source.
+
+---
+
+## 29 September 2026 — a git hook added on a branch does not fire
+
+`core.hooksPath` is one absolute path, shared by every worktree through the common `.git`
+directory. Here it points into the **main checkout's working tree**. So a hook file tracked on a
+feature branch exists in that branch's worktree and is **never executed**, because git reads the
+hook from the path, and the path resolves to whatever branch the main checkout happens to be on.
+
+W1-E added `.githooks/pre-push` and verified it by running the script it calls. That proves the
+script works. **It does not prove the hook fires**, and on the first real push it did not: `git
+push` printed its remote lines and exited 0, with the guard silently absent.
+
+> **Installing a hook and exercising a hook are two different claims.** Prove the second the only
+> way it can be proved: make the hook fail on purpose and confirm the operation is blocked. A hook
+> that has never refused anything is indistinguishable from a hook that is not there.
+
+Registered as `BE-W123`.
+
+---
+
+## 29 September 2026 — a green suite can be green against an app whose JavaScript never loads
+
+The first browser run failed all three specs at the sign-in form. The page rendered, the fields
+filled, the button clicked, and nothing happened: `/_next/static/chunks/main-app.js` answered
+**404**, React never hydrated, and the form fell back to a native submit that reloaded `/sign-in`
+with the fields cleared. The cause was a dev server left running from before `pnpm add` relinked
+`node_modules` — environmental, not a product defect.
+
+**What it exposes is not environmental.** Until that run, nothing in this repository requested a
+page, and nothing ran the page's client bundle. Typecheck, lint, 76 unit and render tests and a
+full HTTP proof would all have been green against an application no user could sign in to.
+
+> **A suite that never loads the page cannot tell you the page works.** Render tests import the
+> module; HTTP proofs talk to the server; neither executes the bundle the browser actually fetches.
+> Keep one test that opens a real browser, signs in through the real form, and clicks.
+
+The related trap: **new test files are not covered by anything unless something names them.**
+`tsconfig.json` included `src/**` only and `lint` was `eslint src`, so the new spec and the
+Playwright config were typechecked and linted by nothing until both were widened. **A test file that
+is not typechecked is a test file that silently rots.**
