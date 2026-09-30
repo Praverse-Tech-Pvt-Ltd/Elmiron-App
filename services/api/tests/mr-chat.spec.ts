@@ -318,6 +318,17 @@ describe.skipIf(!live)('W1-I B2 — the guardrail fires BEFORE any provider call
     expect(row.flags).toContain('patient_identifier_detected');
   });
 
+  it('W1-J / BE-W126: a bare "patient <Firstname Lastname>" is blocked, end to end', async () => {
+    // The phrase that caught NOTHING before W1-J, now proved through the real RPCs and the real
+    // function rather than only in the unit flow. The positive control below still applies.
+    const { body } = await chat('patient Meena Kumari, 42, has bladder pain');
+    expect(body['kind']).toBe('patient_specific');
+    const row = await auditRow(body['requestId'] as string);
+    expect(row.status).toBe('blocked');
+    expect(row.model_provider, 'NO provider call happened').toBeNull();
+    expect(row.input_tokens).toBeNull();
+  });
+
   it('POSITIVE CONTROL: a message WITHOUT patient details does reach the provider', async () => {
     // Without this, the null above could equally mean a broken insert.
     const { body } = await chat('where do I find the beat plan');

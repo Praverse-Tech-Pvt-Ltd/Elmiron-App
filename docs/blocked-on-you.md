@@ -1935,3 +1935,66 @@ would be equally quiet if the purge were broken, because what it reports is that
 environment, aged past its `purge_after`, and observed leaving Storage **and** appearing in
 `audio_destruction_log`. Until that exists, the consent notice's promise rests on code that has never
 had to keep it.
+
+---
+
+## W1-J Part B — the clinical question, decided rather than accepted
+
+**This was a residual W1-I recorded and W1-J closed. It is here because you should know a control was
+added on your behalf, and what it costs a rep.**
+
+### What the gap was
+
+`AI-SPEC` §10 says MR Chat *"must not become a clinical decision-support system"*, and until today
+nothing enforced it. The example, recorded verbatim in the W1-I log:
+
+> *"Is 400mg twice daily normal for interstitial cystitis?"* — names no product, carries no patient
+> identifier, and reached the model.
+
+### The options, and what each costs
+
+| Option | Cost | What it does not do |
+| --- | --- | --- |
+| **A prompt instruction** | Free | **Not an option, and it was never on the list.** The prompt is a request; the model decides what to do with it. The session that built MR Chat established that |
+| **Question-side check only** | Some legitimate questions get redirected | A rep can rephrase around it; and it cannot see what the model *volunteers* |
+| **Answer-side check only** | A model call is paid for and then discarded | The question still reaches the vendor |
+| **BOTH — what was built** | Both of the above, and a second heuristic to maintain | Does not understand medicine; see the limits below |
+| **Accept the risk** | Free | MR Chat may answer a dosing question with an invented number, to a rep who will repeat it to a doctor |
+
+### What was built, and the one thing that makes it usable
+
+**A deterministic check on the question AND the answer**, the same shape as the existing product-name
+check — not an instruction to the model.
+
+**The half that matters is the suppressor.** A clinical term only counts when the question is *not*
+framed as a procedure, because these are all legitimate and all contain clinical words:
+
+* *"how do I report an adverse event"* — **a regulatory obligation.** Blocking it would be the worst
+  false positive available.
+* *"what do I do if a doctor asks about dosing"*
+* *"the doctor asked about contraindications, what is the process"*
+
+**Scored against a corpus, and the numbers are in the record:** 11 of 11 clinical questions refused,
+0 of 17 process questions wrongly refused.
+
+### What a rep actually experiences
+
+A clinical question gets the existing redirect: **"That looks like a product question. Use Product
+Q&A, which answers only from your company's approved material and shows you where each answer came
+from."** They are sent to the tool that cites its sources, which is the correct destination.
+
+### What you are accepting, because it is not zero
+
+1. **It does not understand medicine.** It matches terms and frames. A clinical question phrased
+   without any of the listed words will pass — the control is *"obvious cases"*, the same standard
+   the patient guardrail sets for itself.
+2. **Some legitimate questions will be redirected.** The corpus says none of the 17 tested, but a rep
+   will eventually phrase something in a way the suppressor misses. The cost is one redirect; the
+   asymmetry is deliberate and is the same one the patient guardrail uses.
+3. **A redirect is not an answer.** If reps redirect often on questions they consider reasonable,
+   that is a signal the term list is too broad — and it is worth asking them rather than assuming.
+
+**No decision is required from you. This is a notification, not a request** — the control is
+deterministic, testable and reversible, and the alternative was leaving a documented hole open
+because the mitigation for it was somebody else's unanswered email. **If you would rather it were
+looser, say so and the term list shrinks.**

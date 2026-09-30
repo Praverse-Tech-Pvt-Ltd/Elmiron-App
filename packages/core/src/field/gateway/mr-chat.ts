@@ -138,6 +138,61 @@ const renderHistory = (
  * a two-letter brand would match inside ordinary words and make the assistant refuse everything,
  * which is a different failure and not a safer one.
  */
+/**
+ * W1-J Part B — the clinical-question control, and why it needs two halves rather than a word list.
+ *
+ * **The gap it closes.** W1-I recorded a residual with an example: *"is 400mg twice daily normal for
+ * interstitial cystitis?"* names no product, carries no patient identifier, and reached the model.
+ * `AI-SPEC` §10 says `mr_chat` *"must not become a clinical decision-support system"* and nothing
+ * enforced it. **A prompt instruction was never among the options** — the session that built this
+ * feature established that its prompt stops nothing.
+ *
+ * **Why a term list alone would be worse than nothing.** These are all legitimate and all contain a
+ * clinical word:
+ *
+ *   "how do I report an adverse event"
+ *   "what do I do if a doctor asks about dosing"
+ *   "the doctor asked about contraindications, what is the process"
+ *
+ * A rep who cannot ask those has lost the assistant's main use, and **a guardrail that blocks the
+ * product gets switched off** — the same argument that made `PATIENT_COMPOUND_WORDS` necessary next
+ * door. So a clinical term only counts when the question is **not** framed as a procedure.
+ */
+const CLINICAL_TERMS =
+  /\b(?:dose|doses|dosing|dosage|contraindicat\w*|indicat(?:ion|ions|ed)|pregnan\w*|lactation|breastfeed\w*|half[\s-]?life|interaction|interactions|titrat\w*|renal|hepatic|efficacy|pharmacokinetic\w*|posology|overdose|paediatric|pediatric|geriatric)\b/iu;
+
+/**
+ * A dosage amount — `400mg`, `20 mcg`, `5ml`.
+ *
+ * **Separate from `CLINICAL_TERMS`, and the reason is a bug the corpus caught.** The unit was first
+ * written inside that alternation as `\bmg\b`, which never matches `400mg`: there is no word boundary
+ * between a digit and a letter, so the very example W1-I recorded as the residual —
+ * *"is 400mg twice daily normal for interstitial cystitis?"* — still passed. The number is what
+ * creates the boundary, so the digits have to be part of the pattern.
+ */
+const DOSAGE_AMOUNT = /\b\d+(?:\.\d+)?\s?(?:mg|mcg|ml|g)\b/iu;
+
+/**
+ * A procedural frame: the question is about how to USE THE APP or follow a process, not about a
+ * medicine. Its presence suppresses the clinical-term rule.
+ */
+const PROCEDURAL_FRAME =
+  /\b(?:how\s+(?:do|does|can|should)\s+(?:i|we|you)|how\s+to\b|what\s+do\s+i\s+do|what\s+is\s+the\s+(?:process|procedure|workflow|sop)|where\s+do\s+i|who\s+do\s+i|process\s+for|procedure\s+for|escalat\w*|report\s+(?:an|a)\b|log\s+(?:an|a)\b|record\s+(?:an|a)\b|file\s+(?:an|a)\b)/iu;
+
+/**
+ * Is this a clinical question rather than a question about the app?
+ *
+ * **Used on BOTH the question and the answer**, exactly as the catalogue check is — and for the same
+ * reason. The question side stops the obvious ask before a model is paid for it; **the answer side is
+ * the one that matters**, because it catches an invented clinical claim regardless of how the
+ * question was phrased, and no rephrasing gets around it.
+ *
+ * On the answer side the procedural suppressor still applies: a reply explaining *how to escalate a
+ * dosing question* is exactly what this feature should say.
+ */
+export const isClinicalQuestion = (text: string): boolean =>
+  (CLINICAL_TERMS.test(text) || DOSAGE_AMOUNT.test(text)) && !PROCEDURAL_FRAME.test(text);
+
 export const namesAProduct = (text: string, terms: readonly string[]): string | null => {
   const haystack = text.toLowerCase();
   for (const term of terms) {
@@ -205,6 +260,14 @@ export const answerMrChat = async (input: MrChatInput): Promise<MrChatResult> =>
     return { kind: 'out_of_scope', requestId, message: MR_CHAT_OUT_OF_SCOPE_MESSAGE };
   }
 
+  // W1-J Part B. A clinical question with no procedural framing, whether or not it names a product.
+  // This is the half W1-I recorded as a residual: "is 400mg twice daily normal for interstitial
+  // cystitis?" names nothing in the catalogue and used to reach the model.
+  if (isClinicalQuestion(message)) {
+    await complete({ status: 'blocked', flags: ['off_label_request'] });
+    return { kind: 'out_of_scope', requestId, message: MR_CHAT_OUT_OF_SCOPE_MESSAGE };
+  }
+
   // 4. The model. No sources: this feature has none by design.
   let structured;
   try {
@@ -253,7 +316,7 @@ export const answerMrChat = async (input: MrChatInput): Promise<MrChatResult> =>
 
   // 5. THE CONTROL: the answer is checked against the catalogue and DISCARDED if it names a
   //    product, whatever the model said about scope. Fails closed.
-  if (namesAProduct(out.answer, terms) !== null) {
+  if (namesAProduct(out.answer, terms) !== null || isClinicalQuestion(out.answer)) {
     await complete({
       status: 'completed',
       raw: structured.raw,

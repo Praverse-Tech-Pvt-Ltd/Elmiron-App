@@ -184,23 +184,26 @@ describe('the guardrail fires BEFORE any provider call', () => {
     expect(done['p_flags']).toContain('patient_identifier_detected');
   });
 
-  it('BE-W126 — a bare "patient <Firstname Lastname>" is NOT caught, and that is a real gap', async () => {
-    // Measured, not assumed. `detectPatientSignals` needs a title or the word "named":
-    //   "my patient Mr Sharma should take …"  -> patient_named, patient_specific_advice
-    //   "patient named Meena has bladder pain" -> patient_named
-    //   "patient Meena Kumari, 42, has bladder pain" -> NOTHING
+  it('BE-W126 — CLOSED: a bare "patient <Firstname Lastname>" is now refused', async () => {
+    // **This test previously asserted the OPPOSITE, and the change is deliberate rather than
+    // quiet.** W1-I registered `BE-W126` and wrote this as `expect(result.kind).toBe('answered')`,
+    // documenting the gap in the suite instead of in a document, with the note that fixing the gap
+    // would make it fail and that the failure was the instruction to rewrite it.
     //
-    // This test exists so the gap is visible in the suite rather than implied in a document, and it
-    // is deliberately written as the CURRENT behaviour. When `BE-W126` is fixed this test fails, and
-    // failing is how it asks to be rewritten as the refusal it should be.
+    // W1-J fixed it. The failure arrived exactly as predicted —
+    // `AssertionError: expected 'patient_specific' to be 'answered'` — and this is the rewrite.
+    // The tuning it now depends on is scored against `guardrails.corpus.ts` in
+    // `guardrails.test.ts`, which is where the false-positive half is kept honest.
     const r = fresh();
     const result = await answerMrChat({
       rpc: fakeRpc(r),
-      provider: scripted({ inScope: true, answer: 'I cannot help with that.' }, r),
+      provider: scripted({ inScope: true, answer: 'should never be produced' }, r),
       message: 'patient Meena Kumari, 42, has bladder pain',
     });
-    expect(result.kind).toBe('answered');
-    expect(r.modelRequests).toHaveLength(1);
+    expect(result.kind).toBe('patient_specific');
+    // And it refused BEFORE the provider, which is the property that matters.
+    expect(r.modelRequests).toHaveLength(0);
+    expect(completionOf(r)['p_model_provider']).toBeNull();
   });
 
   it('POSITIVE CONTROL: the same shape of call WITHOUT patient details does reach the model', async () => {
@@ -266,17 +269,43 @@ describe('B3 — what stops an invented product claim', () => {
     expect(completionOf(r)['p_flags']).toContain('off_label_request');
   });
 
-  it('THE HONEST LIMIT: a clinical question naming no product reaches the model', async () => {
-    // Recorded as a test so the gap is visible rather than implied. If this ever starts returning
-    // out_of_scope, something new is stopping it and this test should say what.
+  it('W1-J: the limit W1-I recorded is CLOSED — a clinical question is refused, no model called', async () => {
+    // **This test previously asserted the opposite, and the change is deliberate.** W1-I wrote it as
+    // `expect(result.kind).toBe('answered')` with the note: *"Recorded as a test so the gap is
+    // visible rather than implied. If this ever starts returning out_of_scope, something new is
+    // stopping it and this test should say what."*
+    //
+    // W1-J Part B is the something new: `isClinicalQuestion`, a deterministic question-and-answer
+    // side check scored against `CLINICAL_MUST_REFUSE` / `CLINICAL_MUST_NOT_REFUSE` in
+    // `guardrails.test.ts`. The suppressor there is what keeps "what do I do if a doctor asks about
+    // dosing" answerable.
     const r = fresh();
     const result = await answerMrChat({
       rpc: fakeRpc(r),
       provider: scripted({ inScope: true, answer: '400mg twice daily is typical.' }, r),
       message: 'is 400mg twice daily a normal dose for interstitial cystitis',
     });
-    expect(r.modelRequests).toHaveLength(1);
-    expect(result.kind).toBe('answered');
+    expect(result.kind).toBe('out_of_scope');
+    // Refused BEFORE the provider: no model was paid for a question it must not answer.
+    expect(r.modelRequests).toHaveLength(0);
+    expect(completionOf(r)['p_model_provider']).toBeNull();
+  });
+
+  it('W1-J: and a clinical claim in the ANSWER is discarded, whatever the question was', async () => {
+    // The half a question-side check cannot do: the rep asked something innocuous and the model
+    // volunteered a dose. Same shape as the catalogue check on the answer.
+    const r = fresh();
+    const result = await answerMrChat({
+      rpc: fakeRpc(r),
+      provider: scripted(
+        { inScope: true, answer: 'While you are there, 400mg twice daily is the usual dose.' },
+        r,
+      ),
+      message: 'how do I record a sample drop',
+    });
+    expect(r.modelRequests).toHaveLength(1); // the model WAS called
+    expect(result.kind).toBe('out_of_scope'); // and its answer was thrown away
+    expect(completionOf(r)['p_flags']).toContain('guardrail_triggered');
   });
 });
 

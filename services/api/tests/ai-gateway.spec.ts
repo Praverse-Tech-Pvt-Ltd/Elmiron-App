@@ -282,14 +282,26 @@ afterAll(async () => {
         'false',
         `W1-B C3 revert (${runId}). The flag returns to its shipped state: OFF.`,
       );
-      // Best-effort teardown. A failure here must not fail the suite, but it must be visible.
+      // W1-J C1: `ai_requests` is NOT deleted, and the omission is deliberate.
+      //
+      // This block used to begin `delete from public.ai_requests where prompt_version_id = $1`,
+      // which printed on EVERY run of this suite:
+      //
+      //   ai-gateway teardown left rows behind: ai_requests is append-only: DELETE is not
+      //   permitted by any role
+      //
+      // The table is an audit trail and refuses deletion unconditionally — a `where false` delete
+      // raises, so no row count could ever make it succeed. **A warning that always fires is a
+      // warning people learn to skim**, and this repository has lost real findings that way.
+      //
+      // The rows are namespaced by `runId` and `pnpm db:reset` clears them, which is how every
+      // other append-only table in this suite is handled. The sweep that found this checked all 14
+      // tables the suites delete from and confirmed this was the only DEAD one: every other delete
+      // against an append-only table is a deliberate assertion that the refusal works.
       try {
-        await db.query(`delete from public.ai_requests where prompt_version_id = $1`, [
-          promptVersionId,
-        ]);
         await db.query(`delete from public.product_markets where product_id = $1`, [productId]);
       } catch (error) {
-        console.warn('ai-gateway teardown left rows behind:', (error as Error).message);
+        console.warn('ai-gateway teardown left the product link behind:', (error as Error).message);
       }
     });
   } finally {
@@ -399,6 +411,21 @@ describe.skipIf(!live)('W1-B C4 — the guardrail fires BEFORE any provider call
     expect(row.input_tokens, 'no tokens were spent because no model was asked').toBeNull();
     expect(row.output_tokens).toBeNull();
     expect(row.flags).toContain('patient_identifier_detected');
+  });
+
+  it('W1-J / BE-W126: a bare "patient <Firstname Lastname>" is blocked here too', async () => {
+    // **The guardrail is SHARED, so the gap was never `mr_chat`'s.** `detectPatientSignals` is
+    // called by `product_qa`, `mr_chat` and `ai_doctor`; `BE-W126` shipped with this feature and was
+    // only exposed by the one built later. This asserts the fix end to end on THIS feature, because
+    // proving it on `mr_chat` alone would prove it for a third of the blast radius.
+    //
+    // The phrase caught NOTHING before W1-J. The positive control below still applies.
+    const { body } = await ask('patient Meena Kumari, 42, has bladder pain');
+    expect(body['kind']).toBe('patient_specific');
+    const row = await auditRow(body['requestId'] as string);
+    expect(row.status).toBe('blocked');
+    expect(row.model_provider, 'NO provider call happened').toBeNull();
+    expect(row.input_tokens).toBeNull();
   });
 
   it('POSITIVE CONTROL: the same call WITHOUT patient details does reach the provider', async () => {

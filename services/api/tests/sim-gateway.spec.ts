@@ -653,6 +653,67 @@ describe.skipIf(!live)('W1-D B6 — no real doctor, no recording, no patient dat
     });
     expect(turns).toBe('0');
   });
+
+  it('W1-J / BE-W126: a bare "patient <Firstname Lastname>" is blocked here too, with a positive control', async () => {
+    // **The guardrail is SHARED.** `detectPatientSignals` serves `product_qa`, `mr_chat` and
+    // `ai_doctor`, so `BE-W126` was never `mr_chat`'s gap — it was in this feature as well and was
+    // merely exposed by the one built later. Proving the fix on one feature would prove it for a
+    // third of the blast radius.
+    const started = await rpcAs<{ r: { sessionId: string } }>(
+      world.users.puneMr,
+      `select public.start_sim_session($1) as r`,
+      [scenarioId],
+    );
+    const sessionId = started?.r.sessionId ?? '';
+
+    const lastDoctorRequest = async () =>
+      withClient(async (db) => {
+        const { rows } = await db.query<{
+          status: string;
+          model_provider: string | null;
+        }>(
+          `select status, model_provider from public.ai_requests
+            where feature = 'ai_doctor' order by started_at desc limit 1`,
+        );
+        return rows[0];
+      });
+
+    // The phrase that caught NOTHING before W1-J.
+    const blocked = await gateway(
+      {
+        feature: 'ai_doctor',
+        sessionId,
+        repText: 'patient Meena Kumari, 42, has bladder pain',
+        personaBrief: 'x',
+        personaStance: 'sceptical',
+        objection: 'x',
+        history: [],
+      },
+      mrToken,
+    );
+    expect(blocked.body['kind']).toBe('patient_specific');
+    const blockedRow = await lastDoctorRequest();
+    expect(blockedRow?.status).toBe('blocked');
+    expect(blockedRow?.model_provider, 'NO provider call happened').toBeNull();
+
+    // POSITIVE CONTROL, in the same session: without it, a null provider could mean the gateway
+    // never reaches a provider at all rather than that this turn was refused.
+    const clean = await gateway(
+      {
+        feature: 'ai_doctor',
+        sessionId,
+        repText: 'Good morning doctor, may I have two minutes about the formulary change?',
+        personaBrief: 'x',
+        personaStance: 'sceptical',
+        objection: 'x',
+        history: [],
+      },
+      mrToken,
+    );
+    expect(clean.status).toBe(200);
+    const cleanRow = await lastDoctorRequest();
+    expect(cleanRow?.model_provider, 'the provider IS reachable on a clean turn').toBe('stub');
+  });
 });
 
 describe.skipIf(!live)('W1-D B2 — a persona and a scenario are never born approved', () => {

@@ -1257,3 +1257,209 @@ loading it with the hydration assertion and its negative control, and 11 more mi
 apply to an empty database and to roll back.
 
 **Not merged. The decision is the operator's.**
+
+### W1-J — closing the guardrail · 30 September 2026 · Model: Claude Opus 5
+
+**`BE-W126` is closed with a corpus, the clinical residual is closed with a control, and the sweep
+found the dead teardown was the only one of its kind in the repository.**
+
+**A correction to my own framing first, because the reviewer was right and it changes the scope.** I
+wrote that *"`mr_chat` shipped with a known hole in its most important control."* That is wrong in the
+way that matters: **`detectPatientSignals` is shared**, and `grep` gives the blast radius —
+`product-qa.ts:149`, `mr-chat.ts:191`, `sim-doctor.ts:117`. The gap was in `product_qa` and
+`ai_doctor` from the day they were written; `mr_chat` only exposed it. **`ai_coach` does not call it**,
+which is defensible — it analyses turns already guarded at record time — and is stated here rather
+than glossed as "all four".
+
+**And the mitigation I offered was worse than the reviewer's objection.** I said the exposure was
+limited because `#5` is open so nothing reaches a real provider. **That is a mitigation whose expiry I
+do not control.** The operator may answer `#5` any day. A hole guarded by somebody else's unanswered
+email is not guarded.
+
+#### A1 — the corpus, written before the patterns were touched
+
+`packages/core/src/field/gateway/guardrails.corpus.ts`. Every entry carries its own reason, because a
+phrase without one cannot be argued with.
+
+**The hard half is `MUST_NOT_REFUSE`, and the hardest thing in it is a DOCTOR'S NAME.** `AI-SPEC`
+§2 A3: *"A doctor's name: possible — it is free text."* A rep types doctor names constantly; it is the
+core of the job. **`patient Meena Kumari` and `Dr Meena Kumari` are the same shape of text and need
+opposite answers**, which is why *a sequence of capitalised words* can never be the signal, and why
+any tuning that refuses `add Dr Sharma to my beat plan` has broken the product in order to protect it.
+
+#### A2 — what the detection uses, and why it is more than a longer regex
+
+Three parts, none of which works alone:
+
+1. **The keyed token** — `patient` or `pt`, the latter being how a clinician abbreviates.
+2. **A stoplist, `PATIENT_COMPOUND_WORDS`** — `portal`, `safety`, `information`, `support`,
+   `education`, `adherence`, `leaflet` and the rest of the product's own vocabulary. **This is what
+   makes the widened rule usable at all**; without it, `where is the patient portal` is a patient.
+3. **A capitalisation test on the FOLLOWING word**, which distinguishes a name from a common noun —
+   and which is only safe *because* (2) has already removed the title-cased app vocabulary.
+
+Plus a second, independent rule for the half with no keyed token at all — `Mrs Sharma aged 62`,
+`58M with IC`, `a 42 year old female`: an age or sex marker near a person, **suppressed by a clinician
+title**. That suppressor is the only reason this rule can exist beside a product whose core workflow
+is doctor names.
+
+#### A3 — the numbers, including what the tuning gets wrong
+
+**Corpus: 15 must-refuse, 27 must-not-refuse. 15 of 15 refused. 0 of 27 wrongly refused.**
+
+**A clean sweep meant the corpus was too kind, so twenty further realistic phrases were probed.**
+Three fired, and two were genuine false positives the first tuning would have shipped:
+
+| Probe | Verdict |
+| --- | --- |
+| `the 12F form needs signing` | **FALSE POSITIVE** — a form number read as age+sex |
+| `I have 25M in my territory target` | **FALSE POSITIVE** — twenty-five million read as a 25-year-old male |
+| `patient X reported nausea` | **fires, and correctly** — pseudonymised or not, it is one person's case, and the asymmetry favours refusing |
+
+**Both false positives were fixed by requiring a clinical context word after the shorthand** —
+`58M with IC` has one, `25M in my territory` does not — and **both are now permanent corpus entries**,
+along with four more probes (`the study had 400 patients aged 18 to 65`, `how many patients are on the
+programme`, `Mrs Iyer from the pharmacy called`, `aged care facility visit tomorrow`). A second probe
+round of twenty fresh phrases found **nothing** wrong on either side, including `15M rupees`,
+`60M population`, `Dr Iyer has 200 patients aged over 60` and `a 42 year old programme`.
+
+**What it still gets wrong, named rather than counted:**
+
+| Phrase | Result | Why it is left |
+| --- | --- | --- |
+| `Sharma has been on it three months and reports burning` | **not refused** | A bare surname with no title, no `patient` token and no age. **Indistinguishable from a doctor's name** — this is a ceiling, not a tuning failure |
+| `she has been on it three months, any concerns` | **not refused** | A pronoun. No identifier of any kind |
+| `aged 62 and still working` | **not refused** | An age with no name and no sex word is indistinguishable from `the policy aged 62 days` |
+
+**One bug in what I wrote, caught by the corpus rather than by me:** the title regex had no `i` flag,
+so `Mrs Sharma aged 62` matched nothing. The corpus failed, named the phrase, and the fix was one
+character.
+
+#### A4 — the test that asserted the old behaviour
+
+W1-I wrote it as `expect(result.kind).toBe('answered')` with the note that fixing `BE-W126` would make
+it fail and **that the failure was the instruction to rewrite it as a refusal.** It failed exactly as
+predicted — `AssertionError: expected 'patient_specific' to be 'answered'` — and it is now rewritten as
+the refusal, with the change recorded in the test body rather than made quietly.
+
+#### A5 — before the provider, for EVERY feature sharing the guardrail
+
+All three already had a `model_provider IS NULL` proof, but **all three used old-pattern phrases**
+(a phone number, `my patient is 62`, `my patient Mr Sharma`) — so none exercised the new detection.
+One end-to-end test was added to each, using the bare-name phrase that caught nothing before:
+
+| Feature | Suite | Proof |
+| --- | --- | --- |
+| `product_qa` | `ai-gateway.spec.ts` | blocked, `model_provider IS NULL`, existing positive control |
+| `mr_chat` | `mr-chat.spec.ts` | blocked, `model_provider IS NULL`, existing positive control |
+| `ai_doctor` | `sim-gateway.spec.ts` | blocked, `model_provider IS NULL`, **and its own positive control in the same session** |
+
+**43 of 43** across the three suites.
+
+#### A6 — the mutation
+
+The first mutant (removing the bare-name rule entirely) killed **6** tests — too broad to locate
+anything. The narrow one isolates what probing taught: **removing the context-word requirement from
+the age-sex shorthand killed exactly 1 test**, with **67** passing as the positive control, and the
+killed test named the two phrases. Restored; 68 passed | 4 skipped.
+
+#### B — the clinical question, decided
+
+**Options and costs are tabled for the operator in `docs/blocked-on-you.md` → W1-J Part B.** A prompt
+instruction was not among them, for the reason this project already established.
+
+**Built: a deterministic check on the QUESTION and the ANSWER**, the same shape as the catalogue
+check. The reviewer's position survived contact with the corpus, with one addition — **the suppressor
+is what makes it usable**. A clinical term only counts when the question is not framed as a procedure,
+because these all contain clinical words and must all be answerable:
+
+* **`how do I report an adverse event`** — a regulatory obligation, and the worst false positive
+  available
+* `what do I do if a doctor asks about dosing`
+* `the doctor asked about contraindications, what is the process`
+
+**B3 numbers: 11 of 11 clinical questions refused, 0 of 17 process questions wrongly refused.**
+
+**A second bug the corpus caught in what I had just written:** the unit was written `\bmg\b`, which
+never matches `400mg` — there is no word boundary between a digit and a letter. **The exact sentence
+W1-I recorded as the residual still passed.** The digits had to be part of the pattern.
+
+**And the W1-I test asserting the limit failed**, exactly as A4's did, and is rewritten the same way —
+plus a new one proving a clinical claim in the ANSWER is discarded whatever the question was.
+
+#### C1 — the sweep
+
+**14 tables are deleted from across the suites. Seven refuse DELETE unconditionally** — tested with
+`delete … where false`, so only statement-level refusals fire: `ai_requests`, `consent_records`,
+`adverse_event_reports`, `analysis_overrides`, `app_thresholds`, `course_enrolments`,
+`lesson_completions`.
+
+**Every occurrence against those seven was then classified, and the result is reassuring:**
+
+| Suite | Table | Verdict |
+| --- | --- | --- |
+| `ai-gateway.spec.ts` | `ai_requests` | **DEAD TEARDOWN — the only one. Removed.** |
+| `ai-control-plane.spec.ts` | `ai_requests` | assertion (`sqlstate(...)`) |
+| `adverse-events.spec.ts` | `adverse_event_reports` | assertion (`rejects.toThrow(/append-only/)`) |
+| `consent-withdrawal-bounds.spec.ts` | `consent_records` ×2 | assertions |
+| `decision-debt.spec.ts` | `app_thresholds` | assertion |
+| `lms-core.spec.ts` | `course_enrolments`, `lesson_completions` | assertions |
+| `rls.spec.ts` | `consent_records`, `analysis_overrides` | assertions |
+
+**One dead line in the whole repository, and every other delete against an append-only table is a
+deliberate assertion that the refusal works.** The warning it printed every run is gone.
+
+#### C2 — did the contract requests reach the frontend, and what happens if they do not
+
+**Appended is not read, and I cannot claim they were read.** What can be established: `BE-CR-3`,
+`BE-CR-4` and `BE-CR-5` are in `docs/contract-requests.md` on **this branch**, which is **PR #2, still
+unmerged**. So they are not on `main`, and a frontend developer working from `main` has not seen them
+unless they are reading this branch.
+
+**That is the honest status: written, pushed, unmerged, unacknowledged.** There is no read receipt in
+this repository and inventing one would be worse than saying so.
+
+**What happens if the developer moves before the switch.** `CR-3`'s answer has now been repeated three
+times: six screens can leave `127.0.0.1:4010` today with no backend change, and **a real device cannot
+reach `127.0.0.1` at all** — on a handset that address is the handset. If the switch does not happen
+before they move, **the demo runs on an emulator or not at all**, and the three contract requests
+become documentation for whoever inherits the app rather than instructions for the person who can act
+on them this week. **The backend cannot make that switch; it is entirely frontend work.**
+
+#### D1 — the state of the week
+
+| # | Capability | State | Waiting on |
+| --- | --- | --- | --- |
+| 1 | **Product Q&A** (`product_qa`) | **BUILT AGAINST A STUB** — flow, guardrails, citations, audit, end to end over HTTP | **`#5`** only. The screen is `BE-CR-3` and can be built now |
+| 2 | **MR Chat** (`mr_chat`) | **BUILT AGAINST A STUB** — flow, patient guardrail, catalogue check, clinical check, end to end | **`#5`** only. The screen is `BE-CR-5` and can be built now |
+| 3 | **Learning tutor** (`lms_tutor`) | **DOES NOT EXIST** — no flow file, no gateway dispatch, no tests | Design, then `#5`. Nothing has been started |
+| 4 | **AI Doctor** (`ai_doctor`) | **BUILT AGAINST A STUB** — sessions, turns, personas and scenarios authored and approved through the console, proven in a browser | **`#5`**, plus the prompt text somebody must write |
+| 5 | **AI Coach** (`ai_coach`) | **BUILT AGAINST A STUB** — analysis contract, five dimensions, `C27` enforced in RLS | **`#5`**, plus the scoring question the operator has not answered |
+| 6 | **Voice in practice** | **DOES NOT EXIST** — no flow, no vendor, no corpus | A speech vendor (`BE-W32`), the bake-off corpus, and `#5`. Furthest away |
+
+**The control plane under all six is BUILT AND PROVEN**: flags, approved prompts with four eyes, the
+daily allowance, the audit trail with no conversation in it, and the Edge Function gateway — exercised
+in CI on every push.
+
+#### D2 — what changes on the day `#5` is answered
+
+**One file changes for three features.** `createStubProvider` is swapped for a real
+`LlmProvider` in `services/api/supabase/functions/ai-gateway/index.ts`. `product_qa`, `mr_chat` and
+`ai_doctor` become real that day, because everything else — the flag, the approved prompt, the
+guardrails, the citation validation, the audit row, the refusal mapping — is already there and already
+tested against a stub that deliberately returns the least useful valid answer.
+
+**What still needs work after that, and it is not small:**
+
+* **`ai_coach` needs the scoring question answered** before a score is shown to anybody. The flow
+  works; what a number means is a product decision.
+* **`product_qa` needs approved knowledge.** With none, it correctly answers *"approved information
+  not available"* to everything. `#7`, the product catalogue, is the blocker — not `#5`.
+* **`ai_doctor` needs its prompt written** by the sales training lead, and a persona and scenario
+  approved by two admins. The screens exist; the content does not.
+* **`lms_tutor` and voice need building**, not configuring.
+* **`BE-W106`** still means the AI flag is a global row with no screen, so an engineer switches each
+  feature on per company.
+
+**So: `#5` makes three features real in one file, and changes nothing about the two that do not exist
+and the one that is waiting on a different decision.**
