@@ -29,6 +29,14 @@ export { KNOWLEDGE_NOT_AVAILABLE_MESSAGE } from '../../../../../packages/core/di
 
 export { PATIENT_SPECIFIC_REFUSAL_MESSAGE } from '../../../../../packages/core/dist/field/gateway/guardrails.js';
 
+// W1-I Part B -- `mr_chat`, from the same built output. Its out-of-scope redirect is exported too,
+// because the gateway does not compose refusal text: one copy of the sentence, in the contract.
+export {
+  MR_CHAT_FAILED_MESSAGE,
+  MR_CHAT_OUT_OF_SCOPE_MESSAGE,
+  answerMrChat,
+} from '../../../../../packages/core/dist/field/gateway/mr-chat.js';
+
 // W1-D B4 -- `ai_doctor` and `ai_coach`, from the same built output and the same interfaces.
 export {
   analyseSimSession,

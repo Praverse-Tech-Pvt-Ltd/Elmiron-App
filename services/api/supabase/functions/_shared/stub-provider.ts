@@ -67,7 +67,7 @@ export const resetStubProviderCallCount = (): void => {
  * indistinguishably from a real model returning nonsense, which would make the gateway's validation
  * untestable.
  */
-export type StubShape = 'product_qa' | 'sim_doctor' | 'sim_coach';
+export type StubShape = 'product_qa' | 'mr_chat' | 'sim_doctor' | 'sim_coach';
 
 /**
  * **Every stub reply SAYS it is a stub, in the text a human would read.**
@@ -85,6 +85,11 @@ const stubBody = (shape: StubShape): string => {
       // `supported: false` is the whole design: the one reply that cannot be mistaken for an answer.
       // `answerProductQuestion` maps it to KNOWLEDGE_NOT_AVAILABLE_MESSAGE, verbatim.
       return JSON.stringify({ supported: false, answer: '', citedChunkIds: [] });
+    case 'mr_chat':
+      // `inScope: false` is the same choice `product_qa` makes with `supported: false`: the one
+      // reply that cannot be mistaken for an answer. `answerMrChat` maps it to the out-of-scope
+      // redirect, so a stubbed chat sends the rep to Product Q&A rather than saying something.
+      return JSON.stringify({ inScope: false, answer: '' });
     case 'sim_doctor':
       // Schema-valid so the gateway's validation is exercised, and visibly a stub so nobody mistakes
       // it for a doctor. `objectionAddressed: false` keeps the practice loop honest -- a stub cannot

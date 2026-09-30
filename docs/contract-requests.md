@@ -578,3 +578,196 @@ before the demo. If the objection is to a specific line, ship the rest — **fou
 "this app cannot do this today" about things it does daily is not a safer position than an imperfect
 correction.** Merging it also needs `main` merged into that branch first; it is six commits behind a
 month of work.
+
+---
+
+## Answers — 30 September 2026 (backend, W1-I)
+
+> **⚠ READ THIS LINE FIRST, AND IT IS THE THIRD TIME IT HAS BEEN WRITTEN.**
+>
+> **CR-3 is answered. Six screens can leave `127.0.0.1:4010` TODAY with no backend change, and a real
+> device cannot reach `127.0.0.1` at all — on a handset that address is the handset.** If the switch
+> does not happen before your developer moves to other projects, **it does not happen**, and the demo
+> runs on an emulator or not at all. The detail is under *"Answers — 28 September"*, repeated under
+> *"Answers — 29 September"*, and this is the one-line version.
+
+Three contract requests follow, one per unbuilt screen, to the same completeness as `CR-5`. Each says
+who may call it, the schema names in `packages/core`, every refusal with its SQLSTATE, and what the
+screen shows. **Each ends with a ruling on whether to build it against the stub or hold it until
+`#5`.**
+
+---
+
+### `BE-CR-3` — Product Q&A (`product_qa`)
+
+**What it is.** A rep asks a question about a product; the answer comes **only** from approved
+knowledge for their market, with citations, or it says approved information is not available.
+
+**Who may call it.** Any authenticated user, subject to the database's own three conditions — the
+feature flag, an approved prompt for their organisation, and a daily allowance. The MR's own token;
+never a service key.
+
+**How to call it.** `POST` to the Edge Function, **not** an RPC:
+
+```
+POST {SUPABASE_URL}/functions/v1/ai-gateway
+Authorization: Bearer <the MR's access token>
+{ "feature": "product_qa", "question": "...", "marketId": "<uuid|null>", "productId": "<uuid|null>" }
+```
+
+**`feature` may be omitted** and defaults to `product_qa`, so the W1-B contract is unchanged for
+existing callers. Send it anyway — an explicit feature is one less thing to infer when reading a log.
+
+**What comes back.** `ProductQaResult` (`packages/core/src/field/gateway/product-qa.ts`), a
+discriminated union on `kind`. **Switch on `kind`; do not test for an empty answer:**
+
+| `kind` | What it means | What the screen shows |
+| --- | --- | --- |
+| `answered` | `answer` plus `citations[]`, each with `documentTitle`, `versionNumber`, `heading`, `sourceReference` | The answer **with its citations visible**. A citation is not a footnote here — it is the reason the answer is allowed to exist |
+| `not_available` | Nothing approved matched, or the model's reply failed validation | `KNOWLEDGE_NOT_AVAILABLE_MESSAGE`, verbatim. **Do not soften it into "I could not find anything"** — the sentence is deliberate |
+| `patient_specific` | The guardrail fired | `PATIENT_SPECIFIC_REFUSAL_MESSAGE`, verbatim. Offer the approved channel, not a retry |
+| `failed` | Provider timeout, provider error, or a prompt/schema mismatch | `PRODUCT_QA_FAILED_MESSAGE`. A retry is safe |
+
+**Every refusal, with its SQLSTATE and HTTP status:**
+
+| SQLSTATE | HTTP | Meaning | Screen |
+| --- | --- | --- | --- |
+| — | **401** | No bearer token | Sign in again |
+| `22023` | **400** | Empty question, or an unknown `feature` | A validation message. Not a server problem |
+| `45011` | **403** | `ai_feature_disabled` — flag off, **or** no approved prompt for this organisation | *"This feature is not switched on for your company."* **Not actionable by the rep** — do not offer a retry |
+| `45012` | **429** | `ai_daily_requests_per_user` spent | *"You have used today's questions."* Actionable tomorrow |
+| `28000` | 403 | Not authenticated at the database | Sign in again |
+| `no_provider` | **503** | No AI provider configured — `#5` | See the ruling below |
+
+Use `refusalForSqlState` from `packages/core` rather than mapping these by hand; it already returns
+the `code` and an `actionable` boolean.
+
+**C2 ruling: BUILD IT AGAINST THE STUB.** The stub answers `supported: false`, so the screen shows
+`not_available` on every question — which is **the real behaviour of a company with no approved
+knowledge**, and that is the state every company starts in. The screen is therefore correct today and
+correct after `#5`; nothing about it changes. **Build it.**
+
+---
+
+### `BE-CR-4` — The practice session (`ai_doctor` + `ai_coach`)
+
+**This supersedes nothing in `CR-5` — it is `CR-5`'s screen half.** `CR-5` gave the four calls;
+this gives the refusals and the screen states, which is what was missing.
+
+**Who may call it.** The **rep only**, for their own sessions. `sim_sessions_read` admits the owning
+MR and an admin — **deliberately not a field manager**, which is `C27` and is the whole reason the
+policy omits `visible_user_ids()`. There is no manager surface and there must not be one in v1.
+
+**The four calls.** RPC names from `SIMULATION_RPC` (`packages/core/src/field/simulation.ts`) — read
+them from the constant, never typed as strings:
+
+| Step | Call | Response schema |
+| --- | --- | --- |
+| 1. Start | `SIMULATION_RPC.startSimSession` (`start_sim_session`) | `StartSimSessionResponseSchema` |
+| 2. A turn | the **Edge Function**, `feature: "ai_doctor"` | the function's JSON; the turn is stored server-side |
+| 3. End | `SIMULATION_RPC.endSimSession` | `EndSimSessionResponseSchema` |
+| 4. Coaching | the **Edge Function**, `feature: "ai_coach"` | `RecordSimCoachAnalysisResponseSchema` |
+
+**Every refusal:**
+
+| SQLSTATE | HTTP | Meaning | Screen |
+| --- | --- | --- | --- |
+| `22023` | 400 | **The scenario is not approved**, or its persona is not approved | *"This practice scenario is not ready yet."* **Not the rep's problem to fix** — it is an admin's |
+| `42501` | 403 | The scenario is not in the rep's organisation | Treat as not found. Do not name it |
+| `45011` | 403 | Practice not switched on, **or no approved `ai_doctor` prompt** | *"Practice is not switched on for your company."* |
+| `45012` | 429 | Allowance spent | Actionable tomorrow |
+| `23514` | 400 | A turn or analysis failed a record check | A failure message; a retry is safe |
+| `28000` | 403 | Not authenticated | Sign in again |
+
+**`C27`, and it constrains the screen rather than the API.** Scores are visible to **the rep and a
+company admin only**. **No team average, no ranking, no percentile, and no score on any manager
+screen** — not because the API hides it, but because building it would make the API's omission
+pointless.
+
+**C2 ruling: HOLD THE CONVERSATION SCREEN UNTIL `#5`. Build the list and the history now.**
+
+This is the one case where the demo ruling bites. Every reply from the stubbed doctor is the literal
+string `[PRACTICE STUB - no AI provider is configured; decision #5 is open, so no model was called]`
+and every coach score is **0**. A practice conversation whose every turn is that sentence is not a
+screen anybody can use or evaluate — it is a placeholder wearing a UI. **But the session list, the
+scenario picker and a past session's turn history are all real today** and do not change when `#5`
+lands. Build those.
+
+---
+
+### `BE-CR-5` — MR Chat (`mr_chat`) — **NEW in W1-I, built today**
+
+**What it is.** The general in-app assistant: how a process works, where a screen is, what a policy
+says. **It is explicitly not a product-information tool** (`AI-SPEC` §2 A1) — a product question
+belongs in `BE-CR-3`, which is constrained to approved material and cites it.
+
+**Who may call it.** Any authenticated user, subject to **its own** flag
+(`ai_feature_enabled:mr_chat`) and **its own** approved prompt. It shares nothing with `product_qa`
+but the daily allowance — proven by a test that turns `product_qa` on and shows `mr_chat` still
+refusing.
+
+**How to call it.**
+
+```
+POST {SUPABASE_URL}/functions/v1/ai-gateway
+Authorization: Bearer <the MR's access token>
+{ "feature": "mr_chat", "message": "...", "history": [{ "role": "rep"|"assistant", "text": "..." }] }
+```
+
+**`feature` is REQUIRED here** — omitting it silently gets you `product_qa`. **`history` is yours to
+trim**; the backend does not decide a context window and does not store your history.
+
+**What comes back.** `MrChatResult` (`packages/core/src/field/gateway/mr-chat.ts`):
+
+| `kind` | What the screen shows |
+| --- | --- |
+| `answered` | `answer`. **No citations exist for this feature** — do not render a citation area and do not imply sourcing |
+| `out_of_scope` | `MR_CHAT_OUT_OF_SCOPE_MESSAGE`, which already names Product Q&A. **Make it a link to that screen** — this is the one refusal with an obvious next action |
+| `patient_specific` | `PATIENT_SPECIFIC_REFUSAL_MESSAGE`, verbatim |
+| `failed` | `MR_CHAT_FAILED_MESSAGE`. A retry is safe |
+
+**Refusals:** `22023`→**400** (no `message`), `45011`→**403**, `45012`→**429**, `28000`→403, no
+token→**401**, `no_provider`→**503**. Same mapping as `BE-CR-3`; use `refusalForSqlState`.
+
+**Two things the screen must not do, and they are not style preferences:**
+
+1. **Do not present it as able to answer product or clinical questions.** The backend discards an
+   answer that names one of your organisation's products — so a UI that invites those questions
+   produces a redirect every time and teaches reps the feature is broken.
+2. **Do not store the conversation anywhere the backend cannot see.** `ai_requests` holds tokens and
+   flags and **never the message or the reply**, by design. If the app keeps a transcript locally,
+   that transcript is a new data store with its own retention question, and nobody has answered it.
+
+**C2 ruling: BUILD IT AGAINST THE STUB — and this is the clearest case of the three.** The stub
+answers `inScope: false`, so every message returns `out_of_scope` with the redirect to Product Q&A.
+**That is a correct, useful screen today**: the redirect is real, the link is real, and a rep who
+types a product question gets sent to the right place whether or not a model exists. When `#5` lands,
+in-scope questions start being answered and **nothing in the screen changes**.
+
+---
+
+### C2 — where the line sits, and which side a pilot rep is on
+
+**The demo ruling was that a stubbed answer must not be shown to an audience**, because a plausible
+sentence teaches the room the thing works. **A screen is not an audience** — a developer building
+against a stub is not being misled, they are being unblocked.
+
+**A rep in a pilot IS an audience, and is the most consequential kind.** An audience at a demo knows
+it is a demo; a rep in a pilot believes the app. So:
+
+| | Build now against the stub? | Show to a rep in a pilot? |
+| --- | --- | --- |
+| `BE-CR-3` Product Q&A | **Yes** | **Yes** — `not_available` is the truthful state of a company with no approved knowledge, not a stub artefact |
+| `BE-CR-4` practice conversation | **No** | **No** — every turn is the stub marker |
+| `BE-CR-4` list / history / picker | **Yes** | **Yes** — real today, unchanged by `#5` |
+| `BE-CR-5` MR Chat | **Yes** | **Yes, with the flag off** — see below |
+
+**The rule that resolves all four: a screen may reach a rep when the stub's behaviour is
+indistinguishable from a legitimate real state.** `not_available` and `out_of_scope` are both states
+a fully working system produces every day. The stub doctor's marker sentence is not — no working
+system ever says it.
+
+**And the flag is the mechanism, not a promise.** `ai_feature_enabled:mr_chat` ships **off**. A pilot
+rep can have the screen installed and see nothing until somebody switches it on, which is `#5`'s
+answer arriving. **That is why building now is safe: the shipping default is off, and the code enforces
+it rather than a plan to remember.**

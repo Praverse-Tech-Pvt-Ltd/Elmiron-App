@@ -7,5 +7,6 @@
 export * from './providers.js';
 export * from './guardrails.js';
 export * from './product-qa.js';
+export * from './mr-chat.js';
 export * from './sim-doctor.js';
 export * from './benchmarks.js';

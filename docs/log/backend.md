@@ -1016,3 +1016,244 @@ always timing and expires on 5 October. **One thing now argues against leaving i
 findable only by one.
 
 **Not merged. The decision is the operator's.**
+
+### W1-I — the chatbot · 30 September 2026 · Model: Claude Opus 5
+
+**One line: `mr_chat` exists, through the same gateway as the other three features, and the thing that
+stops it inventing a product claim is a catalogue-derived check on its ANSWER — not its prompt.**
+
+#### A1 — serialisation holds in CI, and the log proves it rather than the stopwatch
+
+| | before (`c4d177f`) | after (`6766e0e`) |
+| --- | --- | --- |
+| `Database and Gate 0 tests` step | **54s** | **102s** |
+| database job total | **5m23s** | **5m40s** |
+| counts | — | `Test Files 73 passed (73)` · `Tests 972 passed \| 4 skipped (976)` |
+
+**The direct evidence is vitest's own duration breakdown, not the timing:**
+
+```
+Duration 97.47s (transform 1.03s, setup 0ms, collect 7.37s, tests 77.25s, environment 13ms, prepare 4.40s)
+```
+
+**`tests 77.25s` INSIDE a 97.47s wall clock.** Under file parallelism that figure is the sum of
+per-file time across workers and exceeds wall clock badly — W1-G's CI log showed **`tests 932.92s` in
+a 54-second step**, seventeen times oversubscribed. Sequential execution is the only way `tests` fits
+inside `Duration`. That is the log showing one file at a time.
+
+**Note the job total rose 17s, not 48s.** Other steps happened to be faster on that run. The honest
+claim is that the *step* doubled; the job cost is smaller than the step cost and varies.
+
+#### A2 — what could override the config, established by enumeration
+
+1. CI invokes the suite **once**: `pnpm turbo run test --filter @fieldforce/api --force`
+   (`ci.yml:248`). No flags.
+2. **Zero occurrences** of `fileParallelism`, `no-file-parallelism`, `maxWorkers`, `minWorkers` or any
+   `VITEST_*` across `ci.yml`, `scripts/ci-local.mjs`, both `package.json`s and both `turbo.json`s.
+3. The api `test` script is exactly `vitest run` — nothing to conflict with.
+4. Seven `vitest.config.ts` files, one per workspace; vitest resolves from the package root, so only
+   `services/api/vitest.config.ts` applies to this suite.
+5. **No `vitest.workspace.*` file exists** — the one thing that could re-declare pooling across
+   packages and silently beat a per-package config.
+
+#### A3 — the line for a future session asked to "speed up CI"
+
+**The 45 seconds bought `BE-W125`. At 1 spurious red in 8, a red was not evidence about the change
+under test. Re-enabling `fileParallelism` brings the deadlock straight back: the `app_thresholds` half
+is guarded by the advisory lock in `tests/global-thresholds.ts`, the DDL half has no guard at all.**
+Recorded beside the setting and in the closed `BE-W125` row, not only here.
+
+#### B — `mr_chat`, built
+
+| Piece | Where |
+| --- | --- |
+| The flow and its contract | `packages/core/src/field/gateway/mr-chat.ts` |
+| The catalogue behind the control | `services/api/supabase/migrations/20260930000100_mr_chat_scope_terms.sql` |
+| Its **own** stub shape | `_shared/stub-provider.ts` — `inScope: false`, so a stubbed chat redirects rather than says something |
+| Gateway dispatch | `ai-gateway/index.ts` — a fourth feature, still one function |
+| Unit tests | `mr-chat.test.ts` — **20 passed (20)** |
+| End to end | `services/api/tests/mr-chat.spec.ts` — **13 passed (13)** |
+
+**B1 — nothing shared with `product_qa`, and it is asserted rather than claimed.** Its own feature id,
+its own `ai_feature_enabled:mr_chat`, its own approved prompt, and **its own output schema name**
+`MrChatOutputSchema`. One test turns `product_qa` **on** while `mr_chat` stays **off** and shows
+`mr_chat` still refused `45011` → 403. Sharing an output schema name is how two modes start being one,
+which the spec forbids.
+
+#### B3 — what stops an invented product or medical claim
+
+**`mr_chat` cannot be restricted to approved knowledge, and that is not a shortcut.** Approved
+knowledge *is* product material; a chat limited to it could not answer *"how do I file a call
+report"*, which is its whole purpose (`AI-SPEC` §2 A1). So the question has to be answered without
+that constraint, and the honest answer has three parts:
+
+1. **`detectPatientSignals` on the message, before anything leaves the building.** The spec calls this
+   the capability where it matters most, and §10's *"must not become a clinical decision-support
+   system"* has this as its only enforcement.
+2. **A catalogue-derived product-name check on the QUESTION** — if the rep names one of their own
+   organisation's products, the model is never called.
+3. **The same check on the ANSWER, and this is the one that matters.** A reply naming a product is
+   **discarded**. This is the half a prompt cannot provide: it does not ask the model to behave, it
+   refuses to pass on the result when it did not.
+
+**`inScope` in the output is the model's own declaration and is treated as a hint** — honoured when
+false, ignored when true. A control that asks the thing being controlled whether it complied is not a
+control.
+
+**Where the terms come from is the point.** `mr_chat_scope_terms()` reads `products` under RLS —
+brand names **and** generic names, active and inactive. That tenant's real catalogue, not a keyword
+list in a TypeScript file that would go stale the first time a product was renamed and be wrong for
+every other organisation from the day it was written.
+
+**THE RESIDUAL RISK, and it is real.** *"Is 400mg twice daily normal for interstitial cystitis?"*
+names no product, carries no patient identifier, and reaches the model. **Nothing in this code stops
+it.** That is not an oversight — it is the cost of having a general assistant at all, and the honest
+options are to accept it or to delete `mr_chat`. It is **a test in the suite**, so the gap is visible
+rather than implied, and it is written up for the operator rather than mitigated with prompt wording
+that would only look like a fix.
+
+#### B2 / B4 — the end-to-end evidence
+
+**13 of 13 over real HTTP**: a real GoTrue password sign-in, a real `POST` to the served Edge
+Function, the function's own Deno process calling the RPCs as that MR.
+
+| Asserted | Observed |
+| --- | --- |
+| The **database** chose the prompt | `ai_requests.prompt_version_id` = the approved `mr_chat` version; the caller never names one |
+| Feature recorded | `feature = 'mr_chat'` |
+| Cost fields | `model_provider = 'stub'`, `model_name`, `input_tokens`, `output_tokens` all non-null |
+| Whose request | `user_id` = the signed-in MR, `organisation_id` = their org — not whoever the gateway runs as |
+| no token | **401** |
+| no `message` | **400 / `22023`** |
+| `45011` | **403** |
+| `45012` | **429** |
+
+**The guardrail proof is not a message.** The stub always reports itself as `stub` with non-null
+tokens, so **`model_provider IS NULL` is reachable only if `generate` never ran** — asserted with its
+positive control, because a null could otherwise mean a broken insert. The catalogue check is proven
+the same way: a question naming this run's brand is `blocked` with **no provider recorded**, so the
+redirect came from the catalogue and not from asking a model. The generic name matches too.
+
+#### B5 — cross-tenant, two-sided
+
+The rival organisation's MR gets terms **excluding** this run's brand and generic name. **Positive
+control:** after inserting a product into *their* catalogue, the same function returns **their** brand
+and still not ours — so an empty array cannot be mistaken for a dead function.
+`has_function_privilege('anon', 'public.mr_chat_scope_terms()', 'execute')` is **false**.
+
+#### B6 — the mutation
+
+Removing the **answer-side** catalogue check — the clause that discards a reply naming a product even
+when the model claims it stayed in scope — killed **exactly 1 test**
+(*"DISCARDS an answer naming a product even when the model claims it is in scope"*), with **19
+passing** as the positive control. Restored; `MUTANT` count 0; **20/20**; core rebuilt.
+
+#### Two things found rather than assumed
+
+**`BE-W126` — the patient guardrail misses a bare `patient <Firstname Lastname>`.** My first guardrail
+test failed, and the reason was not my test. Measured against the built guardrail:
+
+```
+"my patient Mr Sharma should take what dose"   -> patient_named, patient_specific_advice
+"patient named Meena has bladder pain"         -> patient_named
+"patient Meena Kumari, 42, has bladder pain"   -> NOTHING
+```
+
+Every `patient_named` pattern needs a title or the literal word `named`, so the commonest way a person
+writes it falls through — **in the capability the spec says it matters most in.** Registered, and
+deliberately **not** fixed here: widening it is two lines with a large false-positive surface
+(*patient portal*, *patient safety*, *Patient Information Leaflet*), and the guardrail's own header
+states the asymmetry that must decide the tuning. **A test asserts the current behaviour**, so fixing
+`BE-W126` makes that test fail, and the failure is the instruction to rewrite it as a refusal.
+
+**A teardown that could never succeed.** My first `afterAll` copied `ai-gateway.spec.ts`'s
+`delete from public.ai_requests ...`, which printed on **every** run:
+
+```
+ai_requests is append-only: DELETE is not permitted by any role
+```
+
+The table is an audit trail and refuses deletion by design, so that line can never work in any suite.
+Removed from this one — **a warning that always fires is a warning people learn to skim**, which is
+worse than no cleanup at all. **`ai-gateway.spec.ts` still carries the identical dead line**; it is
+noise rather than a defect, and it is recorded here rather than fixed in a commit about something else.
+
+#### C — the frontend handover
+
+Three contract requests appended to `docs/contract-requests.md` under **"Answers — 30 September"**,
+each to `CR-5`'s completeness: **`BE-CR-3`** Product Q&A, **`BE-CR-4`** the practice session,
+**`BE-CR-5`** MR Chat. Each gives who may call it, the exact schema names in `packages/core` (read
+from the source, not recalled), every refusal with its SQLSTATE **and** HTTP status, and what the
+screen shows for each.
+
+**C2's rulings, and the rule that produced them.** The demo ruling was that a stubbed answer must not
+be shown to an audience. **A screen is not an audience — a developer building against a stub is being
+unblocked, not misled. A rep in a pilot IS an audience, and the most consequential kind**, because an
+audience at a demo knows it is a demo and a rep believes the app.
+
+> **A screen may reach a rep when the stub's behaviour is indistinguishable from a legitimate real
+> state.**
+
+| | Build now | To a pilot rep |
+| --- | --- | --- |
+| `BE-CR-3` Product Q&A | **Yes** | **Yes** — `not_available` is the truthful state of a company with no approved knowledge |
+| `BE-CR-4` conversation | **No** | **No** — every turn is the stub marker, which no working system ever produces |
+| `BE-CR-4` list / history / picker | **Yes** | **Yes** — real today, unchanged by `#5` |
+| `BE-CR-5` MR Chat | **Yes** | **Yes, with the flag off** |
+
+**And the flag is the mechanism rather than a promise:** `ai_feature_enabled:mr_chat` ships **off**, so
+a pilot rep can have the screen and see nothing until somebody switches it on. **The code enforces
+that, not a plan to remember it.**
+
+**C3 — repeated where they will see it, for the third time**, at the top of the new section: six
+screens can leave `127.0.0.1:4010` today with no backend change, a real device cannot reach
+`127.0.0.1` at all, and **if the switch does not happen before the developer moves, it does not
+happen.**
+
+#### D1 — the flag, and why there is no small honest fix
+
+**Plainly: there isn't one, and the engineer stays in the loop until `BE-W106` is answered.**
+
+The reasoning is not a preference. `ai_feature_enabled:<feature>` is an `app_thresholds` row with
+`scope = 'global'`, and `20260923000300_app_thresholds_not_directly_readable.sql` states the model
+question in its own words: *"a `global` row is shared by every tenant. That is the model question"*,
+and *"this migration does not answer `BE-W106`."*
+
+So:
+
+* **A write screen is not a small fix, it is a tenancy violation.** One company's admin pressing a
+  toggle would switch the feature on for **every** organisation, because the row is global. That is
+  precisely what `BE-W106` exists to decide.
+* **A territory-scoped row does not help.** `app_thresholds.scope` does support `'territory'`, but
+  `ai_begin_request` calls `threshold('ai_feature_enabled:' || feature)` with **no territory**, so the
+  resolver matches `territory_id is null` only. Making territory rows visible means changing
+  production SQL, which pre-empts the decision outright.
+* **Even a READ-ONLY indicator pre-empts it.** `app_thresholds` is no longer directly readable, so it
+  would need its own RPC — and a per-company console saying *"AI is ON for your company"* would be
+  reporting a **global** fact in per-company words. That is the exact model confusion `BE-W106` is
+  about, shipped as a screen.
+
+**What can be done now, and it is documentation rather than a mechanism:** the checklist's step 1
+carries the exact statement to run, so the engineer's involvement is one auditable copy-paste per
+company rather than a diagnostic conversation. **That is the whole of the available improvement, and
+calling it a fix would be dishonest.**
+
+#### D2 — PR #2
+
+**Un-drafted, as recommended.** `gh pr ready 2` → *"marked as ready for review"*; `gh pr view 2` now
+reports **`draft=false`, `MERGEABLE`**. It costs nothing and it is the one thing that should not wait.
+
+**What merging after 4 October requires:**
+
+1. **A review.** 40 commits, 11 new migrations against `main`'s 75, four console routes, a browser
+   suite and a new CI section. Nobody has reviewed it.
+2. **`main` merged in again** on the day, and `gh pr view 2 --json mergeable` re-read — a `CONFLICTING`
+   answer must be re-read after 30 seconds before it is believed.
+3. **Nothing technical.** CI is green on `HEAD` on both jobs and `main ahead: 0`.
+
+**What `main` gains that it does not have today** — measured, `main`'s `ci.yml` is blob `c345ec3` and
+contains none of it: an exercised Edge Function, a console that is actually **built**, a real browser
+loading it with the hydration assertion and its negative control, and 11 more migrations proven to
+apply to an empty database and to roll back.
+
+**Not merged. The decision is the operator's.**

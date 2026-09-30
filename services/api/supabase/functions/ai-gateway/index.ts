@@ -35,6 +35,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
   PRODUCT_QA_FAILED_MESSAGE,
   analyseSimSession,
+  answerMrChat,
   answerProductQuestion,
   takeDoctorTurn,
 } from '../_shared/core.ts';
@@ -51,7 +52,7 @@ import type { StubShape } from '../_shared/stub-provider.ts';
  * function would have been a second place for the token handling to drift, and the token handling is
  * the whole security model.
  */
-type Feature = 'product_qa' | 'ai_doctor' | 'ai_coach';
+type Feature = 'product_qa' | 'mr_chat' | 'ai_doctor' | 'ai_coach';
 
 interface RequestBody {
   /** Defaults to `product_qa` so the W1-B contract is unchanged for existing callers. */
@@ -59,6 +60,8 @@ interface RequestBody {
   readonly question?: unknown;
   readonly marketId?: unknown;
   readonly productId?: unknown;
+  // mr_chat
+  readonly message?: unknown;
   // ai_doctor / ai_coach
   readonly sessionId?: unknown;
   readonly repText?: unknown;
@@ -72,6 +75,9 @@ interface RequestBody {
 
 const STUB_SHAPE: Record<Feature, StubShape> = {
   product_qa: 'product_qa',
+  // W1-I: its OWN shape, not product_qa's. The spec's rule is that modes must not silently behave
+  // as one another, and sharing a stub shape is how two features start being one.
+  mr_chat: 'mr_chat',
   ai_doctor: 'sim_doctor',
   ai_coach: 'sim_coach',
 };
@@ -125,7 +131,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return json(400, { code: '22023', message: 'body is not JSON' });
   }
   const rawFeature = typeof body.feature === 'string' ? body.feature : 'product_qa';
-  if (rawFeature !== 'product_qa' && rawFeature !== 'ai_doctor' && rawFeature !== 'ai_coach') {
+  if (
+    rawFeature !== 'product_qa' &&
+    rawFeature !== 'mr_chat' &&
+    rawFeature !== 'ai_doctor' &&
+    rawFeature !== 'ai_coach'
+  ) {
     // An unknown feature is refused here rather than passed to `ai_begin_request`, which would
     // refuse it too -- but with a message about a feature flag, which would send whoever typoed it
     // looking in `app_thresholds` for a row that was never the problem.
@@ -141,6 +152,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (typeof body.sessionId !== 'string' || String(body.repText ?? '').trim().length === 0) {
       return json(400, { code: '22023', message: 'sessionId and repText are required' });
     }
+  }
+  if (feature === 'mr_chat' && typeof body.message !== 'string') {
+    return json(400, { code: '22023', message: 'mr_chat needs a message' });
   }
   if (feature === 'ai_coach' && typeof body.sessionId !== 'string') {
     return json(400, { code: '22023', message: 'sessionId is required' });
@@ -184,6 +198,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
         objection: String(body.objection ?? ''),
         history: Array.isArray(body.history)
           ? (body.history as { role: 'rep' | 'doctor'; text: string }[])
+          : [],
+      });
+      return json(200, result);
+    }
+    if (feature === 'mr_chat') {
+      const result = await answerMrChat({
+        rpc,
+        provider,
+        message: String(body.message),
+        history: Array.isArray(body.history)
+          ? (body.history as { role: 'rep' | 'assistant'; text: string }[])
           : [],
       });
       return json(200, result);
