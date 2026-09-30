@@ -3964,3 +3964,59 @@ silently producing nothing.
 **This is the same family as the stale bundle, the stale database and the stale test report.** The
 common shape: **something reported success for work it did not do, because what it checked was not
 what mattered.**
+
+---
+
+## 30 September 2026 — THE PATTERN: six things that reported success for work they had not done
+
+Six separate defects across this project share one shape, and naming the shape is worth more than any
+of the six fixes. **In every case a check passed, or a step reported success, while the work it stood
+for had not happened — because what was examined was not what mattered.**
+
+| # | What reported success | What had actually happened | How it was found |
+| --- | --- | --- | --- |
+| 1 | **A test suite**, 9 passed | `functions serve` was executing a **previous** `packages/core/dist`. A mutation that deleted the patient guardrail entirely still passed | `BE-W119` — a mutant that killed nothing |
+| 2 | **A migration file read**, transcribed by hand | A later migration had **redefined the function**, so the file read was not what was installed. The retyped body dropped an idempotency block that the offline replay path depends on | W1-C A2 — three defects in one hand-copied body |
+| 3 | **`rls.spec.ts`, 98 of 98** | This machine's database carried grants from earlier sessions. On a reset database it fails 1 of 98 | W1-E B3 — a two-sided measurement, dirty vs clean |
+| 4 | **A knowledge graph**, every node carrying a file and a line number | Five weeks stale: **39 of 56 migrations** and **80% of tracked files** absent; `apps/field` represented by a deleted `placeholder.ts` | `MR-35 D1` — and the graph was deleted rather than rebuilt |
+| 5 | **A CI proof-of-execution gate**, `browser suite: 5 passed` | The run it was reporting on had just passed **7**. The JSON went to stdout; a **five-test report from an earlier local run** was still on disk, and the gate read that | W1-G D2 — the gate caught its own defect |
+| 6 | **`turbo run build`**, `3 successful, 2 cached` | **No build at all.** `outputs: ["dist/**"]` does not match `.next`, so turbo cached nothing and replayed that nothing as success. `next start` then died with *"Could not find a production build"* | W1-G — and turbo **did** warn; the warning scrolled past while `3 successful` was the line read |
+
+### The rule
+
+> **When a check reads something it did not just produce, ask what produced it and when.**
+>
+> A bundle, a file on disk, a database's accumulated state, a derived index, a report, a build cache —
+> each is an input the check did not create. If the check cannot tell a fresh one from a stale one, it
+> is not checking the thing you think it is.
+
+### And the two sharper corollaries, both learned the hard way
+
+**Absence is loud; staleness is silent — and staleness is the dangerous one.** Instance 6 was caught
+in a day *because* the cache restored nothing and `next start` refused outright. Had it restored a
+**stale** `.next`, the browser suite would have passed against yesterday's code while reporting on
+today's, and nothing would have complained. **We were lucky in the direction of the failure.**
+
+**Sometimes the correct fix is to leave the artefact UNDECLARED.** W1-H B1 enumerated all 25 turbo
+task instances and found a second mismatch: `typecheck` declares no `outputs` but
+`apps/console/tsconfig.json` sets `incremental: true`, so the task writes
+`apps/console/tsconfig.tsbuildinfo`. **That one is deliberately not "fixed".** A `tsbuildinfo` tells
+`tsc` what it has already checked; restoring one from a cache keyed on a different input set could let
+`tsc --noEmit` skip work and report success — **turning a speed cache into instance 7 of this table.**
+Leaving it undeclared costs a little time on a cache hit and cannot mislead. **The test for whether an
+output belongs in `outputs` is not "does the task write it" — it is "does something later CONSUME it,
+and is a cached copy always as good as a fresh one".**
+
+### How to check it, rather than trust it
+
+For any cached task, the two-sided proof takes one minute and is the only thing that settles it:
+
+```bash
+# 1. cold: does the task produce the artefact at all?
+rm -rf <output>; turbo run <task> --filter <pkg>; ls <output>   # expect: present
+# 2. cache hit: does a REPLAY reproduce it?
+rm -rf <output>; turbo run <task> --filter <pkg>; ls <output>   # expect: present, "Cached: n cached"
+```
+
+If step 2 leaves the artefact missing, the task is caching nothing and reporting success — regardless
+of what the summary line says.

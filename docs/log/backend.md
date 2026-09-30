@@ -788,3 +788,231 @@ From the green run on `e82baa9`:
 **Under a minute**, for the only check in this repository that loads the built application in a
 browser. The `Install Chromium` step is the largest single item and is the one a runner cache would
 remove if it ever matters.
+
+### W1-H — not sharing the database · 30 September 2026 · Model: Claude Opus 5
+
+**One line: `BE-W125` is closed by running one spec file at a time, which costs 45 seconds and was
+the cheap way to stop sharing — the expensive way was named first and would only have half-worked.**
+
+#### A1 — the two ways to stop sharing, measured before choosing
+
+**Both measured on a clean database with the Edge Function freshly served, 8 runs each.**
+
+| | (a) file parallelism — before | (b) one file at a time — `fileParallelism: false` |
+| --- | --- | --- |
+| Failing runs | **1 of 8** | **0 of 8** |
+| Wall clock | 52, **90**, 55, 52, 56, 57, 55, 54 s | 98, 99, 98, 100, 100, 105, 111, 103 s |
+| Median | **55s** | **100s** |
+| Every run's counts | — | `Test Files 73 passed (73)` · `Tests 972 passed \| 4 skipped (976)` |
+
+**It also removes the variance, which was not the goal but is worth having:** the parallel set swung
+52→90s, the serial set 98→111s.
+
+**CI cost, from the green run on `c4d177f`:** the `Database and Gate 0 tests` step took **54s** inside
+a **5m23s** job. Doubling that step puts the job at roughly **6m20s** — about 17% more, on a job that
+had already absorbed 59 seconds of new browser time without complaint.
+
+##### Why NOT per-worker databases, which was my own first answer
+
+The template problem is solvable — build a dedicated `elmiron_template`, migrate it, never point
+PostgREST at it, then `create database w<n> template elmiron_template`. **The reason it fails is
+different, and decisive:**
+
+```bash
+grep -l "API_URL\|FUNCTION_URL\|signIn(" services/api/tests/*.spec.ts | wc -l   # 15
+ls services/api/tests/*.spec.ts | wc -l                                         # 73
+```
+
+**15 of 73 spec files reach the database through PostgREST, GoTrue or the Edge Function**, and those
+components are pointed at ONE database by the Supabase stack's own configuration. They cannot move to
+a private database without reconfiguring and restarting the whole stack per worker.
+
+So per-worker databases would isolate 58 files and **leave those 15 sharing** — the deadlock class
+surviving in exactly the suites most likely to trigger it, since they are the ones that COMMIT global
+rows and talk to out-of-process components. Plus a permanent fork in how a test reaches the database,
+`db.ts` and `auth.ts` rewritten, a global setup creating and dropping N databases, and CI changes.
+**Days of work to half-fix it.**
+
+**Chosen: `fileParallelism: false`.** One line, no new code, nothing to re-tune, and the race cannot
+occur rather than occurring less often.
+
+#### A2 — the rates, and the verification that the config is real
+
+**A flag is not a config.** The 8 runs above used `--no-file-parallelism` on the command line. That
+proves the *behaviour* and says nothing about whether the committed config delivers it — which is this
+session's entire subject. So it was measured again with **no flag at all**:
+
+| | Median |
+| --- | --- |
+| parallel baseline | **55s** |
+| `--no-file-parallelism` flag | **100s** |
+| **config only, no flag** | **105s** (107, 104, 105 — 3 of 3 clean) |
+
+The no-flag runs match the flag runs and not the baseline, so **`fileParallelism: false` is in
+force.** Had they come back at 55s, the line would have been decoration and the flag would have been
+doing all the work.
+
+**Two of five verification runs were stopped early, deliberately.** Three runs already separated 105s
+from 55s unambiguously, and the browser suite needed an uncontended database more than a fourth sample
+was worth. Recorded rather than quietly dropped.
+
+#### A3 / A4 — what CI's signal was worth, and where that is written
+
+At **1 spurious red in 8**, a red on this suite was **not evidence about the change under test** — and
+this project has already ruled that condition a broken signal once, in `BE-W92`. `W1-G` came within
+one rerun of banking a green bought that way.
+
+**That warning now lives in one place: `docs/COMPLETION-PLAN.md`, the `BE-W125` row**, which this
+commit closes. It is not repeated in four files, because four copies of a caveat is how the undated
+sentence in `blocked-on-you.md` reached the frontend track as current.
+
+#### A — the mutation, designed to isolate WHICH mechanism is load-bearing
+
+Two mutants, because "it passes now" does not say whether the config or `BE-W124`'s advisory lock is
+doing the work. Same four files each time — `ai-control-plane`, `ai-gateway`, `sim-gateway`,
+`tenant-boundary-restrictive`.
+
+| Mutant | Result |
+| --- | --- |
+| **A** — lock removed from `ai-gateway`, config left at `fileParallelism: false` | **3 of 3 runs: `Tests 49 passed (49)`** |
+| **B** — lock removed **and** `fileParallelism: true` | **3 of 3 runs: exactly 1 failed**, always `AI-D0 … each missing prerequisite alone refuses`, with **48 passing** as the positive control |
+
+**What that settles.** Mutant A shows the advisory lock is now **uncontended, not load-bearing** — the
+config alone suffices. Mutant B shows the race is real and that the config is precisely what suppresses
+it. **The lock stays anyway**, because it is what makes re-enabling parallelism safe for the
+`app_thresholds` half; it is inert, not redundant, and `vitest.config.ts` says so beside the setting.
+**The DDL half has no such guard, so re-enabling parallelism brings `BE-W125` straight back.**
+
+Both restored; `git diff` on `ai-gateway.spec.ts` is empty and the four files pass **49/49 in 3 of 3**
+runs.
+
+#### B1 — every turbo task, enumerated from the files
+
+**Two `turbo.json` files** — `./turbo.json` and `./services/api/turbo.json`, found with `find`, not
+recalled. **5 task definitions. 25 task instances** across 7 workspaces.
+
+| Task | Instances | Declared `outputs` | What it writes | Verdict |
+| --- | --- | --- | --- | --- |
+| `build` | **4** — core, ui-tokens, mock, console | `dist/**`, `.next/**`, `!.next/cache/**` | core/ui-tokens/mock → `dist/` (incl. `dist/.tsbuildinfo`, resolved through `tsconfig.build.json` → `tsconfig.json` → `outDir: dist`); console → `.next/` (no `distDir`, no `output: standalone`) | ✔ **now** — `.next` was the mismatch, fixed in W1-G |
+| `typecheck` | **7** | *(none)* | `apps/console/tsconfig.tsbuildinfo` — console is the only tsconfig with `incremental: true` | **mismatch, deliberately NOT fixed** |
+| `lint` | **7** | *(none)* | nothing — no `--fix` and no `--cache` in any of the 7 scripts | ✔ |
+| `test` | **7** | *(none)* | nothing — no coverage, no reporters, no `outputFile` anywhere; jest's cache is in OS temp, outside the repo | ✔ |
+| `test` (api override) | **1** | `cache: false` | n/a | ✔ exempt by design |
+
+**2 mismatches in 25.**
+
+#### B2 — what a false cache hit would have hidden, per mismatch
+
+**`build` → `apps/console`, the one that bit.** A false hit hid **the entire production build**.
+`next start` died with *"Could not find a production build in the '.next' directory"*, reaching
+Playwright as the uninformative `Process from config.webServer was not able to start. Exit code: 1`.
+
+**And the version we did not get, which is worse.** The cache restored *nothing*, so the failure was
+loud. **Had it restored a STALE `.next`, `next start` would have served an older build and the browser
+suite would have passed against yesterday's code while reporting on today's** — silently, with a green
+tick. **Absence is loud; staleness is silent. We were lucky in the direction of the failure.**
+
+**`typecheck` → `apps/console`: a false cache hit hides NOTHING, and declaring the output would make
+things worse.** Nothing consumes the `tsbuildinfo`; not restoring it costs a little time on the next
+run. But a `tsbuildinfo` is how `tsc` records what it has already checked — so restoring one from a
+cache keyed on a different input set could let `tsc --noEmit` skip work and report success. **That
+would turn a speed cache into a seventh instance of the stale-artefact class.**
+
+**So the test for `outputs` is not "does the task write it".** It is: *does something later CONSUME it,
+and is a cached copy always as good as a fresh one?* For `.next`, yes to both. For a `tsbuildinfo`, no
+to both.
+
+#### B3 — proven two-sided, in this session
+
+| Glob | Cold run | Then delete `.next` and re-run |
+| --- | --- | --- |
+| **corrected** `["dist/**", ".next/**", "!.next/cache/**"]` | `BUILD_ID` present | `Cached: 3 cached, 3 total` → **`BUILD_ID` RESTORED** |
+| **wrong** `["dist/**"]` | `BUILD_ID` present, plus `WARNING no output files found for task @fieldforce/console#build` | `Cached: 3 cached, 3 total` → **reported success and produced NOTHING** |
+
+`turbo.json` restored; `git diff` empty; a further cold-then-cached cycle confirms `BUILD_ID` comes
+back.
+
+#### B4 — the pattern, in `docs/gotchas.md`
+
+All six instances are now in one table with the rule, because the pattern is the entry and the
+instances are what make it persuasive: a **stale bundle** (`BE-W119`), a **stale function body**
+(W1-C A2), a **stale database** (W1-E B3), a **stale knowledge graph** (`MR-35 D1`), a **stale test
+report** (W1-G D2), and a **build cache that stored absence and replayed it as success** (W1-G).
+
+> **When a check reads something it did not just produce, ask what produced it and when.**
+
+#### C — `BE-W122`, and the correction that goes with it
+
+**C1 was already done, and the brief's premise was one session out of date.** `/prompts` shipped in
+W1-G E1 and is committed at `ed8d0b0`: the route, `prompt-review.tsx`, `prompt-review-list.tsx`, a nav
+entry, and two browser specs. It calls the four existing RPCs and reuses `approvalAffordance` from
+`knowledge-review.tsx` — **the third caller**, so four-eyes is one implementation across knowledge,
+simulation content and prompts. **Verified by reading the files, not assumed from having written
+them.**
+
+**C2 — proven in the browser, and then checked in the database.** `7 passed (59.0s)`. The test names
+are not the evidence; this is:
+
+| | Observed |
+| --- | --- |
+| Session | `fe33093f-a270-4793-bd4d-668b11fd43ad`, started `2026-09-30T05:59:51Z` |
+| The prompt it pinned | `ai_doctor` **version 1**, status **`approved`**, text `"Practice prompt for run 3fee39…"` — a string minted by that run, so it can only have come from `/prompts` |
+| `created_by_user_id <> decided_by_user_id` | **true** — drafted by one admin, approved by a second |
+| Stored attestation | `"Placeholder prompt for a local test. No product claim."` |
+
+So a prompt was drafted through the UI by one admin, approved through the UI by a second, and
+`start_sim_session` pinned **that** prompt — having refused the same scenario before approval.
+**Nothing in the path touched SQL.**
+
+**C3 — the seeder is still needed, and should be KEPT.** Enumerated from the file: it now inserts into
+exactly three tables — `organisations`, `territories`, `user_profiles` — plus `createAuthUser` through
+GoTrue's admin API. **It creates no content whatsoever**; the only surviving mention of
+`ai_prompt_versions` is a comment recording that it used to.
+
+Three things stop it becoming the route people use:
+
+1. **`assertLocalhostOnly` on BOTH URLs before either is touched** — and the order matters, because the
+   identity is minted over HTTP before the database connection opens, so a guard on the DB URL alone
+   would refuse after the user already existed.
+2. **There is nothing left for it to bypass.** No prompt, no persona, no scenario — so it cannot route
+   around four-eyes. That was only ever possible while `ai_prompt_versions` had no screen.
+3. **What it does create, no screen can.** Minting an `auth.users` identity is a GoTrue admin-API
+   operation, correctly not exposed to any console. That is the whole of its remaining job.
+
+**C4 — the mis-filing, recorded as its own failure.** `BE-W122` said the table had *"no RPC and no
+console route"*. **All four RPCs existed** — `submit`, `approve`, `reject` and
+`retire_ai_prompt_version`, in `AI_RPC` since `20260924000700`. Only the route was missing. **I filed a
+gap without grepping for the thing I claimed was absent**, and it described the work at twice its true
+size. **A register that carries a wrong gap costs more than one carrying none, because somebody builds
+against it** — the same shape as the undated `blocked-on-you.md` sentence the frontend track read as
+current.
+
+#### D — the watchdog's blind spot
+
+Written for the operator in `docs/blocked-on-you.md` → **W1-H Part D**. The property: **a monitor
+running on the same platform as the thing it monitors cannot detect that platform stopping.** All five
+workflows went quiet together, 23 Aug – 7 Sep, from one cause. **No change inside this repository fixes
+it**, because any check added here runs on the same platform and disappears with it.
+
+Four options with costs are tabled there; **the dead-man's switch is recommended and deliberately NOT
+added** — it is a dependency and a recurring cost, and the only option whose logic points the right
+way: it alarms on the *absence* of a signal, so the outage cannot silence the alarm.
+
+Beside it, D3: **`destroyedTotal` is 0**, so a schedule alarm still would not tell you the purge works.
+That needs one object aged past `purge_after` in staging and observed leaving Storage.
+
+#### E — the merge
+
+Measured: `main`'s `ci.yml` is blob `c345ec3` and contains **none** of the five steps this branch added
+(Edge Function serve, Chromium, console build, browser suite, proof gate). `main` has **75 migrations
+against 85**; the branch is **39 commits ahead**; `gh pr view 2` reports **MERGEABLE**; **still
+draft**.
+
+Merging would newly give `main`: an exercised Edge Function, a console that is actually **built**, a
+real browser loading it with the hydration assertion, and 10 more migrations proven to apply and roll
+back. **Recommendation unchanged: un-draft now, merge after the 4 October demo** — the AGAINST case was
+always timing and expires on 5 October. **One thing now argues against leaving it long after that:**
+`main` has no check that loads the built application, and two of the six stale-artefact instances were
+findable only by one.
+
+**Not merged. The decision is the operator's.**

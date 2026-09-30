@@ -1864,3 +1864,74 @@ no manager sees a team average. **Answering `#5` swaps the words and nothing els
 
 **Both are typed into `/prompts` by whoever wrote them, and approved by a second admin.** No
 engineer is involved in either.
+
+---
+
+## W1-H Part D — the watchdog cannot see the platform stop, and no code in this repository fixes that
+
+### D1 — as a property, not an incident
+
+**A monitor that runs on the same platform as the thing it monitors cannot detect that platform
+stopping.**
+
+That is not a bug in `retention-watchdog.yml`. It is a property of where it runs. The watchdog is a
+scheduled GitHub Actions workflow whose job is to notice when `retention.yml` stops purging. When
+GitHub stopped creating scheduled runs between **23 Aug 08:16 and 7 Sep 14:49 UTC**, it stopped
+creating both — so the control and the thing it controls failed together, from one cause, at one
+moment, and **the silence looked exactly like health.**
+
+Measured, and the point is that all five went quiet together:
+
+| Workflow | Runs in that window |
+| --- | --- |
+| `retention.yml` (schedule) | **0** |
+| `retention-watchdog.yml` (schedule) | **0** |
+| `backup.yml` (schedule) | **0** |
+| `migration-drift.yml` (schedule) | **0** |
+| `ci.yml`, any trigger | **0** |
+
+**No change inside this repository can fix it.** Any check added here runs on the same platform and
+disappears with it. A second workflow, a `pg_cron` job inside a database the same outage can pause, a
+longer retention window — each is a control whose absence is invisible for the same reason. **The fix
+has to live somewhere this project does not control, which makes it a decision rather than a task.**
+
+**How it was actually found: a failed connection, five weeks later.** Nothing alarmed. That is the
+cost being decided below, stated as a fact rather than a risk.
+
+### D2 — the options, with costs. NOT ADDED.
+
+**This is a decision for you, and engineering has deliberately not made it.** Adding any of these is
+a dependency and, for the first two, a recurring bill — which `.ai-collab/constraints.md` requires be
+asked about before installing.
+
+| Option | What it costs | What it buys | What it does not fix |
+| --- | --- | --- | --- |
+| **A dead-man's switch** — an external service that expects a ping on a schedule and alarms when one does not arrive | A third-party account and roughly **$0–7/month** at this scale; several have a free tier covering four jobs. Engineering: under an hour — one `curl` at the end of each scheduled workflow | **The platform going quiet becomes an alert instead of a discovery.** The alarm fires *because nothing arrived*, so the outage cannot suppress it | It tells you a job stopped running. It does **not** tell you the job does its work — see D3 |
+| **A second CI provider** running the same watchdog | A second account, a second config to keep in step, and its own quiet failure mode | Independence from GitHub specifically | Two platforms to maintain; the second rots because nobody looks at it |
+| **A person checks weekly** | Free | Nothing reliable. **This is what was in place**, and it found the outage after fifteen days | Everything |
+| **Do nothing, deliberately** | Free | Honesty — the register would record the gap as accepted | **The next blackout is again found by accident, and again about fifteen days late.** With audio in production by then, that is fifteen days of a promise to doctors going unkept with nothing reporting it |
+
+**Engineering's recommendation: the dead-man's switch, and it is the only one worth the money.** The
+reason is the direction of its logic — **it alarms on the absence of a signal, so the failure it
+watches for cannot silence the alarm.** Every in-repository option inverts that and is defeated by
+the outage it exists to catch. It is still a dependency and a recurring cost, so **it is not
+installed, and nothing in this commit reaches for it.**
+
+**If the answer is no, say so and it will be recorded as accepted.** A gap somebody decided to accept
+is worth more than an open item nobody reads.
+
+### D3 — and the thing a dead-man's switch would still not tell you
+
+**`destroyedTotal` is 0.** Measured on production on 29 September by dispatching the watchdog and
+reading its own output (run `36551995393`).
+
+So even with an alarm on the schedule, **"the retention job is green" and "the retention job works"
+remain different claims, and only the first has evidence.** The destruction path has never destroyed
+a single object in production — each of the 126 successful runs since 7 September found nothing to do
+and exited cleanly. A ping-based alarm would have been perfectly quiet through all of them, and
+would be equally quiet if the purge were broken, because what it reports is that the job **ran**.
+
+**What closes that second gap is not a monitor.** It is one object, uploaded to a staging
+environment, aged past its `purge_after`, and observed leaving Storage **and** appearing in
+`audio_destruction_log`. Until that exists, the consent notice's promise rests on code that has never
+had to keep it.
