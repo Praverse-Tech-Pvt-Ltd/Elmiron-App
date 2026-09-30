@@ -1463,3 +1463,219 @@ tested against a stub that deliberately returns the least useful valid answer.
 
 **So: `#5` makes three features real in one file, and changes nothing about the two that do not exist
 and the one that is waiting on a different decision.**
+
+### W1-K — the learning tutor · 30 September 2026 · Model: Claude Opus 5
+
+**`lms_tutor` exists, is dispatched, and is the strongest of the five features — because it is the one
+with approved text in front of it.** Five of six capabilities are now built against the stub; only
+voice remains unbuilt.
+
+#### A — the ceiling, put to the operator in its own words
+
+`docs/blocked-on-you.md` → **W1-K Part A**, as a **named accepted risk** carrying the three actual
+sentences rather than the phrase "detection is imperfect":
+
+> *"Sharma has been on it three months and reports burning"*
+> *"she has been on it three months, any concerns"*
+> *"aged 62 and still working"*
+
+**A3 — it is a ceiling, not a tuning failure, and the entry says so explicitly.** To catch a bare
+surname the detector would have to refuse *"Sharma asked for the leaflet"*, and a guardrail that stops
+reps naming doctors is switched off within a week. A pronoun carries no identifier at all; no pattern
+finds one that is not there.
+
+**A2 — what accepting it means.** Today: nothing, because no provider is configured. **From the day
+`#5` is answered, those sentences go to a third-party model.** Four options are tabled with costs. The
+honest ranking given: a **confirmation step** is the only in-app option that catches a pronoun, and
+**vendor terms** are the only thing that helps with sentences nobody predicted. **A stricter pattern is
+the option that looks like progress and is not** — it trades the product's core workflow for one of
+the three sentences.
+
+#### B1 — what the tutor's context is restricted to, and why
+
+**One lesson. Not the course, not approved knowledge, not both.**
+
+`lms_tutor_lesson_context(uuid)` returns the title and body of **exactly one lesson**, and only if:
+
+* the caller is **ENROLLED** on that course version — not merely in the same organisation. Without
+  this the tutor is a way to read the whole course catalogue;
+* the version is **PUBLISHED** — a draft lesson is unapproved text, and explaining it would defeat
+  `C24` through a side door;
+* the lesson is in the caller's organisation.
+
+**One message for all three failures** (`42501`), because distinguishing them would tell a caller which
+courses exist.
+
+**Why not the whole course:** a tutor explaining lesson 3 does not need lesson 7, and **anything it is
+given it can quote**. Why not approved knowledge as well: that is `product_qa`'s corpus, and mixing
+them would make the tutor a second product-information tool with none of `product_qa`'s citation
+machinery.
+
+#### B4 — what stops an invented claim, and here the answer is genuinely stronger
+
+**`mr_chat`'s honest answer was a catalogue check that discards an answer after the fact.** The tutor
+is not in that position: it has the company's own published lesson text in front of it. **So yes — it
+IS restricted to the lesson's own content, and that restriction is the control.** The same shape
+`product_qa` uses, and the only shape that prevents invention rather than catching it:
+
+1. **The model is given one lesson and told to answer only from it.** No other lesson, no course tree,
+   no knowledge corpus.
+2. **`groundedInLesson` is a required output field**, and false — or an empty explanation — is
+   **discarded** and replaced with the referral sentence.
+3. **`groundedInLesson: true` is NOT taken on trust.** The explanation is additionally checked with
+   `isClinicalQuestion`, so a tutor that wanders from *"what does chronic mean"* into a dose is refused
+   whatever it claimed. **A control that asks the thing being controlled whether it complied is not a
+   control.**
+
+**Why not demand quoted spans, which would sound stronger:** it would be a false promise. Verifying
+that an explanation is *supported* by a passage is the same problem as the explanation; a substring
+check is satisfied by quoting one word. `product_qa` can demand exact chunk ids because its answer IS a
+retrieval — a tutor's answer is a restatement. **What is enforced is what can be enforced.**
+
+#### B2 / B3 — its own everything, and both guardrails before the provider
+
+Own feature id, own flag (`ai_feature_enabled:lms_tutor`), own approved prompt, own output schema name
+`LmsTutorOutputSchema`, own stub shape (`groundedInLesson: false`, so a stubbed tutor refers the
+learner to a person). **Proven by a test that switches `mr_chat` ON while `lms_tutor` stays OFF and
+shows `lms_tutor` still refusing `45011` → 403.**
+
+**Both shared guardrails fire before any provider call** — the patient detector *and* the clinical
+check, the same implementations the other features use, scored against `guardrails.corpus.ts`. The
+patient case additionally proves **the lesson is never even fetched**, because the guardrail runs
+first.
+
+#### B5 / B6 — end to end over HTTP
+
+**13 of 13** in `services/api/tests/lms-tutor.spec.ts`:
+
+| Asserted | Observed |
+| --- | --- |
+| The **database** chose the prompt | `ai_requests.prompt_version_id` = the approved `lms_tutor` version |
+| Feature recorded | `feature = 'lms_tutor'` |
+| Cost fields | `model_provider = 'stub'`, `model_name`, both token counts non-null |
+| Whose request | `user_id` = the learner, `organisation_id` = their org |
+| no token / no `lessonId` | **401** / **400 `22023`** |
+| `45011` / `45012` | **403** / **429** |
+| patient question | `blocked`, `model_provider IS NULL`, lesson never fetched |
+| clinical question | `blocked`, `model_provider IS NULL` |
+| positive control | an ordinary question reaches the provider, `model_provider = 'stub'` |
+
+**Scope, two-sided:** a published lesson in the **same organisation** the learner is not enrolled on →
+**403 `42501`**; a **rival organisation's** published lesson → **403 `42501`**; **positive control** —
+the enrolled lesson returns **200**. `has_function_privilege('anon', …)` is **false**.
+
+**The mutant:** removing the answer-side clinical check — taking `groundedInLesson: true` on trust —
+killed **exactly 1** test, with **85** passing as control. Restored; **86 passed | 4 skipped**.
+
+##### The fixture bug the positive control caught, which is the point of having one
+
+The spec first enrolled the learner with `assign_course` as the admin and stopped there. **That creates
+a `course_assignments` row and no enrolment** — enrolment is created by the LEARNER calling
+`start_course_version`. So the tutor correctly refused the lesson the learner was supposed to be
+enrolled on, and **all three scope tests passed for the wrong reason**: two 403s that meant scope and
+one that meant a broken fixture, indistinguishable without the control.
+
+**Three 403s would have read as a working tenant boundary.** The positive control is the only thing
+that told them apart, and it is the same lesson W1-J learned about probing: a check that cannot fail
+for the right reason is not evidence.
+
+#### C1 — did the contract requests reach the frontend? What I know, not what was written
+
+**I cannot claim they were read, and nothing in this repository could tell me.** What is established:
+
+* `BE-CR-3`, `BE-CR-4` and `BE-CR-5` are in `docs/contract-requests.md` **on this branch**;
+* this branch is **PR #2**, which is **un-drafted and MERGEABLE but NOT MERGED**;
+* therefore they are **not on `main`**, and a developer working from `main` has not seen them.
+
+**Status: written, pushed, unmerged, unacknowledged.** There is no read receipt here and inventing one
+would be worse than saying so. **The one thing that would change it is merging PR #2**, which is the
+operator's call and is recommended for after 4 October.
+
+#### C2 — the mock switch: who does it, and when
+
+**Nobody currently does it, and that is the honest answer.**
+
+Six screens can leave `127.0.0.1:4010` today **with no backend change**, and **a real device cannot
+reach `127.0.0.1` at all** — on a handset that address is the handset. The work is entirely in
+`apps/field`: change the base URL and delete the mock fallback. **The backend cannot do it**, and no
+backend session can.
+
+**If the frontend developer moves after the demo without doing it:**
+
+* the demo runs **on an emulator**, or on a device that cannot reach the API;
+* the three contract requests become **documentation for whoever inherits the app**, not instructions
+  for someone who can act this week;
+* and the six screens stay on the mock until somebody is assigned. **There is no scheduled owner.**
+
+**This has now been written three times** — 28, 29 and 30 September — each time to a document. If it
+matters, it needs to be said to the person, not to the repository.
+
+#### D1 — what exactly remains unanswered about scoring
+
+**My own W1-J wording was imprecise and this corrects it.** I wrote that `ai_coach` waits on *"the
+unanswered scoring question"*, which suggests something about what a score means. It is not that.
+
+**`C26`/`C27` already settled what a score is and who may see it**, and the safe default is **built**:
+scores exist on practice simulations and LMS assessments, visible to **the MR and the company admin
+only**, with **no manager surface, no team averages, no rankings** — enforced in RLS, with tests that
+fail the build if those column names appear on a manager surface.
+
+**The one open question is `#14`: may a manager see an MR's practice scores?** It is about **who may
+see it** — not what it means, and not whether numeric scores should exist.
+
+**It is already in `docs/blocked-on-you.md` at line 1368, in one line, in the operator's words**, with
+both answers spelled out: **(a) No — the rule stands, nothing to amend, this is what is built**; **(b)
+Yes — the recorded rule must be formally amended in writing, and it becomes employee monitoring with
+an HR and legal question attached.**
+
+**So nothing is added here.** Appending a second copy would be the failure W1-H named — four copies of
+a caveat is how the undated retention sentence reached the frontend as current. **The correction is to
+my log line, not to the register.**
+
+#### WHERE THIS STOPPED
+
+**Parts A, B, C and D are complete.** `lms_tutor` is built, dispatched, unit-tested (12), proven end to
+end (13), mutated, and rolled back-paired in the same commit — **B7's condition is met: the flow is
+reached by the gateway, not left as a file nothing calls.**
+
+**Voice is the only capability still unbuilt**, and it is the one that cannot be started here: it needs
+a speech vendor (`BE-W32`), the bake-off corpus the project does not have, and `#5`.
+
+#### A defect in CI's own readiness gate, found by the clean-database check refusing this push
+
+**The check refused with 35 failures across the four gateway suites, and the code was fine.**
+
+Step 18 printed:
+
+```
+[18/26] database · Serve the AI gateway Edge Function
+Setting up Edge Functions runtime...
+ai-gateway answered HTTP 502
+```
+
+**and exited 0**, because its condition was *any* HTTP code that is not `000`:
+
+```bash
+if [ -n "$code" ] && [ "$code" != "000" ]; then echo "ai-gateway answered HTTP $code"; exit 0; fi
+```
+
+**502 means the function is DOWN.** Kong listens on `:54321` from the moment `supabase start`
+finishes, so it answers `502` or `503` for a function whose runtime has not come up — **a non-`000`
+code that means the opposite of ready.** The gate declared the function live, and the 35 tests that
+followed failed with `503 name resolution failed`, looking exactly like a code regression in work that
+had passed minutes earlier.
+
+**Fixed: the condition is now `401` or `400` only** — the function *refusing* a request, which is the
+function *running*. Every other code keeps polling and is printed while it waits, so a stuck runtime
+says what it is stuck on instead of being declared healthy.
+
+**This is the seventh instance of one shape**, and it is the sharpest yet because the gate was written
+for exactly this job: a bundle, a function body, a database, a knowledge graph, a test report, a build
+cache — and now **a readiness probe whose success condition admitted the failure it existed to
+detect.** The rule in `docs/gotchas.md` covered artefacts a check reads; this extends it to the
+condition a check tests.
+
+**What it cost:** one refused push and the diagnosis above. **What it would have cost unnoticed:** a
+CI run where the function never came up, 35 red tests, and a session spent looking for a regression in
+`lms_tutor` that was not there. **The clean-database check has now earned its place three times** —
+an unpaired rollback, a stale test report, and this.

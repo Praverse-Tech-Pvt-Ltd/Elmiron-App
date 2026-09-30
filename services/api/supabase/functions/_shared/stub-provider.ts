@@ -67,7 +67,7 @@ export const resetStubProviderCallCount = (): void => {
  * indistinguishably from a real model returning nonsense, which would make the gateway's validation
  * untestable.
  */
-export type StubShape = 'product_qa' | 'mr_chat' | 'sim_doctor' | 'sim_coach';
+export type StubShape = 'product_qa' | 'mr_chat' | 'lms_tutor' | 'sim_doctor' | 'sim_coach';
 
 /**
  * **Every stub reply SAYS it is a stub, in the text a human would read.**
@@ -90,6 +90,11 @@ const stubBody = (shape: StubShape): string => {
       // reply that cannot be mistaken for an answer. `answerMrChat` maps it to the out-of-scope
       // redirect, so a stubbed chat sends the rep to Product Q&A rather than saying something.
       return JSON.stringify({ inScope: false, answer: '' });
+    case 'lms_tutor':
+      // `groundedInLesson: false` is the same choice `product_qa` makes with `supported: false` and
+      // `mr_chat` with `inScope: false`: the one reply that cannot be mistaken for teaching. The flow
+      // maps it to the referral sentence, so a stubbed tutor sends the learner to a person.
+      return JSON.stringify({ groundedInLesson: false, explanation: '' });
     case 'sim_doctor':
       // Schema-valid so the gateway's validation is exercised, and visibly a stub so nobody mistakes
       // it for a doctor. `objectionAddressed: false` keeps the practice loop honest -- a stub cannot

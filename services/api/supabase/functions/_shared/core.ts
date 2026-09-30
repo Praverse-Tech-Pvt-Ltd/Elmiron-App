@@ -37,6 +37,14 @@ export {
   answerMrChat,
 } from '../../../../../packages/core/dist/field/gateway/mr-chat.js';
 
+// W1-K Part B -- `lms_tutor`, from the same built output. Its referral sentence is exported too:
+// the gateway does not compose refusal text, so there is one copy of it, in the contract.
+export {
+  LMS_TUTOR_FAILED_MESSAGE,
+  LMS_TUTOR_NOT_IN_LESSON_MESSAGE,
+  answerLessonQuestion,
+} from '../../../../../packages/core/dist/field/gateway/lms-tutor.js';
+
 // W1-D B4 -- `ai_doctor` and `ai_coach`, from the same built output and the same interfaces.
 export {
   analyseSimSession,

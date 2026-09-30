@@ -35,6 +35,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
   PRODUCT_QA_FAILED_MESSAGE,
   analyseSimSession,
+  answerLessonQuestion,
   answerMrChat,
   answerProductQuestion,
   takeDoctorTurn,
@@ -52,7 +53,7 @@ import type { StubShape } from '../_shared/stub-provider.ts';
  * function would have been a second place for the token handling to drift, and the token handling is
  * the whole security model.
  */
-type Feature = 'product_qa' | 'mr_chat' | 'ai_doctor' | 'ai_coach';
+type Feature = 'product_qa' | 'mr_chat' | 'lms_tutor' | 'ai_doctor' | 'ai_coach';
 
 interface RequestBody {
   /** Defaults to `product_qa` so the W1-B contract is unchanged for existing callers. */
@@ -62,6 +63,8 @@ interface RequestBody {
   readonly productId?: unknown;
   // mr_chat
   readonly message?: unknown;
+  // lms_tutor
+  readonly lessonId?: unknown;
   // ai_doctor / ai_coach
   readonly sessionId?: unknown;
   readonly repText?: unknown;
@@ -78,6 +81,8 @@ const STUB_SHAPE: Record<Feature, StubShape> = {
   // W1-I: its OWN shape, not product_qa's. The spec's rule is that modes must not silently behave
   // as one another, and sharing a stub shape is how two features start being one.
   mr_chat: 'mr_chat',
+  // W1-K: its OWN shape. Four features, four output schemas, no sharing.
+  lms_tutor: 'lms_tutor',
   ai_doctor: 'sim_doctor',
   ai_coach: 'sim_coach',
 };
@@ -134,6 +139,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (
     rawFeature !== 'product_qa' &&
     rawFeature !== 'mr_chat' &&
+    rawFeature !== 'lms_tutor' &&
     rawFeature !== 'ai_doctor' &&
     rawFeature !== 'ai_coach'
   ) {
@@ -155,6 +161,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
   if (feature === 'mr_chat' && typeof body.message !== 'string') {
     return json(400, { code: '22023', message: 'mr_chat needs a message' });
+  }
+  if (
+    feature === 'lms_tutor' &&
+    (typeof body.lessonId !== 'string' || typeof body.question !== 'string')
+  ) {
+    return json(400, { code: '22023', message: 'lms_tutor needs a lessonId and a question' });
   }
   if (feature === 'ai_coach' && typeof body.sessionId !== 'string') {
     return json(400, { code: '22023', message: 'sessionId is required' });
@@ -210,6 +222,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
         history: Array.isArray(body.history)
           ? (body.history as { role: 'rep' | 'assistant'; text: string }[])
           : [],
+      });
+      return json(200, result);
+    }
+    if (feature === 'lms_tutor') {
+      const result = await answerLessonQuestion({
+        rpc,
+        provider,
+        lessonId: String(body.lessonId),
+        question: String(body.question),
       });
       return json(200, result);
     }

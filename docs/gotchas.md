@@ -4020,3 +4020,32 @@ rm -rf <output>; turbo run <task> --filter <pkg>; ls <output>   # expect: presen
 
 If step 2 leaves the artefact missing, the task is caching nothing and reporting success — regardless
 of what the summary line says.
+
+---
+
+## 30 September 2026 — a readiness probe whose success condition admits the failure it exists to detect
+
+CI's Edge Function step waited for the gateway to answer, then declared it ready:
+
+```bash
+if [ -n "$code" ] && [ "$code" != "000" ]; then echo "ai-gateway answered HTTP $code"; exit 0; fi
+```
+
+It printed **`ai-gateway answered HTTP 502`** and exited 0. **502 means the function is down.** Kong
+listens on `:54321` from the moment `supabase start` returns, so it answers `502`/`503` for a function
+whose runtime has not started — a non-`000` code that means the *opposite* of ready.
+
+Thirty-five tests across four suites then failed with `503 name resolution failed`, which reads exactly
+like a code regression. The code was fine.
+
+> **A readiness check must test for the SUCCESS it wants, not for the absence of one failure mode.**
+> "Something answered" is not "the thing I need answered". Name the codes that prove the service is up
+> — here `401` or `400`, the function *refusing* a request, which only a running function does — and
+> keep waiting on everything else.
+
+**Print the code you are still waiting on.** The original was silent until it succeeded or timed out,
+so a stuck runtime and a slow one looked identical.
+
+**This is the same family as the six stale-artefact instances above, one level up.** Those were checks
+reading something they did not produce; this is a check whose *condition* was wider than its claim. The
+question generalises: **when a check passes, ask what else would also have made it pass.**

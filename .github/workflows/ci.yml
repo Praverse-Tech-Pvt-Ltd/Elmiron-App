@@ -215,15 +215,27 @@ jobs:
       - name: Serve the AI gateway Edge Function
         run: |
           pnpm exec supabase --workdir services/api functions serve --no-verify-jwt &
+          # W1-K: the readiness condition is 401-or-400, NOT "any answer that is not 000".
+          #
+          # **The previous condition passed on 502, and 502 means the function is DOWN.** Kong is
+          # listening on :54321 from the moment `supabase start` finishes, so it answers 502 or 503
+          # for a function whose runtime has not come up — a non-000 code that means the opposite of
+          # ready. This step printed `ai-gateway answered HTTP 502`, exited 0, and 35 tests in the
+          # four gateway suites then failed with `503 name resolution failed`, looking exactly like a
+          # code regression.
+          #
+          # 401 (no bearer token) or 400 (bad body) is the FUNCTION refusing, which is the function
+          # running. Those are the only two codes that prove the runtime is up.
           for _ in $(seq 1 60); do
             code=$(curl -s -o /dev/null -w '%{http_code}' -X POST               http://127.0.0.1:54321/functions/v1/ai-gateway               -H 'content-type: application/json' -d '{}' || true)
-            if [ -n "$code" ] && [ "$code" != "000" ]; then
-              echo "ai-gateway answered HTTP $code"
+            if [ "$code" = "401" ] || [ "$code" = "400" ]; then
+              echo "ai-gateway answered HTTP $code — the function is serving"
               exit 0
             fi
+            echo "waiting for ai-gateway (last HTTP $code)"
             sleep 2
           done
-          echo "FAILED: the ai-gateway function never answered on :54321" >&2
+          echo "FAILED: the ai-gateway function never answered 401/400 on :54321" >&2
           exit 1
 
       # Includes services/api/tests/rls.spec.ts — the Gate 0 adversarial suite.

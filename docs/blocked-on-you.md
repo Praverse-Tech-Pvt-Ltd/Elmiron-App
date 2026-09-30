@@ -1998,3 +1998,68 @@ from."** They are sent to the tool that cites its sources, which is the correct 
 deterministic, testable and reversible, and the alternative was leaving a documented hole open
 because the mitigation for it was somebody else's unanswered email. **If you would rather it were
 looser, say so and the term list shrinks.**
+
+---
+
+## W1-K Part A — an ACCEPTED RISK you should read in full: three sentences that still reach the model
+
+**This is not "detection is imperfect". These are the actual sentences**, and the first is exactly
+what a rep types about a patient.
+
+> **"Sharma has been on it three months and reports burning"**
+>
+> **"she has been on it three months, any concerns"**
+>
+> **"aged 62 and still working"**
+
+**All three pass every guardrail this system has.** A rep could type any of them into MR Chat, Product
+Q&A, or a practice conversation, and the text would go to the model.
+
+### Why each one gets through
+
+| Sentence | What the detector sees |
+| --- | --- |
+| *"Sharma has been on it three months and reports burning"* | A bare surname. No title, no word "patient", no age. **It is the same text as a doctor's name** — and `add Dr Sharma to my beat plan` must be answered, because naming doctors is the core of a rep's job |
+| *"she has been on it three months, any concerns"* | A pronoun. There is no identifier of any kind in the sentence — no name, no number, no age |
+| *"aged 62 and still working"* | An age with no name and no sex word. Indistinguishable from *"the policy aged 62 days"* |
+
+### A3 — this is a CEILING, not a bug, and the distinction matters
+
+**A stricter pattern cannot fix these without breaking the product.** The guardrail already refuses
+fifteen kinds of patient reference and correctly allows twenty-seven legitimate phrases, measured
+against a written corpus. What is left is not a tuning failure that more effort would close:
+
+* **A bare surname carries no signal that distinguishes a patient from a doctor.** To catch
+  *"Sharma has been on it"* the detector would have to refuse *"Sharma asked for the leaflet"* — and a
+  guardrail that blocks reps from naming doctors gets switched off within a week.
+* **A pronoun carries no identifier at all.** No pattern can find one that is not there.
+
+**You are being asked to accept a limit of pattern matching, not a defect somebody could fix with
+more care.**
+
+### A2 — what accepting it means once `#5` is answered
+
+**Today it means nothing in practice: no AI provider is configured, so the text reaches a stub that
+never leaves this system.** That changes the day you answer `#5`.
+
+**From that day, a sentence like the three above is sent to a third-party model**, under whatever
+terms that vendor's contract sets. It is the rep's own words — the patient guardrail still stops names,
+phone numbers, email addresses, ID numbers and dates of birth — but *"she has been on it three months,
+any concerns"* would go.
+
+**What would reduce it further, and what each costs:**
+
+| Option | What it costs | What it buys |
+| --- | --- | --- |
+| **Accept it — the current position** | Nothing | Nothing. The three sentences go to the vendor |
+| **A stricter default that refuses more** | **Reps lose questions they legitimately need.** To catch a bare surname you must refuse doctor names, which is most of what a rep types. This is not a dial that can be turned a little | Catches the first sentence; still cannot catch a pronoun |
+| **A confirmation step** — *"This looks like it might be about a patient. Send anyway?"* | One extra tap on some questions, and it trains reps to tap through. It also puts the judgement on the rep, which is where it arguably belongs | Catches all three, because it does not depend on detecting anything |
+| **A vendor contract that forbids training and requires deletion** | Part of `#5`'s negotiation; no engineering cost | Does not stop the text being sent, but changes what happens to it afterwards. **This is the one that scales, because it covers sentences nobody predicted** |
+
+**Engineering's view, offered as input rather than a decision:** the confirmation step is the only
+in-app option that catches a pronoun, and the vendor terms are the only thing that helps with
+sentences nobody has thought of. **A stricter pattern is the option that looks like progress and is
+not** — it trades the product's core workflow for one of the three sentences.
+
+**Nothing is being built on this without your answer.** If the answer is "accept", it will be recorded
+here as accepted with today's date, which is a better position than an open item nobody reads.
