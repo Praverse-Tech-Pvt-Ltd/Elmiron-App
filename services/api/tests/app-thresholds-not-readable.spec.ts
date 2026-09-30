@@ -82,53 +82,60 @@ describe.skipIf(!reachable)('D3 — the settings table is not readable by a sign
   });
 });
 
-describe.skipIf(!reachable)('D4 — the acceptance of what remains has a date that bites', () => {
-  it('is outstanding, dated, and not yet overdue as this ships', async () => {
+describe.skipIf(!reachable)('D4 — the acceptance is DISCHARGED: `BE-W106` is answered', () => {
+  /**
+   * W1-L Part C changed what this block can assert, and the change is the point.
+   *
+   * These three tests used to assert the debt was OUTSTANDING, and one of them simulated the
+   * answer by adding an `organisation_id` column inside a rolled-back transaction. The column
+   * now exists for real, so that test failed with `column "organisation_id" already exists` —
+   * **the gate detected its own answer without anybody remembering to update a flag**, which is
+   * exactly what D4 was built to do.
+   *
+   * What can no longer be asserted against the live database is `overdue`, because the schema
+   * fact that clears it is now permanently true. That claim moves to the pure half, which still
+   * owns the logic and can still be given any input.
+   */
+  it('reads as answered from the live schema, not from a flag anybody sets', async () => {
     await inRolledBackTransaction(async (client) => {
       const { rows } = await client.query<{ status: Record<string, unknown> }>(
         'select public.be_w106_decision_status() as status',
       );
       const status = rows[0]?.status ?? {};
-      expect(status['settingsScoped']).toBe(false);
-      expect(status['dueAt']).toBe('2026-10-31T00:00:00+00:00');
+      expect(status['settingsScoped']).toBe(true);
       expect(status['overdue']).toBe(false);
+      expect(status['warn']).toBe(false);
       expect(evaluateSettingsModelDebt(status).clear).toBe(true);
     });
   });
 
-  it('reports overdue once the deadline has passed and nothing has been decided', async () => {
+  it('stays answered even with the deadline backdated — the date no longer decides', async () => {
     await inRolledBackTransaction(async (client) => {
       await client.query(
         `insert into public.app_thresholds (key, value, scope, note)
          values ('be_w106_settings_model_decision_due', '"2026-09-01T00:00:00Z"'::jsonb, 'global',
                  'backdated inside a rolled-back transaction')`,
       );
-      const { rows } = await client.query<{ status: Record<string, unknown> }>(
-        'select public.be_w106_decision_status() as status',
-      );
-      expect(rows[0]?.status['overdue']).toBe(true);
-      const verdict = evaluateSettingsModelDebt(rows[0]?.status ?? null);
-      expect(verdict.clear).toBe(false);
-      expect(verdict.reasons.join(' ')).toContain('BE-W106');
-    });
-  });
-
-  it('stops reporting overdue the moment the table carries organisation scoping', async () => {
-    await inRolledBackTransaction(async (client) => {
-      await client.query(
-        `insert into public.app_thresholds (key, value, scope, note)
-         values ('be_w106_settings_model_decision_due', '"2026-09-01T00:00:00Z"'::jsonb, 'global',
-                 'backdated inside a rolled-back transaction')`,
-      );
-      // The decision landing as a column is what "answered" means here; the status function reads
-      // the schema rather than a flag somebody has to remember to set.
-      await client.query('alter table public.app_thresholds add column organisation_id uuid');
+      // Before Part C this produced `overdue: true`. A deadline is only a deadline while the
+      // thing it is waiting for has not happened.
       const { rows } = await client.query<{ status: Record<string, unknown> }>(
         'select public.be_w106_decision_status() as status',
       );
       expect(rows[0]?.status['settingsScoped']).toBe(true);
       expect(rows[0]?.status['overdue']).toBe(false);
     });
+  });
+
+  it('STILL FAILS the debt when nothing is scoped — the gate did not lose its teeth', () => {
+    // The pure half, given the input the database can no longer produce. Without this the suite
+    // would only ever see the passing state, and a broken gate would look identical to a clear one.
+    const verdict = evaluateSettingsModelDebt({
+      settingsScoped: false,
+      dueAt: '2026-09-01T00:00:00+00:00',
+      overdue: true,
+    });
+    expect(verdict.clear).toBe(false);
+    expect(verdict.reasons.join(' ')).toContain('BE-W106');
   });
 
   it('FAILS CLOSED: with no deadline row readable, it reads as overdue', () => {

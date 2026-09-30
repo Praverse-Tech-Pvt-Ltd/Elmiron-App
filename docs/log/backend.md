@@ -1679,3 +1679,126 @@ condition a check tests.
 CI run where the function never came up, 35 red tests, and a session spent looking for a regression in
 `lms_tutor` that was not there. **The clean-database check has now earned its place three times** —
 an unpaired rollback, a stale test report, and this.
+
+
+---
+
+### W1-L — twenty answers · 30 September 2026 · Model: Claude Opus 5
+
+**Twenty operator decisions recorded, Gemini's residency checked before it could be locked in, and
+`BE-W106` — open since 15 August — answered and built.**
+
+#### A — the twenty, recorded before anything was built on them
+
+`BE-C6`–`BE-C25` in `.ai-collab/decisions-backend.md`, minted per the `BE-C<n>` rule this
+repository's own `CLAUDE.md` exists to enforce. **One is recorded as CONDITIONAL and stayed
+conditional** — `BE-C6` chose Gemini 2.5 Flash *subject to* India residency including voice, and a
+conditional decision filed as a plain one is how a condition gets quietly dropped.
+
+Recording them closed one gap and opened one. **`BE-W127` was registered, not glossed:** `BE-C19`
+makes AI analysis mandatory across **seven** dimensions and `ai_coach` implements **five**.
+
+#### B — Gemini residency: UNVERIFIED, and the evidence points away
+
+`docs/ai-platform/GEMINI-RESIDENCY.md`. Every claim is a quotation with a URL and the date read, or
+it is marked UNVERIFIED. Nothing was inferred into a blank, nothing was signed, no SDK added.
+
+**The finding that matters is that there are at least THREE Google products with "Gemini" in the
+name and their residency answers differ.** The one India data-residency confirmation located is for
+**Gemini Enterprise** — a packaged app product, not the model API — naming **Gemini 3.5 Flash**, on
+a page that explicitly excludes 2.5 Pro from the India region. **No India region appears in any
+voice/Live API evidence at all**, and the best source found for Live API regions is a developer
+forum thread, which is recorded as the weak evidence it is.
+
+Separately and well documented: **the consumer API's FREE tier uses submitted content for training
+and allows human reviewers to read API input and output.** On a system whose guardrails admit three
+sentences that could describe a patient, that is a disclosure question, not a residency one. **If
+Gemini is used at all it must be the paid tier, and that is now a written condition.**
+
+**What it cost to find out: nothing that had to be undone.** B5 measured why — a grep for every
+vendor name across `packages/core/src` and the migrations returns **0**, and the only provider
+construction site is one line, `services/api/supabase/functions/ai-gateway/index.ts:191`.
+
+#### C — `BE-W106` answered and built: settings belong to a company
+
+`20260930000300_organisation_thresholds.sql`. `app_thresholds` gains an `organisation` scope between
+`global` and `territory`, resolving **territory > organisation > global**, latest `effective_from`
+within a tier.
+
+**The signature did not change, and that was the design constraint rather than a nicety.**
+`threshold()` and `threshold_number()` have **52 call sites across 23 migrations**, and
+`threshold_number` delegates to `threshold` — so changing **one body** made all of them per-company
+with **no caller edited**. That includes the two that mattered most: the AI feature flag and the
+daily allowance are both `threshold()` lookups inside `ai_begin_request`, so the operator checklist
+step reading *"an engineer runs SQL"* is gone without `ai_begin_request` being touched.
+
+**The replacement body was generated from `pg_proc.prosrc` on the running database**, per the rule
+W1-C A2 earned.
+
+**What happened to the rows that existed: nothing, deliberately.** All 19 stayed `global`, because a
+global row IS what every company gets today, so leaving them global changes no company's resolved
+value on the day this ships. Copying them per-organisation was rejected — it would freeze today's
+defaults as per-company decisions nobody made.
+
+**`auth.uid()` is null for background jobs, so the purge worker and the watchdog fall through to
+global.** That path is asserted, not assumed.
+
+#### C — what the mutants proved, and what one existing test proved by breaking
+
+18 new tests, all green on the first run — which is exactly when the question is *what else would
+have made this pass*. Three mutants, applied to the live function and then reverted from the
+migration file rather than retyped:
+
+| Mutant | Killed |
+| --- | --- |
+| the organisation predicate removed (every company's row resolves for everybody) | **8**, in both directions, including the background-job fall-through and the positive control |
+| organisation rows never resolved (pre-migration behaviour, dead column) | **9** |
+| resolution order inverted — organisation beats territory | **exactly 1** |
+
+**And the debt gate detected its own answer without being told.** `be_w106_decision_status()` reads
+`information_schema` for this exact column, so three existing tests changed state the moment the
+migration ran — one failing with `column "organisation_id" already exists`, because it used to
+SIMULATE the answer inside a rolled-back transaction. **That is the gate working.** Two more in
+`decision-debt.spec.ts` failed for the same reason and were repointed at `threshold()` directly,
+because the property they actually pin is *one row is read*, and `be_w106_decision_status()` was
+only ever the convenient probe. `node services/api/scripts/check-decision-debt.mjs` now prints
+*"BE-W106: app_thresholds carries organisation scoping. Nothing outstanding."*
+
+**Full suite: 76 files, 1019 passed, 4 skipped, 0 failed — on a database REBUILT from the 88 migrations after `verify:rollbacks` had rolled it all the way back.** That is the clean-database check in its strongest form: the new migration applies in sequence on an empty schema, and its rollback applies in reverse.
+
+**One property is documented rather than fixed:** `threshold()` orders by `effective_from`, and
+`now()` is fixed for a transaction, so two rows for one key written in ONE transaction tie. It
+predates this work — `ai-control-plane.spec.ts` found it — and in production two admin edits are two
+transactions. Tests needing an ordered pair supply an explicit `effective_from`, rather than a
+parameter being added to production SQL for a test's benefit.
+
+#### D — one list, and it was four items short of consolidated
+
+`docs/operator-inputs.md`, which `BE-C23` asked for. It supersedes `blocked-on-you.md` §5.x and the
+several ask tables in `COMPLETION-PLAN.md` — **three lists with different subsets is the same
+failure as none**, because nobody can tell which is current.
+
+**The useful thing the twenty answers did to this list is split it.** Over and over the METHOD is
+now decided and the VALUE is not: `BE-C9` settled that the legal name is not to be invented and the
+name is still missing; `BE-C11` made the UCPMP cap configurable and no number is configured. **A
+configurable cap with no number is still no cap**, and filing those as closed would have been the
+easiest way to lose them.
+
+**Writing it caught an omission in my own Part A.** The twenty's "what these do NOT answer" section
+named four asks — the PV/DPDP signatory (`#18`), adverse-event content (`#22`), consent-notice
+language order (`#25`) and the 72h/120s thresholds (`#26`) — that the first draft of the
+consolidated list did not carry. They are D-15 to D-18. **`#18` blocks transcripts entirely, has
+been asked before, and all twenty answers went past it**, which the list now says in as many words.
+
+#### E — the four approvals that are not a schedule
+
+Ordered by **what each is blocked by**, not by size or value, because two of the four need something
+from outside engineering before a line can be written. `BE-C12`'s content path is first as the only
+one unblocked today; `BE-C14` notifications last as the only one no finished feature waits on.
+
+**`BE-C16`'s "must not hold up other development" is recorded as applying to a DIFFERENT item than
+the one it is attached to.** The obvious reading — "do vector search quickly" — is wrong. It means
+vector search must not become a prerequisite of anything else, and the thing it would most naturally
+have become a prerequisite of is knowledge retrieval for `product_qa`, **which is finished and
+working on keyword search today**. So the condition governs item #1, and vector search sitting at #3
+is that condition being honoured rather than ignored.

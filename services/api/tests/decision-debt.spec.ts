@@ -322,20 +322,34 @@ describe.skipIf(!reachable)('MR-53 E3 — a duplicated deadline row is read once
       // Both rows are really there -- otherwise this test proves nothing about duplicates.
       expect(Number(rows.rows[0]?.count)).toBeGreaterThanOrEqual(2);
 
-      const verdict = evaluateSettingsModelDebt(await settingsStatus(client));
-      expect(verdict.warnings).toHaveLength(1);
-      expect(verdict.clear).toBe(true);
+      // W1-L Part C: `be_w106_decision_status()` can no longer produce a warning at all --
+      // the decision it was waiting for was MADE, so `settingsScoped` is permanently true and
+      // `warn` permanently false. The property these two tests actually pin is not the debt; it
+      // is `threshold()` reading ONE row. So they now assert that directly, on the same key.
+      const resolved = await client.query<{ value: unknown }>(
+        `select public.threshold('be_w106_settings_model_decision_due') as value`,
+      );
+      expect(resolved.rows).toHaveLength(1);
+      expect(JSON.stringify(resolved.rows[0]?.value)).toBe(due);
+      expect(evaluateSettingsModelDebt(await settingsStatus(client)).clear).toBe(true);
     });
   });
 
   it('the LATEST effective row governs, and a future-dated one does not yet', async () => {
     await inRolledBackTransaction(async (client) => {
+      const due = async (): Promise<string> => {
+        const r = await client.query<{ value: string }>(
+          `select public.threshold('be_w106_settings_model_decision_due') #>> '{}' as value`,
+        );
+        return r.rows[0]?.value ?? '';
+      };
+
       await supersede(client, 'be_w106_settings_model_decision_due', '"2026-01-01T00:00:00Z"', 3);
-      expect((await settingsStatus(client))['overdue']).toBe(true);
+      expect(await due()).toContain('2026-01-01');
 
       // A later row moves it: this is what a deferral is.
       await supersede(client, 'be_w106_settings_model_decision_due', '"2099-01-01T00:00:00Z"', 2);
-      expect((await settingsStatus(client))['overdue']).toBe(false);
+      expect(await due()).toContain('2099-01-01');
 
       // A row stamped into the FUTURE is not yet in effect -- `effective_from <= now()` -- so the
       // overdue date above comes back. A deferral written that way would look filed and change
@@ -345,6 +359,7 @@ describe.skipIf(!reachable)('MR-53 E3 — a duplicated deadline row is read once
          values ('be_w106_settings_model_decision_due', '"2099-06-01T00:00:00Z"'::jsonb, 'global',
                  now() + interval '1 day', 'MR-53 E3 fixture: not yet in effect')`,
       );
+      expect(await due()).toContain('2099-01-01');
       expect((await settingsStatus(client))['dueAt']).toContain('2099-01-01');
     });
   });
