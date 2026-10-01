@@ -20,6 +20,8 @@
 
 export { AiAllowanceNotice, SAMPLE_FIGURES_NOTE } from './AiAllowanceNotice';
 export type { AiAllowanceNoticeProps, AiAllowanceState } from './AiAllowanceNotice';
+export { AssistantScreen, SAMPLE_REPLY_LABEL } from './AssistantScreen';
+export type { AssistantNotice, AssistantScreenProps, AssistantTurn } from './AssistantScreen';
 export { AnalysisReplyScreen } from './AnalysisReplyScreen';
 export type { AnalysisReplyScreenProps } from './AnalysisReplyScreen';
 export { AnalysisScreen } from './AnalysisScreen';
