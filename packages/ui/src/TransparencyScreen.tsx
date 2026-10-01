@@ -83,7 +83,9 @@ export const TransparencyScreen = ({
   <>
     <View style={styles.intro}>
       <Display>Everything, before you ask.</Display>
-      <Label muted>Open this any time from home. It never changes without telling you.</Label>
+      {/* FE-D12 item 1. The promise that followed ("It never changes without telling you") had
+          nothing behind it, and this screen had gone stale unannounced. The fact stays. */}
+      <Label muted>Open this any time from home.</Label>
     </View>
 
     {preamble === undefined ? null : (

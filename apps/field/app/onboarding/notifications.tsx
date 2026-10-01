@@ -1,14 +1,17 @@
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { requestNotificationPermission } from '../../src/onboarding/notification-permission';
 import { BodyText, Button, Display, ListRow, Screen } from '@fieldforce/ui';
-import { capSentence, NOTIFICATION_TYPES } from '../../src/onboarding/notifications';
+import { coachingEnabled } from '../../src/features';
+import { capSentence, notificationTypes } from '../../src/onboarding/notifications';
 
 /**
  * A3 — notifications, asked at sign-in.
  *
- * **The four types are named and the count is capped.** That is the whole design of
+ * **The types are named and the count is capped.** The design names four; this build shows the
+ * ones it can send (FE-D12 item 2, `notificationTypes`). That is the whole design of
  * this screen. "Stay updated" would be a request for consent to an unbounded thing,
  * and an MR who agrees to it has agreed to nothing they could later hold us to.
  *
@@ -36,6 +39,25 @@ export default function NotificationsRationale(): ReactNode {
   };
 
   /**
+   * FE-D12 item 2. Only the types this build can send. The recording flag lives in `appConfig`,
+   * imported on use as `recording-permission.ts` does (it throws at import on a misconfigured
+   * build); a flag that cannot be read is OFF.
+   */
+  const [recordingEnabled, setRecordingEnabled] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void import('../../src/config')
+      .then(({ appConfig }) => {
+        if (live) setRecordingEnabled(appConfig.recordingEnabled);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+  const types = notificationTypes({ coachingEnabled, recordingEnabled });
+
+  /**
    * FE-D2 first run. "Allow notifications" used to call `next` and nothing else, so it asked
    * Android for nothing. It raises the system prompt now (Android 13+; below that there is no
    * permission to ask for), and continues whatever the answer: the app works without them.
@@ -51,9 +73,9 @@ export default function NotificationsRationale(): ReactNode {
   return (
     <Screen scrollable>
       <Display>What we&apos;ll send you</Display>
-      <BodyText>{capSentence()}</BodyText>
+      <BodyText>{capSentence(types.length)}</BodyText>
 
-      {NOTIFICATION_TYPES.map((type) => (
+      {types.map((type) => (
         <ListRow key={type.id} title={type.name} detail={type.detail} />
       ))}
 

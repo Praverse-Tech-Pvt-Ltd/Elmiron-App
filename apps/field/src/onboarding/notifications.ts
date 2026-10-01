@@ -90,6 +90,38 @@ export const NOTIFICATION_TYPES: readonly [
   },
 ];
 
-/** The sentence that states the cap. One place, so the number cannot drift. */
+/**
+ * **FE-D12 item 2. The types this BUILD can send, in the design's order.** `NOTIFICATION_TYPES`
+ * is the design's four. Two of them belong to switched-off features:
+ * - `coaching` needs Coaching, hidden unless `coachingEnabled` (`src/features.ts`);
+ * - `consent-outcome` is entirely about recordings, "a recording you made is confirmed, or
+ *   consent was withdrawn", and recording is off unless `appConfig.recordingEnabled`.
+ *
+ * A permission screen naming a message the app cannot send asks consent for nothing real. Each
+ * line follows its flag, so it returns by itself when the feature is switched on.
+ */
+export const notificationTypes = (build: {
+  readonly coachingEnabled: boolean;
+  readonly recordingEnabled: boolean;
+}): readonly NotificationType[] =>
+  NOTIFICATION_TYPES.filter(
+    (type) =>
+      (type.id !== 'coaching' || build.coachingEnabled) &&
+      (type.id !== 'consent-outcome' || build.recordingEnabled),
+  );
+
+const COUNT_WORDS: Readonly<Record<number, string>> = {
+  1: 'this one',
+  2: 'these two',
+  3: 'these three',
+  4: 'these four',
+};
+
+/**
+ * The sentence that states the cap. One place, so the number cannot drift.
+ *
+ * FE-D12 item 2: the cap is one per type (see `DAILY_CAP`), so it counts the types shown. The
+ * default is the design's four.
+ */
 export const capSentence = (cap: number = DAILY_CAP): string =>
-  `At most ${String(cap)} a day, and nothing outside these four.`;
+  `At most ${String(cap)} a day, and nothing outside ${COUNT_WORDS[cap] ?? `these ${String(cap)}`}.`;

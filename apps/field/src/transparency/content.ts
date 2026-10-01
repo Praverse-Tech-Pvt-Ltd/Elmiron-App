@@ -1,55 +1,66 @@
 import type { TransparencyEntry } from '@fieldforce/ui';
 
 /**
- * A9 — "Everything, before you ask." The five rows, taken from Phase 2's own copy.
+ * A9 — "Everything, before you ask." The design's structure and voice
+ * (`docs/design/phase2-first-run-and-the-day.dc.html` §A9), stating what THIS BUILD records.
  *
- * ---
- * **SOURCING.** Unlike `src/onboarding/notifications.ts`, which was written before
- * `docs/design/` existed and had to derive its wording, these titles and details are
- * transcribed from `docs/design/phase2-first-run-and-the-day.dc.html` §A9. The
- * design is in the repository now and this file should be diffed against it, not
- * rewritten from memory.
- * ---
+ * **FE-D12 item 1. Every row is now a fact about the code, and each is cited in the FE-D12 section
+ * of `PROJECT-OVERVIEW.md`, not here and not on screen.** The rows were written in FE-W3, when
+ * nothing was captured, as `not-yet` with a preamble saying the app "records nothing new about
+ * you". Check-ins, positions, samples, reports and voice notes all landed after that, and the
+ * screen kept saying the opposite. `content.test.ts` now reads the capturing routes and fails if a
+ * row calls a wired capture "not yet".
  *
- * **Every capture row is `not-yet`, and that is the honest state of this build.**
+ * **Where this departs from the design's copy, the design was describing a different product:**
+ * - "Where you are, during your shift · Start day to End day" describes continuous tracking.
+ *   This build takes ONE fix per check-in or check-out press, and none at any other time.
+ * - "Kept 90 days, then deleted" -- what the server does is stamp `purge_after` 90 days from
+ *   receipt on every voice note. Deletion depends on the purge job running, so the row says
+ *   "marked for deletion".
+ * - "anything at all once your shift ends" is not something this client enforces, so it is not
+ *   claimed. What is claimed is what the APK holds no permission for.
  *
- * - Location: the app takes no position fix at all. Whether it may is an open
- *   policy question — `fe-w3-spec.md` §4 forbids code written against an assumed
- *   answer, so there is nothing to describe.
- * - Check-in and check-out times: the contract has the endpoints; no screen calls
- *   them yet.
- * - Voice notes and recordings: FE-W4.
+ * There is no preamble any more. It existed to say "none of the list below is built yet", and the
+ * list now says what is recorded.
  *
- * A screen that listed these as things happening now would be describing a
- * capability this app does not have, on the one screen whose entire value is that
- * it does not overstate. When each lands, its row flips to `active` — and that flip
- * is the point of the field.
+ * Copy is factually accurate but needs privacy/legal review; no owner named.
  */
 export const NEVER_RECORDED =
-  'Your personal calls, messages, other apps, your camera, or anything at all once your shift ends.';
+  'Your calls, messages, contacts, camera or other apps: this app has no permission to reach them. And nothing in the background: your position is read only at the moment you press check in or check out.';
 
-export const TRANSPARENCY_PREAMBLE =
-  'Right now this app records nothing new about you. It reads your plan and your doctor list, and that is all. Below is what it will record when those parts are built, and what it will never record.';
-
-export const TRANSPARENCY_ENTRIES: readonly TransparencyEntry[] = [
+export const transparencyEntries = (build: {
+  readonly recordingEnabled: boolean;
+}): readonly TransparencyEntry[] => [
   {
-    title: 'Where you are, during your shift',
-    detail: 'Start day to End day. Never outside those hours.',
-    state: 'not-yet',
+    title: 'Where you are, when you check in or out',
+    detail:
+      'One position each time you press check in or check out, and how far that was from the clinic. Never in the background, never between visits.',
+    state: 'active',
   },
   {
     title: 'Which doctors you saw, and when',
     detail: 'Check-in and check-out times.',
-    state: 'not-yet',
+    state: 'active',
   },
   {
-    title: 'Your voice notes and reports',
-    detail: 'Kept 90 days, then deleted.',
-    state: 'not-yet',
+    title: 'Your voice notes',
+    detail:
+      'Only while you hold the button. Marked for deletion 90 days after they reach your company.',
+    state: 'active',
+  },
+  {
+    title: 'Your reports, and what you left',
+    detail: 'The call reports you send and the samples you record, in your words.',
+    state: 'active',
   },
   {
     title: 'Recordings — only if a doctor agrees',
-    detail: 'If they say no, nothing happens to you.',
-    state: 'not-yet',
+    detail: 'Only after the doctor agrees on screen, each time.',
+    state: build.recordingEnabled ? 'active' : 'not-yet',
   },
 ];
+
+/** This build: consultation recording is off unless the build sets it (`config.ts:34`). */
+export const TRANSPARENCY_ENTRIES: readonly TransparencyEntry[] = transparencyEntries({
+  recordingEnabled: false,
+});

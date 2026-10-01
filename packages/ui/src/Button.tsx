@@ -69,6 +69,10 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
     borderRadius: tokens.radius.control + 3,
     padding: 3,
+    // FE-D12 V3. Sideways, the 6 reserved above sit OUTSIDE the button's slot, so the button lines
+    // up with the cards and fields around it instead of 6dp inside them. Vertically they stay
+    // where they were, so the spacing between stacked buttons is unchanged. No reflow on focus.
+    marginHorizontal: -6,
   },
   ringFocused: { borderColor: tokens.color.accent },
   base: {
@@ -93,6 +97,9 @@ const styles = StyleSheet.create({
     lineHeight: tokens.typography.control.lineHeight,
     fontWeight: tokens.typography.control.weight,
     fontFamily: fontFamilyFor(tokens.typography.control.weight),
+    // FE-D12 V2. The row centres the text box; this centres the lines in it when a doctor's
+    // name makes the label wrap.
+    textAlign: 'center',
   },
   onAccent: { color: tokens.color.onAccent },
   onWash: { color: tokens.color.textPrimary },

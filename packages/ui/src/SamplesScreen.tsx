@@ -171,12 +171,6 @@ export const SamplesScreen = ({
 
       {loading ? <Spinner label="Getting this visit" /> : null}
 
-      {saved === null ? null : (
-        // Not a banner with a warning tone: the work landed. §02 keeps the
-        // coloured tones for conditions the MR still has to do something about.
-        <Banner detail={saved} title="Recorded" tone="info" />
-      )}
-
       <View style={styles.lines}>
         {lines.map((line) => (
           <Card key={line.id}>
@@ -255,6 +249,14 @@ export const SamplesScreen = ({
       <View style={styles.spacer} />
 
       <View style={styles.foot}>
+        {saved === null ? null : (
+          // Not a banner with a warning tone: the work landed. §02 keeps the
+          // coloured tones for conditions the MR still has to do something about.
+          //
+          // FE-D12 item 4. Here, beside the button just pressed. At the top of the form it was
+          // off-screen by the time the rep pressed Record, and all they saw was the form clearing.
+          <Banner detail={saved} title="Recorded" tone="info" />
+        )}
         <Button
           label="Record what I left"
           loading={busy}

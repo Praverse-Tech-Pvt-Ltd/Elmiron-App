@@ -1,7 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { NOTIFICATION_TYPES, capSentence } from '../onboarding/notifications';
+import { NOTIFICATION_TYPES, capSentence, notificationTypes } from '../onboarding/notifications';
 
 /**
  * The fill and height actually in force on the control carrying `label`, found by
@@ -31,6 +31,14 @@ const fillAndHeightOf = (label: string): { backgroundColor: unknown; minHeight: 
   throw new Error(`no ancestor of "${label}" sets a backgroundColor`);
 };
 
+// FE-D12 item 2. Off by default, which is this build; one test turns Coaching on.
+let mockCoachingEnabled = false;
+jest.mock('../features', () => ({
+  get coachingEnabled() {
+    return mockCoachingEnabled;
+  },
+}));
+
 const mockBack = jest.fn();
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush, back: mockBack }) }));
@@ -40,9 +48,13 @@ import MicrophoneRationale from '../../app/onboarding/microphone';
 import NotificationsRationale from '../../app/onboarding/notifications';
 
 describe('A3 — notifications name what they are and cap the count', () => {
-  it('names all four types rather than promising to "stay updated"', async () => {
+  // FE-D12 item 2: this build hides Coaching and has recording off, so A3 names the two types it
+  // can send. `notificationTypes` is what decides; the design's four are `NOTIFICATION_TYPES`.
+  const shown = notificationTypes({ coachingEnabled: false, recordingEnabled: false });
+
+  it('names every type it can send rather than promising to "stay updated"', async () => {
     await render(<NotificationsRationale />);
-    for (const type of NOTIFICATION_TYPES) {
+    for (const type of shown) {
       expect(screen.getByText(type.name)).toBeTruthy();
     }
   });
@@ -51,7 +63,27 @@ describe('A3 — notifications name what they are and cap the count', () => {
     // Names without a cap is a request for consent to an unbounded thing: four
     // categories, any number of messages.
     await render(<NotificationsRationale />);
-    expect(screen.getByText(capSentence())).toBeTruthy();
+    expect(screen.getByText(capSentence(shown.length))).toBeTruthy();
+  });
+
+  it('FE-D12 item 2: promises no coaching note and no recording outcome in this build', async () => {
+    await render(<NotificationsRationale />);
+    const coaching = NOTIFICATION_TYPES.find((type) => type.id === 'coaching');
+    const consent = NOTIFICATION_TYPES.find((type) => type.id === 'consent-outcome');
+    expect(screen.queryByText(coaching?.name ?? 'Coaching notes')).toBeNull();
+    expect(screen.queryByText(consent?.name ?? 'Consent outcomes')).toBeNull();
+    expect(screen.queryByText(/coaching|recording/iu)).toBeNull();
+  });
+
+  it('FE-D12 item 2: the coaching line comes back by itself when Coaching is switched on', async () => {
+    mockCoachingEnabled = true;
+    try {
+      await render(<NotificationsRationale />);
+      expect(screen.getByText('Coaching notes')).toBeTruthy();
+      expect(screen.getByText(capSentence(3))).toBeTruthy();
+    } finally {
+      mockCoachingEnabled = false;
+    }
   });
 
   it('does not use vague reassurance in place of the names', async () => {

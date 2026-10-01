@@ -150,7 +150,11 @@ export const VoiceNoteScreen = ({
                 ? 'nothing is being recorded'
                 : recording
                   ? 'keep holding · release to finish'
-                  : 'hold the button to start'}
+                  : // FE-D12 V4. A captured, unsaved note is what `onSave` means. "hold the button
+                    // to start" under "00:04" told the rep nothing had been recorded.
+                    onSave !== undefined
+                    ? 'recorded · save it, or start again'
+                    : 'hold the button to start'}
             </Label>
           </View>
 
