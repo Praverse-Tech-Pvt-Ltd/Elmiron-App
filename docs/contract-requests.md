@@ -189,3 +189,42 @@ labelled "Sample data, not from the server."
 **Suggested shape, for backend to accept or change:**
 `allowance: { warning: boolean, requestsUsedToday: number, dailyLimit: number, resetsAt: string }`,
 with `resetsAt` as an ISO instant, on every flow result and on the 429 body.
+
+---
+
+### FE-CR-7 — Land the chat request/response, refusal, placeholder and usage-warning contract in `packages/core` on `main`
+
+| | |
+| --- | --- |
+| Date | 2026-10-01 |
+| Requester | Frontend (FE-D15, the assistant screen) |
+| Owner asked | Backend |
+| Needed | Land the chat request/response, refusal, placeholder and usage-warning contract in `packages/core` on `main` |
+| Status | **Open** |
+
+**Why.** The assistant screen is built against the contract as it stands on
+`worktree-ai-platform-phase-a`. That branch is not merged, so frontend must not import from it.
+Until this lands, the app carries a local mirror of these shapes (`apps/field/src/assistant/contract.ts`)
+and runs only on a labelled sample fixture behind a flag that is off by default. It does not call
+the real gateway. Each item below is cited on that branch:
+
+| Shape | Where on `worktree-ai-platform-phase-a` |
+| --- | --- |
+| Request: `{ feature: 'mr_chat', message, history? }`, POST to the `ai-gateway` Edge Function | `services/api/supabase/functions/ai-gateway/index.ts:58-77, 162-163, 217-226` |
+| Response: `MrChatResult`, `answered` / `out_of_scope` / `patient_specific` / `failed` | `packages/core/src/field/gateway/mr-chat.ts:86-90` |
+| Refusal wording, by design: product and clinical questions are redirected | `mr-chat.ts:102-106` (`MR_CHAT_OUT_OF_SCOPE_MESSAGE`); `packages/core/src/field/gateway/guardrails.ts:238` (`PATIENT_SPECIFIC_REFUSAL_MESSAGE`) |
+| Feature off: HTTP 403 `{ code: '45011' }`. Limit reached: HTTP 429 `{ code: '45012' }` | `ai-gateway/index.ts:260-261` |
+| No model connected: HTTP 503 `{ code: 'no_provider' }` | `ai-gateway/index.ts:189-199`; `services/api/supabase/functions/_shared/stub-provider.ts:26-28` |
+| Usage: `requestsUsedToday`, `dailyLimit`, `allowanceWarning`, on `ai_begin_request` only | `packages/core/src/field/ai.ts:168-176` (see FE-CR-6) |
+
+**Three questions to settle when it lands:**
+
+1. **The local stub's placeholder looks like a refusal.** Against a local target, the stub answers
+   `mr_chat` with `{ inScope: false }` (`stub-provider.ts:120-125`), which `answerMrChat` turns into
+   `out_of_scope`, the same result a real refusal gives. The app cannot tell "no model" from "the
+   assistant declined". Could the result carry an explicit marker, such as `provider: 'stub'`, so the
+   app can show "not available yet" instead of a refusal?
+2. **`history` is not sent.** The app sends only what the rep typed in this message. It attaches no
+   doctor, patient, visit or prescribing data, and no earlier turns. Is a single-turn chat acceptable,
+   or should earlier rep-typed turns be sent?
+3. **The allowance and reset time** belong on the result (FE-CR-6).
