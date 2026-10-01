@@ -2344,3 +2344,35 @@ the instruction that came with it. **The database job and the clean-database che
 **All six parts done; committed locally; NOT PUSHED.** The standing rule is the clean-database check
 before pushing, and the run was stopped by a resource limit, not by a red. **Needs Maanav: either re-run
 `node scripts/ci-local.mjs --with-db` when memory allows, or say to push and let CI run it.**
+
+#### Addendum — the reviewer's ruling and three points carried forward (1 October 2026)
+
+**Ruling (Maanav): push `f75ebec` and let CI run the clean-database check.** The local run was stopped
+by low memory at step 10/26 with nothing red; CI runs the same migrations, rollbacks and database
+suites on every push. **Not green until CI reports by workflow name with SHA = HEAD; if it fails, name
+the cause before changing anything.**
+
+**Reviewer errors, recorded so nobody re-derives them.**
+- **"A second, frontend repository exists."** The reviewer asserted it in W1-O; it never existed. One
+  repository, measured in W1-O and confirmed by `FE-D13` (`docs/frontend-facts-2026-10-01.md`). The
+  "frontend repository URL" was never an outstanding input.
+- **"Six screens read the mock."** That figure is **backend's, not the reviewer's** — it comes from
+  backend's own 30 September note in `docs/contract-requests.md`. Five remain on the mock by `FE-D13`'s
+  count. Same lesson in both cases: a number carried forward without a command beside it.
+
+**Carried forward 1 — the prefix rule did not stop the `FE-CR-1` collision.** Prefixes stop two tracks
+minting the same id at the same time. They do not stop one track **renumbering** inside its own
+space: the frontend renamed `CR-1`–`CR-4` to `FE-CR-1`–`FE-CR-4`, and `BE-C4` had already used
+`FE-CR-1` for the voice note. **Needs a single place that mints ids, or a rule that an id is never
+reused.** Not decided here; open.
+
+**Carried forward 2 — "strengths is missing" was measured and does not hold as stated.**
+- The coach contract **has** `strengths`: a required list (at least one), each finding citing a turn.
+  The database refuses an empty one (`20261001000100_coach_nine_dimensions.sql:183`), and it is stored
+  under the same rep-or-admin read rule as the other fields.
+- The only recorded requirement is `BE-C34`'s **nine** items (`.ai-collab/decisions-backend.md:412`),
+  which does not list strengths. **No ten-item list from Pratham is in the repository.**
+- **Open, needs the raw message:** if Pratham's clarification asks for strengths as something other
+  than the existing list (for example its own score), that is a contract change, and it should be
+  closed before anything else is added to the analysis. Until that message is quoted, the gap is
+  unproved.
