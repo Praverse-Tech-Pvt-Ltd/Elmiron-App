@@ -51,6 +51,7 @@ const fakeRpc = (
           modelConfig: { temperature: 0 },
           requestsUsedToday: 1,
           dailyLimit: 50,
+          allowanceWarning: false,
         });
       case 'lms_tutor_lesson_context':
         if (opts.lessonRefused === true) {

@@ -166,6 +166,13 @@ export const AiBeginRequestResponseSchema = z.object({
   modelConfig: z.record(z.string(), z.unknown()),
   requestsUsedToday: z.number().int().positive(),
   dailyLimit: z.number().nonnegative(),
+  /**
+   * W1-M D1 (`BE-C30`): true once this request reaches `ai_daily_warning_percent` of the daily
+   * allowance (80% by the operator's decision). Required, not defaulted: a missing field read as
+   * `false` would be the silent case the warning exists to remove. The same crossing is written
+   * once per rep per day to `ai_allowance_warnings`, which is what the company admin reads.
+   */
+  allowanceWarning: z.boolean(),
 });
 export type AiBeginRequestResponse = z.infer<typeof AiBeginRequestResponseSchema>;
 

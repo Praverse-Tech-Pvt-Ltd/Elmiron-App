@@ -1802,3 +1802,165 @@ vector search must not become a prerequisite of anything else, and the thing it 
 have become a prerequisite of is knowledge retrieval for `product_qa`, **which is finished and
 working on keyword search today**. So the condition governs item #1, and vector search sitting at #3
 is that condition being honoured rather than ignored.
+
+### W1-M — the real provider · 1 October 2026 · Model: Claude Opus 5
+
+**The real provider was NOT built: no AWS credentials exist anywhere this session could reach, and
+the brief's B1 says stop rather than build an adapter that cannot be exercised. What was built
+instead: the coach analysis now covers the operator's nine items, and the daily allowance has its
+launch value and an 80% warning. Fifteen operator decisions recorded — not thirty-one.**
+
+**Checkout guard.** Branch `worktree-ai-platform-phase-a`, HEAD `afb12fc`, clean tree. `origin/main`
+(`f2487e8`) already an ancestor — merge a no-op. PR #2 `MERGEABLE` / `CLEAN`, both checks `SUCCESS`
+at `afb12fc`.
+
+#### A — fifteen decisions, and why not thirty-one
+
+`BE-C26`–`BE-C40` in `.ai-collab/decisions-backend.md`. **The brief said 31 answers and spelled out
+13 numbered points**, plus "continue development" (`BE-C39`) and a request for a flow to approve
+(`BE-C40`, the brief's "their point 4", which is not the brief's own point 4). **The other sixteen
+were not in the text and were not reconstructed** — searched for in the repository, including the
+untracked `BACKEND-DECISIONS.md` in the main checkout, which is the 24 September list. Asked for as
+`docs/operator-inputs.md` I-11.
+
+Settled, marked in `docs/COMPLETION-PLAN.md` "W1-M": `#5`/`D2` (closed, `BE-C26`), `D-11`, `D-12`,
+`D-13`, `D-14` (moot), `D-16`/`#22` (closed), `D-17`/`#25`, `D-18`/`#26` (half — see D), `D-6`
+(method), `BE-C19` (superseded), `BE-W127` (closed).
+
+**A2 — `BE-C6` is SUPERSEDED, its condition MOOT, not met.** Recorded as its own entry beside
+`BE-C26`, `BE-C6`'s text untouched, with a pointer to `GEMINI-RESIDENCY.md` and the bar a return must
+clear (written confirmation from Google, including voice). Nothing anywhere says Gemini passed.
+
+**A3 — the operator said seven; the register says eleven.** `docs/operator-inputs.md` rewritten to
+hold only what is still needed: the operator's seven (I-2–I-8) plus **AWS access** (new, I-1),
+**approved product content** (old D-8 — `BE-C37` makes Product Q&A answer only from it), **the
+second admin actually provisioned** (old D-3), and **the sixteen unrecorded answers** (I-11). Old
+D-4 dropped (a rule, recorded as `BE-C8`); old D-10 folded into I-9.
+
+**Found:** `D-14` names two different things — Gemini residency in `operator-inputs.md`, the
+console's identity in `handover.md`/`PROJECT-OVERVIEW.md`. The rewritten list uses `I-<n>`.
+
+#### B — STOPPED at B1. A CONDITIONAL STOP THE BRIEF DEFINED
+
+**B1, measured:** no `AWS_*` environment variable; no `~/.aws`; no AWS CLI on the path; no AWS key in
+any `.env` in the main checkout, the worktree or `apps/`. The remote Supabase project's function
+secrets **could not be listed** — the stored `SUPABASE_ACCESS_TOKEN` returns **401 Unauthorized** —
+so whether a key sits there is unknown, not "no"; it would still be unusable from here.
+
+**What is needed, exactly** (I-1): an AWS account the company owns; **Bedrock model access for Claude
+Sonnet 5 and Claude Haiku 4.5**; confirmation that **both are offered through the India geographic
+inference profile**, with the profile ids copied from the console; an IAM key scoped to
+`bedrock:InvokeModel` on those two profiles only, delivered as a function secret.
+
+**⚠ Not verified by me, and said rather than assumed:** that the India geographic inference profile
+offers both models; which AWS speech-out service is India-hosted (`BE-C28`).
+
+**B3 — where routing lives and how to tell which model answered.** Not built (no provider). Proposed
+in `AI-SPEC.md`: per feature in the approved prompt version's `model_config`. **What is already true
+and now tested for the coach:** `model_name` on both `ai_requests` and `sim_coach_analyses` is taken
+from the provider's own reply — `sim-doctor.test.ts` "the model that answered is what is recorded".
+That is a scripted model; **B4's real-vendor evidence does not exist.**
+
+**B5 — which capabilities are REAL: none.** All five answer from the labelled stub. What each still
+needs beyond I-1: `product_qa` — approved content (I-9) and an approved prompt; `mr_chat` — the
+product list (I-6) and a prompt; `lms_tutor` — published lessons and a prompt; `ai_doctor` — the six
+personas (`BE-C35`) and a prompt; `ai_coach` — a prompt that defines *scientific accuracy* and
+*response relevance* in words a model can score against. **Every prompt needs the second admin
+(I-10) to be approved.**
+
+#### C — nine items, against what existed
+
+**C1, read from `record_sim_coach_analysis`'s live `prosrc` (identical to its migration):** five
+of the nine existed — product knowledge, communication, opening/pitch (`opening`), objection
+handling, closing — and *areas for improvement* was already `improvements` (cited findings). **Three
+did not:** scientific accuracy, relevance of response, suggested learning modules. **Not built
+twice:** no `pitch_quality` beside `opening`, no second improvements list.
+
+**C2 — `20261001000100_coach_nine_dimensions.sql`.** Seven scores (`scientific_accuracy`,
+`response_relevance` added), each required, 0–100. `suggestedModules`: an array of **0–3**, each
+`{moduleId, dimension, reason}`; empty is valid. Refused: missing/non-uuid id, empty reason,
+unknown dimension, more than three, a duplicate. **The 8-argument recorder is DROPPED**, asserted from
+`pg_proc` (`pronargs` = `[9]`) — leaving it would leave a way round the checks.
+
+**C3 — what constrains a suggestion.** One predicate, `sim_coach_suggestable_modules(org)`: a module
+in a **published** version of an **active** course in the rep's **own** company — exactly what
+`start_course_version` lets them enrol on. Used twice: `sim_coach_module_candidates()` is the list the
+model is SHOWN (company derived from the caller), and the recorder REFUSES anything outside it. The
+flow also refuses an id it did not offer, **before** the database, closing the request `failed` with
+`unknown_learning_module` — otherwise the request would be counted with nothing saying why.
+
+**C4 — inheritance, proved, and swept a second way.** The new column sits on the row whose policy is
+rep-or-company-admin; a test reads it as the rep (1), the company admin (1), the rep's manager (0)
+and a rival company's admin (0). **Second sweep, different in kind — the catalogue, not the policy:**
+no view and no function other than the writer references `sim_coach_analyses`, and no app file reads
+it. Contract test extended to the **nested** keys (dimension scores, finding, module, candidate) —
+the old check only read the top level.
+
+**What I got wrong and caught.** The first green run of the new DB tests had **no test touching
+`courses.is_active`** — deleting that clause would have survived. Found by asking what else would
+have passed; the deactivated-course case was added before mutating.
+
+**C5 — end to end and mutated.** Over HTTP: the stub's analysis is stored with seven score keys and
+`suggestedModules: []`. **The stub suggests nothing, on purpose**, so the populated-module path is
+proved at the database (positive control + six refusals) and in the flow against a scripted model,
+**not over HTTP** — stated rather than hidden. **`analyseSimSession` had no unit test before
+today**; `sim-doctor.test.ts` is new.
+
+| Mutant (applied live, restored from the migration text) | Killed |
+| --- | --- |
+| `and c.is_active` removed from the predicate | **exactly 1** — the deactivated-course case; positive control green |
+| the duplicate-module check removed | **exactly 1** — "the same module suggested twice" |
+| the flow's unknown-module refusal disabled (TypeScript) | **exactly 1** — "a suggestion NOT on the list"; restored by file copy |
+
+#### D — what was covered
+
+**D1 — BUILT. `20261001000200_ai_allowance_warning.sql`.** Global rows `ai_daily_requests_per_user`
+= 100 and `ai_daily_warning_percent` = 80 (a ceiling may be global; a feature flag may not —
+`BE-C29`). `ai_begin_request` (body from `prosrc`) returns `allowanceWarning` and writes **one**
+`ai_allowance_warnings` row per rep per India day, recording the request that crossed the line. A
+mis-set percentage warns nobody and refuses nothing. **What the warning reaches: the company admin
+(a row), and the flow (a field). NOT the rep's screen** — no flow passes it on and no screen shows
+it: **`BE-W128`.** Mutant: `on conflict do nothing` removed → **exactly 1** killed ("logged ONCE").
+
+**Found:** the gateway suites' cleanup commits a **global JSON-null limit at `now()`**, which
+outranks the migrated 100 on any database they have run against. Test databases only — but it is why
+the test asserts the migration's ROWS, not what `threshold()` resolves.
+
+**D2 — config half ALREADY TRUE; log half NOT met; not built.** Every use of 72h/120s is a
+`threshold_number()` call, per company since W1-L, settable by any admin — no constant anywhere
+(grepped SQL, core and apps). The log, measured: the **sync path stores every rejection** in
+`sync_items`, **but as `internal_error`** with the reason only in prose and the SQLSTATE dropped;
+**direct RPC paths store nothing**; the bounds live in **three triggers**, where `BE-W102`'s
+return-instead-of-raise cannot work. **`BE-W129`**, with the cheap first step named. **A ROOM stop**:
+one path fixed and called done is the silent failure the operator named.
+
+**D3 — expiry IS enough; no new label.** 09:00–18:00 exists only in `seed-synthetic.mjs` (localhost-
+only, enforced in code) and test fixtures; the reference seeder refuses to write shift windows; an
+org default without an `expiresAt` ≤ 60 days is rejected. No script can put the testing value into a
+non-local database, and a label would not stop the one remaining route — a human typing it.
+
+#### E — `AI-SPEC.md`
+
+Out of date in **more** than the three named ways: it still said the gateway, the sim tables, the
+`mr_chat` flow and the tutor did not exist. Every status re-derived: provider and routing section;
+**voice drawn as a separate layer outside the gateway**; the nine items as a table with what refuses
+each; both diagrams re-marked with evidence per BUILT box; page one reduced to what remains. Scope,
+the hard rule and the appendix carried over verbatim.
+
+#### Counts
+
+`node scripts/ci-local.mjs --with-db`, **exit 0**, all 26 steps — on a database built from **90**
+migrations, ending with every rollback applied in reverse to an empty schema, then Supabase stopped.
+**`@fieldforce/api` (vitest): Test Files 76 passed (76); Tests 1039 passed | 4 skipped (1043)** —
+W1-L was 1019/4; +20 = 15 gateway + 5 control-plane, the 4 skips the same `ai-product-qa` ones.
+**`@fieldforce/core`: 9 files, 175 passed | 4 skipped.** Field (jest): **Test Suites 33 passed, Tests
+226 passed**; field (vitest) 648; ui (jest) 24 suites / 273; console 76; browser 7 passed, 0 skipped.
+
+**The first full run FAILED at lint** — two unused `_dropped` destructures in my own tests — and
+prettier then flagged three of my test files. Fixed, re-run from the top.
+
+#### Where I stopped
+
+**Part B at B1: a CONDITIONAL STOP THE BRIEF DEFINED.** Part D2: **ROOM**. Everything else done.
+**CI on the pushed SHA is recorded in the next sub-section**, because a commit cannot name its own
+hash.

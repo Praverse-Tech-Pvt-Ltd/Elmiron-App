@@ -34,6 +34,9 @@ import {
   SIM_COACH_DIMENSIONS,
   SimCoachAnalysisSchema,
   SimCoachFindingSchema,
+  SimCoachModuleCandidateSchema,
+  SimCoachOutputSchema,
+  SimCoachSuggestedModuleSchema,
   SimSessionSchema,
 } from './field/simulation.js';
 
@@ -299,6 +302,22 @@ describe('AI Doctor (W1-D) — a practice score is not a leaderboard', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('W1-M C4: the NESTED shapes carry no comparison field either — scores, findings, modules', () => {
+    // The top-level check above cannot see inside `dimensionScores` or a suggested module, and W1-M
+    // added keys at both depths. A `team_average` dimension or a module's `peerRank` would slip past
+    // a check that only reads one level. `position` is matched too, which is why a module carries no
+    // course position even though the table has one.
+    const forbidden =
+      /(team|cohort|rank|percentile|average|median|peer|comparison|leaderboard|position)/i;
+    const nested = [
+      ...Object.keys(SimCoachAnalysisSchema.shape.dimensionScores.shape),
+      ...Object.keys(SimCoachFindingSchema.shape),
+      ...Object.keys(SimCoachSuggestedModuleSchema.shape),
+      ...Object.keys(SimCoachModuleCandidateSchema.shape),
+    ];
+    expect(nested.filter((k) => forbidden.test(k))).toEqual([]);
+  });
+
   it('a session carries no score at all — the score lives on the analysis', () => {
     // Two places to read a score from is one place for them to disagree.
     const scoreish = /(score|grade|rating|rank)/i;
@@ -311,16 +330,58 @@ describe('AI Doctor (W1-D) — a practice score is not a leaderboard', () => {
     expect(SimCoachFindingSchema.safeParse({ ...uncited, turnIndex: 1 }).success).toBe(true);
   });
 
-  it('the five dimensions are a closed set', () => {
+  it('the SEVEN scored dimensions are a closed set (W1-M, BE-C34)', () => {
     // If a model could invent a dimension, two analyses would not be comparable and no screen could
-    // label them -- the same reason `ai_complete_request` refuses an invented flag.
+    // label them -- the same reason `ai_complete_request` refuses an invented flag. Seven, not nine:
+    // the operator's other two items are `improvements` and `suggestedModules`, which are not scores.
     expect([...SIM_COACH_DIMENSIONS]).toEqual([
       'opening',
       'product_knowledge',
+      'scientific_accuracy',
       'objection_handling',
+      'response_relevance',
       'communication',
       'closing',
     ]);
+    // ...and the score object requires exactly those keys, so the list and the shape cannot drift.
+    expect(Object.keys(SimCoachAnalysisSchema.shape.dimensionScores.shape).sort()).toEqual(
+      [...SIM_COACH_DIMENSIONS].sort(),
+    );
+  });
+
+  it('BE-C34 all nine items exist on the analysis, under their contract names', () => {
+    const keys = Object.keys(SimCoachOutputSchema.shape);
+    expect(keys).toEqual(expect.arrayContaining(['dimensionScores', 'improvements']));
+    expect(keys).toContain('suggestedModules');
+  });
+
+  it('an analysis missing a NEW dimension is refused — scientific_accuracy is not optional', () => {
+    const full = Object.fromEntries(SIM_COACH_DIMENSIONS.map((d) => [d, 50]));
+    const scores = SimCoachAnalysisSchema.shape.dimensionScores;
+    expect(scores.safeParse(full).success).toBe(true);
+    const withoutScience = Object.fromEntries(
+      Object.entries(full).filter(([k]) => k !== 'scientific_accuracy'),
+    );
+    expect(scores.safeParse(withoutScience).success).toBe(false);
+  });
+
+  it('a suggested module needs a module id, a known dimension and a reason — and at most three', () => {
+    const ok = {
+      moduleId: '6f1c2b8e-1d0a-4c4e-9b8f-0a1b2c3d4e5f',
+      dimension: 'scientific_accuracy',
+      reason: 'Your answer on storage temperature contradicted the label.',
+    };
+    expect(SimCoachSuggestedModuleSchema.safeParse(ok).success).toBe(true);
+    expect(SimCoachSuggestedModuleSchema.safeParse({ ...ok, reason: '' }).success).toBe(false);
+    expect(SimCoachSuggestedModuleSchema.safeParse({ ...ok, moduleId: 'Cardio 101' }).success).toBe(
+      false,
+    );
+    expect(SimCoachSuggestedModuleSchema.safeParse({ ...ok, dimension: 'charm' }).success).toBe(
+      false,
+    );
+    const list = SimCoachOutputSchema.shape.suggestedModules;
+    expect(list.safeParse([]).success, 'empty is honest when nothing fits').toBe(true);
+    expect(list.safeParse([ok, ok, ok, ok]).success, 'four is refused').toBe(false);
   });
 
   it('a score outside 0-100 is refused, both ends', () => {
@@ -329,7 +390,9 @@ describe('AI Doctor (W1-D) — a practice score is not a leaderboard', () => {
       dimensionScores: {
         opening: 1,
         product_knowledge: 1,
+        scientific_accuracy: 1,
         objection_handling: 1,
+        response_relevance: 1,
         communication: 1,
         closing: 1,
       },

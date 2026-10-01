@@ -1,105 +1,124 @@
 # The AI platform — specification for approval
 
-**28 September 2026.** Written for a reader who is not an engineer.
+**Updated 1 October 2026 (W1-M). First written 28 September.** Written for a reader who is not an
+engineer.
 
-This document describes **six AI capabilities** we propose to build, what each one does, what
-information goes into it, what comes back, what leaves the country, and what each one is waiting
-on. It is written to be **approved, amended or refused** — not to be admired.
+**You asked for a flow and diagram to approve before major AI work (`BE-C40`). This is it.** It
+describes six AI capabilities, what each does, what goes in, what comes back, what leaves the
+country, and what each is still waiting on.
 
 **Two rules govern every page.**
 
-1. **Nothing here is described as though it were built unless it is built.** Where a step does
-   not exist, it says **does not exist**. Where something is built but has never been used by a
-   real screen, it says so.
-2. **The measurements in this document can be re-derived.** Where a claim rests on a file, the
-   file is named. Where it rests on a decision, the decision is numbered.
+1. **Nothing here is described as though it were built unless it is built.** Every box in both
+   diagrams is marked **BUILT**, **PARTLY BUILT** or **DOES NOT EXIST**, and every BUILT box names the
+   file or test that proves it.
+2. **"BUILT" never means "a rep can use it".** As of today **no screen in the MR app calls any AI
+   feature** (checked: no file under `apps/` sends a request to `ai-gateway`). See the appendix.
+
+**What changed since 28 September, in one paragraph.** You chose the provider (**Claude on AWS
+Bedrock, India geographic inference profile** — `BE-C26`), the model split (**Sonnet 5 / Haiku 4.5**
+— `BE-C27`), and made **voice a separate layer** (**Amazon Transcribe in Mumbai** plus an AWS voice —
+`BE-C28`). Meanwhile engineering built the gateway and every flow behind it, **all answering from a
+labelled stub**, because no AWS account has been provided to call a real model with. The coach
+analysis now covers **your nine items** (`BE-C34`).
 
 ---
 
-# WHAT WE ARE ASKING YOU TO APPROVE
+# WHAT REMAINS FOR YOU TO APPROVE OR SUPPLY
 
-*This is page one. If you read nothing else, read this and the page after it.*
+*Page one. The decisions the 28 September version asked for are answered; this is what is left.*
 
-## The six things we want to build
+## The six capabilities, today
 
-| # | Capability | In one sentence | Can we start? |
-| --- | --- | --- | --- |
-| 1 | **Product Q&A** | An MR asks a question about a product and gets an answer built **only** from company-approved material, with the source shown — or the words "approved information not available" | **No.** Waiting on `#4` and `#5` |
-| 2 | **MR Chat** | A general assistant for a rep — how the app works, what a process is, where to find something | **No.** Waiting on `#4` and `#5` |
-| 3 | **Learning tutor** | A tutor inside a course that explains a lesson the learner did not follow | **No.** Waiting on `#4` and `#5` |
-| 4 | **AI Doctor (practice)** | A rep practises a detailing conversation against a **synthetic doctor**. No real doctor is involved at any point | **No.** Waiting on `#4` and `#5` |
-| 5 | **AI Coach (on practice only)** | After a practice session ends, the rep gets feedback on how they did | **No.** Waiting on `#4`, `#5`, and the score question below |
-| 6 | **Voice in practice only** | The rep can **speak** to the practice doctor and **hear** it reply | **No.** Waiting on `#4`, `#5`, and a speech vendor |
+| # | Capability | Logic built and tested? | Real model? | A screen a rep can use? |
+| --- | --- | --- | --- | --- |
+| 1 | **Product Q&A** (`product_qa`) | **Yes** | **No — stub** | **No** |
+| 2 | **MR Chat** (`mr_chat`) | **Yes** | **No — stub** | **No** |
+| 3 | **Learning tutor** (`lms_tutor`) | **Yes** | **No — stub** | **No** |
+| 4 | **AI Doctor, practice** (`ai_doctor`) | **Yes**, text only. Personas and scenarios are authored and approved in the console | **No — stub** | **No** (console authoring only) |
+| 5 | **AI Coach, practice only** (`ai_coach`) | **Yes**, all nine items | **No — stub**, scores are all zero on purpose | **No** |
+| 6 | **Voice, practice only** | **No.** Two empty interfaces | — | **No** |
 
-**The honest summary of that column: none of the six can start today, and not one of them is
-waiting on engineering.**
+## What only you can unblock
 
-## The decisions that must be answered, ranked by how much each unblocks
+| What | Unblocks | Where it is tracked |
+| --- | --- | --- |
+| **An AWS account with Bedrock access to Sonnet 5 and Haiku 4.5 through the India geographic inference profile** | **Capabilities 1–5 answering for real.** Engineering stopped rather than build an adapter it could not test | `docs/operator-inputs.md` **I-1** |
+| **Approved product content, and who signs it off** | Capability 1 has nothing to answer from; capability 3 has no product lessons | **I-9** |
+| **The second admin, provisioned** | Every approval — prompts, personas, knowledge, lessons | **I-10** |
+| **Approval of THIS document** (`BE-C40`) | The real-provider adapter, voice, and the six personas (`BE-C35`) | here |
 
-| Rank | Decision | What it unblocks | Who answers |
-| --- | --- | --- | --- |
-| **1** | **`#4` — Where does the AI service run?** Inside the existing Supabase platform, or as a separate service | **All six capabilities.** Nothing AI can run at all without it. *Our recommendation: inside Supabase.* We tested this locally on 24 September; it works and it keeps every permission decision in the database where the rest of the app's security already lives | **Praverse + you**, in a meeting |
-| **2** | **`#5` — Which AI provider, and may questions and answers leave India?** | **Every live answer.** Our data residency rule is India (Mumbai). Some providers cannot honour that. For capability 6, note carefully: **an employee's recorded voice is the thing being sent** | **You + Legal** |
-| **3** | **Your own admin account.** Not a decision — a task | **The entire approval path.** The rule is that nobody may approve their own content. With one admin account, **every approval is refused.** Capabilities 1, 3 and 5 all depend on approved content existing | **You**, today |
-| **4** | **`#7` — The product catalogue** — the products, the brand names, and **who supplies the approved labels and prescribing information** | All real product content. Capability 1 has nothing to answer *from* until this exists | **You** |
-| **5** | **`#14` — May a manager see an MR's practice scores?** | The shape of capability 5. We have built the safe answer (**no**) and will not change it without a written amendment | **You + management** |
-| 6 | **`#10` — Notifications.** Build them? Which channel? | Anything that needs to tell a rep something — a course is due, a certificate issued | **Praverse + you** |
-| 7 | **`#11` — A PDF-reading component**, so approved documents can be uploaded rather than pasted | Document ingestion only. Text can be pasted today | **Praverse** |
-| 8 | **`#6` — Vector search** (a database extension) | Search *quality* only. Keyword search works today and is the deliberate fallback. **Not blocking** | **Praverse** |
+## What we are asking you to confirm, not decide
 
-## The three things we are asking you to confirm, not decide
-
-1. **Recording stays off** (`C21`). The consultation-recording feature stays built and switched
-   off. Nothing in this document records a real doctor.
-2. **No patient information, anywhere** (`C25`). Confirmed and already enforced in code.
-3. **AI-generated training text is never approved automatically** (`C24`). It enters as a draft,
-   labelled as machine-written, and only a second human can approve it. **We are asking you to
-   confirm you understand that you are the second human** (`C26`).
+1. **Recording of real doctors stays off** (`C21`, `BE-C17`). Nothing here records a real doctor.
+2. **No patient information reaches AI Doctor or coaching** (`BE-C36`). Enforced by the guardrail
+   before any model call, which is a safety net and not a wall — see §1 A3.
+3. **AI-written training text is never approved automatically** (`C24`, `BE-C37`), and **a model is
+   never the source of a product claim.**
 
 ---
 
-# WHAT 4 OCTOBER CAN AND CANNOT INCLUDE
+# PROVIDER, MODELS AND REGION — decided, not built
 
-*The target is 4 October 2026 (`C28`). This page sets each capability against it. It is not
-softened, because a target met on paper and not in the app is the exact failure this project
-keeps recording about itself.*
+## The decision (`BE-C26`, `BE-C27`)
 
-**Today is 28 September. That is six days.**
-
-| Capability | Verdict for 4 October |
+| | |
 | --- | --- |
-| **Product Q&A** | **Buildable once `#4` and `#5` are answered — and not before.** The logic is already written and tested end to end against a scripted stand-in model. What is missing is the place it runs and the model it calls. Even with both answered on Monday, it also needs **approved product content** (`#7`), which is not an engineering task either |
-| **MR Chat** | **Not buildable this week.** Beyond `#4` and `#5`, nothing of this feature exists — no flow, no screen, no prompt |
-| **Learning tutor** | **Not buildable this week.** The courses, lessons and progress tracking underneath it are built. The tutor itself does not exist, and it needs `#4` and `#5` |
-| **AI Doctor (practice)** | **Not buildable this week.** Nothing exists: no persona storage, no scenario storage, no session, no screen. This is the largest single piece of new building in the whole plan |
-| **AI Coach (on practice)** | **Not buildable this week.** It has nothing to analyse until AI Doctor exists |
-| **Voice in practice** | **Not buildable this week.** It needs AI Doctor first, plus a speech vendor that has not been chosen, plus a legal answer about an employee's voice leaving India |
+| **Provider** | **Claude through AWS Bedrock**, using the **India geographic inference profile**, so processing stays in India |
+| **Reasoning-heavy work** | **Claude Sonnet 5** — AI Doctor, AI Coach, Product Q&A |
+| **Light work** | **Claude Haiku 4.5** — classification, routing, short summaries |
+| **Gemini** | Not used. May be added later **only with written confirmation from Google, including voice.** The earlier Gemini choice (`BE-C6`) is **superseded, not satisfied** — its residency check was never passed. The evidence is kept in `GEMINI-RESIDENCY.md` |
 
-## What IS buildable in six days, and what we did this session
+## Which feature gets which model — proposed where you did not say
 
-**Buildable without any decision:**
+| Feature | Model | Source |
+| --- | --- | --- |
+| `ai_doctor` | Sonnet 5 | **Your decision** |
+| `ai_coach` | Sonnet 5 | **Your decision** |
+| `product_qa` | Sonnet 5 | **Your decision** ("reasoning-heavy product Q&A") |
+| `mr_chat` | **Haiku 4.5** | **Engineering proposal.** Its first job is deciding whether a question is in scope, which is classification |
+| `lms_tutor` | **Haiku 4.5** | **Engineering proposal.** It explains one lesson's text and nothing else — short, grounded work |
 
-- The **draft-labelling rule** — AI-written text can never be born approved. *Built this session.*
-- The **console screen** where you review and approve a draft. *Built this session.*
-- **Route wiring and contract guards**, so the AI and knowledge endpoints are declared and typed
-  for the app team. *Done this session.*
-- **Audit rows on the AI and learning tables**, so approvals and changes leave a trail. *Already
-  existed.* We checked before building and found 15 of the 16 tables already had them — our own
-  inventory, five days old, had recorded a gap that was already closed. The 16th is a derived table
-  that should stay unaudited, and the reasoning is in `W1-A-recon.md`.
+**Please confirm or change the last two rows.**
 
-**What that adds up to, said plainly.** By 4 October the app can have a **working approval
-pipeline with no AI in it**. That is genuinely useful — it is the thing that makes AI-generated
-content safe later — but it is not an AI feature, and nobody should describe it as one.
+## Where routing will live (PROPOSED), and how anyone will be able to tell which model answered
 
-## The one sentence a reader should take away
+* **Where — proposed, not built:** in the approved prompt version for each feature (`ai_prompt_versions.model_config`),
+  which is already per feature, per company, four-eyes approved, and read by `ai_begin_request` on
+  every request. Changing a feature's model is then an approval, not a code release. **Not yet
+  built:** the provider does not yet read a model from it, because there is no provider.
+* **How to tell:** every request already records `model_provider` and `model_name` on its
+  `ai_requests` row, **taken from the provider's own reply, never from configuration** — so a routing
+  mistake shows up in the record instead of being hidden by it. The coach analysis carries the same
+  two fields. Proved for the coach flow against a scripted model
+  (`packages/core/src/field/gateway/sim-doctor.test.ts`, "the model that answered is what is
+  recorded"); **not yet proved against Bedrock.**
 
-**The MR field app cannot be "functionally complete with AI" by 4 October, and the reason is not
-engineering capacity. It is that `#4` and `#5` have been open since 24 September and neither can
-be answered by us.**
+## The region is an assertion, not a setting
 
-If both are answered this week, the realistic first AI capability in the app is **Product Q&A**,
-and it still needs approved product content to answer from.
+The adapter, when built, **refuses to start for any region or inference profile that is not the India
+one.** A provider that reads its region from configuration and would quietly accept another is not
+what you decided.
+
+---
+
+# VOICE — a separate layer (`BE-C28`)
+
+**Voice is no longer "the AI model, but with audio".** Speech is turned into text **before** the AI
+gateway and text is turned into speech **after** it:
+
+* **Speech to text: Amazon Transcribe, Mumbai (`ap-south-1`).**
+* **Speech out: an India-compatible AWS voice.** Which service and which voice is a provisioning
+  question we have not verified.
+* **The consequence that matters:** the patient guardrail, the approved prompt and the audit record
+  apply to the **transcript** exactly as they apply to typed text, because the gateway only ever sees
+  text. **The limitation that remains:** the guardrail reads the transcript, so the **audio has
+  already reached Transcribe** before any check runs. Transcribe is in India, which is what makes
+  that ordering acceptable — it should still be understood before approving.
+* **AI Doctor voice stays simulation only.** No real doctor's voice, ever.
+
+**Status: DOES NOT EXIST.** Two empty interfaces (`TranscriptionProvider`, `SpeechSynthesisProvider`,
+`packages/core/src/field/gateway/providers.ts:53` and `:61`). Nothing calls a speech service.
 
 ---
 
@@ -123,516 +142,167 @@ real consultation.
   `C25` keeps all patient-facing AI in the separate clinical system. It is deliberately absent
   from the feature list in code (`packages/core/src/field/ai.ts:24`).
 
+
 ---
 
-# 1. PRODUCT Q&A (`product_qa`)
+# THE FIVE TEXT CAPABILITIES — one table each
 
-## A1. What it does
+**Common to all five, so it is said once.** Every request goes through **one** AI gateway
+(`services/api/supabase/functions/ai-gateway/index.ts`), which calls the database **as the signed-in
+rep** — never with a service key — so the database makes every permission decision. In order:
+switched on for this company? (`45011` if not) → an approved prompt? → today's allowance? (`45012`
+when used up; **a warning at 80%** from 1 October, `BE-C30`) → **the patient-detail guardrail,
+before anything leaves the building** → the model → **we validate the reply; the vendor is never
+trusted** → a record of counts, timings, model and flags, **never the question or the answer**.
 
-A rep types a question about a product — "what is the dosing interval", "what does the label say
-about renal impairment". The system searches **only** material the company has formally approved
-for that rep's market, and shows an answer built from it with the source document and section
-named underneath. **If nothing approved matches, it says so and stops** — it does not guess, and
-it does not fall back to the model's own knowledge.
+**"Real model?" is NO for all five.** The gateway answers from a stub that labels itself as a stub in
+the text a human reads, and refuses to run anywhere but a local machine. The swap to Bedrock is one
+line in the gateway (`index.ts`, `createStubProvider`) — and it is waiting on **I-1**, not on code.
 
-## A2. The flow, step by step
+| # | Capability | What it does | What goes in | What comes back | Evidence it is built |
+| --- | --- | --- | --- | --- | --- |
+| **1** | **Product Q&A** | Answers a product question **only** from company-approved material, with the source shown — or says *"approved information not available"* and stops | The question; the rep's company and market (read by the database, not claimed by the app); the approved passages found | An answer **with every citation**, or "not available", or the patient refusal, or a failure message | `gateway/product-qa.ts`; `product-qa.test.ts`; over HTTP in `services/api/tests/ai-product-qa.spec.ts` and `ai-gateway.spec.ts` |
+| **2** | **MR Chat** | A general assistant. **A product question is redirected to Product Q&A**, decided from the company's own product names | The rep's message and recent history | A reply, or the redirect, or the standard refusals | `gateway/mr-chat.ts`; `mr-chat.test.ts`; `services/api/tests/mr-chat.spec.ts`; scope terms from `20260930000100_mr_chat_scope_terms.sql` |
+| **3** | **Learning tutor** | Explains **one** lesson the learner is enrolled in, from that lesson's published text and nothing else | The question; the lesson's text, fetched by the database only if the learner is enrolled and the version is published | An explanation, or a referral to a person when the lesson does not cover it | `gateway/lms-tutor.ts`; `lms-tutor.test.ts`; `services/api/tests/lms-tutor.spec.ts`; `20260930000200_lms_tutor_lesson_context.sql` |
+| **4** | **AI Doctor, practice** | The rep practises against a **synthetic** doctor persona on an approved scenario. **No real doctor, no recording, no patient data** — asserted against the database catalogue, not by reading | The persona brief, the scenario's objection, the conversation so far, the rep's turn | The synthetic doctor's reply; each turn stored in the rep's own practice history | `gateway/sim-doctor.ts` (`takeDoctorTurn`); `20260929000100_simulation_core.sql`, `…0200_simulation_rpcs.sql`; `services/api/tests/sim-gateway.spec.ts` (start → turn → end → analysis over HTTP; cross-company refusals; B6 no-patient assertions) |
+| **5** | **AI Coach, practice only** | After a session ends, feedback on **your nine items** — see the next section | The ended session's turns, its objective and objection, **and the list of learning modules the rep could open today** | Seven scores, strengths and areas for improvement (each citing a turn), up to three suggested modules, a summary | `gateway/sim-doctor.ts` (`analyseSimSession`); `20261001000100_coach_nine_dimensions.sql`; `sim-doctor.test.ts`; `sim-gateway.spec.ts` "W1-M C" |
 
-| # | What happens | The real function | Built? |
+**What leaves India once I-1 is provided: nothing**, if the India geographic inference profile does
+what its name says — the question, the passages or conversation, and the approved prompt go to
+Bedrock **in India**. Never the rep's identity, the company name, or any visit, consent or doctor
+record. **Not yet verified against AWS's own documentation by engineering; I-1 asks for it to be
+confirmed in the console.**
+
+**What can still leave a rep's hands in an unexpected way: free text.** A rep can type a doctor's
+name into any of the five. The guardrail refuses patient details by pattern (`gateway/guardrails.ts`)
+and its own source calls itself *"deliberately conservative and deliberately crude"*. **It is a
+safety net, not a wall.**
+
+---
+
+# THE COACH'S NINE ITEMS (`BE-C34`) — built 1 October
+
+| Your item | What it is in the analysis | Its shape | What refuses a bad one |
 | --- | --- | --- | --- |
-| 1 | Rep types a question on a screen | — | **Does not exist.** No screen in either app calls any of this |
-| 2 | The app sends it to the AI gateway | — | **Does not exist** (`#4`) |
-| 3 | The database is asked whether this feature may run at all — for this company, this user, today | `ai_begin_request` | **Built.** Tested by `ai-control-plane.spec.ts` |
-| 4 | The question is checked for patient details **before it leaves the building** | `detectPatientSignals` | **Built** (`gateway/guardrails.ts:59`) |
-| 5 | Approved knowledge is searched, limited to the rep's company, market and product | `search_approved_knowledge` | **Built.** Tested by `knowledge.spec.ts` |
-| 6 | **If nothing matched, the model is never called** | `answerProductQuestion` step 4 | **Built** (`gateway/product-qa.ts:170`) |
-| 7 | The model is given **only** the approved passages and told to answer from them alone | `generateStructured` | **Built as logic; the model itself does not exist** (`#5`) |
-| 8 | The model's reply is checked: is it valid, does it cite passages it was actually given | `answerProductQuestion` step 6 | **Built** (`product-qa.ts:202-233`) |
-| 9 | What happened is recorded — counts, timings, which approved versions were used. **Never the question or the answer** | `ai_complete_request` | **Built** |
-| 10 | The rep sees the answer with its citations | — | **Does not exist** |
+| Product knowledge | `product_knowledge` | score 0–100 | the database, if missing or out of range |
+| **Scientific accuracy** | **`scientific_accuracy`** — new | score 0–100 | same |
+| Communication | `communication` | score 0–100 | same |
+| Opening / pitch quality | `opening` | score 0–100 | same. **One item in your list, one score** — not split in two |
+| Objection handling | `objection_handling` | score 0–100 | same |
+| **Relevance of response** | **`response_relevance`** — new | score 0–100 | same |
+| Closing / follow-up | `closing` | score 0–100 | same |
+| Areas for improvement | `improvements` | **a list, at least one**; each names one of the seven, a title, the detail, **and the turn it is about** | the database refuses a finding citing a turn that is not in the session |
+| **Suggested learning modules** | **`suggestedModules`** — new | **a list of 0 to 3**; each names a module, which of the seven it addresses, and why | **the database refuses any module that is not in a PUBLISHED version of an ACTIVE course in the rep's OWN company** — so never a draft, a retired course, a deactivated course, another company's course, or one that does not exist. Also refused: more than three, the same module twice, no reason given |
 
-**Read that column honestly: the middle is built and both ends are missing.** The whole decision
-chain exists and has never been reached from a screen.
+**Why a suggestion is checked so hard.** A suggestion that points at a course the rep cannot open is
+worse than none — it sends them to a dead end with the system's authority behind it. The model is
+**shown only** the modules the rep could open, and the gateway **refuses** an answer that names
+anything else before the database is asked to store it.
 
-## A3. What goes in
+**Why an empty list is allowed.** When nothing published fits, "none" is the honest answer. Requiring
+one would make a model suggest something irrelevant whenever the catalogue is thin.
 
-| Field | Where it comes from |
-| --- | --- |
-| The question text | Typed by the rep |
-| Who is asking | The rep's signed-in session — the database reads it, the app cannot claim it |
-| Which company | The rep's profile, read by the database |
-| Which market | The screen, chosen from the company's markets |
-| Which product | The screen, optional |
-| The approved passages | The company's approved knowledge library |
-
-**Can an input contain a doctor's name?** Yes — a rep could type one. Nothing prevents free text
-from naming a doctor.
-
-**Can an input contain an employee's voice?** No. This capability is text only.
-
-**Patient data: refused, by name.** `C25` forbids patient information anywhere in this app. The
-guardrail that enforces it is **`detectPatientSignals`**
-(`packages/core/src/field/gateway/guardrails.ts:59`). It runs at **step 4 — before the search and
-before any model call** — and looks for Indian phone numbers, dates of birth, patient-identifier
-shapes and requests for advice about a specific person. When it fires, the request is closed as
-**blocked**, the rep is shown a fixed sentence, and **no text is stored and nothing is sent
-anywhere**.
-
-**What that guardrail is not.** Its own source calls it *"deliberately conservative and
-deliberately crude… they are not a guarantee, and nothing here claims to be."* It catches obvious
-patterns. It is a safety net, not a wall, and it should not be described to anyone as a wall.
-
-## A4. What comes back
-
-Exactly one of four outcomes:
-
-| Outcome | What the rep sees |
-| --- | --- |
-| **Answered** | The answer, **and every citation** — document, version, section. Never the answer without them |
-| **Not available** | *"Approved information not available"* — shown word for word, with no substitute |
-| **Patient-specific refusal** | A fixed sentence directing them to the Medical/Scientific team. **It does not repeat what they typed** |
-| **Failed** | *"The assistant could not answer just now. Please try again, or refer the question to the Medical/Scientific team."* A retry is safe |
-
-**Two refusals happen before anything else.** *"This AI feature is switched off"* (`45011`) and
-*"you have used today's allowance"* (`45012`).
-
-**Note what "not available" covers.** A model reply that fails validation, cites a passage it was
-not given, or returns nothing, is **discarded and reported as not-available**. The worst outcome
-of a bad model reply is an unhelpful answer — never an unsupported claim.
-
-## A5. Which external model or API
-
-**Undecided.** No vendor has been chosen and **no vendor is named anywhere in this system**. The
-code is written against a neutral interface (`LlmProvider`, `providers.ts:43`) with **no adapter
-behind it, on purpose** — writing one would be choosing a vendor.
-
-The choice depends on: **`#5`** (which provider, and may data leave India), the residency rule
-(Mumbai), and the approved budget (about $10–40/month, which fits text but **not** a voice
-product).
-
-## A6. What leaves India
-
-**Today: nothing.** No model is called.
-
-**Once `#5` is answered**, each request would send: the rep's question, the approved passages
-found, and the company's approved prompt. It would **not** send the rep's identity, the company
-name, or anything from the visit, consent or doctor records.
-
-**Whether that leaves India is `#5` and nothing else.** Our residency rule is `ap-south-1`
-(Mumbai). A provider outside India means approved company material and a rep's typed question
-leave the country.
-
-## A7. Future possibilities — not proposed now
-
-Meaning-based search instead of keyword (`#6`); suggested follow-up questions; a *"was this
-useful"* signal to find gaps in the approved library.
-
-## A8. Blocked by
-
-**`#4`** (where it runs) · **`#5`** (which model) · **`#7`** (nothing approved to answer from).
+**Who sees it — unchanged, and proved for the new fields** (`C27`, `BE-C13`, `BE-C34`): **the rep and
+their company admin. Never a manager. No averages, no ranking.** The new fields live on the same row
+as the old ones, so they inherit the same rule rather than needing a new one; a test reads them as
+the rep (sees it), the company admin (sees it), the rep's manager (sees nothing) and another company's
+admin (sees nothing). Nothing else in the database reads that table — checked against the catalogue,
+not by memory.
 
 ---
 
-# 2. MR CHAT (`mr_chat`)
-
-## A1. What it does
-
-A general assistant for a rep inside the app: how a process works, where to find a screen, what a
-policy says. **It is not a product-information tool** — a product question must go through Product
-Q&A, which is constrained to approved material.
-
-## A2. The flow
-
-**Steps 1, 2, 7 and 10 of the Product Q&A table apply identically and are equally missing.** Of
-the rest:
-
-| Step | Function | Built? |
-| --- | --- | --- |
-| Permission, flag, allowance | `ai_begin_request` | **Built** — the feature id `mr_chat` already exists (`ai.ts:26`) |
-| Patient-detail guardrail | `detectPatientSignals` | **Built**, and reusable as-is |
-| The chat flow itself | — | **Does not exist.** There is no `mr_chat` equivalent of `answerProductQuestion` |
-| Recording what happened | `ai_complete_request` | **Built** |
-
-## A3. What goes in
-
-The rep's typed message, their session, their company. **A doctor's name: possible** — it is free
-text. **An employee's voice: no.**
-
-**Patient data: refused by `detectPatientSignals`**, exactly as in Product Q&A, and this is the
-capability where it matters most — a general chat box is the one an MR is most likely to type a
-real situation into. The master prompt's own §10 warns that the MR chatbot *"must not become a
-clinical decision-support system"*, and this guardrail is that warning's only enforcement.
-
-## A4. What comes back
-
-A text reply, or one of: switched off (`45011`), allowance used (`45012`), patient-specific
-refusal, or a failure message. **Shape not yet designed** — it does not exist.
-
-## A5. Which model — **undecided**, depends on `#5`.
-
-## A6. What leaves India — the rep's typed message and the company's approved prompt. `#5` decides.
-
-**This is the capability with the widest input.** Product Q&A sends a product question. MR Chat
-sends whatever a rep types.
-
-## A7. Future possibilities
-
-Answering from the rep's own data ("what is my sample balance"), which would send company
-operational data to a vendor and is deliberately **not** proposed now.
-
-## A8. Blocked by
-
-**`#4`** · **`#5`**. Plus: **it does not exist and has not been designed.**
-
----
-
-# 3. LEARNING TUTOR (`lms_tutor`)
-
-## A1. What it does
-
-Inside a course, a learner who did not follow a lesson asks about it and gets an explanation
-grounded in **that lesson's approved text**. It explains what is there; it does not add new claims.
-
-## A2. The flow
-
-| Step | Function | Built? |
-| --- | --- | --- |
-| Courses, versions, modules, lessons | tables from AI-B2 | **Built.** Tested by `lms-core.spec.ts` |
-| A learner starts and progresses | `start_course_version`, `complete_lesson` | **Built** |
-| The rep asks the tutor a question | — | **Does not exist** |
-| Permission, flag, allowance | `ai_begin_request` | **Built** — `lms_tutor` exists as a feature id |
-| Retrieving the lesson text as the source | — | **Does not exist.** `search_approved_knowledge` searches the knowledge library, not lesson bodies |
-| The model | — | **Does not exist** (`#5`) |
-| Recording | `ai_complete_request` | **Built** |
-
-**The learning platform underneath the tutor is real and tested. The tutor is not.**
-
-## A3. What goes in
-
-The learner's question, the lesson they are on, the lesson's text, their session.
-**Doctor's name: possible** (free text). **Employee's voice: no.**
-**Patient data: refused** — the same guardrail applies and must be wired in when this is built.
-
-## A4. What comes back
-
-An explanation grounded in the lesson, or the standard refusals. **Shape not yet designed.**
-
-## A5. Which model — **undecided**, `#5`.
-
-## A6. What leaves India — the learner's question and the lesson text. `#5` decides.
-
-**One thing to notice.** Under `C24` a lesson's text may itself have been **drafted by AI and then
-approved by you**. That is allowed. What is *not* allowed is that draft reaching a learner without
-your approval — see the hard rule below.
-
-## A7. Future possibilities
-
-Practice questions generated from a lesson; a *"explain this more simply"* control.
-
-## A8. Blocked by
-
-**`#4`** · **`#5`**. Plus: the tutor flow does not exist.
-
----
-
-# 4. AI DOCTOR — PRACTICE SIMULATION (`ai_doctor`)
-
-**This is the largest new build in the plan, and almost none of it exists.**
-
-## A1. What it does
-
-A rep chooses a practice scenario — a doctor persona, a specialty, an attitude, an objection to
-handle — and has a detailing conversation with a **synthetic doctor**. No real doctor is involved
-at any point. The rep can practise as often as they like. When they stop, the session ends and
-(separately) AI Coach gives feedback.
-
-## A2. The flow
-
-| Step | Function | Built? |
-| --- | --- | --- |
-| Rep opens a practice screen and picks a scenario | — | **Does not exist** |
-| Personas and scenarios, editable by an admin without a code release | — | **Does not exist.** No `sim_*` table exists in any migration — verified by search |
-| A session is started and recorded | — | **Does not exist** |
-| Permission, flag, allowance | `ai_begin_request` | **Built** — `ai_doctor` exists as a feature id (`ai.ts:30`) |
-| The rep speaks or types | — | **Does not exist** |
-| Speech in | `TranscriptionProvider` | **Interface only** (`providers.ts:53`). No vendor, no adapter |
-| The synthetic doctor replies | — | **Does not exist** (`#4`, `#5`) |
-| Speech out | `SpeechSynthesisProvider` | **Interface only** (`providers.ts:61`) |
-| The session ends and is stored | — | **Does not exist** |
-| Recording what happened | `ai_complete_request` | **Built** |
-
-**Everything except the permission check and the audit record does not exist.**
-
-## A3. What goes in
-
-The chosen persona and scenario, what the rep says or types, the conversation so far, their
-session and company.
-
-**Can an input contain a doctor's name?** **It should not, and this is worth being precise
-about.** The persona is synthetic and must be authored as synthetic — a scenario named after a
-real doctor would put a real person's name into a practice corpus. That is an authoring rule for
-whoever writes the scenarios, and it is the operator's to enforce, not something code can check.
-
-**Can an input contain an employee's voice?** **Yes — this is the one that does.** If voice
-practice is built, **the rep's recorded voice is the payload sent to a speech vendor.** See A6.
-
-**Patient data: refused.** `C25` applies. The same guardrail must run on the rep's turns. **It
-does not run today because none of this exists** — this is a requirement on the build, not a
-description of one.
-
-## A4. What comes back
-
-The synthetic doctor's reply, as text and (if voice is built) as audio. Refusals: switched off
-(`45011`), allowance used (`45012`), or a failure message. **Shape not yet designed.**
-
-## A5. Which external model or API
-
-**Undecided, and this capability needs up to three separate vendors:** a language model (`#5`),
-a speech-to-text vendor, and a text-to-speech vendor. **None is chosen and none is named.**
-
-**A note on the speech vendor.** `#19` in the register is the speech vendor for **real visits**,
-and `C29` defers it. **A speech vendor for practice is a different question with a different
-answer**, because the payload is an employee's voice rather than a doctor's — a much lighter
-consent problem, but not a zero one.
-
-**A note on cost, because it changes the budget conversation.** The approved AI budget is about
-$10–40 a month. That figure was set for text. **A live voice conversation costs substantially more
-than text per minute, across all three vendors at once.** We are not putting a number on it,
-because we have not chosen vendors and an invented figure is worse than none — but the existing
-budget should not be assumed to cover this.
-
-## A6. What leaves India
-
-**Text practice:** the scenario, the conversation, the approved prompt.
-
-**Voice practice: the employee's recorded voice is the payload.** Said plainly, because it is the
-single most consequential sentence in this document: **if voice practice uses an overseas vendor,
-recordings of your employees' voices leave India.** A voice recording is personal data about an
-identifiable person under DPDP. This needs an explicit answer under `#5`, and it needs the
-employee to be told — this is the same class of question as `#20` (consent from employees whose
-voices join the speech-vendor bake-off corpus), which is deferred but **not answered**.
-
-## A7. Future possibilities — not proposed now
-
-Scenarios generated from real objections; a difficulty that adapts to the rep; letting a manager
-assign a specific scenario (**note: that last one touches `#14`** — assignment is not a score, but
-it is a manager seeing a rep's practice activity).
-
-## A8. Blocked by
-
-**`#4`** · **`#5`** · a speech vendor for practice (not `#19`, which is the real-visit vendor) ·
-an employee-voice answer under `#5`. Plus: **it does not exist**, and it is the biggest build here.
-
----
-
-# 5. AI COACH — ON SIMULATIONS ONLY (`ai_coach`)
-
-## A1. What it does
-
-After a **practice** session ends, the rep gets feedback: what they covered, what they missed, how
-they handled the objection, how clearly they communicated. **It never analyses a real doctor
-visit** — that is coaching on real visits, which `C4` puts out of v1 and `C21` makes impossible
-anyway.
-
-## A2. The flow
-
-| Step | Function | Built? |
-| --- | --- | --- |
-| A practice session exists to analyse | — | **Does not exist** (capability 4) |
-| Permission, flag, allowance | `ai_begin_request` | **Built** — `ai_coach` exists as a feature id (`ai.ts:31`) |
-| The session is sent for analysis | — | **Does not exist** |
-| Feedback is produced and stored | — | **Does not exist** |
-| The rep sees their feedback | — | **Does not exist** |
-| A manager sees it | — | **Deliberately not built.** See below |
-
-## A3. What goes in
-
-The practice conversation, the scenario's objectives, the rep's session.
-**Doctor's name: should not** — same authoring rule as capability 4.
-**Employee's voice: only if voice practice is built**, and then the transcript rather than the
-audio would normally be what is analysed.
-**Patient data: refused**, same guardrail, same caveat that it does not run today.
-
-## A4. What comes back
-
-Written feedback, and a **score** — under the strict limits below. Plus the standard refusals.
-**Shape not yet designed.**
-
-## A5. Which model — **undecided**, `#5`.
-
-## A6. What leaves India — the practice conversation and the approved prompt. `#5` decides.
-
-## The scores rule, which is the part to read twice
-
-**`C27`, built to the safe default.** A score may exist on a **practice simulation** and on an
-**LMS assessment**. It is visible to **the MR themselves** and to the **company admin**.
-
-**It is NOT visible on any manager surface. There are no team averages and no rankings.**
-
-**Why, and it is not caution for its own sake.** The recorded rule is *"never add a ranking,
-score, rank, percentile or grade to `analyses` or the manager surface"*, and there are tests that
-fail the build if those column names appear. The rule exists because scoring an employee and
-showing it to their manager **is employee monitoring**, which carries a different legal basis and
-a different conversation with staff.
-
-**The question we are putting to you (`#14`):** *may a manager see an MR's practice scores?*
-
-- **(a) No — MR and admin only.** The rule stands. Nothing to amend. **This is what is built.**
-- **(b) Yes.** The recorded rule must be **formally amended in writing**, and it becomes employee
-  monitoring, with an HR and legal question attached.
-
-**We did not build a manager-facing score surface this session, and will not under either answer
-until the amendment exists.**
-
-## A8. Blocked by
-
-**`#4`** · **`#5`** · **capability 4 must exist first** · **`#14`** for the manager half.
-
----
-
-# 6. VOICE — PRACTICE ONLY
-
-## A1. What it does
-
-Inside a practice simulation, the rep **speaks** instead of typing and **hears** the synthetic
-doctor reply. **Only inside a simulation. Never in a real consultation** (`C21`).
-
-## A2. The flow
-
-Rep speaks → audio captured on the phone → sent to a speech-to-text vendor → text goes into the
-AI Doctor flow → the reply text is sent to a text-to-speech vendor → audio plays back.
-
-| Step | Function | Built? |
-| --- | --- | --- |
-| Capturing audio on the phone | the existing recording code | **Built, and switched off** (`C21`). It was built for real consultations and is guarded accordingly — see the warning below |
-| Speech to text | `TranscriptionProvider` | **Interface only** (`providers.ts:53`) |
-| Speech to speech reply | `SpeechSynthesisProvider` | **Interface only** (`providers.ts:61`) |
-| Everything between | — | **Does not exist** |
-
-**A warning about reusing the recording code.** The existing capture path is wired to the
-consultation-recording feature, which is deliberately behind **two independent switches** and
-throws an error if enabled against anything but a local server. Practice audio is a **different
-purpose** with a different legal basis and a different retention rule. It must not be made to work
-by loosening that guard — that would switch consultation recording back on as a side effect.
-
-## A3. What goes in
-
-**The employee's recorded voice.** That is the payload, stated plainly.
-
-**A doctor's name: no** — there is no doctor. **Patient data: refused** — but note that a
-guardrail on typed text does not read audio; the check would run on the **transcript**, after the
-audio has already been sent to a vendor. That ordering is a real limitation and should be
-understood before approving.
-
-## A4. What comes back
-
-The synthetic doctor's spoken reply. Refusals fall back to text.
-
-## A5. Which external model or API
-
-**Undecided. Two vendors, neither chosen, neither named.** Whichever is chosen must accept
-**no-training and deletion terms** — the same requirement `#19` carries for the real-visit vendor.
-
-**On "voice modulation".** If that means changing the *character* of the synthetic doctor's
-voice — older, female, brusque, a different accent — **that is a parameter on the text-to-speech
-vendor, not a separate capability.** It is one field in a request. It is worth saying because it
-is easy to present as a distinct feature and it is not one.
-
-## A6. What leaves India
-
-**The employee's recorded voice leaves the device and goes to a speech vendor. If that vendor is
-outside India, an employee's voice leaves the country.**
-
-This is the sharpest residency question in the document and it needs an explicit answer under
-`#5`, plus an employee-facing notice. It is the same class of question as `#20`, which is deferred
-and unanswered.
-
-## A7. Future possibilities
-
-Pronunciation feedback; pace and filler-word analysis. Both would need `#14` answered first —
-they are measurements of an employee.
-
-## A8. Blocked by
-
-**`#4`** · **`#5`** · **capability 4 must exist first** · a speech vendor pair · an employee-voice
-residency and notice answer · **cost**, which the current budget was not sized for.
-
----
-
-# DIAGRAM ONE — how any AI request is supposed to work
+# DIAGRAM ONE — how any AI request works, 1 October 2026
 
 Every box is marked **BUILT**, **PARTLY BUILT** or **DOES NOT EXIST**.
 
 ```mermaid
 flowchart TD
-    A["Rep taps something<br/><b>DOES NOT EXIST</b><br/>no screen calls any of this"]
-    B["The app sends the request<br/><b>DOES NOT EXIST</b><br/>decision #4"]
-    C["AI gateway<br/><b>DOES NOT EXIST</b><br/>decision #4 — where it runs"]
-    D["Who is asking, and may they?<br/><b>BUILT</b><br/>ai_begin_request, as the signed-in user"]
-    E["Is this feature switched on?<br/><b>BUILT</b><br/>every feature ships OFF"]
-    F["Which approved prompt version?<br/><b>PARTLY BUILT</b><br/>mechanism built; no approved<br/>version exists, so it refuses 45011 today"]
-    G["Patient-detail guardrail<br/><b>BUILT</b><br/>detectPatientSignals — refuses<br/>BEFORE search or model"]
-    H["Find approved knowledge<br/><b>PARTLY BUILT</b><br/>search built and tested;<br/>no approved content exists — #7"]
-    I["Call the model<br/><b>DOES NOT EXIST</b><br/>interface only, no vendor — #5"]
-    J["Check the reply's shape<br/><b>BUILT</b><br/>validated by us, never trusted<br/>from the vendor"]
-    K["Check every citation was<br/>a source we supplied<br/><b>BUILT</b><br/>fails closed to 'not available'"]
-    L["Record it: counts, timings,<br/>versions used, flags<br/><b>BUILT</b><br/>ai_complete_request — never<br/>the question or the answer"]
-    M["Rep sees the answer + citations<br/><b>DOES NOT EXIST</b>"]
+    A["Rep taps something in the MR app<br/><b>DOES NOT EXIST</b><br/>no app file calls the gateway"]
+    C["AI gateway, one Edge Function<br/><b>BUILT</b><br/>ai-gateway/index.ts — calls the<br/>database AS THE REP, no service key"]
+    D["Who is asking, and may they?<br/><b>BUILT</b><br/>ai_begin_request"]
+    E["Is this feature switched on<br/>for this company?<br/><b>BUILT</b> — per company since W1-L"]
+    F["Which approved prompt version?<br/><b>PARTLY BUILT</b><br/>mechanism built and tested;<br/>no production prompt approved yet"]
+    W["Daily allowance: 100, warn at 80%<br/><b>BUILT</b> 1 Oct — warning logged for<br/>the admin; NOT yet shown to the rep"]
+    G["Patient-detail guardrail<br/><b>BUILT</b><br/>refuses BEFORE search or model"]
+    H["Approved knowledge / lesson /<br/>session / module list<br/><b>PARTLY BUILT</b><br/>built and tested; no approved<br/>production content — I-9"]
+    I["Call the model: Claude on Bedrock,<br/>India geographic profile<br/><b>DOES NOT EXIST</b><br/>a labelled stub answers — I-1"]
+    J["Validate the reply's shape,<br/>citations, module ids<br/><b>BUILT</b>"]
+    L["Record: counts, timings, model<br/>name, flags — never the text<br/><b>BUILT</b> ai_complete_request"]
+    M["Rep sees the result<br/><b>DOES NOT EXIST</b>"]
 
-    A --> B --> C --> D --> E --> F --> G --> H --> I --> J --> K --> L --> M
+    A --> C --> D --> E --> F --> W --> G --> H --> I --> J --> L --> M
 
-    G -.->|patient signal found| R1["Refused. Nothing searched,<br/>nothing sent, nothing stored<br/><b>BUILT</b>"]
-    E -.->|off or not configured| R2["45011 switched off<br/><b>BUILT</b>"]
-    D -.->|allowance used| R3["45012 wait until tomorrow<br/><b>BUILT</b>"]
-    H -.->|nothing matched| R4["'Approved information<br/>not available'<br/>THE MODEL IS NEVER CALLED<br/><b>BUILT</b>"]
-    K -.->|bad or missing citation| R4
+    G -.->|patient signal| R1["Refused. Nothing sent,<br/>nothing stored <b>BUILT</b>"]
+    E -.->|off| R2["45011 switched off <b>BUILT</b>"]
+    W -.->|used up| R3["45012 until midnight IST <b>BUILT</b>"]
+    J -.->|invalid or uncited| R4["Discarded, safe message <b>BUILT</b>"]
 ```
 
-**How to read that diagram.** The **middle is built** — every permission, flag, guardrail,
-validation and audit step. The **two ends are missing** — the screen a rep taps and the model that
-answers. And two built boxes are **inert**: the prompt check refuses today because no approved
-prompt exists, and the search finds nothing because no approved content exists.
+**How to read it.** **Everything between the rep and the model is built, and both ends are not**: no
+screen calls it, and no real model answers it. The two PARTLY BUILT boxes are working machinery with
+nothing approved inside them yet.
 
-**Evidence for each BUILT box.** `ai_begin_request` / `ai_complete_request` —
-`20260924000700_ai_control_plane.sql`, exercised by `ai-control-plane.spec.ts`. Feature flags and
-allowance — same migration; the allowance **refuses when unset**, an unlimited default is never
-granted. Guardrail — `gateway/guardrails.ts:59`, exercised by `product-qa.test.ts`. Reply and
-citation checks — `gateway/product-qa.ts:202-233`. Audit — `product-qa.test.ts:147` asserts *"the
-log never receives the question"*.
+**Evidence for each BUILT box.** Gateway — `services/api/supabase/functions/ai-gateway/index.ts`,
+exercised over HTTP by `services/api/tests/ai-gateway.spec.ts`. Permission, flag, prompt and
+allowance — `20260924000700_ai_control_plane.sql` and `20260930000300_organisation_thresholds.sql`,
+`services/api/tests/ai-control-plane.spec.ts`. The 80% warning —
+`20261001000200_ai_allowance_warning.sql`, `ai-control-plane.spec.ts` "W1-M D1". Guardrail —
+`packages/core/src/field/gateway/guardrails.ts`, `guardrails.test.ts`. Validation — each flow's
+`*.test.ts` in `packages/core/src/field/gateway/`. Record — `product-qa.test.ts` asserts the log never
+receives the question.
 
 ---
 
-# DIAGRAM TWO — the AI Doctor practice loop
+# DIAGRAM TWO — the AI Doctor practice loop, with voice as a SEPARATE layer
+
+**The structural change from 28 September:** speech in and speech out are now **outside** the AI
+gateway, on either side of it. The gateway only ever handles text.
 
 ```mermaid
 flowchart TD
-    S["Rep starts a practice session<br/><b>DOES NOT EXIST</b>"]
-    P["Pick persona + scenario<br/><b>DOES NOT EXIST</b><br/>no sim_* table in any migration"]
-    V1["Rep speaks<br/><b>DOES NOT EXIST</b>"]
-    T1["Speech to text<br/><b>DOES NOT EXIST</b><br/>interface only, no vendor<br/>EMPLOYEE'S VOICE IS THE PAYLOAD"]
-    G["Gateway: permission, flag,<br/>allowance, guardrail<br/><b>PARTLY BUILT</b><br/>the checks are built;<br/>the gateway is not — #4"]
-    M["Synthetic doctor replies<br/><b>DOES NOT EXIST</b><br/>no model — #5"]
-    T2["Speech out<br/><b>DOES NOT EXIST</b><br/>interface only, no vendor<br/>voice character = one parameter here"]
-    L["Rep hears the reply<br/><b>DOES NOT EXIST</b>"]
-    E["Session ends and is stored<br/><b>DOES NOT EXIST</b>"]
-    C["AI Coach analyses the session<br/><b>DOES NOT EXIST</b>"]
-    R["Rep sees feedback + score<br/><b>DOES NOT EXIST</b><br/>visible to the MR and the<br/>company admin ONLY — C27"]
-    X["Manager sees scores<br/><b>DELIBERATELY NOT BUILT</b><br/>blocked on #14 and a written<br/>amendment to the recorded rule"]
+    S["Rep starts a session on an<br/>APPROVED scenario<br/><b>BUILT</b> start_sim_session<br/>screen: <b>DOES NOT EXIST</b>"]
+    P["Personas + scenarios, authored<br/>and four-eyes approved<br/><b>BUILT</b> — console /practice<br/>the six personas (BE-C35): <b>DO NOT EXIST</b>"]
 
-    S --> P --> V1 --> T1 --> G --> M --> T2 --> L
-    L -->|next turn| V1
+    subgraph VOICE_IN ["VOICE LAYER — separate from the AI (BE-C28)"]
+        V1["Rep speaks<br/><b>DOES NOT EXIST</b>"]
+        T1["Amazon Transcribe, Mumbai<br/><b>DOES NOT EXIST</b><br/>employee's voice is the payload"]
+    end
+    TX["Rep types — or the transcript<br/><b>typing: BUILT</b> (API only)"]
+
+    subgraph GATEWAY ["AI GATEWAY — text only"]
+        G["Permission, flag, allowance,<br/>guardrail on the TEXT<br/><b>BUILT</b>"]
+        M["Synthetic doctor replies<br/>Sonnet 5 on Bedrock India<br/><b>DOES NOT EXIST</b> — stub answers"]
+        ST["Both turns stored<br/><b>BUILT</b> record_sim_turn"]
+    end
+
+    subgraph VOICE_OUT ["VOICE LAYER"]
+        T2["AWS voice, India<br/><b>DOES NOT EXIST</b><br/>which service: unverified"]
+    end
+    L["Rep reads or hears the reply<br/><b>DOES NOT EXIST</b>"]
+    E["Session ends<br/><b>BUILT</b> end_sim_session"]
+    C["AI Coach — nine items<br/>Sonnet 5 on Bedrock India<br/><b>PARTLY BUILT</b>: contract, checks,<br/>storage BUILT; the model is a stub"]
+    R["Rep sees feedback + modules<br/><b>DOES NOT EXIST</b> (no screen)<br/>visible to the rep and company<br/>admin ONLY — enforced, tested"]
+    X["Manager sees scores<br/><b>DELIBERATELY NOT BUILT</b><br/>BE-C13: never"]
+
+    S --> P
+    P --> V1 --> T1 --> TX
+    P --> TX
+    TX --> G --> M --> ST --> T2 --> L
+    ST --> L
+    L -->|next turn| TX
     L --> E --> C --> R
-    R -.->|only if #14 is answered b| X
-    A["Audit: ai_complete_request<br/><b>BUILT</b>"]
-    G --> A
+    R -.-x X
 ```
 
-**Every box in this loop says DOES NOT EXIST except the audit record and the permission checks
-inside a gateway that itself does not exist.** That is the accurate picture of AI Doctor on 28
-September 2026.
+**Read the voice boxes carefully.** Because speech is outside the gateway, **every check runs on the
+transcript** — which is the strength (one set of checks for typed and spoken practice) and the limit
+(the audio has already reached Transcribe in Mumbai before the check runs).
 
-**On voice modulation**, marked on the speech-out box: changing the synthetic voice's character is
-**a parameter on the text-to-speech vendor's request**. It is not a separate capability and should
-not be planned as one.
+**Evidence for each BUILT box.** Session start, turn, end, analysis storage —
+`20260929000200_simulation_rpcs.sql` and `20261001000100_coach_nine_dimensions.sql`, all driven over
+HTTP by `services/api/tests/sim-gateway.spec.ts`. Persona and scenario approval — the same suite,
+"W1-D B2", and the console page `apps/console/src/app/practice/page.tsx`. Visibility — the same
+suite, "C27" and "W1-M C4".
 
 ---
 

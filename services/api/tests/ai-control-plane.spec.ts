@@ -283,6 +283,108 @@ describe.skipIf(!reachable)(
   },
 );
 
+describe.skipIf(!reachable)(
+  'W1-M D1 — the allowance warns at 80%, and the admin can see it',
+  () => {
+    const beginBody = async (client: Client, user: FixtureUser | ProfileLike) => {
+      await asUser(client, user);
+      return rpc<{ allowanceWarning: boolean; requestsUsedToday: number }>(
+        client,
+        'ai_begin_request',
+        ['product_qa'],
+      );
+    };
+
+    it('the 8th of 10 requests is the first to warn, and the day is logged ONCE', async () => {
+      await inRolledBackTransaction(async (client) => {
+        await ready(client, 10);
+        await setThreshold(client, 'ai_daily_warning_percent', 80);
+        const flags: boolean[] = [];
+        for (let i = 0; i < 9; i += 1) {
+          flags.push((await beginBody(client, world.users.puneMr)).allowanceWarning);
+        }
+        // ceil(10 * 80%) = 8: requests 1-7 do not warn, 8 and 9 do.
+        expect(flags).toEqual([false, false, false, false, false, false, false, true, true]);
+        const { rows } = await asOwner(client, () =>
+          client.query<{ requests_used: number; daily_limit: string; warning_percent: string }>(
+            `select requests_used, daily_limit, warning_percent from public.ai_allowance_warnings
+            where user_id = $1`,
+            [world.users.puneMr.id],
+          ),
+        );
+        // One row, recording the request that CROSSED the line -- not the latest one past it.
+        expect(rows).toEqual([{ requests_used: 8, daily_limit: '10', warning_percent: '80' }]);
+      });
+    });
+
+    it('POSITIVE CONTROL: below the line nothing is warned and nothing is logged', async () => {
+      await inRolledBackTransaction(async (client) => {
+        await ready(client, 10);
+        await setThreshold(client, 'ai_daily_warning_percent', 80);
+        for (let i = 0; i < 7; i += 1) {
+          expect((await beginBody(client, world.users.puneMr)).allowanceWarning).toBe(false);
+        }
+        const { rows } = await asOwner(client, () =>
+          client.query(`select 1 from public.ai_allowance_warnings where user_id = $1`, [
+            world.users.puneMr.id,
+          ]),
+        );
+        expect(rows).toEqual([]);
+      });
+    });
+
+    it('the warning reaches the rep’s own row and the company admin — never a manager', async () => {
+      await inRolledBackTransaction(async (client) => {
+        await ready(client, 2);
+        await setThreshold(client, 'ai_daily_warning_percent', 50);
+        await beginBody(client, world.users.puneMr);
+        const count = async (who: FixtureUser | ProfileLike): Promise<number> => {
+          await asUser(client, who);
+          const { rows } = await client.query<{ n: string }>(
+            `select count(*) n from public.ai_allowance_warnings where user_id = $1`,
+            [world.users.puneMr.id],
+          );
+          return Number(rows[0]?.n);
+        };
+        expect(await count(world.users.puneMr), 'the rep').toBe(1);
+        expect(await count(world.users.admin), 'their company admin').toBe(1);
+        expect(await count(world.users.westManager), 'their manager (BE-C13)').toBe(0);
+        expect(await count(world.users.rivalAdmin), 'another company').toBe(0);
+      });
+    });
+
+    it('a MIS-SET warning percentage warns nobody and refuses nothing', async () => {
+      // A warning that could stop the requests it warns about would turn a typo into an outage.
+      await inRolledBackTransaction(async (client) => {
+        await ready(client, 2);
+        await setThreshold(client, 'ai_daily_warning_percent', 150);
+        const out = await beginBody(client, world.users.puneMr);
+        expect(out.allowanceWarning).toBe(false);
+        expect(await begin(client, world.users.puneMr), 'second of two still allowed').toBeNull();
+      });
+    });
+
+    it('the operator’s launch values were written by the migration, as global rows', async () => {
+      // Asserted as ROWS, not as what `threshold()` resolves: the gateway suites commit a global
+      // `null` limit when they finish, which outranks this row on any database they have run against.
+      const rows = await inRolledBackTransaction(async (client) => {
+        const { rows: r } = await asOwner(client, () =>
+          client.query<{ key: string; value: unknown }>(
+            `select key, value from public.app_thresholds
+            where scope = 'global' and note like 'BE-C30%'
+            order by key`,
+          ),
+        );
+        return r;
+      });
+      expect(rows).toEqual([
+        { key: 'ai_daily_requests_per_user', value: 100 },
+        { key: 'ai_daily_warning_percent', value: 80 },
+      ]);
+    });
+  },
+);
+
 describe.skipIf(!reachable)('AI-D0 — prompts are approved like knowledge', () => {
   it('four eyes, an attestation, and approval retires the previous prompt', async () => {
     await inRolledBackTransaction(async (client) => {

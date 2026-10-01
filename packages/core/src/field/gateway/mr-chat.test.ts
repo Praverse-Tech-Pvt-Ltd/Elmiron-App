@@ -48,6 +48,7 @@ const fakeRpc = (
           modelConfig: { temperature: 0 },
           requestsUsedToday: 1,
           dailyLimit: 50,
+          allowanceWarning: false,
         });
       case 'mr_chat_scope_terms':
         return Promise.resolve({ terms: opts.terms ?? TERMS });

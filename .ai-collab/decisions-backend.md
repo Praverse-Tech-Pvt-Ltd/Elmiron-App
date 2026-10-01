@@ -298,3 +298,167 @@ today.
 **Its placement at #3 is therefore the condition being honoured, not ignored.** It is third because
 it is blocked by two dependencies including an unverified one; being third costs nothing precisely
 because nothing is waiting on it.
+
+---
+
+# Operator decisions — 1 October 2026 (W1-M)
+
+**`BE-C26` – `BE-C40`. Fifteen recorded, and the brief said thirty-one.** The session brief that
+relayed them said *"31 answers"* and spelled out **thirteen numbered points**, plus an instruction
+to continue development, plus a request for a flow and diagram to approve (referred to in the brief
+as the operator's "point 4", which is not the brief's point 4 — the brief renumbered them). **That is
+fifteen. The other sixteen were not in the text this session received, and they are not recorded
+here rather than reconstructed.** A decision written down from a guess at what someone probably said
+is worse than a gap, because it reads as settled. **Asked for in `docs/operator-inputs.md`, I-12.**
+
+Numbering below is the brief's, so a reader holding the brief can check each one.
+
+---
+
+## `BE-C26` — AI provider: **Claude through AWS Bedrock India, via the India geographic inference profile**
+
+- **Decision (brief point 1):** Claude on AWS Bedrock, using the **India geographic inference
+  profile** so processing stays in India. The gateway stays provider-independent so Gemini can be
+  added later **only if Google gives written confirmation including voice.** **Do not hold the
+  release for that.**
+- **Settles:** `#5` / `D2` (the provider) and `D-14` in `docs/operator-inputs.md`. **Supersedes
+  `BE-C6`** — see below.
+- **What "India geographic inference profile" obliges the code to do:** the region and the profile
+  are the substance of this decision, not configuration detail. A provider that reads its region
+  from an environment variable and would quietly accept `us-east-1` has not implemented it. **The
+  adapter must refuse to construct for any region or profile that is not the India one** — an
+  assertion, not a default.
+- **NOT BUILT in W1-M, and why:** no AWS credentials exist anywhere this session could reach (B1).
+  An adapter that cannot be exercised is not built — see `docs/operator-inputs.md`, I-1.
+- **⚠ Unverified by engineering:** that the India geographic inference profile offers **both** models
+  `BE-C27` names. The exact inference-profile ids are to be **read from the Bedrock console at
+  provisioning**, not typed from memory or documentation.
+
+## `BE-C6` — **SUPERSEDED by `BE-C26`.** Its condition is MOOT, not MET
+
+- **`BE-C6` chose Gemini 2.5 Flash *conditionally* on India residency including voice.** That condition
+  was never met — `docs/ai-platform/GEMINI-RESIDENCY.md` found it UNVERIFIED with the evidence pointing
+  away. **It is now moot rather than met**: the operator chose a different vendor, so whether Gemini
+  passes no longer decides anything.
+- **The difference matters for one reason:** if Gemini is revisited, it must be re-verified from
+  scratch. **Nothing in this record says Gemini passed.** `GEMINI-RESIDENCY.md` stays where it is, with
+  its three questions for Google Cloud, so the verification is not lost — and `BE-C26` names the bar
+  any return must clear: **written confirmation from Google, including voice.**
+- **`BE-C6` itself is not edited.** Its text stays as recorded on 30 September; this entry is the
+  supersession.
+
+## `BE-C27` — model routing: **Sonnet 5 for reasoning, Haiku 4.5 for light work**
+
+- **Decision (brief point 2):** **Claude Sonnet 5** for AI Doctor, coaching, reasoning-heavy product
+  Q&A and detailed analysis. **Claude Haiku 4.5** for classification, routing, short summaries and
+  low-complexity work, to control cost.
+- **Against what exists, by feature:** `ai_doctor`, `ai_coach`, `product_qa` → Sonnet. `mr_chat` and
+  `lms_tutor` are not named; `mr_chat`'s scoping is a classification and the brief puts that on Haiku.
+  **No feature-to-model mapping is recorded as decided beyond what the operator named** — the two
+  unnamed features are an engineering proposal in `AI-SPEC.md` until confirmed.
+- **Recorded verbatim as "Sonnet 5".** Whether that means a specific point release is the operator's to
+  say and Bedrock's to offer; the model id is read from the console (`BE-C26`).
+- **Where a reader will tell which model answered:** `ai_requests.model_name`, and for coaching
+  `sim_coach_analyses.model_name`, both already written from the provider's own result. **Not
+  exercised against a real model in W1-M** — B1 stopped Part B.
+
+## `BE-C28` — **voice is a separate layer from the LLM**
+
+- **Decision (brief point 3):** **Amazon Transcribe in Mumbai** (`ap-south-1`) for speech to text, an
+  **India-compatible AWS voice option** for speech out. AI Doctor voice stays **simulation only**.
+- **A structural change, not a vendor swap:** voice is no longer "the LLM, but audio". Speech in and
+  speech out sit either side of a TEXT gateway call, so the guardrails, the approved prompt and the
+  audit row apply to the transcript exactly as they apply to typed text. Drawn in `AI-SPEC.md`.
+- **Not built.** Nothing in the repository calls a speech service today.
+- **⚠ Unverified by engineering:** which AWS speech-synthesis option is India-hosted. "India-compatible"
+  is the operator's word; which service and voice satisfies it is a provisioning question, not
+  asserted here.
+
+## `BE-C29` — `D-11`: **all five AI features ON at company level, each independently switchable**
+
+- **Decision (brief point 4):** enable `product_qa`, `mr_chat`, `lms_tutor`, `ai_doctor` (simulation),
+  `ai_coach`. Each switchable from admin.
+- **Mechanism already exists:** `ai_feature_enabled:<feature>` resolved per organisation
+  (`20260930000300_organisation_thresholds.sql`, `BE-C10`). **This decision is a VALUE, entered per
+  company through `set_organisation_threshold` when the company exists** — it is not a migration.
+  Shipping it as a global `true` row would switch AI on for every future tenant nobody has asked.
+- **Settles `D-11`.**
+
+## `BE-C30` — `D-12`: **100 AI requests per MR per day, a warning at 80%**
+
+- **Decision (brief point 5):** 100/day as the launch default, admin-changeable without a code change,
+  usage logged, **warning at 80%**.
+- **Already true:** the allowance is a per-company threshold (`ai_daily_requests_per_user`) and every
+  request is a row in `ai_requests`. **New:** the 80% warning — W1-M Part D.
+- **Settles `D-12`.**
+
+## `BE-C31` — `D-17`: **English first; Hindi or a regional language selectable before consent**
+
+- **Decision (brief point 6):** English first, switchable to Hindi or a regional language **before
+  consent**, configurable by company and territory.
+- **Settles `D-17` / `#25`.** Not built in W1-M.
+
+## `BE-C32` — `D-18`: **keep 72 hours and 120 seconds, as ADMIN CONFIG, and LOG EVERY REJECTION**
+
+- **Decision (brief point 7):** keep the values; make both admin-configurable rather than constants;
+  **log every rejection they cause, so nothing fails silently.**
+- **The log is the requirement**, the config is the means. **Settles `D-18` / `#26`.**
+
+## `BE-C33` — `D-13`: **market is a property of the CONTENT**
+
+- **Decision (brief point 8):** keep the implementation. **Settles `D-13`.** Nothing to change — `AI-B1`
+  stands as built.
+
+## `BE-C34` — **AI analysis covers NINE things**
+
+- **Decision (brief point 9):** after every practice session: product knowledge, scientific accuracy,
+  communication, opening/pitch quality, objection handling, relevance of response, closing/follow-up,
+  areas for improvement, suggested learning modules. **MR sees their own, admin can access, no manager
+  leaderboard or ranking.**
+- **Supersedes `BE-C19`'s seven** and turns `BE-W127` into a nine-item gap. W1-M Part C.
+
+## `BE-C35` — AI Doctor personas to build
+
+- **Decision (brief point 10):** busy, scientific, price-sensitive, competitor-loyal, skeptical, and a
+  difficult-objection scenario.
+- **Against the schema:** `sim_personas.stance` is a closed enum. Whether those six are stances, briefs,
+  or scenarios is content work; **personas are authored and four-eyes approved like all content**
+  (`BE-C7`), so "build" means draft-and-submit, not insert-as-approved. Not started in W1-M.
+
+## `BE-C36` — `D-16`: **minimum necessary data; the MR only FLAGS an adverse event**
+
+- **Decision (brief point 11):** the MR flags a possible adverse event and performs no medical
+  assessment. Patient-identifiable information stays in the authorised admin/PV workflow, **never
+  reaches AI Doctor or coaching**, and leaves only through the authorised PV process.
+- **Settles `D-16` / `#22`** — the question `BE-C20` narrowed and left open. **It does not settle who
+  operates "the authorised PV process"**: that is `D-15`, the signatory, still outstanding.
+
+## `BE-C37` — AI may DRAFT training; it may NEVER invent a product claim
+
+- **Decision (brief point 12):** AI may draft training explanations, lessons, quizzes and summaries. It
+  must never invent a product claim, prescribing information, indication, dosage, efficacy or safety
+  claim. **Product Q&A answers only from approved uploaded material, with traceability to the source.**
+- **Restates `C24` and confirms `BE-C21`.** `product_qa` already refuses without approved knowledge and
+  cites chunk ids; nothing to build for the Q&A half.
+
+## `BE-C38` — `D-6`: **working hours per territory, a company default, and 09:00–18:00 is TEST DATA**
+
+- **Decision (brief point 13):** configurable per territory with a company default. **09:00–18:00
+  Mon–Sat is a TESTING value only and must not be treated as business policy.**
+- **The approved hours themselves are still an input** (operator's own list).
+
+## `BE-C39` — **continue development; send ONE list**
+
+- **Decision:** *"continue development immediately, do not stop for items that are configurable or
+  deferred."* Outstanding inputs go in **one** list — `docs/operator-inputs.md`, rewritten in W1-M A3
+  to hold only what is still needed.
+
+## `BE-C40` — **a flow and diagram to approve before major AI work**
+
+- **Decision:** the operator approves a flow and diagram before major AI work proceeds.
+- **Delivered as** `docs/ai-platform/AI-SPEC.md`, updated in W1-M Part E with every box marked BUILT,
+  PARTLY BUILT or DOES NOT EXIST.
+- **A tension worth naming rather than resolving silently:** `BE-C39` says do not stop; `BE-C40` says
+  approve before *major* AI work. **W1-M reads them together as: build what is already decided (nine
+  dimensions, the 80% warning, logged rejections), and do not start the real-vendor adapter, voice, or
+  persona content ahead of the spec** — which B1 enforced anyway.

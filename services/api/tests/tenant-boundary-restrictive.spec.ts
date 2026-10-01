@@ -217,9 +217,11 @@ describe.skipIf(!reachable)('D2 — a restrictive tenant boundary cannot be wide
       // MR-07 D's seven, plus MR-51 C3's eighteen (BE-W83), plus AI-B1's four catalogue tables
       // (`20260924000400`), AI-B2's seven LMS tables (`20260924000500`), AI-C1's three knowledge
       // tables (`20260924000600`) and AI-D0's two (`20260924000700`). `app_thresholds` is
-      // absent on purpose: it is BE-W106, awaiting the operator (C13).
+      // absent on purpose: it is BE-W106, awaiting the operator (C13). W1-M D1 adds
+      // `ai_allowance_warnings` (`20261001000200`).
       expect(rows.rows.map((r) => r.relname)).toEqual([
         'adverse_event_reports',
+        'ai_allowance_warnings',
         'ai_prompt_versions',
         'ai_requests',
         'beat_plan_entries',

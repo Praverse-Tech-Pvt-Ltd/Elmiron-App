@@ -2670,3 +2670,37 @@ done", and the whole point of listing it.**
 **Six of the nine are blocked on a dependency ask or on the operator, not on engineering time.** That
 is the honest shape of the remaining list, and it is why Part E puts the four approved-but-unstarted
 items in an order rather than starting them.
+
+## W1-M — what the operator decisions of 1 October did to this register
+
+**`BE-C26`–`BE-C40` in `.ai-collab/decisions-backend.md`.** Fifteen recorded; the brief said 31 and
+spelled out 15, and the rest are asked for as `docs/operator-inputs.md` I-11 rather than guessed.
+
+**A1 — rows the decisions SETTLE.** Marked here, not edited in place.
+
+| Row / item | Settled by | Outcome |
+| --- | --- | --- |
+| **`#5` / `D2`** — the AI provider (W1-L: *conditionally answered, STILL OPEN*) | **`BE-C26`** | **CLOSED.** Claude on AWS Bedrock, India geographic inference profile. **Not built** — no AWS credentials (W1-M B1) |
+| **`BE-C6`** — Gemini 2.5 Flash, conditional | **`BE-C26`** | **SUPERSEDED. Its condition is MOOT, not met** — the residency check never passed. Evidence kept: `docs/ai-platform/GEMINI-RESIDENCY.md` |
+| **`D-11`** — which AI features are on | **`BE-C29`** | **All five, per company, each switchable.** A per-company VALUE, entered when the company exists — not a migration |
+| **`D-12`** — the daily allowance | **`BE-C30`** | **100/day, warn at 80%. BUILT** — `20261001000200_ai_allowance_warning.sql` |
+| **`D-13`** — market: company or content | **`BE-C33`** | **Content. Nothing to change** |
+| **`D-14`** — Gemini residency | **`BE-C26`** | **Moot** with `BE-C6` |
+| **`D-16`** / **`#22`** — may an AE report carry patient information | **`BE-C36`** | **CLOSED.** Minimum necessary; the MR only flags; PII leaves only through the authorised PV process. **Who runs that process is still `D-15`** |
+| **`D-17`** / **`#25`** — consent-notice language order | **`BE-C31`** | **English first, switchable before consent, per company and territory. Not built** |
+| **`D-18`** / **`#26`** — 72h and 120s | **`BE-C32`** | **Values kept. Config half: ALREADY TRUE** (measured — every use is `threshold_number()`, per company since W1-L, settable by `set_organisation_threshold`). **Log half: NOT met — `BE-W129`** |
+| **`D-6`** — working hours | **`BE-C38`** | **Method settled; 09:00–18:00 is TEST DATA.** The real hours are still an input (I-5) |
+| **`BE-C19`** — seven analysis dimensions | **`BE-C34`** | **Superseded by nine** |
+| **`BE-W127`** | **`BE-C34`** | **CLOSED (W1-M C).** Seven scores + `improvements` + `suggestedModules`; `20261001000100_coach_nine_dimensions.sql` |
+
+**A note on ids.** `D-14` in `docs/operator-inputs.md` (Gemini residency) and `D-14` in
+`.ai-collab/handover.md` / `PROJECT-OVERVIEW.md` (the console's identity, MR-52) are **two different
+things with one name.** The operator-inputs list now uses `I-<n>`, so the collision stops growing; the
+old rows keep their names where they are cited.
+
+### Added by W1-M — 1 October 2026
+
+| Id | What | Owner | Size |
+| --- | --- | --- | --- |
+| **`BE-W128`** | **The 80% allowance warning does not reach the REP.** `ai_begin_request` returns `allowanceWarning` and writes one `ai_allowance_warnings` row per rep per day, readable by the rep and their company admin (never a manager, `BE-C13`). **No flow passes the field to its result and no screen renders it**, so a rep learns of the limit at 100 when refused. **What it needs:** each of the five flows' result types to carry it, and the app to show it — frontend-facing, so not half-built here | **ENGINEERING** (backend + frontend) | **0.5d** backend |
+| **`BE-W129`** | **`BE-C32`'s "log every rejection" is NOT met for 72h/120s, and the gap is mechanism-shaped, not config-shaped.** Measured: on the **sync path** every such rejection IS stored in `sync_items` — but as `rejection_code = 'internal_error'`, with the reason only in prose `rejection_detail` and **the SQLSTATE (45007/45008) not stored**, so they cannot be counted without parsing text. On **direct RPC paths** (`capture_consent` called directly; `complete_upload`'s 45010) **nothing is stored** — the raise rolls the write back. One bound lives in a **trigger** (`validate_consent_capture`), where `BE-W102`'s set-status-and-return mechanism cannot apply. **What it needs:** a `rejection_sqlstate` column on `sync_items` (cheap, and it fixes counting on the main path), plus a per-entry-point decision for the direct paths. **Not built in W1-M** because doing it for one path and calling it done is exactly the "fails silently" the operator named | **ENGINEERING** | **1d** |

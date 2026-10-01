@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
 import {
+  SIM_COACH_DIMENSIONS,
   SimCoachAnalysisSchema,
   SimCoachOutputSchema,
   StartSimSessionResponseSchema,
@@ -400,7 +401,8 @@ describe.skipIf(!live)('W1-D B5 — a practice session end to end', () => {
       const { rows } = await db.query<Record<string, unknown>>(
         `select id, organisation_id "organisationId", session_id "sessionId", mr_id "mrId",
                 overall_score "overallScore", dimension_scores "dimensionScores",
-                strengths, improvements, summary, prompt_version_id "promptVersionId",
+                strengths, improvements, suggested_modules "suggestedModules",
+                summary, prompt_version_id "promptVersionId",
                 model_provider "modelProvider", model_name "modelName",
                 -- to_jsonb(ts) #>> '{}' is what PostgREST serialises a timestamptz to: an ISO
                 -- 8601 string. Reading it through the pg driver gives a JS Date, which the contract
@@ -422,6 +424,11 @@ describe.skipIf(!live)('W1-D B5 — a practice session end to end', () => {
     expect(parsed.data?.modelProvider, 'no model ran').toBe('stub');
     // Zero scores, on purpose: a stub must not look like a judgement.
     expect(parsed.data?.overallScore).toBe(0);
+    // W1-M C5: the stored row carries all seven scores and the module list, through HTTP.
+    expect(Object.keys(parsed.data?.dimensionScores ?? {}).sort()).toEqual(
+      [...SIM_COACH_DIMENSIONS].sort(),
+    );
+    expect(parsed.data?.suggestedModules, 'the stub suggests nothing').toEqual([]);
   });
 
   it('the coach output the stub produced satisfies the contract schema too', () => {
@@ -432,12 +439,15 @@ describe.skipIf(!live)('W1-D B5 — a practice session end to end', () => {
       dimensionScores: {
         opening: 0,
         product_knowledge: 0,
+        scientific_accuracy: 0,
         objection_handling: 0,
+        response_relevance: 0,
         communication: 0,
         closing: 0,
       },
       strengths: [{ dimension: 'opening', title: 'x', detail: 'y', turnIndex: 1 }],
       improvements: [{ dimension: 'closing', title: 'x', detail: 'y', turnIndex: 1 }],
+      suggestedModules: [],
       summary: 's',
     });
     expect(out.success).toBe(true);
@@ -455,14 +465,291 @@ describe.skipIf(!live)('W1-D B5 — a practice session end to end', () => {
     await expect(
       rpcAs(
         world.users.puneMr,
-        `select public.record_sim_coach_analysis($1, 50,
-            '{"opening":1,"product_knowledge":1,"objection_handling":1,"communication":1,"closing":1}'::jsonb,
+        `select public.record_sim_coach_analysis($1, 50, $2::jsonb,
             '[{"dimension":"opening","title":"t","detail":"d","turnIndex":99}]'::jsonb,
             '[{"dimension":"closing","title":"t","detail":"d","turnIndex":99}]'::jsonb,
+            '[]'::jsonb,
             'summary', 'stub', 'no-model') as r`,
-        [sid],
+        [sid, JSON.stringify(SEVEN_SCORES)],
       ),
     ).rejects.toThrow(/turn 99/);
+  });
+});
+
+/** All seven scored dimensions at a neutral value — W1-M (`BE-C34`). */
+const SEVEN_SCORES = Object.fromEntries(SIM_COACH_DIMENSIONS.map((d) => [d, 50]));
+
+/**
+ * W1-M C3 — a course with one module and one lesson, authored by `admin` in `organisationId`, made
+ * through the same RLS-checked inserts and RPCs the console uses. `publish` publishes it; calling
+ * this twice for one `courseId` publishes a second version, which RETIRES the first
+ * (`publish_course_version`), and that is how the retired case below is built.
+ */
+const makeCourseModule = async (
+  admin: ProfileLike,
+  organisationId: string,
+  opts: { publish: boolean; courseId?: string; title: string },
+): Promise<{ courseId: string; moduleId: string }> =>
+  withClient(async (db) => {
+    const courseId = opts.courseId ?? randomUUID();
+    const versionId = randomUUID();
+    const moduleId = randomUUID();
+    if (opts.courseId === undefined) {
+      await asRpcUser(db, admin, `insert into public.courses (id, title) values ($1, $2)`, [
+        courseId,
+        opts.title,
+      ]);
+    }
+    await asRpcUser(
+      db,
+      admin,
+      `insert into public.course_versions (id, organisation_id, course_id, title)
+       values ($1, $2, $3, $4)`,
+      [versionId, organisationId, courseId, opts.title],
+    );
+    await asRpcUser(
+      db,
+      admin,
+      `insert into public.course_modules (id, organisation_id, course_version_id, position, title)
+       values ($1, $2, $3, 1, $4)`,
+      [moduleId, organisationId, versionId, `${opts.title} — module`],
+    );
+    await asRpcUser(
+      db,
+      admin,
+      `insert into public.lessons
+         (organisation_id, module_id, course_version_id, position, title, body)
+       values ($1, $2, $3, 1, 'Lesson', 'Synthetic W1-M lesson body.')`,
+      [organisationId, moduleId, versionId],
+    );
+    if (opts.publish) {
+      await asRpcUser(db, admin, `select public.publish_course_version($1)`, [versionId]);
+    }
+    return { courseId, moduleId };
+  });
+
+describe.skipIf(!live)('W1-M C — nine items, enforced by the database', () => {
+  let published: string;
+  let draft: string;
+  let retired: string;
+  let inactive: string;
+  let rivalPublished: string;
+
+  beforeAll(async () => {
+    // Our company: one published module, one draft, one retired (v1 superseded by v2).
+    published = (
+      await makeCourseModule(world.users.admin, world.organisationId, {
+        publish: true,
+        title: `Storage W1-M ${runId}`,
+      })
+    ).moduleId;
+    draft = (
+      await makeCourseModule(world.users.admin, world.organisationId, {
+        publish: false,
+        title: `Draft W1-M ${runId}`,
+      })
+    ).moduleId;
+    const v1 = await makeCourseModule(world.users.admin, world.organisationId, {
+      publish: true,
+      title: `Retiring W1-M ${runId}`,
+    });
+    retired = v1.moduleId;
+    await makeCourseModule(world.users.admin, world.organisationId, {
+      publish: true,
+      courseId: v1.courseId,
+      title: `Retiring W1-M ${runId}`,
+    });
+    // A published module in a course an admin has since DEACTIVATED. Added after the first green
+    // run, asking what else would have passed: nothing exercised `courses.is_active`, so deleting
+    // that clause from `sim_coach_suggestable_modules` would have survived every test above.
+    const off = await makeCourseModule(world.users.admin, world.organisationId, {
+      publish: true,
+      title: `Deactivated W1-M ${runId}`,
+    });
+    inactive = off.moduleId;
+    await withClient((db) =>
+      asRpcUser(
+        db,
+        world.users.admin,
+        `update public.courses set is_active = false where id = $1`,
+        [off.courseId],
+      ),
+    );
+    // The rival company: a PUBLISHED module, so the only thing wrong with it is whose it is.
+    rivalPublished = (
+      await makeCourseModule(world.users.rivalAdmin, world.rivalOrganisationId, {
+        publish: true,
+        title: `Rival W1-M ${runId}`,
+      })
+    ).moduleId;
+  }, 120_000);
+
+  /** A fresh ENDED session with one rep turn and one doctor turn (indices 1 and 2). */
+  const endedSession = async (): Promise<string> => {
+    const started = await rpcAs<{ r: { sessionId: string } }>(
+      world.users.puneMr,
+      `select public.start_sim_session($1) as r`,
+      [scenarioId],
+    );
+    const sid = started?.r.sessionId ?? '';
+    await rpcAs(world.users.puneMr, `select public.record_sim_turn($1, 'rep', 'doctor') as r`, [
+      sid,
+    ]);
+    await rpcAs(world.users.puneMr, `select public.end_sim_session($1) as r`, [sid]);
+    return sid;
+  };
+
+  const record = async (
+    sid: string,
+    opts: { scores?: Record<string, number>; modules?: unknown[]; improvementDim?: string } = {},
+  ) =>
+    rpcAs<{ r: { analysisId: string } }>(
+      world.users.puneMr,
+      `select public.record_sim_coach_analysis($1, 50, $2::jsonb,
+          '[{"dimension":"opening","title":"t","detail":"d","turnIndex":1}]'::jsonb,
+          $3::jsonb, $4::jsonb, 'summary', 'stub', 'no-model') as r`,
+      [
+        sid,
+        JSON.stringify(opts.scores ?? SEVEN_SCORES),
+        JSON.stringify([
+          {
+            dimension: opts.improvementDim ?? 'response_relevance',
+            title: 't',
+            detail: 'd',
+            turnIndex: 2,
+          },
+        ]),
+        JSON.stringify(opts.modules ?? []),
+      ],
+    );
+
+  const suggest = (moduleId: string, extra: Record<string, unknown> = {}) => ({
+    moduleId,
+    dimension: 'scientific_accuracy',
+    reason: 'Your storage answer contradicted the label.',
+    ...extra,
+  });
+
+  it('POSITIVE CONTROL: seven scores, a new-dimension finding and a PUBLISHED own module are stored', async () => {
+    const sid = await endedSession();
+    const out = await record(sid, { modules: [suggest(published)] });
+    expect(typeof out?.r.analysisId).toBe('string');
+    const row = await withClient(async (db) => {
+      const { rows } = await db.query<{ suggested_modules: unknown; dims: string[] }>(
+        `select suggested_modules, array(select jsonb_object_keys(dimension_scores)) dims
+           from public.sim_coach_analyses where session_id = $1`,
+        [sid],
+      );
+      return rows[0];
+    });
+    expect(row?.suggested_modules).toEqual([suggest(published)]);
+    expect(row?.dims.sort()).toEqual([...SIM_COACH_DIMENSIONS].sort());
+  });
+
+  it('an EMPTY module list is accepted — nothing fits is an honest answer', async () => {
+    const sid = await endedSession();
+    await expect(record(sid, { modules: [] })).resolves.toBeDefined();
+  });
+
+  it.each([
+    ['a DRAFT module (unapproved text)', () => draft],
+    ['a RETIRED module (closed to new learners)', () => retired],
+    ['a module in a DEACTIVATED course', () => inactive],
+    ['the RIVAL company’s published module', () => rivalPublished],
+    ['a module id that does not exist', () => randomUUID()],
+  ])('C3: %s is REFUSED as a suggestion', async (_label, id) => {
+    const sid = await endedSession();
+    await expect(record(sid, { modules: [suggest(id())] })).rejects.toThrow(
+      /not a published module in your organisation/,
+    );
+  });
+
+  it('C2: more than three suggestions are refused', async () => {
+    const sid = await endedSession();
+    // Four distinct ids, so the count is the only thing wrong -- not a duplicate, not a bad id.
+    const four = [published, randomUUID(), randomUUID(), randomUUID()].map((m) => suggest(m));
+    await expect(record(sid, { modules: four })).rejects.toThrow(/at most three/);
+  });
+
+  it('C2: the same module suggested twice is refused', async () => {
+    const sid = await endedSession();
+    await expect(
+      record(sid, { modules: [suggest(published), suggest(published)] }),
+    ).rejects.toThrow(/more than once/);
+  });
+
+  it('C2: a suggestion with no reason is refused — a link is not advice', async () => {
+    const sid = await endedSession();
+    await expect(record(sid, { modules: [suggest(published, { reason: ' ' })] })).rejects.toThrow(
+      /has no reason/,
+    );
+  });
+
+  it('C2: a suggestion naming an unknown dimension is refused', async () => {
+    const sid = await endedSession();
+    await expect(
+      record(sid, { modules: [suggest(published, { dimension: 'charm' })] }),
+    ).rejects.toThrow(/unknown dimension/);
+  });
+
+  it('C2: an analysis without scientific_accuracy is refused — the new scores are not optional', async () => {
+    const sid = await endedSession();
+    const six = Object.fromEntries(
+      Object.entries(SEVEN_SCORES).filter(([k]) => k !== 'scientific_accuracy'),
+    );
+    await expect(record(sid, { scores: six })).rejects.toThrow(/scientific_accuracy/);
+  });
+
+  it('the 8-argument recorder is GONE — there is no way to store an analysis without the checks', async () => {
+    const overloads = await withClient(async (db) => {
+      const { rows } = await db.query<{ n: number }>(
+        `select pronargs n from pg_proc p join pg_namespace s on s.oid = p.pronamespace
+          where s.nspname = 'public' and p.proname = 'record_sim_coach_analysis'`,
+      );
+      return rows.map((r) => r.n);
+    });
+    expect(overloads).toEqual([9]);
+  });
+
+  it('C3: the model is OFFERED only our published modules — two-sided across companies', async () => {
+    const ids = async (profile: ProfileLike): Promise<string[]> => {
+      const out = await rpcAs<{ r: { moduleId: string }[] }>(
+        profile,
+        `select public.sim_coach_module_candidates() as r`,
+        [],
+      );
+      return (out?.r ?? []).map((c) => c.moduleId);
+    };
+    const ours = await ids(world.users.puneMr);
+    expect(ours).toContain(published);
+    expect(ours).not.toContain(draft);
+    expect(ours).not.toContain(retired);
+    expect(ours).not.toContain(rivalPublished);
+    // The other side: the rival's rep is offered THEIR module and not ours.
+    const theirs = await ids(world.users.rivalMr);
+    expect(theirs).toContain(rivalPublished);
+    expect(theirs).not.toContain(published);
+  });
+
+  it('C4: suggestions are read by the rep and the company admin, never by a manager', async () => {
+    const sid = await endedSession();
+    await record(sid, { modules: [suggest(published)] });
+    const seen = async (profile: ProfileLike): Promise<number> =>
+      withClient(async (db) => {
+        await db.query('begin');
+        await asUser(db, profile);
+        const { rows } = await db.query<{ n: string }>(
+          `select count(*) n from public.sim_coach_analyses
+            where session_id = $1 and jsonb_array_length(suggested_modules) = 1`,
+          [sid],
+        );
+        await db.query('rollback');
+        return Number(rows[0]?.n);
+      });
+    expect(await seen(world.users.puneMr), 'the rep sees their own').toBe(1);
+    expect(await seen(world.users.admin), 'the company admin can access it').toBe(1);
+    expect(await seen(world.users.westManager), 'their manager cannot').toBe(0);
+    expect(await seen(world.users.rivalAdmin), 'another company’s admin cannot').toBe(0);
   });
 });
 

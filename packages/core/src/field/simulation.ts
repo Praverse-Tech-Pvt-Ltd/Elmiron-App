@@ -147,16 +147,24 @@ export type SimTurn = z.infer<typeof SimTurnSchema>;
 // ---------------------------------------------------------------------------
 
 /**
- * The five things a practice session is scored on.
+ * The seven things a practice session is SCORED on. W1-M (`BE-C34`) added `scientific_accuracy` and
+ * `response_relevance` to W1-D's five.
+ *
+ * **The operator asked for nine things and seven of them are scores.** The other two are not numbers:
+ * *areas for improvement* is `improvements` (cited findings, below) and *suggested learning modules*
+ * is `suggestedModules`. *Opening/pitch quality* is one item in the operator's list and it is what
+ * `opening` scores — a separate `pitch_quality` would be two numbers for one judgement.
  *
  * **A closed set, and that is the point.** If a model could invent a dimension, two analyses would
  * not be comparable and no screen could label them. `ai_complete_request` already refuses an
- * invented flag for the same reason (`23514`).
+ * invented flag for the same reason (`23514`). `record_sim_coach_analysis` holds the same list.
  */
 export const SIM_COACH_DIMENSIONS = [
   'opening',
   'product_knowledge',
+  'scientific_accuracy',
   'objection_handling',
+  'response_relevance',
   'communication',
   'closing',
 ] as const;
@@ -185,6 +193,38 @@ export type SimCoachFinding = z.infer<typeof SimCoachFindingSchema>;
 const ScoreSchema = z.number().int().min(0).max(100);
 
 /**
+ * A learning module the coach suggests — the ninth of `BE-C34`'s items. W1-M Part C.
+ *
+ * **Not a score, and not free text.** It names a `course_modules.id`, the dimension it addresses, and
+ * why. **A suggestion pointing at a course the rep cannot open is worse than none**, so the database
+ * refuses any module that is not in a PUBLISHED version of an ACTIVE course in the rep's own company
+ * (`sim_coach_suggestable_modules`) — the same set `start_course_version` will enrol them on. The
+ * model is only ever shown that set (`sim_coach_module_candidates`), and the flow refuses an id
+ * outside it before the database has to.
+ */
+export const SimCoachSuggestedModuleSchema = z.object({
+  moduleId: UuidSchema,
+  dimension: SimCoachDimensionSchema,
+  /** Why this module, for this rep, after this session. A suggestion without a reason is a link. */
+  reason: z.string().min(1),
+});
+export type SimCoachSuggestedModule = z.infer<typeof SimCoachSuggestedModuleSchema>;
+
+/**
+ * At most three, and **empty is valid**: when nothing published fits, the honest answer is none.
+ * Requiring one would force a model to suggest something irrelevant whenever the catalogue is thin.
+ */
+const SuggestedModulesSchema = z.array(SimCoachSuggestedModuleSchema).max(3);
+
+/** One module the model may choose from, as `sim_coach_module_candidates()` returns it. */
+export const SimCoachModuleCandidateSchema = z.object({
+  moduleId: UuidSchema,
+  moduleTitle: z.string(),
+  courseTitle: z.string(),
+});
+export type SimCoachModuleCandidate = z.infer<typeof SimCoachModuleCandidateSchema>;
+
+/**
  * **The shape a coach analysis must have, validated server-side before it is stored.**
  *
  * ## Why scores are permitted here, when `constraints.md` forbids them elsewhere
@@ -211,17 +251,22 @@ export const SimCoachAnalysisSchema = z.object({
   mrId: UuidSchema,
   /** 0–100. What the rep sees. Not a grade, not a percentile, not a rank. */
   overallScore: ScoreSchema,
-  /** One score per dimension. All five required: a missing dimension is a silent zero otherwise. */
+  /** One score per dimension. All seven required: a missing dimension is a silent zero otherwise. */
   dimensionScores: z.object({
     opening: ScoreSchema,
     product_knowledge: ScoreSchema,
+    scientific_accuracy: ScoreSchema,
     objection_handling: ScoreSchema,
+    response_relevance: ScoreSchema,
     communication: ScoreSchema,
     closing: ScoreSchema,
   }),
   /** At least one of each. An analysis that only criticises, or only praises, is not feedback. */
   strengths: z.array(SimCoachFindingSchema).min(1),
+  /** `BE-C34`'s "areas for improvement" — cited findings, the same shape as strengths. */
   improvements: z.array(SimCoachFindingSchema).min(1),
+  /** `BE-C34`'s "suggested learning modules". 0–3, each a module the rep can open today. */
+  suggestedModules: SuggestedModulesSchema,
   /** Two or three sentences the rep reads first. */
   summary: z.string().min(1),
   /** Which approved prompt produced it, and which model. `stub` while `#5` is open. */
@@ -243,6 +288,7 @@ export const SimCoachOutputSchema = z.object({
   dimensionScores: SimCoachAnalysisSchema.shape.dimensionScores,
   strengths: z.array(SimCoachFindingSchema).min(1),
   improvements: z.array(SimCoachFindingSchema).min(1),
+  suggestedModules: SuggestedModulesSchema,
   summary: z.string().min(1),
 });
 export type SimCoachOutput = z.infer<typeof SimCoachOutputSchema>;
@@ -276,6 +322,8 @@ export const SIMULATION_RPC = {
   endSimSession: 'end_sim_session',
   /** The gateway, as the user, once per session. Validates the shape above. */
   recordSimCoachAnalysis: 'record_sim_coach_analysis',
+  /** The gateway, as the user: the modules the coach may suggest. Caller's company only. */
+  simCoachModuleCandidates: 'sim_coach_module_candidates',
 } as const;
 
 export const StartSimSessionResponseSchema = z.object({

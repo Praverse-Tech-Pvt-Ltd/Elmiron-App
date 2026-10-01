@@ -42,6 +42,7 @@ const fakeRpc = (
           modelConfig: { temperature: 0 },
           requestsUsedToday: 1,
           dailyLimit: 50,
+          allowanceWarning: false,
         });
       case 'search_approved_knowledge':
         return Promise.resolve(

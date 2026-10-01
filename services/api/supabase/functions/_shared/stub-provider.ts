@@ -108,7 +108,9 @@ const stubBody = (shape: StubShape): string => {
         dimensionScores: {
           opening: 0,
           product_knowledge: 0,
+          scientific_accuracy: 0,
           objection_handling: 0,
+          response_relevance: 0,
           communication: 0,
           closing: 0,
         },
@@ -118,6 +120,9 @@ const stubBody = (shape: StubShape): string => {
         improvements: [
           { dimension: 'closing', title: STUB_MARKER, detail: STUB_MARKER, turnIndex: 1 },
         ],
+        // EMPTY on purpose, for the reason the scores are zero: a stub that recommended a course
+        // would be read as advice. An empty list is a valid, honest answer (W1-M Part C).
+        suggestedModules: [],
         summary: STUB_MARKER,
       });
   }

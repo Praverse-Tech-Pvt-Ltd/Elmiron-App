@@ -1,7 +1,10 @@
+import { z } from 'zod';
 import {
+  SIM_COACH_DIMENSIONS,
   SIM_COACH_OUTPUT_SCHEMA_NAME,
   SIM_DOCTOR_TURN_OUTPUT_SCHEMA_NAME,
   SIM_TURN_FAILED_MESSAGE,
+  SimCoachModuleCandidateSchema,
   SimCoachOutputSchema,
   SimDoctorTurnOutputSchema,
 } from '../simulation.js';
@@ -256,6 +259,14 @@ export const analyseSimSession = async (input: {
     return { kind: 'failed', message: SIM_TURN_FAILED_MESSAGE };
   }
 
+  // W1-M Part C. The modules the coach may suggest -- the caller's company, published, active --
+  // fetched BEFORE the model, so the model chooses from a list rather than recalling course names.
+  // The database derives the company from the caller; there is no argument to ask about another.
+  const candidates = z
+    .array(SimCoachModuleCandidateSchema)
+    .parse(await rpc.call('sim_coach_module_candidates', {}));
+  const candidateIds = new Set(candidates.map((c) => c.moduleId));
+
   let structured;
   try {
     structured = await withTimeout(input.timeoutMs ?? 20_000, (signal) =>
@@ -267,13 +278,15 @@ export const analyseSimSession = async (input: {
               begun.systemPrompt,
               'You are coaching a medical representative on a PRACTICE conversation.',
               'Every finding must cite the turnIndex it is about, and at least one strength and one improvement are required.',
-              'Score 0-100 overall and on each of: opening, product_knowledge, objection_handling, communication, closing.',
+              `Score 0-100 overall and on each of: ${SIM_COACH_DIMENSIONS.join(', ')}.`,
+              'suggestedModules: at most three, ONLY moduleIds from the AVAILABLE MODULES list, each with the dimension it addresses and a reason. An empty list is correct when none fits.',
               'Reply with JSON only.',
             ].join('\n'),
           },
           {
             role: 'user',
             content:
+              `AVAILABLE MODULES (JSON): ${JSON.stringify(candidates)}\n\n` +
               `Objective: ${input.objective}\nObjection raised: ${input.objection}\n\n` +
               input.turns
                 .map(
@@ -307,16 +320,30 @@ export const analyseSimSession = async (input: {
     return { kind: 'failed', message: SIM_TURN_FAILED_MESSAGE };
   }
 
+  // A suggested module the model was not offered is refused HERE, as invalid output, so the request
+  // closes `failed` with a reason. Left to the database it would surface as a raised 23514 after
+  // the request had already been counted, with nothing on the `ai_requests` row saying why.
+  const out = structured.value;
+  if (out.suggestedModules.some((m) => !candidateIds.has(m.moduleId))) {
+    await complete({
+      status: 'failed',
+      raw: structured.raw,
+      flags: ['schema_invalid'],
+      errorCode: 'unknown_learning_module',
+    });
+    return { kind: 'failed', message: SIM_TURN_FAILED_MESSAGE };
+  }
+
   // The database validates the SAME shape again -- see `record_sim_coach_analysis`. Not redundant:
   // this checks what the model said, that checks what reaches the table, and a future caller that
   // is not this code cannot skip the second one.
-  const out = structured.value;
   const stored = (await rpc.call('record_sim_coach_analysis', {
     p_session_id: sessionId,
     p_overall_score: out.overallScore,
     p_dimension_scores: out.dimensionScores,
     p_strengths: out.strengths,
     p_improvements: out.improvements,
+    p_suggested_modules: out.suggestedModules,
     p_summary: out.summary,
     p_model_provider: structured.raw.provider,
     p_model_name: structured.raw.model,
