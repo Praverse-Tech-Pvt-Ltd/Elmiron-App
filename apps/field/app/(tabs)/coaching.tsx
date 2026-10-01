@@ -1,15 +1,20 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useRouter } from 'expo-router';
-import { ApiRequestError } from '@fieldforce/core';
-import type { Analysis, Doctor, Visit } from '@fieldforce/core';
+import type { Analysis } from '@fieldforce/core';
 import { CoachingFeedScreen, Screen } from '@fieldforce/ui';
 import type { CoachingFeedRow } from '@fieldforce/ui';
-import { createClientForScenario } from '../../src/api';
 import { coachingEnabled } from '../../src/features';
 import { usePulledStore } from '../../src/sync/pulled-store';
+import { visitsFromStore } from '../../src/sync/selectors';
 import { recentMonthsIn } from '../../src/today/server-window';
-import { reviewedNote, SEEN_FIRST, TREND_NOTE } from '../../src/coaching/content';
+import { clockIn, dayMonthIn } from '../../src/today/territory-day';
+import {
+  COACHING_UNAVAILABLE,
+  reviewedNote,
+  SEEN_FIRST,
+  TREND_NOTE,
+} from '../../src/coaching/content';
 import {
   isWorkedWell,
   orderedFindings,
@@ -17,20 +22,8 @@ import {
   statusNote,
   trendFor,
 } from '../../src/coaching/feed';
-// MR-25 C1. This screen still READS from the mock at :4010, which sends the territory's
-// own offset, so the character slice is correct here. **DELETE THE DISABLE BELOW WHEN
-// THIS SCREEN IS CONVERTED** and move to dayMonthIn / clockIn with the zone from
-// usePulledStore(). MR-21 converted app/visit/[id].tsx and kept clockFrom; the gotcha
-// entry did not stop it, and this line sitting on the import is what will.
-// eslint-disable-next-line no-restricted-imports
-import { dayMonthFrom } from '../../src/doctors/profile';
-// MR-25 C1. This screen still READS from the mock at :4010, which sends the territory's
-// own offset, so the character slice is correct here. **DELETE THE DISABLE BELOW WHEN
-// THIS SCREEN IS CONVERTED** and move to dayMonthIn / clockIn with the zone from
-// usePulledStore(). MR-21 converted app/visit/[id].tsx and kept clockFrom; the gotcha
-// entry did not stop it, and this line sitting on the import is what will.
-// eslint-disable-next-line no-restricted-imports
-import { clockFrom } from '../../src/today/plan';
+import { loadRecordingEnabled } from '../../src/coaching/recording-flag';
+import { listMyAnalyses } from '../../src/coaching/server';
 
 /**
  * Phase 4 D1 — the Coaching tab.
@@ -60,65 +53,88 @@ export default function Coaching(): ReactNode {
 function CoachingFeed(): ReactNode {
   const router = useRouter();
   // `FE-W42` C1. Which months the trend names, from the server and in the territory.
-  const { serverTime, zone } = usePulledStore();
+  const { serverTime, zone, store } = usePulledStore();
   const [analyses, setAnalyses] = useState<readonly Analysis[]>([]);
-  const [visits, setVisits] = useState<readonly Visit[]>([]);
-  const [doctors, setDoctors] = useState<readonly Doctor[]>([]);
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
+  /** The build's recording switch, read lazily (`src/coaching/recording-flag.ts`). */
+  const [recordingEnabled, setRecordingEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const client = createClientForScenario();
     let cancelled = false;
 
-    void Promise.all([client.listAnalyses(), client.listVisits(), client.listDoctors()])
-      .then(([analysisPage, visitPage, doctorPage]) => {
+    /**
+     * FE-D16. The MR's own analyses from `list_analyses`, the real function, which CR-3 found an
+     * MR may call. It used to read `GET /analyses` on the mock at `127.0.0.1:4010`.
+     */
+    void listMyAnalyses()
+      .then((outcome) => {
         if (cancelled) return;
-        setAnalyses(analysisPage.items);
-        setVisits(visitPage.items);
-        setDoctors(doctorPage.items);
+        if (outcome.kind === 'loaded') {
+          setAnalyses(outcome.value);
+          return;
+        }
+        // A denial is its own state, never an empty feed — the rule the doctors screen
+        // establishes. "Nothing reviewed" and "you may not see this" look identical otherwise,
+        // and only one of them is reassuring. A mismatch is a failure too: an answer this app
+        // cannot read is not an empty one.
+        setFailure(
+          outcome.kind === 'refused' && outcome.refusal.code === 'not_permitted'
+            ? {
+                title: 'You do not have access to this coaching',
+                detail: `The server refused this request (${outcome.refusal.sqlState}).`,
+              }
+            : {
+                title: 'Could not load your coaching',
+                detail:
+                  outcome.kind === 'mismatch'
+                    ? outcome.detail
+                    : `The server refused this request (${outcome.refusal.sqlState}).`,
+              },
+        );
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        // A denial is its own state, never an empty feed — the rule the doctors
-        // screen establishes. "Nothing reviewed" and "you may not see this" look
-        // identical otherwise, and only one of them is reassuring.
-        setFailure(
-          error instanceof ApiRequestError && error.code === 'permission_denied'
-            ? { title: 'You do not have access to this coaching', detail: error.message }
-            : {
-                title: 'Could not load your coaching',
-                detail: error instanceof Error ? error.message : 'Unknown failure',
-              },
-        );
+        setFailure({
+          title: 'Could not load your coaching',
+          detail: error instanceof Error ? error.message : 'Unknown failure',
+        });
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+
+    void loadRecordingEnabled().then((enabled) => {
+      if (!cancelled) setRecordingEnabled(enabled);
+    });
 
     return () => {
       cancelled = true;
     };
   }, []);
 
+  // The visit and the doctor come from the pulled store, the source every other screen reads.
+  const visits = visitsFromStore(store);
   const doctorFor = (analysis: Analysis): string => {
-    const visit = visits.find((candidate) => candidate.id === analysis.visitId);
+    const visit = store.visit.get(analysis.visitId);
     if (visit === undefined) return 'A visit';
-    return doctors.find((candidate) => candidate.id === visit.doctorId)?.fullName ?? 'A visit';
+    return store.doctor.get(visit.doctorId)?.fullName ?? 'A visit';
   };
 
   const rows: readonly CoachingFeedRow[] = analyses.map((analysis) => ({
     analysisId: analysis.id,
     doctorName: doctorFor(analysis),
     whenLabel:
-      analysis.generatedAt === null ? 'Not yet written' : dayMonthFrom(analysis.generatedAt),
+      analysis.generatedAt === null ? 'Not yet written' : dayMonthIn(analysis.generatedAt, zone),
     findings: orderedFindings(analysis).map((finding) => ({
       id: finding.id,
       workedWell: isWorkedWell(finding),
       summary: finding.title,
     })),
     repliedLabel:
-      analysis.mrRespondedAt === null ? null : `You replied · ${clockFrom(analysis.mrRespondedAt)}`,
+      analysis.mrRespondedAt === null
+        ? null
+        : `You replied · ${clockIn(analysis.mrRespondedAt, zone)}`,
     statusNote: statusNote(analysis),
   }));
 
@@ -150,6 +166,9 @@ function CoachingFeed(): ReactNode {
         reviewedNote={reviewedNote(ratio.reviewed, ratio.total)}
         rows={rows}
         seenFirstNote={SEEN_FIRST}
+        // FE-D16. With recording off in this build, no analysis can be made, and the feed says so
+        // rather than looking like a working feed with nothing in it yet.
+        unavailable={recordingEnabled === false ? COACHING_UNAVAILABLE : null}
         {...(points.some((point) => point.count > 0)
           ? {
               trend: {

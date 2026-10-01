@@ -13,6 +13,24 @@
  * audit log records both. A sentence like this one is only worth printing when the
  * schema behind it can be checked.
  */
+/**
+ * FE-D16. Why the feed cannot fill in this build. True of the build, not a guess: an analysis
+ * is made from a recorded consultation, and `appConfig.recordingEnabled` is off. It does not
+ * claim the AI key is missing, because the app has no signal for that.
+ */
+export const COACHING_UNAVAILABLE = {
+  title: 'Coaching is not available yet',
+  detail:
+    'An analysis is written by an AI model from a recorded consultation. Recording is off in this build, so no analysis can be made.',
+} as const;
+
+/** FE-D16. On every analysis: a model wrote it, not a person. */
+export const AI_PROVENANCE_NOTE = 'Written by an AI model from the transcript, not by a person.';
+
+/** FE-D16. A completed analysis the server returned with no findings (FE-CR-8). */
+export const NO_FINDINGS_NOTE =
+  'The server returned this analysis with no findings, so there is nothing here to read or reply to.';
+
 export const SEEN_FIRST =
   "You're seeing this before your manager acts on it. Anything you write goes with it.";
 
