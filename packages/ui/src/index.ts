@@ -18,6 +18,8 @@
  * TypeScript's NodeNext resolution does.
  */
 
+export { AiAllowanceNotice, SAMPLE_FIGURES_NOTE } from './AiAllowanceNotice';
+export type { AiAllowanceNoticeProps, AiAllowanceState } from './AiAllowanceNotice';
 export { AnalysisReplyScreen } from './AnalysisReplyScreen';
 export type { AnalysisReplyScreenProps } from './AnalysisReplyScreen';
 export { AnalysisScreen } from './AnalysisScreen';

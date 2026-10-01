@@ -154,3 +154,38 @@ because frontend cannot show from the tree that deletion happens in production. 
 - `apps/field/src/consent/content.ts:91,95,99,121` says recordings are "deleted".
 - `apps/field/src/coaching/content.ts:32` says "transcript kept". That screen is hidden, and the
   text contradicts `resumable_upload.sql:933-943`.
+
+---
+
+### FE-CR-6 — Carry the AI allowance, and its reset time, to the app
+
+| | |
+| --- | --- |
+| Date | 2026-10-01 |
+| Requester | Frontend (FE-D14, the AI-limit warning) |
+| Owner asked | Backend |
+| Needed | Each AI flow's result (at least `mr_chat`) to carry `allowanceWarning`, `requestsUsedToday`, `dailyLimit` and the instant the allowance resets. The 429 for `45012` to carry the reset instant too |
+| Status | **Open** |
+
+**Why.** The app may show a usage figure or a reset time only if the server sent it. Today neither
+reaches the app:
+
+- `ai_begin_request` returns `requestsUsedToday`, `dailyLimit` and `allowanceWarning`
+  (`packages/core/src/field/ai.ts:168-176` on `worktree-ai-platform-phase-a`). But `MrChatResult`
+  (`packages/core/src/field/gateway/mr-chat.ts:86-90` on that branch) carries none of them, and
+  the gateway returns that result unchanged
+  (`services/api/supabase/functions/ai-gateway/index.ts:217-226`). This is `BE-W128` in
+  `docs/COMPLETION-PLAN.md:2705` on that branch.
+- **No contract carries a reset time.** The day is the India calendar day
+  (`20261001000200_ai_allowance_warning.sql:138-139` on that branch). The only statement of the
+  reset is a SQL `HINT`, "The allowance resets at midnight, India time." (`:144`). The gateway's
+  429 body is `{ code: '45012', message: 'ai daily limit reached' }` (`index.ts:261`), which drops it.
+
+**What frontend built meanwhile.** `AiAllowanceNotice` (`packages/ui/src/AiAllowanceNotice.tsx`).
+Without a reset time from the server it says "The server has not said when it resets", and with no
+usage figures it shows nothing. The only figures it has displayed so far are a sample fixture,
+labelled "Sample data, not from the server."
+
+**Suggested shape, for backend to accept or change:**
+`allowance: { warning: boolean, requestsUsedToday: number, dailyLimit: number, resetsAt: string }`,
+with `resetsAt` as an ISO instant, on every flow result and on the 429 body.
