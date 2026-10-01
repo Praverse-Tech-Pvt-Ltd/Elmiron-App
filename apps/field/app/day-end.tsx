@@ -1,26 +1,30 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
-import { ApiRequestError } from '@fieldforce/core';
 import { DayEndScreen, Screen } from '@fieldforce/ui';
-import { createClientForScenario } from '../src/api';
+import { totalDistanceMetres } from '../src/capture/mileage';
+import { listMileage } from '../src/capture/visits';
 import { loadQueueState } from '../src/sync/async-storage-store';
 import { usePulledStore } from '../src/sync/pulled-store';
+import { visitsFromStore } from '../src/sync/selectors';
 import { NO_SERVER_CLOCK } from '../src/today/server-window';
 import { indicatorStateFor } from '../src/sync/indicator';
 import { emptyQueue } from '../src/sync/reducer';
 import type { QueueLoad } from '../src/sync/async-storage-store';
 import { CAPTURE_NOTE, summariseDayEnd } from '../src/today/day-end';
-// MR-25 C1. This screen still READS from the mock at :4010, which sends the territory's
-// own offset, so the character slice is correct here. **DELETE THE DISABLE BELOW WHEN
-// THIS SCREEN IS CONVERTED** and move to dayMonthIn / clockIn with the zone from
-// usePulledStore(). MR-21 converted app/visit/[id].tsx and kept clockFrom; the gotcha
-// entry did not stop it, and this line sitting on the import is what will.
-// eslint-disable-next-line no-restricted-imports
-import { clockFrom } from '../src/today/plan';
+import { onDay } from '../src/today/plan';
+import { clockIn } from '../src/today/territory-day';
 
 /**
  * B7 — the day-end binding.
+ *
+ * **FE-D14. It reads the real server.** The day's visits come from the pulled store
+ * (`sync_pull`), chosen by Today's own `onDay` rule, so the two screens cannot disagree about
+ * which visits were today's. The distance comes from `daily_mileage`, which CR-3 proved an MR
+ * may call. It used to read `GET /visits` and `GET /mileage` on the mock at `127.0.0.1:4010`,
+ * which a release build on a phone cannot reach. Times are rendered in the territory zone with
+ * `clockIn`: Supabase sends them in UTC, and the old character slice would have shown 03:25 for
+ * an 08:55 check-in.
  *
  * **The screen renders before the network answers and keeps rendering if it never
  * does.** C11's ordering makes the stop confirmation the load-bearing part, and
@@ -42,12 +46,11 @@ const RATE_NOTE =
 
 export default function DayEnd(): ReactNode {
   const router = useRouter();
-  const [summary, setSummary] = useState<ReturnType<typeof summariseDayEnd> | null>(null);
   const [distanceMetres, setDistanceMetres] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [distanceLoading, setDistanceLoading] = useState(true);
   // `FE-W42` C1. The territory's day, from the server's clock -- never the handset's.
-  const { today } = usePulledStore();
-  const [denial, setDenial] = useState<{ title: string; detail: string } | null>(null);
+  const { store, status, today, zone, failure: pullFailure } = usePulledStore();
+  const [noDay, setNoDay] = useState<{ title: string; detail: string } | null>(null);
   // `FE-W44`. The load, not the state — see the note in app/(tabs)/home.tsx.
   const [queue, setQueue] = useState<QueueLoad>({ kind: 'loaded', state: emptyQueue });
 
@@ -75,43 +78,49 @@ export default function DayEnd(): ReactNode {
      * it is the right day, and when it is absent there is no honest day to substitute.
      */
     if (today === null) {
-      setDenial({ title: 'Could not confirm which day this is', detail: NO_SERVER_CLOCK });
-      setLoading(false);
+      setNoDay({ title: 'Could not confirm which day this is', detail: NO_SERVER_CLOCK });
+      setDistanceLoading(false);
       return;
     }
+    setNoDay(null);
 
-    const client = createClientForScenario();
-    const day = today;
     let cancelled = false;
-
-    void Promise.all([
-      client.listVisits(),
-      // Settled separately: a mileage window the server refuses must not take the
-      // visit counts down with it. The day still happened.
-      // FE-D3 B4. A failure here leaves the distance null, which the screen now reports as "not
-      // available" rather than "no distance yet".
-      client.listMileage({ fromDate: day, toDate: day }).catch(() => null),
-    ])
-      .then(([visits, mileage]) => {
+    // Settled on its own: a mileage the server refuses must not take the visit counts down
+    // with it. The day still happened. FE-D3 B4: a failure leaves the distance null, which the
+    // screen reports as "not available" rather than "no distance yet".
+    void listMileage(today, today)
+      .then((outcome) => {
         if (cancelled) return;
-        setSummary(summariseDayEnd(visits.items));
-        setDistanceMetres(mileage === null ? null : mileage.totalDistanceMetres);
+        setDistanceMetres(outcome.kind === 'loaded' ? totalDistanceMetres(outcome.days) : null);
       })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        if (error instanceof ApiRequestError && error.code === 'permission_denied') {
-          setDenial({ title: 'You do not have access to this day', detail: error.message });
-        }
-        // Anything else leaves the confirmation standing and the totals absent.
+      .catch(() => {
+        if (!cancelled) setDistanceMetres(null);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setDistanceLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
   }, [today]);
+
+  // The day's visits, from the pull. Only a pull that LANDED says what the day held: while the
+  // first one is in flight, or after one failed, the counts are unknown and stay null (FE-D2 7).
+  const summary =
+    today === null || status !== 'ready'
+      ? null
+      : summariseDayEnd(visitsFromStore(store).filter((visit) => onDay(visit, today)));
+  // Only a refusal says something different from "not loaded", so only a refusal is a failure
+  // state. Anything else leaves the confirmation standing and the totals absent.
+  const denial =
+    noDay ??
+    (pullFailure?.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
+      ? {
+          title: 'You do not have access to this day',
+          detail: `The server refused this request (${pullFailure.refusal.sqlState}).`,
+        }
+      : null);
 
   return (
     <Screen scrollable>
@@ -127,14 +136,14 @@ export default function DayEnd(): ReactNode {
         firstCaptureLabel={
           summary?.firstCaptureAt == null
             ? null
-            : `First check-in ${clockFrom(summary.firstCaptureAt)}`
+            : `First check-in ${clockIn(summary.firstCaptureAt, zone)}`
         }
         lastCaptureLabel={
           summary?.lastCaptureAt == null
             ? null
-            : `Last check-out ${clockFrom(summary.lastCaptureAt)}`
+            : `Last check-out ${clockIn(summary.lastCaptureAt, zone)}`
         }
-        loading={loading}
+        loading={status === 'loading' || distanceLoading}
         onOpenQueue={() => {
           router.push('/queue');
         }}

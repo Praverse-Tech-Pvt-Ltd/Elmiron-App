@@ -26,6 +26,11 @@ export interface SettingsNavigation {
   readonly onOpenBattery: () => void;
   readonly onOpenTransparency: () => void;
   readonly onOpenLocation: () => void;
+  /**
+   * FE-D15. Present only when `assistantSampleEnabled`. Absent, there is no assistant row, so a
+   * build with the flag off carries no trace of it.
+   */
+  readonly onOpenAssistant?: () => void;
 }
 
 export const settingsGroups = (
@@ -51,6 +56,17 @@ export const settingsGroups = (
         state: 'available',
         onPress: nav.onOpenDayEnd,
       },
+      ...(nav.onOpenAssistant === undefined
+        ? []
+        : [
+            {
+              id: 'assistant',
+              title: 'Assistant',
+              detail: 'Sample data. Ask how to do something in this app.',
+              state: 'available' as const,
+              onPress: nav.onOpenAssistant,
+            },
+          ]),
     ],
   },
   {
