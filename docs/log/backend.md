@@ -2122,3 +2122,10 @@ came up healthy 35 s later; environmental). Run 3: the rollback guard above. Run
 
 **All five parts done.** Not built, deliberately: live tracking (C5 — an OPERATOR INSTRUCTION in the
 brief), `BE-W130`, `BE-W132`, `BE-W128`. **CI on the pushed SHA follows in the next sub-section.**
+
+#### CI — on the SHA, read from the run
+
+Workflow **`CI`**, run `36838170076`, `headSha` **`59cac513a4d25c790d4698b4d5624fe5f19ff34b`** (the W1-N
+commit), conclusion **success**: **"typecheck · lint · format · unit tests" pass**, **"migrations ·
+Gate 0 RLS suite · rollbacks" pass**. **This sub-section is a docs-only commit on top**; its own CI
+result is reported in the session summary.
