@@ -1964,3 +1964,12 @@ prettier then flagged three of my test files. Fixed, re-run from the top.
 **Part B at B1: a CONDITIONAL STOP THE BRIEF DEFINED.** Part D2: **ROOM**. Everything else done.
 **CI on the pushed SHA is recorded in the next sub-section**, because a commit cannot name its own
 hash.
+
+#### CI — on the SHA, read from the run rather than the badge
+
+Workflow **`CI`**, run `36819533508`, `headSha` **`70efa136e9139a065cc67939ca64f4af2679de36`**
+(the W1-M commit), conclusion **success**. Job **"typecheck · lint · format · unit tests": pass.**
+Job **"migrations · Gate 0 RLS suite · rollbacks": pass** — its own log reads **Test Files 76 passed
+(76); Tests 1039 passed | 4 skipped (1043)**, *"browser suite: 7 passed, 0 skipped, 0 failed"*, and
+*"All rollbacks applied in reverse order; public schema is empty."* Same numbers as local. **This
+sub-section is a docs-only commit on top**; its own CI result is reported in the session summary.
