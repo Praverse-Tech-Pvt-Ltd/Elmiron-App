@@ -28,7 +28,7 @@ interface Recorded {
   modelRequests: LlmGenerateRequest[];
 }
 
-const fakeRpc = (recorded: Recorded): ControlPlaneRpc => ({
+const fakeRpc = (recorded: Recorded, opts: { recordRefuses?: string } = {}): ControlPlaneRpc => ({
   call: (fn, args) => {
     recorded.calls.push({ fn, args: { ...args } });
     switch (fn) {
@@ -55,6 +55,11 @@ const fakeRpc = (recorded: Recorded): ControlPlaneRpc => ({
           },
         ]);
       case 'record_sim_coach_analysis':
+        if (opts.recordRefuses !== undefined) {
+          const refusal = new Error('refused by the database') as Error & { code?: string };
+          refusal.code = opts.recordRefuses;
+          return Promise.reject(refusal);
+        }
         return Promise.resolve({ analysisId: '88888888-8888-4888-8888-888888888888' });
       case 'ai_complete_request':
         return Promise.resolve({ requestId: REQUEST_ID, status: 'recorded' });
@@ -160,5 +165,33 @@ describe('ai_coach — nine items, and a suggestion is only ever a real module (
     expect(stored(r)[0]?.args['p_model_name']).toBe('scripted-coach-1');
     expect(completionOf(r)['p_model_name']).toBe('scripted-coach-1');
     expect(completionOf(r)['p_input_tokens']).toBe(40);
+  });
+});
+
+describe('ai_coach — a refused analysis CLOSES its request (W1-P D2)', () => {
+  const runWith = (recorded: Recorded, opts: { recordRefuses?: string }) =>
+    analyseSimSession({
+      rpc: fakeRpc(recorded, opts),
+      provider: scripted(analysis([]), recorded),
+      sessionId: SESSION_ID,
+      objective: 'Explain storage',
+      objection: 'No room in my fridge',
+      turns: [{ turnIndex: 1, role: 'rep', text: 'It keeps below 25 degrees.' }],
+    });
+
+  it('the database refusing the analysis (23514) is the failure sentence, closed as analysis_refused', async () => {
+    // The turn list comes from the client, so the database stays the authority: it can refuse what
+    // the flow's own check let through. Found by the stub's `[STUB:cite-missing-turn]` branch, where
+    // the refusal used to reach the rep raw and leave the request `started` for ever.
+    const r = fresh();
+    const out = await runWith(r, { recordRefuses: '23514' });
+    expect(out.kind).toBe('failed');
+    expect(completionOf(r)['p_status']).toBe('failed');
+    expect(completionOf(r)['p_error_code']).toBe('analysis_refused');
+  });
+
+  it('POSITIVE CONTROL: an identity refusal (42501) is NOT swallowed — it still propagates', async () => {
+    const r = fresh();
+    await expect(runWith(r, { recordRefuses: '42501' })).rejects.toMatchObject({ code: '42501' });
   });
 });

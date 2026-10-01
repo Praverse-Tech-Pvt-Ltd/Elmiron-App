@@ -176,6 +176,26 @@ export const AiBeginRequestResponseSchema = z.object({
 });
 export type AiBeginRequestResponse = z.infer<typeof AiBeginRequestResponseSchema>;
 
+/**
+ * W1-P C (`BE-W128`, `BE-C30`) — where the rep stands against today's AI allowance.
+ *
+ * **The AI gateway attaches this to EVERY 200 response, for every feature**, as `allowance`, so the
+ * screen that shows the answer can show the warning beside it without a second call. It is the
+ * `ai_begin_request` figures for THIS request: `requestsUsedToday` counts it.
+ *
+ * * `warning` is the server's judgement (`ai_daily_warning_percent`, 80% by the operator's
+ *   decision) — **the client must not recompute it from the two numbers**, because the percentage is
+ *   a per-company setting the client cannot see.
+ * * At the limit the request is refused instead: HTTP 429, SQLSTATE `45012`, which
+ *   `refusalForSqlState` already maps. There is no `allowance` on a refusal.
+ */
+export const AiAllowanceSchema = z.object({
+  requestsUsedToday: z.number().int().positive(),
+  dailyLimit: z.number().nonnegative(),
+  warning: z.boolean(),
+});
+export type AiAllowance = z.infer<typeof AiAllowanceSchema>;
+
 export const AiCompleteRequestRequestSchema = z.object({
   p_request_id: UuidSchema,
   p_status: z.enum(['completed', 'failed', 'blocked']),

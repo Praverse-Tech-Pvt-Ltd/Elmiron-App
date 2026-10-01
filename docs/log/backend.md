@@ -2209,3 +2209,138 @@ database run was not repeated**, because nothing it exercises changed since `d70
 **Part A and Part C: BLOCKAGE** — the five messages were not provided. **Part B1–B3, B6: BLOCKAGE** —
 no URL. **B4, B5, B7 and Part D: done.** **Needs the operator/reviewer:** paste the five messages and
 the frontend repository's URL, branch and access, and W1-O resumes at A1.
+
+### W1-P — the work that needs nobody · 1 October 2026 · Model: Claude Opus 5
+
+**The rule this session ran under: nothing new built on the stub.** The rep's AI-limit warning is
+finished server-side, the stub's hidden branches are exposed (which found and fixed a real defect),
+the 4 October page is rewritten on the frontend's own facts, and **the brief's two-repository premise
+is withdrawn on evidence**. **Not pushed: the local clean-database run was stopped by the machine running
+out of memory before it reached the database job** — see "Where I stopped".
+
+**Checkout guard.** `ac793db`, clean. **`origin/main` had moved** — PR #12 `fe-d13-facts` merged — so it
+was NOT an ancestor. Merged as `ff64e2b`: two conflicts, both append-only on both sides
+(`docs/contract-requests.md`, `PROJECT-OVERVIEW.md`), resolved by keeping both; verified against both
+parents that `PROJECT-OVERVIEW.md` only gained lines. The 4 lines `contract-requests.md` "lost" against
+our side were **main's own deliberate rename** of `CR-1`–`CR-4` to `FE-CR-1`–`FE-CR-4`.
+
+**What I got wrong last session, found this session:** W1-O said CI on `ac793db` was "still running".
+**It never ran** — zero check runs on that SHA. PR #12 had made PR #2 conflict, and **a conflicting PR
+gets no CI run** (`BE-W120`). The merge above is what lets CI run again.
+
+#### The premise withdrawn — there is one repository
+
+**FE-D13 (`docs/frontend-facts-2026-10-01.md` §1) measured it from the frontend side**, matching W1-O's
+measurement from this side: one remote, no submodule, `apps/field` + `apps/console` + `packages/*` +
+`services/api` all in `Elmiron-App`; `Elmiron` and `Elmiron-LMS-Demo` are other projects. **So "the
+frontend repository URL" is not an outstanding item**, and the operator's "separate repositories must
+behave as one project" is satisfied by construction today.
+
+#### A — the contract: imported, never copied, and the check PROVED to fail on drift
+
+**A1–A3 are already true, and were not rebuilt.** `apps/field` depends on `"@fieldforce/core":
+"workspace:*"` (linked, not copied — FE-D13 §3: no duplicated Zod schemas), and every PR typechecks
+and tests every workspace together in one CI. **Building a publish pipeline for a repository that does
+not exist would be the speculative building this session forbids.** If a second repository ever
+appears, the route needing no new account is a `pnpm pack` tarball attached to a GitHub release of this
+(public) repository, pinned by version — recorded, not built.
+
+**A4, two-sided, against the real app:** removing `visitDay` from `VisitSchema` turned
+`turbo run typecheck --filter @fieldforce/field --force` **red with 8 errors**, including a screen
+(`app/samples/[visitId].tsx:254`); restoring the file byte-identical turned it **green** (3/3 tasks).
+**What else would pass:** that gate catches SHAPE drift, not CONSTRAINT drift — a tightened `min()`
+type-checks. That class is caught at runtime instead: the app parses every response through core, and
+the database suites parse real responses through the same schemas. **Two near-duplicates FE-D13 found
+(three local unions, hard-coded RPC names) are the frontend's to fix.**
+
+#### B — `BE-W129`: done in W1-N, not redone
+
+The brief repeats W1-N's Part B word for word. **B1's question** (*how many, which kind, which
+company, which period*) is `count_write_rejections`; **B5's proof** is `write-rejections.spec.ts`. What
+remains is **`BE-W130`**, whose two exits are both asks. Nothing new to build.
+
+#### C — `BE-W128`: the rep's warning, server side complete
+
+**Where it belongs: on every AI answer**, because the rep is looking at the answer when they cross the
+line. The gateway's RPC transport captures `ai_begin_request`'s own reply as it passes — **no flow
+changed** — and every 200 carries `allowance: { requestsUsedToday, dailyLimit, warning }`
+(`AiAllowanceSchema`, core). **C3 over HTTP:** request **79/100 → no warning**, **80 → warning**,
+**100 → warning**, **101 → 429 `45012`, no allowance**. **Mutant** (`>=` → `>` at the line): **exactly
+the 80% test** failed. **C2:** `BE-CR-6` in `docs/contract-requests.md` — field, when, wording, what the
+rep can do; **the screen is Dev's.**
+
+#### D — the stub's blind spots, enumerated from the contracts, and a real defect found
+
+**D1 — what the stub could not produce, and what therefore had never run over HTTP:**
+
+| Feature | Stub always returned | Never exercised |
+| --- | --- | --- |
+| `product_qa` | `supported: false` | an **answer with citations**; a **fabricated citation** discarded; an invalid reply; a provider failure |
+| `mr_chat` | `inScope: false` | an **in-scope answer**; an answer **discarded for a dosing claim**; invalid; provider failure |
+| `lms_tutor` | `groundedInLesson: false` | an **explanation**; a grounded-but-clinical one **refused**; invalid; provider failure |
+| `ai_doctor` | reply + `objectionAddressed: false` | **`objectionAddressed: true`**; an invalid reply (no half-turn stored) |
+| `ai_coach` | zero scores, findings at turn 1 | a **citation of turn 2**; a **citation of a turn that does not exist**; provider failure |
+| all five | instant success | **a provider timeout** — not driven over HTTP (same branch as provider failure, 20 s per test) |
+
+**D2:** each now on request via `[STUB:<branch>]`, **every output still carrying the stub marker**, and
+**each feature's valid AND refused case driven over HTTP** — 4 + 4 + 4 + 2 + 3 new tests.
+
+**And it found a defect — `BE-W133`.** A coach reply citing a turn that does not exist reached the rep as
+a **raw HTTP 403 with the database's message**, and its `ai_requests` row stayed **`started` for ever**
+(read from the table, not inferred). W1-M had added this check for modules, not turns. **Fixed in
+`analyseSimSession`**: a pre-check (`unknown_turn_cited`) plus a backstop that closes any analysis the
+database refuses as `analysis_refused`, identity refusals still propagating. **Mutant** removing the
+pre-check: **exactly the one HTTP test** failed — and showed the backstop closing it as
+`analysis_refused`. **This is the session rule's argument made concrete: the stub was hiding a broken
+branch that a real model would have hit.**
+
+**My mistake during D, caught:** I restarted the function server from `packages/core`, where the script
+does not exist; the old edge container kept serving pre-fix code, and one red was against stale code.
+Found by reading the serve log; every result above was re-run against a container proved fresh.
+
+#### E — `docs/4-OCTOBER.md`, rewritten on FE-D13
+
+Eighteen must-haves, each in one group: **BUILT AND REAL 4 · reading the mock (frontend's switch) 2 ·
+BLOCKED ON A CREDENTIAL 6 · waiting on master data 1 · NOT STARTED, engineering 4 (two frontend) ·
+waiting on an operator decision/purchase 1.** **E1:** the "six screens" figure was not invented by the
+reviewer — **backend wrote it** (`contract-requests.md`, 30 Sep: *"six screens can leave
+`127.0.0.1:4010`"*, beside CR-3's five functions); one screen has since moved off the mock, leaving **five**,
+which FE-D13 names. **The finding that dominates the page: production has 19 of 91 migrations** (FE-D13
+§6) — nothing the app records can reach production until the deploy runs.
+
+#### F — three short ones
+
+* **F1:** `CLAUDE.md` said *"`CR-1`–`CR-5` keep their names"* — **false since FE-D13 renamed four of
+  them.** Corrected, with `FE-CR-1` = `BACKUP_DESTINATION` and the voice-note item = `FE-CR-5`; change-id
+  prefixes added. **Both tracks read it, because there is one repository.**
+* **F2:** answered in W1-O with the CURRENT figures — **135 / 134** consecutive successes, not the
+  brief's 126 / 125 — and **`FE-CR-5` is now answered**: production cannot hold a voice note at all yet.
+* **F3:** the three setup lists and four templates are actionable **except one detail the operator
+  cannot supply, now fixed in Q-2**: a **sideloaded** pilot's Android map key needs the SHA-1 of
+  **engineering's** signing keystore, not the Play Console's; and the console's web domain does not exist
+  until it is hosted. **The tracking notice's four blanks remain the operator's decisions.**
+
+#### How much of the remaining work waits on a credential
+
+**Of the 14 must-haves not yet built and real, 6 (43%) cannot be started by anyone until a credential
+arrives** — the AWS key gates four, the second admin one, Google one, Firebase one. **Counting master data
+and the tracking decision too, 8 of the 14 wait on the company, not on engineering.** Engineering's own
+queue is the frontend's two mock switches and two AI screens, and backend's production deploy.
+
+**And the cost of waiting is not neutral:** every AI capability is proven against text a stub wrote. A
+real model will differ in shape, length, latency and failure mode — `BE-W133` is what one hidden branch
+looked like.
+
+#### Counts
+
+**Local, partial:** core **177 passed | 4 skipped** (9 files) — 175 + the two `BE-W133` unit tests;
+ui-tokens 59; ui vitest 4. **Targeted database suites, against a fresh function server:** the four gateway
+suites **93 passed (4 files)**; `ai-gateway.spec.ts` 13 + 4. **The full `ci-local --with-db` run was
+STOPPED at step 10 of 26 by the machine running low on memory** — not a failure, and not restarted, per
+the instruction that came with it. **The database job and the clean-database check did not run.**
+
+#### Where I stopped
+
+**All six parts done; committed locally; NOT PUSHED.** The standing rule is the clean-database check
+before pushing, and the run was stopped by a resource limit, not by a red. **Needs Maanav: either re-run
+`node scripts/ci-local.mjs --with-db` when memory allows, or say to push and let CI run it.**

@@ -493,3 +493,39 @@ describe.skipIf(!live)('W1-I B5 — cross-tenant, two-sided', () => {
     expect(allowed).toBe(false);
   });
 });
+
+/**
+ * W1-P D2 — the branches of `mr_chat` the stub used to hide, each driven over HTTP.
+ *
+ * The stub always said `inScope: false`, so an in-scope ANSWER, an answer the control must discard,
+ * an invalid reply and a provider failure had never run through the deployed function.
+ */
+describe.skipIf(!live)('W1-P D2 — mr_chat: the branches the stub used to hide', () => {
+  const q = 'How do I submit a call report from the app?';
+
+  it('VALID: an in-scope plain answer is shown — the stub marker is the answer', async () => {
+    const r = await chat(`${q} [STUB:in-scope]`);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body['kind']).toBe('answered');
+    expect(String(r.body['answer'])).toContain('PRACTICE STUB');
+  });
+
+  it('REFUSED: an in-scope answer carrying a dosing claim is DISCARDED, whatever the model said', async () => {
+    const r = await chat(`${q} [STUB:in-scope-clinical]`);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body['kind']).toBe('out_of_scope');
+    expect((await auditRow(String(r.body['requestId']))).flags).toContain('guardrail_triggered');
+  });
+
+  it('REFUSED: an invalid reply is the failure sentence, flagged schema_invalid', async () => {
+    const r = await chat(`${q} [STUB:invalid]`);
+    expect(r.body['kind']).toBe('failed');
+    expect((await auditRow(String(r.body['requestId']))).flags).toContain('schema_invalid');
+  });
+
+  it('REFUSED: a provider failure is the failure sentence, recorded as provider_error', async () => {
+    const r = await chat(`${q} [STUB:provider-error]`);
+    expect(r.body['kind']).toBe('failed');
+    expect((await auditRow(String(r.body['requestId']))).flags).toContain('provider_error');
+  });
+});

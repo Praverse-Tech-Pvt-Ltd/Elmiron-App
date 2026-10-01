@@ -40,7 +40,7 @@ import {
   answerProductQuestion,
   takeDoctorTurn,
 } from '../_shared/core.ts';
-import type { ControlPlaneRpc, LlmProvider } from '../_shared/core.ts';
+import type { AiAllowance, ControlPlaneRpc, LlmProvider } from '../_shared/core.ts';
 import { createStubProvider, stubProviderRefusal } from '../_shared/stub-provider.ts';
 import type { StubShape } from '../_shared/stub-provider.ts';
 
@@ -172,6 +172,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return json(400, { code: '22023', message: 'sessionId is required' });
   }
 
+  // W1-P C (`BE-W128`). The rep's allowance, captured from `ai_begin_request`'s own reply as it
+  // passes through here -- every flow calls it first, so no flow had to change, and the figures are
+  // the database's, not recomputed. Attached to every 200 below; null if the request never began.
+  let allowance: AiAllowance | null = null;
+  const withAllowance = (result: unknown): Response =>
+    json(200, { ...(result as Record<string, unknown>), allowance });
+
   const rpc: ControlPlaneRpc = {
     call: async (fn: string, args: Record<string, unknown>): Promise<unknown> => {
       const { data, error } = await supabase.rpc(fn, args as any);
@@ -181,6 +188,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
         const wrapped = new Error(error.message) as Error & { code?: string };
         wrapped.code = (error as { code?: string }).code;
         throw wrapped;
+      }
+      if (fn === 'ai_begin_request' && typeof data === 'object' && data !== null) {
+        const begun = data as Record<string, unknown>;
+        allowance = {
+          requestsUsedToday: Number(begun['requestsUsedToday']),
+          dailyLimit: Number(begun['dailyLimit']),
+          warning: begun['allowanceWarning'] === true,
+        };
       }
       return data;
     },
@@ -212,7 +227,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           ? (body.history as { role: 'rep' | 'doctor'; text: string }[])
           : [],
       });
-      return json(200, result);
+      return withAllowance(result);
     }
     if (feature === 'mr_chat') {
       const result = await answerMrChat({
@@ -223,7 +238,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           ? (body.history as { role: 'rep' | 'assistant'; text: string }[])
           : [],
       });
-      return json(200, result);
+      return withAllowance(result);
     }
     if (feature === 'lms_tutor') {
       const result = await answerLessonQuestion({
@@ -232,7 +247,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         lessonId: String(body.lessonId),
         question: String(body.question),
       });
-      return json(200, result);
+      return withAllowance(result);
     }
     if (feature === 'ai_coach') {
       const result = await analyseSimSession({
@@ -245,7 +260,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           ? (body.turns as { turnIndex: number; role: 'rep' | 'doctor'; text: string }[])
           : [],
       });
-      return json(200, result);
+      return withAllowance(result);
     }
     const result = await answerProductQuestion({
       rpc,
@@ -254,7 +269,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       marketId: typeof body.marketId === 'string' ? body.marketId : null,
       productId: typeof body.productId === 'string' ? body.productId : null,
     });
-    return json(200, result);
+    return withAllowance(result);
   } catch (error) {
     const code = sqlstateOf(error);
     if (code === '45011') return json(403, { code, message: 'ai feature disabled' });

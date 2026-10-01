@@ -122,8 +122,8 @@ billing to be enabled for Maps even within free usage):
 
 | Enable this API | Used for | Key restriction |
 | --- | --- | --- |
-| **Maps SDK for Android** | The map in the MR app | **Android key**: application restriction *Android apps*, package **`com.praversetech.fieldforce`**, plus the **SHA-1 of the app-signing certificate** (Play Console → *App integrity*) **and** of the upload certificate used for internal builds. API restriction: **Maps SDK for Android only** |
-| **Maps JavaScript API** | Maps in the admin console, including the live-tracking view | **Web key**: application restriction *HTTP referrers* = the console's domain(s). API restriction: **Maps JavaScript API only** |
+| **Maps SDK for Android** | The map in the MR app | **Android key**: application restriction *Android apps*, package **`com.praversetech.fieldforce`**, plus the **SHA-1 of every certificate the app is signed with**. **The pilot is SIDELOADED (W1-P), so its certificate is the keystore engineering signs the APK with — engineering supplies that SHA-1, not the Play Console.** Add the Play Console's app-signing SHA-1 (*App integrity*) only when the Play listing exists. API restriction: **Maps SDK for Android only** |
+| **Maps JavaScript API** | Maps in the admin console, including the live-tracking view | **Web key**: application restriction *HTTP referrers* = the console's domain(s) — **engineering supplies the domain; the console is not hosted yet, so create the key restricted by API now and add the referrer when it is**. API restriction: **Maps JavaScript API only** |
 | *Geocoding API — only if you want clinic addresses turned into coordinates automatically on import* | Clinic import | A third key, API-restricted to Geocoding. **Say if you want this; otherwise do not enable it** |
 
 **Billing safeguards:** a budget alert on the billing account, and a **daily quota cap** on each enabled

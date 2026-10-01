@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
+import { AiAllowanceSchema } from '@fieldforce/core';
 import { requireDatabase, withClient } from './db.js';
-import { API_URL, asUser, signIn, withIdentityLock } from './auth.js';
+import { API_URL, asUser, mintAccessToken, signIn, withIdentityLock } from './auth.js';
 import { acquireGlobalThresholds } from './global-thresholds.js';
 import type { ProfileLike } from './auth.js';
 import { seedFixtures } from './fixtures.js';
@@ -511,5 +512,114 @@ describe.skipIf(!live)('W1-B C4 — the refusals travel from the database to HTT
     // There is no column to hold it -- asserted structurally rather than by searching text.
     expect(Object.keys(row)).not.toContain('question');
     expect(Object.keys(row)).not.toContain('answer');
+  });
+});
+
+/**
+ * W1-P C3 (`BE-W128`) — the allowance reaches the REP's response, over HTTP, at the thresholds.
+ *
+ * `nagpurMr`, because no other test in this suite spends their allowance, so the counts are exact.
+ * Earlier requests are PRE-FILLED as committed `ai_requests` rows — the counter `ai_begin_request`
+ * reads — so each threshold costs one real HTTP call, not a hundred.
+ */
+describe.skipIf(!live)('W1-P C3 — the allowance arrives over HTTP at 79%, 80% and 100%', () => {
+  let nagpurToken: string;
+
+  /** Commit `n` earlier requests for the Nagpur MR, today. */
+  const prefill = async (n: number): Promise<void> =>
+    withClient(async (db) => {
+      await db.query(
+        `insert into public.ai_requests (organisation_id, user_id, feature, prompt_version_id)
+         select $1, $2, 'product_qa', $3 from generate_series(1, $4)`,
+        [world.organisationId, world.users.nagpurMr.id, promptVersionId, n],
+      );
+    });
+
+  beforeAll(async () => {
+    // This company's own limit and warning line -- organisation rows, so nothing leaks (W1-N D2).
+    await withClient(async (db) => {
+      await setThreshold(db, 'ai_daily_requests_per_user', '100', `W1-P C3 (${runId})`);
+      await setThreshold(db, 'ai_daily_warning_percent', '80', `W1-P C3 (${runId})`);
+    });
+    nagpurToken = mintAccessToken(world.users.nagpurMr);
+  });
+
+  it('request 79 of 100: the allowance is reported, and there is NO warning yet', async () => {
+    await prefill(78);
+    const r = await ask('What is the storage temperature?', { token: nagpurToken });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(AiAllowanceSchema.parse(r.body['allowance'])).toEqual({
+      requestsUsedToday: 79,
+      dailyLimit: 100,
+      warning: false,
+    });
+  });
+
+  it('request 80 of 100: the WARNING arrives with the answer', async () => {
+    const r = await ask('What is the storage temperature?', { token: nagpurToken });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(AiAllowanceSchema.parse(r.body['allowance'])).toEqual({
+      requestsUsedToday: 80,
+      dailyLimit: 100,
+      warning: true,
+    });
+  });
+
+  it('request 100 of 100 is still answered and warned; request 101 is REFUSED with 45012', async () => {
+    await prefill(19);
+    const last = await ask('What is the storage temperature?', { token: nagpurToken });
+    expect(last.status, JSON.stringify(last.body)).toBe(200);
+    expect(AiAllowanceSchema.parse(last.body['allowance'])).toEqual({
+      requestsUsedToday: 100,
+      dailyLimit: 100,
+      warning: true,
+    });
+    const refused = await ask('What is the storage temperature?', { token: nagpurToken });
+    expect(refused.status).toBe(429);
+    expect(refused.body).toMatchObject({ code: '45012' });
+    // A refusal carries no allowance: the request never began.
+    expect(refused.body).not.toHaveProperty('allowance');
+  });
+});
+
+/**
+ * W1-P D2 — the branches of `product_qa` the stub used to hide, each driven over HTTP.
+ *
+ * Before W1-P the stub always answered `supported: false`, so `answered`, a fabricated citation, an
+ * invalid reply and a provider failure had never run through the deployed function. Each reply is
+ * still stub output: the answer text IS the stub marker.
+ */
+describe.skipIf(!live)('W1-P D2 — product_qa: the branches the stub used to hide', () => {
+  const q = 'What is the storage temperature?';
+
+  it('VALID: a citation of a SUPPLIED passage is answered, with that passage as the citation', async () => {
+    const r = await ask(`${q} [STUB:cite-supplied]`);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body['kind']).toBe('answered');
+    expect(String(r.body['answer'])).toContain('PRACTICE STUB');
+    const citations = r.body['citations'] as { documentVersionId: string }[];
+    expect(citations).toHaveLength(1);
+  });
+
+  it('REFUSED: a citation of a passage that was NOT supplied is discarded as not-available', async () => {
+    const r = await ask(`${q} [STUB:cite-unsupplied]`);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body['kind']).toBe('not_available');
+    const row = await auditRow(String(r.body['requestId']));
+    expect(row.status).toBe('failed');
+    expect(row.flags).toContain('guardrail_triggered');
+  });
+
+  it('REFUSED: an invalid reply is never shown — not-available, flagged schema_invalid', async () => {
+    const r = await ask(`${q} [STUB:invalid]`);
+    expect(r.body['kind']).toBe('not_available');
+    expect((await auditRow(String(r.body['requestId']))).flags).toContain('schema_invalid');
+  });
+
+  it('REFUSED: a provider failure is the failure sentence, recorded as provider_error', async () => {
+    const r = await ask(`${q} [STUB:provider-error]`);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body['kind']).toBe('failed');
+    expect((await auditRow(String(r.body['requestId']))).flags).toContain('provider_error');
   });
 });

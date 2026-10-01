@@ -334,20 +334,51 @@ export const analyseSimSession = async (input: {
     return { kind: 'failed', message: SIM_TURN_FAILED_MESSAGE };
   }
 
+  // W1-P D2. A finding citing a turn this session was not given is refused HERE too, exactly as an
+  // unoffered module is -- found by the stub's new `[STUB:cite-missing-turn]` branch: without it the
+  // database's 23514 reached the rep as a raw 403 and the request was left `started` for ever.
+  const offeredTurns = new Set(input.turns.map((t) => t.turnIndex));
+  if ([...out.strengths, ...out.improvements].some((f) => !offeredTurns.has(f.turnIndex))) {
+    await complete({
+      status: 'failed',
+      raw: structured.raw,
+      flags: ['schema_invalid'],
+      errorCode: 'unknown_turn_cited',
+    });
+    return { kind: 'failed', message: SIM_TURN_FAILED_MESSAGE };
+  }
+
   // The database validates the SAME shape again -- see `record_sim_coach_analysis`. Not redundant:
   // this checks what the model said, that checks what reaches the table, and a future caller that
-  // is not this code cannot skip the second one.
-  const stored = (await rpc.call('record_sim_coach_analysis', {
-    p_session_id: sessionId,
-    p_overall_score: out.overallScore,
-    p_dimension_scores: out.dimensionScores,
-    p_strengths: out.strengths,
-    p_improvements: out.improvements,
-    p_suggested_modules: out.suggestedModules,
-    p_summary: out.summary,
-    p_model_provider: structured.raw.provider,
-    p_model_name: structured.raw.model,
-  })) as { analysisId?: string };
+  // is not this code cannot skip the second one. The turn list above came from the client, so the
+  // database stays the authority -- and if it refuses, the request is CLOSED with that refusal
+  // rather than abandoned mid-flight.
+  let stored: { analysisId?: string };
+  try {
+    stored = (await rpc.call('record_sim_coach_analysis', {
+      p_session_id: sessionId,
+      p_overall_score: out.overallScore,
+      p_dimension_scores: out.dimensionScores,
+      p_strengths: out.strengths,
+      p_improvements: out.improvements,
+      p_suggested_modules: out.suggestedModules,
+      p_summary: out.summary,
+      p_model_provider: structured.raw.provider,
+      p_model_name: structured.raw.model,
+    })) as { analysisId?: string };
+  } catch (error) {
+    // Only a refusal of the ANALYSIS is closed here; an identity or tenancy refusal (28000, 42501)
+    // is the caller's problem and keeps propagating, as it does for every other RPC in this flow.
+    const code = (error as { code?: unknown }).code;
+    if (code !== '22023' && code !== '23514') throw error;
+    await complete({
+      status: 'failed',
+      raw: structured.raw,
+      flags: ['schema_invalid'],
+      errorCode: 'analysis_refused',
+    });
+    return { kind: 'failed', message: SIM_TURN_FAILED_MESSAGE };
+  }
 
   await complete({ status: 'completed', raw: structured.raw });
 

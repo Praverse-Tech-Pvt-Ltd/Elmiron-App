@@ -38,7 +38,14 @@ decisions and not contract requests, so the same collision happened again.**
 | Backend / AI platform | **`BE-CR<n>`** |
 | Frontend / field app | **`FE-CR<n>`** |
 
-**`CR-1`–`CR-5` keep their names**, for the reason `C1`–`C31` do.
+**On the operator's instruction (FE-D13, 1 October 2026), `CR-1`–`CR-4` were renamed `FE-CR-1`–`FE-CR-4`**
+— each heading keeps "(was CR-n)" so old citations resolve. **`CR-5` (the practice session API) keeps
+its name.** So **`FE-CR-1` is `BACKUP_DESTINATION`**, and the voice-note item `BE-C4` once called
+`FE-CR-1` is **`FE-CR-5`**. Read `docs/contract-requests.md` for the current owner of an id; never
+infer it from this paragraph.
+
+**Change ids follow the same rule**: the backend mints `BE-W<n>` (work items) and the frontend
+`FE-W<n>` / `FE-D<n>`, each from its own sequence. **Register an id in its file before citing it.**
 
 **Why the rule exists, so nobody "simplifies" it away.** On 28 September two sessions ran in parallel
 and **both minted `C20`** — each read the highest id in `.ai-collab/decisions.md`, which is only

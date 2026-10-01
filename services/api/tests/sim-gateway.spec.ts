@@ -766,6 +766,91 @@ describe.skipIf(!live)('W1-M C — nine items, enforced by the database', () => 
     });
   });
 
+  // W1-P D2 -- the doctor's and the coach's branches the stub used to hide.
+  const doctorTurnOverHttp = async (repText: string) => {
+    const started = await rpcAs<{
+      r: { sessionId: string; personaStance: string; objection: string };
+    }>(world.users.puneMr, `select public.start_sim_session($1) as r`, [scenarioId]);
+    const s = started?.r;
+    return gateway(
+      {
+        feature: 'ai_doctor',
+        sessionId: s?.sessionId,
+        repText,
+        personaBrief: 'A busy cardiologist.',
+        personaStance: s?.personaStance,
+        objection: s?.objection,
+        history: [],
+      },
+      mrToken,
+    );
+  };
+
+  const latestCoachRequest = async () =>
+    withClient(async (db) => {
+      const { rows } = await db.query<{ status: string; error_code: string | null }>(
+        `select status, error_code from public.ai_requests
+          where user_id = $1 and feature = 'ai_coach' order by started_at desc limit 1`,
+        [world.users.puneMr.id],
+      );
+      return rows[0];
+    });
+
+  it('W1-P D2 doctor VALID: "objection addressed" travels to the rep', async () => {
+    const r = await doctorTurnOverHttp('It keeps below 25 degrees. [STUB:objection-addressed]');
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body).toMatchObject({ kind: 'replied', objectionAddressed: true });
+  });
+
+  it('W1-P D2 doctor REFUSED: an invalid reply is never stored as a turn', async () => {
+    const r = await doctorTurnOverHttp('It keeps below 25 degrees. [STUB:invalid]');
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body['kind']).toBe('failed');
+    const turns = await withClient(async (db) => {
+      const { rows } = await db.query<{ n: string }>(
+        `select count(*) n from public.sim_turns where session_id = $1`,
+        [r.body['sessionId']],
+      );
+      return Number(rows[0]?.n);
+    });
+    expect(turns, 'no half-turn is stored').toBe(0);
+  });
+
+  it('W1-P D2 coach VALID: a finding citing turn 2 is stored as turn 2', async () => {
+    const sid = await endedSession();
+    const r = await coachOverHttp(sid, '[STUB:cite-turn-2]');
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body['kind']).toBe('analysed');
+    const improvements = await withClient(async (db) => {
+      const { rows } = await db.query<{ i: { turnIndex: number }[] }>(
+        `select improvements i from public.sim_coach_analyses where session_id = $1`,
+        [sid],
+      );
+      return rows[0]?.i ?? [];
+    });
+    expect(improvements.map((f) => f.turnIndex)).toEqual([2]);
+  });
+
+  it('W1-P D2 coach REFUSED: a finding citing a turn the session does not have — failed, and the request CLOSED', async () => {
+    const sid = await endedSession();
+    const r = await coachOverHttp(sid, '[STUB:cite-missing-turn]');
+    // The rep gets the failure sentence, as for a fabricated module -- not a raw database refusal.
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body['kind']).toBe('failed');
+    // ...and the request is closed with a reason, not left open forever.
+    expect(await latestCoachRequest()).toEqual({
+      status: 'failed',
+      error_code: 'unknown_turn_cited',
+    });
+  });
+
+  it('W1-P D2 coach REFUSED: a provider failure is recorded as provider_error', async () => {
+    const sid = await endedSession();
+    const r = await coachOverHttp(sid, '[STUB:provider-error]');
+    expect(r.body['kind']).toBe('failed');
+    expect(await latestCoachRequest()).toEqual({ status: 'failed', error_code: 'provider_error' });
+  });
+
   it('C4: suggestions are read by the rep and the company admin, never by a manager', async () => {
     const sid = await endedSession();
     await record(sid, { modules: [suggest(published)] });

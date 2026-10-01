@@ -4,6 +4,13 @@
 active working hours, visibly to the MR, under a SEPARATE privacy notice and consent, stopping outside
 working hours. Check-in and check-out GPS continues regardless.*
 
+> **Update, 1 October evening (W1-P) — operator direction as relayed in the W1-P brief, not yet from
+> the raw message:** tracking will use the **PAID solution** (option B below), **working hours only,
+> visible to the MR**, and **not enabled in production until the second notice is approved**. The
+> **pilot is SIDELOADED**, with the Play Store prepared in parallel — so the Play-policy finding below
+> governs the Play submission, **not the pilot**. If capacity forces a cut, **tracking is deferred
+> first**. The recommendation below for option A is therefore superseded by that choice.
+
 **Nothing in this document is built (C5), on purpose.** A half-built background location service that
 drains batteries is worse than none, and this project's rule is that what exists must be reached by
 something. It needs three things engineering cannot invent: **a dependency decision (C2), an approved

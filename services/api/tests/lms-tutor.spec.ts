@@ -508,3 +508,39 @@ describe.skipIf(!live)('W1-K B6 — the lesson scope, two-sided', () => {
     expect(allowed).toBe(false);
   });
 });
+
+/**
+ * W1-P D2 — the branches of `lms_tutor` the stub used to hide, each driven over HTTP.
+ *
+ * The stub always said `groundedInLesson: false`, so an EXPLANATION, an explanation the clinical
+ * rule must refuse, an invalid reply and a provider failure had never run through the deployed function.
+ */
+describe.skipIf(!live)('W1-P D2 — lms_tutor: the branches the stub used to hide', () => {
+  const q = 'Can you explain this lesson more simply?';
+
+  it('VALID: a grounded explanation is shown — the stub marker is the explanation', async () => {
+    const r = await ask(enrolledLessonId, `${q} [STUB:grounded]`);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body['kind']).toBe('explained');
+    expect(String(r.body['explanation'])).toContain('PRACTICE STUB');
+  });
+
+  it('REFUSED: "grounded" is not taken on trust — a dosing claim is referred on, not shown', async () => {
+    const r = await ask(enrolledLessonId, `${q} [STUB:grounded-clinical]`);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body['kind']).toBe('not_in_lesson');
+    expect((await auditRow(String(r.body['requestId']))).flags).toContain('guardrail_triggered');
+  });
+
+  it('REFUSED: an invalid reply is the failure sentence, flagged schema_invalid', async () => {
+    const r = await ask(enrolledLessonId, `${q} [STUB:invalid]`);
+    expect(r.body['kind']).toBe('failed');
+    expect((await auditRow(String(r.body['requestId']))).flags).toContain('schema_invalid');
+  });
+
+  it('REFUSED: a provider failure is the failure sentence, recorded as provider_error', async () => {
+    const r = await ask(enrolledLessonId, `${q} [STUB:provider-error]`);
+    expect(r.body['kind']).toBe('failed');
+    expect((await auditRow(String(r.body['requestId']))).flags).toContain('provider_error');
+  });
+});

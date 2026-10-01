@@ -111,18 +111,72 @@ const stubSuggestedModules = (request: LlmGenerateRequest): unknown[] => {
     : [{ moduleId: first.moduleId, dimension: 'scientific_accuracy', reason: STUB_MARKER }];
 };
 
+/**
+ * W1-P D2 -- the stub's BLIND SPOTS, closed. Each feature's default reply below takes ONE branch of
+ * its flow; every other branch had never run over HTTP. A test now names the branch it wants in the
+ * user's own text, which reaches the prompt verbatim:
+ *
+ *   all five        [STUB:invalid]               not JSON           -> the schema-invalid branch
+ *                   [STUB:provider-error]        generate() throws  -> the provider-error branch
+ *   product_qa      [STUB:cite-supplied]         supported, citing the first supplied passage -> ANSWERED
+ *                   [STUB:cite-unsupplied]       supported, citing a passage NOT supplied     -> refused
+ *   mr_chat         [STUB:in-scope]              in scope, a plain answer                     -> ANSWERED
+ *                   [STUB:in-scope-clinical]     in scope, a dosing claim in the answer       -> refused
+ *   lms_tutor       [STUB:grounded]              grounded, a plain explanation                -> EXPLAINED
+ *                   [STUB:grounded-clinical]     grounded, a dosing claim                     -> refused
+ *   ai_doctor       [STUB:objection-addressed]   objectionAddressed: true                     -> REPLIED
+ *   ai_coach        [STUB:cite-turn-2]           an improvement citing turn 2                 -> ANALYSED
+ *                   [STUB:cite-missing-turn]     a finding citing turn 99                     -> refused
+ *
+ * **Every text a directive produces still carries STUB_MARKER**, so no output -- stored, shown or
+ * logged -- can be mistaken for a model's. Scores stay zero under every directive: a non-zero stub
+ * score would read as a judgement. Without a directive nothing changes. The stub refuses to exist
+ * outside a local target, so a directive typed into a real session reaches nothing.
+ *
+ * **This does not deepen the stub**: it adds no capability, it exposes branches the stub was hiding.
+ */
+const STUB_UNSUPPLIED_CHUNK_ID = '00000000-0000-4000-8000-0000000c0de0';
+const STUB_CLINICAL = `${STUB_MARKER} Take 400mg twice daily.`;
+
+const directiveOf = (request: LlmGenerateRequest): string | undefined =>
+  /\[STUB:([a-z0-9-]+)\]/u.exec(request.messages.map((m) => m.content).join('\n'))?.[1];
+
 const stubBody = (shape: StubShape, request: LlmGenerateRequest): string => {
+  const directive = directiveOf(request);
+  if (directive === 'invalid') return `${STUB_MARKER} -- deliberately not JSON`;
   switch (shape) {
-    case 'product_qa':
+    case 'product_qa': {
+      if (directive === 'cite-supplied' || directive === 'cite-unsupplied') {
+        const supplied = /\bid=([0-9a-f-]{36})\b/u.exec(
+          request.messages.map((m) => m.content).join('\n'),
+        )?.[1];
+        const cited = directive === 'cite-supplied' ? supplied : STUB_UNSUPPLIED_CHUNK_ID;
+        return JSON.stringify({
+          supported: true,
+          answer: STUB_MARKER,
+          citedChunkIds: cited === undefined ? [] : [cited],
+        });
+      }
       // `supported: false` is the whole design: the one reply that cannot be mistaken for an answer.
       // `answerProductQuestion` maps it to KNOWLEDGE_NOT_AVAILABLE_MESSAGE, verbatim.
       return JSON.stringify({ supported: false, answer: '', citedChunkIds: [] });
+    }
     case 'mr_chat':
+      if (directive === 'in-scope') return JSON.stringify({ inScope: true, answer: STUB_MARKER });
+      if (directive === 'in-scope-clinical') {
+        return JSON.stringify({ inScope: true, answer: STUB_CLINICAL });
+      }
       // `inScope: false` is the same choice `product_qa` makes with `supported: false`: the one
       // reply that cannot be mistaken for an answer. `answerMrChat` maps it to the out-of-scope
       // redirect, so a stubbed chat sends the rep to Product Q&A rather than saying something.
       return JSON.stringify({ inScope: false, answer: '' });
     case 'lms_tutor':
+      if (directive === 'grounded') {
+        return JSON.stringify({ groundedInLesson: true, explanation: STUB_MARKER });
+      }
+      if (directive === 'grounded-clinical') {
+        return JSON.stringify({ groundedInLesson: true, explanation: STUB_CLINICAL });
+      }
       // `groundedInLesson: false` is the same choice `product_qa` makes with `supported: false` and
       // `mr_chat` with `inScope: false`: the one reply that cannot be mistaken for teaching. The flow
       // maps it to the referral sentence, so a stubbed tutor sends the learner to a person.
@@ -130,9 +184,14 @@ const stubBody = (shape: StubShape, request: LlmGenerateRequest): string => {
     case 'sim_doctor':
       // Schema-valid so the gateway's validation is exercised, and visibly a stub so nobody mistakes
       // it for a doctor. `objectionAddressed: false` keeps the practice loop honest -- a stub cannot
-      // judge whether the rep answered anything.
-      return JSON.stringify({ reply: STUB_MARKER, objectionAddressed: false });
-    case 'sim_coach':
+      // judge whether the rep answered anything -- unless a test asks for the other branch.
+      return JSON.stringify({
+        reply: STUB_MARKER,
+        objectionAddressed: directive === 'objection-addressed',
+      });
+    case 'sim_coach': {
+      const improvementTurn =
+        directive === 'cite-turn-2' ? 2 : directive === 'cite-missing-turn' ? 99 : 1;
       // Scores are all zero ON PURPOSE. A stub returning 72/100 would be read as a judgement, and a
       // rep would believe it. Zero with a stub summary cannot be mistaken for feedback.
       return JSON.stringify({
@@ -150,13 +209,19 @@ const stubBody = (shape: StubShape, request: LlmGenerateRequest): string => {
           { dimension: 'opening', title: STUB_MARKER, detail: STUB_MARKER, turnIndex: 1 },
         ],
         improvements: [
-          { dimension: 'closing', title: STUB_MARKER, detail: STUB_MARKER, turnIndex: 1 },
+          {
+            dimension: 'closing',
+            title: STUB_MARKER,
+            detail: STUB_MARKER,
+            turnIndex: improvementTurn,
+          },
         ],
         // EMPTY unless a test asks otherwise (W1-N D1, `stubSuggestedModules`), for the reason the
         // scores are zero: a stub that recommended a course would be read as advice.
         suggestedModules: stubSuggestedModules(request),
         summary: STUB_MARKER,
       });
+    }
   }
 };
 
@@ -167,6 +232,11 @@ export const createStubProvider = (shape: StubShape = 'product_qa'): LlmProvider
   return {
     generate: (request: LlmGenerateRequest): Promise<LlmResult> => {
       callCount += 1;
+      if (directiveOf(request) === 'provider-error') {
+        // W1-P D2: the provider failing outright -- the branch every flow maps to its failure
+        // sentence and records as `provider_error`.
+        return Promise.reject(new Error(`${STUB_MARKER} -- deliberate provider error`));
+      }
       const text = stubBody(shape, request);
       return Promise.resolve({
         text,

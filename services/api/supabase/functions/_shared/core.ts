@@ -27,6 +27,10 @@ export {
 
 export { KNOWLEDGE_NOT_AVAILABLE_MESSAGE } from '../../../../../packages/core/dist/field/knowledge.js';
 
+// W1-P C (`BE-W128`): the allowance every 200 response carries. A type only -- the gateway builds it
+// from `ai_begin_request`'s own figures, and the contract is where its shape lives.
+export type { AiAllowance } from '../../../../../packages/core/dist/field/ai.js';
+
 export { PATIENT_SPECIFIC_REFUSAL_MESSAGE } from '../../../../../packages/core/dist/field/gateway/guardrails.js';
 
 // W1-I Part B -- `mr_chat`, from the same built output. Its out-of-scope redirect is exported too,

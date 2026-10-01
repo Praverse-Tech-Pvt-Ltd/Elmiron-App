@@ -867,3 +867,76 @@ because frontend cannot show from the tree that deletion happens in production. 
 - `apps/field/src/consent/content.ts:91,95,99,121` says recordings are "deleted".
 - `apps/field/src/coaching/content.ts:32` says "transcript kept". That screen is hidden, and the
   text contradicts `resumable_upload.sql:933-943`.
+
+---
+
+## Answers — 1 October 2026, evening (backend, W1-P)
+
+### `BE-CR-6` — the AI allowance on the rep's screen (`BE-W128`, operator `BE-C30`, screen owned by Dev)
+
+| | |
+| --- | --- |
+| Date | 2026-10-01 |
+| Requester | Backend (W1-P C), for the operator's "warning at 80%" |
+| Owner asked | Frontend — **Dev owns the screen** (operator, 1 Oct) |
+| Server side | **Complete and proved over HTTP.** Nothing else is needed from backend |
+
+**The field.** Every **HTTP 200** from the AI gateway (`/functions/v1/ai-gateway`), for **every**
+feature — `product_qa`, `mr_chat`, `lms_tutor`, `ai_doctor`, `ai_coach` — now carries:
+
+```json
+"allowance": { "requestsUsedToday": 80, "dailyLimit": 100, "warning": true }
+```
+
+Parse it with **`AiAllowanceSchema`** from `@fieldforce/core` (`packages/core/src/field/ai.ts`) — import
+it, do not copy it. `requestsUsedToday` **includes the request just answered**. It is `null` only if the
+request never began (a malformed body).
+
+**When `warning` is true.** When this request reached the company's warning line — 80% of the daily
+limit by the operator's decision, but **a per-company setting the app cannot see. Show the warning when
+`warning` is true; never recompute it from the two numbers.** Proved over HTTP
+(`services/api/tests/ai-gateway.spec.ts`, "W1-P C3"): request **79 of 100 → `false`**, **80 → `true`**,
+**100 → `true`**, and **101 → HTTP 429, SQLSTATE `45012`, no `allowance` at all.**
+
+**What it should say — a suggestion; the words are Dev's.** *"You have used 80 of today's 100 AI
+questions. They reset at midnight."* — the two numbers from the field, "midnight" because the count
+resets on the India calendar day (`ai_begin_request`). **Do not imply a cost or a penalty**; nothing
+in the system imposes either.
+
+**What the rep can do.** Keep going — nothing is blocked until the limit. **At the limit** the request
+is refused with `45012`, which `refusalForSqlState` already maps to `ai_rate_limited` (actionable: try
+tomorrow). **An admin can raise the limit for the company** without a code change
+(`set_organisation_threshold('ai_daily_requests_per_user', …)`); the rep cannot.
+
+**Where it is NOT needed:** no AI screen exists in the app yet (`docs/4-OCTOBER.md`), so this lands with
+the first one rather than as a screen of its own.
+
+### `FE-CR-5` — is a voice note's audio actually destroyed in production? **No evidence that it is, and it cannot be yet**
+
+**Your "not established" is right, and backend adds one fact that settles it for now:** **production
+cannot hold a voice note at all.** Production has applied **19** migrations (your FE-D13 §6 reading of
+drift run `36718280007`); voice notes arrive through `sync_push`, which is not among them. **So there
+is nothing to destroy, and the retention job's `destroyedTotal: 0` / `liveObjectCount: 0` (watchdog run
+`36821347402`) is the truthful result of an empty bucket, not evidence the purge works there.**
+
+* **The purge path itself IS exercised** — locally and in CI, against real Storage, by
+  `services/api/tests/consent-audio.spec.ts` (`runPurge`). What has never run is that path **against
+  production**. **Proving it needs one audio object aged past `purge_after` in a staging project after
+  the production deploy** (`BE-C25`'s recorded gap).
+* **The row is kept as a tombstone, deliberately**: `purge_state = 'destroyed'`, `storage_key = null`,
+  plus an `audio_destruction_log` row. **That is what lets anyone prove later that a deletion
+  happened.** It changes nothing the app tells a rep: the audio is what was promised deleted, not the
+  record that it existed.
+* **Copy:** "Marked for deletion 90 days after they reach your company" is accurate — keep it.
+  **"Transcript kept" is wrong**: `confirm_audio_destroyed` deletes the transcripts too. Recordings'
+  "… then deleted" is the unproven claim; recording is deferred (`BE-C17`), so it ships to nobody yet.
+* **Your scheduler note is right and harmless to the promise:** GitHub runs the hourly job every few
+  hours. A 90-day promise is not threatened by a few hours.
+
+### `FE-CR-1` now names TWO things — the third id collision, recorded where both tracks read it
+
+`BE-C4` (29 Sep, above) named the voice-note item **`FE-CR-1`**. FE-D13 then renamed the old
+**`CR-1` (`BACKUP_DESTINATION`) to `FE-CR-1`** on the operator's instruction, and filed voice-note
+deletion as **`FE-CR-5`**. **The operator's instruction wins**, so: **`FE-CR-1` is `BACKUP_DESTINATION`;
+the voice-note item is `FE-CR-5`**; `BE-C4`'s assignment is superseded. Recorded in `CLAUDE.md` — **which
+both tracks DO read, because FE-D13 §1 established there is one repository.**
