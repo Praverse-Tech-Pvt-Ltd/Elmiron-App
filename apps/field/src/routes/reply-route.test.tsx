@@ -13,14 +13,14 @@ import { AnalysisSchema } from '@fieldforce/core';
  */
 
 const mockGetAnalysis = jest.fn<() => Promise<unknown>>();
-const mockRespond = jest.fn<(id: string, body: { response: string }) => Promise<unknown>>();
+const mockRespond = jest.fn<(id: string, response: string) => Promise<unknown>>();
 const mockReplace = jest.fn();
 
-jest.mock('../api', () => ({
-  createClientForScenario: () => ({
-    getAnalysis: () => mockGetAnalysis(),
-    respondToAnalysis: (id: string, body: { response: string }) => mockRespond(id, body),
-  }),
+// FE-D16 — the route reads and sends through the REAL functions now (`src/coaching/server.ts`).
+// The load is wrapped in the module's outcome shape; a rejection is still a rejection.
+jest.mock('../coaching/server', () => ({
+  readMyAnalysis: () => mockGetAnalysis().then((value) => ({ kind: 'loaded', value })),
+  respondToMyAnalysis: (id: string, response: string) => mockRespond(id, response),
 }));
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ analysisId: '55555555-5555-4555-8555-555555555511' }),
@@ -109,10 +109,10 @@ describe('FE-D2 5 — a send failure keeps the reply', () => {
   });
 
   it('POSITIVE CONTROL: a reply that sends goes back to the analysis, with no failure', async () => {
-    mockRespond.mockResolvedValue({});
+    mockRespond.mockResolvedValue({ kind: 'sent' });
     await writeAndSend();
 
-    expect(mockRespond).toHaveBeenCalledWith(ANALYSIS.id, { response: WROTE });
+    expect(mockRespond).toHaveBeenCalledWith(ANALYSIS.id, WROTE);
     expect(mockReplace).toHaveBeenCalledWith(`/analysis/${ANALYSIS.id}`);
     expect(screen.queryByText('Your reply was not sent')).toBeNull();
   });
