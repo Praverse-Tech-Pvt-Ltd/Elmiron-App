@@ -2129,3 +2129,83 @@ Workflow **`CI`**, run `36838170076`, `headSha` **`59cac513a4d25c790d4698b4d5624
 commit), conclusion **success**: **"typecheck · lint · format · unit tests" pass**, **"migrations ·
 Gate 0 RLS suite · rollbacks" pass**. **This sub-section is a docs-only commit on top**; its own CI
 result is reported in the session summary.
+
+### W1-O — the raw messages and the frontend repository · 1 October 2026 · Model: Claude Opus 5
+
+**PART A IS BLOCKED, AND SO IS MOST OF PART B — the two inputs the brief says are "pasted above this
+brief" were not in the message.** The brief opens: *"The operator's five decision messages are pasted
+above this brief, VERBATIM"*, and Part B: *"Its URL, branch and access are given above."* **The message
+contained the brief and nothing above it.** Storing five messages verbatim, diffing the 31 answers and
+cloning a repository are each impossible without them, and **reconstructing either would repeat the exact
+failure this session exists to stop** — a decision reaching the build through a summary.
+
+**Checkout guard.** `worktree-ai-platform-phase-a` at `d704163`, clean; `origin/main` (`f2487e8`) an
+ancestor, merge a no-op; PR #2 `MERGEABLE`/`CLEAN`. `review-handoff/` deleted.
+
+#### A — BLOCKAGE. Nothing stored, nothing diffed, no count reported
+
+Searched before stopping: no `.ai-collab/operator-messages/`; the W1-N sweep had already established that
+no 31-item list exists in the repository, its history since 27 September, or the session records. **No
+count of missing answers is reported, because the only honest number needs the message.** Part C depends
+on A's NEW WORK group, so **C is blocked with it.** `operator-inputs.md` Q-4 stays open (A5 needs A).
+
+#### B — what the evidence says about the premise, and what COULD be done
+
+**The brief's premise is contradicted by this repository's own history.** It says the frontend has
+worked in a different repository this session never read. Measured: **nine `fe-` PRs merged here**
+(#1, #3–#10, the last on 29 September), **`f34ceef` is an ancestor of `origin/main`** (exit 0), and **PR
+#11 `fe-d12-final` is open here now** — `2195874`, **14 commits ahead of `main`, 0 behind**. The frontend
+may have moved since; the "status note" the brief quotes (retention off since 23 August) is **on no
+branch here**, which fits. **Without the URL, B1–B3 and B6 cannot be answered, and guessing which
+organisation repository it is would make B2's three facts describe the wrong project.**
+
+**B4 — done on `fe-d12-final`, the newest frontend code reachable.** **24 screens** (route files,
+`_layout` excluded — counted from `git ls-tree`, because the subagent's own headline said 26 and 15
+"real" while its lists summed to 24 and 13). **REAL 13 · MOCK 3 · BOTH 2 · STATIC 6.** Classified by
+tracing imports, then **cross-checked by a second method of a different kind** — every file naming the
+mock factory: nine hits, **four of them comments** recording an earlier move off the mock, not calls.
+
+**Mock-reading, NAMED:** **Coaching, Analysis, Reply** (flag-gated, the flag is off) and **Day end,
+Mileage** (always reachable).
+
+**B5 — CR-3 holds for all of them.** Every real replacement — `daily_mileage`, `list_analyses`,
+`read_analysis`, `respond_to_analysis`, `list_consent_records`, plus `sync_pull` for visits and doctors —
+is among CR-3's five, **proved for an MR over real HTTP** by `cr3-mr-reads.spec.ts`, green in this
+branch's last full run. **There is no "rest".** Two details: the real `daily_mileage` wrapper already
+exists (`apps/field/src/capture/visits.ts:92`) **and nothing imports it**; and `endpoints.ts` declares
+**no** `/rpc/respond_to_analysis` path.
+
+**B7 — `docs/4-OCTOBER.md` now names the screens** instead of "cannot assess". **The operator's "six"
+could not be mapped**; the nearest recorded six is CR-3's *"six screens can leave `127.0.0.1:4010`"*
+(28 Sep), of which **five still have not**.
+
+#### D — the two corrections, in `docs/contract-requests.md` ("Answers — 1 October")
+
+**D1, measured with `gh run list`:** `Audio retention` **active, 135 consecutive successes since 7 Sep
+14:49 UTC**; the watchdog **active, 134 since 7 Sep 15:01 UTC**; last failures 23 Aug. The note was true
+for two weeks and stale for three. **The finding that matters more, from the watchdog's own output (run
+`36821347402`, 05:46 UTC today): `destroyedTotal: 0`, `liveObjectCount: 0`, `overdueObjectCount: 0`** —
+the job has never had anything to delete. **Green is evidence it runs, not that it works.** The target is
+whatever the `SUPABASE_DB_URL` secret names, which I cannot read; "production" is the workflow's stated
+target, not verified.
+
+**D2 — already done, and the brief is stale on it.** `BE-C4` (29 Sep) minted `BE-CR`/`FE-CR`, renamed the
+voice-note item `FE-CR-1`, and is in `CLAUDE.md`. **The real finding: if the frontend now works in another
+repository, that repository never loads this `CLAUDE.md`**, so the rule cannot reach it — the fix is that
+repository carrying the same tables, which backend cannot write without access.
+
+#### What I got wrong
+
+Mistyped a workflow run id once (`36832283016`), caught when the log came back empty, and nearly
+relayed the subagent's 26/15 screen counts — caught by counting the route files myself.
+
+#### Counts
+
+**No code, migration or test changed this session** — docs only. Static checks below; **the full
+database run was not repeated**, because nothing it exercises changed since `d704163`'s green run.
+
+#### Where I stopped
+
+**Part A and Part C: BLOCKAGE** — the five messages were not provided. **Part B1–B3, B6: BLOCKAGE** —
+no URL. **B4, B5, B7 and Part D: done.** **Needs the operator/reviewer:** paste the five messages and
+the frontend repository's URL, branch and access, and W1-O resumes at A1.

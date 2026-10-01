@@ -771,3 +771,52 @@ system ever says it.
 rep can have the screen installed and see nothing until somebody switches it on, which is `#5`'s
 answer arriving. **That is why building now is safe: the shipping default is off, and the code enforces
 it rather than a plan to remember.**
+
+## Answers — 1 October 2026 (backend, W1-O) — two corrections
+
+### Retention is NOT off. It is green — and green is not the same as working
+
+**What was said (as relayed to backend; the note itself was not found on any branch of this
+repository, including `fe-d12-final`):** the retention jobs have been off since 23 August.
+
+**Measured today, with `gh run list` against this repository:**
+
+| Workflow | State | Current run of consecutive successes | Last failure |
+| --- | --- | --- | --- |
+| `Audio retention` (`retention.yml`) | **active** | **135**, since 7 Sep 14:49 UTC | 23 Aug 08:15 UTC |
+| `Audio retention watchdog` (`retention-watchdog.yml`) | **active** | **134**, since 7 Sep 15:01 UTC | 23 Aug 07:47 UTC |
+
+**So the note was true from 23 August to 7 September and has been out of date for over three weeks**
+— the gap is the recorded blackout, when both workflows were `disabled_manually`
+(`.ai-collab/decisions.md`, "Retention workflows: disabled, then deployed and re-enabled").
+
+**The finding that matters more.** The watchdog's own output, run `36821347402` at 05:46 UTC today:
+
+```
+"destroyedTotal": 0,
+"liveObjectCount": 0,
+"overdueObjectCount": 0,
+Audio retention is healthy.
+```
+
+**The database these jobs point at holds no audio at all, and has destroyed nothing, ever.** So 135
+green runs prove the job **runs**, not that it **works**: it has never had anything to delete. *"The
+job is green"* and *"the job works"* are different claims, and only the first has evidence. That
+database is whatever the `SUPABASE_DB_URL` repository secret names — backend cannot read the value, so
+calling it production is the workflow's stated target, not something verified here. **Proving the
+purge needs one audio object aged past `purge_after` in a staging project**, which `BE-C25` already
+records as the gap a heartbeat cannot close.
+
+### "CR-5" for voice-note deletion — already renamed `FE-CR-1`, and why it may keep happening
+
+**This is not a new ruling.** It is `BE-C4` (29 September, above, line ~448): contract requests are
+minted per track — **`BE-CR<n>`** and **`FE-CR<n>`** — and the voice-note item is **`FE-CR-1`**. It is
+recorded in **`CLAUDE.md`**, the one file both tracks load before reading any code.
+
+**Why it may recur anyway, and this is the real finding.** `CLAUDE.md` only reaches a track that works
+**in this repository**. If the frontend is now working in a separate repository — which is what the
+reviewer reports, and which would explain why this note was found on no branch here — **that
+repository's sessions never load this rule**, and nothing will stop a fourth collision. **The fix is
+for the frontend repository's own `CLAUDE.md` to carry the same two tables**, or for the work to come
+back here (`docs/log/backend.md`, W1-O Part B). Backend cannot write to a repository it has not been
+given.
