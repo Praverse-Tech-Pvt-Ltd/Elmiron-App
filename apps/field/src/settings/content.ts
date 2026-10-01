@@ -31,6 +31,8 @@ export interface SettingsNavigation {
    * build with the flag off carries no trace of it.
    */
   readonly onOpenAssistant?: () => void;
+  /** FE-D17. Present only when `practiceSampleEnabled`; absent, there is no practice row. */
+  readonly onOpenPractice?: () => void;
 }
 
 export const settingsGroups = (
@@ -65,6 +67,17 @@ export const settingsGroups = (
               detail: 'Sample data. Ask how to do something in this app.',
               state: 'available' as const,
               onPress: nav.onOpenAssistant,
+            },
+          ]),
+      ...(nav.onOpenPractice === undefined
+        ? []
+        : [
+            {
+              id: 'practice',
+              title: 'AI Doctor practice',
+              detail: 'Sample data. Practise a visit with an AI doctor and get feedback.',
+              state: 'available' as const,
+              onPress: nav.onOpenPractice,
             },
           ]),
     ],

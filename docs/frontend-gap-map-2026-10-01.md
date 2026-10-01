@@ -110,3 +110,22 @@ three reasons: slow on a mid-range phone, costly on data, and the surveillance r
 trail. The operator's message asks for maps and tracking UI. Building it reverses that decision,
 so the operator should confirm the reversal first. The two no-trail options above keep the third
 reason intact.
+
+---
+
+## Update — FE-D17 (1 October, after the operator's clarification)
+
+**AI analysis in this release means AI Doctor practice, not recorded consultations.** Coaching,
+Analysis and Reply now map to practice:
+
+| Line / screen | Status | Evidence | Blocker and owner |
+| --- | --- | --- | --- |
+| AI Doctor practice: pick, conversation, feedback | **done on sample data** (flag `EXPO_PUBLIC_PRACTICE_SAMPLE`, off) | `app/practice/*`, `packages/ui/src/Practice*Screen.tsx`, `apps/field/src/practice/*` (`70d6169`, `5e9037d`, `3eb838e`) | **FE-CR-11** (backend: the practice contract and read RPCs on `main`). **C-1** (operator: AWS key; until then the stub, so "not available") |
+| Coaching / Analysis on real recorded visits (FE-D16 wiring) | **deferred** with real-call analysis | `app/(tabs)/coaching.tsx`, `app/analysis/[id].tsx`. Still hidden behind `coachingEnabled` | Deferred scope (operator, 1 October) |
+| Reply | **out of this release** for practice | No reply exists for a practice analysis, even on the branch (FE-CR-11 question 1) | Backend, if wanted |
+| Clock and calendar lint in `packages/ui` | **done** | `eslint.config.mjs` (`ecef224`) | — |
+| APK and device testing in CI | **not started** | No workflow builds or installs an app (FE-D13 §4) | After integration is stable (operator) |
+
+**Visibility for practice** follows the ruling, and the backend on the branch already enforces it
+(`simulation_core.sql:281-297`): the MR sees their own, an admin can read, and a manager sees no
+individual score, ranking or team average. The feedback screen says so.
