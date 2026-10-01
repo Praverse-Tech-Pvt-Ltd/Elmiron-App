@@ -7,9 +7,15 @@ dated line under it.
 
 Each entry: **date · requester · owner asked · shape or answer needed · why · status.**
 
+**Identifier prefixes (2026-10-01, FE-D13).** Frontend's requests carry the prefix `FE-CR-`, so
+they cannot be confused with a backend-raised request. CR-1 to CR-4 were renamed FE-CR-1 to
+FE-CR-4 on the operator's instruction. Each heading keeps its old label as "(was CR-n)", so
+references to CR-1 to CR-4 in `PROJECT-OVERVIEW.md` still resolve. Only those four heading lines
+changed. No entry's body was edited.
+
 ---
 
-### CR-1 — Is `BACKUP_DESTINATION` set?
+### FE-CR-1 (was CR-1) — Is `BACKUP_DESTINATION` set?
 
 | | |
 | --- | --- |
@@ -28,7 +34,7 @@ the owner's answer before calling it either way.
 
 ---
 
-### CR-2 — Stale "30 September" deadline in a document frontend does not own
+### FE-CR-2 (was CR-2) — Stale "30 September" deadline in a document frontend does not own
 
 | | |
 | --- | --- |
@@ -50,7 +56,7 @@ append to is in `PROJECT-OVERVIEW.md` → FE-D1.
 
 ---
 
-### CR-3 — Can an MR call the five functions that would replace the mock, and do they return the contract shapes?
+### FE-CR-3 (was CR-3) — Can an MR call the five functions that would replace the mock, and do they return the contract shapes?
 
 | | |
 | --- | --- |
@@ -71,7 +77,7 @@ switch is frontend-only. If it's no, what's needed is exactly what this entry as
 
 ---
 
-### CR-4 — Should an approximate location fix be treated differently at check-in?
+### FE-CR-4 (was CR-4) — Should an approximate location fix be treated differently at check-in?
 
 | | |
 | --- | --- |
@@ -104,3 +110,47 @@ approximate?
   fix.
 
 Frontend changes nothing until this is answered.
+
+---
+
+### FE-CR-5 — Is a voice note's audio actually destroyed in production 90 days after it arrives?
+
+| | |
+| --- | --- |
+| Date | 2026-10-01 |
+| Requester | Frontend (FE-D13, `docs/frontend-facts-2026-10-01.md` §6) |
+| Owner asked | Backend |
+| Needed | A yes, a no, or "not until X". If yes, the evidence. Also: should the `voice_notes` row be kept as a tombstone, and does that change what the app may tell a rep? |
+| Status | **Open**. A question, not a claim |
+
+**The question.** The app tells a rep that voice notes are "marked for deletion 90 days after they
+reach your company" (`apps/field/src/transparency/content.ts:48`). It does not say "deleted",
+because frontend cannot show from the tree that deletion happens in production. Does it?
+
+**What frontend found, so the answer can be checked rather than trusted:**
+
+- **The code would delete the audio and keep the row.**
+  - `stamp_audio_retention` sets `purge_after = received_at + 90 days`
+    (`20260815000300_audio_consent_retention.sql:196-197, 206-208`).
+  - `claim_expired_audio` selects expired voice notes (`20260816000300_resumable_upload.sql:800-812`).
+  - `purge-expired-audio.mjs:105-107` deletes the storage object.
+  - `confirm_audio_destroyed` deletes the transcripts and marks the row `destroyed` with a null
+    `storage_key` (`resumable_upload.sql:933-950`). It does not delete the row.
+- **The production wiring exists.**
+  - All of the above is in the first 19 migrations, which production has applied (drift run
+    36718280007: `"appliedVersions": 19`).
+  - `retention.yml` runs on a schedule (`:46`) with `SUPABASE_DB_URL`, `SUPABASE_URL` and
+    `SUPABASE_SERVICE_ROLE_KEY` set.
+  - Its recent runs succeed (36827155291, 1 October 2026).
+- **It has never been exercised.**
+  - Every run logs `claimed 0, destroyed 0` and `"liveObjectCount": 0`.
+  - `PROJECT-OVERVIEW.md:2008-2011` says the dispatch "proves the wiring, not the retention path".
+  - The voice-note path (`sync_push`) is not on production (`handoff.md:162`), so the app cannot
+    store a note there today.
+- **The schedule fires less often than hourly.** The last three runs were 3.8 and 6.5 hours apart.
+
+**Related copy, which frontend will not change until this is answered:**
+
+- `apps/field/src/consent/content.ts:91,95,99,121` says recordings are "deleted".
+- `apps/field/src/coaching/content.ts:32` says "transcript kept". That screen is hidden, and the
+  text contradicts `resumable_upload.sql:933-943`.
