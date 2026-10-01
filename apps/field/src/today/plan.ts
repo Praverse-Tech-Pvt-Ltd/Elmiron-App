@@ -112,7 +112,7 @@ const countsTowardTheDay = (visit: Visit): boolean => visit.status !== 'cancelle
  * is the one thing this screen must never hide. A visit whose day the server has not sent
  * (`visitDay === null`) is not claimed for today unless it is in progress.
  */
-const onDay = (visit: Visit, day: string): boolean =>
+export const onDay = (visit: Visit, day: string): boolean =>
   visit.status === 'in_progress' || visit.visitDay === day;
 
 /**

@@ -2,176 +2,201 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import { VisitSchema } from '@fieldforce/core';
 
-// Mocked at the client boundary, as the other route tests are: importing the real
-// one pulls in `src/config`, which validates EXPO_PUBLIC_* at module load and
-// throws under jest.
-const mockListVisits = jest.fn<() => Promise<unknown>>();
-const mockListMileage = jest.fn<() => Promise<unknown>>();
-jest.mock('../api', () => ({
-  createClientForScenario: () => ({
-    listVisits: mockListVisits,
-    listMileage: mockListMileage,
-  }),
+/**
+ * B7 — Day end.
+ *
+ * FE-D14. The screen reads the REAL server now:
+ *
+ * - the day's visits come from the pulled store (`sync_pull`), chosen by the same `onDay` rule
+ *   Today uses, so the two screens cannot disagree about which visits were today's;
+ * - the distance comes from `daily_mileage` (`listMileage`), which CR-3 proved an MR may call.
+ *
+ * The mock client is mocked to THROW, so any path back to `127.0.0.1:4010` fails these cases.
+ * Supabase renders timestamps in UTC (`+00:00`), so the check-in/out times are asserted through
+ * the territory zone: a character slice would read 03:25 where the rep checked in at 08:55.
+ */
+
+const mockListMileage = jest.fn<(from: string, to: string) => Promise<unknown>>();
+jest.mock('../capture/visits', () => ({
+  listMileage: (from: string, to: string) => mockListMileage(from, to),
 }));
+const mockMockClient = jest.fn(() => {
+  throw new Error('FE-D14: day end must not reach the mock server');
+});
+jest.mock('../api', () => ({ createClientForScenario: () => mockMockClient() }));
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 
-// FE-W42 C1. The day now comes from the pulled store, and the real module reaches
-// `src/config` the same way `../api` does.
 const mockStore = jest.fn();
 jest.mock('../sync/pulled-store', () => ({ usePulledStore: () => mockStore() }));
 
 import DayEnd from '../../app/day-end';
 
+const IST = { timeZone: 'Asia/Kolkata', source: 'territory' } as const;
+const MR = '22222222-2222-4222-8222-2222222222aa';
+
 const visit = (over: Record<string, unknown> = {}) =>
   VisitSchema.parse({
     id: '22222222-2222-4222-8222-222222222201',
-    mrId: '22222222-2222-4222-8222-2222222222aa',
+    mrId: MR,
     doctorId: '22222222-2222-4222-8222-2222222222bb',
     beatPlanId: null,
     clinicAddressId: null,
     status: 'completed',
     notMetReason: null,
     scheduledFor: null,
-    startedAt: '2026-08-13T08:55:00+05:30',
-    completedAt: '2026-08-13T18:22:00+05:30',
-    receivedAt: '2026-08-13T18:22:01+05:30',
-    createdAt: '2026-08-13T08:00:00+05:30',
-    updatedAt: '2026-08-13T18:22:01+05:30',
+    // 08:55 and 18:22 IST, as Supabase sends them: in UTC.
+    startedAt: '2026-08-13T03:25:00+00:00',
+    completedAt: '2026-08-13T12:52:00+00:00',
+    receivedAt: '2026-08-13T12:52:01+00:00',
+    createdAt: '2026-08-13T02:30:00+00:00',
+    updatedAt: '2026-08-13T12:52:01+00:00',
+    visitDay: '2026-08-13',
     ...over,
   });
 
+const mileage = (distanceMetres: number | null) =>
+  distanceMetres === null
+    ? { kind: 'loaded', days: [] }
+    : {
+        kind: 'loaded',
+        days: [{ mrId: MR, travelDate: '2026-08-13', distanceMetres, checkInCount: 2 }],
+      };
+
+/** A pulled store holding `visits`, with the given status and territory day. */
+const withStore = ({
+  visits = [visit()],
+  status = 'ready',
+  today = '2026-08-13',
+  failure = null,
+}: {
+  visits?: readonly ReturnType<typeof visit>[];
+  status?: 'loading' | 'ready' | 'failed';
+  today?: string | null;
+  failure?: unknown;
+} = {}) => {
+  mockStore.mockReturnValue({
+    store: { visit: new Map(visits.map((v) => [v.id, v])) },
+    status,
+    today,
+    zone: IST,
+    failure,
+  });
+};
+
 beforeEach(() => {
-  // Without this, `not.toHaveBeenCalled()` below sees the PREVIOUS case's calls: these
-  // doubles are module-scoped and jest does not clear them between tests by default. The
-  // case passed alone and failed in sequence, which is the only way that defect shows.
-  mockListVisits.mockReset();
   mockListMileage.mockReset();
+  mockMockClient.mockClear();
   mockStore.mockReset();
 });
 
-/** A settled store with a territory day, which is what the existing cases assume. */
-const withDay = (today: string | null = '2026-08-13') => {
-  mockStore.mockReturnValue({ today });
-};
-
 describe('app/day-end.tsx — B7', () => {
-  it('carries the stop confirmation through from the contract-parsed day', async () => {
-    withDay();
-    mockListVisits.mockResolvedValue({ items: [visit()] });
-    mockListMileage.mockResolvedValue({ days: [], totalDistanceMetres: 48_200 });
+  it("carries the stop confirmation and the day's real figures", async () => {
+    withStore();
+    mockListMileage.mockResolvedValue(mileage(48_200));
 
     await render(<DayEnd />);
 
-    expect(await screen.findByText('Nothing is being recorded.')).toBeTruthy();
-    // Server stamps, sliced — not a duration, and not re-expressed in the
-    // handset's timezone.
+    expect(await screen.findByText('48.2 km')).toBeTruthy();
+    expect(screen.getByText('Nothing is being recorded.')).toBeTruthy();
     expect(screen.getByText('First check-in 08:55')).toBeTruthy();
     expect(screen.getByText('Last check-out 18:22')).toBeTruthy();
-    expect(screen.getByText('48.2 km')).toBeTruthy();
+    expect(screen.getByText('1 of 1')).toBeTruthy();
   });
 
-  it('keeps the confirmation standing when the day itself cannot be loaded', async () => {
-    // C11's whole point: an MR who cannot tell whether tracking stopped kills the
-    // app from Recents, and it is then off tomorrow morning too. A network failure
-    // must not be allowed to take that answer off the screen.
-    withDay();
-    mockListVisits.mockRejectedValue(new Error('Network request failed'));
-    mockListMileage.mockResolvedValue({ days: [], totalDistanceMetres: 0 });
+  it('keeps the confirmation standing when the pull has failed, with the counts not available', async () => {
+    withStore({ status: 'failed', failure: { kind: 'unreachable' } });
+    mockListMileage.mockResolvedValue(mileage(null));
 
     await render(<DayEnd />);
 
     expect(await screen.findByText('Nothing is being recorded.')).toBeTruthy();
-    // FE-D2 7 — corrected. This asserted '0 of 0' after a FAILED load: it asserted the defect.
-    // The counts are unknown, not zero, and the screen now says they are not available.
     expect(await screen.findByText(/Not available/u)).toBeTruthy();
     expect(screen.queryByText('0 of 0')).toBeNull();
     expect(screen.queryByText('you went to all of them')).toBeNull();
   });
 
-  it('keeps the visit counts when only the mileage window is refused', async () => {
-    // Settled separately on purpose. A mileage refusal is not a reason to stop
-    // telling the MR how many visits they did.
-    withDay();
-    mockListVisits.mockResolvedValue({ items: [visit()] });
+  it('keeps the visit counts when only the mileage is refused', async () => {
+    withStore();
+    mockListMileage.mockResolvedValue({
+      kind: 'refused',
+      refusal: { code: 'unknown', sqlState: 'XX000', actionable: false },
+    });
+
+    await render(<DayEnd />);
+
+    expect(await screen.findByText(/Distance not available/u)).toBeTruthy();
+    expect(screen.getByText('1 of 1')).toBeTruthy();
+    expect(screen.queryByText(/No distance yet/u)).toBeNull();
+  });
+
+  it('keeps the visit counts when the mileage request fails outright', async () => {
+    withStore();
     mockListMileage.mockRejectedValue(new Error('Network request failed'));
 
     await render(<DayEnd />);
 
-    expect(await screen.findByText('1 of 1')).toBeTruthy();
-    // FE-D3 B4 — corrected. This asserted "No distance yet … once you have checked into more than
-    // one visit" for a mileage fetch that FAILED: it asserted the defect, a false reason given for
-    // a real error. The distance is unknown, and the screen now says it could not be fetched.
-    expect(screen.getByText(/Distance not available/u)).toBeTruthy();
-    expect(screen.queryByText(/No distance yet/u)).toBeNull();
+    expect(await screen.findByText(/Distance not available/u)).toBeTruthy();
+    expect(screen.getByText('1 of 1')).toBeTruthy();
   });
 });
 
-/**
- * `FE-W42` C1/C2 — the day this screen asks the server for.
- *
- * It was `todayIso(new Date())`: the handset for the instant AND local `getDate()` for the
- * calendar. The value below is chosen to EXPOSE that rather than tolerate it.
- */
-describe("app/day-end.tsx — FE-W42, the day is the server's", () => {
-  it('asks the server for the TERRITORY day, five minutes past IST midnight', async () => {
-    // 18:35Z on 30 September is 00:05 IST on 1 October. A build reading the instant in UTC
-    // -- which is what the device-clock version did on a phone whose clock is RIGHT --
-    // asks for 2026-09-30. The territory has already turned over.
-    withDay('2026-10-01');
-    mockListVisits.mockResolvedValue({ items: [] });
-    mockListMileage.mockResolvedValue({ days: [], totalDistanceMetres: 0 });
+describe('FE-D14 — day end reads the real server', () => {
+  it('asks daily_mileage for the territory day only, and never the mock', async () => {
+    withStore({ today: '2026-10-01', visits: [] });
+    mockListMileage.mockResolvedValue(mileage(null));
+
+    await render(<DayEnd />);
+    await screen.findByText('nothing was planned');
+
+    expect(mockListMileage).toHaveBeenCalledWith('2026-10-01', '2026-10-01');
+    expect(mockMockClient).not.toHaveBeenCalled();
+  });
+
+  it("counts only today's visits, by the server's visit_day", async () => {
+    withStore({
+      visits: [
+        visit(),
+        visit({ id: '22222222-2222-4222-8222-222222222202', visitDay: '2026-08-12' }),
+      ],
+    });
+    mockListMileage.mockResolvedValue(mileage(null));
 
     await render(<DayEnd />);
 
-    await screen.findByText('Nothing is being recorded.');
-    // Assert the CONTENT of the request, not that a request happened.
-    expect(mockListMileage).toHaveBeenCalledWith({
-      fromDate: '2026-10-01',
-      toDate: '2026-10-01',
+    expect(await screen.findByText('1 of 1')).toBeTruthy();
+  });
+
+  it('a pull refused as not permitted is the denial state', async () => {
+    withStore({
+      status: 'failed',
+      failure: {
+        kind: 'refused',
+        refusal: { code: 'not_permitted', sqlState: '42501', actionable: false },
+      },
     });
+    mockListMileage.mockResolvedValue(mileage(null));
+
+    await render(<DayEnd />);
+
+    expect(await screen.findByText('You do not have access to this day')).toBeTruthy();
   });
 
   it('with NO server day, asks for nothing and names the missing thing', async () => {
-    withDay(null);
-    mockListVisits.mockResolvedValue({ items: [] });
-    mockListMileage.mockResolvedValue({ days: [], totalDistanceMetres: 0 });
+    withStore({ today: null });
 
     await render(<DayEnd />);
 
     expect(await screen.findByText('Could not confirm which day this is')).toBeTruthy();
-    // The assertion that fails against any fallback: the screen asked for NO window at all.
     expect(mockListMileage).not.toHaveBeenCalled();
-    expect(mockListVisits).not.toHaveBeenCalled();
-  });
-
-  it('THE POSITIVE CONTROL: with a day, it still fetches', async () => {
-    // Without this, declining unconditionally would satisfy the case above.
-    withDay('2026-08-13');
-    mockListVisits.mockResolvedValue({ items: [visit()] });
-    mockListMileage.mockResolvedValue({ days: [], totalDistanceMetres: 48_200 });
-
-    await render(<DayEnd />);
-
-    await screen.findByText('Nothing is being recorded.');
-    expect(mockListMileage).toHaveBeenCalledWith({
-      fromDate: '2026-08-13',
-      toDate: '2026-08-13',
-    });
   });
 });
 
 /**
  * FE-D2 7 — an unknown count is not a zero, and a zero is not a congratulation.
- *
- * The route passed `summary?.planned ?? 0`, so a day still loading and a day that failed to load
- * both rendered "0 of 0", and `DayEndScreen` read `done + notMet === planned` as attendance:
- * 0 === 0, "you went to all of them". The route's own comment says a failed fetch leaves "the
- * totals absent"; the `?? 0` made them present, and wrong.
  */
 describe('FE-D2 7 — day-end: unknown vs zero', () => {
-  it('while the day is still loading, shows no count and no verdict', async () => {
-    withDay();
-    mockListVisits.mockReturnValue(new Promise(() => undefined));
+  it('while the first pull is still loading, shows no count and no verdict', async () => {
+    withStore({ status: 'loading', visits: [] });
     mockListMileage.mockReturnValue(new Promise(() => undefined));
     await render(<DayEnd />);
     await screen.findByText('Nothing is being recorded.');
@@ -181,9 +206,8 @@ describe('FE-D2 7 — day-end: unknown vs zero', () => {
   });
 
   it('a day with nothing planned says so, and does not congratulate', async () => {
-    withDay();
-    mockListVisits.mockResolvedValue({ items: [] });
-    mockListMileage.mockResolvedValue({ days: [], totalDistanceMetres: 0 });
+    withStore({ visits: [] });
+    mockListMileage.mockResolvedValue(mileage(null));
     await render(<DayEnd />);
 
     expect(await screen.findByText('nothing was planned')).toBeTruthy();
@@ -191,9 +215,8 @@ describe('FE-D2 7 — day-end: unknown vs zero', () => {
   });
 
   it('POSITIVE CONTROL: a day where every planned visit was attended still says so', async () => {
-    withDay();
-    mockListVisits.mockResolvedValue({ items: [visit()] });
-    mockListMileage.mockResolvedValue({ days: [], totalDistanceMetres: 0 });
+    withStore();
+    mockListMileage.mockResolvedValue(mileage(null));
     await render(<DayEnd />);
 
     expect(await screen.findByText('1 of 1')).toBeTruthy();
