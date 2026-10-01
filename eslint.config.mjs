@@ -169,6 +169,9 @@ export default tseslint.config(
       '**/.next/**',
       '.pnpm-store/**',
       'services/api/supabase/.temp/**',
+      // W1-N: git-ignored copies for the reviewer. Copied .ts files belong to no tsconfig, so a
+      // type-aware lint run from the root would fail on them; they are never authored here.
+      'review-handoff/**',
     ],
   },
   js.configs.recommended,

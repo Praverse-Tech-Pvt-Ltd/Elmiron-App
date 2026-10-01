@@ -364,9 +364,24 @@ describe.skipIf(!reachable)(
       });
     });
 
+    it('W1-N D2: the migrated 100 and 80 are what the GLOBAL default RESOLVES to', async () => {
+      // W1-M could only assert the migration's ROWS, because the four gateway suites committed a
+      // global `null` (or, in `ai-gateway`, an unreverted '50') that outranked them. They now write
+      // organisation rows for their own fixture company, so on a database built from migrations the
+      // global resolution must be exactly the operator's values -- whatever suites ran first. A
+      // suite that starts leaking a global setting again turns this red.
+      const resolved = await inRolledBackTransaction(async (client) =>
+        asOwner(client, () =>
+          client.query<{ daily: string; warn: string }>(
+            `select public.threshold_number('ai_daily_requests_per_user', null, null) as daily,
+                    public.threshold_number('ai_daily_warning_percent', null, null) as warn`,
+          ),
+        ),
+      );
+      expect(resolved.rows[0]).toEqual({ daily: '100', warn: '80' });
+    });
+
     it('the operator’s launch values were written by the migration, as global rows', async () => {
-      // Asserted as ROWS, not as what `threshold()` resolves: the gateway suites commit a global
-      // `null` limit when they finish, which outranks this row on any database they have run against.
       const rows = await inRolledBackTransaction(async (client) => {
         const { rows: r } = await asOwner(client, () =>
           client.query<{ key: string; value: unknown }>(

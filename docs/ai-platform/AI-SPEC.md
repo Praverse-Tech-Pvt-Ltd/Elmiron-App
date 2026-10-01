@@ -46,7 +46,7 @@ analysis now covers **your nine items** (`BE-C34`).
 | **An AWS account with Bedrock access to Sonnet 5 and Haiku 4.5 through the India geographic inference profile** | **Capabilities 1–5 answering for real.** Engineering stopped rather than build an adapter it could not test | `docs/operator-inputs.md` **I-1** |
 | **Approved product content, and who signs it off** | Capability 1 has nothing to answer from; capability 3 has no product lessons | **I-9** |
 | **The second admin, provisioned** | Every approval — prompts, personas, knowledge, lessons | **I-10** |
-| **Approval of THIS document** (`BE-C40`) | The real-provider adapter, voice, and the six personas (`BE-C35`) | here |
+| ~~Approval of THIS document~~ | **APPROVED 1 October (`BE-C41`, operator A-1)** — "do not hold AI implementation further" | — |
 
 ## What we are asking you to confirm, not decide
 
@@ -76,10 +76,10 @@ analysis now covers **your nine items** (`BE-C34`).
 | `ai_doctor` | Sonnet 5 | **Your decision** |
 | `ai_coach` | Sonnet 5 | **Your decision** |
 | `product_qa` | Sonnet 5 | **Your decision** ("reasoning-heavy product Q&A") |
-| `mr_chat` | **Haiku 4.5** | **Engineering proposal.** Its first job is deciding whether a question is in scope, which is classification |
-| `lms_tutor` | **Haiku 4.5** | **Engineering proposal.** It explains one lesson's text and nothing else — short, grounded work |
+| `mr_chat` | **Haiku 4.5** | **Confirmed by the operator (`BE-C41`).** Its first job is deciding whether a question is in scope, which is classification |
+| `lms_tutor` | **Haiku 4.5** | **Confirmed by the operator (`BE-C41`).** It explains one lesson's text and nothing else — short, grounded work |
 
-**Please confirm or change the last two rows.**
+**The last two rows were engineering proposals and are now confirmed — "lighter model for chat and learning" (`BE-C41`).**
 
 ## Where routing will live (PROPOSED), and how anyone will be able to tell which model answered
 

@@ -93,9 +93,9 @@ const setThreshold = async (
   note: string,
 ): Promise<void> => {
   await db.query(
-    `insert into public.app_thresholds (key, value, scope, note, effective_from)
-     values ($1, $2::jsonb, 'global', $3, now())`,
-    [key, value, note],
+    `insert into public.app_thresholds (key, value, scope, organisation_id, note, effective_from)
+     values ($1, $2::jsonb, 'organisation', $4, $3, now())`,
+    [key, value, note, world.organisationId],
   );
 };
 
@@ -251,42 +251,13 @@ beforeAll(async () => {
 afterAll(async () => {
   // W1-G C1. Released LAST and in a `finally`: a stranded lock would block every later run of
   // the other two suites for as long as this process lives.
+  // W1-N D2: NO REVERT ROWS. This suite used to commit GLOBAL settings and then "revert" them with
+  // more global rows -- which outranked the migrated `ai_daily_requests_per_user` = 100 on any
+  // database it had run against. `setThreshold` now writes ORGANISATION rows for this run's own
+  // fixture company (a fresh uuid per run), so nothing it writes can reach another company, another
+  // suite or the global defaults, and there is nothing to put back.
   try {
     if (!live || runId === '') return;
-    await withClient(async (db) => {
-      // `app_thresholds` is append-only, so the revert is a later row carrying its own note.
-      await setThreshold(
-        db,
-        'ai_feature_enabled:ai_doctor',
-        'false',
-        `W1-D revert (${runId}). The flag returns to its shipped state: OFF.`,
-      );
-      await setThreshold(
-        db,
-        'ai_feature_enabled:ai_coach',
-        'false',
-        `W1-D revert (${runId}). The flag returns to its shipped state: OFF.`,
-      );
-      // THE DAILY LIMIT MUST BE REVERTED TOO, and forgetting it broke another suite on CI.
-      //
-      // `ai_daily_requests_per_user` is a GLOBAL row and this suite COMMITS it, because the Edge
-      // Function reads from another connection and cannot see an open transaction. Leaving it set
-      // made `ai-control-plane.spec.ts`'s "never unlimited by default" case pass where it must
-      // refuse: that test asserts an UNSET limit raises 45011, and this suite had quietly set one.
-      //
-      // It went unnoticed locally because this machine's database already carried state from earlier
-      // sessions. CI starts clean, which is exactly why CI found it and the local run did not.
-      //
-      // `'null'::jsonb` rather than a number: `threshold() #>> '{}'` yields SQL NULL for it, which is
-      // what "no limit configured" means to `ai_begin_request`. The row cannot be DELETED -- the
-      // table is append-only by design -- so restoring an absence means asserting it.
-      await setThreshold(
-        db,
-        'ai_daily_requests_per_user',
-        'null',
-        `W1-D revert (${runId}). Restores the UNSET state: an unlimited allowance is never the default.`,
-      );
-    });
   } finally {
     await releaseGlobalThresholds?.();
     releaseGlobalThresholds = null;
@@ -729,6 +700,70 @@ describe.skipIf(!live)('W1-M C — nine items, enforced by the database', () => 
     const theirs = await ids(world.users.rivalMr);
     expect(theirs).toContain(rivalPublished);
     expect(theirs).not.toContain(published);
+  });
+
+  /** `ai_coach` over HTTP for an ended session, with a stub directive in the objective (W1-N D1). */
+  const coachOverHttp = async (sid: string, directive: string) =>
+    gateway(
+      {
+        feature: 'ai_coach',
+        sessionId: sid,
+        objective: `Explain storage ${directive}`,
+        objection: 'No room in my fridge.',
+        turns: [
+          { turnIndex: 1, role: 'rep', text: 'rep' },
+          { turnIndex: 2, role: 'doctor', text: 'doctor' },
+        ],
+      },
+      mrToken,
+    );
+
+  it('W1-N D1: a module the flow OFFERED is stored on the analysis, end to end over HTTP', async () => {
+    const sid = await endedSession();
+    const response = await coachOverHttp(sid, '[STUB:suggest-offered]');
+    expect(response.status, JSON.stringify(response.body)).toBe(200);
+    expect(response.body['kind']).toBe('analysed');
+    const stored = await withClient(async (db) => {
+      const { rows } = await db.query<{ m: { moduleId: string; reason: string }[] }>(
+        `select suggested_modules m from public.sim_coach_analyses where session_id = $1`,
+        [sid],
+      );
+      return rows[0]?.m ?? [];
+    });
+    expect(stored).toHaveLength(1);
+    // A module the rep can open -- never the draft, retired, deactivated or rival one...
+    expect([draft, retired, inactive, rivalPublished]).not.toContain(stored[0]?.moduleId);
+    const offered = await rpcAs<{ r: { moduleId: string }[] }>(
+      world.users.puneMr,
+      `select public.sim_coach_module_candidates() as r`,
+      [],
+    );
+    expect((offered?.r ?? []).map((c) => c.moduleId)).toContain(stored[0]?.moduleId);
+    // ...and the reason says, on its face, that no model chose it.
+    expect(stored[0]?.reason).toContain('PRACTICE STUB');
+  });
+
+  it('W1-N D1: a module NOT offered is refused end to end — no analysis, and the request says why', async () => {
+    const sid = await endedSession();
+    const response = await coachOverHttp(sid, '[STUB:suggest-unoffered]');
+    expect(response.status, JSON.stringify(response.body)).toBe(200);
+    expect(response.body['kind']).toBe('failed');
+    const outcome = await withClient(async (db) => {
+      const analyses = await db.query(
+        `select 1 from public.sim_coach_analyses where session_id = $1`,
+        [sid],
+      );
+      const request = await db.query<{ status: string; error_code: string | null }>(
+        `select status, error_code from public.ai_requests
+          where user_id = $1 and feature = 'ai_coach' order by started_at desc limit 1`,
+        [world.users.puneMr.id],
+      );
+      return { analyses: analyses.rowCount, request: request.rows[0] };
+    });
+    expect(outcome).toEqual({
+      analyses: 0,
+      request: { status: 'failed', error_code: 'unknown_learning_module' },
+    });
   });
 
   it('C4: suggestions are read by the rep and the company admin, never by a manager', async () => {

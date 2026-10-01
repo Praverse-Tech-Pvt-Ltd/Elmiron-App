@@ -462,3 +462,41 @@ Numbering below is the brief's, so a reader holding the brief can check each one
   approve before *major* AI work. **W1-M reads them together as: build what is already decided (nine
   dimensions, the 80% warning, logged rejections), and do not start the real-vendor adapter, voice, or
   persona content ahead of the spec** — which B1 enforced anyway.
+
+**Correction (W1-N), appended rather than edited:** the preamble above says the sixteen unrecorded
+answers are asked for as *"`docs/operator-inputs.md`, I-12"*. **It was I-11.** Found by a W1-N search,
+not by a reader. The id that preamble should have named is gone with the W1-N rewrite of that file;
+the ask itself lives on as **Q-4** there.
+
+---
+
+# Operator direction — 1 October 2026, second message (W1-N)
+
+**`BE-C41` – `BE-C61`, one per item, in the operator's own codes**, so a reader holding their message
+can check each line. **Recorded from the reviewer's SUMMARY of that message, not the message itself**
+— the brief says so in as many words, and says the operator's text wins on any disagreement. **No
+disagreement could be checked, because the operator's text was not provided.**
+
+| Id | Code | Decision | Relation to earlier records |
+| --- | --- | --- | --- |
+| `BE-C41` | A-1 | **AI-SPEC APPROVED.** Lighter model for chat and learning, stronger for AI Doctor, coaching and detailed analysis. **Do not hold AI implementation further** | **Settles `BE-C40`** and confirms the two engineering-proposed rows of `BE-C27`: `mr_chat` and `lms_tutor` → Haiku 4.5 |
+| `BE-C42` | A-2 | Sample cap stays admin-configurable; **never invent or hard-code the number**; it arrives before enforcement is mandatory | Restates `BE-C11`. The 6 November CI deadline is unchanged by it |
+| `BE-C43` | A-3 | Send **only** the sixteen lost subjects | See W1-N A4: **they cannot be named from any evidence engineering holds** |
+| `BE-C44` | A-4 | Product claims, labels and PI need an authorised medical/business approver; the operator gives final approval; **author and approver are SEPARATE ACCOUNTS**; AI drafts training, never a claim | `C24` / `BE-C37`. Four eyes is already a table CHECK on every content type |
+| `BE-C45` | A-5 | **Live tracking: YES, conditionally** — active working hours only, visible to the MR, a **separate** notice and consent, stopping outside hours. Check-in/out GPS continues regardless | **New.** Designed in W1-N Part C, **not built** |
+| `BE-C46` | A-6 | **Maps: Google Maps Platform**, the billing/API account swappable without a rewrite | **New.** Setup ask in `docs/operator-inputs.md` |
+| `BE-C47` | A-7 | **Notifications: Firebase Cloud Messaging**, project under the company's account — LMS reminders, assignments, certificates, field alerts, system notifications | Names the channel `BE-C14` approved |
+| `BE-C48` | A-8 | **The six remaining app screens and the AI-limit warning in the UI are part of 4 October and are not to be postponed** | Turns `BE-W128` into a 4 October item. **Frontend-owned** |
+| `BE-C49` | B-1 | Territory: National → Region → Area/Territory → MR, with name, code, parent, company; **an Excel template**; do not block on the data | Template + checker built in W1-N A3 |
+| `BE-C50` | B-2 | Working hours per territory and company; **09:00–18:00 Mon–Sat is a temporary test value**; production value editable from admin | Restates `BE-C38` |
+| `BE-C51` | B-3 | Product master: brand, generic, market, status, **a link to approved content**; real list later | Restates `BE-C12`. *Whether a product row links to approved content today is not established in W1-N* |
+| `BE-C52` | B-4 | Product Q&A answers only from approved material and **refuses** product-claim questions when none exists | Already true: `answerProductQuestion` returns *"approved information not available"* and never calls the model |
+| `BE-C53` | B-5 | Doctor/clinic import and admin entry ready; **AI Doctor must not depend on the real doctor master** | Already true for AI Doctor: no `sim_*` table references `doctors` (asserted, `sim-gateway.spec.ts` B6) |
+| `BE-C54` | B-6 | AI drafts modules, explanations, quizzes, role-play and summaries **from supplied source material**; all final content approved | `BE-C21` / `BE-C37` |
+| `BE-C55` | B-7 | **PV/data-protection signatory is NOT a current-release blocker**; keep the field and workflow ready | **Changes the standing of `D-15` / I-8**: still needed, no longer blocking |
+| `BE-C56` | C-1 | **Proceed with Bedrock India**; say exactly what AWS account, IAM and key scope is needed, **restricted** | `BE-C26`. The policy is in `docs/operator-inputs.md` Q-1 |
+| `BE-C57` | C-2 | Second production admin **being provisioned now** | `BE-C7`. Stays open until one approval is made with it |
+| `BE-C58` | C-3 | Production order: pre-flight → working-hour config → pending changes → reference data → **production smoke test**. Never reference data before schema | `BE-C8`, plus the smoke test as a final step |
+| `BE-C59` | C-4 | **Paid plan**; uptime/heartbeat monitoring **outside** the hosting platform | `BE-C25` |
+| `BE-C60` | D-1 | AI privacy limit **acknowledged**. Keep the filter; **do not intentionally collect patient identifiers in the MR app; minimise what is sent; log and filter risky inputs where practical; keep patient/PV workflows separate from AI Doctor and coaching** | `BE-C20` / `BE-C36`. "Log risky inputs" is the same requirement as `BE-W129`, from a second direction |
+| `BE-C61` | — | **The legal name remains the only legal-name input outstanding. Do not invent it** | `BE-C9` |

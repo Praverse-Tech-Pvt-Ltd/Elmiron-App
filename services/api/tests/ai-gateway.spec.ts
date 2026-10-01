@@ -146,9 +146,9 @@ const setThreshold = async (
   note: string,
 ): Promise<void> => {
   await db.query(
-    `insert into public.app_thresholds (key, value, scope, note, effective_from)
-     values ($1, $2::jsonb, 'global', $3, now())`,
-    [key, value, note],
+    `insert into public.app_thresholds (key, value, scope, organisation_id, note, effective_from)
+     values ($1, $2::jsonb, 'organisation', $4, $3, now())`,
+    [key, value, note, world.organisationId],
   );
 };
 
@@ -275,13 +275,11 @@ afterAll(async () => {
   try {
     if (!live || runId === '') return;
     await withClient(async (db) => {
-      // app_thresholds is append-only by design, so the revert is a later row, not a delete.
-      await setThreshold(
-        db,
-        'ai_feature_enabled:product_qa',
-        'false',
-        `W1-B C3 revert (${runId}). The flag returns to its shipped state: OFF.`,
-      );
+      // W1-N D2: no revert rows. `setThreshold` writes ORGANISATION rows for this run's own fixture
+      // company, so they reach nothing outside it and there is nothing to put back. This suite used
+      // to revert the flag GLOBALLY and never reverted the daily limit at all, leaving a committed
+      // global '50' that outranked the migrated 100 on every database it ran against.
+      //
       // W1-J C1: `ai_requests` is NOT deleted, and the omission is deliberate.
       //
       // This block used to begin `delete from public.ai_requests where prompt_version_id = $1`,

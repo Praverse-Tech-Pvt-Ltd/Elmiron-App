@@ -79,7 +79,39 @@ export type StubShape = 'product_qa' | 'mr_chat' | 'lms_tutor' | 'sim_doctor' | 
 const STUB_MARKER =
   '[PRACTICE STUB - no AI provider is configured; decision #5 is open, so no model was called]';
 
-const stubBody = (shape: StubShape): string => {
+/**
+ * W1-N D1 -- the ONE place a test can steer the stub, and only the coach's module suggestion.
+ *
+ * Before this, the stub always returned `suggestedModules: []`, so the populated path -- a module
+ * stored on the analysis, or one refused for not being offered -- had never run over HTTP. A test
+ * now puts a directive in the session's `objective`, which reaches the prompt verbatim:
+ *
+ *   [STUB:suggest-offered]    suggest the FIRST module the flow offered (`AVAILABLE MODULES`)
+ *   [STUB:suggest-unoffered]  suggest an id that was NOT offered, so the refusal runs end to end
+ *
+ * Without a directive the reply is unchanged: no suggestion, because a stub recommending a course
+ * would be read as advice. With one, the REASON is the stub marker, so even a stored suggestion
+ * says on its face that no model chose it. The stub refuses to exist outside a local target, so a
+ * directive typed into a real session reaches nothing.
+ */
+const STUB_UNOFFERED_MODULE_ID = '00000000-0000-4000-8000-00000000dead';
+
+const stubSuggestedModules = (request: LlmGenerateRequest): unknown[] => {
+  const prompt = request.messages.map((m) => m.content).join('\n');
+  const directive = /\[STUB:(suggest-offered|suggest-unoffered)\]/u.exec(prompt)?.[1];
+  if (directive === undefined) return [];
+  if (directive === 'suggest-unoffered') {
+    return [{ moduleId: STUB_UNOFFERED_MODULE_ID, dimension: 'closing', reason: STUB_MARKER }];
+  }
+  const line = /^AVAILABLE MODULES \(JSON\): (.*)$/mu.exec(prompt)?.[1] ?? '[]';
+  const offered = JSON.parse(line) as { moduleId: string }[];
+  const first = offered[0];
+  return first === undefined
+    ? []
+    : [{ moduleId: first.moduleId, dimension: 'scientific_accuracy', reason: STUB_MARKER }];
+};
+
+const stubBody = (shape: StubShape, request: LlmGenerateRequest): string => {
   switch (shape) {
     case 'product_qa':
       // `supported: false` is the whole design: the one reply that cannot be mistaken for an answer.
@@ -120,9 +152,9 @@ const stubBody = (shape: StubShape): string => {
         improvements: [
           { dimension: 'closing', title: STUB_MARKER, detail: STUB_MARKER, turnIndex: 1 },
         ],
-        // EMPTY on purpose, for the reason the scores are zero: a stub that recommended a course
-        // would be read as advice. An empty list is a valid, honest answer (W1-M Part C).
-        suggestedModules: [],
+        // EMPTY unless a test asks otherwise (W1-N D1, `stubSuggestedModules`), for the reason the
+        // scores are zero: a stub that recommended a course would be read as advice.
+        suggestedModules: stubSuggestedModules(request),
         summary: STUB_MARKER,
       });
   }
@@ -135,7 +167,7 @@ export const createStubProvider = (shape: StubShape = 'product_qa'): LlmProvider
   return {
     generate: (request: LlmGenerateRequest): Promise<LlmResult> => {
       callCount += 1;
-      const text = stubBody(shape);
+      const text = stubBody(shape, request);
       return Promise.resolve({
         text,
         usage: {

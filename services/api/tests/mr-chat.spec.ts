@@ -108,9 +108,9 @@ const setThreshold = async (
   note: string,
 ): Promise<void> => {
   await db.query(
-    `insert into public.app_thresholds (key, value, scope, note, effective_from)
-     values ($1, $2::jsonb, 'global', $3, now())`,
-    [key, value, note],
+    `insert into public.app_thresholds (key, value, scope, organisation_id, note, effective_from)
+     values ($1, $2::jsonb, 'organisation', $4, $3, now())`,
+    [key, value, note, world.organisationId],
   );
 };
 
@@ -184,18 +184,10 @@ afterAll(async () => {
   try {
     if (!live || runId === '') return;
     await withClient(async (db) => {
-      await setThreshold(
-        db,
-        'ai_feature_enabled:mr_chat',
-        'false',
-        `W1-I revert (${runId}). The flag returns to its shipped state: OFF.`,
-      );
-      await setThreshold(
-        db,
-        'ai_daily_requests_per_user',
-        'null',
-        `W1-I revert (${runId}). Restores the UNSET state: an unlimited allowance is never the default.`,
-      );
+      // W1-N D2: no revert rows. `setThreshold` writes ORGANISATION rows for this run's own fixture
+      // company, so they reach nothing outside it and there is nothing to put back. The old global
+      // reverts outranked the migrated daily limit on every database this suite ran against.
+      //
       // `ai_requests` rows are NOT deleted, and the omission is deliberate.
       //
       // The first version of this teardown copied `ai-gateway.spec.ts`'s

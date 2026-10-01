@@ -218,7 +218,8 @@ describe.skipIf(!reachable)('D2 — a restrictive tenant boundary cannot be wide
       // (`20260924000400`), AI-B2's seven LMS tables (`20260924000500`), AI-C1's three knowledge
       // tables (`20260924000600`) and AI-D0's two (`20260924000700`). `app_thresholds` is
       // absent on purpose: it is BE-W106, awaiting the operator (C13). W1-M D1 adds
-      // `ai_allowance_warnings` (`20261001000200`).
+      // `ai_allowance_warnings` (`20261001000200`); W1-N B adds `write_rejections`
+      // (`20261001000300`) -- found missing by this test on the first full run, as intended.
       expect(rows.rows.map((r) => r.relname)).toEqual([
         'adverse_event_reports',
         'ai_allowance_warnings',
@@ -262,6 +263,7 @@ describe.skipIf(!reachable)('D2 — a restrictive tenant boundary cannot be wide
         'visit_audio_quarantine_clearances',
         'visits',
         'voice_notes',
+        'write_rejections',
       ]);
     });
   });

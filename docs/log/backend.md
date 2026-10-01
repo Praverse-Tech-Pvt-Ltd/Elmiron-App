@@ -1973,3 +1973,152 @@ Job **"migrations · Gate 0 RLS suite · rollbacks": pass** — its own log read
 (76); Tests 1039 passed | 4 skipped (1043)**, *"browser suite: 7 passed, 0 skipped, 0 failed"*, and
 *"All rollbacks applied in reverse order; public schema is empty."* Same numbers as local. **This
 sub-section is a docs-only commit on top**; its own CI result is reported in the session summary.
+
+### W1-N — what they are waiting on · 1 October 2026 · Model: Claude Opus 5
+
+**The operator's four asks written, `BE-W129` closed for every path the app uses, live tracking
+designed and deliberately not built, the stub made able to suggest a module, the settings leak fixed
+at its source, and one honest page about 4 October.**
+
+**Checkout guard.** `worktree-ai-platform-phase-a` at `cdbd3fc`, clean; `origin/main` (`f2487e8`) an
+ancestor, merge a no-op; PR #2 `MERGEABLE`/`CLEAN`. `review-handoff/` did not exist.
+
+**The operator's direction arrived as the reviewer's SUMMARY.** Recorded as `BE-C41`–`BE-C61`, one per
+code (A-1 … D-1), with that caveat in the record. **One place the summary and the operator's own rule
+differed was resolved for the operator:** the brief said fold four things into one list and "everything
+else out"; the operator's rule is "items that need credentials, legal text or master data", which also
+covers Firebase (Q-3) and the tracking notice (Q-12). Both are in.
+
+#### A — the consolidated list: `docs/operator-inputs.md`, Q-1 to Q-14
+
+* **Q-1 AWS** — the IAM policy itself: invoke only the two India inference profiles; the two models only
+  in `ap-south-1`/`ap-south-2`; an explicit **Deny** on every Bedrock call outside India. Five
+  placeholders to copy from the console, and the three things I could not verify named for them to check.
+* **Q-2 Google Maps** — two APIs, two keys, each restricted by application and API; the one setting per
+  app that holds the key (`GOOGLE_MAPS_ANDROID_API_KEY` in `app.config.ts`, `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`
+  in the console) — **a design, not yet built**, and an Android map key needs a rebuild to change.
+* **Q-5 the territory template** — `docs/operator/territory-template.xlsx`, **generated from the CSVs a
+  test reads** and **opened in Microsoft Excel to confirm** (3 sheets, 11/4/3 rows). The importer did
+  not exist as a spreadsheet reader, so "what the importer rejects" would have been fiction:
+  `services/api/scripts/check-territory-sheet.mjs` now refuses eleven named problems by row number
+  and writes the JSON `seed:reference` already takes. **Found:** `territories.code` is UNIQUE across
+  ALL companies, not per company. **Its example rows are refused by name**, so they cannot be loaded.
+* **A4 — the sixteen lost subjects CANNOT be listed.** A sweep of the repository, its history since
+  27 September and the session records found no ~31-item question list; the W1-M brief contained exactly
+  what W1-M recorded. **The loss is upstream of the repository.** The document says so, refuses to send
+  a guessed list, and **asks the reviewer to forward the operator's original message verbatim.** The
+  operator's second message re-answers at least fourteen subjects that were not in the fifteen.
+* **My W1-M error, corrected by append:** I wrote "I-12" for the item that was I-11.
+
+#### B — `BE-W129`: the question, then the build
+
+**B1, the question:** *"for my company, between two dates, how many writes were rejected, of which
+kind, through which path?"* — `count_write_rejections(p_from, p_to)`, admin only.
+
+**B2.** A trigger refuses by raising, which rolls back any row written beside it; `BE-W102`'s escape
+needs a function returning a body, and a BEFORE trigger returning nothing skips the write while
+reporting success. **So the CALLER that catches writes the log**: `sync_push` already runs each item in
+a subtransaction, so one `perform` in its handler logs every rejection on the path **all** app writes
+take (measured: nothing in `apps/field` calls the direct RPCs). **B4:** the reason is the **SQLSTATE**,
+the project's existing refusal vocabulary; prose sits beside it.
+
+**B3, both paths:** sync — every rejection; direct — `complete_upload`, renamed rather than retyped and
+wrapped, answering over HTTP with PostgREST's own envelope. **`capture_consent`, `record_check_in`,
+`record_check_out` (row-returning) and direct `visits` writes cannot refuse AND commit a row** —
+registered as **`BE-W130`** with both ways out costed (withdraw direct grants: 19 test files; or
+`dblink`: a dependency ask). **No app traffic uses them.**
+
+**B5, the proof** (`services/api/tests/write-rejections.spec.ts`, 7 tests):
+* sync: 45007 and 45008 counted by code; the accepted capture produces nothing;
+* **the baseline was measured against the OLD schema first** — direct 45010 → HTTP **400** with code
+  45010 — and the new path returns exactly that, now with a row;
+* positive controls on both paths; another company's admin, the MR and the manager cannot ask.
+
+**The mutant that mattered:** removing `sync_push`'s one-line guard made an **80-hour-stale recording
+come back `accepted` inside an HTTP 400 batch** — the wrapper returned its envelope instead of raising,
+and `apply_sync_item` took it as success. **Exactly one test killed.** That failure is what the guard
+prevents; it would have been silent in production.
+
+#### C — live tracking, designed: `docs/ai-platform/LIVE-TRACKING-DESIGN.md`
+
+Each of the four conditions with what enforces it: **the device decides when to collect, the server
+decides what to keep** — an ingest RPC refusing out-of-hours points and points with no current consent,
+every refusal a `write_rejections` row.
+
+**C2, the options:** **A** `expo-location` (already a dependency, `~57.0.14`) + `expo-task-manager`
+— free; **B** `react-native-background-geolocation` — a paid Android licence, price not verified;
+**C** our own service — engineering time. **Recommended: A, foreground-only, started by the MR.**
+
+**Found by sweeping the tests, and it changes the recommendation:**
+`apps/field/src/onboarding/no-background-location.test.ts` forbids background location, citing
+`FE-W3-SPEC` (31 Aug): **Google Play's background-location declaration does not list employee
+monitoring as an acceptable use.** So background location may not pass review *at all* for this purpose,
+the foreground-service route becomes the design rather than an optimisation, and building it means the
+frontend track reversing its own guard. **To verify against current policy before a line is written.**
+
+**C3:** seven things only a real handset can show, headed by manufacturer battery managers killing the
+service. **C4:** `docs/operator/live-tracking-notice-DRAFT.md`, DRAFT, inserted nowhere, with **four
+blanks that are decisions** — chief among them **who may see an MR's position**, which is the
+`BE-C13` question in a new place. **C5: nothing built.**
+
+**My mistake, caught by checking:** I first wrote that the shift window is "already sent in sync". It
+is not — the app calls `my_shift_window()` directly and reads only the timezone. Corrected.
+
+#### D — the two items left open
+
+**D1.** The stub reads a `[STUB:suggest-offered]` / `[STUB:suggest-unoffered]` directive from the
+objective and suggests the first OFFERED module or a known-unoffered id, **its reason being the stub
+marker**. Both cases driven over HTTP; a mutant disabling the flow's refusal killed **exactly the
+refused-case test**, and showed the database's 23514 as the backstop. **What else the stub cannot
+produce — `BE-W132`:** product_qa's other branches are covered by scripted cases; `mr_chat`,
+`lms_tutor`, `ai_coach` have **no timeout test**; **`takeDoctorTurn` has no unit test at all.**
+
+**D2 — `BE-W131`, fixed at the source.** Four suites committed GLOBAL settings and reverted them with
+more global rows; **`ai-gateway` never reverted the daily limit, leaving `'50'`.** Each helper now
+writes ORGANISATION rows for its own per-run fixture company. Proved two ways: after all four suites ran,
+the catalogue held **2 global `ai_*` rows (the migration's) and 27 organisation rows**, and a new test
+asserts the global default **resolves** to 100/80. **Mutant** (one helper back to global): exactly that
+test failed, resolving `200`.
+
+**And D2 had a consequence I did not predict.** The full run then failed at `verify:rollbacks`: W1-L's
+`organisation_thresholds` rollback **refuses if any company has its own settings** — and the suites now
+leave 27. **That guard had never fired before.** It was right. `verify-rollbacks.mjs` now **proves the
+guard refuses (23001)**, then runs the deliberate procedure the file's own header prints, then applies
+it. **Mutant** (guard disabled): the run fails naming the missing guard — after I corrected my first
+version, which surfaced a misleading check-constraint error instead.
+
+#### E — `docs/4-OCTOBER.md`
+
+| Feature | 4 Oct |
+| --- | --- |
+| Real AI answers | **NOT, unless Q-1 arrives by 2 Oct** — about a day after AWS access |
+| AI screens in the MR app | **NOT** — no file in `apps/` calls the gateway (measured) |
+| The six remaining screens | **CANNOT ASSESS** — no document names them |
+| AI-limit warning in the UI | **PARTLY** — backend built; flow plumbing (`BE-W128`) + screen not |
+| Maps / live tracking / notifications / voice | **NOT** — each waits on credentials, a dependency ask, and (tracking) a handset and a Play-policy check |
+| Coaching on nine items | **PARTLY** — built end to end; real scoring needs Q-1 |
+| Approvals | **BUILT, unusable until the second admin** |
+| Territory import | **BUILDABLE** — needs the data |
+| Product master / Q&A refusal, working hours, rejection counting | **BUILT** |
+| Doctor import | **PARTLY** — import built; admin entry screen not verified |
+| Production deploy | **PARTLY** — order ready; paid plan and external monitor are not engineering's |
+
+#### Counts
+
+`node scripts/ci-local.mjs --with-db`, **exit 0, all 26 steps**, on a volume dropped first
+(`supabase stop --no-backup`) so the database was built from **91** migrations. **`@fieldforce/api`:
+Test Files 78 passed (78); Tests 1060 passed | 4 skipped (1064)** — W1-M's 1039 + 21 new; the 4 skips
+unchanged. **core: 175 passed | 4 skipped.** field: **Test Suites 33 passed, Tests 226 passed**; field
+vitest 648; ui **24 suites / 273**; console 76; browser **7 passed, 0 skipped**. Rollbacks: *"guard
+held … with 27 organisation setting(s) present"*, then *"public schema is empty"*.
+
+**It took five full runs.** Run 1: two reds — `write_rejections` missing from the hard-coded tenant
+list (my omission; the same list W1-M had to update) and `recorded-at-bounds` reading the codes from the
+wrapper rather than the renamed body. Run 2: Supabase failed to start on a cold volume (the container
+came up healthy 35 s later; environmental). Run 3: the rollback guard above. Run 4: prettier on
+`verify-rollbacks.mjs`. Run 5: green.
+
+#### Where I stopped
+
+**All five parts done.** Not built, deliberately: live tracking (C5 — an OPERATOR INSTRUCTION in the
+brief), `BE-W130`, `BE-W132`, `BE-W128`. **CI on the pushed SHA follows in the next sub-section.**
