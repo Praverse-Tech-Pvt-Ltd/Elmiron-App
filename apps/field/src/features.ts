@@ -32,3 +32,16 @@ export const coachingEnabled: boolean = process.env.EXPO_PUBLIC_COACHING_ENABLED
  * meaning.
  */
 export const assistantSampleEnabled: boolean = process.env.EXPO_PUBLIC_ASSISTANT_SAMPLE === 'true';
+
+/**
+ * FE-D17 — AI Doctor practice, on SAMPLE data.
+ *
+ * **Off by default, and off for the demo.** On, Me gains "AI Doctor practice" and `/practice`
+ * opens: pick a scenario, practise with the AI doctor, get feedback. Every reply and score comes
+ * from the sample in `src/practice/sample.ts`, nothing leaves the phone, and every screen says
+ * "sample data". Off, the row does not exist and every practice route goes to Today.
+ *
+ * It becomes real practice when FE-CR-11 lands the practice contract on `main`. That change
+ * replaces `src/practice/transport.ts`, not this flag's meaning.
+ */
+export const practiceSampleEnabled: boolean = process.env.EXPO_PUBLIC_PRACTICE_SAMPLE === 'true';

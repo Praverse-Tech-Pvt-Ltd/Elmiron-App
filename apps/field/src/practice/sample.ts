@@ -87,9 +87,10 @@ export const createSamplePracticeBackend = (): PracticeBackend => {
   const sessions = new Map<string, StoredSession>();
   const analyses = new Map<string, PracticeAnalysis>();
   let counter = 0;
-  const nextId = (suffix: string): string => {
+  /** A UUID-shaped id, as the real backend's are: `kind` is a hex tag, `a0` session, `b0` analysis. */
+  const nextId = (kind: 'a0' | 'b0'): string => {
     counter += 1;
-    return `88888888-8888-4888-8888-${String(counter).padStart(8, '0')}${suffix}`;
+    return `88888888-8888-4888-8888-${kind}${String(counter).padStart(10, '0')}`;
   };
   // The sample's own clock: a fixed instant per step, so nothing on screen depends on the phone.
   const SAMPLE_AT = '2026-10-01T05:30:00.000Z';
@@ -118,7 +119,7 @@ export const createSamplePracticeBackend = (): PracticeBackend => {
         return Promise.reject(new Error('sample: unknown scenario'));
       }
       const start: StartSessionResponse = {
-        sessionId: nextId('ss'),
+        sessionId: nextId('a0'),
         personaId: persona.id,
         personaDisplayName: persona.displayName,
         personaStance: persona.stance,
@@ -211,7 +212,7 @@ export const createSamplePracticeBackend = (): PracticeBackend => {
       }
       const firstRep = stored.turns.find((turn) => turn.role === 'rep')?.turnIndex ?? 1;
       const analysis: PracticeAnalysis = {
-        id: nextId('an'),
+        id: nextId('b0'),
         sessionId: body.sessionId,
         overallScore: 58,
         dimensionScores: {
