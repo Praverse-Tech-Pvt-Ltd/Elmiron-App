@@ -1,5 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen, fireEvent } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
+import { tokens } from '@fieldforce/ui-tokens';
 import { SettingsScreen } from './SettingsScreen';
 import type { SettingsScreenProps } from './SettingsScreen';
 
@@ -76,5 +78,20 @@ describe('what the screen does not claim', () => {
     // place for a plausible guess.
     await render(<SettingsScreen groups={groups()} />);
     expect(screen.queryByText(/MB/u)).toBeNull();
+  });
+});
+
+/**
+ * **FE-D12 V5.** FE-D7 4 moved every screen title to `Title` (Today, Today's route, Your report,
+ * Day end) and missed this one. On the Me tab, where Sign out lives, "Settings" was drawn at the
+ * section-heading size, a step below every other screen title the demo shows.
+ */
+describe('the screen title (FE-D12 V5)', () => {
+  it('is drawn at the day-screen title size, like every other screen title', async () => {
+    await render(<SettingsScreen groups={groups()} />);
+    const title = StyleSheet.flatten(screen.getByText('Settings').props['style']) as {
+      fontSize?: number;
+    };
+    expect(title.fontSize).toBe(tokens.typography.title.size);
   });
 });

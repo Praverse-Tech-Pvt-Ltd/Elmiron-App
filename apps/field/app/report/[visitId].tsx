@@ -41,7 +41,9 @@ export default function CallReport(): ReactNode {
   const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
 
   const send = (): void => {
-    if (sending) return;
+    // FE-D12 item 3. A report that was sent, or saved to send by itself, is not sent again. The
+    // screen no longer offers the button; this is the same rule where the write starts.
+    if (sending || sentNote !== null) return;
     setSending(true);
     setFailure(null);
 

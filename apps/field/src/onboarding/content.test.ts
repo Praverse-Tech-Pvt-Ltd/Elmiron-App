@@ -8,6 +8,7 @@ import {
   NAMES_ARE_DERIVED,
   NOTIFICATION_TYPES,
   capSentence,
+  notificationTypes,
 } from './notifications';
 
 const FAMILIES: readonly OemFamily[] = ['xiaomi', 'oppo', 'vivo', 'realme', 'unknown'];
@@ -94,5 +95,48 @@ describe('A3 names exactly four types and caps them', () => {
   it('states the cap as a number rather than a reassurance', () => {
     expect(capSentence()).toContain(String(DAILY_CAP));
     expect(capSentence()).not.toMatch(/stay updated|from time to time|occasionally/iu);
+  });
+});
+
+/**
+ * **FE-D12 item 2.** A3 promised "Coaching notes" while Coaching is hidden, and "when a recording
+ * you made is confirmed, or when consent was withdrawn" while consultation recording is off. A
+ * permission screen that names a message the app cannot send is asking consent for something
+ * that does not exist. Each of those two lines now follows its feature's flag, so it returns by
+ * itself when the feature is switched on, and the cap counts only what is shown.
+ */
+describe('A3 promises only what this build can send (FE-D12 item 2)', () => {
+  const ids = (flags: { coachingEnabled: boolean; recordingEnabled: boolean }) =>
+    notificationTypes(flags).map((type) => type.id);
+
+  it('with Coaching hidden and recording off, as in this build: neither line', () => {
+    expect(ids({ coachingEnabled: false, recordingEnabled: false })).toEqual([
+      'day-plan',
+      'sync-outcome',
+    ]);
+  });
+
+  it('with both switched on: all four, in the design order', () => {
+    expect(ids({ coachingEnabled: true, recordingEnabled: true })).toEqual([
+      'day-plan',
+      'sync-outcome',
+      'consent-outcome',
+      'coaching',
+    ]);
+  });
+
+  it('each line follows its own flag', () => {
+    expect(ids({ coachingEnabled: true, recordingEnabled: false })).toContain('coaching');
+    expect(ids({ coachingEnabled: true, recordingEnabled: false })).not.toContain(
+      'consent-outcome',
+    );
+    expect(ids({ coachingEnabled: false, recordingEnabled: true })).toContain('consent-outcome');
+    expect(ids({ coachingEnabled: false, recordingEnabled: true })).not.toContain('coaching');
+  });
+
+  it('caps and counts what is shown, not the design’s four', () => {
+    const shown = notificationTypes({ coachingEnabled: false, recordingEnabled: false });
+    expect(capSentence(shown.length)).toBe('At most 2 a day, and nothing outside these two.');
+    expect(capSentence(4)).toBe('At most 4 a day, and nothing outside these four.');
   });
 });

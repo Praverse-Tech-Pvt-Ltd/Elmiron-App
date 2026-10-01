@@ -82,7 +82,44 @@ describe('Screen safe-area inset', () => {
     );
 
     const padding = paddingAroundText('scrolling content');
-    expect(padding['paddingTop']).toBe(tokens.space.md + METRICS.insets.top);
+    // FE-D12 V1: the top inset is no longer inside the scrolling content (next test). What the
+    // content container carries at the top is the token margin alone.
+    expect(padding['paddingTop']).toBe(tokens.space.md);
     expect(padding['paddingBottom']).toBe(tokens.space.md + METRICS.insets.bottom);
+    expect(padding['paddingLeft']).toBe(tokens.space.md + METRICS.insets.left);
+    expect(padding['paddingRight']).toBe(tokens.space.md + METRICS.insets.right);
+  });
+
+  /**
+   * **FE-D12 V1.** With the whole top inset inside the ScrollView's content, it scrolled away
+   * with the content, and on the Pixel 10 the clock drew over "May we record this" once the
+   * doctor scrolled the consent screen. The status bar's height belongs to a wrapper that does
+   * not scroll, so content is clipped below the status bar instead of passing under it. The
+   * first paint is unchanged: the content still starts at `inset + md`.
+   */
+  it('keeps the status-bar inset outside the scrolling content', async () => {
+    await renderInSafeArea(
+      <Screen scrollable>
+        <BodyText>scrolling content</BodyText>
+      </Screen>,
+    );
+
+    let scroll = screen.getByText('scrolling content').parent;
+    while (scroll !== null && scroll.props['contentContainerStyle'] === undefined) {
+      scroll = scroll.parent;
+    }
+    if (scroll === null) throw new Error('no ScrollView above the content');
+
+    let wrapper = scroll.parent;
+    let wrapperTop: unknown = undefined;
+    while (wrapper !== null && wrapperTop === undefined) {
+      const style = Object.assign(
+        {},
+        ...([] as unknown[]).concat(wrapper.props['style'] as unknown[]).filter(Boolean),
+      ) as Record<string, unknown>;
+      wrapperTop = style['paddingTop'];
+      wrapper = wrapper.parent;
+    }
+    expect(wrapperTop).toBe(METRICS.insets.top);
   });
 });

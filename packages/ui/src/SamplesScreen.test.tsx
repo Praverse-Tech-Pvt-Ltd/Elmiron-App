@@ -129,3 +129,48 @@ describe('the outcome is told as a completion, not as a fault', () => {
     expect(screen.queryByText('Record what I left')).toBeNull();
   });
 });
+
+/** Every text on screen, in reading order. */
+const textsInOrder = (): string[] => {
+  const out: string[] = [];
+  const walk = (node: unknown): void => {
+    if (typeof node === 'string') {
+      out.push(node);
+      return;
+    }
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    if (node !== null && typeof node === 'object' && 'children' in node) {
+      walk(node.children);
+    }
+  };
+  walk(screen.toJSON());
+  return out;
+};
+
+/**
+ * **FE-D12 item 4.** The rep presses "Record what I left" at the foot of a long form. The
+ * "Recorded" confirmation was drawn at the TOP, off-screen by then, so all they saw was the form
+ * clearing. It belongs where they are looking: right beside the button they pressed.
+ */
+describe('the confirmation (FE-D12 item 4)', () => {
+  it('sits right beside "Record what I left", after the form and the cap note', async () => {
+    await render(
+      <SamplesScreen {...props} lines={[line()]} saved="1 recorded against this visit." />,
+    );
+    const texts = textsInOrder();
+    const recorded = texts.indexOf('Recorded');
+    const button = texts.indexOf('Record what I left');
+    const capNote = texts.indexOf(props.capNote);
+
+    expect(recorded).toBeGreaterThan(capNote);
+    expect(texts.slice(recorded, button)).toEqual(['Recorded', '1 recorded against this visit.']);
+  });
+
+  it('still says nothing when nothing has been recorded', async () => {
+    await render(<SamplesScreen {...props} lines={[line()]} />);
+    expect(screen.queryByText('Recorded')).toBeNull();
+  });
+});

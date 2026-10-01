@@ -68,3 +68,17 @@ describe('the continue action', () => {
     expect(screen.queryByText('Start my first day')).toBeNull();
   });
 });
+
+/**
+ * **FE-D12 item 1.** Under the title, the screen promised "It never changes without telling you."
+ * Nothing in the app keeps that promise -- FE-D12 found this very screen stale for weeks after
+ * check-ins, voice notes and reports landed, with nobody told. A9 states facts it can cite, so the
+ * promise goes and the fact stays: it can be opened from home.
+ */
+describe('the subtitle (FE-D12 item 1)', () => {
+  it('says only what is true: it can be opened any time from home', async () => {
+    await render(<TransparencyScreen entries={entries} neverRecorded={NEVER} />);
+    expect(screen.getByText('Open this any time from home.')).toBeTruthy();
+    expect(screen.queryByText(/never changes without telling you/i)).toBeNull();
+  });
+});

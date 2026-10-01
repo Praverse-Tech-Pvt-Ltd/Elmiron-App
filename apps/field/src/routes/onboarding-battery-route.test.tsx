@@ -146,14 +146,16 @@ describe('A5-A8 — the shortcut, when the device does resolve one', () => {
 });
 
 describe('A5-A8 — the video that does not exist', () => {
-  it('renders the control disabled with an honest label, never a working-looking one', async () => {
+  it('shows no video control at all, never a working-looking one', async () => {
     mockDetect.mockReturnValue('xiaomi');
     mockLauncher.current = unresolvable;
     await render(<BatterySetup />);
 
     // No asset exists and there is no third-party link. A dead button that looks live
-    // is the thing being avoided; the label says why it is off.
-    expect(screen.getByText('20-second video — not recorded yet')).toBeTruthy();
+    // is the thing being avoided. FE-D12 item 5: so was a primary-sized disabled button
+    // apologising for the asset ("20-second video — not recorded yet"); the control is
+    // hidden until a video exists (`videoAvailable`).
+    expect(screen.queryByText('20-second video — not recorded yet')).toBeNull();
     expect(screen.queryByText('Show me a 20-second video')).toBeNull();
   });
 });

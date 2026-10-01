@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Heading, Label } from './Text';
+import { BodyText, Label, Title } from './Text';
 import { Card } from './Card';
 import { StatusGlyph } from './StatusGlyph';
 
@@ -44,7 +44,8 @@ const NOT_YET = 'Not yet — this setting does not control anything in this buil
 
 export const SettingsScreen = ({ groups }: SettingsScreenProps): ReactNode => (
   <>
-    <Heading>Settings</Heading>
+    {/* FE-D12 V5. A screen title, like Today's; FE-D7 4 moved the others and missed this one. */}
+    <Title>Settings</Title>
 
     {groups.map((group) => (
       <View key={group.heading} style={styles.group}>
