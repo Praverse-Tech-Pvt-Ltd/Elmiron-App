@@ -21136,3 +21136,53 @@ $ git diff --name-only origin/main...HEAD | grep -E '^(services|packages/core|sc
 - **S7:** the finished visit shows no check-out time.
 - **The helper's Ctrl+C message** was not exercised.
 - Carried from FE-D8: extend the release config guard; make the CMake pin permanent.
+
+### FE-D13 — facts from the code, for the team
+
+**1 October 2026, branch `fe-d13-facts`**, off `main` at `593e5f0`. This is a docs-only session.
+The full answers, each with its citation, are in **`docs/frontend-facts-2026-10-01.md`**.
+
+#### PR #11
+
+- PR #11's CI was green at its head, `2195874` (run 36539639208, both jobs).
+- The session's own `gh pr merge 11 --merge` was **refused by the harness permission check** and
+  was not retried. The operator merged it (`593e5f0`, 2026-10-01T09:52:09Z).
+- After that, `fe-d13-facts` was fast-forwarded to `origin/main`. Nothing was reset or deleted.
+
+#### Findings
+
+| # | Question | Answer |
+| --- | --- | --- |
+| 1 | Repo, access, where the backend lives | `Praverse-Tech-Pvt-Ltd/Elmiron-App`, default branch `main`. Rabbitshah has **admin**. Backend and frontend are in this one repo. 75 migrations on `main`; Maanav's newest work is on `worktree-ai-platform-phase-a` (91 migrations, commits on 1 October). There are no other remotes and no references to another repo. The org's `Elmiron` and `Elmiron-LMS-Demo` repos are separate projects |
+| 2 | Screens on test data | Mock: **Day end and Mileage** (reachable). Coaching, Analysis and Reply also read the mock but are hidden by `EXPO_PUBLIC_COACHING_ENABLED`. No fixtures are compiled into the app |
+| 3 | Shared contract | `workspace:*` linked to `packages/core`. No duplicated Zod schemas. Three local type unions duplicate core enums, and the RPC names are literals instead of core's endpoint map |
+| 4 | CI | Every PR and every push to `main`. Last green run on `main`: 36530813334, 2,158 tests. Not covered: jest under Android (iOS preset only), any device or emulator test, any Android build |
+| 5 | Clock rules | Enforced by lint in CI for `apps/field` only. `packages/ui`, `packages/core` and `apps/console` are held by convention. No test checks that the rules still fire |
+| 6 | Voice-note deletion in production | **Not established.** The job, its secrets and the code are in place: it deletes the audio and keeps the row as a tombstone. It has never destroyed anything in production, and the app cannot store a voice note there today. No copy was changed |
+| 7 | Prefixes | CR-1 to CR-4 → FE-CR-1 to FE-CR-4, each keeping "(was CR-n)". **FE-CR-5** added as a question |
+
+#### Corrections to earlier records
+
+- **"Three unset GitHub secrets" (`handoff-frontend.md:9,258`) is stale.** `gh api …/actions/secrets`
+  lists `SUPABASE_DB_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_URL`.
+- **The coaching copy "transcript kept" (`apps/field/src/coaching/content.ts:32`) contradicts the
+  server.** `confirm_audio_destroyed` deletes the transcripts. That screen is hidden; the copy is
+  recorded in FE-CR-5 and was not changed.
+
+#### Boundary
+
+- Files changed: `docs/frontend-facts-2026-10-01.md` (new), `docs/contract-requests.md` (four
+  headings relabelled, a dated note, FE-CR-5 appended) and this section.
+- No app code. Nothing under `services`, `packages/core`, migrations or the seed script. No
+  dependency was added and nothing was installed. No device work. Nothing was deleted.
+- `docs/contract-requests.md` describes itself as append-only. Its four heading lines were edited
+  on the operator's instruction; the bodies are unchanged.
+- **One side effect to report.** A read-only subagent ran `pnpm exec eslint` once in `apps/field`.
+  pnpm printed a dependency-resolution line ("added 0"). `git status` afterwards showed no changed
+  tracked file.
+
+#### Open
+
+- Answers to FE-CR-1 to FE-CR-5.
+- Whether to extend the clock lint to `packages/ui`, `packages/core` and `apps/console`.
+- The CI run on `593e5f0` (36845650674) was still in its database job when this was written.
