@@ -228,3 +228,90 @@ the real gateway. Each item below is cited on that branch:
    doctor, patient, visit or prescribing data, and no earlier turns. Is a single-turn chat acceptable,
    or should earlier rep-typed turns be sent?
 3. **The allowance and reset time** belong on the result (FE-CR-6).
+
+---
+
+### FE-CR-8 — What writes an analysis and its findings, and when?
+
+| | |
+| --- | --- |
+| Date | 2026-10-01 |
+| Requester | Frontend (FE-D16, the Coaching readiness audit) |
+| Owner asked | Backend |
+| Needed | An answer: which function or job will insert `public.analyses` rows and their findings, and is it planned for `main`? |
+| Status | **Open**. A question |
+
+**Why.** FE-D16 wired Coaching and Analysis to `list_analyses` and `read_analysis`. On `main`
+today, both screens can only ever be empty or show an analysis with no findings:
+
+- **Nothing on `main` writes `public.analyses`.** Only test fixtures insert rows
+  (`services/api/tests/fixtures.ts:514-517`, `consent-audio.spec.ts:673`). `seed-day.mjs` creates
+  none, and `seed-one-mr.mjs:19-25` says so on purpose.
+- **Findings are hard-coded empty.** `analysis_contract_row` emits `'findings', '[]'::jsonb`
+  (`20260923000100_console_reads_contract_shape.sql:92`). Its header says the engine is due "week
+  10, contract I5" (`:13-16`).
+- **The AI branch does not write them either.** `ai_coach` on `worktree-ai-platform-phase-a` writes
+  `public.sim_coach_analyses` (`20261001000100_coach_nine_dimensions.sql:259`, and
+  `packages/core/src/field/gateway/sim-doctor.ts:199-234`), which holds practice sessions, not
+  analyses of real visits.
+
+**So the AWS key alone does not make Coaching work.** A model needs a path from a consented
+recording and a transcript to an `analyses` row with findings. Is that path designed, and on which
+branch?
+
+---
+
+### FE-CR-9 — Should opening an analysis stamp `mr_viewed_at`?
+
+| | |
+| --- | --- |
+| Date | 2026-10-01 |
+| Requester | Frontend (FE-D16) |
+| Owner asked | Backend |
+| Needed | A yes or no. If yes, `read_analysis` stamps `mr_viewed_at` when the caller is the analysis's own MR |
+| Status | **Open**. A question |
+
+**Why.**
+
+- **Only replying stamps it.** `respond_to_analysis` sets `mr_viewed_at = coalesce(mr_viewed_at,
+  now())` (`20260811000300_audit_log.sql:487`). No other migration writes the column.
+- **Reading does not.** `read_analysis` (`20260923000100…:31`) only reads.
+- **The core client assumed it does** (`packages/core/src/field/client.ts:466-473`), and so did
+  the frontend's own 3 September handoff (`handoff-frontend.md`, "`getAnalysis` … please
+  confirm").
+- **The design rests on it.** "Your manager can only see what you've already seen" (phase 4 D1)
+  is a promise about this column.
+
+Until this is answered, FE-D16 removed the screen's claims built on the column ("You read it
+first", "Your manager has not opened this yet"). Nothing on screen backs them.
+
+---
+
+### FE-CR-10 — Queue a reply offline, and the shape `respond_to_analysis` returns
+
+| | |
+| --- | --- |
+| Date | 2026-10-01 |
+| Requester | Frontend (FE-D16) |
+| Owner asked | Backend |
+| Needed | (1) Should a reply be queued offline? If yes, it needs a sync entity, an idempotency key and a `sync_push` path. (2) Should `respond_to_analysis` return the `Analysis` contract? |
+| Status | **Open**. Two questions |
+
+**Why.**
+
+1. **A reply cannot go through the queue today.** The sync entity list has no analysis response
+   (`packages/core/src/field/sync.ts:12-21`; the database enum at
+   `20260813000200_offline_sync.sql:48-57`). The latest `apply_sync_item` raises "not yet accepted
+   by sync" for anything else (`20260911000400_sync_row_identity_from_payload_id.sql:59, 235`). So
+   FE-D16 calls `respond_to_analysis` directly. With no signal the send fails, and the text stays on
+   the screen, as the reply route's existing design says (`apps/field/app/reply/[analysisId].tsx:23-27`).
+   A queued reply would also need an answer to that design's point: a half-written argument
+   should not land in a manager's queue the moment signal returns.
+2. **The return is a raw row.** `respond_to_analysis` returns `to_jsonb(v_row)`, snake_case, with
+   no `findings` and no `transcriptId` (`20260811000300_audit_log.sql:496`). That is not
+   `AnalysisSchema`, which core's REST `respondToAnalysis` parses (`client.ts:486-492`). FE-D16
+   does not read the return, and does not reshape it. Should it go through `analysis_contract_row`
+   like the reads?
+
+**Also noted:** the only test of an MR calling these four functions, `cr3-mr-reads.spec.ts`, is on
+`worktree-ai-platform-phase-a` only, not on `main`.
