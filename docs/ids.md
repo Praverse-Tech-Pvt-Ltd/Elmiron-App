@@ -320,3 +320,6 @@ bootstrap rows are not restated here; the first file that cites each is the poin
 | `BE-C65` | backend | the `model_refused` rollback refuses while a refusal is recorded; the request log is never rewritten (W1-T B) |
 | `BE-W138` | backend | `write_rejections` has no append-only trigger, unlike every other record-of-what-happened table (W1-T B4) |
 | `BE-W139` | backend | day-one consequence of `BE-W23`/`FE-W28`: nothing in production creates a beat plan or a visit, the cut list's "manual assignment for the pilot" has no tool or runbook step, and no operator input asks for it — a rep's Today is empty (W1-T C) |
+| `BE-C66` | backend | settings belong to each company (operator item 15); `BE-W106` closed by the schema, two gaps remain (W1-U3 C) |
+| `BE-W140` | backend | a company's default working hours can only be temporary: the 60-day expiry on `org_default_shift_window` checks the key, not the scope |
+| `BE-W141` | backend | `ucpmp_cap_decision_status` runs with no caller and reads only the GLOBAL cap: a company-level cap would not stop the 6 November build failure |

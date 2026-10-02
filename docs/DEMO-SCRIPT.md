@@ -69,3 +69,34 @@ people risks the rest of the demo on one network toggle.
 6. **The frontend's own demo APK and laptop** — not inspected; this script assumes the APK at P1 exists
    and was built from `fe-d17-practice` or later with Coaching and the assistant off.
 7. **Tomorrow's re-seed** — the data above is today's; P4 makes tomorrow's.
+
+---
+
+## The operator's items 5 and 6 (2 October) — measured against today (W1-U3 F)
+
+**Item 5 — whether to show AI.** The condition is *"IF the AWS integration is completed AND fully tested
+before the demo"* (`docs/operator/2026-10-02-operator-direction.md`). **It is not met:** AWS model access
+for both models is not granted on the account (`agreementAvailability: NOT_AVAILABLE`), so no adapter
+could be written or tested, and no instruction set can be approved without the second admin. **So item
+5's other branch applies: keep AI hidden and show only the tested core MR workflow.**
+
+**Item 6 — the fourteen checks: what the backend can confirm, and what only a screen can.** A server
+check does not cover a screen; both columns must be ticked by someone.
+
+| Item 6 check | The server can confirm | Only a screen can confirm |
+| --- | --- | --- |
+| Login | Sign-in succeeds for the seeded rep (rehearsed W1-T) | The sign-in screen and what follows it |
+| Dashboard | `sync_pull` and `my_shift_window` answer (rehearsed) | That Home shows them correctly |
+| Day plan | Today's plan and visits arrive in the pull (rehearsed: 3 visits, 1 plan) | That the plan screen lists them |
+| Doctor visit | The visit and its doctor are in the pull | Opening the visit |
+| Check-in | `accepted` through `sync_push` (rehearsed) | The stage moving on screen |
+| Consent | The notice is in the pull; the capture is `accepted` (rehearsed) | The notice shown and the answer recorded |
+| Sample entry | `accepted` (rehearsed) | The entry and the "no cap set" note |
+| Call report | `accepted` (rehearsed) | The form and the submitted state |
+| Day End | `daily_mileage` answers (rehearsed; distance 0 m — clinics at one point) | The summary screen |
+| Mileage | `daily_mileage` answers | The mileage screen |
+| Chatbot | **Cannot answer for real** — model access not granted | **Not in the demo build**; hidden |
+| LMS | The LMS backend exists | **No LMS screen exists in the app** — no route under `apps/field/app` on any branch. **This check cannot pass tomorrow** |
+| AI Doctor | **Cannot answer for real** | Sample data only; hidden |
+| AI Analysis | **Cannot answer for real** | Sample data only; hidden |
+| "No old/sample/vendor-specific Coaching content visible" | — | **Screen only**: the Coaching tab must be absent (tab bar shows Today, Doctors, Me) |

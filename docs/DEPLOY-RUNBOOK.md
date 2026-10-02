@@ -16,23 +16,39 @@ repository secret. Put it in your shell, never in a file or a chat:
 read -rs PROD_DB_URL && export PROD_DB_URL     # paste, press Enter; nothing is echoed
 ```
 
-## The order — and the one place it differs from the recorded order
+## The order — the operator's, as fixed (item 8, 2 October): do not change it
 
-The operator recorded **pre-flight → working-hour config → pending changes → reference data → smoke
-test** (`BE-C58`). **The rehearsal says working hours cannot be fully set second:**
+**Pre-flight → working hours → database migrations → reference data → smoke test.** The operator's
+words: *"Use the fixed deployment sequence … Do not change the order."*
+(`docs/operator/2026-10-02-operator-direction.md`, item 8.)
 
-* At production's current state there are **0 territories** and **no per-company settings table** —
-  the second arrives with a pending migration (`20260930000300`), the first with reference data.
-* Only the **global fallback** can be set before the push. It survived the push in the rehearsal, so
-  setting it early does no harm — but it is a fallback that **must expire within 60 days** by design
-  (`20260816000200`), not the territory hours `BE-C50` asks for.
+**It executes as written — measured W1-U3, against a copy rebuilt to production's 19 migrations:**
+before the migrations there are **0 companies, 0 territories and no per-company settings table**, so
+hours cannot attach to a company or a territory yet. **What CAN be set at step 2 is item 9's temporary
+value as the platform-wide fallback** — and that is exactly what item 9 says it is: *"a temporary
+configurable value … not the final business policy."* Refused without an expiry; refused at 61 days;
+**accepted at 59 days, resolved for every territory, and survived all the migrations** (94 applied).
+Per-territory hours — the final policy, not yet decided — are set after reference data, inside the
+operator's step 4, if and when they are decided.
 
-**So this runbook runs: pre-flight → pending changes → reference data → working hours → accounts → smoke
-test.** "Never reference data before schema" (`BE-C58`) is kept exactly.
+**Row ids are kept from the 2 October rehearsal** (they are cited in other documents); the sections are
+in the operator's order, and this maps them:
+
+| Operator's step | Runbook rows |
+| --- | --- |
+| 1. Pre-flight | 0.1–0.4 |
+| 2. Working hours | 3.2 — item 9's value as the expiring fallback |
+| 3. Database migrations | 1.1–1.4 |
+| 4. Reference data | 2.1–2.4, then accounts 4.1–4.3, then 3.1 (per-territory hours, when decided) |
+| 5. Smoke test | S1–S7 |
+
+> **History:** the 2 October version of this page reordered the steps on the rehearsal's evidence
+> (W1-S). Item 8 then fixed the order, and W1-U3 measured that the operator's order can run. The W1-S
+> reordering was mine and is withdrawn.
 
 ---
 
-## Step 0 — pre-flight (read-only; about 10 minutes)
+## Operator step 1 — pre-flight (read-only; about 10 minutes)
 
 | # | Command | Proves it worked | If it did not |
 | --- | --- | --- | --- |
@@ -55,7 +71,21 @@ select (select count(*) from public.organisations)                              
 | either is non-zero and `organisations = 1` | Both backfills attribute the rows to that one company, by themselves. Proceed |
 | either is non-zero and `organisations > 1` | `20260908000800` / `20260908001200` will **stop with 23502** and a message naming the rows. **Before 1.1**, set `organisation_id` on each of those rows by hand — choosing it is choosing whose data they read, so the operator decides which company each belongs to |
 
-## Step 1 — pending changes (the schema; seconds; then the function)
+## Operator step 2 — working hours: item 9's TEMPORARY value (minutes; before the migrations)
+
+**Item 9, verbatim:** *"For UAT/demo use: Monday-Saturday 09:00-18:00 Local territory time. This remains
+a temporary configurable value and is not the final business policy."*
+
+| # | Command (SQL editor) | Proves it worked | If it did not |
+| --- | --- | --- | --- |
+| 3.2 | `insert into public.app_thresholds (key, value, note) values ('org_default_shift_window', '{"shiftStart":"09:00","shiftEnd":"18:00","timezone":"Asia/Kolkata","activeWeekdays":[1,2,3,4,5,6],"expiresAt":"<ISO, at most 60 days ahead>"}', 'TEMPORARY (operator item 9, UAT/demo): Mon-Sat 09:00-18:00 local territory time. Configurable; NOT business policy. Set by <who>, <date>.');` | `select * from public.resolve_shift_window(null)` → `09:00 18:00 Asia/Kolkata {1,2,3,4,5,6} org_default` (measured W1-U3) | Without `expiresAt`: **refused** — *"must carry an expiresAt; it is a temporary measure by construction"*. More than 60 days ahead: **refused** — *"A fallback that can be configured for a year is not a fallback."* Both measured |
+
+**What this costs, said before it bites:** the value is **platform-wide**, not per company (item 15), and
+it **lapses on its expiry date** — after which **check-in refuses** for any territory without hours of its
+own. Renewing is one more row like 3.2; replacing it is 3.1 below. "Local territory time" is honoured as
+`Asia/Kolkata` here; a territory in another timezone needs its own 3.1 row.
+
+## Operator step 3 — database migrations (seconds; then the function)
 
 | # | Command | Proves it worked | If it did not |
 | --- | --- | --- | --- |
@@ -64,7 +94,7 @@ select (select count(*) from public.organisations)                              
 | 1.3 | `pnpm --filter @fieldforce/core build` then `pnpm exec supabase --workdir services/api functions deploy ai-gateway --project-ref <production ref>` | The CLI lists `ai-gateway` as deployed | **Not rehearsed** — see the limits. Read the CLI's error; the most likely is a stale `packages/core/dist` |
 | 1.4 | Pushing again: `…db push --db-url "$PROD_DB_URL" --yes` | *"Remote database is up to date"*, nothing applied (rehearsed: "up to date") | — this is the safe re-run check, not a step that changes anything |
 
-## Step 2 — reference data (minutes; safe to re-run)
+## Operator step 4 — reference data (minutes; safe to re-run)
 
 The operator fills `docs/operator/territory-template.xlsx` and exports its two sheets as CSV.
 
@@ -78,14 +108,7 @@ The operator fills `docs/operator/territory-template.xlsx` and exports its two s
 **The loader carries no consent notice and no doctors** (`consentTextVersions: []`). See "Before the
 first real MR day" below.
 
-## Step 3 — working hours (minutes)
-
-| # | Command (SQL editor) | Proves it worked | If it did not |
-| --- | --- | --- | --- |
-| 3.1 | Per territory, for every Area/Territory row: `insert into public.territory_shift_windows (territory_id, shift_start, shift_end) select id, '09:00', '18:00' from public.territories where code = '<CODE>';` | `select * from public.resolve_shift_window((select id from public.territories where code='<CODE>'))` → `source = territory` (rehearsed) | `23505` = that territory already has hours — **not a failure**, the row exists; change it with `update`. **09:00–18:00 is the TEST value** (`BE-C50`) — use the operator's approved hours (Q-8) |
-| 3.2 | Optional global fallback: `insert into public.app_thresholds (key, value, note) values ('org_default_shift_window', '{"shiftStart":"09:00","shiftEnd":"18:00","timezone":"Asia/Kolkata","activeWeekdays":[1,2,3,4,5,6],"expiresAt":"<ISO, at most 60 days ahead>"}', '<who, why>');` | `resolve_shift_window(null)` → `source = org_default` | Without `expiresAt` it is **refused** (rehearsed): *"must carry an expiresAt; it is a temporary measure by construction"* |
-
-## Step 4 — accounts, BY HAND (`BE-W137`)
+### Operator step 4, continued — accounts, BY HAND (`BE-W137`) — users are a master (item 11)
 
 **There is no tool that creates the MR sheet's accounts on production.** `seed:mr` refuses any
 non-local target by design and creates its own company and territory; `check-territory-sheet`'s note
@@ -121,7 +144,13 @@ a field role with no territory, a rep as their own manager. **It accepts five, s
 | --- | --- | --- |
 | 4.3 | **After the last account, read every profile back** (SQL editor, read-only) and compare it line by line with the checked MR sheet, with a second person reading the sheet aloud | `select u.email, p.full_name, p.role, t.code as territory, m.full_name as manager, u.email_confirmed_at is not null as confirmed from public.user_profiles p join auth.users u on u.id = p.id left join public.territories t on t.id = p.territory_id left join public.user_profiles m on m.id = p.reporting_manager_id order by p.role, t.code, u.email;` — **one row per person on the sheet, `role` `mr` for every rep, the sheet's territory, a manager for every rep, `confirmed` true** |
 
-## Step 5 — the smoke test (five minutes; commands with expected answers)
+### Operator step 4, continued — per-territory hours, ONLY when the final policy is decided
+
+| # | Command (SQL editor) | Proves it worked | If it did not |
+| --- | --- | --- | --- |
+| 3.1 | Per territory: `insert into public.territory_shift_windows (territory_id, shift_start, shift_end) select id, '<start>', '<end>' from public.territories where code = '<CODE>';` | `resolve_shift_window(<territory id>)` → `source = territory` (rehearsed) | `23505` = that territory already has hours — change it with `update`. **Not item 9's value**: these are the final hours, which the operator has not yet given |
+
+## Operator step 5 — the smoke test (five minutes; commands with expected answers)
 
 Set `API=https://<production ref>.supabase.co`, `ANON=<publishable key>`, and one MR's email and
 password from step 4. **Every expected answer below is what the rehearsal printed**, except S7, where
@@ -137,7 +166,7 @@ TOKEN=$(curl -s -X POST "$API/auth/v1/token?grant_type=password" -H "apikey: $AN
 | --- | --- | --- | --- |
 | S1 | Migration drift workflow (as 1.2) | *"No drift. 93 migration(s), all applied."* | Schema incomplete — step 1 |
 | S2 | `echo ${#TOKEN}` | A number in the hundreds (rehearsal: 907). **0 = sign-in failed** | Wrong password, or 4.1 not confirmed |
-| S3 | `curl -s -X POST "$API/rest/v1/rpc/my_shift_window" -H "apikey: $ANON" -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{}'` | `{"source": "territory", "window": {"shiftStart": "09:00:00", "shiftEnd": "18:00:00", …}}` | `source: org_default` = step 3.1 missed this territory; nothing = no hours at all, **check-in will refuse** |
+| S3 | `curl -s -X POST "$API/rest/v1/rpc/my_shift_window" -H "apikey: $ANON" -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{}'` | With item 9's value (row 3.2): `{"source": "org_default", "window": {"shiftStart": "09:00:00", "shiftEnd": "18:00:00", "activeWeekdays": [1, 2, 3, 4, 5, 6], …}}`. Once per-territory hours exist (row 3.1): `"source": "territory"` | Nothing = no hours at all — the fallback is missing or has **expired**, and **check-in will refuse**; back to row 3.2 |
 | S4 | `curl -s -X POST "$API/rest/v1/rpc/sync_pull" -H "apikey: $ANON" -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{}'` | JSON with keys `changes, hasMore, nextCursor, serverTime, completeness` | An error code here means the app cannot load the rep's day |
 | S5 | `curl -s -w ' http=%{http_code}' "$API/rest/v1/territories?select=id" -H "apikey: $ANON"` | `"code":"42501"` … `http=401` — **anonymous is refused** | **Anything returned is a data leak — stop and roll back the deploy's exposure** |
 | S6 | `curl -s -w ' http=%{http_code}' "$API/rest/v1/app_thresholds?select=key" -H "apikey: $ANON" -H "Authorization: Bearer $TOKEN"` | `"code":"42501"` … `http=403` — an MR cannot read settings directly | Same as S5 |

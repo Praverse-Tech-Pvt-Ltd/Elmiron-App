@@ -112,3 +112,27 @@ deserves its own decision.
   fixable without the key, and neither was done: loosening the parser would hide the model behaviour the
   first call exists to show — the adapter should force JSON instead — and a length cap needs a number
   only the product can choose. The other nine still need the key, the adapter, or the operator.
+
+## Update, 2 October (W1-U) — the key arrived; what the day actually taught
+
+**Every "verify" in D1 is now verified — from the service, not from documentation** (full record:
+`docs/operator-inputs.md`, Q-1, "Measured 2 October"):
+
+| Was "verify" | Measured |
+| --- | --- |
+| The India profile id | **Two profiles, one per model:** `in.anthropic.claude-sonnet-5` and `in.anthropic.claude-haiku-4-5-20251001-v1:0`. Not one profile carrying both |
+| Where it routes | **`ap-south-1` and `ap-south-2` only**, for both. The prefix to assert is `in.` — the account also sees `apac.*` and `global.*` profiles that route outside India, and the adapter must refuse them |
+| Model access enabled in the region | **No.** `agreementAvailability: NOT_AVAILABLE`, `authorizationStatus: NOT_AUTHORIZED`, with region and entitlement `AVAILABLE`. A separate approval by the AWS account owner |
+| Can `measure-provider-latency.mjs` call Bedrock | **No, as written** — it sends a bearer header; Bedrock needed SigV4. The W1-U checks were signed with the approved SDK's own signer |
+
+**Prediction #5 fired — before an adapter existed.** "Model access not enabled" was its first example.
+**What the prediction missed: the same condition arrived under TWO error names** — `AccessDeniedException`
+(403) on the first calls, `ValidationException: Operation not allowed` on the next. Logged by name
+(`BE-C64`), one cause would read as two codes, `provider_access_denied_exception` and
+`provider_validation_exception`. **For the day the adapter is written:** the model-availability report
+(`GetFoundationModelAvailability`) is the evidence of an access problem, not the error name.
+
+**Two names to reconcile before the adapter:** this checklist says `AI_MODEL_ID`; `operator-inputs.md`
+says `BEDROCK_SONNET_PROFILE_ARN` / `BEDROCK_HAIKU_PROFILE_ARN`. With region and profile ASSERTED, the
+two ids above can be constants the adapter checks, and the environment carries only the credential and
+the region.

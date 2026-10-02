@@ -574,3 +574,20 @@ disagreement could be checked, because the operator's text was not provided.**
 - **Swept for the same thing elsewhere (B4):** of 26 UPDATE/DELETE statements on the 31 history tables in
   migrations and rollbacks, every other one is a guarded lifecycle transition inside a function or fills a
   column added in the same migration. **This rollback was the only rewrite of a recorded fact.**
+
+## `BE-C66` — **settings belong to each company** (operator item 15, 2 October) — and what that does and does not close
+
+- **The operator's words** (`docs/operator/2026-10-02-operator-direction.md`, item 15): *"This has already been
+  decided: Settings belong to EACH COMPANY. Do not keep this as an open question."*
+- **The dated alarm is already off, and was before the operator wrote that.** `be_w106_decision_status()`
+  reports `settingsScoped: true` (measured W1-U3): `app_thresholds` has carried `organisation_id` since
+  `20260930000300` (W1-L), and the status function detects resolution from the schema. The 31 October
+  build failure (`check:decision-debt`) cannot fire. **`BE-W106` is CLOSED** — by the schema, now with the
+  operator's decision attached. No row is added to `app_thresholds`: a deadline row with no date would
+  make the status function fail closed, and resolution is read from the schema by design.
+- **What the system implements:** every setting read through `threshold()` resolves territory → company →
+  global, the company taken from the caller (`set_organisation_threshold` writes a company row; any key).
+- **What it does NOT yet implement — so "decided" and "implemented" differ in two places:** a company's
+  default working hours can only ever be TEMPORARY (the 60-day expiry checks the key, not the scope —
+  `BE-W140`); and the UCPMP decision check runs with no caller, reads only the GLOBAL cap, and would still
+  fail the build on 6 November after a company sets its own cap (`BE-W141`).

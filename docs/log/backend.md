@@ -2970,3 +2970,147 @@ worktree `demo-fe17` is removed at the end. CI on the pushed HEAD goes in the ne
 | browser suite | — | 7 passed, 0 skipped, 0 failed |
 
 Rollbacks: all applied in reverse; public schema empty — the corrected `20261002000200` rollback among them (no refusal recorded, so it rolled back cleanly, as `BE-C65` intends). Database +2 on W1-S: the two rollback tests. The reset cleared today's demo seed — the script requires a fresh one on the day anyway.
+
+### W1-U — the key, and what it could not reach
+
+**Three briefs, one section.** W1-U stopped at A3 twice (no credential reachable; then the file not yet
+created); W1-U2 supplied the file and approved the SDK; W1-U3 did everything that needs no model access.
+
+**Checkout guard (each time).** Branch `worktree-ai-platform-phase-a`, HEAD
+`0eb90be0d58410c1ba975781f8653aa5c5ca194e`, status clean (0). `origin/main` nothing new; PR #2 `MERGEABLE` /
+`CLEAN`. `review-handoff/` deleted at the start.
+
+**The priority override did NOT fire.** Model access was checked at the start and between parts — four
+times — and stayed `NOT_AVAILABLE` / `NOT_AUTHORIZED` throughout. Nothing was interrupted.
+
+#### CI result of the PREVIOUS push
+
+**Workflow `CI`, run `36984720263`, SHA `0eb90be0d58410c1ba975781f8653aa5c5ca194e` = W1-T's HEAD —
+`success` on both jobs.** Database job: **Test Files 78 passed (78)**, **Tests 1090 passed | 4 todo
+(1094)**; browser **7 passed, 0 skipped, 0 failed**; **"All rollbacks applied in reverse order; public
+schema is empty."**
+
+#### The operator's own words
+
+**Recorded verbatim** at `docs/operator/2026-10-02-operator-direction.md`, from the W1-U2 brief's
+"OPERATOR MESSAGE — VERBATIM". **Where the reviewer's summary and their text differed, their text won:**
+item 3 says credentials go *"only"* into Edge Function secrets and item 1 says none may *"remain stored
+locally after the work is completed"* — W1-U3's brief read that as consistent with a git-ignored local
+file for the duration of the work; recorded as that reading, superseded by anything the operator says.
+
+#### A — the key: what it reached (recorded in `docs/operator-inputs.md` Q-1, "Measured 2 October")
+
+**How:** signed calls to Bedrock in `ap-south-1` with the approved SDK (`@aws-sdk/client-bedrock-runtime`
+`3.1145.0`, installed only in a scratch folder outside the repository — **28 packages**; not yet in the
+project, because no adapter was written) and its own signer. No credential printed; error text scrubbed
+of account numbers and ARNs.
+
+1. **Does the India profile carry both models? No — one India profile per model**, both `ACTIVE`:
+   **`in.anthropic.claude-sonnet-5`** and **`in.anthropic.claude-haiku-4-5-20251001-v1:0`** (ids copied
+   from `ListInferenceProfiles`).
+2. **Where do they route? `ap-south-2` and `ap-south-1` only** — the residency answer.
+3. **Is model access granted? No.** `GetFoundationModelAvailability`, both models: region `AVAILABLE`,
+   entitlement `AVAILABLE`, **agreement `NOT_AVAILABLE`, authorization `NOT_AUTHORIZED`**. Calls refused —
+   first `AccessDeniedException`, then `ValidationException: Operation not allowed`: **one condition, two
+   error names.** **Who fixes it: the AWS account owner** (enable access to both models; confirm the IAM
+   policy in Q-1). **BLOCKAGE.** No adapter written: nothing could exercise it.
+4. **The Supabase access token in this repository is dead (401)** — nothing in this project can read
+   production's function secrets.
+
+`KEY-DAY-CHECKLIST.md` updated: every "verify" settled; **prediction #5 ("model access not enabled")
+fired before an adapter existed** — and what it missed: it arrives under two error names.
+
+#### B — the deploy order: it CAN run as the operator wrote it
+
+**Measured on a copy rebuilt to production's 19 migrations:** 0 companies, 0 territories, no per-company
+settings table. Item 9's value with no expiry: **refused** ("must carry an expiresAt; it is a temporary
+measure by construction"); 61 days: **refused**; **59 days: accepted**, resolving every territory to
+`09:00 18:00 Asia/Kolkata {1,2,3,4,5,6} org_default`, and **surviving all migrations (94)**.
+
+**The four lines back to the operator:**
+1. **The instruction:** pre-flight → working hours → migrations → reference data → smoke test, unchanged;
+   working hours = Monday–Saturday 09:00–18:00 local territory time, temporary (items 8, 9).
+2. **Measurably possible:** at step 2 hours cannot attach to a company or territory (none exist yet), but
+   item 9's value CAN be set as the platform-wide temporary fallback — and it survives the migrations.
+3. **Smallest change that keeps the intent: none to the order.** Step 2 sets item 9's value with an expiry
+   of at most 60 days; final per-territory hours, when decided, go in after reference data.
+4. **Cost:** it is platform-wide, not per company, and lapses on its expiry — after which check-in
+   refuses until it is renewed (one row) or replaced by territory hours.
+
+**The runbook is restored to the operator's order.** The W1-S reordering was mine, made on the
+rehearsal's evidence before item 8; it is withdrawn. Row ids are kept (cited elsewhere); a mapping table
+shows which rows serve which of their five steps. The smoke test's S3 now expects `org_default` with
+item 9's value. *Not measured:* `my_shift_window` as a signed-in rep under the fallback — the resolver
+was measured directly.
+
+#### C — settings per company: the alarm is off; the decision is two-thirds implemented (`BE-C66`)
+
+**The 31 October build failure cannot fire** — `be_w106_decision_status()` reports `settingsScoped:
+true`, because `app_thresholds.organisation_id` exists since `20260930000300` (W1-L). **`BE-W106` CLOSED**,
+with item 15's words attached. No row added: the status reads the schema, and a dateless deadline row
+would make it fail closed. **What is still missing, in one paragraph:** every setting read through
+`threshold()` resolves territory → company → global, so a company CAN own its settings — but (1) a
+company's default working hours can only ever be temporary, because the 60-day expiry checks the key and
+not the scope (`BE-W140`); and (2) **the UCPMP deadline check runs in CI with no caller and reads only the
+global cap — proved: with a company cap set, it still reports `capConfigured: false`, so the build would
+still fail on 6 November after the operator supplies the number** (`BE-W141`).
+
+#### D — the status table (measured this session, or cited)
+
+| MODULE | STATUS | OWNER | BLOCKER | ETA |
+| --- | --- | --- | --- | --- |
+| Core MR workflow — server | DONE | Maanav | — | — |
+| Core MR workflow — app | IN PROGRESS | Dev | PRs #13, #14, #15 open, not merged | on merge |
+| Day End / Mileage | IN PROGRESS | Dev | PR #13 open, not merged | on merge |
+| Day planning (manager plans) | BLOCKED | Operator, then Maanav + Dev | Three questions unanswered (whose MRs; where the manager plans; who allows an unplanned visit). Today only the MR may write a plan | 10–15 working days after the answers |
+| Real backend in production | BLOCKED | Maanav | PR #2 not merged; production at 19 of 94 migrations | about 1 day after merge (`DEPLOY-RUNBOOK.md`) |
+| Product Q&A | BLOCKED | AWS account owner | Bedrock model access not granted for `in.anthropic.claude-sonnet-5` and `in.anthropic.claude-haiku-4-5-20251001-v1:0`; then an approved prompt needs the second admin | 7–10 working days after access |
+| Chatbot | BLOCKED | AWS account owner | Same | Same |
+| LMS Tutor | BLOCKED | AWS account owner | Same | Same |
+| AI Doctor | BLOCKED | AWS account owner | Same | Same |
+| AI Analysis / Coaching | BLOCKED | AWS account owner | Same | Same |
+| LMS (app screens) | POST-4-OCT | Dev | No LMS route in `apps/field/app` on any branch; the backend exists | — |
+| Second admin | BLOCKED | Operator | Name and email not yet given (item 12) | same day once received |
+| Consent in production | BLOCKED | Operator | Registered legal name (item 13) | ½ day once received |
+| Sample cap | BLOCKED | Operator, then Maanav | The number (item 14); and `BE-W141` | ½ day once received |
+| Demo build (APK) | BLOCKED | Dev | CMake `3.31.6` absent on this machine (measured W1-T, not re-measured) | — |
+| Maps, notifications, voice, live tracking | POST-4-OCT | — | Item 16: not to destabilise the demo | — |
+
+#### E — the manager plans the day: designed, not built (`docs/design/MANAGER-PLANS-THE-DAY.md`)
+
+**Measured: the permission points the wrong way.** Only the MR may write `beat_plans`, entries and
+`visits` (`mr_id = auth.uid()`); a manager may only read (`visible_user_ids()`); nothing creates or
+approves a plan; plans are per day; the console has no planning screen; the app cannot create a visit
+(`FE-W28`). **Size: 10–15 working days** — backend 3–4 (reversed policies, four functions, two-sided
+tests including "an admin cannot plan"), console 5–8 (owner to confirm), app 2–3. **Eight questions for
+the operator**, three blocking: whose MRs a manager may plan for; web console or phone; who allows an
+unplanned visit.
+
+#### F — the demo
+
+**Item 5's condition — "AWS integration completed AND fully tested" — is not met**: model access is not
+granted, so no adapter exists, and no prompt can be approved without the second admin. **Keep AI hidden;
+show the tested core workflow.** Item 6's fourteen checks split into what the server can confirm and what
+only a screen can (`docs/DEMO-SCRIPT.md`): **"LMS" cannot pass tomorrow — there is no LMS screen.**
+
+#### What I got wrong
+
+- **The W1-S runbook reorder.** I changed the operator's recorded order on my own authority because the
+  rehearsal showed full working hours could not go second; the narrower truth — item 9's temporary value
+  CAN go second — was available then and I did not test it.
+- **"Working hours cannot be set before the migrations" (W1-S, W1-T)** was too broad for the same reason.
+
+#### Where I stopped
+
+**All six W1-U3 parts done. W1-U2's A–D stand blocked on AWS model access** (and D on the second
+admin's name and email); E–I of W1-U2 are covered by W1-U3's B–F except I (cost), which needs real token
+counts. **No credential appears anywhere in the diff** (checked before commit). **The local env file still
+exists** (`services/api/supabase/functions/.env`, git-ignored) — it is needed the moment access is granted,
+and it is deleted when the AI work finishes, per item 1.
+
+#### The clean-database check
+
+`node scripts/verify-clean-db.mjs`: **All 27 step(s) passed.** Database **Test Files 78 passed (78)**,
+**Tests 1090 passed | 4 todo (1094)**; core 11 files, 201 passed | 4 todo; field 46 files, 664; console 8
+files, 76; ui-tokens 59, ui 4, mock 43; browser **7 passed, 0 skipped, 0 failed**; rollbacks all applied,
+schema empty. Identical to W1-T: this session changed documents and the ledger only.

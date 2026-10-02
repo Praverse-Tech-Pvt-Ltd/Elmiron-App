@@ -114,6 +114,45 @@ request elsewhere. **Nothing else in AWS is reachable with this key.**
 the daily allowance (100 requests per MR, `BE-C30`) is the in-app ceiling, the budget is the
 account-level one.
 
+### Measured 2 October (W1-U), from the AWS service with the key the operator supplied
+
+**Not from this page, not from documentation:** signed calls to Bedrock in `ap-south-1` — the list of
+inference profiles, the model-availability report for each model, and a one-token call to each
+profile. No credential was printed; error text was scrubbed of account numbers and ARNs.
+
+**1. The India profiles — the answer to "verify" item 1 above.** There is **no single India profile
+carrying both models: there is one per model**, both `ACTIVE`, both `SYSTEM_DEFINED`:
+
+| Model | Inference profile id (copied from the service) | Underlying model id | Routes to |
+| --- | --- | --- | --- |
+| Claude Sonnet 5 | `in.anthropic.claude-sonnet-5` | `anthropic.claude-sonnet-5` | `ap-south-2`, `ap-south-1` |
+| Claude Haiku 4.5 | `in.anthropic.claude-haiku-4-5-20251001-v1:0` | `anthropic.claude-haiku-4-5-20251001-v1:0` | `ap-south-2`, `ap-south-1` |
+
+**Both route only to Hyderabad and Mumbai — the residency answer.** The policy above is therefore
+right as drafted: its two profile ARNs take these ids, its model ARNs take these model ids in both
+regions, and the Deny on any other region blocks nothing these profiles need. (The account also sees
+`apac.*` and `global.*` profiles that route outside India; the adapter refuses those by construction.)
+
+**2. Model access is a SEPARATE approval from the key — and it is not granted.** The key signs
+correctly and can list profiles, but every call is refused. The service's own report for BOTH models:
+
+| Field | Value | What it means |
+| --- | --- | --- |
+| `regionAvailability` | `AVAILABLE` | The model exists in `ap-south-1` |
+| `entitlementAvailability` | `AVAILABLE` | The account is eligible to use it |
+| `agreementAvailability.status` | **`NOT_AVAILABLE`** | **The model's terms have not been accepted for this account** — the console's model-access step (for Anthropic models, a use-case form and the terms) |
+| `authorizationStatus` | **`NOT_AUTHORIZED`** | **This caller may not invoke it.** Whether this follows from the agreement alone or ALSO from the IAM policy is not distinguishable from outside — so check both |
+
+**Who fixes it: the AWS account owner**, in the Bedrock console for `ap-south-1`: enable access to
+Claude Sonnet 5 and Claude Haiku 4.5, and confirm the IAM user carries the policy above. The calls
+were refused first as `AccessDeniedException`, then as `ValidationException: Operation not allowed` —
+two names for one condition, which is why the availability report, not the error, is the evidence.
+**This is the first-day failure the key-day checklist predicted; it fired before an adapter existed.**
+
+**3. The Supabase access token engineering holds is dead (401).** Nothing in this project can read
+production's function secrets — which is also why nobody could say whether a key was already set
+there (item 3 above). A fresh token is being issued.
+
 ---
 
 ## 2. Q-2 — Google Maps Platform (`BE-C46`)
