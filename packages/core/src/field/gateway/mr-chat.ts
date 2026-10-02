@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AiBeginRequestResponseSchema } from '../ai.js';
 import type { AiRequestFlag } from '../ai.js';
 import { PATIENT_SPECIFIC_REFUSAL_MESSAGE, detectPatientSignals } from './guardrails.js';
-import { ProviderTimeoutError, generateStructured, withTimeout } from './providers.js';
+import { generateStructured, invalidOutput, providerFailure, withTimeout } from './providers.js';
 import type { ControlPlaneRpc, LlmProvider, LlmResult } from './providers.js';
 
 /**
@@ -92,9 +92,12 @@ export type MrChatResult =
 export interface MrChatInput {
   readonly rpc: ControlPlaneRpc;
   readonly provider: LlmProvider;
+  /**
+   * **The rep's message, and nothing else — `mr_chat` is single-turn (W1-S C, `BE-W135` CLOSED).**
+   * It took earlier turns once; nothing stores a chat, so an "assistant" turn was the client's word.
+   * The frontend already sent none, and `FE-CR-7` said single-turn is acceptable.
+   */
   readonly message: string;
-  /** Earlier turns, oldest first. Trimmed by the caller; this does not decide a window. */
-  readonly history?: readonly { readonly role: 'rep' | 'assistant'; readonly text: string }[];
   /** Default 20 seconds, matching `product_qa`. */
   readonly timeoutMs?: number;
 }
@@ -125,10 +128,6 @@ const OUTPUT_CONTRACT = [
   'Never give advice about an individual patient.',
   'Reply with JSON only: {"inScope": boolean, "answer": string}.',
 ].join('\n');
-
-const renderHistory = (
-  history: readonly { readonly role: 'rep' | 'assistant'; readonly text: string }[],
-): string => history.map((h) => `${h.role === 'rep' ? 'Rep' : 'Assistant'}: ${h.text}`).join('\n');
 
 /**
  * Does `text` name one of the organisation's products?
@@ -243,13 +242,7 @@ export const answerMrChat = async (input: MrChatInput): Promise<MrChatResult> =>
   }
 
   // 2. The patient guardrail, BEFORE any provider call. Nothing is searched, nothing is sent.
-  //
-  // W1-Q E1 (`BE-W135`): over the HISTORY too. It is the client's account of earlier turns and is
-  // sent to the model verbatim, so a screened message beside an unscreened history screened nothing.
-  const signals = [
-    ...detectPatientSignals(message),
-    ...(input.history ?? []).flatMap((h) => detectPatientSignals(h.text)),
-  ];
+  const signals = detectPatientSignals(message);
   if (signals.length > 0) {
     const onlyAdvice = signals.every((s) => s === 'patient_specific_advice');
     await complete({
@@ -281,25 +274,14 @@ export const answerMrChat = async (input: MrChatInput): Promise<MrChatResult> =>
       generateStructured(provider, MrChatOutputSchema, {
         messages: [
           { role: 'system', content: `${begun.systemPrompt}\n\n${OUTPUT_CONTRACT}` },
-          {
-            role: 'user',
-            content:
-              (input.history === undefined || input.history.length === 0
-                ? ''
-                : `Earlier in this conversation:\n${renderHistory(input.history)}\n\n`) + message,
-          },
+          { role: 'user', content: message },
         ],
         modelConfig: begun.modelConfig,
         signal,
       }),
     );
   } catch (error) {
-    const timedOut = error instanceof ProviderTimeoutError;
-    await complete({
-      status: 'failed',
-      flags: [timedOut ? 'provider_timeout' : 'provider_error'],
-      errorCode: timedOut ? 'provider_timeout' : 'provider_error',
-    });
+    await complete({ status: 'failed', ...providerFailure(error) });
     return { kind: 'failed', requestId, message: MR_CHAT_FAILED_MESSAGE };
   }
 
@@ -307,8 +289,7 @@ export const answerMrChat = async (input: MrChatInput): Promise<MrChatResult> =>
     await complete({
       status: 'failed',
       raw: structured.raw,
-      flags: ['schema_invalid'],
-      errorCode: structured.reason,
+      ...invalidOutput(structured.reason),
     });
     return { kind: 'failed', requestId, message: MR_CHAT_FAILED_MESSAGE };
   }

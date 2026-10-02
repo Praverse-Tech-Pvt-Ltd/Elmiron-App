@@ -69,7 +69,8 @@ interface RequestBody {
   // server's (`sim_session_context`); fields a client still sends for them are not read.
   readonly sessionId?: unknown;
   readonly repText?: unknown;
-  // mr_chat's earlier turns (screened, `BE-W135`)
+  // Read only to REFUSE it: `mr_chat` is single-turn since W1-S (`BE-W135`), and a non-empty
+  // history is a 400 rather than something silently dropped.
   readonly history?: unknown;
 }
 
@@ -123,24 +124,6 @@ const limitReached = (error: unknown): AiAllowance | null => {
     return null;
   }
 };
-
-/**
- * W1-Q E1 (`BE-W135`). `mr_chat`'s `history`, made into what the flow's type claims: every turn's
- * text a STRING and its role one of two. The flow screens each turn's text for patient details, and
- * the guardrail's string methods would throw on anything else — after the request had begun, leaving
- * it open (`BE-W133`'s shape). Not a cast: a cast is what let this through before. (The AI doctor no
- * longer takes a history at all since W1-R — `sim_session_context`.)
- */
-const historyOf = (raw: unknown): { role: 'rep' | 'assistant'; text: string }[] =>
-  Array.isArray(raw)
-    ? raw.map((h) => {
-        const turn = (typeof h === 'object' && h !== null ? h : {}) as Record<string, unknown>;
-        return {
-          role: turn['role'] === 'rep' ? 'rep' : 'assistant',
-          text: typeof turn['text'] === 'string' ? turn['text'] : String(turn['text'] ?? ''),
-        };
-      })
-    : [];
 
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
@@ -198,6 +181,19 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
   if (feature === 'mr_chat' && typeof body.message !== 'string') {
     return json(400, { code: '22023', message: 'mr_chat needs a message' });
+  }
+  // W1-S C (`BE-W135` CLOSED). `mr_chat` is single-turn: nothing stores a chat, so an earlier
+  // "assistant" turn could only ever be the client's word. A client that sends one is TOLD, here,
+  // before any request is counted — not silently answered as though its history had been read.
+  if (
+    feature === 'mr_chat' &&
+    body.history !== undefined &&
+    !(Array.isArray(body.history) && body.history.length === 0)
+  ) {
+    return json(400, {
+      code: '22023',
+      message: 'mr_chat is single-turn: send only the message, no history',
+    });
   }
   if (
     feature === 'lms_tutor' &&
@@ -269,7 +265,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
         rpc,
         provider,
         message: String(body.message),
-        history: historyOf(body.history),
       });
       return withAllowance(result);
     }

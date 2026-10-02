@@ -13,7 +13,7 @@ import type { SimTurnResult } from '../simulation.js';
 import { AiBeginRequestResponseSchema } from '../ai.js';
 import type { AiRequestFlag } from '../ai.js';
 import { PATIENT_SPECIFIC_REFUSAL_MESSAGE, detectPatientSignals } from './guardrails.js';
-import { ProviderTimeoutError, generateStructured, withTimeout } from './providers.js';
+import { generateStructured, invalidOutput, providerFailure, withTimeout } from './providers.js';
 import type { ControlPlaneRpc, LlmProvider, LlmResult } from './providers.js';
 
 /**
@@ -167,12 +167,7 @@ export const takeDoctorTurn = async (input: SimTurnInput): Promise<SimTurnResult
       }),
     );
   } catch (error) {
-    const timedOut = error instanceof ProviderTimeoutError;
-    await complete({
-      status: 'failed',
-      flags: [timedOut ? 'provider_timeout' : 'provider_error'],
-      errorCode: timedOut ? 'provider_timeout' : 'provider_error',
-    });
+    await complete({ status: 'failed', ...providerFailure(error) });
     return { kind: 'failed', sessionId, message: SIM_TURN_FAILED_MESSAGE };
   }
 
@@ -182,8 +177,7 @@ export const takeDoctorTurn = async (input: SimTurnInput): Promise<SimTurnResult
     await complete({
       status: 'failed',
       raw: structured.raw,
-      flags: ['schema_invalid'],
-      errorCode: structured.reason,
+      ...invalidOutput(structured.reason),
     });
     return { kind: 'failed', sessionId, message: SIM_TURN_FAILED_MESSAGE };
   }
@@ -313,12 +307,7 @@ export const analyseSimSession = async (input: {
       }),
     );
   } catch (error) {
-    const timedOut = error instanceof ProviderTimeoutError;
-    await complete({
-      status: 'failed',
-      flags: [timedOut ? 'provider_timeout' : 'provider_error'],
-      errorCode: timedOut ? 'provider_timeout' : 'provider_error',
-    });
+    await complete({ status: 'failed', ...providerFailure(error) });
     return { kind: 'failed', message: SIM_TURN_FAILED_MESSAGE };
   }
 
@@ -326,8 +315,7 @@ export const analyseSimSession = async (input: {
     await complete({
       status: 'failed',
       raw: structured.raw,
-      flags: ['schema_invalid'],
-      errorCode: structured.reason,
+      ...invalidOutput(structured.reason),
     });
     return { kind: 'failed', message: SIM_TURN_FAILED_MESSAGE };
   }

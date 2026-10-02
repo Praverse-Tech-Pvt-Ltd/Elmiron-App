@@ -543,3 +543,17 @@ disagreement could be checked, because the operator's text was not provided.**
      show anyone.**
 - **Nothing differs from the operator's rule.** Restates `C27`, `BE-C13`, `BE-C34`. "Later if management
   formally decides" is a future change to `is_admin()`'s branch, not to anything here.
+
+## `BE-C64` — **the request log tells a refusal from garbage, and keeps the vendor's error NAME** (W1-S B)
+
+- **Decided by backend, not put to the operator, and why:** it changes only what `ai_requests` records,
+  and **no reader of that log exists** outside its two writers — measured from the catalogue (no other
+  function or view mentions `ai_requests`) and from the code (no app or console file reads `error_code` or
+  `flags`). With no reader, no count can be silently redefined; and the change only ADDS: every existing
+  flag and error code keeps its meaning.
+- **What changed:** a vendor-reported refusal (`LlmResult.refused`) is flagged **`model_refused`**, no
+  longer `schema_invalid`; a vendor-named failure (`ProviderError`) keeps the flag `provider_error` and
+  records the vendor's error **name** in `error_code` (`provider_throttling_exception`) — **never its
+  message**, which can echo the request (§52). Unnamed failures still read exactly `provider_error`.
+- **The bar the brief set:** an existing reader of the log is not misled. There is none; and a future one
+  that counts `schema_invalid` now counts only malformed output, which is what the name always claimed.

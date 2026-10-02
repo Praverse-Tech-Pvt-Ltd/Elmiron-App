@@ -147,21 +147,17 @@ describe('answerMrChat — the happy path', () => {
     expect(begin?.args['p_feature']).toBe('mr_chat');
   });
 
-  it('passes earlier turns to the model, oldest first', async () => {
+  it('W1-S C — single-turn: the model is sent the message and nothing else', async () => {
+    // This test once asserted the opposite ("passes earlier turns to the model"). `BE-W135` closed
+    // history for mr_chat: nothing stores a chat, so an earlier "assistant" turn was the client's word.
     const r = fresh();
     await answerMrChat({
       rpc: fakeRpc(r),
       provider: scripted({ inScope: true, answer: 'ok' }, r),
       message: 'and after that?',
-      history: [
-        { role: 'rep', text: 'how do I check in' },
-        { role: 'assistant', text: 'Tap Start day.' },
-      ],
     });
     const user = r.modelRequests[0]?.messages.find((m) => m.role === 'user');
-    expect(user?.content).toContain('Rep: how do I check in');
-    expect(user?.content).toContain('Assistant: Tap Start day.');
-    expect(user?.content).toContain('and after that?');
+    expect(user?.content).toBe('and after that?');
   });
 });
 

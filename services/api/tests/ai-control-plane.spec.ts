@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
 import {
+  AI_REQUEST_FLAGS,
   AiBeginRequestResponseSchema,
   AiCompleteRequestResponseSchema,
   ApproveAiPromptVersionResponseSchema,
@@ -678,3 +679,26 @@ describe.skipIf(!reachable)('AI-D0 — every RPC response matches @fieldforce/co
     });
   });
 });
+
+/**
+ * W1-S B (`BE-C64`). The flags the contract may write and the flags the database accepts are ONE list.
+ * Nothing checked this before: a flag added to `AI_REQUEST_FLAGS` alone would be refused by
+ * `ai_requests_flags_known` the first time a flow wrote it — after the request had begun.
+ */
+describe.skipIf(!reachable)(
+  'W1-S B — the request log accepts exactly the flags the contract writes',
+  () => {
+    it('ai_requests_flags_known lists the same flags as AI_REQUEST_FLAGS', async () => {
+      await inRolledBackTransaction(async (client) => {
+        const { rows } = await client.query<{ def: string }>(
+          `select pg_get_constraintdef(oid) as def from pg_constraint
+          where conrelid = 'public.ai_requests'::regclass and conname = 'ai_requests_flags_known'`,
+        );
+        const inDatabase = [...(rows[0]?.def ?? '').matchAll(/'([a-z_]+)'::text/gu)].map(
+          (m) => m[1],
+        );
+        expect(inDatabase.sort()).toEqual([...AI_REQUEST_FLAGS].sort());
+      });
+    });
+  },
+);

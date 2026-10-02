@@ -1,25 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { SIM_DOCTOR_TURN_OUTPUT_SCHEMA_NAME } from '../simulation.js';
-import { MR_CHAT_OUTPUT_SCHEMA_NAME, answerMrChat } from './mr-chat.js';
 import type { ControlPlaneRpc, LlmGenerateRequest, LlmProvider } from './providers.js';
 import { takeDoctorTurn } from './sim-doctor.js';
 
 /**
- * W1-Q E1 — `BE-W135`: the HISTORY a client sends is screened like the message it sends.
- * W1-R C — `BE-W136`: the AI doctor no longer takes a history from the client at all.
+ * Where a conversation's earlier turns come from — `BE-W135` and `BE-W136`.
  *
- * `mr_chat` and `ai_doctor` both accept `history` from the request body and put it in the model's
- * prompt verbatim (`renderHistory`). Before W1-Q only the NEW message went through
- * `detectPatientSignals`, so patient details placed in an "earlier turn" reached the model — exactly
- * what `C25` forbids. Found while answering `FE-CR-7`'s question "should earlier turns be sent?".
- *
- * Two-sided: a patient detail anywhere in the history is refused before the model; a clean history
- * still reaches it (otherwise refusing every request would pass).
+ * * W1-Q E1 found that `mr_chat` and `ai_doctor` put a CLIENT-supplied history into the prompt, and
+ *   screened only the new message. W1-Q screened the history too.
+ * * W1-R C (`BE-W136`): the AI doctor now reads its persona and turns from the server
+ *   (`sim_session_context`) and takes no history from the client at all — tested here.
+ * * W1-S C: `mr_chat` is single-turn; the gateway refuses a history outright (400). Its tests are in
+ *   `mr-chat.test.ts` (the model is sent the message alone) and over HTTP in `mr-chat.spec.ts`.
  */
 
 const REQUEST_ID = '33333333-3333-4333-8333-333333333333';
 const SESSION_ID = '77777777-7777-4777-8777-777777777777';
-const PATIENT = 'my patient Mr Sharma, phone 98765 43210, asked about it';
 
 type Recorded = {
   calls: { fn: string; args: Record<string, unknown> }[];
@@ -40,12 +36,7 @@ const STORED = {
   ],
 };
 
-const fakeRpc = (
-  r: Recorded,
-  feature: string,
-  outputSchemaName: string,
-  opts: { notYours?: boolean } = {},
-): ControlPlaneRpc => ({
+const fakeRpc = (r: Recorded, opts: { notYours?: boolean } = {}): ControlPlaneRpc => ({
   call: (fn, args) => {
     r.calls.push({ fn, args: { ...args } });
     switch (fn) {
@@ -59,20 +50,18 @@ const fakeRpc = (
       case 'ai_begin_request':
         return Promise.resolve({
           requestId: REQUEST_ID,
-          feature,
+          feature: 'ai_doctor',
           startedAt: '2026-10-01T10:00:00+00:00',
           promptVersionId: '55555555-5555-4555-8555-555555555555',
           promptVersionNumber: 1,
           systemPrompt: 'system',
-          outputSchemaName,
+          outputSchemaName: SIM_DOCTOR_TURN_OUTPUT_SCHEMA_NAME,
           modelConfig: { temperature: 0 },
           requestsUsedToday: 1,
           dailyLimit: 100,
           allowanceWarning: false,
           allowanceResetsAt: '2026-10-01T18:30:00+00:00',
         });
-      case 'mr_chat_scope_terms':
-        return Promise.resolve({ terms: ['Probexa'] });
       case 'record_sim_turn':
         return Promise.resolve({ turnCount: 2 });
       case 'ai_complete_request':
@@ -96,46 +85,10 @@ const scripted = (body: unknown, r: Recorded): LlmProvider => ({
 });
 
 const fresh = (): Recorded => ({ calls: [], model: [] });
-const closed = (r: Recorded) =>
-  r.calls.filter((c) => c.fn === 'ai_complete_request').at(-1)?.args ?? {};
-
-const chat = (r: Recorded, earlier: string) =>
-  answerMrChat({
-    rpc: fakeRpc(r, 'mr_chat', MR_CHAT_OUTPUT_SCHEMA_NAME),
-    provider: scripted({ inScope: true, answer: 'Tap Day end, then Check out.' }, r),
-    message: 'how do I check out',
-    history: [
-      { role: 'rep', text: earlier },
-      { role: 'assistant', text: 'Open the visit first.' },
-    ],
-  });
-
-describe('mr_chat — the history is screened before the model (BE-W135)', () => {
-  const run = chat;
-
-  it('a patient detail in an EARLIER turn is refused, and the model is never called', async () => {
-    const r = fresh();
-    const result = await run(r, PATIENT);
-
-    expect(result.kind).toBe('patient_specific');
-    expect(r.model).toHaveLength(0);
-    expect(closed(r)['p_status']).toBe('blocked');
-    expect(closed(r)['p_flags']).toContain('patient_identifier_detected');
-  });
-
-  it('a clean history still reaches the model, in the prompt', async () => {
-    const r = fresh();
-    const result = await run(r, 'What does the first screen show?');
-
-    expect(result.kind).not.toBe('patient_specific');
-    expect(r.model).toHaveLength(1);
-    expect(JSON.stringify(r.model[0]?.messages)).toContain('What does the first screen show?');
-  });
-});
 
 const doctor = (r: Recorded, opts: { notYours?: boolean } = {}) =>
   takeDoctorTurn({
-    rpc: fakeRpc(r, 'ai_doctor', SIM_DOCTOR_TURN_OUTPUT_SCHEMA_NAME, opts),
+    rpc: fakeRpc(r, opts),
     provider: scripted({ reply: 'Go on.', objectionAddressed: false }, r),
     sessionId: SESSION_ID,
     repText: 'It keeps below 25 degrees.',

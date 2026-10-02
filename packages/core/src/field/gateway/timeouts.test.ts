@@ -10,6 +10,7 @@ import {
   answerLessonQuestion,
 } from './lms-tutor.js';
 import { MR_CHAT_FAILED_MESSAGE, MR_CHAT_OUTPUT_SCHEMA_NAME, answerMrChat } from './mr-chat.js';
+import { ProviderError } from './providers.js';
 import type { ControlPlaneRpc, LlmProvider } from './providers.js';
 import { analyseSimSession, takeDoctorTurn } from './sim-doctor.js';
 
@@ -90,6 +91,31 @@ const silent: LlmProvider = { generate: () => new Promise(() => undefined) };
 /** Fails at once. A failure that is not a timeout must not be logged as one. */
 const broken: LlmProvider = { generate: () => Promise.reject(new Error('connection reset')) };
 
+/**
+ * W1-S B (`BE-C64`). The SAME prose twice — once as the vendor's ordinary reply, once with the vendor
+ * reporting the model declined. Only the signal differs, so a test that tells them apart is testing
+ * the signal, not a string.
+ */
+const PROSE = 'I cannot help with that request.';
+const reply = (refused: boolean) => ({
+  generate: () =>
+    Promise.resolve({
+      text: PROSE,
+      usage: { inputTokens: 10, outputTokens: 5 },
+      provider: 'scripted',
+      model: 'scripted-1',
+      ...(refused ? { refused: true } : {}),
+    }),
+});
+const malformed: LlmProvider = reply(false);
+const refusing: LlmProvider = reply(true);
+
+/** A failure the vendor NAMED. Its message is never logged, only the name (§52). */
+const throttled: LlmProvider = {
+  generate: () =>
+    Promise.reject(new ProviderError('ThrottlingException', 'Rate exceeded: ' + PROSE)),
+};
+
 const completions = (calls: Call[]) => calls.filter((c) => c.fn === 'ai_complete_request');
 
 const FLOWS = [
@@ -142,11 +168,15 @@ const FLOWS = [
 ] as const;
 
 describe.each([
-  ['never answers', 'provider_timeout', silent],
-  ['fails outright', 'provider_error', broken],
+  ['never answers', 'provider_timeout', 'provider_timeout', silent],
+  ['fails outright', 'provider_error', 'provider_error', broken],
+  // W1-S B (`BE-C64`) — the two the first real call most needs told apart, and the vendor's name.
+  ['replies with prose', 'schema_invalid', 'not_json', malformed],
+  ['DECLINES (the same prose, flagged by the vendor)', 'model_refused', 'model_refused', refusing],
+  ['fails with a NAMED vendor error', 'provider_error', 'provider_throttling_exception', throttled],
 ] as const)(
-  'a provider that %s is closed once, as %s, in every flow (W1-Q B2)',
-  (_how, code, provider) => {
+  'a provider that %s is closed once, flagged %s, in every flow (W1-Q B2, W1-S B)',
+  (_how, flag, errorCode, provider) => {
     it.each(FLOWS.map((f) => [f.feature, f] as const))('%s', async (_feature, flow) => {
       const calls: Call[] = [];
       const result = await flow.run(calls, provider);
@@ -157,8 +187,10 @@ describe.each([
       const closed = completions(calls);
       expect(closed, 'the request is closed exactly once').toHaveLength(1);
       expect(closed[0]?.args['p_status']).toBe('failed');
-      expect(closed[0]?.args['p_flags']).toEqual([code]);
-      expect(closed[0]?.args['p_error_code']).toBe(code);
+      expect(closed[0]?.args['p_flags']).toEqual([flag]);
+      expect(closed[0]?.args['p_error_code']).toBe(errorCode);
+      // The vendor's MESSAGE is never logged — only its name.
+      expect(JSON.stringify(closed)).not.toContain(PROSE);
     });
   },
 );

@@ -2738,3 +2738,46 @@ old rows keep their names where they are cited.
 | **`BE-W136`** | **The AI doctor and coach took their whole context from the CLIENT — FOUND sizing `BE-W135`'s residual, FIXED in W1-R.** The gateway read `personaBrief`, `personaStance`, `objective`, `objection`, `history` and the coach's `turns` from the request body, though the server holds every one. Measured: `start_sim_session` never returns the persona's approved `brief`, so **no real client could send it — the model was briefed with nothing**, and the coach scored a conversation the client described. **Fix:** `sim_session_context` (`20261002000100`) returns the caller's OWN session (approved brief, stance, objective, objection, stored turns), read before `ai_begin_request`; both flows take only `sessionId` (+ `repText`). Proved over HTTP: a fabricated persona brief and doctor turn carrying `[STUB:objection-addressed]` leave `objectionAddressed: false`; fabricated coach turns carrying `[STUB:provider-error]` still analyse. **Mutant removing the ownership line failed exactly the "nobody else reads it" test** — another rep read the approved brief | — | — |
 | **`BE-W135` — status** | **AI doctor half CLOSED by `BE-W136`** (no client history at all). **`mr_chat` half OPEN, by design:** nothing stores a chat, so an `assistant` turn stays the client's word. Options and costs in the W1-R log; recommendation: **send no history for the pilot** (FE-CR-7 already says single-turn is acceptable) | ENGINEERING + FRONTEND (decision) | — |
 | **`BE-W134` — status** | **Packaged for the operator as Q-15** in `docs/operator-inputs.md`. Not decided | **OPERATOR** | — |
+
+### Added by W1-S — 2 October 2026
+
+**Part D, the register sweep.** Every `BE-W` row whose latest status read OPEN was measured against the
+code, tests, migrations and CI of this branch (W1-S, a read-only sweep; the two named candidates verified
+again by hand and by today's clean-database run). **79 ids checked; 20 had changed state and still read
+open** (18 rows — `BE-W62`/`BE-W63` and `BE-W92`/`BE-W99` each share one). **One in four.** That is a
+finding about the register: closures landed in commits and logs, and the rows they closed were not
+revisited. Nothing below was fixed in W1-S; this table only makes the register true.
+
+| Id | Was reading | Now | Evidence |
+| --- | --- | --- | --- |
+| **`BE-W116`** | open — two files deadlock creating a reviewer admin | **CLOSED** | `ac9ed20` (29 Sep, its own title says "BE-W116 closed"); and `fileParallelism: false` (`services/api/vitest.config.ts:71`, `6766e0e`) means the two files no longer run together. **Caveat:** `ai-product-qa.spec.ts` never took the lock — safe only while files run serially. Today's clean-database run: 78/78 files, no deadlock |
+| **`BE-W117`** | open — a test asserts an absolute `audit_log` count | **CLOSED as a failure; the assertion is unchanged** | `refused-reads-audited.spec.ts:161` still counts the whole table; the concurrent writer that broke it is gone with `6766e0e`. **Re-enabling parallel files brings it back** |
+| `BE-W92` (+`BE-W99`) | open, reconciled | **SUPERSEDED by `BE-W125` (closed)** | `vitest.config.ts:64-71` |
+| `BE-W118` | open — two branches minting one id | **CLOSED** | `docs/ids.md` + `scripts/check-ids.mjs`, a CI step (`cf1c83c`, W1-Q C) |
+| `BE-W9` | row only | **CLOSED** | `docs/gotchas.md` carries the toolchain traps |
+| `BE-W10` | row only | **CLOSED** | the "40 tables" claim is gone; correction at `.ai-collab/decisions.md:633` |
+| `BE-W12` | row only | **CLOSED** | checkout guard: `docs/gotchas.md:1336` |
+| `BE-W17` | row only | **CLOSED** | `services/api/scripts/seed-synthetic.mjs` |
+| `BE-W18` | row only | **CLOSED** | writes go through `sync_push`: `apps/field/src/sync/push-client.ts` |
+| `BE-W19` | row only | **CLOSED** | `services/api/supabase/config.toml:186` |
+| `BE-W36` | "observe a scheduled retention run" | **CLOSED** | five scheduled runs, all green, latest 2 October |
+| `BE-W38` | "RLS read performance never measured" | **CLOSED** | measured: `PROJECT-OVERVIEW.md:5591` |
+| `BE-W51` | "no `sync_pull`" | **CLOSED** | `20260907001100_sync_pull_phase1.sql`; `apps/field/src/sync/pull.ts` |
+| `BE-W62` / `BE-W63` | pull cannot page; watermark gap | **CLOSED (by design change)** | snapshot cursor, `docs/adr-sync-pull.md` §2.1(b), `20260908000100` |
+| `BE-W83` | 18 of 19 tables; the 19th is `BE-W106` | **CLOSED** | `20260923000300`, `20260930000300` |
+| `BE-W120` | proposal to split the shared logs | **CLOSED** | `docs/log/backend.md` exists (`0c7507d`) |
+
+**Still OPEN, measured:** `BE-W16`, `W20`, `W22`, `W23`, `W24`–`W29`, `W31`, `W33`/`W34`, `W35` (partly),
+`W42`, `W43`, `W44`, `W48`–`W50`, `W52`–`W55`, `W57`, `W58`, `W59`, `W66`, `W67`, `W68` (by design),
+`W71`, `W72`, `W80`–`W82`, `W85`, `W86` (partly), `W90` (by design), `W94`, `W95`, `W98`, `W108`,
+`W109`, `W115`, `W119`, `W121`, `W123`, `W128` (frontend screen only), `W134` (operator, Q-15).
+**Cannot be measured from a repository:** `W11`, `W21`/`W65`, `W32`, `W37`, `W39`, `W41`, `W45`, `W46`,
+`W70`, `W93` — each needs production, a credential, an operator value or a person.
+
+**Other W1-S rows:**
+
+| Id | What | Owner | Size |
+| --- | --- | --- | --- |
+| **`BE-W135` — CLOSED** | **`mr_chat` is single-turn (W1-S C).** The flow takes no history; the gateway answers a non-empty `history` with **400 `22023` "mr_chat is single-turn: send only the message, no history"**, before any request is counted — so a client that still sends one is told, never silently answered. The frontend already sends none (`apps/field/src/assistant/request.ts` on `fe-d17-practice`). Proved over HTTP both ways; mutants: dropping the refusal turned the history request into a silent `answered` (exactly one test), refusing empty history broke exactly the other | — | — |
+| **`BE-W137`** | **No tool creates the MR sheet's accounts on production.** `seed:mr` refuses non-local targets by design and creates its own company; `check-territory-sheet`'s note that accounts are "created with `seed:mr`" does not hold for production. Rehearsed by hand — `docs/DEPLOY-RUNBOOK.md` step 4 | ENGINEERING (a remote-safe account tool) or accept by hand | 0.5d |
+| **KEY-DAY #4, #5 — CLOSED** | Refusal flagged `model_refused`; vendor error name kept (`BE-C64`) | — | — |

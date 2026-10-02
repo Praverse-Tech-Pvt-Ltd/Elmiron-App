@@ -169,6 +169,8 @@ const scripted = (behaviour: ScriptedModelBehaviour, calls: { n: number }): LlmP
         return r(JSON.stringify({ supported: false, answer: '', citedChunkIds: [] }));
       case 'returns_prose':
         return r('It is fine to store it anywhere.');
+      case 'refuses':
+        return r('I cannot help with that request.').then((x) => ({ ...x, refused: true }));
       case 'times_out':
         return new Promise(() => undefined);
       case 'must_not_be_called':

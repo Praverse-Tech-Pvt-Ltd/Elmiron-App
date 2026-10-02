@@ -57,6 +57,8 @@ export const AI_REQUEST_FLAGS = [
   'off_label_request',
   'provider_timeout',
   'provider_error',
+  /** W1-S B (`BE-C64`): the vendor reported the model declined — not malformed output. */
+  'model_refused',
 ] as const;
 export const AiRequestFlagSchema = z.enum(AI_REQUEST_FLAGS);
 export type AiRequestFlag = z.infer<typeof AiRequestFlagSchema>;

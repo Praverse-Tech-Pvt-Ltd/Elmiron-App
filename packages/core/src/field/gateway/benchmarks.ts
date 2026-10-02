@@ -33,6 +33,12 @@ export type ScriptedModelBehaviour =
   | 'says_unsupported'
   /** Not JSON at all. */
   | 'returns_prose'
+  /**
+   * W1-S B (`BE-C64`). The SAME kind of prose, but the vendor reports the model declined
+   * (`LlmResult.refused`). Paired with `returns_prose` on purpose: the text alone cannot tell the
+   * two apart, so a case that passes here distinguishes on the signal, not on a string.
+   */
+  | 'refuses'
   /** Never answers. */
   | 'times_out'
   /** The case must end before the model is reached; calling it is itself a failure. */
@@ -156,6 +162,22 @@ export const PRODUCT_QA_BENCHMARK: readonly ProductQaBenchmarkCase[] = [
       kind: 'not_available',
       modelCalled: true,
       flags: ['schema_invalid'],
+      requestStatus: 'failed',
+    },
+  },
+  {
+    id: 'model-refuses',
+    description:
+      'The vendor reports the model declined (W1-S, BE-C64). Logged as model_refused — NOT as ' +
+      'schema_invalid, which is what the identical prose without the signal is logged as above.',
+    question: BENCHMARK_MATCHING_QUESTION,
+    knowledge: 'matching',
+    model: 'refuses',
+    requiresRealModel: false,
+    expected: {
+      kind: 'not_available',
+      modelCalled: true,
+      flags: ['model_refused'],
       requestStatus: 'failed',
     },
   },

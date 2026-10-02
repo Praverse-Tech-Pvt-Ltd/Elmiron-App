@@ -97,3 +97,18 @@ from guesses about the vendor. **Ordered by how early it bites.**
 `catch` blocks, which are vendor-neutral, so fixing them is not adapter work — it can be done before the
 key. Not done here: it changes what `ai_requests.error_code` records, which is a contract change, and
 deserves its own decision.
+
+---
+
+## Update, 2 October (W1-S B) — #4 and #5 are fixed before the key
+
+* **#4 — a refusal now has its own flag.** An adapter that reads the vendor's stop reason sets
+  `LlmResult.refused`; the flow logs `model_refused`, not `schema_invalid` (`BE-C64`). **On the day, the
+  adapter must set it** — that is the one adapter obligation this adds.
+* **#5 — a vendor error keeps its name.** An adapter throws `ProviderError(vendorCode, message)`; the log
+  records `provider_<vendor_code>` (e.g. `provider_access_denied_exception`), never the message. An
+  adapter that throws a plain `Error` still logs `provider_error`, as before.
+* **Re-read of the other eleven:** #3 (JSON with a sentence in front) and #11 (no length cap) became
+  fixable without the key, and neither was done: loosening the parser would hide the model behaviour the
+  first call exists to show — the adapter should force JSON instead — and a length cap needs a number
+  only the product can choose. The other nine still need the key, the adapter, or the operator.

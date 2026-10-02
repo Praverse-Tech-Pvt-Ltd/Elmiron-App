@@ -2693,3 +2693,135 @@ and the push follow; **CI on the pushed HEAD is recorded in the next session's s
 **Needs the operator:** Q-1 (the key) for anything in Part A; **Q-15** (`BE-W134`); and the four
 actions at the end of `docs/4-OCTOBER.md`. **Needs Maanav:** merge PR #2 — it is now also what carries
 `BE-W136` to production.
+
+### W1-S — the deploy rehearsed
+
+**Priority override: did NOT apply.** No AWS key — checked first, the way W1-R did: no `AWS_*` /
+`BEDROCK` / `AI_MODEL` name in the shell, user or machine environment; no `~/.aws`; no AWS CLI; no
+functions env file. Carried on with the brief.
+
+**Checkout guard.** Branch `worktree-ai-platform-phase-a`, HEAD `e91859cbf51d036a21287dfd26dce17a95a5d99a`,
+status clean (0). `origin/main` had nothing new; PR #2 `MERGEABLE` / `CLEAN`. `review-handoff/` deleted.
+
+#### CI result of the PREVIOUS push
+
+**Workflow `CI`, run `36973501243`, SHA `e91859cbf51d036a21287dfd26dce17a95a5d99a` = W1-R's HEAD —
+`success` on both jobs.** Database job log: **Test Files 78 passed (78)**, **Tests 1087 passed | 4 todo
+(1091)**; browser **7 passed, 0 skipped, 0 failed**; **"All rollbacks applied in reverse order; public
+schema is empty."**
+
+#### A — the production deploy, rehearsed and not run (`docs/DEPLOY-RUNBOOK.md`)
+
+**A1 — measured this morning, not carried:** the Supabase connector has no permission on the production
+project (`pgfdbzoapmleqtoezhoa`), so I ran the repository's own read-only **Migration drift** workflow on
+demand against THIS branch: run `36975013243`, 06:44 UTC — **"Production has applied the first 19 of 93
+migrations, in order, with nothing applied that has no file here."** (W1-S then added a 94th.)
+
+**A2 — the rehearsal, on a copy built to production's state** (`supabase db reset --version
+20260817000200`: 19 migrations, 39 s), then the exact production command pointed at the copy:
+
+| Step | What happened |
+| --- | --- |
+| Working hours BEFORE the push (operator's step 2) | Only the **global** fallback can be set: **0 territories**, no per-company table yet. Refused without `expiresAt` ("a temporary measure by construction", ≤ 60 days). With it: set, and it **survived the push** |
+| `db push --dry-run` | Exactly **74** pending, first `20260907000100`, last `20261002000100`; nothing changed |
+| `db push` | **All 74 applied in 8 s** on an empty copy; drift check on the copy: **"No drift. 93 migration(s), all applied."** |
+| Push again | "up to date" — safe |
+| **Forced failure** (a pre-created `products` table) | Stopped at `20260924000400_catalogue`, exit 1, error names file, statement and SQLSTATE `42P07`. **The 56 before it stayed applied; the failed one rolled back whole** (`markets`, created earlier in it, absent). Blocker removed → push **resumed: 18 applied, 93** |
+| Reference data | Shipped template **refused** (`example_row` ×3, nothing written). Rehearsal sheets → checker → JSON → loader dry run → apply (1 org, 4 territories) → **apply again: 0 inserted** |
+| Per-territory hours | Possible only now; `resolve_shift_window` → `source = territory` |
+| MR account | **No tool does it on production** — `seed:mr` refuses remote targets (`BE-W137`). Done by hand: auth user + profile |
+| Smoke test S2–S7 | sign-in token; hours `09:00–18:00` from the territory; `sync_pull` keys, no error; anonymous read refused 401 `42501`; MR reading settings refused 403 `42501`; gateway `45011` locally (production: **503 `no_provider`** — the stub refuses a non-local target first) |
+
+**A3 — the order changed in one place, because the rehearsal said so:** pre-flight → pending changes →
+reference data → **working hours** → accounts → smoke test. The recorded order (`BE-C58`) puts working
+hours second; at production's state only the expiring global fallback exists then. "Never reference data
+before schema" is kept.
+
+**A5 — what a rehearsal on a copy could NOT establish:** production's **data** (the copy was empty —
+two pending migrations make `organisation_id` required and branch on row counts; runbook step 0.3 reads
+them first); production's **timing** over the pooler; **hosted-platform differences** (role ownership,
+extensions, pooler timeouts, auth settings, the paid plan); the **function deploy** (a local stack serves,
+it does not deploy); whether production is **still at 19 on the day** (step 0.2 re-measures); and
+**rollback** — rolling production back drops data, so a failed deploy is fixed forward.
+
+**Also found:** **consent capture refuses in production until a consent notice exists**, and the notice
+waits on the legal name (Q-11). The loader carries none.
+
+#### B — the first real call made diagnosable (`BE-C64`)
+
+**B1 — the cost today:** a vendor-reported refusal was logged `schema_invalid`, indistinguishable from
+garbage; every vendor failure was `provider_error` with the vendor's message — and name — discarded.
+
+**B2 — decided by backend, not put to the operator.** Measured first: **no reader of `ai_requests`**
+exists outside its two writers (catalogue: no other function or view mentions it; code: no app or
+console file reads `error_code` or `flags`). The change only ADDS: a refusal (`LlmResult.refused`, set
+by the adapter from the vendor's stop reason) is flagged **`model_refused`**; a `ProviderError` keeps
+flag `provider_error` and records the vendor's error **name** (`provider_throttling_exception`) — never
+its message (§52). Unnamed failures still read exactly `provider_error`. New migration
+`20261002000200` admits the flag; a new DB test pins the contract's flag list to the database's.
+
+**B3 — the test distinguishes, it does not just look for a string:** the SAME prose is sent twice, once
+as an ordinary reply, once with the vendor's refusal signal; only the signal differs. Five flows, plus a
+`model-refuses` benchmark case that runs against the real database. **Mutants on `mr_chat`:** logging a
+refusal as malformed failed **exactly one** test (the declines case); logging everything as a refusal
+failed **two** — the new prose case and the pre-existing "not JSON is a failure" test, which already
+pinned malformed output. Recorded as it happened rather than bent to one.
+
+**B4 — the other eleven:** #3 (JSON after a sentence) and #11 (no length cap) became fixable without
+the key; neither done — loosening the parser hides the behaviour the first call should show, and a cap
+needs a product number. The other nine still need the key, the adapter or the operator.
+
+#### C — the chat history, closed (`BE-W135` CLOSED)
+
+`mr_chat` is single-turn. **What a client that still sends history experiences: HTTP 400, code `22023`,
+"mr_chat is single-turn: send only the message, no history" — before any request is counted.** Not a
+silent change: the alternative — ignoring it — is exactly what the first mutant produced (an
+`answered` reply to a request whose history was dropped), and that mutant is what the test catches.
+No real client is affected: the frontend sends `{ feature, message }` only. Two-sided over HTTP;
+mutants each failed exactly one test.
+
+#### D — the register sweep
+
+**79 ids checked; 20 had changed state and still read open (18 rows).** Both named candidates were
+among them: `BE-W116` (closed by `ac9ed20`, whose own title says so, and by `fileParallelism: false`,
+`6766e0e`) and `BE-W117` (its failure gone with `6766e0e`; the absolute count remains and returns if
+files run in parallel). **One in four rows was wrong — a finding about the register:** closures were
+recorded in commits and logs and the rows were not revisited. Marked in the W1-S table of
+`docs/COMPLETION-PLAN.md`; nothing fixed in this part.
+
+#### E — 4 October
+
+`docs/4-OCTOBER.md` rewritten for the day. **None of the four actions has happened** as of this
+morning: PR #2 open; the frontend's PRs #13–#15 open; no record of the go-ahead or of Q-14. Still
+**READY 4 / COULD BE READY 6 / CANNOT BE READY 8**, with two corrections from the rehearsal: the deploy
+is a rehearsed procedure (an estimated hour, watched), and **consent in production cannot work without
+Q-11**.
+
+#### The clean-database check
+
+`node scripts/verify-clean-db.mjs`: **All 27 step(s) passed.**
+
+| Suite | Test Files | Tests |
+| --- | --- | --- |
+| database (`@fieldforce/api`) | 78 passed (78) | **1088 passed \| 4 todo (1092)** |
+| `@fieldforce/core` | 11 passed (11) | 201 passed \| 4 todo (205) |
+| `@fieldforce/field` | 46 passed (46) | 664 passed (664) |
+| `@fieldforce/console` | 8 passed (8) | 76 passed (76) |
+| `ui-tokens` / `ui` / `mock` | 3 / 1 / 1 passed | 59 / 4 / 43 passed |
+| browser suite | — | 7 passed, 0 skipped, 0 failed |
+
+Rollbacks: all applied in reverse; public schema empty — `20261002000200`'s among them.
+
+#### What I got wrong
+
+- **The B3 mutant did not kill exactly one test.** It killed two, because an older test already guarded
+  the same behaviour. Reported as such.
+- **The first runbook draft would have said working hours go second**, as recorded — the rehearsal
+  refused it twice (no territories; the fallback needs an expiry). Writing from the run, not the plan,
+  is the only reason the runbook is right.
+
+#### Where I stopped
+
+**All five parts done.** This section, the commit and the push follow; **CI on the pushed HEAD goes in the
+next session's section.** **Needs Maanav:** merge PR #2. **Needs the operator:** the go-ahead and the paid
+plan; Q-14; Q-11 (consent in production); Q-15; Q-1.

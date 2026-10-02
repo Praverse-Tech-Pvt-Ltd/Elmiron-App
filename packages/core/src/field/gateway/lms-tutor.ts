@@ -4,7 +4,7 @@ import { AiBeginRequestResponseSchema } from '../ai.js';
 import type { AiRequestFlag } from '../ai.js';
 import { PATIENT_SPECIFIC_REFUSAL_MESSAGE, detectPatientSignals } from './guardrails.js';
 import { isClinicalQuestion } from './mr-chat.js';
-import { ProviderTimeoutError, generateStructured, withTimeout } from './providers.js';
+import { generateStructured, invalidOutput, providerFailure, withTimeout } from './providers.js';
 import type { ControlPlaneRpc, LlmProvider, LlmResult } from './providers.js';
 
 /**
@@ -196,12 +196,7 @@ export const answerLessonQuestion = async (input: LmsTutorInput): Promise<LmsTut
       }),
     );
   } catch (error) {
-    const timedOut = error instanceof ProviderTimeoutError;
-    await complete({
-      status: 'failed',
-      flags: [timedOut ? 'provider_timeout' : 'provider_error'],
-      errorCode: timedOut ? 'provider_timeout' : 'provider_error',
-    });
+    await complete({ status: 'failed', ...providerFailure(error) });
     return { kind: 'failed', requestId, message: LMS_TUTOR_FAILED_MESSAGE };
   }
 
@@ -209,8 +204,7 @@ export const answerLessonQuestion = async (input: LmsTutorInput): Promise<LmsTut
     await complete({
       status: 'failed',
       raw: structured.raw,
-      flags: ['schema_invalid'],
-      errorCode: structured.reason,
+      ...invalidOutput(structured.reason),
     });
     return { kind: 'failed', requestId, message: LMS_TUTOR_FAILED_MESSAGE };
   }

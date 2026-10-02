@@ -110,6 +110,8 @@ const scriptedProvider = (behaviour: ScriptedModelBehaviour, recorded: Recorded)
         return Promise.resolve(reply({ supported: false, answer: '', citedChunkIds: [] }));
       case 'returns_prose':
         return Promise.resolve(reply('Sure! Benchmarol should be stored somewhere cool.'));
+      case 'refuses':
+        return Promise.resolve({ ...reply('I cannot help with that request.'), refused: true });
       case 'times_out':
         return new Promise(() => undefined);
       case 'must_not_be_called':
