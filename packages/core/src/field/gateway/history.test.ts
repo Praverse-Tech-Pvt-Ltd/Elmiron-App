@@ -6,6 +6,7 @@ import { takeDoctorTurn } from './sim-doctor.js';
 
 /**
  * W1-Q E1 — `BE-W135`: the HISTORY a client sends is screened like the message it sends.
+ * W1-R C — `BE-W136`: the AI doctor no longer takes a history from the client at all.
  *
  * `mr_chat` and `ai_doctor` both accept `history` from the request body and put it in the model's
  * prompt verbatim (`renderHistory`). Before W1-Q only the NEW message went through
@@ -25,10 +26,36 @@ type Recorded = {
   model: LlmGenerateRequest[];
 };
 
-const fakeRpc = (r: Recorded, feature: string, outputSchemaName: string): ControlPlaneRpc => ({
+/** What the SERVER holds for the session — distinct strings, so the prompt can be checked for them. */
+const STORED = {
+  sessionId: SESSION_ID,
+  state: 'open',
+  personaBrief: 'APPROVED BRIEF: a cautious urologist',
+  personaStance: 'skeptical',
+  objective: 'Explain storage',
+  objection: 'No room in my fridge',
+  turns: [
+    { turnIndex: 1, role: 'rep', text: 'Good morning, doctor.' },
+    { turnIndex: 2, role: 'doctor', text: 'STORED DOCTOR TURN: what about storage?' },
+  ],
+};
+
+const fakeRpc = (
+  r: Recorded,
+  feature: string,
+  outputSchemaName: string,
+  opts: { notYours?: boolean } = {},
+): ControlPlaneRpc => ({
   call: (fn, args) => {
     r.calls.push({ fn, args: { ...args } });
     switch (fn) {
+      case 'sim_session_context':
+        if (opts.notYours === true) {
+          const refusal = new Error('session is not yours') as Error & { code?: string };
+          refusal.code = '42501';
+          return Promise.reject(refusal);
+        }
+        return Promise.resolve(STORED);
       case 'ai_begin_request':
         return Promise.resolve({
           requestId: REQUEST_ID,
@@ -83,25 +110,9 @@ const chat = (r: Recorded, earlier: string) =>
     ],
   });
 
-const doctor = (r: Recorded, earlier: string) =>
-  takeDoctorTurn({
-    rpc: fakeRpc(r, 'ai_doctor', SIM_DOCTOR_TURN_OUTPUT_SCHEMA_NAME),
-    provider: scripted({ reply: 'Go on.', objectionAddressed: false }, r),
-    sessionId: SESSION_ID,
-    repText: 'It keeps below 25 degrees.',
-    personaBrief: 'A busy urologist.',
-    personaStance: 'skeptical',
-    objection: 'No room in my fridge',
-    history: [
-      { role: 'rep', text: earlier },
-      { role: 'doctor', text: 'And storage?' },
-    ],
-  });
+describe('mr_chat — the history is screened before the model (BE-W135)', () => {
+  const run = chat;
 
-describe.each([
-  ['mr_chat', chat],
-  ['ai_doctor', doctor],
-] as const)('%s — the history is screened before the model (BE-W135)', (_feature, run) => {
   it('a patient detail in an EARLIER turn is refused, and the model is never called', async () => {
     const r = fresh();
     const result = await run(r, PATIENT);
@@ -119,5 +130,32 @@ describe.each([
     expect(result.kind).not.toBe('patient_specific');
     expect(r.model).toHaveLength(1);
     expect(JSON.stringify(r.model[0]?.messages)).toContain('What does the first screen show?');
+  });
+});
+
+const doctor = (r: Recorded, opts: { notYours?: boolean } = {}) =>
+  takeDoctorTurn({
+    rpc: fakeRpc(r, 'ai_doctor', SIM_DOCTOR_TURN_OUTPUT_SCHEMA_NAME, opts),
+    provider: scripted({ reply: 'Go on.', objectionAddressed: false }, r),
+    sessionId: SESSION_ID,
+    repText: 'It keeps below 25 degrees.',
+  });
+
+describe("ai_doctor — the persona and the conversation are the SERVER's (BE-W136)", () => {
+  it('the model is briefed with the approved persona and the STORED turns', async () => {
+    const r = fresh();
+    const result = await doctor(r);
+
+    expect(result.kind).toBe('replied');
+    const [system, user] = r.model[0]?.messages ?? [];
+    expect(system?.content).toContain('APPROVED BRIEF: a cautious urologist');
+    expect(user?.content).toContain('STORED DOCTOR TURN: what about storage?');
+  });
+
+  it('"not your session" refuses BEFORE a request is counted', async () => {
+    const r = fresh();
+    await expect(doctor(r, { notYours: true })).rejects.toMatchObject({ code: '42501' });
+    expect(r.calls.map((c) => c.fn)).toEqual(['sim_session_context']);
+    expect(r.model).toHaveLength(0);
   });
 });

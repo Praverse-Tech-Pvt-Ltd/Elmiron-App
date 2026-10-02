@@ -22,6 +22,7 @@ genuinely need credentials, legal text or master data."* Every decision you have
 | **Q-12** | Legal text | **Approve the live-tracking privacy notice** — drafted by us, `docs/operator/live-tracking-notice-DRAFT.md` | Live tracking (`BE-C45`) — it cannot start without a separate consent | Yes, for tracking |
 | **Q-13** | Legal text | **The PV / data-protection signatory** — **not a current-release blocker** (`BE-C55`) | Recording and transcripts, both deferred | No |
 | **Q-14** | Account | **The second production admin** you are provisioning (`BE-C57`) — tell us when one approval has been made with it | Every approval: prompts, personas, knowledge, lessons | **Yes** — nothing can be approved without it |
+| **Q-15** | Your answer | **Should Product Q&A notice side effects, off-label requests and product complaints — or is noticing them the rep's job?** — section 6 (`BE-W134`) | Either a new piece of work, or deleting three tests that can never pass | No |
 
 **Why Q-3 and Q-12 are here when the reviewer's brief asked for four items:** your rule covers anything
 needing credentials or legal text, and these two are exactly that. Where the brief and your rule
@@ -210,3 +211,37 @@ sending — any code starting `EXAMPLE-` is refused.**
 | An example row left in | So example data can never be loaded |
 
 **MR sign-in accounts are created separately**, one per MR row, after the territories load.
+
+---
+
+## 6. Q-15 — should Product Q&A notice side effects, off-label requests and complaints? (`BE-W134`)
+
+**The question, in one line: when a rep types something into Product Q&A that sounds like a side
+effect, an off-label use or a product complaint, should the assistant flag it — or is spotting those
+the rep's job?**
+
+Three examples the system was written to expect, and what happens today:
+
+| The rep types | What a flag would mean | What happens today |
+| --- | --- | --- |
+| "A doctor told me someone developed a rash after starting [product]" | Possible **side effect** — someone should review it | Answered (or refused) like any question. **Nothing is flagged** |
+| "Can [product] be used for migraine?" | **Off-label** request | Refused, because no approved material covers it. **Not flagged as off-label** |
+| "The strips I received had broken tablets and a wrong label" | Possible **quality complaint** | Treated as a question. **Nothing is flagged** |
+
+**Why this is your decision, not ours.** You already decided the rep **flags a possible adverse
+event themselves** and makes no medical assessment (`BE-C36`). That covers the side-effect case
+through the rep. Whether the assistant should ALSO notice — a second net, or a second opinion
+nobody asked for — is a compliance choice.
+
+**What each answer costs:**
+
+* **"Yes, the assistant should notice."** New work: a step that reads every question for these three
+  signs before answering. It needs the real model (Q-1) to be any good — keyword matching would
+  flag "rash" in a training question and miss the same report in other words. Each flag then needs
+  somewhere to go and someone to review it, which is the PV workflow (Q-13). **Not before 4 October.**
+* **"No, that is the rep's job."** No work. The three tests that expect the assistant to flag these
+  are **deleted**, not left looking as though they are waiting for something — they can never pass,
+  with any model, because nothing in Product Q&A is built to raise these flags.
+
+**Nothing is decided until you answer.** Until then the three tests stay marked as waiting on this
+question, by name, in every test run.

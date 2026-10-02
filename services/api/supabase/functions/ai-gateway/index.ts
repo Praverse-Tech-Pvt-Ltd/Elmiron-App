@@ -65,15 +65,12 @@ interface RequestBody {
   readonly message?: unknown;
   // lms_tutor
   readonly lessonId?: unknown;
-  // ai_doctor / ai_coach
+  // ai_doctor / ai_coach — only these two. Since W1-R the persona, scenario and turns are the
+  // server's (`sim_session_context`); fields a client still sends for them are not read.
   readonly sessionId?: unknown;
   readonly repText?: unknown;
-  readonly personaBrief?: unknown;
-  readonly personaStance?: unknown;
-  readonly objective?: unknown;
-  readonly objection?: unknown;
+  // mr_chat's earlier turns (screened, `BE-W135`)
   readonly history?: unknown;
-  readonly turns?: unknown;
 }
 
 const STUB_SHAPE: Record<Feature, StubShape> = {
@@ -128,20 +125,18 @@ const limitReached = (error: unknown): AiAllowance | null => {
 };
 
 /**
- * W1-Q E1 (`BE-W135`). The request body's `history`, made into what the flows' types claim: every
- * turn's text a STRING and its role one of two. The flows now screen each turn's text for patient
- * details, and the guardrail's string methods would throw on anything else — after the request had
- * begun, leaving it open (`BE-W133`'s shape). Not a cast: a cast is what let this through before.
+ * W1-Q E1 (`BE-W135`). `mr_chat`'s `history`, made into what the flow's type claims: every turn's
+ * text a STRING and its role one of two. The flow screens each turn's text for patient details, and
+ * the guardrail's string methods would throw on anything else — after the request had begun, leaving
+ * it open (`BE-W133`'s shape). Not a cast: a cast is what let this through before. (The AI doctor no
+ * longer takes a history at all since W1-R — `sim_session_context`.)
  */
-const historyOf = <R extends 'assistant' | 'doctor'>(
-  raw: unknown,
-  other: R,
-): { role: 'rep' | R; text: string }[] =>
+const historyOf = (raw: unknown): { role: 'rep' | 'assistant'; text: string }[] =>
   Array.isArray(raw)
     ? raw.map((h) => {
         const turn = (typeof h === 'object' && h !== null ? h : {}) as Record<string, unknown>;
         return {
-          role: turn['role'] === 'rep' ? 'rep' : other,
+          role: turn['role'] === 'rep' ? 'rep' : 'assistant',
           text: typeof turn['text'] === 'string' ? turn['text'] : String(turn['text'] ?? ''),
         };
       })
@@ -264,10 +259,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
         provider,
         sessionId: String(body.sessionId),
         repText: String(body.repText),
-        personaBrief: String(body.personaBrief ?? ''),
-        personaStance: String(body.personaStance ?? 'receptive'),
-        objection: String(body.objection ?? ''),
-        history: historyOf(body.history, 'doctor'),
+        // W1-R C (`BE-W136`): persona, objection and history come from `sim_session_context`. A
+        // client that still sends them is not refused — it is ignored.
       });
       return withAllowance(result);
     }
@@ -276,7 +269,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         rpc,
         provider,
         message: String(body.message),
-        history: historyOf(body.history, 'assistant'),
+        history: historyOf(body.history),
       });
       return withAllowance(result);
     }
@@ -294,11 +287,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         rpc,
         provider,
         sessionId: String(body.sessionId),
-        objective: String(body.objective ?? ''),
-        objection: String(body.objection ?? ''),
-        turns: Array.isArray(body.turns)
-          ? (body.turns as { turnIndex: number; role: 'rep' | 'doctor'; text: string }[])
-          : [],
+        // W1-R C (`BE-W136`): the STORED conversation is analysed; body turns are ignored.
       });
       return withAllowance(result);
     }

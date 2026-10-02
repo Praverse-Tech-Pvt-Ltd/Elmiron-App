@@ -2556,3 +2556,140 @@ section**, per the rule that a commit made only to record a CI result goes unrec
 **Needs Maanav:** merge PR #2 (it is what puts the chat contract on `main` for Dev, `FE-CR-7`);
 **needs the operator:** the `BE-W134` decision — should product_qa flag adverse events, off-label
 requests and quality complaints at all, given `BE-C36`.
+
+### W1-R — the key and the strengths question
+
+**Checkout guard.** Branch `worktree-ai-platform-phase-a`, HEAD `cf1c83cba60d96b3826fd39ae7b5ead57d2b4b02`,
+status clean (0 lines). `origin/main` had nothing this branch lacks; PR #2 `MERGEABLE` / `CLEAN`.
+`review-handoff/` deleted at the start.
+
+#### CI result of the PREVIOUS push
+
+**Workflow `CI`, run `36969076685`, SHA `cf1c83cba60d96b3826fd39ae7b5ead57d2b4b02` = W1-Q's HEAD —
+`success` on both jobs.** From the database job's log: **Test Files 78 passed (78)**, **Tests 1083
+passed | 4 todo (1087)**; browser suite **7 passed, 0 skipped, 0 failed**; **"All rollbacks applied in
+reverse order; public schema is empty."** Identical to W1-Q's local clean-database run.
+
+#### A — the key: it has not arrived. CONDITIONAL STOP THE BRIEF DEFINED
+
+**A1, how established, not believed:** no `AWS_*`, `BEDROCK` or `AI_MODEL` variable in this shell, nor
+in the Windows user or machine environment (names listed, values never read); no `~/.aws`; no AWS CLI;
+no env file for the functions; the console's only env file holds two Supabase names;
+`docs/operator-inputs.md` still shows Q-1 open with the IAM policy as `<ACCOUNT_ID>` placeholders.
+**Not checkable from here:** the hosted project's function secrets (no Supabase access token) — and a
+key there would still have no adapter to use it.
+
+**A2: no adapter written.** A3–A5 did not run. D2's thirteen predictions are therefore still predictions.
+
+#### B — strengths, closed from the operator's own words (`BE-C62`, `BE-C63`)
+
+**B1, read from `SimCoachOutputSchema` (`simulation.ts`) and `sim_coach_analyses`' columns, not
+recalled:** seven of the ten are **scores** 0–100 (`product_knowledge`, `scientific_accuracy`,
+`communication` — "Communication quality", `opening` — "Opening / pitch", `objection_handling`,
+`response_relevance` — "Relevance of responses", `closing` — "Closing / follow-up"); three are
+**lists** (`strengths` ≥1, `improvements` ≥1, each naming a dimension and citing a turn;
+`suggestedModules` 0–3). Kept, not asked for: `overallScore`, `summary`. **All ten have a home.**
+
+**B2 — reading taken: "Strengths" is the existing LIST. Nothing changed.** Items 1–7 are skills and
+each is already scored; items 8–10 are kinds of feedback, and its pair "Areas for improvement" is
+plainly a list. A strengths score would re-score the seven skills under another name.
+
+**B3 — nothing unhomed; nothing registered.** The gap was in the record, not the contract: `BE-C34`
+recorded nine because the relayed brief dropped "Strengths"; the reviewer's "the contract covers nine"
+had the same source. `BE-C62` records the ten from the operator's words.
+
+**B4 — item 6 is MET as enforced (`BE-C63`), measured two ways that differ in kind:** (1) the policy
+— `sim_coach_analyses_read`: same company AND (own row OR `is_admin()`), where `is_admin()` is
+`effective_role() = 'admin'`; `sim_sessions`/`sim_turns` carry the same rule; only `authenticated`
+has SELECT; (2) every reader in the catalogue — the only function whose body mentions
+`sim_coach_analyses` or `overall_score` is the writer; no view mentions either. **No average or
+ranking exists to show a manager.**
+
+#### C — the earlier turn, and what it uncovered (`BE-W136`)
+
+**C1 — cheaper than the brief assumed, and it closed more than history.** Sizing it found that the
+gateway took the AI doctor's ENTIRE context from the request body — `personaBrief`, `personaStance`,
+`objection`, `history` — and the coach's `objective`, `objection` and `turns`, though the server holds
+all of them. `start_sim_session` never returns the persona's approved `brief`, and grep finds
+`personaBrief` sent only by tests: **in any real use the model was briefed with an empty persona**,
+and the coach scored a conversation the client described — a rep could have a conversation that never
+happened scored and kept where their admin reads it. **Cost: one read-only function, two flows
+narrowed, test fakes updated.** Nothing then comes from the client but `sessionId` and the rep's new
+words; fields a client still sends are ignored, not refused, so a client built to the old request
+shape — the frontend's practice screens on `fe-d17-practice`, on sample data today — is not broken by it.
+
+**C2 — `mr_chat`, where nothing stores a conversation (by design). The honest options:**
+
+| Option | Cost | What it buys |
+| --- | --- | --- |
+| **Do nothing** | none | An `assistant` turn stays the client's word. It is screened for patient details (`BE-W135`), so the residual is a rep putting words in the assistant's mouth — a prompt-steering risk, not a data leak |
+| **Send no history** (single-turn) | none on the server; the frontend already sends none and FE-CR-7 says single-turn is acceptable | Removes the question entirely. **Recommended for the pilot** |
+| **Sign the assistant's replies** (HMAC over the reply text, verified when returned as history) | a secret, a signature field in the contract, a frontend change | Proves an `assistant` turn was really sent, without storing anything |
+| A transcript table | a new store, its own retention and access rules | Rejected by the brief, rightly |
+
+**C3 — built** (`20261002000100_sim_session_context.sql`): the caller's OWN session only, `42501`
+otherwise, exactly as `record_sim_turn` refuses; read **before** `ai_begin_request`, so "not yours"
+cannot leave a counted request open. **Proof over HTTP, with the stub's directive as the probe** (it
+obeys a directive wherever it appears in the prompt): a request with a **fabricated** persona brief and
+a **fabricated doctor turn**, both carrying `[STUB:objection-addressed]`, returns
+`objectionAddressed: false` — ignored. The other side already existed: the same directive in the rep's
+real words returns `true`. Coach: fabricated `turns` and `objective` carrying `[STUB:provider-error]`
+still analyse; the same directive STORED fails. The five coach tests that used to carry directives in
+the client's `objective` now store them — they kept passing, which is the evidence the stored path works.
+
+**C4 — mutant on the ownership line** (`and mr_id = v_uid` removed, installed in the live database):
+**exactly one of 45 failed** — "nobody else reads it", with another rep receiving the approved brief and
+turns. Restored from the migration file; `pg_proc` checked.
+
+#### D — `BE-W134`, for the operator
+
+**Q-15 in `docs/operator-inputs.md`, section 6**, in their terms: should Product Q&A notice side
+effects, off-label requests and product complaints, or is that the rep's job (`BE-C36`)? Yes = new
+work needing the model, a review route and PV — not before 4 October. No = the three tests are
+deleted. **Not decided.**
+
+#### E — 4 October, two days out
+
+`docs/4-OCTOBER.md` rewritten, with a new column: **READY / COULD BE READY / CANNOT BE READY**.
+Re-measured, not carried: production at **19 of this branch's 93** migrations (drift run
+`36871733061`, 1 October); the frontend's Day end and Mileage are real, and its assistant and practice
+screens built on sample data — **on its branches, not `main`**. Counted: **READY 4** (core day,
+territory import, working hours, rejected writes); **COULD BE READY 6** (Day end/Mileage, AI screens and
+the limit warning on sample data, content approval, the deploy, the uptime monitor — each one landing
+away); **CANNOT BE READY 8** (real AI, Product Q&A answering, AI drafting, voice practice, maps,
+notifications, live tracking, real-call analysis). Four actions move anything: merge PR #2, merge the
+frontend's branches, say go to the deploy, finish Q-14.
+
+#### What I got wrong
+
+- **The C3 test script expected six coach call sites; there were five.** The guard stopped it before it
+  wrote anything; counted, corrected, re-run.
+- **Pratham's ten were in the operator's message all along**; this branch recorded nine for three
+  sessions because it recorded the relay, not the source.
+- **I piped a check's output again** (`prettier --check … | tail`) — the same slip as W1-Q. Re-run
+  unpiped: clean.
+
+#### The clean-database check
+
+`node scripts/verify-clean-db.mjs`: **All 27 step(s) passed.** Both runner lines, per suite:
+
+| Suite | Test Files | Tests |
+| --- | --- | --- |
+| database (`@fieldforce/api`) | 78 passed (78) | **1087 passed \| 4 todo (1091)** |
+| `@fieldforce/core` | 11 passed (11) | 190 passed \| 4 todo (194) |
+| `@fieldforce/field` | 46 passed (46) | 664 passed (664) |
+| `@fieldforce/console` | 8 passed (8) | 76 passed (76) |
+| `ui-tokens` / `ui` / `mock` | 3 / 1 / 1 passed | 59 / 4 / 43 passed |
+| browser suite | — | 7 passed, 0 skipped, 0 failed |
+
+Rollbacks: **all applied in reverse order; public schema empty** — `20261002000100`'s among them.
+Database tests +4 on W1-Q (1083 → 1087): the two fabrication tests and the two ownership tests.
+
+#### Where I stopped
+
+**A stopped at A2 — the brief's own condition: no key. B, C, D and E done.** This section, the commit
+and the push follow; **CI on the pushed HEAD is recorded in the next session's section.**
+
+**Needs the operator:** Q-1 (the key) for anything in Part A; **Q-15** (`BE-W134`); and the four
+actions at the end of `docs/4-OCTOBER.md`. **Needs Maanav:** merge PR #2 — it is now also what carries
+`BE-W136` to production.

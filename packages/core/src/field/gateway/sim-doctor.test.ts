@@ -47,6 +47,16 @@ const fakeRpc = (recorded: Recorded, opts: { recordRefuses?: string } = {}): Con
           allowanceWarning: false,
           allowanceResetsAt: '2026-10-01T18:30:00+00:00',
         });
+      case 'sim_session_context':
+        return Promise.resolve({
+          sessionId: SESSION_ID,
+          state: 'ended',
+          personaBrief: 'A busy urologist.',
+          personaStance: 'skeptical',
+          objective: 'Explain storage',
+          objection: 'No room in my fridge',
+          turns: [{ turnIndex: 1, role: 'rep', text: 'It keeps below 25 degrees.' }],
+        });
       case 'sim_coach_module_candidates':
         return Promise.resolve([
           {
@@ -100,9 +110,6 @@ const run = (body: unknown, recorded: Recorded) =>
     rpc: fakeRpc(recorded),
     provider: scripted(body, recorded),
     sessionId: SESSION_ID,
-    objective: 'Explain storage',
-    objection: 'No room in my fridge',
-    turns: [{ turnIndex: 1, role: 'rep', text: 'It keeps below 25 degrees.' }],
   });
 
 const fresh = (): Recorded => ({ calls: [], modelRequests: [] });
@@ -175,9 +182,6 @@ describe('ai_coach — a refused analysis CLOSES its request (W1-P D2)', () => {
       rpc: fakeRpc(recorded, opts),
       provider: scripted(analysis([]), recorded),
       sessionId: SESSION_ID,
-      objective: 'Explain storage',
-      objection: 'No room in my fridge',
-      turns: [{ turnIndex: 1, role: 'rep', text: 'It keeps below 25 degrees.' }],
     });
 
   it('the database refusing the analysis (23514) is the failure sentence, closed as analysis_refused', async () => {

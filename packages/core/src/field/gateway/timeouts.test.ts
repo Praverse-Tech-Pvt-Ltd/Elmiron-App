@@ -64,6 +64,16 @@ const fakeRpc = (calls: Call[], feature: string, outputSchemaName: string): Cont
           lessonBody: 'Interstitial cystitis is a chronic bladder condition.',
           courseTitle: 'Urology foundations',
         });
+      case 'sim_session_context':
+        return Promise.resolve({
+          sessionId: SESSION_ID,
+          state: 'ended',
+          personaBrief: 'A busy urologist.',
+          personaStance: 'skeptical',
+          objective: 'Explain storage',
+          objection: 'No room in my fridge',
+          turns: [{ turnIndex: 1, role: 'rep', text: 'It keeps below 25 degrees.' }],
+        });
       case 'sim_coach_module_candidates':
         return Promise.resolve([]);
       case 'ai_complete_request':
@@ -115,10 +125,6 @@ const FLOWS = [
         provider,
         sessionId: SESSION_ID,
         repText: 'It keeps below 25 degrees.',
-        personaBrief: 'A busy urologist.',
-        personaStance: 'skeptical',
-        objection: 'No room in my fridge',
-        history: [],
         timeoutMs: 50,
       }),
   },
@@ -130,9 +136,6 @@ const FLOWS = [
         rpc: fakeRpc(calls, 'ai_coach', SIM_COACH_OUTPUT_SCHEMA_NAME),
         provider,
         sessionId: SESSION_ID,
-        objective: 'Explain storage',
-        objection: 'No room in my fridge',
-        turns: [{ turnIndex: 1, role: 'rep', text: 'It keeps below 25 degrees.' }],
         timeoutMs: 50,
       }),
   },

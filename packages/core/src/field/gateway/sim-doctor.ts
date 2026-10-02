@@ -7,6 +7,7 @@ import {
   SimCoachModuleCandidateSchema,
   SimCoachOutputSchema,
   SimDoctorTurnOutputSchema,
+  SimSessionContextSchema,
 } from '../simulation.js';
 import type { SimTurnResult } from '../simulation.js';
 import { AiBeginRequestResponseSchema } from '../ai.js';
@@ -42,19 +43,26 @@ import type { ControlPlaneRpc, LlmProvider, LlmResult } from './providers.js';
  * there would widen who can read a rep's words without anybody deciding to.
  */
 
+/**
+ * **The session id and the rep's new words — nothing else comes from the client.** W1-R C
+ * (`BE-W136`): the persona brief, stance, objection and the conversation so far are read from
+ * `sim_session_context`. Before, they were request fields: the approved persona brief never reached
+ * the model (no client is sent it), and an earlier "doctor" turn was the client's word.
+ */
 export interface SimTurnInput {
   readonly rpc: ControlPlaneRpc;
   readonly provider: LlmProvider;
   readonly sessionId: string;
   readonly repText: string;
-  /** The persona's authored brief and stance, from `start_sim_session`. */
-  readonly personaBrief: string;
-  readonly personaStance: string;
-  readonly objection: string;
-  /** The turns so far, oldest first, so the doctor remembers the conversation. */
-  readonly history: readonly { readonly role: 'rep' | 'doctor'; readonly text: string }[];
   readonly timeoutMs?: number;
 }
+
+/**
+ * The session as the server holds it, read BEFORE `ai_begin_request` so that "not your session"
+ * (42501) refuses before a request is counted — not after, which would leave it open (`BE-W133`).
+ */
+const sessionContext = async (rpc: ControlPlaneRpc, sessionId: string) =>
+  SimSessionContextSchema.parse(await rpc.call('sim_session_context', { p_session_id: sessionId }));
 
 /**
  * The fixed half of the system message — the contract with this code, not editable per organisation.
@@ -80,6 +88,9 @@ export const takeDoctorTurn = async (input: SimTurnInput): Promise<SimTurnResult
   const { rpc, provider, sessionId } = input;
   const repText = input.repText.trim();
   if (repText.length === 0) throw new Error('takeDoctorTurn: empty rep turn');
+
+  // 0. The session, from the server. Its turns were each screened before they were stored.
+  const context = await sessionContext(rpc, sessionId);
 
   // 1. May this run at all? Refusals propagate with their SQLSTATE.
   const begun = AiBeginRequestResponseSchema.parse(
@@ -118,11 +129,9 @@ export const takeDoctorTurn = async (input: SimTurnInput): Promise<SimTurnResult
   // history should not contain the patient details they were stopped from sending, and storing them
   // "for the audit" would put the exact data `C25` forbids into a table that keeps it for ever.
   //
-  // W1-Q E1 (`BE-W135`): the client-supplied HISTORY is screened too — it reaches the model verbatim.
-  const signals = [
-    ...detectPatientSignals(repText),
-    ...input.history.flatMap((h) => detectPatientSignals(h.text)),
-  ];
+  // W1-Q E1 screened a client-supplied history here (`BE-W135`). Since W1-R there is none: the
+  // history is `sim_turns`, and every rep turn in it passed this guardrail before it was stored.
+  const signals = detectPatientSignals(repText);
   if (signals.length > 0) {
     const onlyAdvice = signals.every((s) => s === 'patient_specific_advice');
     await complete({
@@ -143,14 +152,14 @@ export const takeDoctorTurn = async (input: SimTurnInput): Promise<SimTurnResult
             content: [
               begun.systemPrompt,
               OUTPUT_CONTRACT,
-              `Your character: ${input.personaBrief}`,
-              `Your stance: ${input.personaStance}`,
-              `The objection you raise: ${input.objection}`,
+              `Your character: ${context.personaBrief}`,
+              `Your stance: ${context.personaStance}`,
+              `The objection you raise: ${context.objection}`,
             ].join('\n\n'),
           },
           {
             role: 'user',
-            content: `Conversation so far:\n${renderHistory(input.history)}\n\nRepresentative: ${repText}`,
+            content: `Conversation so far:\n${renderHistory(context.turns)}\n\nRepresentative: ${repText}`,
           },
         ],
         modelConfig: begun.modelConfig,
@@ -221,19 +230,17 @@ export const analyseSimSession = async (input: {
   readonly rpc: ControlPlaneRpc;
   readonly provider: LlmProvider;
   readonly sessionId: string;
-  readonly objective: string;
-  readonly objection: string;
-  readonly turns: readonly {
-    readonly turnIndex: number;
-    readonly role: 'rep' | 'doctor';
-    readonly text: string;
-  }[];
   readonly timeoutMs?: number;
 }): Promise<
   | { readonly kind: 'analysed'; readonly analysisId: string; readonly overallScore: number }
   | { readonly kind: 'failed'; readonly message: string }
 > => {
   const { rpc, provider, sessionId } = input;
+
+  // W1-R C (`BE-W136`). The conversation analysed is the one STORED, not one the client describes:
+  // before, `turns`, `objective` and `objection` were request fields, so a rep could have a
+  // conversation that never happened scored and kept where their admin reads it.
+  const context = await sessionContext(rpc, sessionId);
 
   const begun = AiBeginRequestResponseSchema.parse(
     await rpc.call('ai_begin_request', { p_feature: 'ai_coach' }),
@@ -292,8 +299,8 @@ export const analyseSimSession = async (input: {
             role: 'user',
             content:
               `AVAILABLE MODULES (JSON): ${JSON.stringify(candidates)}\n\n` +
-              `Objective: ${input.objective}\nObjection raised: ${input.objection}\n\n` +
-              input.turns
+              `Objective: ${context.objective}\nObjection raised: ${context.objection}\n\n` +
+              context.turns
                 .map(
                   (t) =>
                     `[${String(t.turnIndex)}] ${t.role === 'rep' ? 'Representative' : 'Doctor'}: ${t.text}`,
@@ -342,7 +349,7 @@ export const analyseSimSession = async (input: {
   // W1-P D2. A finding citing a turn this session was not given is refused HERE too, exactly as an
   // unoffered module is -- found by the stub's new `[STUB:cite-missing-turn]` branch: without it the
   // database's 23514 reached the rep as a raw 403 and the request was left `started` for ever.
-  const offeredTurns = new Set(input.turns.map((t) => t.turnIndex));
+  const offeredTurns = new Set(context.turns.map((t) => t.turnIndex));
   if ([...out.strengths, ...out.improvements].some((f) => !offeredTurns.has(f.turnIndex))) {
     await complete({
       status: 'failed',
@@ -355,8 +362,8 @@ export const analyseSimSession = async (input: {
 
   // The database validates the SAME shape again -- see `record_sim_coach_analysis`. Not redundant:
   // this checks what the model said, that checks what reaches the table, and a future caller that
-  // is not this code cannot skip the second one. The turn list above came from the client, so the
-  // database stays the authority -- and if it refuses, the request is CLOSED with that refusal
+  // is not this code cannot skip the second one. The database stays the authority -- and if it
+  // refuses, the request is CLOSED with that refusal
   // rather than abandoned mid-flight.
   let stored: { analysisId?: string };
   try {

@@ -500,3 +500,46 @@ disagreement could be checked, because the operator's text was not provided.**
 | `BE-C59` | C-4 | **Paid plan**; uptime/heartbeat monitoring **outside** the hosting platform | `BE-C25` |
 | `BE-C60` | D-1 | AI privacy limit **acknowledged**. Keep the filter; **do not intentionally collect patient identifiers in the MR app; minimise what is sent; log and filter risky inputs where practical; keep patient/PV workflows separate from AI Doctor and coaching** | `BE-C20` / `BE-C36`. "Log risky inputs" is the same requirement as `BE-W129`, from a second direction |
 | `BE-C61` | — | **The legal name remains the only legal-name input outstanding. Do not invent it** | `BE-C9` |
+
+## `BE-C62` — **the coach's analysis covers TEN items; "Strengths" is the existing list** (W1-R B)
+
+- **The operator's words** (Pratham, 1 October, item 5, quoted in the W1-R brief): *"Product knowledge,
+  Scientific accuracy, Communication quality, Opening / pitch, Objection handling, Relevance of
+  responses, Closing / follow-up, Strengths, Areas for improvement, Recommended LMS/training modules."*
+- **`BE-C34` recorded NINE because the brief that relayed it dropped "Strengths".** Ten is the source.
+- **All ten have a home, read from `SimCoachOutputSchema` and `sim_coach_analyses`, not recalled:**
+
+| # | Operator's item | In the contract | Shape |
+| --- | --- | --- | --- |
+| 1 | Product knowledge | `dimensionScores.product_knowledge` | score 0–100 |
+| 2 | Scientific accuracy | `dimensionScores.scientific_accuracy` | score 0–100 |
+| 3 | Communication quality | `dimensionScores.communication` | score 0–100 |
+| 4 | Opening / pitch | `dimensionScores.opening` | score 0–100 |
+| 5 | Objection handling | `dimensionScores.objection_handling` | score 0–100 |
+| 6 | Relevance of responses | `dimensionScores.response_relevance` | score 0–100 |
+| 7 | Closing / follow-up | `dimensionScores.closing` | score 0–100 |
+| 8 | **Strengths** | `strengths` | **list, at least one**, each naming a dimension and citing a turn |
+| 9 | Areas for improvement | `improvements` | list, at least one, same shape |
+| 10 | Recommended LMS/training modules | `suggestedModules` | list of 0–3, only modules the rep can open |
+
+  Not asked for, and kept: `overallScore` and `summary`.
+- **Reading taken: the LIST, not a separate score.** Items 1–7 are skills and each is already a score;
+  items 8–10 are kinds of feedback, and "Areas for improvement" — its pair — is plainly a list. A
+  "strengths score" would re-score the seven skills under another name. **Nothing changes.**
+- **The reviewer's "the contract covers nine" was wrong for the same reason `BE-C34` was**: both counted
+  from the relayed nine, not the operator's ten.
+
+## `BE-C63` — **visibility: MR + Admin yes, Manager no — MET as enforced** (W1-R B4)
+
+- **The operator's words** (item 6): *"MR: Can see their own detailed practice feedback and analysis.
+  Admin: Can access the practice analysis for administration/training oversight. Manager: Do NOT show
+  individual practice scores, rankings or team averages for now."*
+- **Measured from the catalogue, two ways that differ in kind:**
+  1. **Policy:** `sim_coach_analyses_read` — same company AND (`mr_id = auth.uid()` OR `is_admin()`);
+     `is_admin()` is `effective_role() = 'admin'`, so a manager matches neither. `sim_sessions` and
+     `sim_turns` carry the same rule. Only `authenticated` has `SELECT`.
+  2. **Every reader:** the only function whose body mentions `sim_coach_analyses` or `overall_score` is
+     the writer `record_sim_coach_analysis`; no view mentions either. **No average or ranking exists to
+     show anyone.**
+- **Nothing differs from the operator's rule.** Restates `C27`, `BE-C13`, `BE-C34`. "Later if management
+  formally decides" is a future change to `is_admin()`'s branch, not to anything here.

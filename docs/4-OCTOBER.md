@@ -1,82 +1,107 @@
-# 4 October — the honest list
+# 4 October — the honest list, two days out
 
-**Rewritten 1 October 2026, evening (W1-P Part E).** Built on the frontend's own measured gap map,
-**`docs/frontend-facts-2026-10-01.md` (FE-D13)**, and on backend's measurements in this repository.
+**Rewritten 2 October 2026 (W1-R Part E). This is the version to read on the day.** Every line is
+measured, and says where: the backend from this branch (PR #2, CI green), the frontend from its own gap
+map on its branches (`fe-d14-screens` → `fe-d17-practice`), production from the drift check.
 
-**Four categories, and the last one is the point:**
+**Four categories:**
 
 | Mark | Means |
 | --- | --- |
 | **BUILT AND REAL** | Working against real data, on a real server, today |
-| **BUILT BUT STUBBED** | The code is finished and tested — but every answer it gives was written by a placeholder, because no real AI model is connected |
+| **BUILT BUT STUBBED** | Finished and tested — but every AI answer is written by a labelled placeholder, because no model is connected |
 | **NOT STARTED** | Engineering has not done it. Engineering could |
-| **BLOCKED ON A CREDENTIAL** | **Nobody can do it yet.** It waits on an account, key or person only the company can supply |
+| **BLOCKED ON A CREDENTIAL** | **Nobody can do it yet.** It waits on a key, account or person only the company can supply |
 
-**"Real" means real on a phone against a server.** One fact underlies the whole page: **production has
-applied 19 of this project's 91 database migrations** (FE-D13 §6, drift run `36718280007`). **The app's
-offline sync is not on production**, so nothing the app records can reach production until the deploy
-runs. Everything below marked REAL is real against the development server.
+**And one more column, which is the point of this version: by 4 October, is it**
+
+* **READY** — true today;
+* **COULD BE READY** — not ready, but everything it waits on could still land before the 4th, and the
+  work after it is small enough to fit;
+* **CANNOT BE READY** — even if what it waits on arrived today, it will not be finished by the 4th.
+  **This is the column to re-plan against.**
+
+**Three facts underlie the whole page:**
+
+1. **Production has applied 19 of this branch's 93 database migrations** (drift check, run
+   `36871733061`, 1 October: "the first 19 of 75" on `main`; this branch adds 18). **Nothing the app
+   records reaches production until the deploy runs** — everything marked REAL is real on the
+   development server.
+2. **No AWS key exists for this project** (checked 2 October: no credential in any environment, file or
+   setting reachable from it). Every AI answer is the stub's.
+3. **PR #2 is not merged**, and **the frontend's branches are not merged**. Work on a branch is not on
+   `main`; nothing on a branch is in a build a rep holds.
 
 ---
 
 ## The list
 
-| # | Must-have | Status | What it is waiting on |
-| --- | --- | --- | --- |
-| 1 | **The MR app's core day** — sign in, today's plan, doctors, check-in/out, consent, samples, call report, voice note, upload queue (13 screens) | **BUILT AND REAL** | Production deploy (item 17) to be real **in production** |
-| 2 | **Day end and Mileage** (2 screens, always reachable) | **BUILT, BUT READING THE MOCK SERVER** | **Frontend only.** The real function exists, works for an MR (`CR-3`, proved over HTTP), and a wrapper for it already exists unused (`apps/field/src/capture/visits.ts:92`). A sideloaded phone cannot reach a laptop's mock, so **on a handset these two show nothing real until switched** |
-| 3 | **Coaching, Analysis, Reply** (3 screens) | **BUILT, READING THE MOCK, HIDDEN** | Frontend only, as item 2; hidden by a flag that is off |
-| 4 | **The five AI features** — Product Q&A, MR Chat, tutor, AI Doctor practice, coaching | **BUILT BUT STUBBED** | **BLOCKED ON A CREDENTIAL: the AWS key (Q-1).** Logic, guardrails, audit and every branch are tested over HTTP — against stub output |
-| 5 | **AI screens in the MR app** | **NOT STARTED** | Frontend. **No file in `apps/` calls the AI gateway** (measured) |
-| 6 | **The 80% AI-limit warning on the rep's screen** | **Server BUILT AND REAL; screen NOT STARTED** | Frontend (`BE-CR-6`) — and the AI screens of item 5, since the warning rides on an AI answer |
-| 7 | **Approval of content** (prompts, personas, knowledge, lessons — four eyes) | **BUILT AND REAL, UNUSABLE** | **BLOCKED ON A CREDENTIAL: the second production admin (Q-14).** One admin cannot pass a four-eyes check |
-| 8 | **Product Q&A answering from approved material, refusing otherwise** | **BUILT** (refusal real; answering stubbed) | **Master data:** approved content (Q-9), plus item 4 |
-| 9 | **AI drafting of training content** | **NOT STARTED** beyond the draft/approve lifecycle | **BLOCKED ON A CREDENTIAL** — drafting is a model call (Q-1) |
-| 10 | **Voice practice** | **NOT STARTED** | The AWS account (Q-1) for Transcribe; the operator ruled no new stub-built capability |
-| 11 | **Maps** — basic doctor location and navigation | **NOT STARTED** | **BLOCKED ON A CREDENTIAL: Google keys (Q-2)**, plus a map-library dependency approval and a new build |
-| 12 | **Notifications** (deferred second if capacity forces) | **NOT STARTED** | **BLOCKED ON A CREDENTIAL: Firebase (Q-3)**, plus a dependency approval |
-| 13 | **Live tracking** (deferred first if capacity forces) | **NOT STARTED, designed** | The operator chose the **paid** library — a dependency purchase; the **separate notice approved** (Q-12, four decisions); real handsets. Pilot is **sideloaded**, which removes the Play-review question for the pilot (`LIVE-TRACKING-DESIGN.md`) |
-| 14 | **Territory / MR import** | **BUILT AND REAL** (template + checker) | **Master data (Q-5)** |
-| 15 | **Working hours per territory** | **BUILT AND REAL** | Master data (Q-8); a test value is in place |
-| 16 | **Rejected writes counted** (asked for twice) | **BUILT AND REAL** | — (direct API paths the app does not use: `BE-W130`) |
-| 17 | **Production deploy** — the 72 missing migrations, then reference data, then a smoke test (operator's order) | **NOT STARTED** | Engineering, in the operator's sequence; the paid plan is the operator's action. **Every REAL item above depends on this one to be real in production** |
-| 18 | **External uptime monitor** | **NOT STARTED** | A dependency ask (an external service) |
+| # | Must-have | Status | Waiting on | By 4 October |
+| --- | --- | --- | --- | --- |
+| 1 | **The MR app's core day** — sign in, plan, doctors, check-in/out, consent, samples, call report, voice note, upload queue | **BUILT AND REAL** | The production deploy (17) to be real **in production** | **READY** on the development server; in production only if 17 runs |
+| 2 | **Day end and Mileage** | **BUILT AND REAL — on the frontend's branch** (`6fb2f15`, `e58ac35`), reading `daily_mileage` | **Merging the frontend's branch** | **COULD BE READY** — a merge and a build |
+| 3 | **Coaching, Analysis, Reply** | **Hidden by decision**; Reply is out | The frontend keeps Coaching hidden until its content is real | **CANNOT BE READY** as real-call analysis — real recording is deferred (operator, item 4); practice coaching is item 5 |
+| 4 | **The five AI features** — Product Q&A, MR Chat, tutor, AI Doctor practice, coaching | **BUILT BUT STUBBED** — every branch, guardrail and refusal tested over HTTP against stub output | **BLOCKED ON A CREDENTIAL: the AWS key (Q-1)**, then about a day of adapter work (`docs/ai-platform/KEY-DAY-CHECKLIST.md`), then **approved prompts (needs Q-14)** | **CANNOT BE READY** as real AI. Even with the key today: adapter, first-call failures (the checklist predicts thirteen), and no prompt can be approved without the second admin |
+| 5 | **AI screens in the MR app** — assistant and AI Doctor practice | **BUILT ON SAMPLE DATA — on the frontend's branches**, behind flags that are off (`74b0010`, `3eb838e`) | **PR #2 merged** (the chat and practice contracts, `FE-CR-7`, `FE-CR-11`), then item 4 for real answers | **COULD BE READY on sample data** after two merges; **CANNOT BE READY on real answers** (item 4) |
+| 6 | **The 80% AI-limit warning on the rep's screen** | **Server BUILT AND REAL** (every answer and the 429 carry the figures and the reset time); **component built on the frontend's branch** (`e5fdfcd`) | Item 5's screens, since the warning rides on an AI answer | Same as 5: **sample data yes, real no** |
+| 7 | **Approval of content** (prompts, personas, knowledge, lessons — four eyes) | **BUILT AND REAL, unusable** | **BLOCKED ON A CREDENTIAL: the second production admin (Q-14)** | **COULD BE READY** if Q-14 lands — it is "being provisioned now" (`BE-C57`) — and someone authors content to approve |
+| 8 | **Product Q&A answering from approved material, refusing otherwise** | **Refusal BUILT AND REAL; answering STUBBED** | Approved product content (**Q-9**), its approval (**Q-14**), and the model (**Q-1**) | **CANNOT BE READY** — three company inputs in a row |
+| 9 | **AI drafting of training content** | **NOT STARTED** beyond the draft/approve lifecycle | **BLOCKED ON A CREDENTIAL** — drafting is a model call (Q-1) | **CANNOT BE READY** |
+| 10 | **Voice practice** | **NOT STARTED** | The AWS account (Q-1) for speech, and no stub-built capability by the operator's rule | **CANNOT BE READY** |
+| 11 | **Maps** — basic doctor location and navigation | **NOT STARTED** (planned on the frontend's branch) | **BLOCKED ON A CREDENTIAL: Google key (Q-2)**, a map-library dependency approval, and a new build — the key is compiled in | **CANNOT BE READY** — key, approval, library work and a rebuild in two days |
+| 12 | **Notifications** (operator: deferred second if capacity forces) | **NOT STARTED** | **BLOCKED ON A CREDENTIAL: Firebase (Q-3)**, plus a dependency approval | **CANNOT BE READY** |
+| 13 | **Live tracking** (operator: deferred first if capacity forces) | **NOT STARTED, designed** | The paid library (a purchase), the separate privacy notice approved (Q-12), real handsets | **CANNOT BE READY** — and the operator already ordered it deferred first |
+| 14 | **Territory / MR import** | **BUILT AND REAL** (template + checker) | Master data (Q-5) | **READY** as a tool; the data is the company's |
+| 15 | **Working hours per territory** | **BUILT AND REAL** | Master data (Q-8); a test value is in place | **READY** with test hours |
+| 16 | **Rejected writes counted** | **BUILT AND REAL** for every path the app uses (`BE-W130` closed) | — | **READY** |
+| 17 | **Production deploy** — the 74 missing migrations, then reference data, then a smoke test (operator's order, `BE-C58`) | **NOT STARTED** | Engineering, **after PR #2 merges** and the operator's go-ahead; the paid plan is the operator's action | **COULD BE READY** — it is hours of work, not days, once the go-ahead and the merge exist. **Every REAL item depends on it to be real in production** |
+| 18 | **External uptime monitor** | **NOT STARTED** | A dependency ask (an external service) | **COULD BE READY** if approved — it is configuration |
 
-**Counted — each item once, by what stops it today:**
+## Counted
+
+**By what stops each item today** (each counted once):
 
 | Group | Items | Count |
 | --- | --- | --- |
-| **BUILT AND REAL, nothing waiting but data or the deploy** | 1, 14, 15, 16 | **4** |
-| **BUILT, reading the mock — frontend's switch** | 2, 3 | **2** |
-| **BLOCKED ON A CREDENTIAL** — AWS key, second admin, Google, Firebase | 4, 7, 9, 10, 11, 12 | **6** |
-| **Waiting on master data** | 8 | **1** |
-| **NOT STARTED — engineering (frontend: 5, 6)** | 5, 6, 17, 18 | **4** |
-| **NOT STARTED — waiting on operator decisions and a purchase** | 13 | **1** |
+| **BUILT AND REAL** (on the development server) | 1, 14, 15, 16 | **4** |
+| **BUILT AND REAL, on a branch not yet merged** | 2 | **1** |
+| **BUILT BUT STUBBED / on sample data** | 4, 5, 6 | **3** |
+| **BLOCKED ON A CREDENTIAL** | 7, 9, 10, 11, 12 | **5** |
+| **Waiting on company inputs in sequence** (content, approval, model) | 8 | **1** |
+| **NOT STARTED — engineering, waiting on a merge or an approval** | 17, 18 | **2** |
+| **Out of this release by decision** | 3, 13 | **2** |
+| **Total** | | **18** |
+
+**By what 4 October can hold:**
+
+| By 4 October | Items | Count |
+| --- | --- | --- |
+| **READY** | 1, 14, 15, 16 | **4** |
+| **COULD BE READY** — each needs one thing to land in time | 2 (a merge), 5 and 6 on sample data (merges), 7 (Q-14), 17 (merge + go-ahead), 18 (an approval) | **6** |
+| **CANNOT BE READY** | 3, 4, 8, 9, 10, 11, 12, 13 — and 5 and 6 on **real** answers | **8** |
 | **Total** | | **18** |
 
 ---
 
-## The day the AWS key arrives — what changes, and what does not
+## What the operator can still change before the 4th
 
-**What changes, within about a day of engineering:** the stub is replaced by Bedrock India behind the
-gateway's one construction line; **all five AI features start answering for real**; every branch already
-proved against stub output then runs against a real model, which **will differ in length, latency and
-failure mode** — that day is when the AI work is actually tested.
+**Four actions, and nothing else on this page moves without them:**
 
-**What does NOT change:**
+1. **Merge PR #2** (Maanav). It carries the AI contracts the frontend's screens are waiting for, and it
+   is the precondition for the deploy. CI is green on it.
+2. **Merge the frontend's branches** (Dev). Day end and Mileage become real in a build; the assistant
+   and practice screens become available on sample data.
+3. **Say go to the production deploy** (operator), and confirm the paid plan. It is the difference
+   between "real on a laptop" and "real".
+4. **Finish Q-14, the second admin** (operator). Nothing can be approved without it — not even the
+   prompt each AI feature needs before it will run.
 
-* **An MR still sees no AI**, because no app screen calls it (item 5).
-* **No AI content can be approved** until the second admin exists (item 7) — including the prompt each
-  feature needs before it will run at all.
-* **Product Q&A still refuses** until approved product content is loaded (item 8).
-* **Nothing reaches production** until the deploy runs (item 17).
+**What no action before the 4th can change:** real AI answers (the key has not arrived, and after it
+there is adapter work, first-call failures and approvals), maps, notifications, live tracking, voice
+practice and AI drafting. **Plan the 4th without them.**
 
-## The plain reading
+## The day the AWS key arrives — still true
 
-**The decision in front of the operator is no longer what to cut. It is how fast three things land:
-the AWS key, the second admin account, and the go-ahead to deploy.** Six of the eighteen items cannot be
-started by anyone until the first two arrive; the production deploy gates whether anything is real
-outside a laptop.
-
-**On the frontend's side, the cheapest real gain on the demo path is items 2 and 3**: the functions exist
-and are proved, and the switch is theirs.
+The stub is replaced behind one line of the gateway; the checklist says what changes, what to assert
+and which thirteen things will fail first. **An MR still sees no real AI** until the prompts are
+approved (Q-14) and the frontend's screens call the gateway (merges above).

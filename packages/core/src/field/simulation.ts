@@ -294,6 +294,29 @@ export const SimCoachOutputSchema = z.object({
 export type SimCoachOutput = z.infer<typeof SimCoachOutputSchema>;
 export const SIM_COACH_OUTPUT_SCHEMA_NAME = 'SimCoachOutputSchema';
 
+/**
+ * W1-R C (`BE-W136`) — `sim_session_context(p_session_id)`: the caller's OWN session as the server
+ * holds it. The AI doctor and coach read the persona, the scenario and the turns from here, never from
+ * the request body: the persona brief is approved content no client is ever sent, and a coach that
+ * scored client-supplied turns would score a conversation that may never have happened.
+ */
+export const SimSessionContextSchema = z.object({
+  sessionId: UuidSchema,
+  state: z.enum(['open', 'ended']),
+  personaBrief: z.string(),
+  personaStance: z.string(),
+  objective: z.string(),
+  objection: z.string(),
+  turns: z.array(
+    z.object({
+      turnIndex: z.number().int().positive(),
+      role: z.enum(['rep', 'doctor']),
+      text: z.string(),
+    }),
+  ),
+});
+export type SimSessionContext = z.infer<typeof SimSessionContextSchema>;
+
 /** What the model must return for one doctor turn. Small on purpose. */
 export const SimDoctorTurnOutputSchema = z.object({
   reply: z.string().min(1),

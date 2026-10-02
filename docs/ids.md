@@ -311,3 +311,7 @@ bootstrap rows are not restated here; the first file that cites each is the poin
 | `BE-W135` | backend | `mr_chat` and `ai_doctor` sent client-supplied `history` to the model unscreened for patient details; fixed W1-Q E1. Residual: an `assistant`/`doctor` turn is still the client's word |
 | `FE-CR-6` | frontend | carry the AI allowance and its reset time to the app (filed on `fe-d14-screens`); answered W1-Q |
 | `FE-CR-7` | frontend | land the chat contract in `packages/core` on `main` (filed on `fe-d14-screens`); lands with PR #2 |
+| `BE-C62` | backend | the coach's analysis covers the operator's TEN items; "Strengths" is the existing list, nothing changes (W1-R B) |
+| `BE-C63` | backend | practice-analysis visibility MR + Admin yes, Manager no — measured as met (W1-R B4) |
+| `BE-W136` | backend | the AI doctor and coach took persona brief, stance, objective, objection and turns from the CLIENT although the server holds them; the approved persona brief never reached the model (W1-R C) |
+| `FE-CR-11` | frontend | the AI Doctor practice-session contract on `main` (filed on `fe-d17-practice`, `fbd5e4f`); lands with PR #2 |
