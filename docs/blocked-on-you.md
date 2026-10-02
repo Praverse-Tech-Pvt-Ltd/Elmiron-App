@@ -238,6 +238,17 @@
 > repository already knows where that leads — red became routine on 22 August, the workflows
 > were disabled on 23 August **with no reason recorded**, and production auto-paused unnoticed
 > for two weeks. See `docs/gotchas.md`.
+>
+> **THAT IS HISTORY, NOT THE STATE TODAY — verified 29 September 2026 (W1-G A1).** The blackout
+> ran **23 Aug 08:16 → 7 Sep 14:49 UTC** and ended there. Since 7 September `retention.yml` has
+> run **126 times with 126 successes** and `retention-watchdog.yml` **125 with 125**, both are
+> `state=active`, and the last run of each was **today**. The frontend track read the sentence
+> above as current and reported retention as still off; it is not. **Check before citing it —
+> one command, and it needs no credentials:**
+>
+> ```bash
+> gh run list --workflow retention.yml --limit 5 --json createdAt,conclusion
+> ```
 
 
 > # ⚠ ONE QUERY, AND NOBODY HAS RUN IT
@@ -1331,3 +1342,724 @@ row below is a decision.
 2. **5.13** — it is the only one whose cost is larger tomorrow than today, and the damage cannot
    be repaired afterwards because the ledger is append-only by design.
 3. **`FE-W70`** — the current behaviour keeps audio of a doctor who said stop.
+
+
+---
+
+## W1-A — 28 September 2026: eight answers, and what is still open
+
+**Eight rulings were given and recorded as `C21`–`C29` in `.ai-collab/decisions.md`** (nine ids —
+`C27` is the scores default this session was told to build to). This section marks the register rows
+they touch and restates, in one place, what remains.
+
+### Rows now RESOLVED
+
+| Row | Question | Answer | Recorded |
+| --- | --- | --- | --- |
+| **`#15` / `X4`** | Does "coaching is out of v1" cover AI Coach and AI Doctor on practice? | **No.** Practice simulations with no real doctor are **in scope**. `C4` is scoped to real visits | **`C22`**, `C23` |
+| **`#12` / `X1`** | Patient-detail detection, patient details in safety reports, patient-facing assistant | **No patient information anywhere in this app.** Any patient-related data is admin-only. No patient-facing assistant here — it belongs in the clinical project | **`C25`** |
+| **`#9` / `D8`** | Named medical / scientific approver for knowledge and AI prompts | **The operator.** `#16`'s built mechanism (a named admin + stored written attestation, three roles kept) is ratified | **`C26`** |
+| **`#16` / `X5`** | Content approver role | **Ratified as built.** No fourth role | **`C26`** |
+
+### Row PARTLY resolved — the one question that still needs you
+
+| Row | Resolved | Still open |
+| --- | --- | --- |
+| **`#14` / `X2`** | Scores exist on **practice simulations** and **LMS assessments**, visible to the **MR** and the **company admin**. No manager surface, no team averages, no rankings. Built to this default (`C27`) | **May a manager see an MR's practice scores?** |
+
+**The question, in one line: may a manager see an MR's practice simulation and assessment scores?**
+
+- **(a) MR-only** — *the default already built.* Keeps `constraints.md` intact
+  (*"Never add a ranking, score, rank, percentile or grade to `analyses` or the manager surface"*,
+  asserted by tests). Nothing to amend. §34's team averages stay out of scope permanently.
+- **(b) Manager-visible** — requires the recorded rule to be **formally amended in writing**, and it
+  **is employee monitoring**, which brings the `C8` reasoning and an HR/legal question with it. It
+  also makes register **`#17`** (may a manager see which AI features an MR used?) load-bearing
+  rather than adjacent.
+
+**No manager-facing score surface was built this session, in either case.**
+
+### Rows DEFERRED — `C29`
+
+**`#18` to `#26` are deferred, not blocking.** No work waits on them. They are listed here so the
+deferral is visible rather than implied by silence.
+
+| Row | Subject |
+| --- | --- |
+| `#18` | The named PV / DPDP signatory (`C3`, `blocked-on-you` 5.8) |
+| `#19` | Speech-to-text provider for **real** visits, on measured Hinglish accuracy (`BE-W32`, 4.2) |
+| `#20` | Consent from employees whose voices join the bake-off corpus (`E1`) |
+| `#21` | The notice a **doctor** reads before being recorded (`BE-W109`, `E2`) |
+| `#22` | May an adverse-event report carry patient information, and may it leave the platform (4.1) |
+| `#23` | Is a doctor's second answer a withdrawal or a separate answer (`BE-W95`, 5.14) |
+| `#24` | On withdrawal, must audio already on the phone be destroyed (`FE-W70`, 3.2) |
+| `#25` | Which consent-notice language an MR sees first (5.12) |
+| `#26` | The 72-hour and 120-second clock thresholds (5.10) |
+
+**Two things the deferral does not do, and both matter.**
+
+1. **`#26`'s two unratified numbers still bound `recorded_at` on every audio upload** (`C18`), not
+   only consent captures. Deferring the ratification ships two figures nobody has confirmed. That is
+   tolerable **only** because `C21` keeps the recording path switched off — it stops being tolerable
+   the moment the flag moves.
+2. **`#21` is the DOCTOR's notice. The REPS' notice is a different row and is NOT deferred.**
+   `blocked-on-you` **2.6** / `FE-W52` — six of eight claims in the reps' transparency notice false
+   or partly false, truthful wording sitting on branch `mr-46/fe-w52-notice-pending-approval` and
+   **not on `main`** since 21 September — is outside the `#18`–`#26` range and still needs approval.
+   It is the oldest thing on this page that a signature alone would close.
+
+### Rows STILL OPEN, and what each blocks
+
+**The two at the top block everything AI.** Neither is an engineering task.
+
+| Row | Question | Blocks |
+| --- | --- | --- |
+| **`#4` / `D1`** | **Where does the AI gateway run?** | **Every AI feature.** Nothing in this release that needs a model can start |
+| **`#5` / `D2`** | **Which AI provider, and may questions and answers leave India?** | **Every live AI call.** Residency is `ap-south-1`. For voice practice, an employee's recorded voice is the payload |
+| `#6` / `D3` | Approve `pgvector` | Vector retrieval only. Keyword search is the deliberate working fallback — **not blocking** |
+| `#7` / `D5` | The product catalogue, and who supplies approved labels / prescribing information | All real product content. **And it is the boundary `C24` must not cross** — a model may draft training text, never a product claim |
+| `#8` / `D6` | Market on the company or on the content | Built as *on the content*. An answer of "company" **reworks** AI-B1 rather than unblocking |
+| `#10` / `D9` | Notifications — build them, and by which channel | Anything in LMS or AI that wants to tell a user something. Measured in `AI-SPEC.md`; none exist |
+| `#11` | A PDF-reading component for knowledge upload | Document ingestion. Text can be pasted today |
+| `#14` | See above — the manager-score half | A manager-facing score surface |
+| `#17` | May a manager see which AI features an MR used, and when? | Built as **no**. Please confirm. Becomes load-bearing if `#14` is answered (b) |
+| `#2` / `BE-W106` | Should settings belong to a company? | Per-company AI entitlements and cost limits. **Dated 2026-10-31** |
+| `#1` / `BE-W21` | The UCPMP sample cap — value, dimension, whether `input` counts | Nothing downstream, but **CI goes red on 6 November**, warning from 16 October |
+| `#3` / `BE-W93` | The organisation's registered legal name for the consent notice | **The only item whose cost is larger tomorrow than today.** `consent_records` is append-only, so every consent captured before the name exists is permanently defective and cannot be amended |
+
+### If you answer only three
+
+**`#4`, `#5`, and your own admin account (`C26`).** The first two unblock roughly two-thirds of
+everything not started, and both are answerable in a meeting. The third is not a decision at all —
+it is a provisioning task, and without it **four-eyes refuses every approval `42501`**, which means
+`C24`'s entire draft-to-approved path cannot be exercised by a human even once.
+
+---
+
+## W1-B — Part D: `BE-W115`, and what it does and does not put at risk
+
+### D1. The defect, in one paragraph
+
+**Approved knowledge is the only thing an AI feature is allowed to answer from, and approval is
+supposed to require two people.** W1-A closed the obvious way round that: a plain `INSERT` claiming
+`status = 'approved'` now fails loudly, for the database owner as much as for an admin, and a test
+proves it. **What is still open is a slower route.** Anyone connecting to the database with the
+highest-privilege account — which is what a migration, a seed script or a maintenance session runs
+as — can take a draft and *update* it to "in review", then update it again to "approved", writing
+whatever attestation text they like. Every constraint on the table is satisfied, because the rule
+that a second person must approve lives inside the approval **function**, not on the table itself.
+**Closing it needs the table to be able to tell "this update came from the approval function" from
+"this update came from a person with a database connection", and this schema has no mechanism for
+that anywhere.**
+
+### D2. The options, their costs, and what I recommend
+
+| # | Option | Cost | What it would need permission for |
+| --- | --- | --- | --- |
+| **(a)** | **A session-scoped flag.** `approve_knowledge_version` sets a marker for the duration of its own transaction; the update trigger refuses a move into `approved` unless the marker is set | **0.5d.** The mechanism is small | **A new mechanism this schema has nowhere.** `.ai-collab/constraints.md` requires asking before introducing one. It also has its own failure mode — a flag left set — so it needs its own two-sided test |
+| **(b)** | **Move the four-eyes check onto the table**, re-implementing it in the update trigger | ~1d | **Two copies of the same rule**, in the function and the trigger, which is the duplication the repo's own "one side computes, the other is told" rule exists to prevent. When they drift, the safe-looking one wins |
+| **(c)** | **Revoke the ability to update the table from every role that holds it**, leaving only the RPCs | **Unsizable without a survey.** It would also block legitimate maintenance | Would need each revocation checked against what still has to work |
+| **(d)** | **Accept it and detect instead.** The table is already fully audited (`knowledge_versions_audit`), so every such update leaves a row naming the actor | **~0.25d** for a check that reports approvals whose audit trail shows no RPC call | Nothing — it adds a report, removes no capability |
+
+**Recommendation: (a), with (d) alongside.** (a) is the only option that actually closes the hole,
+and it is small. (d) is worth doing regardless, because a control that cannot be exercised is not a
+control and a trail nobody reads is the same failure from the other side — and (d) is the thing
+that would tell you the hole had been used.
+
+**What (a) needs permission for, stated plainly: introducing a session-scoped configuration flag as
+a security mechanism, which does not exist anywhere in this schema today.** That is the
+ask-before-doing item. **It was not built in W1-A or W1-B.**
+
+### D3. What it does and does not put at risk, given `C24`
+
+**Not at risk: everything that goes through the application.** The four-eyes path is sound for every
+route a person can actually take from the console or the field app. A signed-in admin — including
+the operator under `C26` — reaches `approve_knowledge_version`, and that function refuses an author
+approving their own work, refuses an empty attestation, and refuses a version that is not in review.
+The W1-B review screen calls exactly that function. **`C24`'s promise that AI-generated text cannot
+become approved without a second human holds for every path an application offers.**
+
+**At risk: the claim that it is impossible.** `C24` says *"No seed, script or migration may insert
+approved knowledge."* After W1-A that sentence is **true as written** — an insert fails. It is
+**not** true of an update. So the honest statement is: **AI-generated text cannot be born approved,
+and cannot be approved through the app without a second person; it can still be walked to approved
+by someone with a database connection, and the audit log would record that they did.**
+
+**Why that is a smaller risk than it sounds, and still worth closing.** `.ai-collab/constraints.md`
+already forbids granting a direct production database session at all, and names the audit log as
+the mitigation for the roles that hold `BYPASSRLS`. So the exposure is not "anyone can do this" —
+it is "the people who already have the most dangerous access have one more thing they can do
+quietly." Option (d) is what turns "quietly" into "visibly".
+
+---
+
+## W1-B — Part E: two numbers, and the order they have to happen in
+
+### E1. Production is 62 migrations behind, not 45
+
+**Corrected where the old figure appeared.** The number rests on two facts, one measured and one
+unmeasurable from here:
+
+| | |
+| --- | --- |
+| Migrations on this branch | **81**, including W1-A's `20260928000100_knowledge_authorship.sql`; W1-B adds none — re-derive with `ls services/api/supabase/migrations/*.sql \| wc -l` |
+| Applied to production | **19**, applied **14 August 2026** at `BE-W8` |
+| **Pending** | **62** |
+
+**When it was last measured: 15 September 2026**, by `BE-W40`, reading `schema_migrations` over
+the pooler (`docs/blocked-on-you.md` §6.1). **Nothing has measured production since**, and nothing
+in this repository can: `.ai-collab/constraints.md` records that the remote project is not linked,
+and `INVENTORY.md` records that the Elmiron-App project is absent from the Supabase account
+connected to this machine.
+
+**So "62" is arithmetic on a 13-day-old reading, not a current measurement.** The one command that
+would settle it needs the production connection string:
+
+```bash
+node services/api/scripts/check-migration-drift.mjs
+```
+
+**A correction made while writing this section, and left visible because it is the argument.** This
+paragraph first said **82 files and 63 pending**. Running the command gave **81**, because W1-B adds
+no migration and W1-A's was already counted. The brief's own figure was **45**, W1-A corrected it to
+**62**, and I nearly moved it to 63 by arithmetic rather than by measurement — **three different
+numbers in two weeks for one fact, twice wrong by assuming rather than running one command.** That
+is `constraints.md`'s FIX-07 rule exactly: *"a count that changes is recorded as the command that
+produces it, not as a number."*
+
+### E2. The deploy order, for the operator, in one place
+
+**pre-flight query → shift hours → migrate → reference data → paid plan.**
+
+**Why the order and not the list.** Each step's failure mode is what makes it non-negotiable.
+
+| # | Step | If it is skipped |
+| --- | --- | --- |
+| **0** | **The pre-flight query.** One query against production: how many migrations are applied, and are there any territories, doctors or user profiles? | You deploy without knowing whether an exposure is already live. **If the counts are not zero, this is an incident, not a deployment** — production is at a schema with a known, still-open cross-tenant admin read (`BE-W76`), closed by two migrations that are **not** on production, so any data loaded since 14 August has been mutually readable between organisations. The deploy would close the hole **and destroy the evidence of how long it was open.** Nobody has run this query |
+| **1** | **Configure shift hours** | **Capture refuses.** An MR cannot check in at all. The organisation-wide default also **expires 60 days after it is configured** and then refuses again, so this is a dated step, not a one-off. Register `#28` |
+| **2** | **Deploy the migrations** | Reference data lands on a schema with no tenant boundary — the whole of escalation `6.1`, register `#31`. **One thing to know first:** `20260908000800` once aborted the deploy outright rather than failing gracefully, so nothing ordered after it would run. It was fixed under the single named exception in `constraints.md`, and **the deploy has been rehearsed against seeded databases and never run against production** |
+| **3** | **Load reference data** — territories, doctors, the product catalogue | See step 2. Register `#28`, open since sprint 3 |
+| **4** | **The paid plan**, about $25/month | The free tier **auto-paused production for two weeks in August**. It also makes `G-PILOT` unachievable by definition, since that gate requires *"a database that does not pause itself"*. Register `#35` |
+
+**Why this blocks `C28`'s 4 October target and cannot be worked around by engineering.**
+
+**The frontend cannot be tested against a backend that is 63 migrations behind.** Everything built
+since 14 August — the tenant boundary, organisation scoping, the audio path, the recording-permission
+read, the entire AI, LMS and knowledge layer, and W1-A's authorship rule — is absent from production.
+A screen tested against production today is tested against a schema that does not contain the
+features it calls.
+
+**What the frontend does until then: build and test entirely against the local stack**, which is
+complete (82 migrations applied and verified this session) and which is where every number in this
+repository comes from. **A green result there is evidence about the local stack and nothing else.**
+
+**Every step above needs someone with production access. None of them is an engineering task**, and
+that is the point of listing them here rather than in a backlog.
+
+---
+
+## W1-C — 28 September 2026: one operator question, with a date
+
+### `BACKUP_DESTINATION` — is it an ORGANISATION secret? The repository does not have it.
+
+**One line, one command, and a date attached.**
+
+**The question.** Is `BACKUP_DESTINATION` set as an **organisation** secret scoped to this
+repository? Answer with `gh secret list --org Praverse-Tech-Pvt-Ltd` — it needs org admin, which this
+session does not have (`HTTP 403`).
+
+**Why it is asked this way rather than "is it set".** Two of the three levels were settled by command
+on 28 September and only the third is unreadable from here:
+
+| Level | Verdict |
+| --- | --- |
+| **Repository** | **NOT SET.** `gh secret list` returns exactly three: `SUPABASE_DB_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_URL` |
+| **Environment** | **cannot apply** — no environments exist, and `backup.yml` declares no `environment:` |
+| **Organisation** | **UNVERIFIED** — 403 |
+
+**The date, and it is no longer conditional.** `backup.yml:85` sets `DEFERRAL_EXPIRES: '2026-10-15'`.
+Unless an org secret supplies the value, the **Database backup** workflow goes **red from
+2026-10-16 UTC on any run, and first on the weekly schedule on Monday 2026-10-19.**
+
+**What the red means, and what it does not.** It is **not a broken backup**. The backup mechanism is
+built and proven end to end — it produces a dump, restores it into a scratch database and compares
+counts. **The artefact has nowhere lawful to go** (`BE-W11`, register `#33`). The workflow goes red to
+say that out loud on a date rather than let it be forgotten.
+
+**Engineering will not pick a destination.** A dump of this database holds the consent ledger,
+doctors' names, adverse-event report text and every auth identity. Choosing where that goes is
+register `#33` and it is yours.
+
+**Answered for the frontend as CR-1** in `docs/contract-requests.md`.
+
+---
+
+## W1-C Part B — stop losing CI, and the merge question
+
+### B1. Reducing the collision surface — the cheapest change that keeps one durable record
+
+**The mechanism, stated first because the fix follows from it.** Three documents are appended to by
+**both** tracks: `PROJECT-OVERVIEW.md`, `.ai-collab/decisions.md` and `docs/blocked-on-you.md`. An
+append goes at the **end of the file**, and two appends at the same end of the same file is a textbook
+git conflict. So every session on a long-lived branch conflicts with every session on the other track,
+and the conflict silently kills CI (`refs/pull/N/merge` cannot be built).
+
+**Measured, not argued: this happened FOUR times in one day.** 06:41Z green → conflict → merge →
+conflict → merge → conflict, the last one discovered while building the very check meant to catch it.
+
+#### The proposal: one append file per track per document, and the shared document points at them
+
+| Today | Proposed |
+| --- | --- |
+| `PROJECT-OVERVIEW.md` — both tracks append | `PROJECT-OVERVIEW.md` keeps everything up to today and gains a short, **stable** index at the end pointing at `docs/log/backend.md` and `docs/log/frontend.md`. New sections go in the per-track file |
+| `.ai-collab/decisions.md` — both tracks append | same split: `decisions-backend.md`, `decisions-frontend.md`, with the existing file keeping `C1`–`C31` and the pointer |
+| `docs/blocked-on-you.md` — both tracks append | unchanged. It is **operator-facing**, one voice is the point, and it is appended to far less often |
+
+**Two properties that make it cheap.** The index is *stable text* — it changes only when a track is
+added, so it does not conflict. And **nothing already written moves**, so no citation anywhere in the
+repository breaks; `PROJECT-OVERVIEW.md` stays the entry point and stays append-only.
+
+**What it costs a future reader, stated honestly because this is the real trade.** Today one file is
+the whole history in one chronological order. After the split, **a reader must open two files and
+interleave them by date to reconstruct what happened in a week.** That is a genuine loss — the
+`FE-D7` / `W1-B` interleaving in the current file is how a reader sees that two tracks were racing.
+The mitigation is that both files stay dated and append-only, so the interleave is mechanical; the
+cost is that it is no longer free.
+
+**Would it have prevented the CI loss? Yes, for these three files — and that was every conflict
+observed.** All four conflicts were in `PROJECT-OVERVIEW.md` and `.ai-collab/decisions.md`, nothing
+else. It does **not** prevent conflicts in shared *code*, and it should not be sold as doing so.
+
+**Would it have prevented the `C20` collision? No — and that matters.** Two tracks reading the same
+file's highest id would still both read `C19` if the sequences lived in separate files; in fact
+separate files make it *easier* to miss the other's high-water mark. **The id collision needed a
+different fix and got one: `BE-C3`'s per-track prefixes.** Recording that these are two problems with
+two fixes, rather than one, is the point of this paragraph — `BE-W118` conflated them and the
+conflation is what made the C20 renumbering a surprise.
+
+**Not done in this session, and deliberately.** Splitting `PROJECT-OVERVIEW.md` while PR #2 is open
+would itself be a large diff to the most conflict-prone file in the repository — the change would
+collide with the thing it is meant to fix. **It should land immediately after PR #2 merges, on `main`,
+as its own commit.** Registered as **`BE-W120`**.
+
+### B2. Should PR #2 merge to `main` now?
+
+**The case FOR.** PR #2 carries 82 migrations, the approval pipeline, the deployed gateway, the
+console review screen and a green CI run on HEAD with both jobs passing; it is 100-plus commits of
+work that `main` does not have, and **every day it stays open it costs more than it did the day
+before.** It conflicted four times in one session, and each conflict silently removed CI from the
+branch — so the longer it is open, the more of its own verification it loses, and the more of the
+frontend's merges it has to absorb one at a time. The frontend is also now **unblocked by its
+contents**: CR-3's answer is that six screens can leave the mock, and CR-4's answer ships as a
+migration that only exists on this branch. Nothing about the code argues for waiting — it is tested,
+CI-green, and the risky parts (the AI features) are behind flags that ship off.
+
+**The case AGAINST.** `main` is what the **4 October demo** is built from, and PR #2 changes the
+database under it: 82 migrations including a rewrite of `record_check_in`, which is on the demo's
+critical path (check-in is item 9 of the demo script). A merge four days before a demo puts a large,
+unrehearsed schema change beneath the one flow that must work, and **production is 63 migrations
+behind regardless**, so merging does not make the demo environment any more real — it only moves the
+risk closer. The AI work it carries is **inert without `#5`**, so merging buys no capability, only
+tidiness. And PR #2 is still marked **draft**, which is the author's own signal that it was not
+offered for merge.
+
+**Recommendation: merge it, but after the 4 October demo, and un-draft it now.** The conflict cost is
+real and compounding, and the AGAINST case is entirely about timing rather than content — which means
+it expires on 5 October. Until then, **merge `origin/main` into the branch at the start of every
+session** (this brief already requires it) and keep `BE-W120` and the mergeability check ready to land
+immediately afterwards. **Taking it out of draft now costs nothing and makes it reviewable**, which is
+the one thing that should not wait.
+
+**I have not merged it.** The brief forbids it and the decision is the operator's.
+
+### B3. The check that makes a conflicting PR loud — `.github/workflows/pr-mergeable.yml`
+
+**The trap this had to avoid.** A mergeability job inside `ci.yml` would be suppressed by the very
+condition it reports: if the PR conflicts, `ci.yml` does not run at all. **A workflow that cannot
+report its own absence is the exact shape this project keeps finding.**
+
+So it runs **from the default branch**, where no PR's conflict state can reach it: on a daily
+schedule (06:15 UTC, before the IST working day), **on every push to `main`** — which is *when* a PR
+becomes conflicting, because merging one PR is what conflicts the others — and by hand.
+
+**It reports on every open PR, not a hard-coded number**, so it does not go stale when #2 merges. It
+polls, because GitHub computes `mergeable` lazily and returns `UNKNOWN` until it finishes: **a null
+read is otherwise indistinguishable from `CLEAN`, and the check would pass on exactly the PRs it
+exists to catch.** An `UNKNOWN` that survives polling is a **warning**, not a failure — calling it a
+conflict would cry wolf on a PR opened seconds earlier.
+
+**Verified against live data rather than a fixture**, which was possible because the condition
+recurred while the check was being written:
+
+```
+$ gh pr list --state open --json number,title,mergeable,isDraft
+PR #2  CONFLICTING  draft=true  AI platform: recon, catalogue, LMS, ...
+conflicting=1   unknown=0
+```
+
+With that input the job prints a `::error` naming PR #2 and **exits 1**.
+
+**The limitation, stated because it is load-bearing: this check does nothing until PR #2 merges.**
+`schedule`, `push: branches: [main]` and `workflow_dispatch` all resolve against the **default
+branch**, and this file is on `worktree-ai-platform-phase-a`. GitHub will not run it — or offer it
+for dispatch — until it is on `main`. **So B3's protection is gated on B2's merge**, which is itself
+an argument for B2 that the FOR paragraph above does not make: the fix for the silent-CI problem
+cannot be switched on while the problem is happening.
+
+---
+
+## W1-F Part C — running one practice session, start to finish, without an engineer
+
+**Read this first, because it changes what the rest of the list means.** Until today, **steps 3 to 7
+below were impossible for anybody**. The tables existed, the AI Doctor worked end to end, and the
+one thing nobody could do was create a doctor for a rep to practise against. That is now a screen.
+
+**One step still needs an engineer, and it is named rather than hidden: step 2.** Everything else is
+a form.
+
+### What you need before you start
+
+* **Two admin accounts, belonging to two different people.** Not one person with two logins. The
+  database refuses an approval by the person who wrote or submitted the thing, and there is no way
+  around it from any screen.
+* **One rep account** in the same company.
+* The console, signed in.
+
+### The checklist
+
+1. **Decide whether AI is on for your company.** Practice is behind a feature flag. If it is off,
+   step 8 answers *"this feature is not enabled"* and nothing else in the list is wrong.
+
+2. **⚠ ENGINEER NEEDED — the practice prompt.** Somebody has to store the instructions the
+   practice doctor is given. **There is no screen for this today** (`BE-W122`, half a day of work),
+   so an engineer writes it directly into the database and a second admin approves it there. Until
+   that exists, ask your engineer for *"an approved `ai_doctor` prompt version"* once, per company.
+   It is a one-off, not a per-session step.
+
+3. **Admin 1 → Practice doctors → "New practice doctor".** Fill in four things:
+   * **Name shown to the rep** — a label such as *"Dr A. Sharma (practice)"*.
+     **Never a real doctor's name.** No rule anywhere can check this. This step is the only place it
+     is checked at all, by you.
+   * **Specialty.**
+   * **How they behave** — receptive, sceptical, rushed or hostile.
+   * **Brief** — what this doctor knows and cares about.
+
+   Press **Save draft**. It saves as a *draft*. No rep can reach it.
+
+4. **Admin 1 → the same page, the card for that doctor → "Submit for review".**
+
+5. **Admin 2 signs in → the same card → type an attestation → "Approve".**
+   The attestation is a sentence saying what you checked. It is stored and it is not optional.
+   **Admin 1 will not see an Approve button at all** — the screen tells them why. That is the rule,
+   not a fault.
+
+6. **Admin 1 → "New practice scenario".** Choose the doctor you just approved, then:
+   * **Title.**
+   * **What the rep should achieve.**
+   * **The objection the doctor will raise** — this is what the practice is actually for.
+   * **Product** — optional. **If you choose one, you must also choose a market.** One country's
+     promotional rules never apply everywhere, and the form will not let you save without it.
+
+   **Save draft**, then **Submit for review**.
+
+7. **Admin 2 → approve the scenario**, the same way as step 5.
+
+8. **The rep opens practice in the field app and starts the scenario.** Before step 7 this refuses
+   with *"scenario is draft, not approved"*. After it, it starts.
+
+### What the rep will actually see today, with decision `#5` still open
+
+**No model is called, and the screen does not pretend one was.** Every reply from the practice
+doctor is the same sentence:
+
+> `[PRACTICE STUB - no AI provider is configured; decision #5 is open, so no model was called]`
+
+and every coaching score is **0**.
+
+**That is a deliberate choice, not a bug.** A stub that returned plausible conversation would be the
+most dangerous thing in this system — somebody would demo it, and nobody downstream would be able to
+tell it apart from a real model. A score of 72 would be read as a judgement of a real person's
+performance. So the stub is unmistakable and the scores are zero.
+
+**Everything except the words is real**: the session is created, the turns are stored in order, the
+audit trail is written, the rep's own scores stay visible to the rep and the company admin only, and
+no manager sees a team average. **Answering `#5` swaps the words and nothing else.**
+
+### Who writes the two prompt texts
+
+There are exactly two, and **they are different jobs**:
+
+| | **The practice doctor's prompt** | **The coach's prompt** |
+| --- | --- | --- |
+| What it controls | how the doctor behaves in character, what they will and will not concede, how hard they push | what the coaching looks at, and the words it uses back to the rep |
+| Who should write it | **your sales training lead**, with a medical person reading it | **your sales training lead**, alone |
+| Why not an engineer | an engineer does not know what a real urologist says at minute four of a cold call | the five things it scores are a training judgement, not a technical one |
+| Why not a model | `C24`: the never-born-approved rule. A model may draft it; **a second human approves it**, and the approval is stored with their name |
+| The hard limit | **neither prompt may contain a product claim, an indication or prescribing information.** Those are regulated promotional content and must come from you, from an approved label (`#7`). The model must never be the source of one |
+
+**An engineer's only part is step 2 — storing the text somebody else wrote.** Once `BE-W122` ships,
+even that is a form.
+
+---
+
+## W1-G Part E2 — turning practice on, end to end, with no engineer at any step
+
+> **This supersedes the W1-F Part C checklist above.** That one had a step marked
+> **"⚠ ENGINEER NEEDED"** because there was no screen for the AI prompt. **`BE-W122` built it
+> (`/prompts`), so that step is now a form like every other one.** Nothing in this list requires
+> SQL, a terminal, or a developer.
+
+### Before you start
+
+* **Two admin accounts belonging to two different people.** Not one person with two logins. The
+  database refuses an approval by whoever wrote or submitted the thing, on every screen below, and
+  there is no way around it from any screen.
+* **One rep account** in the same company.
+* The console, in a browser, signed in.
+
+### The checklist
+
+| # | What you do | Where |
+| --- | --- | --- |
+| **1** | **Confirm AI is switched on for your company.** If it is off, step 9 answers *"this feature is not enabled"* and nothing else in this list is wrong | operator/engineering — the one remaining flag, see the note below |
+| **2** | **Admin 1 → "AI prompts" → "New prompt".** Choose **`ai_doctor`**. Type the instructions the practice doctor is given. **No product claim, no indication, no prescribing information** — those are regulated and must come from an approved label. **Save draft** | **`/prompts`** |
+| **3** | **Admin 1 → the same card → "Submit for review"** | **`/prompts`** |
+| **4** | **Admin 2 → "AI prompts" → type an attestation → "Approve"**. Admin 1 will not be shown an Approve button at all; the screen says why | **`/prompts`** |
+| **5** | **Admin 1 → "Practice doctors" → "New practice doctor".** Name shown to the rep — a **label** such as *"Dr A. Sharma (practice)"*, **never a real doctor's name**; no rule anywhere can check that, and this step is the only place it is checked. Specialty. How they behave. Brief. **Save draft**, then **Submit for review** | **`/practice`** |
+| **6** | **Admin 2 → approve the practice doctor**, with an attestation | **`/practice`** |
+| **7** | **Admin 1 → "New practice scenario".** Choose the approved doctor. Title, what the rep should achieve, the objection the doctor will raise. **Product is optional — but if you choose one you must also choose a market**, and the form will not let you save without it. **Save draft**, then **Submit for review** | **`/practice`** |
+| **8** | **Admin 2 → approve the scenario** | **`/practice`** |
+| **9** | **The rep opens practice in the field app and starts the scenario.** Before step 8 this refuses with *"scenario is draft, not approved"*. After it, it starts | field app |
+
+**Step 1 is the only line that is not a screen.** The AI feature flag lives in `app_thresholds` as a
+global row and there is no admin screen for it — that is `BE-W106`, and it is the last of these.
+Ask your engineer once, per company. It is not a per-session step.
+
+### What the rep will actually see today, with decision `#5` still open
+
+**No model is called, and the screen does not pretend one was.** Every reply from the practice
+doctor is the same sentence:
+
+> `[PRACTICE STUB - no AI provider is configured; decision #5 is open, so no model was called]`
+
+and every coaching score is **0**.
+
+**That is deliberate.** A stub returning plausible conversation would be the most dangerous object in
+this system — somebody would demo it, and nobody downstream could tell it from a real model. A score
+of 72 would be read as a judgement of a real person.
+
+**Everything except the words is real:** the session is created, the turns are stored in order, the
+audit trail is written, the rep's scores stay visible to the rep and the company admin **only**, and
+no manager sees a team average. **Answering `#5` swaps the words and nothing else.**
+
+### Who writes the two prompt texts
+
+| | **The practice doctor's prompt** (`ai_doctor`) | **The coach's prompt** (`ai_coach`) |
+| --- | --- | --- |
+| What it controls | how the doctor behaves in character, what they concede, how hard they push | what the coaching looks at, and the words it uses back to the rep |
+| Who writes it | **your sales training lead**, with a medical person reading it | **your sales training lead**, alone |
+| Why not an engineer | an engineer does not know what a real urologist says at minute four of a cold call | the five things it scores are a training judgement, not a technical one |
+| Why not a model | `C24`. A model may draft it; **a second human approves it**, and the approval is stored with their name |
+| The hard limit | **no product claim, no indication, no prescribing information** in either. Regulated content comes from an approved label (`#7`), never from a model and never from the prompt box |
+
+**Both are typed into `/prompts` by whoever wrote them, and approved by a second admin.** No
+engineer is involved in either.
+
+---
+
+## W1-H Part D — the watchdog cannot see the platform stop, and no code in this repository fixes that
+
+### D1 — as a property, not an incident
+
+**A monitor that runs on the same platform as the thing it monitors cannot detect that platform
+stopping.**
+
+That is not a bug in `retention-watchdog.yml`. It is a property of where it runs. The watchdog is a
+scheduled GitHub Actions workflow whose job is to notice when `retention.yml` stops purging. When
+GitHub stopped creating scheduled runs between **23 Aug 08:16 and 7 Sep 14:49 UTC**, it stopped
+creating both — so the control and the thing it controls failed together, from one cause, at one
+moment, and **the silence looked exactly like health.**
+
+Measured, and the point is that all five went quiet together:
+
+| Workflow | Runs in that window |
+| --- | --- |
+| `retention.yml` (schedule) | **0** |
+| `retention-watchdog.yml` (schedule) | **0** |
+| `backup.yml` (schedule) | **0** |
+| `migration-drift.yml` (schedule) | **0** |
+| `ci.yml`, any trigger | **0** |
+
+**No change inside this repository can fix it.** Any check added here runs on the same platform and
+disappears with it. A second workflow, a `pg_cron` job inside a database the same outage can pause, a
+longer retention window — each is a control whose absence is invisible for the same reason. **The fix
+has to live somewhere this project does not control, which makes it a decision rather than a task.**
+
+**How it was actually found: a failed connection, five weeks later.** Nothing alarmed. That is the
+cost being decided below, stated as a fact rather than a risk.
+
+### D2 — the options, with costs. NOT ADDED.
+
+**This is a decision for you, and engineering has deliberately not made it.** Adding any of these is
+a dependency and, for the first two, a recurring bill — which `.ai-collab/constraints.md` requires be
+asked about before installing.
+
+| Option | What it costs | What it buys | What it does not fix |
+| --- | --- | --- | --- |
+| **A dead-man's switch** — an external service that expects a ping on a schedule and alarms when one does not arrive | A third-party account and roughly **$0–7/month** at this scale; several have a free tier covering four jobs. Engineering: under an hour — one `curl` at the end of each scheduled workflow | **The platform going quiet becomes an alert instead of a discovery.** The alarm fires *because nothing arrived*, so the outage cannot suppress it | It tells you a job stopped running. It does **not** tell you the job does its work — see D3 |
+| **A second CI provider** running the same watchdog | A second account, a second config to keep in step, and its own quiet failure mode | Independence from GitHub specifically | Two platforms to maintain; the second rots because nobody looks at it |
+| **A person checks weekly** | Free | Nothing reliable. **This is what was in place**, and it found the outage after fifteen days | Everything |
+| **Do nothing, deliberately** | Free | Honesty — the register would record the gap as accepted | **The next blackout is again found by accident, and again about fifteen days late.** With audio in production by then, that is fifteen days of a promise to doctors going unkept with nothing reporting it |
+
+**Engineering's recommendation: the dead-man's switch, and it is the only one worth the money.** The
+reason is the direction of its logic — **it alarms on the absence of a signal, so the failure it
+watches for cannot silence the alarm.** Every in-repository option inverts that and is defeated by
+the outage it exists to catch. It is still a dependency and a recurring cost, so **it is not
+installed, and nothing in this commit reaches for it.**
+
+**If the answer is no, say so and it will be recorded as accepted.** A gap somebody decided to accept
+is worth more than an open item nobody reads.
+
+### D3 — and the thing a dead-man's switch would still not tell you
+
+**`destroyedTotal` is 0.** Measured on production on 29 September by dispatching the watchdog and
+reading its own output (run `36551995393`).
+
+So even with an alarm on the schedule, **"the retention job is green" and "the retention job works"
+remain different claims, and only the first has evidence.** The destruction path has never destroyed
+a single object in production — each of the 126 successful runs since 7 September found nothing to do
+and exited cleanly. A ping-based alarm would have been perfectly quiet through all of them, and
+would be equally quiet if the purge were broken, because what it reports is that the job **ran**.
+
+**What closes that second gap is not a monitor.** It is one object, uploaded to a staging
+environment, aged past its `purge_after`, and observed leaving Storage **and** appearing in
+`audio_destruction_log`. Until that exists, the consent notice's promise rests on code that has never
+had to keep it.
+
+---
+
+## W1-J Part B — the clinical question, decided rather than accepted
+
+**This was a residual W1-I recorded and W1-J closed. It is here because you should know a control was
+added on your behalf, and what it costs a rep.**
+
+### What the gap was
+
+`AI-SPEC` §10 says MR Chat *"must not become a clinical decision-support system"*, and until today
+nothing enforced it. The example, recorded verbatim in the W1-I log:
+
+> *"Is 400mg twice daily normal for interstitial cystitis?"* — names no product, carries no patient
+> identifier, and reached the model.
+
+### The options, and what each costs
+
+| Option | Cost | What it does not do |
+| --- | --- | --- |
+| **A prompt instruction** | Free | **Not an option, and it was never on the list.** The prompt is a request; the model decides what to do with it. The session that built MR Chat established that |
+| **Question-side check only** | Some legitimate questions get redirected | A rep can rephrase around it; and it cannot see what the model *volunteers* |
+| **Answer-side check only** | A model call is paid for and then discarded | The question still reaches the vendor |
+| **BOTH — what was built** | Both of the above, and a second heuristic to maintain | Does not understand medicine; see the limits below |
+| **Accept the risk** | Free | MR Chat may answer a dosing question with an invented number, to a rep who will repeat it to a doctor |
+
+### What was built, and the one thing that makes it usable
+
+**A deterministic check on the question AND the answer**, the same shape as the existing product-name
+check — not an instruction to the model.
+
+**The half that matters is the suppressor.** A clinical term only counts when the question is *not*
+framed as a procedure, because these are all legitimate and all contain clinical words:
+
+* *"how do I report an adverse event"* — **a regulatory obligation.** Blocking it would be the worst
+  false positive available.
+* *"what do I do if a doctor asks about dosing"*
+* *"the doctor asked about contraindications, what is the process"*
+
+**Scored against a corpus, and the numbers are in the record:** 11 of 11 clinical questions refused,
+0 of 17 process questions wrongly refused.
+
+### What a rep actually experiences
+
+A clinical question gets the existing redirect: **"That looks like a product question. Use Product
+Q&A, which answers only from your company's approved material and shows you where each answer came
+from."** They are sent to the tool that cites its sources, which is the correct destination.
+
+### What you are accepting, because it is not zero
+
+1. **It does not understand medicine.** It matches terms and frames. A clinical question phrased
+   without any of the listed words will pass — the control is *"obvious cases"*, the same standard
+   the patient guardrail sets for itself.
+2. **Some legitimate questions will be redirected.** The corpus says none of the 17 tested, but a rep
+   will eventually phrase something in a way the suppressor misses. The cost is one redirect; the
+   asymmetry is deliberate and is the same one the patient guardrail uses.
+3. **A redirect is not an answer.** If reps redirect often on questions they consider reasonable,
+   that is a signal the term list is too broad — and it is worth asking them rather than assuming.
+
+**No decision is required from you. This is a notification, not a request** — the control is
+deterministic, testable and reversible, and the alternative was leaving a documented hole open
+because the mitigation for it was somebody else's unanswered email. **If you would rather it were
+looser, say so and the term list shrinks.**
+
+---
+
+## W1-K Part A — an ACCEPTED RISK you should read in full: three sentences that still reach the model
+
+**This is not "detection is imperfect". These are the actual sentences**, and the first is exactly
+what a rep types about a patient.
+
+> **"Sharma has been on it three months and reports burning"**
+>
+> **"she has been on it three months, any concerns"**
+>
+> **"aged 62 and still working"**
+
+**All three pass every guardrail this system has.** A rep could type any of them into MR Chat, Product
+Q&A, or a practice conversation, and the text would go to the model.
+
+### Why each one gets through
+
+| Sentence | What the detector sees |
+| --- | --- |
+| *"Sharma has been on it three months and reports burning"* | A bare surname. No title, no word "patient", no age. **It is the same text as a doctor's name** — and `add Dr Sharma to my beat plan` must be answered, because naming doctors is the core of a rep's job |
+| *"she has been on it three months, any concerns"* | A pronoun. There is no identifier of any kind in the sentence — no name, no number, no age |
+| *"aged 62 and still working"* | An age with no name and no sex word. Indistinguishable from *"the policy aged 62 days"* |
+
+### A3 — this is a CEILING, not a bug, and the distinction matters
+
+**A stricter pattern cannot fix these without breaking the product.** The guardrail already refuses
+fifteen kinds of patient reference and correctly allows twenty-seven legitimate phrases, measured
+against a written corpus. What is left is not a tuning failure that more effort would close:
+
+* **A bare surname carries no signal that distinguishes a patient from a doctor.** To catch
+  *"Sharma has been on it"* the detector would have to refuse *"Sharma asked for the leaflet"* — and a
+  guardrail that blocks reps from naming doctors gets switched off within a week.
+* **A pronoun carries no identifier at all.** No pattern can find one that is not there.
+
+**You are being asked to accept a limit of pattern matching, not a defect somebody could fix with
+more care.**
+
+### A2 — what accepting it means once `#5` is answered
+
+**Today it means nothing in practice: no AI provider is configured, so the text reaches a stub that
+never leaves this system.** That changes the day you answer `#5`.
+
+**From that day, a sentence like the three above is sent to a third-party model**, under whatever
+terms that vendor's contract sets. It is the rep's own words — the patient guardrail still stops names,
+phone numbers, email addresses, ID numbers and dates of birth — but *"she has been on it three months,
+any concerns"* would go.
+
+**What would reduce it further, and what each costs:**
+
+| Option | What it costs | What it buys |
+| --- | --- | --- |
+| **Accept it — the current position** | Nothing | Nothing. The three sentences go to the vendor |
+| **A stricter default that refuses more** | **Reps lose questions they legitimately need.** To catch a bare surname you must refuse doctor names, which is most of what a rep types. This is not a dial that can be turned a little | Catches the first sentence; still cannot catch a pronoun |
+| **A confirmation step** — *"This looks like it might be about a patient. Send anyway?"* | One extra tap on some questions, and it trains reps to tap through. It also puts the judgement on the rep, which is where it arguably belongs | Catches all three, because it does not depend on detecting anything |
+| **A vendor contract that forbids training and requires deletion** | Part of `#5`'s negotiation; no engineering cost | Does not stop the text being sent, but changes what happens to it afterwards. **This is the one that scales, because it covers sentences nobody predicted** |
+
+**Engineering's view, offered as input rather than a decision:** the confirmation step is the only
+in-app option that catches a pronoun, and the vendor terms are the only thing that helps with
+sentences nobody has thought of. **A stricter pattern is the option that looks like progress and is
+not** — it trades the product's core workflow for one of the three sentences.
+
+**Nothing is being built on this without your answer.** If the answer is "accept", it will be recorded
+here as accepted with today's date, which is a better position than an open item nobody reads.

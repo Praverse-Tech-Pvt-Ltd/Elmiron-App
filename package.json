@@ -21,7 +21,8 @@
     "db:status": "supabase --workdir services/api status",
     "db:reset": "supabase --workdir services/api db reset && pnpm db:instrument",
     "db:instrument": "node services/api/scripts/enable-lock-logging.mjs",
-    "db:types": "supabase --workdir services/api gen types typescript --local"
+    "db:types": "supabase --workdir services/api gen types typescript --local",
+    "functions:serve": "supabase --workdir services/api functions serve --no-verify-jwt"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

@@ -25,6 +25,7 @@
     "@fieldforce/core": "workspace:*"
   },
   "devDependencies": {
+    "@aws-sdk/client-bedrock-runtime": "3.1144.0",
     "@types/node": "^24.9.2",
     "@types/pg": "^8.15.6",
     "pg": "^8.16.3",

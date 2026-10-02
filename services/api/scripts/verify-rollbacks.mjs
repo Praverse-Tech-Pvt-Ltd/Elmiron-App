@@ -17,6 +17,61 @@ const DEFAULTS = {
   dbUrl: process.env.SUPABASE_DB_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres',
 };
 
+/**
+ * W1-N -- the one rollback that is ALLOWED to refuse, and is now made to prove it.
+ *
+ * W1-L's `organisation_thresholds` rollback stops if any company has its own settings, because
+ * dropping the column would silently return a company that switched AI off to the global value.
+ * Until W1-N that guard had never fired: the suites wrote only GLOBAL test settings. W1-N D2 moved
+ * the gateway suites to ORGANISATION rows for their own fixture companies (so they stop overriding
+ * the operator's defaults), and the guard then refused this run -- correctly.
+ *
+ * So instead of weakening the guard, this run PROVES it: with organisation rows present the file
+ * must refuse with 23001, or this script fails. It then performs the deliberate procedure the
+ * file's own header prints -- this script is localhost-only and destroys the whole schema by design,
+ * which is exactly the deliberate decision the header asks for -- and applies the file for real.
+ */
+const GUARDED_ROLLBACK = '20260930000300_organisation_thresholds.down.sql';
+
+const proveGuardThenClear = async (client, sql) => {
+  const { rows } = await client.query(
+    `select count(*)::int as n from public.app_thresholds where scope = 'organisation'`,
+  );
+  if (rows[0].n === 0) return;
+  let refused = false;
+  try {
+    await client.query(sql);
+  } catch (error) {
+    // Any OTHER failure means the guard did not run: measured by disabling it, the file then
+    // fails later on `app_thresholds_scope_check` (23514). Say which, rather than surfacing a
+    // constraint name that sends a reader to the wrong place.
+    if (error.code !== '23001') {
+      throw new Error(
+        `${GUARDED_ROLLBACK} did not refuse with its guard (23001) -- it failed with ` +
+          `${String(error.code)}: ${String(error.message)}. The guard is missing or not first.`,
+      );
+    }
+    refused = true;
+  }
+  if (!refused) {
+    throw new Error(
+      `${GUARDED_ROLLBACK} rolled back ${String(rows[0].n)} organisation-scoped setting(s) ` +
+        'without refusing. Its guard is gone; a real rollback would now discard companies’ settings.',
+    );
+  }
+  process.stdout.write(
+    `  guard held: ${GUARDED_ROLLBACK} refused (23001) with ${String(rows[0].n)} organisation ` +
+      'setting(s) present; clearing them as its header directs\n',
+  );
+  await client.query(
+    'alter table public.app_thresholds disable trigger app_thresholds_reject_mutation',
+  );
+  await client.query(`delete from public.app_thresholds where scope = 'organisation'`);
+  await client.query(
+    'alter table public.app_thresholds enable trigger app_thresholds_reject_mutation',
+  );
+};
+
 const LOCALHOST_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
 
 /**
@@ -127,6 +182,7 @@ export const verifyRollbacks = async (overrides = {}) => {
     for (const migration of migrations) {
       const file = migration.replace(/\.sql$/, '.down.sql');
       const sql = await readFile(join(rollbackDir, file), 'utf8');
+      if (file === GUARDED_ROLLBACK) await proveGuardThenClear(client, sql);
       process.stdout.write(`applying ${file} ... `);
       await client.query(sql);
       process.stdout.write('ok\n');
