@@ -32,7 +32,9 @@ import { readFile, writeFile } from 'node:fs/promises';
  *
  * **What it does NOT do: create MR accounts.** An MR is a sign-in account, not a territory, and
  * `seed:reference` creates no users. The MR sheet is CHECKED here so the hierarchy is complete and
- * consistent; each account is then created with `seed:mr`. Said rather than implied.
+ * consistent. **On production each account is created BY HAND** (`docs/DEPLOY-RUNBOOK.md` step 4,
+ * `BE-W137`): `seed:mr` refuses any non-local target by design and makes its own company. W1-T
+ * corrected this line, which said accounts were "created with `seed:mr`". Said rather than implied.
  */
 
 export const TERRITORY_COLUMNS = ['level', 'name', 'code', 'parent_code', 'company'];

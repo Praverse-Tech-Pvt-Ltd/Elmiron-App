@@ -557,3 +557,20 @@ disagreement could be checked, because the operator's text was not provided.**
   message**, which can echo the request (§52). Unnamed failures still read exactly `provider_error`.
 - **The bar the brief set:** an existing reader of the log is not misled. There is none; and a future one
   that counts `schema_invalid` now counts only malformed output, which is what the name always claimed.
+
+## `BE-C65` — **a rollback never rewrites the request log; it refuses instead** (W1-T B)
+
+- **Decided by backend, not put to the operator:** it governs only how one migration is undone, loses
+  nothing either way, and touches no business rule.
+- **What was wrong:** the `model_refused` rollback (W1-S) rewrote such rows to `schema_invalid` — making
+  the log say something that did not happen. Measured: it could not even run. `ai_requests_before_update`
+  refuses any change to a completed request (23514), so with one refused row the rollback stopped on an
+  error that explains nothing.
+- **Now:** while any request records a refusal, the rollback refuses by name (55000) and the migration is
+  fixed FORWARD; with none — every database until a real model answers — it rolls back cleanly.
+- **Alternatives weighed:** keep the flag permanently allowed on rollback (a "rolled back" schema that
+  silently differs from the original); rewrite the rows (forbidden by the table, and false). Refusing is the
+  only one that leaves the log true and says why.
+- **Swept for the same thing elsewhere (B4):** of 26 UPDATE/DELETE statements on the 31 history tables in
+  migrations and rollbacks, every other one is a guarded lifecycle transition inside a function or fills a
+  column added in the same migration. **This rollback was the only rewrite of a recorded fact.**

@@ -2825,3 +2825,148 @@ Rollbacks: all applied in reverse; public schema empty — `20261002000200`'s am
 **All five parts done.** This section, the commit and the push follow; **CI on the pushed HEAD goes in the
 next session's section.** **Needs Maanav:** merge PR #2. **Needs the operator:** the go-ahead and the paid
 plan; Q-14; Q-11 (consent in production); Q-15; Q-1.
+
+### W1-T — the demo rehearsed
+
+**Priority override: did NOT apply** — no AWS key: no `AWS_*`/`BEDROCK`/`AI_MODEL` name in the shell,
+user or machine environment; no `~/.aws`; no AWS CLI; no functions env file.
+
+**Checkout guard.** Branch `worktree-ai-platform-phase-a`, HEAD `fc44921c6afaa62e144d1cae3e0bcd0b1ccaabdc`,
+status clean (0). `origin/main` nothing new; PR #2 `MERGEABLE` / `CLEAN`. `review-handoff/` deleted.
+
+#### CI result of the PREVIOUS push
+
+**Workflow `CI`, run `36979624619`, SHA `fc44921c6afaa62e144d1cae3e0bcd0b1ccaabdc` = W1-S's HEAD —
+`success` on both jobs.** Database job: **Test Files 78 passed (78)**, **Tests 1088 passed | 4 todo
+(1092)**; browser **7 passed, 0 skipped, 0 failed**; **"All rollbacks applied in reverse order; public
+schema is empty."**
+
+#### A — the demo, rehearsed (`docs/DEMO-SCRIPT.md`)
+
+**A1 — what can be demonstrated, measured:** the frontend's demo is a **release APK on a phone over
+Wi-Fi to the local stack on a laptop**, seeded by `seed:day` (`docs/demo-path-2026-10-01.md` on
+`fe-d17-practice`). This laptop has the Android SDK and two emulator images (`Pixel_10`, `Pixel_6a`).
+Built from a temporary worktree of `fe-d17-practice` (`5021e8b`), against this branch's database (a
+superset of the frontend's schema), seeded today.
+
+**A2 — the surprises, in the order they arrived:**
+
+1. **No demo APK exists on this machine, and this laptop is `192.168.1.6`** — the last APK was built for
+   `192.168.1.15`. An APK cannot follow a laptop to a new address.
+2. **The documented build fails from a clean checkout:** `Unable to resolve @fieldforce/ui-tokens …
+   dist/index.js — none of these files exist`. The script assumes the shared packages are built and does
+   not check. Building them (`pnpm --filter "./packages/*" run build`) cleared it.
+3. **Then the build needs CMake `3.31.6`; this machine has only `3.22.1`** (`[CXX1300]`). Installing it is a
+   dependency ask — **not done. BLOCKAGE for the screens on this laptop.** The frontend's laptop built the
+   last APK.
+4. **So the SERVER half was rehearsed instead, in the audience's order, as the seeded rep, with the app's
+   own payloads:** sign-in, pull (3 doctors, 5 visits, 1 beat plan, 3 entries, 1 notice `en-IN`), shift
+   window (`territory`, `04:00–23:59`), check-in, consent, samples, check-out, call report — all
+   `accepted`; Day end `daily_mileage` answered.
+5. **The seed makes three visits today and TWO ARE ALREADY COMPLETED — there is ONE visit to walk.** A
+   second run found all three completed: **one practice run consumes the demo.** Home offers only the next
+   *planned* visit. Re-seed after any rehearsal, and sign in with the account that run prints.
+6. **Day end reads `distance_metres: 0`** — all seeded clinics sit at one point. Without a sentence, "0.0
+   km" reads as broken.
+7. *Checked and not a finding:* a second check-in on a completed visit was accepted — by design: a late or
+   replayed check-in is recorded and does not move a completed visit (`20260928000200:167`).
+
+**A3/A4** — the script (prerequisites with owners, each step, what the audience sees, the true sentence)
+and the do-not-show list: Coaching/Analysis/Reply, the assistant and every AI feature (a stub refusal
+reads as a defect), AI-doctor practice (sample data), maps, an indoor check-in away from the clinic, a
+second walk of one visit, and any claim that this is production.
+
+**A5 — what the rehearsal could not establish:** the screens (no APK here); the phone, Wi-Fi and
+firewall; the device-only first-run and battery screens; the voice-note upload; the offline queue live;
+the frontend's own APK and laptop; tomorrow's re-seed.
+
+#### B — the rollback that would have rewritten the log (`BE-C65`, decided by backend)
+
+**B1:** `ai_requests` is SELECT-only for users, delete/truncate are refused (`reject_mutation`), and
+`ai_requests_before_update` refuses ANY update once a request is no longer `started` (23514). **So the
+W1-S rollback's rewrite could not even run:** probed with one real refused row — *"ai request … is already
+failed"*, an error that explains nothing; CI's rollback check passes only because its database has no such
+row.
+
+**B2/B3 — decided by backend** (it governs how one migration is undone, loses nothing, touches no
+business rule): the rollback **refuses by name (55000) while any refusal is recorded** — fix forward —
+and rolls back cleanly otherwise. Rewriting is false and forbidden; keeping the flag permanently allowed
+leaves a "rolled-back" schema that silently differs. **Two-sided, run on the committed file:** a recorded
+refusal blocks it; none, and it restores the old list. **Mutants: removing the guard failed exactly the
+"blocks" test** (it then failed with an unexplained `23514`); **an always-refusing guard failed exactly the
+"clean" test.**
+
+**B4 — swept two ways:** the catalogue gives **31 tables guarded as history** (`reject_mutation` or a
+guarded update trigger); the migration and rollback files hold **26** UPDATE/DELETE statements on them —
+every other one a guarded lifecycle transition inside a function, or a fill of a column added in the same
+migration. **This rollback was the only rewrite of a recorded fact.** Found beside it: **`write_rejections`
+has no append-only trigger** (`BE-W138`).
+
+#### C — what a rep cannot do on day one (`docs/DEPLOY-RUNBOOK.md`, rewritten section)
+
+From the catalogue's refusals and the app's own path, not the register:
+
+| A rep cannot… | Waits on |
+| --- | --- |
+| sign in | Q-5, then accounts by hand |
+| **see a single visit** — nothing in production creates a beat plan or a visit (`BE-W139`) | **nobody: no input asks for it** — a decision on who plans the day |
+| check in — `is_within_shift` refuses | Q-8 (or the test value as an expiring fallback) |
+| record consent — `capture_consent` refuses; the screen says no notice | Q-11 |
+| record a voice note — `begin_upload` needs standing consent | Q-11 |
+| write a call report | a visit (row 2) |
+| use any AI | Q-1, then Q-14 |
+| take a course | content, then Q-14 |
+
+Samples work (uncounted until Q-10). **Every listed input could arrive and a rep would still open Today
+to nothing** — `BE-W23`'s "manual assignment for the pilot" has no tool, no runbook step and no input.
+
+#### D — `BE-W137`: by hand, deliberately
+
+**Six accounts** for the first deployment (`G-PILOT`: 1 territory, 2 MRs, plus admins, a manager, the PV
+officer). The schema refuses three by-hand mistakes and **silently accepts five**: an admin role for a
+rep, a wrong territory, a mistyped territory (`INSERT 0 0`), no manager, an unconfirmed email. **Argument:**
+a tool needs the service-role key on a laptop and turns one bug into many wrong identities; by hand a
+mistake is one person's — **and a read-back query (runbook 4.3, run as printed) makes all five visible.**
+Revisit at the 100-MR pilot. No tool built, so D3 does not arise.
+
+#### E — the register rots: **not built**
+
+The smallest mechanism — flag an id a commit calls "closed" while its row reads open — **would have caught
+3 of the 18 stale rows** (`BE-W83`, `BE-W92`, `BE-W116`). The other 15 were closed by work aimed elsewhere
+and leave no textual trace. A build-time check for one stale row in six is the cost this project rejects.
+The remedy that matches the cause is a sweep every few sessions.
+
+#### F — after the 4th (`docs/AFTER-4-OCTOBER.md`)
+
+Items 1–7 (merge, deploy, the sheet, **who plans a day**, the legal name, hours, the second admin):
+**about a week of engineering**, most of it the beat-plan decision. **The AI chain — key → adapter →
+first calls → prompts → second-admin approval → app screens → deploy — is about 7 to 10 working days
+after the key arrives, two weeks of calendar time, if Q-14 exists.** Weeks, not days.
+
+#### What I got wrong
+
+- **I wrote a rollback that rewrote the log** (W1-S) and called it reasonable; it was false in intent
+  and could not run. W1-S's mutants tested the migration, not its rollback against real rows.
+- **I assumed the demo could be built here** and spent two builds learning it cannot.
+
+#### Where I stopped
+
+All six parts done; A's screens blocked on a toolchain I may not install without asking. The temporary
+worktree `demo-fe17` is removed at the end. CI on the pushed HEAD goes in the next session's section.
+**Needs Maanav:** merge PR #2; whether to install CMake `3.31.6` here, or demo from the frontend's laptop.
+**Needs the operator:** who plans a rep's day (`BE-W139`); Q-5, Q-8, Q-11, Q-14, Q-1.
+
+#### The clean-database check
+
+`node scripts/verify-clean-db.mjs`: **All 27 step(s) passed.**
+
+| Suite | Test Files | Tests |
+| --- | --- | --- |
+| database (`@fieldforce/api`) | 78 passed (78) | **1090 passed \| 4 todo (1094)** |
+| `@fieldforce/core` | 11 passed (11) | 201 passed \| 4 todo (205) |
+| `@fieldforce/field` | 46 passed (46) | 664 passed (664) |
+| `@fieldforce/console` | 8 passed (8) | 76 passed (76) |
+| `ui-tokens` / `ui` / `mock` | 3 / 1 / 1 passed | 59 / 4 / 43 passed |
+| browser suite | — | 7 passed, 0 skipped, 0 failed |
+
+Rollbacks: all applied in reverse; public schema empty — the corrected `20261002000200` rollback among them (no refusal recorded, so it rolled back cleanly, as `BE-C65` intends). Database +2 on W1-S: the two rollback tests. The reset cleared today's demo seed — the script requires a fresh one on the day anyway.

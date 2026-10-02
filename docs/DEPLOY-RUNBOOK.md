@@ -99,6 +99,28 @@ per person:
 
 **The second admin (Q-14) is created the same way with `role = 'admin'` and no territory.**
 
+### Why by hand, and what by hand gets wrong (W1-T D)
+
+**By hand, deliberately, for the first deployment** — the pilot gate is 1 territory and 2 MRs
+(`G-PILOT`), about six accounts with the admins, a manager and the PV officer. A tool that creates
+production identities needs the service-role key on a laptop, and one bug in it makes many wrong
+accounts at once; by hand, a mistake is one person's. **Revisit at the 100-MR pilot** (`spend-approval.md`).
+
+The schema refuses three mistakes: a profile for a user that does not exist (`user_profiles_id_fkey`),
+a field role with no territory, a rep as their own manager. **It accepts five, silently** — so 4.3:
+
+| Mistake | What happens |
+| --- | --- |
+| `role = 'admin'` typed for a rep | The rep reads **the whole company's data** |
+| a valid but WRONG territory code | The rep sees another territory's doctors |
+| a MISTYPED territory code | `INSERT 0 0` — no profile, no error; the rep cannot use the app |
+| no `reporting_manager_id` | The manager never sees the rep's work |
+| "Auto-confirm" left unticked in 4.1 | The rep cannot sign in |
+
+| # | Action | Proves it worked |
+| --- | --- | --- |
+| 4.3 | **After the last account, read every profile back** (SQL editor, read-only) and compare it line by line with the checked MR sheet, with a second person reading the sheet aloud | `select u.email, p.full_name, p.role, t.code as territory, m.full_name as manager, u.email_confirmed_at is not null as confirmed from public.user_profiles p join auth.users u on u.id = p.id left join public.territories t on t.id = p.territory_id left join public.user_profiles m on m.id = p.reporting_manager_id order by p.role, t.code, u.email;` — **one row per person on the sheet, `role` `mr` for every rep, the sheet's territory, a manager for every rep, `confirmed` true** |
+
 ## Step 5 — the smoke test (five minutes; commands with expected answers)
 
 Set `API=https://<production ref>.supabase.co`, `ANON=<publishable key>`, and one MR's email and
@@ -121,13 +143,28 @@ TOKEN=$(curl -s -X POST "$API/auth/v1/token?grant_type=password" -H "apikey: $AN
 | S6 | `curl -s -w ' http=%{http_code}' "$API/rest/v1/app_thresholds?select=key" -H "apikey: $ANON" -H "Authorization: Bearer $TOKEN"` | `"code":"42501"` … `http=403` — an MR cannot read settings directly | Same as S5 |
 | S7 | `curl -s -w ' http=%{http_code}' -X POST "$API/functions/v1/ai-gateway" -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"feature":"product_qa","question":"storage?"}'` | **Production: `{"code":"no_provider",…} http=503`** — the function is deployed and, correctly, has no model until Q-1. (Locally the stub is allowed, so the rehearsal printed `45011` / 403 instead) | `404` = step 1.3 did not deploy. **A 200 with an answer in production would mean the stub is answering outside a local target — stop** |
 
-## Before the first real MR day
+## Before the first real MR day — what a rep CANNOT do, and the one input each waits on
 
-* **Consent capture refuses until a consent notice exists for the company.** The loader carries none,
-  and the notice waits on the registered legal name (**Q-11**, `BE-C61` — never invented). **Until then
-  the MR's consent step fails in production**, whatever else is ready.
-* **Doctors** load through the same `seed:reference` file (`doctors: []` from the sheet checker today) —
-  Q-7. AI Doctor practice does not need them (`BE-C53`).
+**Measured W1-T C from the schema and the code, not from the register** — every refusal in the
+catalogue that fires for want of a value, then the app's own path through a day. Nothing invented,
+no placeholder built.
+
+| # | On day one in production a rep cannot… | Because (measured) | Waits on |
+| --- | --- | --- | --- |
+| 1 | **sign in** | No tool creates the sheet's accounts on production (`BE-W137`) | **Q-5** — the territory and MR sheet; then step 4 by hand |
+| 2 | **see a single visit** | **Nothing in production creates a beat plan or a visit.** The app cannot create one (`outbox.ts`: `case 'visit': return blocked('not_convertible')`; unplanned visits are `FE-W28`, a product question); no console screen, no RPC, no loader writes `beat_plans` — only the demo and synthetic seeds, which refuse remote targets. The register's cut list says beat plans are **"manual assignment for the pilot"** (`BE-W23`) — but no tool, no runbook step and no input does that assignment (`BE-W139`) | **Nobody — it is not on the list.** A decision on who plans a rep's day, and a way to enter it. Also doctors (**Q-7**): a visit needs one |
+| 3 | **check in** | `is_within_shift` refuses: *"no shift window configured for territory % or any ancestor, and no organisation default"* | **Q-8** — the approved hours (or the operator's test value, `BE-C50`, set as an expiring fallback: step 3.2) |
+| 4 | **record a doctor's consent** | `capture_consent` refuses: *"no active consent text for language % at %"*; the app blocks with "there is no consent notice for this language yet" | **Q-11** — the registered legal name the notice must carry |
+| 5 | **record a voice note** | `begin_upload` refuses: *"visit % has no standing consent; there is no upload path"* | **Q-11** — via 4 |
+| 6 | **write a call report** | It belongs to a visit | Via 2 |
+| 7 | **use any AI feature** | `ai_begin_request`: *"has no approved prompt"*; `start_sim_session` likewise | **Q-1** (the key), then **Q-14** to approve a prompt |
+| 8 | **take a training course** | `assign_course`: *"course % has no published version to take"* | Content authored, then **Q-14** to approve it |
+
+**What a rep CAN do with nothing more supplied:** record samples — with no cap set they are
+accepted and uncounted, and the screen says so (until **Q-10**; CI fails on 6 November while unset).
+
+**The finding the register could not show:** row 2. Every listed input could arrive and a rep would
+still open Today to nothing.
 
 ## What the rehearsal could NOT establish
 

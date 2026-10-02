@@ -317,3 +317,6 @@ bootstrap rows are not restated here; the first file that cites each is the poin
 | `FE-CR-11` | frontend | the AI Doctor practice-session contract on `main` (filed on `fe-d17-practice`, `fbd5e4f`); lands with PR #2 |
 | `BE-C64` | backend | the request log flags a model refusal `model_refused` and keeps a vendor error's NAME in `error_code` (W1-S B) |
 | `BE-W137` | backend | no tool creates the MR sheet's accounts on production: `seed:mr` refuses remote targets by design; accounts are made by hand (runbook step 4) |
+| `BE-C65` | backend | the `model_refused` rollback refuses while a refusal is recorded; the request log is never rewritten (W1-T B) |
+| `BE-W138` | backend | `write_rejections` has no append-only trigger, unlike every other record-of-what-happened table (W1-T B4) |
+| `BE-W139` | backend | day-one consequence of `BE-W23`/`FE-W28`: nothing in production creates a beat plan or a visit, the cut list's "manual assignment for the pilot" has no tool or runbook step, and no operator input asks for it — a rep's Today is empty (W1-T C) |

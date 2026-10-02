@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
 import {
@@ -698,6 +699,71 @@ describe.skipIf(!reachable)(
           (m) => m[1],
         );
         expect(inDatabase.sort()).toEqual([...AI_REQUEST_FLAGS].sort());
+      });
+    });
+  },
+);
+
+/**
+ * W1-T B (`BE-C65`). The rollback of `model_refused` never rewrites the request log. It is run here
+ * EXACTLY as committed, inside a transaction that is always rolled back.
+ *
+ * Its first version rewrote refused rows to `schema_invalid` — a log saying something that did not
+ * happen — and could not even run: `ai_requests_before_update` refuses any change to a completed
+ * request. Now it refuses, by name, while such a row exists, and rolls back cleanly when none does.
+ */
+describe.skipIf(!reachable)(
+  'W1-T B — the model_refused rollback refuses to rewrite history',
+  () => {
+    const ROLLBACK = readFileSync(
+      new URL(
+        '../rollbacks/20261002000200_ai_request_flag_model_refused.down.sql',
+        import.meta.url,
+      ),
+      'utf8',
+    );
+
+    /** One request that ran and was REFUSED by the model, written the way the flows write it. */
+    const recordRefusal = async (client: Client): Promise<void> => {
+      const mr = world.users.puneMr;
+      const prompt = await client.query<{ id: string }>(
+        `insert into public.ai_prompt_versions
+         (organisation_id, feature, version_number, system_prompt, created_by_user_id)
+       values ($1, 'mr_chat', 999, 'W1-T B', $2) returning id`,
+        [world.organisationId, mr.id],
+      );
+      const request = await client.query<{ id: string }>(
+        `insert into public.ai_requests (organisation_id, user_id, feature, prompt_version_id)
+       values ($1, $2, 'mr_chat', $3) returning id`,
+        [world.organisationId, mr.id, prompt.rows[0]?.id],
+      );
+      await client.query(
+        `update public.ai_requests set status = 'failed', completed_at = clock_timestamp(),
+              flags = array['model_refused'], error_code = 'model_refused' where id = $1`,
+        [request.rows[0]?.id],
+      );
+    };
+
+    it('a recorded refusal BLOCKS the rollback, by name — the row is not rewritten', async () => {
+      await inRolledBackTransaction(async (client) => {
+        await recordRefusal(client);
+        await expect(client.query(ROLLBACK)).rejects.toMatchObject({ code: '55000' });
+      });
+    });
+
+    it('with no refusal recorded, it rolls back cleanly and model_refused leaves the list', async () => {
+      await inRolledBackTransaction(async (client) => {
+        const before = await client.query<{ n: string }>(
+          `select count(*) n from public.ai_requests where 'model_refused' = any (flags)`,
+        );
+        expect(Number(before.rows[0]?.n), 'precondition: no refusal recorded').toBe(0);
+        await client.query(ROLLBACK);
+        const { rows } = await client.query<{ def: string }>(
+          `select pg_get_constraintdef(oid) as def from pg_constraint
+          where conrelid = 'public.ai_requests'::regclass and conname = 'ai_requests_flags_known'`,
+        );
+        expect(rows[0]?.def).not.toContain('model_refused');
+        expect(rows[0]?.def).toContain('schema_invalid');
       });
     });
   },
