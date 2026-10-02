@@ -23,6 +23,9 @@ genuinely need credentials, legal text or master data."* Every decision you have
 | **Q-13** | Legal text | **The PV / data-protection signatory** — **not a current-release blocker** (`BE-C55`) | Recording and transcripts, both deferred | No |
 | **Q-14** | Account | **The second production admin** you are provisioning (`BE-C57`) — tell us when one approval has been made with it | Every approval: prompts, personas, knowledge, lessons | **Yes** — nothing can be approved without it |
 | **Q-15** | Your answer | **Should Product Q&A notice side effects, off-label requests and product complaints — or is noticing them the rep's job?** — section 6 (`BE-W134`) | Either a new piece of work, or deleting three tests that can never pass | No |
+| **Q-16** | Your answer | **May a manager plan for their direct reports only, or for everyone beneath them?** — section 7 | Manager planning (item 10) | No — but nothing of manager planning is built until Q-16–Q-18 are answered |
+| **Q-17** | Your answer | **Does the manager plan on the web console or on the phone?** — section 7 | Manager planning screens | Same |
+| **Q-18** | Your answer | **Does an MR's unplanned visit need the manager's approval before, after, or never?** — section 7 | Unplanned visits (`FE-W28`) | Same |
 
 **Why Q-3 and Q-12 are here when the reviewer's brief asked for four items:** your rule covers anything
 needing credentials or legal text, and these two are exactly that. Where the brief and your rule
@@ -284,3 +287,44 @@ nobody asked for — is a compliance choice.
 
 **Nothing is decided until you answer.** Until then the three tests stay marked as waiting on this
 question, by name, in every test run.
+
+## 7. Q-16, Q-17, Q-18 — three questions before the manager can plan the MR's day
+
+**2 October 2026, W1-V D.** You decided the manager plans the MR's day (your item 10). The design is in
+`docs/design/MANAGER-PLANS-THE-DAY.md`; **nothing is built**. Each question below is answered with one
+word. If you would rather we decide, say "you decide" and we use the default shown, which can be
+changed later.
+
+### Q-16 — May a manager plan for their **direct reports** only, or for **everyone** beneath them?
+
+| Answer | What it costs |
+| --- | --- |
+| **Direct** | Smallest permission. A regional manager cannot plan for an area manager's MRs. No extra work |
+| **Everyone** | About the same work — managers can already *see* everyone beneath them. But two managers can then plan the same MR's day, so we must also decide whose change wins: **about +1 day** |
+
+**Default if you say "you decide": Direct.** It is the narrower permission, and widening it later takes
+nobody's access away (about half a day). Narrowing it later would.
+
+### Q-17 — Does the manager plan on the **web** console or on the **phone**?
+
+| Answer | What it costs |
+| --- | --- |
+| **Web** | **5–8 days** for three screens on the existing console (plan a week, reschedule or cancel, completion review) |
+| **Phone** | **Estimated 7–10 days**, and less certain: placing a week of visits on a small screen needs new design work, and the phone app has no manager screens of this kind today |
+| **Both** | Roughly the two added together |
+
+**Default if you say "you decide": Web.** Planning a week is desk work, and the console already exists.
+
+### Q-18 — Does an MR's unplanned visit need the manager's approval **before**, **after**, or **never**?
+
+| Answer | What it costs |
+| --- | --- |
+| **Before** | The MR waits at the clinic until the manager answers — and cannot ask at all without signal. Needs an approval queue and a way to alert the manager, and notifications are not set up yet (Q-3). **About +3–4 days**, and it can stall field work |
+| **After** | The visit happens; the manager sees it marked "unplanned" in completion review and accepts or questions it. **About +1–2 days** |
+| **Never** | The visit is recorded and shown as unplanned. **No extra work** beyond letting the app add the visit (`FE-W28`, already counted) |
+
+**Default if you say "you decide": After.** The MR can work offline, and the manager still sees and
+answers every unplanned visit.
+
+**The day figures above are estimates, not measurements.** The assumptions behind them are listed in
+`docs/design/MANAGER-PLANS-THE-DAY.md`, "What the estimate assumes".

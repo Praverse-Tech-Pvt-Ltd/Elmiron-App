@@ -65,6 +65,32 @@ here is — never by a screen hiding a button.
 
 These are estimates from the size of comparable work in this repository, not measurements.
 
+### What the estimate assumes (W1-V D2)
+
+**If any line below turns out false, the 10–15 days is wrong — most of them in the direction of more.**
+
+1. **The three blocking questions are answered with their defaults** (`docs/operator-inputs.md`
+   section 7): **Q-16 Direct**, **Q-17 Web**, **Q-18 After**. "Everyone" adds about 1 day, "Phone"
+   replaces 5–8 days with an estimated 7–10, "Before" adds about 3–4.
+2. **The five other questions take the simplest answer:** a weekly plan is seven daily plans saved
+   together (3); a reassigned rep's future plans stay with the rep and the new manager can edit them (5);
+   a started day can be changed only for visits not yet started, as a new plan version (6); no approval
+   step — a plan the manager writes is approved by being written (7); only doctors in the rep's own
+   territory (8). A different answer to any of these is new work, sized when it is given.
+3. **No notifications.** The rep sees a new or changed plan on the next sync, not by an alert —
+   notifications wait on Q-3.
+4. **No change to how sync works.** Plans already travel to the phone through `sync_pull`; the only
+   new case is a plan changing while the rep is offline, where the manager's change wins for any visit
+   not yet started. That is counted in the app's 2–3 days.
+5. **Someone owns the console and knows it.** The 5–8 days assume a developer already working in
+   `apps/console`; nobody is named yet ("to confirm" above).
+6. **The three parts run in parallel.** 10–15 days is the **total effort**. One person doing it all
+   needs about 2–3 weeks; three people in parallel need about as long as the slowest part — the
+   console, **5–8 days** — plus a day or two to join the parts together.
+7. **Not counted:** the operator testing it, a production deploy, the admin-data load the plans
+   depend on (territories, MRs, doctors — Q-5, Q-7), and any rework from answers that change after
+   building starts.
+
 ## What the decision does not answer — the operator's, cheaper to ask now
 
 1. **Whose MRs may a manager plan for** — direct reports only, or everyone beneath them?
@@ -80,4 +106,5 @@ These are estimates from the size of comparable work in this repository, not mea
 8. **A doctor outside the MR's territory** — may a manager assign one?
 
 **Nothing is built until 1, 2 and 4 are answered**: they change the permission boundary and where the
-screens live.
+screens live. **Put to the operator as Q-16, Q-17 and Q-18** (`docs/operator-inputs.md` section 7,
+W1-V D1), each answerable with one word, with its cost and the default used on "you decide".

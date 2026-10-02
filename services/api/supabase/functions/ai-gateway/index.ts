@@ -42,6 +42,9 @@ import {
 } from '../_shared/core.ts';
 import type { AiAllowance, ControlPlaneRpc, LlmProvider } from '../_shared/core.ts';
 import { createStubProvider, stubProviderRefusal } from '../_shared/stub-provider.ts';
+import { INDIA_PROFILES, createBedrockProvider } from '../_shared/bedrock-provider.ts';
+import type { IndiaProfileId } from '../_shared/bedrock-provider.ts';
+import { bedrockConverse } from '../_shared/bedrock-client.ts';
 import type { StubShape } from '../_shared/stub-provider.ts';
 
 /**
@@ -73,6 +76,18 @@ interface RequestBody {
   // history is a 400 rather than something silently dropped.
   readonly history?: unknown;
 }
+
+/**
+ * W1-V A — which India profile answers each feature, as decided (`docs/ai-platform/AI-SPEC.md`:
+ * Sonnet 5 for reasoning-heavy work; Haiku 4.5 for `mr_chat` and `lms_tutor`, `BE-C41`).
+ */
+const BEDROCK_PROFILE: Record<Feature, IndiaProfileId> = {
+  product_qa: INDIA_PROFILES.sonnet,
+  ai_doctor: INDIA_PROFILES.sonnet,
+  ai_coach: INDIA_PROFILES.sonnet,
+  mr_chat: INDIA_PROFILES.haiku,
+  lms_tutor: INDIA_PROFILES.haiku,
+};
 
 const STUB_SHAPE: Record<Feature, StubShape> = {
   product_qa: 'product_qa',
@@ -236,9 +251,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
     },
   };
 
+  // THE construction line (`KEY-DAY-CHECKLIST.md` D1 §1). Bedrock only when the deployment says so
+  // EXPLICITLY (`AI_PROVIDER=bedrock`, an Edge Function secret); otherwise the stub, which refuses
+  // any non-local target. Local runs and CI therefore keep the stub even where a key file exists —
+  // the HTTP suites drive stub behaviour, and a real model would turn them red for no defect.
   let provider: LlmProvider;
   try {
-    provider = createStubProvider(STUB_SHAPE[feature]);
+    provider =
+      Deno.env.get('AI_PROVIDER') === 'bedrock'
+        ? createBedrockProvider({
+            region: Deno.env.get('AWS_REGION'),
+            profileId: BEDROCK_PROFILE[feature],
+            converse: bedrockConverse({
+              accessKeyId: Deno.env.get('AWS_ACCESS_KEY_ID'),
+              secretAccessKey: Deno.env.get('AWS_SECRET_ACCESS_KEY'),
+            }),
+          })
+        : createStubProvider(STUB_SHAPE[feature]);
   } catch (error) {
     // The stub refuses to exist outside a local target (`C2`). That is a deployment-shaped
     // refusal, not a user-shaped one, and it must not read as "the assistant is busy".

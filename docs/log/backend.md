@@ -3114,3 +3114,201 @@ and it is deleted when the AI work finishes, per item 1.
 **Tests 1090 passed | 4 todo (1094)**; core 11 files, 201 passed | 4 todo; field 46 files, 664; console 8
 files, 76; ui-tokens 59, ui 4, mock 43; browser **7 passed, 0 skipped, 0 failed**; rollbacks all applied,
 schema empty. Identical to W1-T: this session changed documents and the ledger only.
+
+### W1-V — the adapter, without the model
+
+**2 October 2026.** Model access was still not granted, so: everything the Bedrock adapter needs that
+does not require a successful model call, then the two dated defects, the planning questions, and which
+of the operator's 4 October items have a screen.
+
+#### The previous push's CI
+
+`777d15b` (W1-U3): **CI green**, run `37002651218`, SHA = that commit. Database runner: **Test Files 78
+passed (78)**, **Tests 1090 passed | 4 todo (1094)**. Unit runner: core 11 files, 201 passed | 4 todo;
+ui-tokens 59; ui 4; mock 43; field 46 files, 664; console 8 files, 76.
+
+#### The priority override — did it fire? **No.**
+
+Checked at the start and between every part with `GetFoundationModelAvailability` (the scratch probe,
+outside the repository): both `anthropic.claude-sonnet-5` and `anthropic.claude-haiku-4-5-20251001-v1`
+read `agreementAvailability.status: NOT_AVAILABLE`, `authorizationStatus: NOT_AUTHORIZED`,
+`entitlementAvailability: AVAILABLE`, `regionAvailability: AVAILABLE` — the last check just before this
+section was written. The account owner still has to grant access (Q-1).
+
+#### A — the adapter
+
+**A1.** `services/api/supabase/functions/_shared/bedrock-provider.ts` implements `LlmProvider`; it never
+imports the SDK. The one thing that talks to AWS is an injected `converse` function, built in
+`_shared/bedrock-client.ts` from `@aws-sdk/client-bedrock-runtime` **3.1144.0, pinned exactly** (approved
+W1-U2, option (a)), declared in `services/api/package.json` and in `functions/deno.json`. The gateway
+builds it when `AI_PROVIDER=bedrock`, picking the Sonnet profile for `product_qa`, `ai_doctor` and
+`ai_coach` and the Haiku profile for `mr_chat` and `lms_tutor`; otherwise the stub, as before. Any
+construction failure is the existing **503 `no_provider`**. Deno resolution was proved by serving the
+gateway with `AI_PROVIDER=bedrock` and no credential: 503, the adapter's own refusal, not an import
+error. `ProviderError` is re-exported from `_shared/core.ts` so it is the same class the flows test with
+`instanceof`.
+
+**Found while installing:** `pnpm add` of 3.1145.0 silently wrote `minimumReleaseAgeExclude` entries into
+`pnpm-workspace.yaml` — a quiet weakening of the supply-chain age policy. Reverted; 3.1144.0 (published
+30 September) is old enough to need no exemption. `pnpm-workspace.yaml` is unchanged in this commit.
+
+**A2 — two refusals, each two-sided** (`tests/bedrock-provider.spec.ts`): region `us-east-1`,
+`ap-south-2` and unset are refused; profile `global.*`, `apac.*`, a bare model id and
+`in.anthropic.claude-opus-5` are refused; **positive control:** `ap-south-1` with each India profile
+constructs.
+
+**A3 — three mappings against a faked vendor response:** a `content_filtered` stop reason → `refused:
+true` (and `end_turn` → not refused); a named vendor error (`ThrottlingException` carrying `$metadata`)
+→ `ProviderError`, which `providerFailure` logs as `provider_throttling_exception`, and **the request
+text is not in the thrown message**; an unnamed failure → a plain `Error`, logged as the coarse
+`provider_error`.
+
+**A4:** the request's signal is the very object the vendor call receives, and aborting it rejects the
+call.
+
+**Mutants (A2–A4):** no region check; no profile check; refusal never reported; named error loses its
+name; abort signal replaced. **Each failed exactly one test**; file restored and compared.
+
+**A5 — the live suite is gated and was observed skipping** (`tests/bedrock-live.spec.ts`). The first
+test's title states the reason. With the local credential: **`gate: SKIPPING — model access not granted
+(ValidationException)`**, 1 passed | 2 skipped. With the env file moved aside: **`gate: SKIPPING — no
+credential (services/api/supabase/functions/.env absent or incomplete)`**, 1 passed | 2 skipped; file
+restored. CI has no credential, so CI shows the second reason. The vendor answered the probe with
+`ValidationException`, not `AccessDeniedException`; both are read as "access not granted", and any other
+name skips as `probe failed (<name>)` rather than passing.
+
+**A6 — the under-an-hour list** is in `docs/ai-platform/KEY-DAY-CHECKLIST.md`, "The hour model access
+lands": (1) run the live suite — the gate must read READY; (2) `AI_PROVIDER=bedrock` in the local env
+file, start the database, serve functions from the repository root; (3) seed the practice world, submit
+and approve the prompts as the two fixture admins, flags on; (4) per feature, one ordinary request and
+one carrying patient details — the second must be `patient_specific`, blocked, `model_provider` null;
+(5) record predictions #3–#13; (6) delete the local env file. Production then needs the secrets set
+(`AI_PROVIDER` plus the AWS values), the merge, the deploy, and a real second admin.
+
+#### B — the UCPMP deadline and company caps (`BE-W141`)
+
+**B1 — measured from the check itself.** `pg_get_functiondef` of the installed
+`ucpmp_cap_decision_status()`: `cap_configured` is `v.cap is not null and jsonb_typeof(v.cap) <> 'null'`
+where `v.cap = public.threshold('ucpmp_sample_cap_quantity')`. `threshold()` resolves the company from
+the caller; `check:decision-debt` runs in CI with no caller, so only the global row is ever seen. W1-U
+had proved the consequence: a company cap set, `capConfigured: false`.
+
+**B2 — fixed** (`20261002000300_ucpmp_decision_sees_company_caps.sql`, generated from the installed body
+with one fragment replaced; rollback = the installed body). A cap counts when it is set globally **or for
+any company** (non-null, already effective). Two-sided, in `tests/decision-debt.spec.ts`: a company cap
+of 10 with the deadline already past → `capConfigured: true`, not overdue, not warning; **no cap anywhere
+— with a company row set to null —** still warns ten days out and is still overdue once the date passes.
+**Mutants:** ignoring company rows (the old body) failed exactly the first; counting a null company cap
+failed exactly the second. 25/25 pass. The grant is unchanged (`create or replace` keeps it).
+
+**B3 — the same question of every other dated alarm,** found by grepping functions whose body says
+`overdue`, `decision_due` or `outstanding`, and CI files carrying a date outside comments:
+
+| Alarm | What answers it | Can it see the answer? |
+| --- | --- | --- |
+| `be_w106_decision_status()` | `app_thresholds.organisation_id` existing, or any company row | **Yes** — reads the schema and the table directly, not through `threshold()`. Already resolved (`settingsScoped: true`) |
+| Migration drift `--accept-undeployed-until 2026-10-31` | the deploy | **Yes** — it reads production's own migration list |
+| Backup `DEFERRAL_EXPIRES: '2026-10-15'` | the `BACKUP_DESTINATION` secret | **Yes** — the job reads the secret. **But it expires in 13 days**, and the job then goes red |
+| `audio_purge_*`, `adverse_event_clock_summary`, `retention_status`, `assign_course` | — | Not decision debt: operational clocks on rows, not a question waiting for an answer |
+
+#### C — the rejection log is append-only (`BE-W138`)
+
+`20261002000400_write_rejections_append_only.sql`: one statement-level `BEFORE DELETE OR UPDATE OR
+TRUNCATE` trigger executing `reject_mutation()` — exactly the shape of the fully append-only peers
+(`audit_log`, `consent_records`, `call_reports`, `app_thresholds`, `audio_destruction_log`, … — 22 tables
+carried `reject_mutation` before this one, read from `pg_trigger`). The peers' other protections were checked and already
+matched: grants revoked from anon / authenticated / service_role with SELECT back to authenticated only;
+RLS enabled and forced; foreign keys `on delete restrict`.
+
+**Proved as the peers are, as the owner** (the owner bypasses grants and RLS, so only the trigger stands
+in the way): UPDATE, DELETE and TRUNCATE each refused **23001**, the row still there and unchanged.
+Run **before** the migration was applied, exactly that test failed (`expected null to be '23001'`);
+after, 8/8. Inserts still work: the existing direct-path and sync-path tests write rejections and pass.
+
+**C3 — what the gap allowed, and whether anything took advantage. Measured: nothing did, and nothing
+could have in production.** The gap: the table owner — so every SECURITY DEFINER function, a
+service-role session, the dashboard SQL editor — could rewrite or delete a rejection, and
+`count_write_rejections()` would report the edited count as fact. Users could not (SELECT only).
+(1) **No code** in migrations, functions, scripts or either app updates, deletes or truncates
+`write_rejections` (grep, empty). (2) **Production does not have the table:** the last drift run
+(`36975013243`, 2 October) reads `appliedVersions: 19` of 93, `20261001000300` among the not applied.
+(3) Locally the table only ever held rolled-back test fixtures.
+
+#### D — the manager-planning questions
+
+**D1.** Put to the operator as **Q-16, Q-17, Q-18** (`docs/operator-inputs.md` section 7 and its table),
+each one sentence answerable with one word, each answer's cost, and the default on "you decide":
+
+| Q | Question | Default | Cost of the other answers |
+| --- | --- | --- | --- |
+| Q-16 | Direct reports only, or everyone beneath them? | **Direct** | Everyone: about +1 day (whose change wins) |
+| Q-17 | Plan on the web console or the phone? | **Web** (5–8 days) | Phone: an estimated 7–10 days, less certain — the phone's manager home is a single placeholder row (`home.tsx`, "Team — FE-W6") |
+| Q-18 | Unplanned visit approved before, after, or never? | **After** (+1–2 days) | Before: +3–4 days, and it stalls a rep without signal; Never: no extra work |
+
+**D2.** "What the estimate assumes" added to `docs/design/MANAGER-PLANS-THE-DAY.md`: the three defaults;
+the simplest answers to the five other questions; no notifications; no sync change beyond "the manager's
+change wins for a visit not yet started"; a console owner who knows the code; **10–15 days is total
+effort, not calendar** — one person about 2–3 weeks, three in parallel about 5–8 days plus joining;
+not counted: operator testing, deploy, master data, rework. **D3:** nothing built.
+
+#### E — which 4 October items have a screen
+
+**E1**, measured from the code (a search agent's sweep, then its key claims re-checked here by hand:
+`mileage.tsx:59` and `day-end.tsx:83` call `createClientForScenario()`; `endpoints.ts:1255` says `GET
+/mileage` "has no backend at all"; `features.ts:20` defaults coaching off; `apps/field/app` lists no LMS,
+Q&A, chat or practice route; `git branch -r --no-merged HEAD` lists `fe-d14-screens`, `fe-d16-coaching`,
+`fe-d17-practice`, `mr-46/…`):
+
+| Item | Verdict on merged code |
+| --- | --- |
+| Core MR workflow | Screen + real server |
+| Day planning / execution | Screen + real server — empty, nothing creates a plan (`BE-W139`) |
+| Real backend | Partly — writes, sync, sign-in real; Day End, Mileage, Coaching read the mock |
+| Day End | Screen on the **mock**; real wiring only on unmerged `fe-d14-screens` |
+| Mileage | Screen on the **mock**; real wiring only on unmerged `fe-d14-screens` |
+| LMS | **Server only** — no screen in either app |
+| Product Q&A | **Server only** for the MR (console has knowledge authoring) |
+| Chatbot | **Server only** — `assistant.tsx` on unmerged `fe-d14-screens`, flag off, sample data |
+| AI Doctor | **Server only** for the MR — `practice/*` on unmerged `fe-d17-practice`, flag off, sample backend |
+| AI Analysis / Coaching | Screens hidden by flag, on the mock; real wiring on unmerged `fe-d16-coaching` |
+
+**Nothing in either app calls `ai-gateway`** on the merged code. **E2:** the full table, with file paths,
+is `BE-CR-7` in `docs/contract-requests.md` — the cross-track file Dev reads — with one question: which
+of the three unmerged branches will be on `main` for 4 October. Registered in `docs/ids.md` first.
+
+#### Checks
+
+* `pnpm typecheck` — **0 errors**; `pnpm lint` — **0 errors, 1 warning**, the warning in
+  `apps/field/src/routes/beat-plan-route.test.tsx` (unchanged since `3b53b84`, 28 September — not mine,
+  frontend's); `pnpm format:check` — **all files pass**. All three logs read in full, not piped.
+* **The first static run was red, on my own files**: 2 type errors (`exactOptionalPropertyTypes` in the
+  adapter's output type and the live suite's credential type), 4 lint errors in the two new specs, 4
+  files unformatted. Fixed; rerun clean. I had run the tests before the static checks.
+* `node scripts/check-ids.mjs` — 305 ids, every one registered once by its own track.
+* `pnpm verify:rollbacks` — every rollback applied in reverse, including both of this session's; schema
+  empty. Database reset after.
+* **The clean-database check was red on its first run: 61 failed, all in the four specs that call the
+  edge function over HTTP, every one `503 "name resolution failed"`.** Read, not rerun: the function
+  server's own log ended `container exited gracefully: supabase_edge_runtime_Elmiron-App` — the database
+  resets I had just run stopped the edge container and `functions serve` exited with it. Restarted from
+  the repository root in a loop that would restart it again, confirmed from its log (`Serving functions`,
+  12:29:29), rerun: **All 27 step(s) passed** — database **Test Files 80 passed (80)**, **Tests 1102
+  passed | 2 skipped | 4 todo (1108)** — the two skipped are the live Bedrock tests, gated; core 11 files,
+  201 | 4 todo; field 46 files, 664; console 8 files, 76; ui-tokens 59; ui 4; mock 43; browser **7 passed,
+  0 skipped, 0 failed**. The serve loop did not have to restart during the run.
+
+#### What I got wrong
+
+* Ran the tests before the static checks; the static checks then found ten problems in my own files.
+* My own database resets took the function server down, and the first clean-database run went red for
+  it. The fix is the order: serve after the last reset, or keep it in a restart loop.
+* I nearly accepted `pnpm add`'s silent edit to the workspace's release-age policy; caught on reading the
+  diff, reverted.
+
+#### Where I stopped
+
+**All five W1-V parts done; the override never fired.** The live calls wait on AWS model access only —
+the list for that hour is A6. **No credential appears anywhere in the diff** (the staged diff is checked
+against the env file's values before commit). **The local env file still exists**
+(`services/api/supabase/functions/.env`, git-ignored) — it is needed the moment access is granted, and is
+deleted when the AI work finishes, per item 1.

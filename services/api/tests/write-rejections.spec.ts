@@ -121,6 +121,45 @@ describe.skipIf(!reachable)('W1-N B — the SYNC path: every rejection is a coun
     });
   });
 
+  it('W1-V C (BE-W138): a counted rejection cannot be edited, deleted or truncated — not even by the owner', async () => {
+    // Proved as the OWNER, as every peer's append-only test is: the owner bypasses grants and RLS,
+    // so only the trigger stands between it and the record.
+    const refused = async (client: Client, sql: string, params: unknown[] = []) => {
+      await client.query('savepoint probe');
+      try {
+        await client.query(sql, params);
+        await client.query('release savepoint probe');
+        return null;
+      } catch (error) {
+        await client.query('rollback to savepoint probe');
+        return (error as { code?: string }).code ?? 'unknown';
+      }
+    };
+    await inRolledBackTransaction(async (client) => {
+      await pushAs(client, world.users.puneMr, [consent(hoursFromNow(-80))]);
+      await asOwner(client, async () => {
+        const mine = [world.users.puneMr.id];
+        expect(
+          await refused(
+            client,
+            `update public.write_rejections set sqlstate = '00000' where user_id = $1`,
+            mine,
+          ),
+        ).toBe('23001');
+        expect(
+          await refused(client, `delete from public.write_rejections where user_id = $1`, mine),
+        ).toBe('23001');
+        expect(await refused(client, 'truncate public.write_rejections')).toBe('23001');
+        // POSITIVE CONTROL: the row is still there, unchanged — and inserting still works.
+        const row = await client.query<{ sqlstate: string }>(
+          'select sqlstate from public.write_rejections where user_id = $1',
+          mine,
+        );
+        expect(row.rows.map((r) => r.sqlstate)).toEqual(['45008']);
+      });
+    });
+  });
+
   it('the count is the company’s own, and only an admin may ask', async () => {
     await inRolledBackTransaction(async (client) => {
       const from = hoursFromNow(-1);

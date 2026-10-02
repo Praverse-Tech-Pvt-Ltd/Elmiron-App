@@ -323,3 +323,4 @@ bootstrap rows are not restated here; the first file that cites each is the poin
 | `BE-C66` | backend | settings belong to each company (operator item 15); `BE-W106` closed by the schema, two gaps remain (W1-U3 C) |
 | `BE-W140` | backend | a company's default working hours can only be temporary: the 60-day expiry on `org_default_shift_window` checks the key, not the scope |
 | `BE-W141` | backend | `ucpmp_cap_decision_status` runs with no caller and reads only the GLOBAL cap: a company-level cap would not stop the 6 November build failure |
+| `BE-CR-7` | backend | which items on the operator's 4 October list have a screen and which only a server, measured from the code (W1-V E) |

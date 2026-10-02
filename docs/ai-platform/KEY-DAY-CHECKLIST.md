@@ -136,3 +136,24 @@ deserves its own decision.
 says `BEDROCK_SONNET_PROFILE_ARN` / `BEDROCK_HAIKU_PROFILE_ARN`. With region and profile ASSERTED, the
 two ids above can be constants the adapter checks, and the environment carries only the credential and
 the region.
+
+## The hour model access lands — what is left (W1-V A6)
+
+**Built and proved without a model (W1-V):** the adapter (`_shared/bedrock-provider.ts`, its SDK wiring
+`_shared/bedrock-client.ts`), the construction line (`AI_PROVIDER=bedrock` only), the India assertions,
+the refusal and error mappings, the abort signal, and the live suite's gate. **What is left is
+calls.** In order, each with its proof:
+
+| # | Do | Proves it | Minutes |
+| --- | --- | --- | --- |
+| 1 | `pnpm --filter @fieldforce/api exec vitest run tests/bedrock-live.spec.ts --reporter=verbose` | The first test reads **`gate: READY`**, and **both India profiles pass** with real token counts. If it still reads `SKIPPING — model access not granted`, access is not live yet — stop | 2 |
+| 2 | Add `AI_PROVIDER=bedrock` to the git-ignored `services/api/supabase/functions/.env` (a setting, not a secret); `pnpm db:start`; `pnpm functions:serve` **from the repository root**; confirm "Serving functions" in its own log | The gateway now builds Bedrock locally — a call without a key would answer `503 no_provider` (proved W1-V) | 5 |
+| 3 | `node services/api/scripts/seed-practice-world.mjs` (local only); then, as admin A, `submit_ai_prompt_version` for each feature, and as admin B, `approve_ai_prompt_version` — **the real four-eyes path, with local fixture admins**; switch each feature's flag on for that company | `ai_begin_request` stops refusing "has no approved prompt" (prediction #1) | 15 |
+| 4 | For each of the five features: one ordinary request and one carrying a patient detail, over HTTP as the fixture rep | Ordinary: answered, `ai_requests` row `completed`, `model_name` = the profile id, real tokens, latency. Patient detail: `patient_specific`, row `blocked`, **`model_provider` null** — refused before the provider | 20 |
+| 5 | Read predictions #3–#13 against what fired; record each | The first real failures, named | 10 |
+| 6 | Delete `services/api/supabase/functions/.env` when the AI work is finished (operator item 1) | No credential remains on the machine | 1 |
+
+**Production is separate and needs people:** the deployed function needs `AI_PROVIDER=bedrock` and the
+three AWS values as Edge Function secrets (the operator's dashboard, or `supabase secrets set` with a
+fresh access token), the merge, and the deploy — and a production prompt approved by a REAL second
+admin (Q-14).

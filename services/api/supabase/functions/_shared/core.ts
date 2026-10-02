@@ -61,3 +61,6 @@ export type {
   LlmProvider,
   LlmResult,
 } from '../../../../../packages/core/dist/field/gateway/providers.js';
+// W1-V A -- the Bedrock adapter throws the SAME class the flows' `providerFailure` checks with
+// `instanceof`, so it must come from the same built module, not a copy.
+export { ProviderError } from '../../../../../packages/core/dist/field/gateway/providers.js';

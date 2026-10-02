@@ -990,3 +990,34 @@ Your three questions:
    patient's name and phone number in an "earlier turn" reached the model. **What the server still
    cannot check: that an `assistant` turn is one it really sent.** It is the client's word.
 3. **The allowance and reset time** — `FE-CR-6` above.
+
+### `BE-CR-7` — the operator's 4 October list: which items have a screen, and which only a server
+
+**2 October 2026 · backend (W1-V E) · to frontend (Dev) · a fact, and one question.** Measured from the
+code on `worktree-ai-platform-phase-a` (PR #2, which includes `main`) and from the remote branches as
+last fetched — not from any register. The list is the operator's item 16
+(`docs/operator/2026-10-02-operator-direction.md`). "Mock" means `createClientForScenario()`, which
+reads `services/mock` (`apps/field/src/api-target.ts:19`), not Supabase.
+
+| # | Item | Phone app screen | Console screen | Server | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Core MR workflow | sign-in, visit (check-in/out), consent, samples, call report, voice note — all write through `sync_push` | consent text versions (`admin`) | built | **Screen + real server** |
+| 2 | Day planning / execution | `home.tsx` (Today), `beat-plan.tsx` — read from `sync_pull` | none | built; **nothing creates a plan in production** (`BE-W139`) | **Screen + real server**, empty until plans exist |
+| 3 | Real backend | writes, sync and sign-in are real; **Day End, Mileage, Coaching and Analysis still read the mock** | coaching reads the server | built | **Partly real** |
+| 4 | Day End | `day-end.tsx` — reads the **mock** (`listVisits`, `listMileage`) | none | visits + `daily_mileage()` | **Screen on mock**; the real wiring is on `origin/fe-d14-screens` (`e58ac35`), **not merged** |
+| 5 | Mileage | `mileage.tsx` — reads the **mock** `GET /mileage`, which "has no backend at all" (`packages/core/src/field/endpoints.ts:1255`) | none | `daily_mileage()` | **Screen on mock**; real wiring on `fe-d14-screens`, **not merged** |
+| 6 | LMS | **none** | **none** | courses, lessons, enrolments (`20260924000500`), `lms_tutor` | **Server only** |
+| 7 | Product Q&A | **none** | knowledge approval only (authoring, not asking) | knowledge + `product_qa` through `ai-gateway` | **Server only** for the MR |
+| 8 | Chatbot | **none** on `main` / PR #2; `assistant.tsx` exists on `fe-d14-screens` behind `EXPO_PUBLIC_ASSISTANT_SAMPLE` (off), on sample data | none | `mr_chat` through `ai-gateway` | **Server only** on the merged code |
+| 9 | AI Doctor | **none** on `main` / PR #2; `practice/*` on `origin/fe-d17-practice` behind `EXPO_PUBLIC_PRACTICE_SAMPLE` (off), on a sample backend | personas, scenarios, prompts (authoring) | `start_sim_session` and the rest (`20260929000100`, `20260929000200`, `20261002000100`), `ai_doctor` | **Server only** for the MR |
+| 10 | AI Analysis / Coaching | `coaching`, `analysis/[id]`, `reply/[analysisId]` — on the **mock**, hidden by `EXPO_PUBLIC_COACHING_ENABLED` (off); real wiring on `origin/fe-d16-coaching`, **not merged** | coaching review (real) | `analysis_overrides`, `sim_coach_*`, `ai_coach` | **Screen hidden, on mock**; real wiring unmerged |
+
+**Nothing in either app calls `ai-gateway` yet** (no `functions.invoke`, no `ai-gateway` URL) on the
+merged code. So for items 6–9 a demo on 4 October shows **nothing to an MR** unless the unmerged
+branches land — and the model is still unavailable (AWS access, `docs/operator-inputs.md` Q-1).
+
+**The question for Dev:** which of `fe-d14-screens`, `fe-d16-coaching`, `fe-d17-practice` will be on
+`main` for 4 October? The operator's item 7 asks for Day End and Mileage to be merged once tested, and
+on the merged code both still read the mock.
+
+**Status:** open — asked 2 October.

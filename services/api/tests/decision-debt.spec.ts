@@ -179,6 +179,54 @@ describe.skipIf(!reachable)('the UCPMP cap decision has a deadline that bites', 
     });
   });
 
+  /**
+   * W1-V B (`BE-W141`). A cap set for a COMPANY answers the question. CI calls this function with
+   * no signed-in caller, so `threshold()` sees only the global row — before
+   * `20261002000300_ucpmp_decision_sees_company_caps.sql` a company's cap left the alarm standing.
+   */
+  const companyCap = async (client: Client, value: string): Promise<void> => {
+    const org = await client.query<{ id: string }>(
+      `insert into public.organisations (name) values ('W1-V B fixture -- rolled back') returning id`,
+    );
+    await client.query(
+      `insert into public.app_thresholds (key, value, scope, organisation_id, note, effective_from)
+       values ('ucpmp_sample_cap_quantity', $1::jsonb, 'organisation', $2, 'W1-V B fixture', now() - interval '1 second')`,
+      [value, org.rows[0]?.id],
+    );
+  };
+
+  it('W1-V B: a cap set for a company resolves the deadline, even after the date', async () => {
+    await inRolledBackTransaction(async (client) => {
+      await supersede(client, 'ucpmp_sample_cap_decision_due', '"2026-01-01T00:00:00Z"', 2);
+      await companyCap(client, '10');
+      const s = await status(client);
+      expect(s['capConfigured']).toBe(true);
+      expect(s['overdue']).toBe(false);
+      expect(s['warn']).toBe(false);
+    });
+  });
+
+  it('W1-V B: with no cap anywhere it still warns, and still fails on the date', async () => {
+    // The other side. A company row that sets the cap to null is not an answer either.
+    await inRolledBackTransaction(async (client) => {
+      await companyCap(client, 'null');
+      await supersede(
+        client,
+        'ucpmp_sample_cap_decision_due',
+        JSON.stringify(new Date(Date.now() + 10 * 86_400_000).toISOString()),
+        2,
+      );
+      const warning = await status(client);
+      expect(warning['capConfigured']).toBe(false);
+      expect(warning['warn']).toBe(true);
+
+      await supersede(client, 'ucpmp_sample_cap_decision_due', '"2026-01-01T00:00:00Z"', 1);
+      const due = await status(client);
+      expect(due['capConfigured']).toBe(false);
+      expect(due['overdue']).toBe(true);
+    });
+  });
+
   it('the threshold row cannot be quietly edited or deleted', async () => {
     // `app_thresholds` carries a statement-level reject_mutation trigger, which is what
     // makes "a deferral is on the record" true rather than aspirational.
