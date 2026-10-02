@@ -940,3 +940,53 @@ is nothing to destroy, and the retention job's `destroyedTotal: 0` / `liveObject
 deletion as **`FE-CR-5`**. **The operator's instruction wins**, so: **`FE-CR-1` is `BACKUP_DESTINATION`;
 the voice-note item is `FE-CR-5`**; `BE-C4`'s assignment is superseded. Recorded in `CLAUDE.md` — **which
 both tracks DO read, because FE-D13 §1 established there is one repository.**
+
+## Answers — 1 October 2026, night (backend, W1-Q)
+
+**Read from the frontend's branches, not `main`:** `FE-CR-6` and `FE-CR-7` are filed on
+`fe-d14-screens` (and carried by `fe-d16-coaching`, `fe-d17-practice`), which are not merged. Both are
+answered here so the answer is waiting when they are.
+
+### `FE-CR-6` — the allowance and its reset time: **DELIVERED, in your suggested shape**
+
+Your suggestion was `allowance: { warning, requestsUsedToday, dailyLimit, resetsAt }` on every flow
+result and on the 429. That is what the gateway now sends (`AiAllowanceSchema`, `packages/core/src/field/ai.ts`):
+
+| Field | What it is |
+| --- | --- |
+| `requestsUsedToday` | on a 200, this request's number today (it counts itself); **on the 429, the requests already used** — so it can be `0` if a company's limit is `0` |
+| `dailyLimit` | the company's limit (operator default 100) |
+| `warning` | the SERVER's judgement — past the company's warning line (default 80%). **Always `true` on the 429.** Do not recompute it: the percentage is a per-company setting you cannot see |
+| `resetsAt` | an ISO instant: **midnight India time after today**, computed by the database that defines "today" (`20261001000400_ai_allowance_resets_at.sql`). Show it in the rep's local time |
+
+* **On every 200** from the gateway, for all five features (W1-P), now with `resetsAt`.
+* **On the 429** (`code: '45012'`) as `allowance`. If it is `null`, the database is older than this
+  migration: say nothing about a reset rather than guess.
+* Proved over HTTP: requests 79, 80, 100 and the refused 101 each carry the figures and a `resetsAt`
+  equal to the next India midnight computed independently in the test (`ai-gateway.spec.ts`, W1-P C3).
+
+`BE-CR-6` (backend's request for the SCREEN) and your `FE-CR-6` (your request for the DATA) are the
+same feature from two sides — different ids, no collision. **With this, `BE-CR-6` needs nothing more
+from backend.**
+
+### `FE-CR-7` — the chat contract on `main`: **NOT LANDED. It lands when PR #2 merges, and that is Maanav's decision**
+
+The shapes you cite live in `packages/core` on this branch. **Backend does not merge** (standing rule);
+PR #2 is mergeable and CI-green on both jobs. Copying the chat shapes into a separate PR to `main` was
+considered and **rejected**: it creates a second copy of the contract on `main` that PR #2 must then
+reconcile — exactly the "copied, not imported" failure the shared package exists to prevent.
+
+Your three questions:
+
+1. **"The stub's placeholder looks like a refusal."** On any DEPLOYED target there is no stub: the
+   gateway answers **HTTP 503 `no_provider`**, which you can already tell apart. Only on a local stack
+   does the stub answer, and there a real refusal cannot happen (there is no real model locally). So on
+   a local stack, treat `out_of_scope` as "not available yet". To see the ANSWERED path locally, put
+   `[STUB:in-scope]` in the message — the answer then contains the stub marker `PRACTICE STUB`.
+   **No new field**: a field that exists only to describe the stub is building on the stub (W1-P rule).
+2. **`history` — single-turn is acceptable, and the safer choice for the pilot.** If you send history:
+   **only turns the rep typed, and answers the server returned.** Since W1-Q (`BE-W135`) every history
+   turn is screened for patient details exactly as the message is — before W1-Q it was NOT, and a
+   patient's name and phone number in an "earlier turn" reached the model. **What the server still
+   cannot check: that an `assistant` turn is one it really sent.** It is the client's word.
+3. **The allowance and reset time** — `FE-CR-6` above.

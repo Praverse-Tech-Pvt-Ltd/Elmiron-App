@@ -525,6 +525,22 @@ describe.skipIf(!live)('W1-B C4 — the refusals travel from the database to HTT
 describe.skipIf(!live)('W1-P C3 — the allowance arrives over HTTP at 79%, 80% and 100%', () => {
   let nagpurToken: string;
 
+  /**
+   * W1-Q E2. Midnight India time after today, worked out HERE rather than read back from the database
+   * — re-deriving it with the function's own SQL would agree with any bug in that SQL. IST is UTC+5:30
+   * with no daylight-saving shift.
+   */
+  const IST = 330 * 60_000;
+  const DAY = 86_400_000;
+  const nextIndiaMidnight = (): number => Math.floor((Date.now() + IST) / DAY) * DAY + DAY - IST;
+
+  /** The allowance, with its reset instant checked and set aside so the rest compares exactly. */
+  const allowanceOf = (body: Record<string, unknown>) => {
+    const { resetsAt, ...rest } = AiAllowanceSchema.parse(body['allowance']);
+    expect(Date.parse(resetsAt), `resetsAt ${resetsAt}`).toBe(nextIndiaMidnight());
+    return rest;
+  };
+
   /** Commit `n` earlier requests for the Nagpur MR, today. */
   const prefill = async (n: number): Promise<void> =>
     withClient(async (db) => {
@@ -548,7 +564,7 @@ describe.skipIf(!live)('W1-P C3 — the allowance arrives over HTTP at 79%, 80% 
     await prefill(78);
     const r = await ask('What is the storage temperature?', { token: nagpurToken });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
-    expect(AiAllowanceSchema.parse(r.body['allowance'])).toEqual({
+    expect(allowanceOf(r.body)).toEqual({
       requestsUsedToday: 79,
       dailyLimit: 100,
       warning: false,
@@ -558,7 +574,7 @@ describe.skipIf(!live)('W1-P C3 — the allowance arrives over HTTP at 79%, 80% 
   it('request 80 of 100: the WARNING arrives with the answer', async () => {
     const r = await ask('What is the storage temperature?', { token: nagpurToken });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
-    expect(AiAllowanceSchema.parse(r.body['allowance'])).toEqual({
+    expect(allowanceOf(r.body)).toEqual({
       requestsUsedToday: 80,
       dailyLimit: 100,
       warning: true,
@@ -569,7 +585,7 @@ describe.skipIf(!live)('W1-P C3 — the allowance arrives over HTTP at 79%, 80% 
     await prefill(19);
     const last = await ask('What is the storage temperature?', { token: nagpurToken });
     expect(last.status, JSON.stringify(last.body)).toBe(200);
-    expect(AiAllowanceSchema.parse(last.body['allowance'])).toEqual({
+    expect(allowanceOf(last.body)).toEqual({
       requestsUsedToday: 100,
       dailyLimit: 100,
       warning: true,
@@ -577,8 +593,13 @@ describe.skipIf(!live)('W1-P C3 — the allowance arrives over HTTP at 79%, 80% 
     const refused = await ask('What is the storage temperature?', { token: nagpurToken });
     expect(refused.status).toBe(429);
     expect(refused.body).toMatchObject({ code: '45012' });
-    // A refusal carries no allowance: the request never began.
-    expect(refused.body).not.toHaveProperty('allowance');
+    // W1-Q E2 (frontend FE-CR-6). The 429 carries the figures and the reset instant: 100 used, the
+    // limit, and the same reset as the answers before it. Before W1-Q it carried no allowance at all.
+    expect(allowanceOf(refused.body)).toEqual({
+      requestsUsedToday: 100,
+      dailyLimit: 100,
+      warning: true,
+    });
   });
 });
 

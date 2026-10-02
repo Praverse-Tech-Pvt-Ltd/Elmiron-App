@@ -74,6 +74,19 @@ jobs:
             exit 1
           fi
 
+      # W1-Q C. The id rule was a paragraph in CLAUDE.md three times, and ids collided three
+      # times (C20; CR-5; FE-CR-1). This is the rule as a check: every BE-/FE- id has one row in
+      # docs/ids.md, minted by its own track, cited only after it is registered, and never
+      # changed once it is in the base. Same base as the guard above, for the same reason.
+      - name: Every BE-/FE- id is registered once and never reused
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="origin/${{ github.base_ref }}"
+          else
+            BASE="${{ github.event.before }}"
+          fi
+          node scripts/check-ids.mjs "$BASE"
+
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v5

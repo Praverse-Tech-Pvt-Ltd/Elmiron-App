@@ -219,10 +219,10 @@ describe.skipIf(!reachable)('AI-D1 — product_qa benchmark through the real con
     });
   });
 
-  it.skip.each(PRODUCT_QA_BENCHMARK.filter((c) => c.requiresRealModel).map((c) => [c.id] as const))(
-    '%s — needs a real model (D2)',
-    () => undefined,
-  );
+  // A todo, not a skip with an empty body: un-skipping that would PASS with no assertion (W1-Q A).
+  for (const c of PRODUCT_QA_BENCHMARK.filter((x) => x.requiresRealModel)) {
+    it.todo(`${c.id} — waits for ${c.waitsFor ?? '(no reason given)'}`);
+  }
 
   it('a feature that is switched off refuses before anything else — no request is logged', async () => {
     await inRolledBackTransaction(async (client) => {

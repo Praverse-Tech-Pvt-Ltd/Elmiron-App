@@ -47,6 +47,13 @@ infer it from this paragraph.
 **Change ids follow the same rule**: the backend mints `BE-W<n>` (work items) and the frontend
 `FE-W<n>` / `FE-D<n>`, each from its own sequence. **Register an id in its file before citing it.**
 
+**Minting an id means adding its ONE row to `docs/ids.md`; an id there is never reused, renumbered or
+re-meant.** CI enforces it (W1-Q C) — the check, runnable locally:
+
+```bash
+node scripts/check-ids.mjs   # once, own track, registered before cited, never changed vs origin/main
+```
+
 **Why the rule exists, so nobody "simplifies" it away.** On 28 September two sessions ran in parallel
 and **both minted `C20`** — each read the highest id in `.ai-collab/decisions.md`, which is only
 correct on one branch at a time. The frontend's reached `main` first, so nine backend rulings were

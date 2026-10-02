@@ -243,7 +243,13 @@ export const answerMrChat = async (input: MrChatInput): Promise<MrChatResult> =>
   }
 
   // 2. The patient guardrail, BEFORE any provider call. Nothing is searched, nothing is sent.
-  const signals = detectPatientSignals(message);
+  //
+  // W1-Q E1 (`BE-W135`): over the HISTORY too. It is the client's account of earlier turns and is
+  // sent to the model verbatim, so a screened message beside an unscreened history screened nothing.
+  const signals = [
+    ...detectPatientSignals(message),
+    ...(input.history ?? []).flatMap((h) => detectPatientSignals(h.text)),
+  ];
   if (signals.length > 0) {
     const onlyAdvice = signals.every((s) => s === 'patient_specific_advice');
     await complete({

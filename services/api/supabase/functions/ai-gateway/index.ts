@@ -105,6 +105,48 @@ const sqlstateOf = (error: unknown): string | null => {
   return typeof code === 'string' ? code : null;
 };
 
+/**
+ * The allowance on a 429, from `45012`'s DETAIL (`20261001000400`). Null if the detail is absent or
+ * not the expected JSON — an older database, say — so the client shows nothing rather than a guess.
+ */
+const limitReached = (error: unknown): AiAllowance | null => {
+  try {
+    const d = JSON.parse(String((error as { details?: unknown }).details)) as Record<
+      string,
+      unknown
+    >;
+    if (typeof d['resetsAt'] !== 'string') return null;
+    return {
+      requestsUsedToday: Number(d['requestsUsedToday']),
+      dailyLimit: Number(d['dailyLimit']),
+      warning: true,
+      resetsAt: d['resetsAt'],
+    };
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * W1-Q E1 (`BE-W135`). The request body's `history`, made into what the flows' types claim: every
+ * turn's text a STRING and its role one of two. The flows now screen each turn's text for patient
+ * details, and the guardrail's string methods would throw on anything else — after the request had
+ * begun, leaving it open (`BE-W133`'s shape). Not a cast: a cast is what let this through before.
+ */
+const historyOf = <R extends 'assistant' | 'doctor'>(
+  raw: unknown,
+  other: R,
+): { role: 'rep' | R; text: string }[] =>
+  Array.isArray(raw)
+    ? raw.map((h) => {
+        const turn = (typeof h === 'object' && h !== null ? h : {}) as Record<string, unknown>;
+        return {
+          role: turn['role'] === 'rep' ? 'rep' : other,
+          text: typeof turn['text'] === 'string' ? turn['text'] : String(turn['text'] ?? ''),
+        };
+      })
+    : [];
+
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
 
@@ -185,8 +227,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
       if (error !== null) {
         // Rethrown with the SQLSTATE on `code`, which is the shape `answerProductQuestion`
         // expects and the shape the database tests already produce through `pg`.
-        const wrapped = new Error(error.message) as Error & { code?: string };
+        const wrapped = new Error(error.message) as Error & { code?: string; details?: string };
         wrapped.code = (error as { code?: string }).code;
+        wrapped.details = (error as { details?: string }).details;
         throw wrapped;
       }
       if (fn === 'ai_begin_request' && typeof data === 'object' && data !== null) {
@@ -195,6 +238,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           requestsUsedToday: Number(begun['requestsUsedToday']),
           dailyLimit: Number(begun['dailyLimit']),
           warning: begun['allowanceWarning'] === true,
+          resetsAt: String(begun['allowanceResetsAt']),
         };
       }
       return data;
@@ -223,9 +267,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         personaBrief: String(body.personaBrief ?? ''),
         personaStance: String(body.personaStance ?? 'receptive'),
         objection: String(body.objection ?? ''),
-        history: Array.isArray(body.history)
-          ? (body.history as { role: 'rep' | 'doctor'; text: string }[])
-          : [],
+        history: historyOf(body.history, 'doctor'),
       });
       return withAllowance(result);
     }
@@ -234,9 +276,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         rpc,
         provider,
         message: String(body.message),
-        history: Array.isArray(body.history)
-          ? (body.history as { role: 'rep' | 'assistant'; text: string }[])
-          : [],
+        history: historyOf(body.history, 'assistant'),
       });
       return withAllowance(result);
     }
@@ -273,7 +313,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
   } catch (error) {
     const code = sqlstateOf(error);
     if (code === '45011') return json(403, { code, message: 'ai feature disabled' });
-    if (code === '45012') return json(429, { code, message: 'ai daily limit reached' });
+    if (code === '45012') {
+      // W1-Q E2 (frontend `FE-CR-6`). The refusal's DETAIL carries the database's own figures and
+      // reset instant; the rep at the limit is the one who most needs to know when it resets.
+      return json(429, { code, message: 'ai daily limit reached', allowance: limitReached(error) });
+    }
     if (code !== null) return json(403, { code, message: (error as Error).message });
     return json(500, { code: 'gateway_error', message: PRODUCT_QA_FAILED_MESSAGE });
   }

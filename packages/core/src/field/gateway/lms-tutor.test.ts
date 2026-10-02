@@ -52,6 +52,7 @@ const fakeRpc = (
           requestsUsedToday: 1,
           dailyLimit: 50,
           allowanceWarning: false,
+          allowanceResetsAt: '2026-10-01T18:30:00+00:00',
         });
       case 'lms_tutor_lesson_context':
         if (opts.lessonRefused === true) {

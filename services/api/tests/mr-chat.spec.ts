@@ -215,7 +215,7 @@ afterAll(async () => {
 /** POST to the function as the signed-in MR. */
 const chat = async (
   message: string,
-  opts: { token?: string | null } = {},
+  opts: { token?: string | null; history?: { role: 'rep' | 'assistant'; text: string }[] } = {},
 ): Promise<{ status: number; body: Record<string, unknown> }> => {
   const response = await fetch(FUNCTION_URL, {
     method: 'POST',
@@ -223,7 +223,7 @@ const chat = async (
       'content-type': 'application/json',
       ...(opts.token === null ? {} : { Authorization: `Bearer ${opts.token ?? mrToken}` }),
     },
-    body: JSON.stringify({ feature: 'mr_chat', message }),
+    body: JSON.stringify({ feature: 'mr_chat', message, history: opts.history }),
   });
   return { status: response.status, body: (await response.json()) as Record<string, unknown> };
 };
@@ -527,5 +527,39 @@ describe.skipIf(!live)('W1-P D2 — mr_chat: the branches the stub used to hide'
     const r = await chat(`${q} [STUB:provider-error]`);
     expect(r.body['kind']).toBe('failed');
     expect((await auditRow(String(r.body['requestId']))).flags).toContain('provider_error');
+  });
+});
+
+/**
+ * W1-Q E1 — `BE-W135`, over HTTP. The gateway forwards `history` from the request body untouched, so
+ * this is the path a client actually takes. Before W1-Q a patient detail in an earlier turn reached
+ * the model; the in-scope directive is there so that, unscreened, the reply would be `answered`.
+ */
+describe.skipIf(!live)('W1-Q E1 — mr_chat: the history is screened like the message', () => {
+  const q = 'How do I submit a call report from the app? [STUB:in-scope]';
+
+  it('REFUSED: a patient detail in an earlier turn — blocked before the model', async () => {
+    const r = await chat(q, {
+      history: [{ role: 'rep', text: 'my patient Mr Sharma, phone 98765 43210, asked about it' }],
+    });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body['kind']).toBe('patient_specific');
+    expect((await auditRow(String(r.body['requestId']))).flags).toContain(
+      'patient_identifier_detected',
+    );
+  });
+
+  it('VALID: a clean earlier turn — answered', async () => {
+    const r = await chat(q, { history: [{ role: 'rep', text: 'Where is the visit list?' }] });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body['kind']).toBe('answered');
+  });
+
+  it('a turn whose text is not a string is read as text, not a crash that leaves the request open', async () => {
+    const malformed = [{ role: 'rep', text: 42 }] as unknown as { role: 'rep'; text: string }[];
+    const r = await chat(q, { history: malformed });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body['kind']).toBe('answered');
+    expect((await auditRow(String(r.body['requestId']))).status).toBe('completed');
   });
 });

@@ -173,6 +173,8 @@ export const AiBeginRequestResponseSchema = z.object({
    * once per rep per day to `ai_allowance_warnings`, which is what the company admin reads.
    */
   allowanceWarning: z.boolean(),
+  /** W1-Q E2 (`20261001000400`): when today's allowance resets — midnight India time after today. */
+  allowanceResetsAt: IsoDateTimeSchema,
 });
 export type AiBeginRequestResponse = z.infer<typeof AiBeginRequestResponseSchema>;
 
@@ -187,12 +189,17 @@ export type AiBeginRequestResponse = z.infer<typeof AiBeginRequestResponseSchema
  *   decision) — **the client must not recompute it from the two numbers**, because the percentage is
  *   a per-company setting the client cannot see.
  * * At the limit the request is refused instead: HTTP 429, SQLSTATE `45012`, which
- *   `refusalForSqlState` already maps. There is no `allowance` on a refusal.
+ *   `refusalForSqlState` already maps. **Since W1-Q E2 (frontend `FE-CR-6`) the 429 carries
+ *   `allowance` too** — the requests already used, the limit, `warning: true`, and when it resets.
+ *   On a 429 `requestsUsedToday` counts no new request, so it can be 0 when the limit is 0.
+ * * `resetsAt` is the database's own instant — midnight India time after today — never the client's
+ *   arithmetic, for the same reason as `warning`.
  */
 export const AiAllowanceSchema = z.object({
-  requestsUsedToday: z.number().int().positive(),
+  requestsUsedToday: z.number().int().nonnegative(),
   dailyLimit: z.number().nonnegative(),
   warning: z.boolean(),
+  resetsAt: IsoDateTimeSchema,
 });
 export type AiAllowance = z.infer<typeof AiAllowanceSchema>;
 

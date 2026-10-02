@@ -49,6 +49,7 @@ const fakeRpc = (
           requestsUsedToday: 1,
           dailyLimit: 50,
           allowanceWarning: false,
+          allowanceResetsAt: '2026-10-01T18:30:00+00:00',
         });
       case 'mr_chat_scope_terms':
         return Promise.resolve({ terms: opts.terms ?? TERMS });

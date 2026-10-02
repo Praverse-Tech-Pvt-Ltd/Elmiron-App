@@ -43,6 +43,7 @@ const fakeRpc = (
           requestsUsedToday: 1,
           dailyLimit: 50,
           allowanceWarning: false,
+          allowanceResetsAt: '2026-10-01T18:30:00+00:00',
         });
       case 'search_approved_knowledge':
         return Promise.resolve(
@@ -150,10 +151,12 @@ describe('AI-D1 — the product_qa benchmark, guardrail cases', () => {
     if (result.kind === 'answered') expect(JSON.stringify(completes)).not.toContain(result.answer);
   });
 
-  it.skip.each(skipped.map((c) => [c.id] as const))(
-    '%s — needs a real model (D2)',
-    () => undefined,
-  );
+  // A todo, not a skip with an empty body: un-skipping that would PASS with no assertion (W1-Q A).
+  for (const c of skipped) it.todo(`${c.id} — waits for ${c.waitsFor ?? '(no reason given)'}`);
+
+  it('every case that cannot run says what it waits for', () => {
+    expect(skipped.filter((c) => !c.waitsFor).map((c) => c.id)).toEqual([]);
+  });
 });
 
 describe('AI-D1 — what the model is and is not shown', () => {

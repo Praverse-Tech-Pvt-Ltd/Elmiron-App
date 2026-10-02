@@ -45,6 +45,7 @@ const fakeRpc = (recorded: Recorded, opts: { recordRefuses?: string } = {}): Con
           requestsUsedToday: 1,
           dailyLimit: 100,
           allowanceWarning: false,
+          allowanceResetsAt: '2026-10-01T18:30:00+00:00',
         });
       case 'sim_coach_module_candidates':
         return Promise.resolve([

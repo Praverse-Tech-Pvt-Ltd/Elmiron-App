@@ -117,7 +117,12 @@ export const takeDoctorTurn = async (input: SimTurnInput): Promise<SimTurnResult
   // A refused turn is not written to `sim_turns` at all. That is deliberate: a rep's practice
   // history should not contain the patient details they were stopped from sending, and storing them
   // "for the audit" would put the exact data `C25` forbids into a table that keeps it for ever.
-  const signals = detectPatientSignals(repText);
+  //
+  // W1-Q E1 (`BE-W135`): the client-supplied HISTORY is screened too — it reaches the model verbatim.
+  const signals = [
+    ...detectPatientSignals(repText),
+    ...input.history.flatMap((h) => detectPatientSignals(h.text)),
+  ];
   if (signals.length > 0) {
     const onlyAdvice = signals.every((s) => s === 'patient_specific_advice');
     await complete({

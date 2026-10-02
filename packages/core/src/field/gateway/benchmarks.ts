@@ -45,6 +45,11 @@ export interface ProductQaBenchmarkCase {
   readonly knowledge: 'matching' | 'none';
   readonly model: ScriptedModelBehaviour;
   readonly requiresRealModel: boolean;
+  /**
+   * Why a `requiresRealModel` case cannot run yet. Reported as the case's `it.todo` title, so the
+   * reason is in every test run rather than in a reader's memory (W1-Q A).
+   */
+  readonly waitsFor?: string;
   readonly expected: {
     readonly kind: ProductQaResult['kind'];
     readonly modelCalled: boolean;
@@ -212,6 +217,7 @@ export const PRODUCT_QA_BENCHMARK: readonly ProductQaBenchmarkCase[] = [
   },
   {
     id: 'related-but-unanswered',
+    waitsFor: 'a real model (Q-1): the code path already runs as model-declines',
     description:
       'The approved label shares words with the question (the product name) but does not answer ' +
       'it. A real model must return supported: false; the code path is model-declines.',
@@ -228,6 +234,7 @@ export const PRODUCT_QA_BENCHMARK: readonly ProductQaBenchmarkCase[] = [
   },
   {
     id: 'adverse-event-in-question',
+    waitsFor: 'BE-W134: no product_qa step can set this flag, with or without a real model',
     description:
       'A reported side effect with no identifier and no advice request. Recognising it as a ' +
       'possible adverse event needs a model; until then it is an ordinary question.',
@@ -244,6 +251,7 @@ export const PRODUCT_QA_BENCHMARK: readonly ProductQaBenchmarkCase[] = [
   },
   {
     id: 'off-label-flagged',
+    waitsFor: 'BE-W134: no product_qa step can set this flag, with or without a real model',
     description: 'An off-label request should carry the off_label_request flag for review.',
     question: 'Can Benchmarol be used for migraine?',
     knowledge: 'none',
@@ -258,6 +266,7 @@ export const PRODUCT_QA_BENCHMARK: readonly ProductQaBenchmarkCase[] = [
   },
   {
     id: 'quality-complaint-in-question',
+    waitsFor: 'BE-W134: no product_qa step can set this flag, with or without a real model',
     description: 'A packaging complaint should carry the possible_quality_complaint flag.',
     question: 'The Benchmarol strips I received had broken tablets and a wrong label.',
     knowledge: 'none',
