@@ -24,13 +24,14 @@ const MODULE_A = '6f1c2b8e-1d0a-4c4e-9b8f-0a1b2c3d4e5f';
 const MODULE_ELSEWHERE = '0e0e0e0e-0e0e-4e0e-8e0e-0e0e0e0e0e0e';
 
 interface Recorded {
-  calls: { fn: string; args: Record<string, unknown> }[];
+  /** `via` says which connection made the call: the rep's (`rpc`) or the gateway's `writer`. */
+  calls: { fn: string; args: Record<string, unknown>; via: 'rpc' | 'writer' }[];
   modelRequests: LlmGenerateRequest[];
 }
 
-const fakeRpc = (recorded: Recorded, opts: { recordRefuses?: string } = {}): ControlPlaneRpc => ({
+const fakeRpc = (recorded: Recorded): ControlPlaneRpc => ({
   call: (fn, args) => {
-    recorded.calls.push({ fn, args: { ...args } });
+    recorded.calls.push({ fn, args: { ...args }, via: 'rpc' });
     switch (fn) {
       case 'ai_begin_request':
         return Promise.resolve({
@@ -65,18 +66,30 @@ const fakeRpc = (recorded: Recorded, opts: { recordRefuses?: string } = {}): Con
             courseTitle: 'Product basics',
           },
         ]);
-      case 'record_sim_coach_analysis':
-        if (opts.recordRefuses !== undefined) {
-          const refusal = new Error('refused by the database') as Error & { code?: string };
-          refusal.code = opts.recordRefuses;
-          return Promise.reject(refusal);
-        }
-        return Promise.resolve({ analysisId: '88888888-8888-4888-8888-888888888888' });
+      // W1-Z A (`BE-C69`): NOT here. A score written through the rep's connection is now an error:
+      // the database grants `record_sim_coach_analysis` to the service role only.
       case 'ai_complete_request':
         return Promise.resolve({ requestId: REQUEST_ID, status: 'recorded' });
       default:
         throw new Error(`unexpected rpc ${fn}`);
     }
+  },
+});
+
+/** The gateway's writer: the only connection that may store a score (W1-Z A, `BE-C69`). */
+const fakeWriter = (
+  recorded: Recorded,
+  opts: { recordRefuses?: string } = {},
+): ControlPlaneRpc => ({
+  call: (fn, args) => {
+    recorded.calls.push({ fn, args: { ...args }, via: 'writer' });
+    if (fn !== 'record_sim_coach_analysis') throw new Error(`unexpected writer call ${fn}`);
+    if (opts.recordRefuses !== undefined) {
+      const refusal = new Error('refused by the database') as Error & { code?: string };
+      refusal.code = opts.recordRefuses;
+      return Promise.reject(refusal);
+    }
+    return Promise.resolve({ analysisId: '88888888-8888-4888-8888-888888888888' });
   },
 });
 
@@ -108,6 +121,7 @@ const analysis = (suggestedModules: unknown[], scores: Record<string, number> = 
 const run = (body: unknown, recorded: Recorded) =>
   analyseSimSession({
     rpc: fakeRpc(recorded),
+    writer: fakeWriter(recorded),
     provider: scripted(body, recorded),
     sessionId: SESSION_ID,
   });
@@ -179,7 +193,8 @@ describe('ai_coach — nine items, and a suggestion is only ever a real module (
 describe('ai_coach — a refused analysis CLOSES its request (W1-P D2)', () => {
   const runWith = (recorded: Recorded, opts: { recordRefuses?: string }) =>
     analyseSimSession({
-      rpc: fakeRpc(recorded, opts),
+      rpc: fakeRpc(recorded),
+      writer: fakeWriter(recorded, opts),
       provider: scripted(analysis([]), recorded),
       sessionId: SESSION_ID,
     });
@@ -195,8 +210,49 @@ describe('ai_coach — a refused analysis CLOSES its request (W1-P D2)', () => {
     expect(completionOf(r)['p_error_code']).toBe('analysis_refused');
   });
 
-  it('POSITIVE CONTROL: an identity refusal (42501) is NOT swallowed — it still propagates', async () => {
+  it('a WRITER refusal (42501) closes the request too — REVERSED in W1-Z', async () => {
+    // **This test once asserted the opposite**: "an identity refusal (42501) is NOT swallowed — it
+    // still propagates". That was right while the score was written AS THE REP, where 42501 meant
+    // "not your session". Since W1-Z (`BE-C69`) the score goes through the gateway's writer, the
+    // rep's identity was already checked through `rpc`, and a 42501 here means the database refused
+    // the REQUEST BINDING — so the model has answered and been paid for, and leaving the request
+    // `started` is exactly `BE-W145`. Closed, with the SQLSTATE in the code.
     const r = fresh();
-    await expect(runWith(r, { recordRefuses: '42501' })).rejects.toMatchObject({ code: '42501' });
+    const out = await runWith(r, { recordRefuses: '42501' });
+    expect(out.kind).toBe('failed');
+    expect(completionOf(r)['p_status']).toBe('failed');
+    expect(completionOf(r)['p_error_code']).toBe('write_refused_42501');
+  });
+
+  it('W1-Z BE-W145: an analysis already stored (23505) closes the request; it used to leave it open', async () => {
+    const r = fresh();
+    const out = await runWith(r, { recordRefuses: '23505' });
+    expect(out.kind).toBe('failed');
+    expect(completionOf(r)['p_status']).toBe('failed');
+    expect(completionOf(r)['p_error_code']).toBe('write_refused_23505');
+    expect(completionOf(r)['p_flags']).toEqual([]);
+  });
+});
+
+describe('ai_coach — the score is written by the gateway, never as the rep (W1-Z A, BE-C69)', () => {
+  it('the score goes through the WRITER, bound to the request the rep began', async () => {
+    const r = fresh();
+    const out = await run(analysis([]), r);
+    expect(out.kind).toBe('analysed');
+    const writes = r.calls.filter((c) => c.fn === 'record_sim_coach_analysis');
+    expect(writes.map((c) => c.via)).toEqual(['writer']);
+    expect(writes[0]?.args['p_ai_request_id']).toBe(REQUEST_ID);
+  });
+
+  it('POSITIVE CONTROL: everything else still goes through the rep’s connection', async () => {
+    const r = fresh();
+    await run(analysis([]), r);
+    const viaRep = r.calls.filter((c) => c.via === 'rpc').map((c) => c.fn);
+    expect(viaRep).toEqual(
+      expect.arrayContaining(['sim_session_context', 'ai_begin_request', 'ai_complete_request']),
+    );
+    expect(r.calls.filter((c) => c.via === 'writer').map((c) => c.fn)).toEqual([
+      'record_sim_coach_analysis',
+    ]);
   });
 });

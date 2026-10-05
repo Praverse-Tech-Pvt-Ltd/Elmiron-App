@@ -51,6 +51,13 @@ import type { ControlPlaneRpc, LlmProvider, LlmResult } from './providers.js';
  */
 export interface SimTurnInput {
   readonly rpc: ControlPlaneRpc;
+  /**
+   * W1-Z A (`BE-C69`). The ONE connection allowed to write a practice turn or score: the gateway's
+   * service-role writer, which can call `record_sim_turn` and `record_sim_coach_analysis` and nothing
+   * else. Everything else — the session, the request, the allowance — still goes through `rpc`, as the
+   * rep. Before W1-Z the rep's own token could write both sides of a turn (`BE-W144`).
+   */
+  readonly writer: ControlPlaneRpc;
   readonly provider: LlmProvider;
   readonly sessionId: string;
   readonly repText: string;
@@ -76,6 +83,17 @@ const OUTPUT_CONTRACT = [
   'Stay in character. Raise the objection you were given until it is addressed.',
   'Reply with JSON only: {"reply": string, "objectionAddressed": boolean}.',
 ].join('\n');
+
+/**
+ * W1-Z A (`BE-W145`). How a refused practice write is named in the request log: the SQLSTATE, within
+ * `error_code`'s shape, so "the session had ended" and "an analysis already exists" stay two counts.
+ */
+const writeRefusal = (error: unknown): string => {
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' && /^[0-9A-Z]{5}$/u.test(code)
+    ? `write_refused_${code.toLowerCase()}`
+    : 'write_refused';
+};
 
 const renderHistory = (
   history: readonly { readonly role: 'rep' | 'doctor'; readonly text: string }[],
@@ -182,14 +200,22 @@ export const takeDoctorTurn = async (input: SimTurnInput): Promise<SimTurnResult
     return { kind: 'failed', sessionId, message: SIM_TURN_FAILED_MESSAGE };
   }
 
-  // 5. Both turns, atomically, with the request id that produced the doctor's.
-  const recorded = (await rpc.call('record_sim_turn', {
-    p_session_id: sessionId,
-    p_rep_text: repText,
-    p_doctor_text: structured.value.reply,
-    p_ai_request_id: requestId,
-    p_knowledge_version_ids: [],
-  })) as { turnCount?: number };
+  // 5. Both turns, atomically, with the request id that produced the doctor's — through the WRITER,
+  // which the database binds to this open request (`BE-C69`). A refused write CLOSES the request
+  // before reporting the failure: the model has answered and been paid for (`BE-W145`).
+  let recorded: { turnCount?: number };
+  try {
+    recorded = (await input.writer.call('record_sim_turn', {
+      p_session_id: sessionId,
+      p_rep_text: repText,
+      p_doctor_text: structured.value.reply,
+      p_ai_request_id: requestId,
+      p_knowledge_version_ids: [],
+    })) as { turnCount?: number };
+  } catch (error) {
+    await complete({ status: 'failed', raw: structured.raw, errorCode: writeRefusal(error) });
+    return { kind: 'failed', sessionId, message: SIM_TURN_FAILED_MESSAGE };
+  }
 
   // 6. Counts, timings and flags. Never the text.
   await complete({ status: 'completed', raw: structured.raw });
@@ -222,6 +248,8 @@ export const takeDoctorTurn = async (input: SimTurnInput): Promise<SimTurnResult
  */
 export const analyseSimSession = async (input: {
   readonly rpc: ControlPlaneRpc;
+  /** The gateway's service-role writer — see `SimTurnInput.writer` (`BE-C69`). */
+  readonly writer: ControlPlaneRpc;
   readonly provider: LlmProvider;
   readonly sessionId: string;
   readonly timeoutMs?: number;
@@ -351,11 +379,15 @@ export const analyseSimSession = async (input: {
   // The database validates the SAME shape again -- see `record_sim_coach_analysis`. Not redundant:
   // this checks what the model said, that checks what reaches the table, and a future caller that
   // is not this code cannot skip the second one. The database stays the authority -- and if it
-  // refuses, the request is CLOSED with that refusal
-  // rather than abandoned mid-flight.
+  // refuses, the request is CLOSED with that refusal rather than abandoned mid-flight.
+  //
+  // W1-Z A. Written through the WRITER, bound to this open `ai_coach` request (`BE-C69`). And EVERY
+  // refusal now closes the request (`BE-W145`): before, only 22023/23514 did, so a `23505` — an
+  // analysis already stored for the session, which a rep could cause by writing their own first —
+  // rethrew and left the request `started` after the model had answered and been paid for.
   let stored: { analysisId?: string };
   try {
-    stored = (await rpc.call('record_sim_coach_analysis', {
+    stored = (await input.writer.call('record_sim_coach_analysis', {
       p_session_id: sessionId,
       p_overall_score: out.overallScore,
       p_dimension_scores: out.dimensionScores,
@@ -365,17 +397,16 @@ export const analyseSimSession = async (input: {
       p_summary: out.summary,
       p_model_provider: structured.raw.provider,
       p_model_name: structured.raw.model,
+      p_ai_request_id: requestId,
     })) as { analysisId?: string };
   } catch (error) {
-    // Only a refusal of the ANALYSIS is closed here; an identity or tenancy refusal (28000, 42501)
-    // is the caller's problem and keeps propagating, as it does for every other RPC in this flow.
     const code = (error as { code?: unknown }).code;
-    if (code !== '22023' && code !== '23514') throw error;
+    const shape = code === '22023' || code === '23514';
     await complete({
       status: 'failed',
       raw: structured.raw,
-      flags: ['schema_invalid'],
-      errorCode: 'analysis_refused',
+      ...(shape ? { flags: ['schema_invalid'] as const } : {}),
+      errorCode: shape ? 'analysis_refused' : writeRefusal(error),
     });
     return { kind: 'failed', message: SIM_TURN_FAILED_MESSAGE };
   }

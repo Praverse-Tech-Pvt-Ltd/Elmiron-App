@@ -8,7 +8,7 @@ import {
   StartSimSessionResponseSchema,
 } from '@fieldforce/core';
 import { requireDatabase, withClient } from './db.js';
-import { API_URL, asUser, signIn, withIdentityLock } from './auth.js';
+import { ANON_KEY, API_URL, asUser, signIn, withIdentityLock } from './auth.js';
 import type { ProfileLike } from './auth.js';
 import { acquireGlobalThresholds } from './global-thresholds.js';
 import { seedFixtures } from './fixtures.js';
@@ -294,6 +294,61 @@ const rpcAs = async <T = unknown>(
     }
   });
 
+/** W1-Z A — an AI request begun AS THE REP: what the gateway does first, under the rep's own token. */
+const beginAs = async (
+  profile: ProfileLike,
+  feature: 'ai_doctor' | 'ai_coach',
+): Promise<string> => {
+  const out = await rpcAs<{ r: { requestId: string } }>(
+    profile,
+    `select public.ai_begin_request($1::public.ai_feature) as r`,
+    [feature],
+  );
+  return out?.r.requestId ?? '';
+};
+
+/** Closes a request begun for a test write, so the log does not keep `started` rows for ever. */
+const closeAs = (profile: ProfileLike, requestId: string, status: 'completed' | 'failed') =>
+  rpcAs(
+    profile,
+    `select public.ai_complete_request($1, $2::public.ai_request_status, 'test', 'test', 0, 0) as r`,
+    [requestId, status],
+  );
+
+/**
+ * W1-Z A (`BE-C69`) — a call as the GATEWAY'S practice writer: the service role. Since W1-Z the only
+ * connection that may write a practice turn or score; before it, this file wrote them as the rep.
+ */
+const asGateway = async <T = unknown>(sql: string, params: unknown[]): Promise<T | undefined> =>
+  withClient(async (db) => {
+    await db.query('begin');
+    try {
+      await db.query('set local role service_role');
+      const { rows } = await db.query<Record<string, unknown>>(sql, params);
+      await db.query('commit');
+      return rows[0] as T | undefined;
+    } catch (error) {
+      await db.query('rollback');
+      throw error;
+    }
+  });
+
+/** A practice turn written the way the gateway writes it: a request the rep began, then the writer. */
+const gatewayTurn = async (profile: ProfileLike, sessionId: string, repText: string) => {
+  const requestId = await beginAs(profile, 'ai_doctor');
+  try {
+    await asGateway(`select public.record_sim_turn($1, $2, 'doctor', $3) as r`, [
+      sessionId,
+      repText,
+      requestId,
+    ]);
+    await closeAs(profile, requestId, 'completed');
+  } catch (error) {
+    await closeAs(profile, requestId, 'failed');
+    throw error;
+  }
+};
+
 describe.skipIf(!live)('W1-D B5 — a practice session end to end', () => {
   it('start -> turn -> end -> analysis, through the deployed function', async () => {
     // 1. START. Through the RPC as the rep -- there is no parameter for whose session it is.
@@ -432,18 +487,20 @@ describe.skipIf(!live)('W1-D B5 — a practice session end to end', () => {
     );
     const sid = started?.r.sessionId ?? '';
     await rpcAs(world.users.puneMr, `select public.end_sim_session($1) as r`, [sid]);
-    // Turn 99 is not in a session with zero turns.
+    // Turn 99 is not in a session with zero turns. Written as the GATEWAY (W1-Z A, `BE-C69`) — before
+    // W1-Z this call was made as the rep, which is the defect W1-Z closed.
+    const requestId = await beginAs(world.users.puneMr, 'ai_coach');
     await expect(
-      rpcAs(
-        world.users.puneMr,
+      asGateway(
         `select public.record_sim_coach_analysis($1, 50, $2::jsonb,
             '[{"dimension":"opening","title":"t","detail":"d","turnIndex":99}]'::jsonb,
             '[{"dimension":"closing","title":"t","detail":"d","turnIndex":99}]'::jsonb,
             '[]'::jsonb,
-            'summary', 'stub', 'no-model') as r`,
-        [sid, JSON.stringify(SEVEN_SCORES)],
+            'summary', 'stub', 'no-model', $3) as r`,
+        [sid, JSON.stringify(SEVEN_SCORES), requestId],
       ),
     ).rejects.toThrow(/turn 99/);
+    await closeAs(world.users.puneMr, requestId, 'failed');
   });
 });
 
@@ -564,37 +621,47 @@ describe.skipIf(!live)('W1-M C — nine items, enforced by the database', () => 
       [scenarioId],
     );
     const sid = started?.r.sessionId ?? '';
-    await rpcAs(world.users.puneMr, `select public.record_sim_turn($1, $2, 'doctor') as r`, [
-      sid,
-      repText,
-    ]);
+    // W1-Z A (`BE-C69`): written the way the gateway writes it. Before W1-Z this line was
+    // `rpcAs(world.users.puneMr, record_sim_turn(...))` — the rep writing the DOCTOR's turn, which is
+    // exactly `BE-W144`, and it was green here for as long as the defect stood.
+    await gatewayTurn(world.users.puneMr, sid, repText);
     await rpcAs(world.users.puneMr, `select public.end_sim_session($1) as r`, [sid]);
     return sid;
   };
 
+  /** Stores an analysis the way the coach does: a request the rep began, then the gateway's writer. */
   const record = async (
     sid: string,
     opts: { scores?: Record<string, number>; modules?: unknown[]; improvementDim?: string } = {},
-  ) =>
-    rpcAs<{ r: { analysisId: string } }>(
-      world.users.puneMr,
-      `select public.record_sim_coach_analysis($1, 50, $2::jsonb,
-          '[{"dimension":"opening","title":"t","detail":"d","turnIndex":1}]'::jsonb,
-          $3::jsonb, $4::jsonb, 'summary', 'stub', 'no-model') as r`,
-      [
-        sid,
-        JSON.stringify(opts.scores ?? SEVEN_SCORES),
-        JSON.stringify([
-          {
-            dimension: opts.improvementDim ?? 'response_relevance',
-            title: 't',
-            detail: 'd',
-            turnIndex: 2,
-          },
-        ]),
-        JSON.stringify(opts.modules ?? []),
-      ],
-    );
+  ) => {
+    const requestId = await beginAs(world.users.puneMr, 'ai_coach');
+    try {
+      const out = await asGateway<{ r: { analysisId: string } }>(
+        `select public.record_sim_coach_analysis($1, 50, $2::jsonb,
+            '[{"dimension":"opening","title":"t","detail":"d","turnIndex":1}]'::jsonb,
+            $3::jsonb, $4::jsonb, 'summary', 'stub', 'no-model', $5) as r`,
+        [
+          sid,
+          JSON.stringify(opts.scores ?? SEVEN_SCORES),
+          JSON.stringify([
+            {
+              dimension: opts.improvementDim ?? 'response_relevance',
+              title: 't',
+              detail: 'd',
+              turnIndex: 2,
+            },
+          ]),
+          JSON.stringify(opts.modules ?? []),
+          requestId,
+        ],
+      );
+      await closeAs(world.users.puneMr, requestId, 'completed');
+      return out;
+    } catch (error) {
+      await closeAs(world.users.puneMr, requestId, 'failed');
+      throw error;
+    }
+  };
 
   const suggest = (moduleId: string, extra: Record<string, unknown> = {}) => ({
     moduleId,
@@ -673,7 +740,7 @@ describe.skipIf(!live)('W1-M C — nine items, enforced by the database', () => 
     await expect(record(sid, { scores: six })).rejects.toThrow(/scientific_accuracy/);
   });
 
-  it('the 8-argument recorder is GONE — there is no way to store an analysis without the checks', async () => {
+  it('ONE recorder, and it takes the request id — the older ones are GONE (8 args W1-M, 9 args W1-Z)', async () => {
     const overloads = await withClient(async (db) => {
       const { rows } = await db.query<{ n: number }>(
         `select pronargs n from pg_proc p join pg_namespace s on s.oid = p.pronamespace
@@ -681,7 +748,8 @@ describe.skipIf(!live)('W1-M C — nine items, enforced by the database', () => 
       );
       return rows.map((r) => r.n);
     });
-    expect(overloads).toEqual([9]);
+    // W1-Z A: 10 — the 9-argument recorder the rep could call is dropped, not left beside it.
+    expect(overloads).toEqual([10]);
   });
 
   it('C3: the model is OFFERED only our published modules — two-sided across companies', async () => {
@@ -1254,5 +1322,238 @@ describe.skipIf(!live)('W1-D B2 — a persona and a scenario are never born appr
     await expect(
       rpcAs(world.users.puneMr, `select public.start_sim_session($1) as r`, [id]),
     ).rejects.toThrow();
+  });
+});
+
+/**
+ * W1-Z A (`BE-W144`, `BE-C69`) — a practice turn and a practice score are written by the GATEWAY.
+ *
+ * **These tests REVERSE what this file used to do.** Until W1-Z, `endedSession` and `record` above
+ * wrote turns and scores AS THE REP (`rpcAs(world.users.puneMr, record_sim_turn(...))`) — and were
+ * green in CI for weeks, because the database allowed it. That is how a rep's token could write both
+ * sides of a practice conversation and their own score labelled as any model, and why it survived.
+ */
+describe.skipIf(!live)(
+  'W1-Z A — a practice turn or score can be written only by the gateway',
+  () => {
+    const freshSession = async (profile: ProfileLike = world.users.puneMr): Promise<string> => {
+      const started = await rpcAs<{ r: { sessionId: string } }>(
+        profile,
+        `select public.start_sim_session($1) as r`,
+        [scenarioId],
+      );
+      return started?.r.sessionId ?? '';
+    };
+    const codeOf = (p: Promise<unknown>) =>
+      p.then(
+        () => null,
+        (e: unknown) => (e as { code?: string }).code ?? 'unknown',
+      );
+    const coachArgs = (sid: string, requestId: string) => [
+      sid,
+      JSON.stringify(Object.fromEntries(SIM_COACH_DIMENSIONS.map((d) => [d, 100]))),
+      requestId,
+    ];
+    const COACH_SQL = `select public.record_sim_coach_analysis($1, 100, $2::jsonb,
+      '[{"dimension":"opening","title":"t","detail":"d","turnIndex":1}]'::jsonb,
+      '[{"dimension":"closing","title":"t","detail":"d","turnIndex":2}]'::jsonb,
+      '[]'::jsonb, 'I scored myself', 'anthropic', 'claude-sonnet-5', $3) as r`;
+
+    it('REVERSED: the rep’s own token can no longer write a turn — the doctor’s side included', async () => {
+      const sid = await freshSession();
+      const requestId = await beginAs(world.users.puneMr, 'ai_doctor');
+      expect(
+        await codeOf(
+          rpcAs(
+            world.users.puneMr,
+            `select public.record_sim_turn($1, 'rep', 'a doctor reply I wrote', $2) as r`,
+            [sid, requestId],
+          ),
+        ),
+      ).toBe('42501');
+      // POSITIVE CONTROL: the same write, as the gateway, with the same open request, is stored.
+      await asGateway(`select public.record_sim_turn($1, 'rep', 'doctor', $2) as r`, [
+        sid,
+        requestId,
+      ]);
+      await closeAs(world.users.puneMr, requestId, 'completed');
+    });
+
+    it('REVERSED: the rep’s own token can no longer write a score — and the coach can', async () => {
+      const sid = await freshSession();
+      await gatewayTurn(world.users.puneMr, sid, 'It keeps below 25 degrees.');
+      await rpcAs(world.users.puneMr, `select public.end_sim_session($1) as r`, [sid]);
+      const requestId = await beginAs(world.users.puneMr, 'ai_coach');
+      // The self-written 100, labelled as a real model: refused.
+      expect(await codeOf(rpcAs(world.users.puneMr, COACH_SQL, coachArgs(sid, requestId)))).toBe(
+        '42501',
+      );
+      // POSITIVE CONTROL — two-sided: the coach's write, through the gateway, succeeds.
+      const stored = await asGateway<{ r: { analysisId: string } }>(
+        COACH_SQL,
+        coachArgs(sid, requestId),
+      );
+      expect(stored?.r.analysisId).toMatch(/^[0-9a-f-]{36}$/u);
+      await closeAs(world.users.puneMr, requestId, 'completed');
+    });
+
+    it('the gateway’s write needs an OPEN request of the RIGHT feature', async () => {
+      const sid = await freshSession();
+      // A coach request cannot write a doctor turn.
+      const coach = await beginAs(world.users.puneMr, 'ai_coach');
+      expect(
+        await codeOf(
+          asGateway(`select public.record_sim_turn($1, 'rep', 'doctor', $2) as r`, [sid, coach]),
+        ),
+      ).toBe('42501');
+      await closeAs(world.users.puneMr, coach, 'failed');
+      // A request that is already CLOSED cannot write either — the binding is to work in flight.
+      const closed = await beginAs(world.users.puneMr, 'ai_doctor');
+      await closeAs(world.users.puneMr, closed, 'completed');
+      expect(
+        await codeOf(
+          asGateway(`select public.record_sim_turn($1, 'rep', 'doctor', $2) as r`, [sid, closed]),
+        ),
+      ).toBe('42501');
+    });
+
+    it('a DOCTOR request cannot write a score — the score needs the rep’s open coach request', async () => {
+      // Added after the first mutation run, asking what else would have passed: the score writer's
+      // feature check was untested — only the turn writer's was.
+      const sid = await freshSession();
+      await gatewayTurn(world.users.puneMr, sid, 'It keeps below 25 degrees.');
+      await rpcAs(world.users.puneMr, `select public.end_sim_session($1) as r`, [sid]);
+      const doctor = await beginAs(world.users.puneMr, 'ai_doctor');
+      expect(await codeOf(asGateway(COACH_SQL, coachArgs(sid, doctor)))).toBe('42501');
+      await closeAs(world.users.puneMr, doctor, 'failed');
+    });
+
+    it('another rep’s request cannot write into this rep’s session', async () => {
+      const sid = await freshSession(world.users.puneMr);
+      const theirs = await beginAs(world.users.nagpurMr, 'ai_doctor');
+      expect(
+        await codeOf(
+          asGateway(`select public.record_sim_turn($1, 'rep', 'doctor', $2) as r`, [sid, theirs]),
+        ),
+      ).toBe('42501');
+      await closeAs(world.users.nagpurMr, theirs, 'failed');
+    });
+
+    it('one request produces one turn — it cannot be replayed to append more', async () => {
+      const sid = await freshSession();
+      const requestId = await beginAs(world.users.puneMr, 'ai_doctor');
+      await asGateway(`select public.record_sim_turn($1, 'rep', 'doctor', $2) as r`, [
+        sid,
+        requestId,
+      ]);
+      expect(
+        await codeOf(
+          asGateway(`select public.record_sim_turn($1, 'again', 'again', $2) as r`, [
+            sid,
+            requestId,
+          ]),
+        ),
+      ).toBe('22023');
+      await closeAs(world.users.puneMr, requestId, 'completed');
+    });
+  },
+);
+
+/**
+ * W1-Z B3 — the practice screens' OWN transport, end to end, against the local stack and the stub.
+ *
+ * Not a test calling the gateway: it drives `createLivePracticeBackend` from `apps/field` — the object
+ * the screens call through `PracticeBackend` — as the signed-in rep, through every method the screens
+ * use. Loaded by path because `apps/field` resolves imports the bundler's way; `apps/field`'s own
+ * typecheck holds it to the `PracticeBackend` interface.
+ */
+describe.skipIf(!live)('W1-Z B3 — the live practice transport, end to end, as the rep', () => {
+  it('scenarios → start → turn → read → end → analyse → read the analysis → my sessions', async () => {
+    const { fileURLToPath } = await import('node:url');
+    const livePath = fileURLToPath(
+      new URL('../../../apps/field/src/practice/live.ts', import.meta.url),
+    );
+    const { createLivePracticeBackend } = (await import(livePath)) as {
+      createLivePracticeBackend: (c: {
+        baseUrl: string;
+        apiKey: string;
+        accessToken: () => Promise<string | null>;
+      }) => {
+        listScenarios(): Promise<{ scenarios: readonly { id: string }[] }>;
+        start(scenarioId: string): Promise<{ sessionId: string; personaDisplayName: string }>;
+        turn(body: Record<string, unknown>): Promise<{ status: number; body: unknown }>;
+        readSession(sessionId: string): Promise<{
+          state?: string;
+          turns: readonly { role: string; text: string }[];
+          personaBrief: string;
+          analysisId?: string | null;
+        } | null>;
+        end(sessionId: string): Promise<void>;
+        analyse(body: Record<string, unknown>): Promise<{ status: number; body: unknown }>;
+        readAnalysis(analysisId: string): Promise<{
+          overallScore: number;
+          modelProvider: string;
+          dimensionScores: Record<string, number>;
+        } | null>;
+        listMySessions(): Promise<readonly { sessionId: string; analysisId: string | null }[]>;
+        moduleTitles(ids: readonly string[]): Promise<Record<string, string>>;
+      };
+    };
+    const backend = createLivePracticeBackend({
+      baseUrl: API_URL,
+      apiKey: ANON_KEY,
+      accessToken: () => Promise.resolve(mrToken),
+    });
+
+    // The approved scenario this file's setup created is offered.
+    const { scenarios } = await backend.listScenarios();
+    expect(scenarios.map((s) => s.id)).toContain(scenarioId);
+
+    const started = await backend.start(scenarioId);
+    expect(started.personaDisplayName.length).toBeGreaterThan(0);
+
+    // A turn, through the gateway, as the rep — answered by the stub, written by the gateway's writer.
+    const turn = await backend.turn({
+      feature: 'ai_doctor',
+      sessionId: started.sessionId,
+      repText: 'It keeps below 25 degrees.',
+    });
+    expect(turn.status).toBe(200);
+    const replied = turn.body as { kind: string; reply: string };
+    expect(replied.kind).toBe('replied');
+    // B4: what reaches a rep today is the stub's marker — a sentence no working system produces.
+    expect(replied.reply).toContain('PRACTICE STUB');
+
+    const open = await backend.readSession(started.sessionId);
+    expect(open?.state).toBe('open');
+    expect(open?.turns.map((t) => t.role)).toEqual(['rep', 'doctor']);
+    expect(open?.personaBrief.length).toBeGreaterThan(0);
+
+    await backend.end(started.sessionId);
+    const analysed = await backend.analyse({ feature: 'ai_coach', sessionId: started.sessionId });
+    expect(analysed.status).toBe(200);
+    const result = analysed.body as { kind: string; analysisId: string };
+    expect(result.kind).toBe('analysed');
+
+    const analysis = await backend.readAnalysis(result.analysisId);
+    expect(analysis?.modelProvider).toBe('stub');
+    expect(analysis?.overallScore).toBe(0);
+    expect(Object.keys(analysis?.dimensionScores ?? {})).toHaveLength(SIM_COACH_DIMENSIONS.length);
+
+    const ended = await backend.readSession(started.sessionId);
+    expect(ended?.state).toBe('ended');
+    expect(ended?.analysisId).toBe(result.analysisId);
+    const mine = await backend.listMySessions();
+    expect(mine.find((s) => s.sessionId === started.sessionId)?.analysisId).toBe(result.analysisId);
+    expect(await backend.moduleTitles([])).toEqual({});
+
+    // A REFUSED read must throw, never read as "nothing there". Added after a mutant that ignored the
+    // refusal survived: an expired token would have shown the rep an empty practice list.
+    const refused = createLivePracticeBackend({
+      baseUrl: API_URL,
+      apiKey: ANON_KEY,
+      accessToken: () => Promise.resolve('not-a-token'),
+    });
+    await expect(refused.listMySessions()).rejects.toMatchObject({ status: 401 });
   });
 });

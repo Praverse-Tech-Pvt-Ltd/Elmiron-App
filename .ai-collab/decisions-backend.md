@@ -617,3 +617,27 @@ disagreement could be checked, because the operator's text was not provided.**
   `model_context_window_exceeded` → truncated; `end_turn`, `stop_sequence`, `tool_use`,
   `malformed_tool_use`, `malformed_model_output` → handed to validation, which decides (§38).
   **W1-V's `refusal` is not on the list** — it came from documentation — and is removed.
+
+## `BE-C69` — **a practice turn and score are written by the gateway, as the service role, for exactly two functions** (W1-Z A, 5 October)
+
+- **Amends `C30` narrowly.** The gateway still calls the database as the REP for every decision
+  (`ai_begin_request`: flag, allowance, approved prompt, organisation; `sim_session_context`;
+  `ai_complete_request`). It now ALSO reads `SUPABASE_SERVICE_ROLE_KEY`, on the `ai_doctor` and `ai_coach`
+  paths only, and hands it to `_shared/practice-writer.ts`, which can call `record_sim_turn` and
+  `record_sim_coach_analysis` and refuses every other name before a network call.
+- **Why (`BE-W144`):** whatever the gateway could write with the rep's token, the rep could write too —
+  both sides of a practice turn and their own score labelled as any model, which blocked the real coach
+  (one analysis per session). Proof of origin needs something the rep does not hold.
+- **The binding that keeps authorisation in Postgres:** both functions are granted to `service_role`
+  only (`20261005000200`), and each refuses unless it names an OPEN request, of the right feature, begun
+  by the rep who owns the session. The trusted path cannot attach a score the rep never asked for.
+- **Alternatives, and why they lose:** (1) *a database check that a request is open* — the rep can open
+  one with their own token, so it proves nothing; (2) *a dedicated signing secret* shared by the gateway
+  and the database — keeps the gateway key-free, but adds a value to provision in three environments
+  (local, CI, production) for a team that has not yet received the keys it already needs; (3) *leave it
+  until an admin sees a score* — that was the W1-Y answer; the window in which the fix is cheap is now.
+  The service-role key is supplied to every Edge Function by Supabase whether or not code reads it, so
+  reading it adds a code path, not an exposure.
+- **Not covered (`BE-W146`):** the request log itself. `ai_complete_request` runs as the rep, so a rep
+  can still close their own request as `completed` with any model name and token counts. A practice
+  SCORE can no longer be forged; a request-log ROW can.

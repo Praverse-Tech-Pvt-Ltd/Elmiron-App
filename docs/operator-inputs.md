@@ -27,6 +27,7 @@ genuinely need credentials, legal text or master data."* Every decision you have
 | **Q-17** | Your answer | **Does the manager plan on the web console or on the phone?** — section 7 | Manager planning screens | Same |
 | **Q-18** | Your answer | **Does an MR's unplanned visit need the manager's approval before, after, or never?** — section 7 | Unplanned visits (`FE-W28`) | Same |
 | **Q-19** | Your answer | **Where may a full copy of the production database be kept: GitHub, a storage bucket you provide, or Supabase's own backups?** — section 8 | **The production deploy you approved** — its first step is a backup from today. And the backup job, which goes red from 16 October | **Yes — the deploy cannot start without it** |
+| **Q-20** | Your answer | **Should the code repository stay public?** — section 9. Anyone can read your messages, the runbook and every finding; no credential was found in it | Nothing technical — a decision about who may read the documents | No |
 
 **Why Q-3 and Q-12 are here when the reviewer's brief asked for four items:** your rule covers anything
 needing credentials or legal text, and these two are exactly that. Where the brief and your rule
@@ -362,3 +363,29 @@ anywhere. The note in the job that says "no code change needed" is wrong. That i
 mistake, not something you need to act on; the times above include fixing it.
 
 **The time estimates are ours, not measured.**
+
+## 9. Q-20 — should the code repository stay public?
+
+**5 October 2026, W1-Z D.** One word: **Public** or **Private**. Engineering has not changed the setting.
+
+**What anyone on the internet can read today**, and has been able to since August: your own messages
+to the team, copied word for word (`docs/operator/`); the production deploy runbook, step by step; every
+finding about what the system cannot yet do and why (the engineering logs, the status tables, the
+4 October score); the draft privacy notice and the territory template; the names of the people working
+on it; two company email addresses; and **the identity of the production database** — its project id and
+host, in Mumbai. **No password, key or token was found** — every commit on every branch was checked
+(232,802 added lines); the only key-shaped strings are the public demonstration keys every local
+Supabase install ships with, and placeholders. So this is a decision about candour and reconnaissance,
+not about a leak.
+
+**Making it private costs money, and breaks one thing unless you pay.** This repository used about
+**3,200 build minutes a month** at last week's pace; I believe a private repository on GitHub's free
+organisation plan includes about **2,000**, so builds would stop or bill once a month ran out. The
+branch-protection rule recommended on 5 October (no merge without a green build) is, I believe, available
+on a private repository only on a **paid plan (GitHub Team, roughly US$4 per person per month, which also
+raises the minutes)** — on the free plan, private would mean choosing between protection and privacy.
+**Please check those three figures on GitHub's pricing page; they are from memory, not measured.**
+Nothing else breaks: the people already on the team keep their access, and no code changes.
+
+**Engineering's recommendation, not a default: Private, on GitHub Team.** The documents were written
+for the team, not for the world.

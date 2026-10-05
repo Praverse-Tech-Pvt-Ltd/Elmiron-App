@@ -19,6 +19,8 @@ const SESSION_ID = '77777777-7777-4777-8777-777777777777';
 
 type Recorded = {
   calls: { fn: string; args: Record<string, unknown> }[];
+  /** W1-Z A: calls made through the gateway's writer, kept apart from the rep's `calls`. */
+  writes: { fn: string; args: Record<string, unknown> }[];
   model: LlmGenerateRequest[];
 };
 
@@ -62,13 +64,28 @@ const fakeRpc = (r: Recorded, opts: { notYours?: boolean } = {}): ControlPlaneRp
           allowanceWarning: false,
           allowanceResetsAt: '2026-10-01T18:30:00+00:00',
         });
-      case 'record_sim_turn':
-        return Promise.resolve({ turnCount: 2 });
+      case 'record_sim_turn': {
+        // W1-Z A (`BE-C69`): as the database now answers the rep's connection.
+        const refusal = new Error('permission denied for function record_sim_turn') as Error & {
+          code?: string;
+        };
+        refusal.code = '42501';
+        return Promise.reject(refusal);
+      }
       case 'ai_complete_request':
         return Promise.resolve({ requestId: REQUEST_ID, status: 'recorded' });
       default:
         throw new Error(`unexpected rpc ${fn}`);
     }
+  },
+});
+
+/** The gateway's writer: the only connection that may store a practice turn (W1-Z A, `BE-C69`). */
+const fakeWriter = (r: Recorded): ControlPlaneRpc => ({
+  call: (fn, args) => {
+    r.writes.push({ fn, args: { ...args } });
+    if (fn !== 'record_sim_turn') throw new Error(`unexpected writer call ${fn}`);
+    return Promise.resolve({ turnCount: 2 });
   },
 });
 
@@ -84,11 +101,13 @@ const scripted = (body: unknown, r: Recorded): LlmProvider => ({
   },
 });
 
-const fresh = (): Recorded => ({ calls: [], model: [] });
+const fresh = (): Recorded => ({ calls: [], writes: [], model: [] });
 
 const doctor = (r: Recorded, opts: { notYours?: boolean } = {}) =>
   takeDoctorTurn({
     rpc: fakeRpc(r, opts),
+    // W1-Z A (`BE-C69`): the turn is written through the gateway's writer, recorded in `r.writes`.
+    writer: fakeWriter(r),
     provider: scripted({ reply: 'Go on.', objectionAddressed: false }, r),
     sessionId: SESSION_ID,
     repText: 'It keeps below 25 degrees.',
@@ -103,6 +122,16 @@ describe("ai_doctor — the persona and the conversation are the SERVER's (BE-W1
     const [system, user] = r.model[0]?.messages ?? [];
     expect(system?.content).toContain('APPROVED BRIEF: a cautious urologist');
     expect(user?.content).toContain('STORED DOCTOR TURN: what about storage?');
+  });
+
+  it('W1-Z A: the turn is stored through the WRITER, bound to the request — never as the rep', async () => {
+    // Added after a mutant survived: with the writer and the rep's connection as one fake, writing
+    // the turn AS THE REP passed every test in this file.
+    const r = fresh();
+    expect((await doctor(r)).kind).toBe('replied');
+    expect(r.writes.map((w) => w.fn)).toEqual(['record_sim_turn']);
+    expect(r.writes[0]?.args['p_ai_request_id']).toBe(REQUEST_ID);
+    expect(r.calls.map((c) => c.fn)).not.toContain('record_sim_turn');
   });
 
   it('"not your session" refuses BEFORE a request is counted', async () => {

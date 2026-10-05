@@ -13,6 +13,12 @@
  * defensively: there is no reference to it, so it cannot be reached for later by someone fixing a
  * 401 in a hurry.
  *
+ * **W1-Z amends that, narrowly (`BE-C69`).** The key IS read — on the `ai_doctor` and `ai_coach`
+ * paths only, and handed to `_shared/practice-writer.ts`, which can call exactly two functions:
+ * `record_sim_turn` and `record_sim_coach_analysis`. Calling them as the rep had let a rep's token
+ * write both sides of a practice turn and their own score (`BE-W144`). Every authorisation decision
+ * still runs as the rep — the request is begun with the rep's token, and each write must name it.
+ *
  * **The gateway is deliberately dumb (`C30`).** It:
  *
  *   1. takes the caller's `Authorization` header and passes it through, unexamined;
@@ -45,6 +51,7 @@ import { createStubProvider, stubProviderRefusal } from '../_shared/stub-provide
 import { INDIA_PROFILES, createBedrockProvider } from '../_shared/bedrock-provider.ts';
 import type { IndiaProfileId } from '../_shared/bedrock-provider.ts';
 import { bedrockConverse } from '../_shared/bedrock-client.ts';
+import { practiceWriter } from '../_shared/practice-writer.ts';
 import type { StubShape } from '../_shared/stub-provider.ts';
 
 /**
@@ -277,10 +284,32 @@ Deno.serve(async (req: Request): Promise<Response> => {
     });
   }
 
+  // W1-Z A (`BE-C69`): the practice paths write turns and scores through the service-role writer,
+  // which can call exactly those two functions. Read only here, only for these two features.
+  const writerFor = (): ControlPlaneRpc | null => {
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    return serviceRoleKey === undefined ? null : practiceWriter(supabaseUrl, serviceRoleKey);
+  };
+
   try {
-    if (feature === 'ai_doctor') {
+    if (feature === 'ai_doctor' || feature === 'ai_coach') {
+      const writer = writerFor();
+      if (writer === null) {
+        return json(500, { code: 'misconfigured', message: 'SUPABASE_SERVICE_ROLE_KEY unset' });
+      }
+      if (feature === 'ai_coach') {
+        const result = await analyseSimSession({
+          rpc,
+          writer,
+          provider,
+          sessionId: String(body.sessionId),
+          // W1-R C (`BE-W136`): the STORED conversation is analysed; body turns are ignored.
+        });
+        return withAllowance(result);
+      }
       const result = await takeDoctorTurn({
         rpc,
+        writer,
         provider,
         sessionId: String(body.sessionId),
         repText: String(body.repText),
@@ -303,15 +332,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
         provider,
         lessonId: String(body.lessonId),
         question: String(body.question),
-      });
-      return withAllowance(result);
-    }
-    if (feature === 'ai_coach') {
-      const result = await analyseSimSession({
-        rpc,
-        provider,
-        sessionId: String(body.sessionId),
-        // W1-R C (`BE-W136`): the STORED conversation is analysed; body turns are ignored.
       });
       return withAllowance(result);
     }

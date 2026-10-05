@@ -37,5 +37,13 @@ export interface PracticeBackend {
   moduleTitles(moduleIds: readonly string[]): Promise<Readonly<Record<string, string>>>;
 }
 
-/** One backend for the app process, so a session started on one screen is there on the next. */
+/**
+ * One backend for the app process, so a session started on one screen is there on the next.
+ *
+ * **Still the sample, on purpose (W1-Z B4).** The real backend exists — `createLivePracticeBackend` in
+ * `./live.ts`, proved end to end against the local stack (`services/api/tests/sim-gateway.spec.ts`,
+ * W1-Z B3) — but every practice screen says "sample data", and the only model reachable today is the
+ * stub, whose replies are a marker sentence. Switching this line is a step of the day model access
+ * lands, together with the screens' wording (`docs/log/backend.md`, W1-Z B5).
+ */
 export const practiceBackend: PracticeBackend = createSamplePracticeBackend();
