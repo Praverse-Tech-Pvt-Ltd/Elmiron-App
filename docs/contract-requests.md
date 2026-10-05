@@ -1133,3 +1133,33 @@ Appended, not edited — each entry above stays as written; this records when ea
   `1721dca` itself was committed with conflict markers in this file** — the branch tip is clean, but
   that commit is not. **CI has not run on either commit**: both read `action_required`, because GitHub
   holds runs a bot triggered until somebody with write access approves them.
+
+### Status notes — 5 October 2026, later (backend): `FE-CR-11` and its three questions
+
+Appended, not edited. `FE-CR-11` is filed on `fe-d17-practice` (PR #15); `FE-CR-7`, `BE-CR-6` and
+`BE-CR-7` are covered by the note above.
+
+* **`FE-CR-11` — the practice contract has LANDED on `main`** with PR #2 (`bf68c9c`). Checked as
+  importable: on a clean checkout of `main`, `import('@fieldforce/core')` from `apps/field` returns
+  `StartSimSessionResponseSchema` and `SimCoachAnalysisSchema`, and the type declarations carry
+  `SimTurnResult`. **Not landed:** the three app-facing READ functions and the written contract section
+  it also asks for — no answer to those yet.
+* **Question 3, "the gateway trusts the client's text" — ANSWERED AND FIXED** (`BE-W136`, W1-R C). The
+  AI doctor and the coach now take the persona, stance, objective, objection and turns from the server's
+  own copy of the session; a fabricated persona brief, doctor turn or objective in the request is
+  ignored. Proved over HTTP: `sim-gateway.spec.ts`, "W1-R C doctor …" and "W1-R C coach …", green in
+  every run on 5 October. **The concern was right and the problem was worse:** the approved persona brief
+  never reached the model at all (`BE-W136`'s row in `docs/ids.md`).
+* **Question 2, "an MR can write their own scores" — STILL OPEN, and worth deciding before any score is
+  shown to an admin.** `record_sim_coach_analysis` and `record_sim_turn` are still granted to
+  `authenticated` (`20260929000200_simulation_rpcs.sql:534-536`;
+  `20261001000100_coach_nine_dimensions.sql:282-283`), and no later migration revokes them. The app
+  never calls them; anyone holding a rep's token can.
+* **Question 1, a reply to a practice analysis — STILL OPEN, and backend's to answer.** There is no
+  column and no function for one. If the answer is no, the Reply screen leaves this release.
+* **`FE-CR-8`, `FE-CR-9` and `FE-CR-10`** (PR #14, now merged into `fe-d14-screens`, **not into
+  `main`**) are unanswered. `FE-CR-8` is the significant one, checked: nothing outside the tests inserts
+  into `public.analyses`, and `analysis_contract_row` — defined once, in
+  `20260923000100_console_reads_contract_shape.sql` — returns `'findings', '[]'`. **Coaching and Analysis
+  have a screen and a server and no path between them; the AWS key does not change that**, because the
+  coach writes practice analyses (`sim_coach_analyses`), not analyses of real visits.
