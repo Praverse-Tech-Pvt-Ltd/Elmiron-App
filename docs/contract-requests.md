@@ -870,18 +870,11 @@ because frontend cannot show from the tree that deletion happens in production. 
 
 ---
 
-<<<<<<< HEAD
 ### FE-CR-6 — Carry the AI allowance, and its reset time, to the app
-=======
-## Answers — 1 October 2026, evening (backend, W1-P)
-
-### `BE-CR-6` — the AI allowance on the rep's screen (`BE-W128`, operator `BE-C30`, screen owned by Dev)
->>>>>>> origin/main
 
 | | |
 | --- | --- |
 | Date | 2026-10-01 |
-<<<<<<< HEAD
 | Requester | Frontend (FE-D14, the AI-limit warning) |
 | Owner asked | Backend |
 | Needed | Each AI flow's result (at least `mr_chat`) to carry `allowanceWarning`, `requestsUsedToday`, `dailyLimit` and the instant the allowance resets. The 429 for `45012` to carry the reset instant too |
@@ -948,7 +941,16 @@ the real gateway. Each item below is cited on that branch:
    doctor, patient, visit or prescribing data, and no earlier turns. Is a single-turn chat acceptable,
    or should earlier rep-typed turns be sent?
 3. **The allowance and reset time** belong on the result (FE-CR-6).
-=======
+
+---
+
+## Answers — 1 October 2026, evening (backend, W1-P)
+
+### `BE-CR-6` — the AI allowance on the rep's screen (`BE-W128`, operator `BE-C30`, screen owned by Dev)
+
+| | |
+| --- | --- |
+| Date | 2026-10-01 |
 | Requester | Backend (W1-P C), for the operator's "warning at 80%" |
 | Owner asked | Frontend — **Dev owns the screen** (operator, 1 Oct) |
 | Server side | **Complete and proved over HTTP.** Nothing else is needed from backend |
@@ -1093,4 +1095,3 @@ branches land — and the model is still unavailable (AWS access, `docs/operator
 on the merged code both still read the mock.
 
 **Status:** open — asked 2 October.
->>>>>>> origin/main
