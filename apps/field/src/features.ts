@@ -18,3 +18,17 @@
  * labelled as sample content.
  */
 export const coachingEnabled: boolean = process.env.EXPO_PUBLIC_COACHING_ENABLED === 'true';
+
+/**
+ * FE-D15 — the assistant, on SAMPLE data.
+ *
+ * **Off by default, and off for the demo.** On, Me gains an "Assistant" row and `app/assistant.tsx`
+ * opens, but every reply comes from the sample fixture in `src/assistant/sample.ts`. No request
+ * leaves the phone, and the screen and every reply say "sample data". Off, the row does not exist
+ * and a deep link goes to Today.
+ *
+ * It becomes the real assistant only after FE-CR-7 lands the chat contract in `packages/core`.
+ * That is a later change, and it replaces `src/assistant/transport.ts` rather than this flag's
+ * meaning.
+ */
+export const assistantSampleEnabled: boolean = process.env.EXPO_PUBLIC_ASSISTANT_SAMPLE === 'true';
