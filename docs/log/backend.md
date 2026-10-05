@@ -3528,3 +3528,220 @@ runbook. The live AI calls still wait on AWS model access only. **No credential 
 diff** (checked against the env file's values before commit). **The local env file still exists**
 (`services/api/supabase/functions/.env`, git-ignored) — needed the moment access is granted; deleted when
 the AI work finishes, per item 1.
+
+### W1-Y — landed, and the unowned questions
+
+**5 October 2026.** The app branches land on `main`; then the five questions left with no owner since
+the frontend developer left, the screen-test timeouts, the merge that turned `main` red, and 4 October
+scored.
+
+#### The previous push's CI
+
+`d084127` (W1-W, PR #16 head): **CI green**, run `37278910733`, SHA = that commit. Database runner:
+**Test Files 81 passed (81)**, **Tests 1115 passed | 2 skipped | 4 todo (1121)**; unit runner all green.
+PR #16 then merged as `ab12e18`.
+
+#### The priority override — did it fire? **No.**
+
+`authorizationStatus: NOT_AUTHORIZED` for both models at the start and between every part.
+
+#### A — what is on `main`, and how each was established
+
+**The brief's premise was wrong, and checked first.** PR #15 had been merged — **into `fe-d16-coaching`,
+its stacked base, not `main`**; PR #14 likewise into `fe-d14-screens`. So none of the app work from #14
+or #15 was on `main`. `fe-d16-coaching` (`41d083a`) held #14, #15 and `main` to `80d4b80`, and merged
+cleanly with `main`; **PR #17** opened from it, **CI green on `41d083a`** (run `37281587610`: database 81
+files, 1115 passed | 2 skipped | 4 todo; field 707 + 272, ui 4 + 328, core 203, console 76), and **merged
+as `bc8ccdc`** with `--match-head-commit`. CI on `main` at `bc8ccdc`: green (run `37282925588`, the same
+counts). The tree inspected below (`6a607c5`, a local merge) and `bc8ccdc` differ by nothing.
+
+**A1 — screen by screen, how established:**
+
+* **No screen reads the mock.** Static: no file in `apps/field/app` or `apps/field/src` imports
+  `src/api` (`createClientForScenario`); the four screens that mention it do so in comments recording the
+  read they replaced. **Dynamic — the mock killed:** a top-level `throw` prepended to `src/api.ts`, then
+  the whole field suite: **50 files / 707 tests and 39 screen suites / 272 tests passed.** Caveat: five
+  route tests replace `../api` with `jest.mock`, so the throw cannot fire there; the static check covers
+  those screens. (A first run of this showed 16 suites failing — every one a cold-cache timeout; see C.)
+* **Real server:** sign-in, Today, beat plan, doctors, visit, consent, samples, call report, voice note,
+  queue, Day End and Mileage (pull / push / `daily_mileage`).
+* **Behind a flag that is off:** Coaching, Analysis, Reply (`EXPO_PUBLIC_COACHING_ENABLED`); the
+  assistant (`EXPO_PUBLIC_ASSISTANT_SAMPLE`); AI Doctor practice (`EXPO_PUBLIC_PRACTICE_SAMPLE`).
+* **Sample data only, even with the flag on:** `src/assistant/transport.ts` returns `sampleTransport`;
+  `src/practice/transport.ts` is `createSamplePracticeBackend()`. **Nothing in the app calls
+  `ai-gateway`.** The contracts they waited for (`FE-CR-7`, `FE-CR-11`) are on `main`; the transports
+  were never switched.
+* **No LMS or Product Q&A screen exists.**
+
+**A2 — the operator's fourteen demo checks (item 6), on `main`, from the code and its tests — not on a
+device:**
+
+| Check | On `main` |
+| --- | --- |
+| Login, Dashboard, Day plan, Doctor visit, Check-in, Consent, Sample entry, Call report, Day End, Mileage | **Passable against a seeded development server** — real reads and writes, tests green. **Not in production** (19 migrations; the deploy is stopped at its backup). Day plan is empty in production even after deploy (`BE-W139`) |
+| Chatbot | **No** — sample data, flag off, no gateway call |
+| LMS | **No** — no screen |
+| AI Doctor | **No** — sample data, flag off |
+| AI Analysis | **No** — see B1: practice feedback is sample data; recorded-visit analysis has no writer |
+
+**Ten of fourteen** are passable on a development server; **none** in production; **none of the four AI
+checks** anywhere.
+
+**A3 — regressions.** The landing removes 140 lines, all in coaching / analysis / reply / `me.tsx` /
+the demo build script / `CoachingFeedScreen`. `main` changed **no** file under `apps` or `packages/ui`
+between the branch point (`80d4b80`) and the landing, so every removal is #14's own intended change, not
+a revert of `main`. On the landed tree: typecheck 0 errors, lint 0 errors (the one frontend warning),
+format clean, id check clean, pin check clean, every unit suite green. **No regression found.**
+
+#### B — the five unowned questions (`BE-C68`; `docs/contract-requests.md`, "Answers — 5 October")
+
+* **B1 `FE-CR-8`:** re-established — nothing outside fixtures writes `public.analyses`; findings are
+  `'[]'`. **Decided: this release's "AI Analysis" is the practice feedback screen**; Coaching/Analysis/
+  Reply stay hidden. **The ruling's source is FE-D17's record of the operator** (`frontend-gap-map`), not
+  the operator's words — said so. Sized: transport switch ~1 day, two read functions ~1 day, `BE-W144`
+  ~1 day, plus model access and the second admin. Real-visit analysis: POST-4-OCT (recording deferred).
+* **B2 `FE-CR-9`: no.** Measured: `mr_viewed_at` is read by **no** row rule — `list_analyses` gives a
+  manager every analysis in `visible_user_ids()`. The promise is unenforced, and a read-stamp would not
+  enforce it. When it matters: a separate write call, and a rule of its own.
+* **B3 `FE-CR-10`: no** offline reply — the screen's own argument; return reshape has no reader.
+* **B4 `FE-CR-11` Q2 — measured worse than asked (`BE-W144`, `BE-W145`).** A rep can write **both sides**
+  of a practice turn (`record_sim_turn(..., doctor_text)`), and their own score labelled as any model —
+  `sim-gateway.spec.ts` does both as the rep, green in CI. One analysis per session (`unique
+  (session_id)`), so a self-score **blocks** the real coach, whose `23505` is unhandled and **leaves the
+  AI request open** (`BE-W145`). Decided: acceptable only while no admin sees a score (none does — no
+  console reader); fix before one does, ~1 day.
+* **B5 `FE-CR-11` Q1: no** reply to practice — managers do not see practice scores, so a reply has no
+  reader. Reply leaves this release.
+
+#### C — the screen tests' missing headroom: measured, and the CAUSE fixed
+
+**C2 — the measurement.** Field jest, cache cleared before each run, 20-core machine:
+
+| Workers | Slowest first test | Suites timed out | Whole run |
+| --- | --- | --- | --- |
+| 19 (default) | 36.9 s | 9 | 56.9 s |
+| 10 (50%) | 22.3 s | 2 | 34.8 s |
+| 4 | 12.5 s | 0 | 23.3 s |
+| 3 | 11.2 s | 0 | 24.0 s |
+| 19, **warm** | 14.2 s | 0 | 17.4 s |
+
+**Every failure was the FIRST test in its file (9 of 9);** the median later test took 0.07 s. So it is the
+known first-test cost (module load + transform + first render) — but **its size is set by jest's worker
+count**: every worker transforms the same cold graph at once. "Machine load" was the worker count all
+along — three times (28 September in `packages/ui`, twice on 5 October). `packages/ui`: default 41.8 s
+with a first test at **20.3 s** (over its bound); 4 workers 17.3 s and 5.6 s.
+
+**C3 — fixed the cause, not the bound:** `maxWorkers: 3` in `apps/field/jest.config.cjs` and
+`packages/ui/jest.config.cjs`; `testTimeout` stays 20 s. 3 is what a 4-core CI runner already uses
+(cores − 1), so CI is unchanged. **Proved both ways:** uncapped cold = 9 failures (the measurement above
+IS the "remove the cap" mutant); capped by the config alone, cold: field 272/272 in 24.6 s, ui 328/328 in
+17.1 s; and the clean-database check, which runs both in parallel, passed. **What is left:**
+`offline-day*` reloads the app twice on purpose (`jest.resetModules()`), 11–13 s cold — about 60% of the
+bound, recorded in the config.
+
+#### D — the merge nobody checked
+
+**D1 — the exact condition.** On 5 October, five merges: **#13 with no CI at all** (its runs held at
+`action_required` — GitHub waits for a human to approve workflows on bot-pushed commits), **#14 and #15
+with CI RED** (`8efe619`, `8e74c98` — the id check), #16 and #17 green. **One fact allowed all three:
+nothing requires a check before the merge button works.** "Mergeable" means only "no conflict".
+
+**D2 — recommendation: a ruleset on `main` requiring both CI jobs. Not applied — a repository setting.**
+Measured first: the repository is **PUBLIC**, the organisation is on GitHub's **free** plan, there is **no**
+branch protection and **no** ruleset — and rulesets are available to public repositories on free.
+
+```bash
+gh api -X POST repos/Praverse-Tech-Pvt-Ltd/Elmiron-App/rulesets --input - <<'JSON'
+{ "name": "main needs green CI", "target": "branch", "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
+  "bypass_actors": [],
+  "rules": [
+    { "type": "pull_request", "parameters": { "required_approving_review_count": 0,
+      "dismiss_stale_reviews_on_push": false, "require_code_owner_review": false,
+      "require_last_push_approval": false, "required_review_thread_resolution": false } },
+    { "type": "required_status_checks", "parameters": { "strict_required_status_checks_policy": true,
+      "required_status_checks": [ { "context": "typecheck · lint · format · unit tests" },
+                                  { "context": "migrations · Gate 0 RLS suite · rollbacks" } ] } },
+    { "type": "non_fast_forward" }, { "type": "deletion" } ] }
+JSON
+```
+
+* **Sufficient for the case that happened:** a held run is `action_required`, not `success`, so the merge
+  stays blocked until someone approves and it passes; a red run blocks outright.
+* **What it costs:** every merge waits for both jobs (~3 + ~5 minutes); **strict** (up to date with
+  `main`) means a re-run whenever `main` moves — chosen deliberately, because a PR green against an older
+  `main` can be red against the current one: **#16 was green on `2265fbb`, then red on its next run once
+  #13 had changed `main` under it**; no direct pushes to `main`; and **no bypass, admins included** —
+  an emergency means removing the rule, on purpose and visibly.
+* **What it does NOT cover:** merges into other branches (#14, #15 merged red into stacked bases) — those
+  reach `main` only through a PR, which this gates. And the check names must stay identical to the job
+  names, or a rename silently drops the requirement.
+* **The visibility itself is the operator's to know about:** a PUBLIC repository makes every committed
+  document world-readable — the operator's messages, decisions, the data-protection discussion.
+
+**D3 — the id check: a habit was not enough; one line of mechanism, now done.** It fired on four merges
+in two days, always after a push. It now runs FIRST in the pre-commit hook (`ci-local --only=check-ids,…`,
+under a second). **Proved by running this worktree's hook:** a made-up, unregistered backend work-item id is refused with
+its file and line; a clean tree passes all four steps. **Found while proving it:** `core.hooksPath` is an
+**absolute** path to the main checkout (`D:\Praverse\Elmiron-App\.githooks`), so worktrees run the MAIN
+CHECKOUT'S hooks — my first probe went through because the old hook ran, and the change takes effect
+there only once that checkout pulls. **The hook does not cover bot or other machines' commits; D2 does.**
+
+#### E — 4 October, scored (`docs/4-OCTOBER.md`, "Scored after the day")
+
+On the day: `main` was **`dbc17dd`**, unchanged since 1 October (first-parent history: #12 on the 1st,
+then #2 on the 5th); production **19 of 75** migrations (drift run `37203438592`); **no AI answered**.
+**Every CANNOT held (8/8); none of the six COULDs landed; the deploy was called an hour's work when its
+first step was impossible** — the page's one real miss, optimistic. A first attempt at "what was on `main`
+on the 4th" used `git log --before`, which filters by COMMIT date and returned a commit that reached
+`main` only on the 5th; first-parent history is the right question.
+
+#### F — the status table (measured this session, or cited)
+
+| MODULE | STATUS | OWNER | BLOCKER | ETA |
+| --- | --- | --- | --- | --- |
+| Core MR workflow — server | DONE | Maanav | — | — |
+| Core MR workflow — app (incl. Day End, Mileage) | DONE | Maanav | On `main`, every screen on the real server (mock killed). Not run on a device since the merges | — |
+| Contracts for chat and practice | DONE | Maanav | — | — |
+| Bedrock adapter | DONE | Maanav | No live call yet (model access) | — |
+| AI Doctor practice / AI Analysis (practice feedback) | BLOCKED | AWS account owner, then Maanav | Model access; then the transport switch (~1d), two reads (~1d), `BE-W144` (~1d), second admin | about 3 days after access |
+| Chatbot screen | BLOCKED | AWS account owner, then Maanav | Model access; transport still sample-only | about 1 day after access |
+| Product Q&A / LMS Tutor | BLOCKED | AWS account owner | Model access; and no app screen for either | — |
+| Recorded-visit Coaching / Analysis / Reply | POST-4-OCT | Maanav | Nothing writes `analyses`; recording deferred (`BE-C17`), signatory (Q-13) | — |
+| LMS (app screens) | POST-4-OCT | Maanav | No screen | — |
+| Production deploy | BLOCKED | Operator, then Maanav | Q-19; then `BE-W143`; stopped at runbook 0.1 | about 1 day after the answer |
+| Backup | BLOCKED | Operator, then Maanav | Q-19; red from 16 October | ½ day after the answer |
+| Day planning (manager plans) | BLOCKED | Operator | Q-16, Q-17, Q-18 | 10–15 working days after the answers |
+| Branch protection on `main` | BLOCKED | Repository admin | A setting, not code — D2's command | minutes |
+| Second admin | BLOCKED | Operator | Q-14 | same day |
+| Consent in production | BLOCKED | Operator | Q-11 | ½ day |
+| Sample cap | BLOCKED | Operator | Q-10 | ½ day |
+| Demo build (APK) | BLOCKED | Maanav | Not re-measured since W1-T (CMake 3.31.6 missing then) | — |
+
+#### Checks
+
+* Static: typecheck **0 errors**, lint **0 errors** (one frontend warning), format clean; id check
+  **318 ids** (`BE-C68`, `BE-W144`, `BE-W145` registered in the commit that first cites them); pin check
+  clean.
+* **Clean-database check: All 28 step(s) passed** — database **Test Files 81 passed (81)**, **Tests 1115
+  passed | 2 skipped | 4 todo (1121)** (the two skipped: the gated live Bedrock tests); core 11 files, 203
+  | 4 todo; field 50 files, 707, and 39 screen suites, 272; ui 4 and 30 screen suites, 328; console 76;
+  ui-tokens 59; mock 43; browser **7 passed, 0 skipped, 0 failed**. Function server started from the
+  repository root in a restart loop, confirmed from its log.
+
+#### What I got wrong
+
+* **The D3 probe:** my first attempt committed the probe (`ca79b31`, never pushed, reset) because git ran
+  the main checkout's OLD hook — I tested a hook I had not checked was the one running.
+* **"What was on main on the 4th"** — first answered with `git log --before` (commit date), which named a
+  commit that landed on the 5th.
+* **W1-W's guidance on PR #15** said "point it at `main`"; by the time it was acted on it had been merged
+  into its base instead — I did not say plainly enough that merging a stacked PR does NOT reach `main`.
+
+#### Where I stopped
+
+**All six parts done; the override never fired.** The app work is on `main` (`bc8ccdc`). B's answers,
+C's fix, D's hook line and E's score are on the branch of this commit, for a PR. The ruleset (D2) is the
+repository admin's to apply. **No credential appears anywhere in the diff** (checked against the env
+file's values before commit). **The local env file still exists** (`services/api/supabase/functions/.env`,
+git-ignored) — needed the moment access is granted; deleted when the AI work finishes, per item 1.

@@ -79,3 +79,40 @@ against the last column.**
 
 **What no action before the 4th can change:** real AI answers, maps, notifications, live tracking,
 voice practice and AI drafting. **Plan the 4th without them.**
+
+---
+
+## Scored after the day — 5 October 2026 (W1-Y E)
+
+**What was true on 4 October, from evidence, not from this page:**
+
+* **`main` was `dbc17dd` — unchanged since 1 October.** `main`'s first-parent history goes from PR #12
+  (1 October, 15:39) straight to PR #2 (5 October, 09:54). Nothing merged on the 2nd, 3rd or 4th.
+* **Production had applied 19 of 75 migrations** — scheduled drift run `37203438592`, 4 October 12:49
+  UTC, on `dbc17dd`. Nothing was deployed.
+* **No AI answered anywhere.** The Bedrock adapter was not on `main`, model access was `NOT_AUTHORIZED`
+  when measured on 2 and on 5 October (no measurement exists for the 4th), and production had none of the
+  AI tables, so even a deployed gateway could not have begun a request.
+* **This page's own premise was already stale the day it was written:** it says "No AWS key exists". The
+  key arrived later on 2 October (W1-U); the blocker became model access, which it still is. The outcome
+  is the same; the reason on the page is not.
+
+**The score, line by line — wrong in either direction:**
+
+| # | Predicted for the 4th | What happened | Verdict |
+| --- | --- | --- | --- |
+| 1 | READY — on the development server | True off `main` only; nothing reached production | **Right as worded** — and the wording was the hedge: "development server" is not what a demo of the product needs |
+| 2 | COULD BE READY — "a merge and a build" | The merge happened on the **5th** (PR #13) | **Did not happen** — one day late |
+| 3 | CANNOT BE READY | Could not | **Right** |
+| 4 | CANNOT BE READY — the key | Could not — but the cause moved from "no key" to "no model access" | **Right outcome, stale cause** |
+| 5, 6 | COULD on sample data; CANNOT on real answers | Not merged on the 4th; still sample-only on the 5th (the transports were never switched) | **"Could" did not happen; "cannot" right** |
+| 7 | COULD — if the second admin lands | No second admin recorded | **Did not happen** |
+| 8–13 | CANNOT BE READY | Could not | **Right** (six rows) |
+| 14, 15, 16 | READY | True on PR #2's branch; on `main` only from the 5th | **Right about the code, wrong about where** |
+| 17 | **COULD BE READY — "an estimated hour"** | **Could never have been ready.** Its first step needs a backup, and there is nowhere to put one — and even with a destination set, the backup job stores nothing (`BE-W143`). Attempted on the 5th; stopped at step 0.1 | **WRONG, optimistic** — the page's one real miss |
+| 18 | COULD — if approved | Not approved | **Did not happen** |
+
+**In one sentence: every CANNOT was right, no COULD became a did, and one COULD was never possible.**
+Eight of eight CANNOTs held. None of the six COULDs landed on the day, because nothing merged until the
+5th. And the production deploy — the item "every REAL item depends on" — was called an hour's work when
+its first step was impossible. The page did not check that step; W1-W found it by running it.
