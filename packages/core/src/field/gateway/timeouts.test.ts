@@ -37,6 +37,12 @@ const LESSON_ID = '44444444-4444-4444-8444-444444444444';
 
 type Call = { fn: string; args: Record<string, unknown> };
 
+/** W1-Z A: the gateway's writer. Nothing may be STORED when the model never answered. */
+const noWrite: ControlPlaneRpc = {
+  call: (fn) =>
+    Promise.reject(new Error(`no practice write expected after a provider failure: ${fn}`)),
+};
+
 const fakeRpc = (calls: Call[], feature: string, outputSchemaName: string): ControlPlaneRpc => ({
   call: (fn, args) => {
     calls.push({ fn, args: { ...args } });
@@ -148,6 +154,7 @@ const FLOWS = [
     run: (calls: Call[], provider: LlmProvider) =>
       takeDoctorTurn({
         rpc: fakeRpc(calls, 'ai_doctor', SIM_DOCTOR_TURN_OUTPUT_SCHEMA_NAME),
+        writer: noWrite,
         provider,
         sessionId: SESSION_ID,
         repText: 'It keeps below 25 degrees.',
@@ -160,6 +167,7 @@ const FLOWS = [
     run: (calls: Call[], provider: LlmProvider) =>
       analyseSimSession({
         rpc: fakeRpc(calls, 'ai_coach', SIM_COACH_OUTPUT_SCHEMA_NAME),
+        writer: noWrite,
         provider,
         sessionId: SESSION_ID,
         timeoutMs: 50,
