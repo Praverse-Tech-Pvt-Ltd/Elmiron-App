@@ -151,6 +151,28 @@ export const CheckInSchema = z.object({
   /** Computed server-side. A client-reported distance is an expense claim it wrote itself. */
   distanceFromClinicMetres: z.number().nonnegative().nullable(),
   source: CaptureSourceSchema,
+  /**
+   * W1-D A1 / CR-4 / `BE-C2` — was the fix too coarse to judge this geofence?
+   *
+   * **True** when the device-reported accuracy radius EXCEEDED the clinic's geofence radius, so the
+   * fix could not place the rep inside or outside it. **False** when it could.
+   *
+   * **NULL MEANS NOT ASSESSED, AND NEVER "the fix was fine".** Three cases produce it: a check-in
+   * written before `20260928000200`, a device that sent no accuracy, and a visit with no clinic
+   * address to compare against. Rendering any of those as "precise" would be the same
+   * overstatement the reps' privacy notice had to be corrected for (`FE-W52`).
+   *
+   * **`.optional()` as well as `.nullable()`, deliberately.** Optional because a caller reading a
+   * narrower column list must still parse — `sync_pull` does not carry this field today, and a
+   * required key would break every existing consumer the moment it was added. Nullable because the
+   * column itself is nullable. **The two mean different things and both are true:** absent = this
+   * response does not carry the field; null = the server has no answer.
+   *
+   * **It is NOT a verdict and nothing is refused on it.** `geofenceStatus` remains the server's
+   * answer, computed from the centre point alone, unchanged by accuracy — a verdict that shifted
+   * with fix quality would mean something different for every check-in (`BE-C2`).
+   */
+  locationIsApproximate: z.boolean().nullable().optional(),
   /** What the device says. Its clock is not trusted. */
   occurredAt: IsoDateTimeSchema,
   /** When the server took delivery. Use both to reconcile a late sync. */

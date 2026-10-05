@@ -8,6 +8,11 @@ import {
   UuidSchema,
 } from '../shared/primitives.js';
 import { RoleSchema, TerritorySchema, UserProfileSchema } from '../shared/identity.js';
+// W1-A B1. The RPC name tables are the source of truth for the names; the paths below
+// interpolate them so a rename cannot leave a stale string here.
+import { AI_RPC } from './ai.js';
+import { KNOWLEDGE_RPC } from './knowledge.js';
+import { LMS_RPC } from './lms.js';
 import {
   BeatPlanEntrySchema,
   BeatPlanSchema,
@@ -742,6 +747,41 @@ export const API_PATHS = {
   /** MR-50 F2 / `FE-W12`. The override history's read — the RPC, which Supabase and the mock both serve. */
   listAnalysisOverrides: '/rpc/list_analysis_overrides',
   retentionStatus: '/rpc/retention_status',
+
+  // ---------------------------------------------------------------------------
+  // W1-A B1 -- the AI, knowledge and LMS paths.
+  //
+  // **Declaring a path is not building a consumer, and this block must not be read as one.**
+  // `INVENTORY.md` B4 records the exact failure this could repeat: eleven manager RPCs have had
+  // declared paths and mock handlers here since MR-44, no client method, and no call site -- an
+  // entire role that LOOKS wired because this table mentions it. These entries exist so the app
+  // team has one typed place to read the paths from, and for no other reason.
+  //
+  // The RPC NAMES are owned by `LMS_RPC` (`lms.ts`), `KNOWLEDGE_RPC` (`knowledge.ts`) and
+  // `AI_RPC` (`ai.ts`). They are interpolated rather than retyped so the two cannot drift;
+  // `contract.test.ts` asserts every name in those three tables has a path here.
+  //
+  // `ai_begin_request` and `ai_complete_request` are deliberately ABSENT. They are the gateway's
+  // (`#4`), called as the user by a runtime that does not exist. No app calls them, and a path
+  // here would invite one to. `contract.test.ts` asserts their absence, so a later addition is a
+  // decision rather than a drift.
+  publishCourseVersion: `/rpc/${LMS_RPC.publishCourseVersion}`,
+  retireCourseVersion: `/rpc/${LMS_RPC.retireCourseVersion}`,
+  assignCourse: `/rpc/${LMS_RPC.assignCourse}`,
+  cancelCourseAssignment: `/rpc/${LMS_RPC.cancelCourseAssignment}`,
+  startCourseVersion: `/rpc/${LMS_RPC.startCourseVersion}`,
+  completeLesson: `/rpc/${LMS_RPC.completeLesson}`,
+
+  submitKnowledgeVersion: `/rpc/${KNOWLEDGE_RPC.submitKnowledgeVersion}`,
+  approveKnowledgeVersion: `/rpc/${KNOWLEDGE_RPC.approveKnowledgeVersion}`,
+  rejectKnowledgeVersion: `/rpc/${KNOWLEDGE_RPC.rejectKnowledgeVersion}`,
+  retireKnowledgeVersion: `/rpc/${KNOWLEDGE_RPC.retireKnowledgeVersion}`,
+  searchApprovedKnowledge: `/rpc/${KNOWLEDGE_RPC.searchApprovedKnowledge}`,
+
+  submitAiPromptVersion: `/rpc/${AI_RPC.submitAiPromptVersion}`,
+  approveAiPromptVersion: `/rpc/${AI_RPC.approveAiPromptVersion}`,
+  rejectAiPromptVersion: `/rpc/${AI_RPC.rejectAiPromptVersion}`,
+  retireAiPromptVersion: `/rpc/${AI_RPC.retireAiPromptVersion}`,
 } as const;
 
 export const EntityResponseSchemas = {

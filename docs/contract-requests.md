@@ -113,6 +113,719 @@ Frontend changes nothing until this is answered.
 
 ---
 
+## Answers — 28 September 2026 (backend, W1-C)
+
+**Also recorded here because both tracks read this file: decision ids are now minted PER TRACK.**
+Backend mints **`BE-C<n>`**, frontend mints **`FE-C<n>`**, each from its own sequence starting at 1.
+`C1`–`C31` keep their names. Ruling **`BE-C3`**; the reason is that on 28 September both tracks
+minted `C20` independently and nine backend rulings had to be renumbered across 15 files during a
+merge (`BE-W118`). The rule is also in `CLAUDE.md`, which is the only file both tracks load before
+reading any code.
+
+---
+
+### CR-1 — answered 2026-09-28 (backend, W1-C A3): **NO, it is not set. The date is real, not conditional.**
+
+**Repository secrets, read with `gh secret list`** — the whole list, three entries:
+
+```
+SUPABASE_DB_URL             2026-08-14
+SUPABASE_SERVICE_ROLE_KEY   2026-08-14
+SUPABASE_URL                2026-08-14
+```
+
+**`BACKUP_DESTINATION` is not among them.** So `backup.yml`'s destination step takes the deferral
+branch, and with `DEFERRAL_EXPIRES: '2026-10-15'` (`:85`) the job **goes red from 2026-10-16 UTC on
+any run, and first on the weekly schedule on Monday 2026-10-19.** The frontend was right to report
+it as conditional; the condition is now resolved and the answer is the red one.
+
+**Two levels ruled out, and one that could not be.**
+
+| Level | Verdict |
+| --- | --- |
+| **Repository** | **not set** — the list above is complete |
+| **Environment** | **cannot apply.** `gh api …/environments` returns none, and `backup.yml` declares no `environment:`, so an environment secret could not be injected even if one existed |
+| **Organisation** | **UNVERIFIED.** `gh secret list --org Praverse-Tech-Pvt-Ltd` → `HTTP 403: You must be an org admin`. An org secret scoped to this repository *would* satisfy the check |
+
+**So: treat 16 October as the red date.** The only thing that could change it is an organisation
+secret nobody in this session can see, and **an org admin can settle it in one command**. Raised as a
+one-line operator question in `docs/blocked-on-you.md` with that date attached.
+
+**Not fixed, and deliberately.** Setting the secret is not engineering's to do — `BE-W11` records
+that the backup artefact is built and proven end to end and has **nowhere lawful to go** (register
+`#33`). A destination invented by engineering would be a dump of the consent ledger, doctors' names
+and adverse-event text sent somewhere nobody approved.
+
+---
+
+### CR-2 — answered 2026-09-28 (backend, W1-C A4): **corrected in place.**
+
+`handoff-frontend.md:259` now strikes the date and carries a correction block. **The 30 September CI
+deadline was retired on 22 September** (MR-50 B3, ruling `C7`): `transcript-v0.expiry.test.ts`
+validates a Hinglish fixture instead of checking a date, so **no date remains that can fire.**
+
+Contract I3 itself — the speech vendor — is **still open**, is now register `#19`, and was
+**deferred** by `C29`. It has no deadline attached. The frontend was right that anyone following that
+line would chase something that cannot arrive.
+
+**Noted for the record:** the deadline was retired *by answering its question*, which is this
+repository's rule for retiring a deadline test rather than moving its date.
+
+---
+
+### CR-3 — answered 2026-09-28 (backend, W1-C A1): **all five are YES for an MR. The switch is frontend-only.**
+
+**Proven, not read.** `services/api/tests/cr3-mr-reads.spec.ts` — **10 tests, all passing** — signs
+in as the fixture MR through **real GoTrue**, calls each function over **real HTTP** with that MR's
+token, and parses every response through the exact exported schema. Reading the grant would have
+answered neither half: `grant execute … to authenticated` is true for all five and says nothing about
+what the body does with `current_app_role()`.
+
+| Function | Behaves for an MR? | Parses? | Note |
+| --- | --- | --- | --- |
+| `daily_mileage` | **YES** — returns only that MR's days (`visible_user_ids()`) | **YES, with `MileageRowSchema` + `fromMileageRow`** | **The naming answer to your "or".** See below |
+| `list_analyses` | **YES** — the MR's own; another MR's are absent, asserted | **YES** — `ListAnalysesPageSchema` | **No `p_reason` needed for an MR.** Only an `admin` must supply one (`22023`) |
+| `read_analysis` | **YES** for their own | **YES** — `ReadAnalysisResponseSchema` | Out of scope returns **`data: null`, HTTP 200** — an absence the server chose, not an error to handle |
+| `respond_to_analysis` | **YES** for their own; **refused** for another MR's, asserted two-sided | n/a — a write | |
+| `list_consent_records` | **YES** — records in scope | **YES** — `ListConsentRecordsPageSchema` | |
+
+**The one thing to get right, and it is the "or" in your question.** `daily_mileage` is the only one
+of the five that is **not** a `jsonb` builder — it is
+`returns table (mr_id, travel_date, check_in_count, distance_metres)`, so PostgREST serialises those
+column names literally and **the wire is snake_case.** That is why MR-52 A2's camelCase sweep over
+`to_jsonb(row)` shapes never touched it.
+
+**It is not a defect and the mapper already exists.** **Use `MileageRowSchema` for the wire and
+`fromMileageRow(row)` to get a `MileageDay`** — which is exactly what
+`apps/field/src/capture/visits.ts:102` already does through `listMileage`. **`MileageDaySchema` alone
+will NOT parse the wire**, and the suite asserts that as a negative control, so if the function is
+ever converted to camelCase the double-mapping becomes a red test rather than a silent bug.
+
+**No other mismatch was found.** Four of the five already return the contract's camelCase shape
+because MR-52 A2 converted them after the same class of defect was found against the console.
+
+**So the mock switch is yours alone.** Nothing in the backend has to change for the six screens to
+leave `127.0.0.1:4010`.
+
+---
+
+### CR-4 — answered 2026-09-28 (backend, W1-C A2): ruling **`BE-C2`** — the verdict stays, the check-in is flagged.
+
+**The ruling, in the reviewer's words: the geofence VERDICT keeps using the centre point, because *a
+verdict that silently changes meaning with fix quality is worse than one that is wrong the same way
+every time.*** An accuracy-widened geofence would make "inside" mean something different for every
+check-in, and no screen or report could say which. Wrong-but-consistent is auditable.
+
+**What was built** — `20260928000200_approximate_check_in.sql`:
+
+* **new column `check_ins.location_is_approximate`**, set by `record_check_in` at write time;
+* **true when the device-reported `accuracy_metres` EXCEEDS the clinic's geofence radius** — the one
+  threshold with a meaning rather than a taste: if the error radius is larger than the circle being
+  tested, the fix cannot place the rep inside or outside it;
+* **NULL when no accuracy was sent, or when there is no clinic** to compare against. Not `false` —
+  the question has no answer, and `false` would assert a good fix;
+* **NULL for every row written before the migration.** Not assessed, not "good";
+* **`v_geofence` is byte-for-byte unchanged.** A test asserts a 5 m and a 5 km fix at the same point
+  produce the **same verdict** and **different flags**, so a future session widening the geofence by
+  accuracy reverses the ruling visibly instead of quietly.
+
+**Nothing is refused on the flag.** A rep on an approximate-only grant — which the operator allowed
+at first run (FE-D2 10) — still checks in, and the visit still starts.
+
+**What the frontend now needs to show.** The column is served and **nothing reads it yet**;
+`CheckInSchema` in `packages/core` does not declare it, so adopting it is a contract change the
+frontend can request or make:
+
+1. **Surface it on the check-in**, wherever the geofence result is already shown — "location
+   approximate" beside the verdict, not instead of it. The verdict is still the server's answer.
+2. **Do not present it as a failure.** The check-in succeeded and counts. The honest wording is that
+   the *fix* was too coarse to confirm the location, not that the rep did anything wrong.
+3. **Handle NULL as "not assessed"**, distinct from false. Older check-ins and fixes with no reported
+   accuracy will be null, and rendering that as "precise" would be the same overstatement the reps'
+   privacy notice was corrected for.
+4. **Nothing to change on the write path.** `takeFix` already sends `accuracyMetres`
+   (`apps/field/src/capture/location.ts:83`) and the server already stored it; only the reading side
+   is new.
+
+---
+
+### CR-5 — The practice session API (AI Doctor), from backend to frontend
+
+| | |
+| --- | --- |
+| Date | 2026-09-29 |
+| Requester | **Backend** (W1-D / W1-E) |
+| Owner asked | **Frontend** — this is an offer, not a demand |
+| Needed | Nothing from you yet. This is the API as it actually is, so a screen can be built against it without asking, **and the reasons not to build one yet** |
+| Status | **Open — informational** |
+
+**Why this exists.** AI Doctor is built and proven end to end over HTTP — a real sign-in, a real
+session, a turn through the deployed Edge Function, an analysis row — and **no screen can reach any
+of it.** That is the same shape as six MR screens sitting on the mock, and it is solvable the same
+way: by telling the other track what to call.
+
+**Everything below is exercised by `services/api/tests/sim-gateway.spec.ts` (18 tests), which ran in
+CI rather than skipping.**
+
+---
+
+#### The four calls
+
+**Three are Postgres RPCs through PostgREST, exactly like every other write in the app. One is the
+Edge Function.** No new transport, no new auth, no upload path.
+
+##### 1. Start a session — `start_sim_session`
+
+| | |
+| --- | --- |
+| Who | **Anyone signed in, for themselves.** There is no parameter for whose session it is: `mr_id` is `auth.uid()` |
+| Call | `supabase.rpc('start_sim_session', { p_scenario_id })` |
+| Request | one uuid |
+| Response | **`StartSimSessionResponseSchema`** — `sessionId`, `personaId`, `personaDisplayName`, `personaStance`, `objective`, `objection`, `promptVersionId`, `startedAt` |
+
+**Refusals**
+
+| SQLSTATE | When | What the screen shows |
+| --- | --- | --- |
+| `28000` | no session | Sign in again — `refusalForSqlState` already maps this |
+| `42501` | the scenario is not yours / does not exist — **deliberately the same answer**, so it is not a cross-tenant existence oracle | *"That practice scenario is not available."* Do not say "not found"; you do not know that |
+| `22023` | the scenario or its persona is **not approved** | *"This scenario is not ready yet."* It is waiting on an approver, not on the rep |
+| **`45011`** | **no approved `ai_doctor` prompt version for this company** | *"Practice is not switched on for your company yet."* Not an error the rep can act on |
+
+**`personaStance` is one of `receptive`, `sceptical`, `rushed`, `hostile`** — a closed set, safe to
+switch on for an avatar or a tone indicator.
+
+##### 2. Take a turn — the **Edge Function**, not an RPC
+
+| | |
+| --- | --- |
+| Who | the rep who owns the session |
+| Call | `POST {SUPABASE_URL}/functions/v1/ai-gateway` with the user's bearer token |
+| Body | `{ feature: 'ai_doctor', sessionId, repText, personaBrief, personaStance, objection, history }` |
+| `history` | `[{ role: 'rep' \| 'doctor', text }]`, oldest first, so the doctor remembers the conversation |
+| Response | **`SimTurnResult`** — a discriminated union on `kind` |
+
+| `kind` | Meaning | What the screen shows |
+| --- | --- | --- |
+| `replied` | `reply`, `objectionAddressed`, `turnCount` | the doctor's line. **`turnCount` counts BOTH turns**, so it goes up by 2 |
+| `patient_specific` | the guardrail refused **before any model call** | `message`, verbatim. **Do not echo what the rep typed** — that is the point of the refusal |
+| `failed` | timeout, provider error, or a reply that failed validation | `message`, verbatim. **The session stays open**; a retry is safe and costs a turn, not the practice |
+
+**HTTP-level refusals from the same endpoint:** `401` + `{code:'28000'}` with no bearer token;
+`403` + `{code:'45011'}` feature off; `429` + `{code:'45012'}` daily allowance spent —
+*"You have used today's practice allowance. It resets at midnight."*
+
+**Two properties worth relying on.** A refused turn is **not stored at all**, so patient details a
+rep was stopped from sending never enter their history. And **both turns are written atomically**,
+so you will never see a rep turn with no reply.
+
+##### 3. End a session — `end_sim_session`
+
+| | |
+| --- | --- |
+| Who | the owner. **An admin cannot end a rep's session** — practice is the rep's own |
+| Response | **`EndSimSessionResponseSchema`** — `sessionId`, `state: 'ended'`, `endedAt`, `turnCount` |
+| Idempotent | **yes.** Ending twice returns the same answer, because a phone that lost its reply will retry |
+| Refusal | `42501` if it is not yours |
+
+##### 4. The coach analysis
+
+**Produced** by the same Edge Function with `feature: 'ai_coach'` and `{ sessionId, objective,
+objection, turns }`, after the session has ended (`22023` if it has not).
+
+**Read** as an ordinary table read of `sim_coach_analyses`, parsed with
+**`SimCoachAnalysisSchema`**: `overallScore` and five `dimensionScores`
+(`opening`, `product_knowledge`, `objection_handling`, `communication`, `closing`), all 0–100
+integers; `strengths` and `improvements`, **at least one of each**, every finding carrying
+`dimension`, `title`, `detail` and **`turnIndex`**; `summary`; and `modelProvider` / `modelName`.
+
+**Every finding cites a turn, and the server refuses one that does not** — so you can and should
+link each piece of feedback to the turn it is about. A finding citing a turn outside the session is
+refused `23514`.
+
+**One per session**, enforced by a unique constraint. There is no "latest analysis" question.
+
+---
+
+#### Who can see a score — read this before designing anything
+
+**`C27`: a practice session, its turns and its coach analysis are visible to the MR who owns it and
+to a company admin. To nobody else.** A **field manager sees nothing** — asserted by a test, because
+`visible_user_ids()` is deliberately absent from those RLS policies.
+
+**So: no team view, no averages, no ranking, no comparison, and no "how did I do against my
+colleagues".** The row has no field that would support one, and `contract.test.ts` fails the build if
+one is added by name. If a manager-facing score is ever wanted, that is register `#14` and it needs
+the recorded rule amended **in writing** first.
+
+---
+
+#### What a screen would show TODAY, and whether to build one
+
+**The doctor's replies are not real.** `#5` — which AI provider, and may data leave India — is open,
+so the gateway runs a **stub**. Every stubbed reply is literally the text
+`[PRACTICE STUB - no AI provider is configured; decision #5 is open, so no model was called]`, and
+every stubbed coach analysis scores **0 on every dimension** with the same marker as its summary.
+
+**That is deliberate.** A stub that said *"Yes, tell me more about the dosing"* would be
+indistinguishable from a working feature to anyone watching, including the person who built it.
+
+**Recommendation: build the screen against the stub, but do not put it in front of a rep or a
+demo audience.** The reasoning, rather than a preference:
+
+- **For building now:** the contract will not change when a vendor is chosen. Swapping the stub for
+  a real adapter is **one file** in `supabase/functions/_shared/`, and nothing in the request or
+  response shapes moves. A screen built now is a screen that works the day `#5` is answered, and the
+  screen is the larger piece of work.
+- **For not shipping it now:** a practice screen whose doctor says the same marker every time
+  teaches nothing, and a rep who tries it once will not come back when it becomes real.
+- **The deciding asymmetry:** building early costs nothing if the contract holds, and the contract is
+  pinned by 18 tests. **Shipping early costs the feature's credibility with the first reps who
+  touch it.** So: build behind a flag that ships off, the same shape as `C21`'s recording feature.
+
+---
+
+#### What does NOT exist yet, and what is needed to run ONE practice session
+
+**No persona and no scenario exist as content.** The tables are there and empty. **`C24` applies:
+neither is born approved** — both enter as drafts and need a **second admin** to approve them, which
+is the same four-eyes path knowledge uses.
+
+**To run one practice session end to end, someone must create and approve:**
+
+| # | What | Who | Note |
+| --- | --- | --- | --- |
+| 1 | **A second admin account** | operator | Four eyes refuses every approval with one admin. Same blocker as `C26`, still open |
+| 2 | **One persona** — display name, specialty, stance, brief | an admin drafts | The display name is a **label**, never a real doctor's name. No constraint can check that; the approver enforces it |
+| 3 | **Approve the persona** | the **other** admin | attestation required |
+| 4 | **One scenario** — title, objective, objection, optional product + market | an admin drafts | If it names a product it **must** name a market (§47) |
+| 5 | **Approve the scenario** | the **other** admin | attestation required |
+| 6 | **An approved `ai_doctor` prompt version** | an admin drafts, the other approves | `outputSchemaName` must be `SimDoctorTurnOutputSchema`, or every reply fails validation |
+| 7 | **An approved `ai_coach` prompt version** | same | `outputSchemaName` must be `SimCoachOutputSchema` |
+| 8 | **`ai_feature_enabled:ai_doctor` and `:ai_coach` set true**, and **`ai_daily_requests_per_user` set** | operator | All three ship **off/unset**; an unlimited allowance is never the default |
+
+**Steps 2–5 need a console screen that does not exist.** The knowledge approval screen (W1-A E3) is
+the working model; a persona/scenario equivalent is the obvious next backend-console piece, and it is
+**not blocked by `#5`.**
+
+**Nothing on this list is engineering-blocked. All of it is content and two accounts.**
+
+---
+
+## Answers — 29 September 2026 (backend, W1-G)
+
+> **Read this section first if you are the frontend track.** Three of the four items below are
+> answers to things you have already asked, and one of them — **CR-3 — was answered on
+> 28 September and you are still building against a mock because of it.**
+
+### ⚠ CR-3 IS ANSWERED. You can leave `127.0.0.1:4010` today, with no backend change.
+
+**It was answered on 28 September and it is in this file, above, under "Answers — 28 September".**
+It is repeated here because a buried answer is an unanswered question, and because your developer
+leaves after the demo.
+
+**All five functions work for an MR, over real HTTP, with a real GoTrue token.** Proven in
+`services/api/tests/cr3-mr-reads.spec.ts` — **10 tests, all passing** — not read off a grant.
+
+| Function | An MR may call it | Parse with |
+| --- | --- | --- |
+| `daily_mileage` | **YES** | **`MileageRowSchema` + `fromMileageRow`** — see the warning below |
+| `list_analyses` | **YES**, their own. **No `p_reason`** — only an `admin` must supply one | `ListAnalysesPageSchema` |
+| `read_analysis` | **YES**, their own. Out of scope is **`data: null` with HTTP 200**, an absence rather than an error | `ReadAnalysisResponseSchema` |
+| `respond_to_analysis` | **YES**, their own; refused for another MR's, asserted two-sided | — |
+| `list_consent_records` | **YES**, in scope | `ListConsentRecordsPageSchema` |
+
+**The one trap, and it is the "or" in your original question.** `daily_mileage` is the only one that
+is not a `jsonb` builder — it is `returns table (mr_id, travel_date, check_in_count,
+distance_metres)`, so PostgREST serialises those column names literally and **the wire is
+snake_case.** **`MileageDaySchema` alone will NOT parse it.** Use `MileageRowSchema` for the wire
+and `fromMileageRow(row)` to get a `MileageDay` — which is what
+`apps/field/src/capture/visits.ts:102` already does through `listMileage`. The suite asserts the
+failure as a negative control, so a future camelCase conversion becomes a red test rather than a
+silent bug.
+
+**Six screens can leave the mock with no backend change, and the switch is yours alone.** It is also
+not optional for the demo: **`127.0.0.1` on a handset is the handset**, so a real device cannot
+reach the mock at all. Every screen still pointed at `:4010` is a screen that works only in an
+emulator.
+
+---
+
+### `BE-C4` — CR ids are colliding. Per-track prefixes, as `BE-C3` did for decisions.
+
+**What happened.** You called the voice-note retention item **CR-5**. `CR-5` in this file is **the
+practice session API**, filed by the backend on 28 September. **Two tracks are minting CR ids from
+one sequence, and each reads the highest id in a file that is only correct on one branch at a time.**
+
+**This is the same collision class as `C20`**, where both tracks minted the same decision id in
+parallel and nine backend rulings had to be renumbered across 15 files during a merge. That was
+fixed by per-track prefixes (`BE-C3`). **The fix was applied to decisions and not to contract
+requests, which is why it has happened again.**
+
+**Ruling `BE-C4`, effective now:**
+
+| Track | Mints |
+| --- | --- |
+| Backend / AI platform | **`BE-CR<n>`** |
+| Frontend / field app | **`FE-CR<n>`** |
+
+Each sequence starts at 1 and is independent. **`CR-1`–`CR-5` keep their names** — they are cited in
+tests, commits and both registers, and renaming them costs more than the ambiguity they carry. The
+same call `BE-C3` made for `C1`–`C31`.
+
+**Your voice-note item is therefore `FE-CR-1`, and it is answered in this session's Part A** —
+short version: the retention jobs are **not** off, they have run **126 times without a failure since
+7 September**, they **do** cover `voice_notes`, and production holds **zero** audio objects of any
+age. The long version, with the run history and the production numbers, is in
+`docs/log/backend.md` → W1-G Part A.
+
+**Recorded in `CLAUDE.md`**, because that is the only file both tracks load before reading any code
+— the same place `BE-C3` was put, for the same reason.
+
+---
+
+### `BE-CR-1` — off-site check-ins: what the rep is told, whether the visit starts, when a manager sees it
+
+**What exists today, measured rather than recalled.** `check_ins.geofence_status` is a **NOT NULL**
+enum `('inside','outside','unavailable')`, so a verdict is recorded for **every** check-in and always
+has been. `check_ins.location_is_approximate` was added on 28 September by
+`20260928000200_approximate_check_in.sql` (ruling `BE-C2`, the answer to CR-4). **No screen in
+`apps/field` reads either column** — `grep` over `apps/field/src` and `apps/field/app` returns
+nothing for both.
+
+**1. Should the rep be told? YES, and clearly.**
+
+It is a fact about **their own** check-in, recorded about them, and it can be read later by someone
+who decides things about their job. **Hiding it is precisely the failure the privacy notice is
+being corrected for** — see the next item, where a notice currently tells a rep the app "cannot do
+this today" about things it does every day. A rep who discovers months later that "outside" was
+recorded every time they stood in the car park has been misled by omission, and the fix costs one
+line under the check-in confirmation.
+
+**Say it plainly and without threat.** Not a warning, not a blocking dialog, not red:
+
+> *Checked in — we could not confirm you were at the clinic.*
+
+and, when the fix was coarse:
+
+> *Checked in — your phone gave an approximate location.*
+
+**Do not** tell the rep what it will be used for, because nobody has decided that yet, and a screen
+that invents a consequence is worse than one that states a fact.
+
+**2. Should an off-site check-in still start a visit? YES. Unconditionally.**
+
+**The server already does**, and this is the answer to "what should the app do": nothing in
+`record_check_in` refuses on `geofence_status = 'outside'`. The verdict is recorded beside the
+check-in, not used as a gate.
+
+**Refusing would strand a rep standing in front of a doctor** — because the clinic's stored
+coordinates are wrong, because they are on the third floor, because the GPS is poor indoors, or
+because the doctor moved rooms. The app would then be punishing a rep for the accuracy of a number
+somebody else typed into a clinic record. **A check-in that is recorded and flagged is strictly more
+useful than one that never happened**, and the flag survives to be looked at; a refusal leaves no
+trace at all.
+
+**3. When does a manager see it? Not in v1.**
+
+There is no manager surface for it and there should not be one yet, for two reasons that are
+independent:
+
+* **Nothing decides what "outside" means.** 150 metres is a default radius, not a policy. Until
+  somebody rules on what an off-site check-in signifies, a manager screen showing it would invite a
+  conclusion the data does not support — and the first such conclusion will be about a person's pay
+  or job.
+* **The manager console is out of v1 entirely**, with the rest of the manager surface. This is not a
+  special exclusion for geofencing.
+
+**The data is not lost while that is decided** — it is on every check-in row from the beginning, so
+the surface can be built at any time against a complete history. **Building the screen is cheap
+later; recording nothing now would be unrecoverable.** That asymmetry is the whole argument.
+
+---
+
+### `BE-CR-2` — the privacy notice: what a rep sees TODAY is not the corrected one
+
+**You said the "What we record" screen is now accurate. It is accurate on YOUR BRANCH, and that
+branch is not merged.** Measured, not recalled:
+
+| | `origin/main` — **what a rep sees today** | `origin/mr-46/fe-w52-notice-pending-approval` |
+| --- | --- | --- |
+| entries marked `state: 'active'` | **0** | **5** |
+| entries marked `state: 'not-yet'` | **4** | 1 |
+| merged into `main`? | — | **NO** (`git branch -r --merged origin/main` does not list it) |
+| commits ahead of `main` | — | 6, last one `75dd570`, 23 September |
+
+**There is exactly one copy of the file**, `apps/field/src/transparency/content.ts`, with a single
+commit in its history on `main` (`2536862`). **PR #2's branch carries `main`'s version too**, so the
+correction is not arriving through the backend branch either.
+
+**What that means on a handset today, and it is worse than "out of date".** `not-yet` renders, from
+`packages/ui/src/TransparencyScreen.tsx:72`, as:
+
+> **"Not yet — this app cannot do this today."**
+
+So a rep opening **"What this app records"** is currently told that the app **cannot** record where
+they are during their shift, which doctors they saw and when, or their voice notes and reports —
+**while check-in with a geofence verdict, voice notes and call reports are all built and working.**
+
+**The screen is not merely stale. It states the opposite of the truth, in the one place the product
+promises transparency.** And it is the same omission as the previous item: the corrected version is
+the one that says *"whether you were inside the clinic's area"*, and `main`'s does not mention the
+geofence verdict at all.
+
+**What is actually blocking it: operator approval, not engineering.** The branch name says
+`pending-approval` and `MR-46 A` is titled *"FE-W52 truthful transparency notice, PENDING OPERATOR
+APPROVAL"*. The text is written. **Nobody has approved it, and while nobody approves it the untrue
+version is the one shipping.**
+
+**Recommendation, and the backend has no veto here:** approve the notice or reject it, this week and
+before the demo. If the objection is to a specific line, ship the rest — **four entries that say
+"this app cannot do this today" about things it does daily is not a safer position than an imperfect
+correction.** Merging it also needs `main` merged into that branch first; it is six commits behind a
+month of work.
+
+---
+
+## Answers — 30 September 2026 (backend, W1-I)
+
+> **⚠ READ THIS LINE FIRST, AND IT IS THE THIRD TIME IT HAS BEEN WRITTEN.**
+>
+> **CR-3 is answered. Six screens can leave `127.0.0.1:4010` TODAY with no backend change, and a real
+> device cannot reach `127.0.0.1` at all — on a handset that address is the handset.** If the switch
+> does not happen before your developer moves to other projects, **it does not happen**, and the demo
+> runs on an emulator or not at all. The detail is under *"Answers — 28 September"*, repeated under
+> *"Answers — 29 September"*, and this is the one-line version.
+
+Three contract requests follow, one per unbuilt screen, to the same completeness as `CR-5`. Each says
+who may call it, the schema names in `packages/core`, every refusal with its SQLSTATE, and what the
+screen shows. **Each ends with a ruling on whether to build it against the stub or hold it until
+`#5`.**
+
+---
+
+### `BE-CR-3` — Product Q&A (`product_qa`)
+
+**What it is.** A rep asks a question about a product; the answer comes **only** from approved
+knowledge for their market, with citations, or it says approved information is not available.
+
+**Who may call it.** Any authenticated user, subject to the database's own three conditions — the
+feature flag, an approved prompt for their organisation, and a daily allowance. The MR's own token;
+never a service key.
+
+**How to call it.** `POST` to the Edge Function, **not** an RPC:
+
+```
+POST {SUPABASE_URL}/functions/v1/ai-gateway
+Authorization: Bearer <the MR's access token>
+{ "feature": "product_qa", "question": "...", "marketId": "<uuid|null>", "productId": "<uuid|null>" }
+```
+
+**`feature` may be omitted** and defaults to `product_qa`, so the W1-B contract is unchanged for
+existing callers. Send it anyway — an explicit feature is one less thing to infer when reading a log.
+
+**What comes back.** `ProductQaResult` (`packages/core/src/field/gateway/product-qa.ts`), a
+discriminated union on `kind`. **Switch on `kind`; do not test for an empty answer:**
+
+| `kind` | What it means | What the screen shows |
+| --- | --- | --- |
+| `answered` | `answer` plus `citations[]`, each with `documentTitle`, `versionNumber`, `heading`, `sourceReference` | The answer **with its citations visible**. A citation is not a footnote here — it is the reason the answer is allowed to exist |
+| `not_available` | Nothing approved matched, or the model's reply failed validation | `KNOWLEDGE_NOT_AVAILABLE_MESSAGE`, verbatim. **Do not soften it into "I could not find anything"** — the sentence is deliberate |
+| `patient_specific` | The guardrail fired | `PATIENT_SPECIFIC_REFUSAL_MESSAGE`, verbatim. Offer the approved channel, not a retry |
+| `failed` | Provider timeout, provider error, or a prompt/schema mismatch | `PRODUCT_QA_FAILED_MESSAGE`. A retry is safe |
+
+**Every refusal, with its SQLSTATE and HTTP status:**
+
+| SQLSTATE | HTTP | Meaning | Screen |
+| --- | --- | --- | --- |
+| — | **401** | No bearer token | Sign in again |
+| `22023` | **400** | Empty question, or an unknown `feature` | A validation message. Not a server problem |
+| `45011` | **403** | `ai_feature_disabled` — flag off, **or** no approved prompt for this organisation | *"This feature is not switched on for your company."* **Not actionable by the rep** — do not offer a retry |
+| `45012` | **429** | `ai_daily_requests_per_user` spent | *"You have used today's questions."* Actionable tomorrow |
+| `28000` | 403 | Not authenticated at the database | Sign in again |
+| `no_provider` | **503** | No AI provider configured — `#5` | See the ruling below |
+
+Use `refusalForSqlState` from `packages/core` rather than mapping these by hand; it already returns
+the `code` and an `actionable` boolean.
+
+**C2 ruling: BUILD IT AGAINST THE STUB.** The stub answers `supported: false`, so the screen shows
+`not_available` on every question — which is **the real behaviour of a company with no approved
+knowledge**, and that is the state every company starts in. The screen is therefore correct today and
+correct after `#5`; nothing about it changes. **Build it.**
+
+---
+
+### `BE-CR-4` — The practice session (`ai_doctor` + `ai_coach`)
+
+**This supersedes nothing in `CR-5` — it is `CR-5`'s screen half.** `CR-5` gave the four calls;
+this gives the refusals and the screen states, which is what was missing.
+
+**Who may call it.** The **rep only**, for their own sessions. `sim_sessions_read` admits the owning
+MR and an admin — **deliberately not a field manager**, which is `C27` and is the whole reason the
+policy omits `visible_user_ids()`. There is no manager surface and there must not be one in v1.
+
+**The four calls.** RPC names from `SIMULATION_RPC` (`packages/core/src/field/simulation.ts`) — read
+them from the constant, never typed as strings:
+
+| Step | Call | Response schema |
+| --- | --- | --- |
+| 1. Start | `SIMULATION_RPC.startSimSession` (`start_sim_session`) | `StartSimSessionResponseSchema` |
+| 2. A turn | the **Edge Function**, `feature: "ai_doctor"` | the function's JSON; the turn is stored server-side |
+| 3. End | `SIMULATION_RPC.endSimSession` | `EndSimSessionResponseSchema` |
+| 4. Coaching | the **Edge Function**, `feature: "ai_coach"` | `RecordSimCoachAnalysisResponseSchema` |
+
+**Every refusal:**
+
+| SQLSTATE | HTTP | Meaning | Screen |
+| --- | --- | --- | --- |
+| `22023` | 400 | **The scenario is not approved**, or its persona is not approved | *"This practice scenario is not ready yet."* **Not the rep's problem to fix** — it is an admin's |
+| `42501` | 403 | The scenario is not in the rep's organisation | Treat as not found. Do not name it |
+| `45011` | 403 | Practice not switched on, **or no approved `ai_doctor` prompt** | *"Practice is not switched on for your company."* |
+| `45012` | 429 | Allowance spent | Actionable tomorrow |
+| `23514` | 400 | A turn or analysis failed a record check | A failure message; a retry is safe |
+| `28000` | 403 | Not authenticated | Sign in again |
+
+**`C27`, and it constrains the screen rather than the API.** Scores are visible to **the rep and a
+company admin only**. **No team average, no ranking, no percentile, and no score on any manager
+screen** — not because the API hides it, but because building it would make the API's omission
+pointless.
+
+**C2 ruling: HOLD THE CONVERSATION SCREEN UNTIL `#5`. Build the list and the history now.**
+
+This is the one case where the demo ruling bites. Every reply from the stubbed doctor is the literal
+string `[PRACTICE STUB - no AI provider is configured; decision #5 is open, so no model was called]`
+and every coach score is **0**. A practice conversation whose every turn is that sentence is not a
+screen anybody can use or evaluate — it is a placeholder wearing a UI. **But the session list, the
+scenario picker and a past session's turn history are all real today** and do not change when `#5`
+lands. Build those.
+
+---
+
+### `BE-CR-5` — MR Chat (`mr_chat`) — **NEW in W1-I, built today**
+
+**What it is.** The general in-app assistant: how a process works, where a screen is, what a policy
+says. **It is explicitly not a product-information tool** (`AI-SPEC` §2 A1) — a product question
+belongs in `BE-CR-3`, which is constrained to approved material and cites it.
+
+**Who may call it.** Any authenticated user, subject to **its own** flag
+(`ai_feature_enabled:mr_chat`) and **its own** approved prompt. It shares nothing with `product_qa`
+but the daily allowance — proven by a test that turns `product_qa` on and shows `mr_chat` still
+refusing.
+
+**How to call it.**
+
+```
+POST {SUPABASE_URL}/functions/v1/ai-gateway
+Authorization: Bearer <the MR's access token>
+{ "feature": "mr_chat", "message": "...", "history": [{ "role": "rep"|"assistant", "text": "..." }] }
+```
+
+**`feature` is REQUIRED here** — omitting it silently gets you `product_qa`. **`history` is yours to
+trim**; the backend does not decide a context window and does not store your history.
+
+**What comes back.** `MrChatResult` (`packages/core/src/field/gateway/mr-chat.ts`):
+
+| `kind` | What the screen shows |
+| --- | --- |
+| `answered` | `answer`. **No citations exist for this feature** — do not render a citation area and do not imply sourcing |
+| `out_of_scope` | `MR_CHAT_OUT_OF_SCOPE_MESSAGE`, which already names Product Q&A. **Make it a link to that screen** — this is the one refusal with an obvious next action |
+| `patient_specific` | `PATIENT_SPECIFIC_REFUSAL_MESSAGE`, verbatim |
+| `failed` | `MR_CHAT_FAILED_MESSAGE`. A retry is safe |
+
+**Refusals:** `22023`→**400** (no `message`), `45011`→**403**, `45012`→**429**, `28000`→403, no
+token→**401**, `no_provider`→**503**. Same mapping as `BE-CR-3`; use `refusalForSqlState`.
+
+**Two things the screen must not do, and they are not style preferences:**
+
+1. **Do not present it as able to answer product or clinical questions.** The backend discards an
+   answer that names one of your organisation's products — so a UI that invites those questions
+   produces a redirect every time and teaches reps the feature is broken.
+2. **Do not store the conversation anywhere the backend cannot see.** `ai_requests` holds tokens and
+   flags and **never the message or the reply**, by design. If the app keeps a transcript locally,
+   that transcript is a new data store with its own retention question, and nobody has answered it.
+
+**C2 ruling: BUILD IT AGAINST THE STUB — and this is the clearest case of the three.** The stub
+answers `inScope: false`, so every message returns `out_of_scope` with the redirect to Product Q&A.
+**That is a correct, useful screen today**: the redirect is real, the link is real, and a rep who
+types a product question gets sent to the right place whether or not a model exists. When `#5` lands,
+in-scope questions start being answered and **nothing in the screen changes**.
+
+---
+
+### C2 — where the line sits, and which side a pilot rep is on
+
+**The demo ruling was that a stubbed answer must not be shown to an audience**, because a plausible
+sentence teaches the room the thing works. **A screen is not an audience** — a developer building
+against a stub is not being misled, they are being unblocked.
+
+**A rep in a pilot IS an audience, and is the most consequential kind.** An audience at a demo knows
+it is a demo; a rep in a pilot believes the app. So:
+
+| | Build now against the stub? | Show to a rep in a pilot? |
+| --- | --- | --- |
+| `BE-CR-3` Product Q&A | **Yes** | **Yes** — `not_available` is the truthful state of a company with no approved knowledge, not a stub artefact |
+| `BE-CR-4` practice conversation | **No** | **No** — every turn is the stub marker |
+| `BE-CR-4` list / history / picker | **Yes** | **Yes** — real today, unchanged by `#5` |
+| `BE-CR-5` MR Chat | **Yes** | **Yes, with the flag off** — see below |
+
+**The rule that resolves all four: a screen may reach a rep when the stub's behaviour is
+indistinguishable from a legitimate real state.** `not_available` and `out_of_scope` are both states
+a fully working system produces every day. The stub doctor's marker sentence is not — no working
+system ever says it.
+
+**And the flag is the mechanism, not a promise.** `ai_feature_enabled:mr_chat` ships **off**. A pilot
+rep can have the screen installed and see nothing until somebody switches it on, which is `#5`'s
+answer arriving. **That is why building now is safe: the shipping default is off, and the code enforces
+it rather than a plan to remember.**
+
+## Answers — 1 October 2026 (backend, W1-O) — two corrections
+
+### Retention is NOT off. It is green — and green is not the same as working
+
+**What was said (as relayed to backend; the note itself was not found on any branch of this
+repository, including `fe-d12-final`):** the retention jobs have been off since 23 August.
+
+**Measured today, with `gh run list` against this repository:**
+
+| Workflow | State | Current run of consecutive successes | Last failure |
+| --- | --- | --- | --- |
+| `Audio retention` (`retention.yml`) | **active** | **135**, since 7 Sep 14:49 UTC | 23 Aug 08:15 UTC |
+| `Audio retention watchdog` (`retention-watchdog.yml`) | **active** | **134**, since 7 Sep 15:01 UTC | 23 Aug 07:47 UTC |
+
+**So the note was true from 23 August to 7 September and has been out of date for over three weeks**
+— the gap is the recorded blackout, when both workflows were `disabled_manually`
+(`.ai-collab/decisions.md`, "Retention workflows: disabled, then deployed and re-enabled").
+
+**The finding that matters more.** The watchdog's own output, run `36821347402` at 05:46 UTC today:
+
+```
+"destroyedTotal": 0,
+"liveObjectCount": 0,
+"overdueObjectCount": 0,
+Audio retention is healthy.
+```
+
+**The database these jobs point at holds no audio at all, and has destroyed nothing, ever.** So 135
+green runs prove the job **runs**, not that it **works**: it has never had anything to delete. *"The
+job is green"* and *"the job works"* are different claims, and only the first has evidence. That
+database is whatever the `SUPABASE_DB_URL` repository secret names — backend cannot read the value, so
+calling it production is the workflow's stated target, not something verified here. **Proving the
+purge needs one audio object aged past `purge_after` in a staging project**, which `BE-C25` already
+records as the gap a heartbeat cannot close.
+
+### "CR-5" for voice-note deletion — already renamed `FE-CR-1`, and why it may keep happening
+
+**This is not a new ruling.** It is `BE-C4` (29 September, above, line ~448): contract requests are
+minted per track — **`BE-CR<n>`** and **`FE-CR<n>`** — and the voice-note item is **`FE-CR-1`**. It is
+recorded in **`CLAUDE.md`**, the one file both tracks load before reading any code.
+
+**Why it may recur anyway, and this is the real finding.** `CLAUDE.md` only reaches a track that works
+**in this repository**. If the frontend is now working in a separate repository — which is what the
+reviewer reports, and which would explain why this note was found on no branch here — **that
+repository's sessions never load this rule**, and nothing will stop a fourth collision. **The fix is
+for the frontend repository's own `CLAUDE.md` to carry the same two tables**, or for the work to come
+back here (`docs/log/backend.md`, W1-O Part B). Backend cannot write to a repository it has not been
+given.
 ### FE-CR-5 — Is a voice note's audio actually destroyed in production 90 days after it arrives?
 
 | | |
@@ -157,11 +870,18 @@ because frontend cannot show from the tree that deletion happens in production. 
 
 ---
 
+<<<<<<< HEAD
 ### FE-CR-6 — Carry the AI allowance, and its reset time, to the app
+=======
+## Answers — 1 October 2026, evening (backend, W1-P)
+
+### `BE-CR-6` — the AI allowance on the rep's screen (`BE-W128`, operator `BE-C30`, screen owned by Dev)
+>>>>>>> origin/main
 
 | | |
 | --- | --- |
 | Date | 2026-10-01 |
+<<<<<<< HEAD
 | Requester | Frontend (FE-D14, the AI-limit warning) |
 | Owner asked | Backend |
 | Needed | Each AI flow's result (at least `mr_chat`) to carry `allowanceWarning`, `requestsUsedToday`, `dailyLimit` and the instant the allowance resets. The 429 for `45012` to carry the reset instant too |
@@ -228,3 +948,149 @@ the real gateway. Each item below is cited on that branch:
    doctor, patient, visit or prescribing data, and no earlier turns. Is a single-turn chat acceptable,
    or should earlier rep-typed turns be sent?
 3. **The allowance and reset time** belong on the result (FE-CR-6).
+=======
+| Requester | Backend (W1-P C), for the operator's "warning at 80%" |
+| Owner asked | Frontend — **Dev owns the screen** (operator, 1 Oct) |
+| Server side | **Complete and proved over HTTP.** Nothing else is needed from backend |
+
+**The field.** Every **HTTP 200** from the AI gateway (`/functions/v1/ai-gateway`), for **every**
+feature — `product_qa`, `mr_chat`, `lms_tutor`, `ai_doctor`, `ai_coach` — now carries:
+
+```json
+"allowance": { "requestsUsedToday": 80, "dailyLimit": 100, "warning": true }
+```
+
+Parse it with **`AiAllowanceSchema`** from `@fieldforce/core` (`packages/core/src/field/ai.ts`) — import
+it, do not copy it. `requestsUsedToday` **includes the request just answered**. It is `null` only if the
+request never began (a malformed body).
+
+**When `warning` is true.** When this request reached the company's warning line — 80% of the daily
+limit by the operator's decision, but **a per-company setting the app cannot see. Show the warning when
+`warning` is true; never recompute it from the two numbers.** Proved over HTTP
+(`services/api/tests/ai-gateway.spec.ts`, "W1-P C3"): request **79 of 100 → `false`**, **80 → `true`**,
+**100 → `true`**, and **101 → HTTP 429, SQLSTATE `45012`, no `allowance` at all.**
+
+**What it should say — a suggestion; the words are Dev's.** *"You have used 80 of today's 100 AI
+questions. They reset at midnight."* — the two numbers from the field, "midnight" because the count
+resets on the India calendar day (`ai_begin_request`). **Do not imply a cost or a penalty**; nothing
+in the system imposes either.
+
+**What the rep can do.** Keep going — nothing is blocked until the limit. **At the limit** the request
+is refused with `45012`, which `refusalForSqlState` already maps to `ai_rate_limited` (actionable: try
+tomorrow). **An admin can raise the limit for the company** without a code change
+(`set_organisation_threshold('ai_daily_requests_per_user', …)`); the rep cannot.
+
+**Where it is NOT needed:** no AI screen exists in the app yet (`docs/4-OCTOBER.md`), so this lands with
+the first one rather than as a screen of its own.
+
+### `FE-CR-5` — is a voice note's audio actually destroyed in production? **No evidence that it is, and it cannot be yet**
+
+**Your "not established" is right, and backend adds one fact that settles it for now:** **production
+cannot hold a voice note at all.** Production has applied **19** migrations (your FE-D13 §6 reading of
+drift run `36718280007`); voice notes arrive through `sync_push`, which is not among them. **So there
+is nothing to destroy, and the retention job's `destroyedTotal: 0` / `liveObjectCount: 0` (watchdog run
+`36821347402`) is the truthful result of an empty bucket, not evidence the purge works there.**
+
+* **The purge path itself IS exercised** — locally and in CI, against real Storage, by
+  `services/api/tests/consent-audio.spec.ts` (`runPurge`). What has never run is that path **against
+  production**. **Proving it needs one audio object aged past `purge_after` in a staging project after
+  the production deploy** (`BE-C25`'s recorded gap).
+* **The row is kept as a tombstone, deliberately**: `purge_state = 'destroyed'`, `storage_key = null`,
+  plus an `audio_destruction_log` row. **That is what lets anyone prove later that a deletion
+  happened.** It changes nothing the app tells a rep: the audio is what was promised deleted, not the
+  record that it existed.
+* **Copy:** "Marked for deletion 90 days after they reach your company" is accurate — keep it.
+  **"Transcript kept" is wrong**: `confirm_audio_destroyed` deletes the transcripts too. Recordings'
+  "… then deleted" is the unproven claim; recording is deferred (`BE-C17`), so it ships to nobody yet.
+* **Your scheduler note is right and harmless to the promise:** GitHub runs the hourly job every few
+  hours. A 90-day promise is not threatened by a few hours.
+
+### `FE-CR-1` now names TWO things — the third id collision, recorded where both tracks read it
+
+`BE-C4` (29 Sep, above) named the voice-note item **`FE-CR-1`**. FE-D13 then renamed the old
+**`CR-1` (`BACKUP_DESTINATION`) to `FE-CR-1`** on the operator's instruction, and filed voice-note
+deletion as **`FE-CR-5`**. **The operator's instruction wins**, so: **`FE-CR-1` is `BACKUP_DESTINATION`;
+the voice-note item is `FE-CR-5`**; `BE-C4`'s assignment is superseded. Recorded in `CLAUDE.md` — **which
+both tracks DO read, because FE-D13 §1 established there is one repository.**
+
+## Answers — 1 October 2026, night (backend, W1-Q)
+
+**Read from the frontend's branches, not `main`:** `FE-CR-6` and `FE-CR-7` are filed on
+`fe-d14-screens` (and carried by `fe-d16-coaching`, `fe-d17-practice`), which are not merged. Both are
+answered here so the answer is waiting when they are.
+
+### `FE-CR-6` — the allowance and its reset time: **DELIVERED, in your suggested shape**
+
+Your suggestion was `allowance: { warning, requestsUsedToday, dailyLimit, resetsAt }` on every flow
+result and on the 429. That is what the gateway now sends (`AiAllowanceSchema`, `packages/core/src/field/ai.ts`):
+
+| Field | What it is |
+| --- | --- |
+| `requestsUsedToday` | on a 200, this request's number today (it counts itself); **on the 429, the requests already used** — so it can be `0` if a company's limit is `0` |
+| `dailyLimit` | the company's limit (operator default 100) |
+| `warning` | the SERVER's judgement — past the company's warning line (default 80%). **Always `true` on the 429.** Do not recompute it: the percentage is a per-company setting you cannot see |
+| `resetsAt` | an ISO instant: **midnight India time after today**, computed by the database that defines "today" (`20261001000400_ai_allowance_resets_at.sql`). Show it in the rep's local time |
+
+* **On every 200** from the gateway, for all five features (W1-P), now with `resetsAt`.
+* **On the 429** (`code: '45012'`) as `allowance`. If it is `null`, the database is older than this
+  migration: say nothing about a reset rather than guess.
+* Proved over HTTP: requests 79, 80, 100 and the refused 101 each carry the figures and a `resetsAt`
+  equal to the next India midnight computed independently in the test (`ai-gateway.spec.ts`, W1-P C3).
+
+`BE-CR-6` (backend's request for the SCREEN) and your `FE-CR-6` (your request for the DATA) are the
+same feature from two sides — different ids, no collision. **With this, `BE-CR-6` needs nothing more
+from backend.**
+
+### `FE-CR-7` — the chat contract on `main`: **NOT LANDED. It lands when PR #2 merges, and that is Maanav's decision**
+
+The shapes you cite live in `packages/core` on this branch. **Backend does not merge** (standing rule);
+PR #2 is mergeable and CI-green on both jobs. Copying the chat shapes into a separate PR to `main` was
+considered and **rejected**: it creates a second copy of the contract on `main` that PR #2 must then
+reconcile — exactly the "copied, not imported" failure the shared package exists to prevent.
+
+Your three questions:
+
+1. **"The stub's placeholder looks like a refusal."** On any DEPLOYED target there is no stub: the
+   gateway answers **HTTP 503 `no_provider`**, which you can already tell apart. Only on a local stack
+   does the stub answer, and there a real refusal cannot happen (there is no real model locally). So on
+   a local stack, treat `out_of_scope` as "not available yet". To see the ANSWERED path locally, put
+   `[STUB:in-scope]` in the message — the answer then contains the stub marker `PRACTICE STUB`.
+   **No new field**: a field that exists only to describe the stub is building on the stub (W1-P rule).
+2. **`history` — single-turn is acceptable, and the safer choice for the pilot.** If you send history:
+   **only turns the rep typed, and answers the server returned.** Since W1-Q (`BE-W135`) every history
+   turn is screened for patient details exactly as the message is — before W1-Q it was NOT, and a
+   patient's name and phone number in an "earlier turn" reached the model. **What the server still
+   cannot check: that an `assistant` turn is one it really sent.** It is the client's word.
+3. **The allowance and reset time** — `FE-CR-6` above.
+
+### `BE-CR-7` — the operator's 4 October list: which items have a screen, and which only a server
+
+**2 October 2026 · backend (W1-V E) · to frontend (Dev) · a fact, and one question.** Measured from the
+code on `worktree-ai-platform-phase-a` (PR #2, which includes `main`) and from the remote branches as
+last fetched — not from any register. The list is the operator's item 16
+(`docs/operator/2026-10-02-operator-direction.md`). "Mock" means `createClientForScenario()`, which
+reads `services/mock` (`apps/field/src/api-target.ts:19`), not Supabase.
+
+| # | Item | Phone app screen | Console screen | Server | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Core MR workflow | sign-in, visit (check-in/out), consent, samples, call report, voice note — all write through `sync_push` | consent text versions (`admin`) | built | **Screen + real server** |
+| 2 | Day planning / execution | `home.tsx` (Today), `beat-plan.tsx` — read from `sync_pull` | none | built; **nothing creates a plan in production** (`BE-W139`) | **Screen + real server**, empty until plans exist |
+| 3 | Real backend | writes, sync and sign-in are real; **Day End, Mileage, Coaching and Analysis still read the mock** | coaching reads the server | built | **Partly real** |
+| 4 | Day End | `day-end.tsx` — reads the **mock** (`listVisits`, `listMileage`) | none | visits + `daily_mileage()` | **Screen on mock**; the real wiring is on `origin/fe-d14-screens` (`e58ac35`), **not merged** |
+| 5 | Mileage | `mileage.tsx` — reads the **mock** `GET /mileage`, which "has no backend at all" (`packages/core/src/field/endpoints.ts:1255`) | none | `daily_mileage()` | **Screen on mock**; real wiring on `fe-d14-screens`, **not merged** |
+| 6 | LMS | **none** | **none** | courses, lessons, enrolments (`20260924000500`), `lms_tutor` | **Server only** |
+| 7 | Product Q&A | **none** | knowledge approval only (authoring, not asking) | knowledge + `product_qa` through `ai-gateway` | **Server only** for the MR |
+| 8 | Chatbot | **none** on `main` / PR #2; `assistant.tsx` exists on `fe-d14-screens` behind `EXPO_PUBLIC_ASSISTANT_SAMPLE` (off), on sample data | none | `mr_chat` through `ai-gateway` | **Server only** on the merged code |
+| 9 | AI Doctor | **none** on `main` / PR #2; `practice/*` on `origin/fe-d17-practice` behind `EXPO_PUBLIC_PRACTICE_SAMPLE` (off), on a sample backend | personas, scenarios, prompts (authoring) | `start_sim_session` and the rest (`20260929000100`, `20260929000200`, `20261002000100`), `ai_doctor` | **Server only** for the MR |
+| 10 | AI Analysis / Coaching | `coaching`, `analysis/[id]`, `reply/[analysisId]` — on the **mock**, hidden by `EXPO_PUBLIC_COACHING_ENABLED` (off); real wiring on `origin/fe-d16-coaching`, **not merged** | coaching review (real) | `analysis_overrides`, `sim_coach_*`, `ai_coach` | **Screen hidden, on mock**; real wiring unmerged |
+
+**Nothing in either app calls `ai-gateway` yet** (no `functions.invoke`, no `ai-gateway` URL) on the
+merged code. So for items 6–9 a demo on 4 October shows **nothing to an MR** unless the unmerged
+branches land — and the model is still unavailable (AWS access, `docs/operator-inputs.md` Q-1).
+
+**The question for Dev:** which of `fe-d14-screens`, `fe-d16-coaching`, `fe-d17-practice` will be on
+`main` for 4 October? The operator's item 7 asks for Day End and Mileage to be merged once tested, and
+on the merged code both still read the mock.
+
+**Status:** open — asked 2 October.
+>>>>>>> origin/main

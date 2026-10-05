@@ -102,3 +102,13 @@ SESSION-2026-09-11.md
 # turns out to be.
 backups/
 *.sql.manifest.json
+
+# Playwright (W1-F). Traces, screenshots and the HTML report are per-run artefacts of a local
+# browser suite; none of them is reproducible from the repository and none belongs in it.
+test-results/
+playwright-report/
+playwright-results.json
+
+# W1-N: the per-session review folder. Rebuilt from scratch every session -- copies of the files a
+# reviewer needs -- and never committed: the copies would be stale the moment the originals move.
+review-handoff/
