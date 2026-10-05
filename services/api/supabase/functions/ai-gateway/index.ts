@@ -8,16 +8,20 @@
  * `.ai-collab/constraints.md` â€” *"RLS is the enforcement layer, never application code."* A
  * gateway holding `SUPABASE_SERVICE_ROLE_KEY` and calling `ai_begin_request` with it would work,
  * would pass a happy-path test, and would have moved the feature flag, the daily allowance, the
- * organisation boundary and the approved-prompt check out of the database into this file. The
- * service-role key is therefore **not read here at all** â€” not read and ignored, not read
- * defensively: there is no reference to it, so it cannot be reached for later by someone fixing a
- * 401 in a hurry.
+ * organisation boundary and the approved-prompt check out of the database into this file.
  *
- * **W1-Z amends that, narrowly (`BE-C69`).** The key IS read — on the `ai_doctor` and `ai_coach`
- * paths only, and handed to `_shared/practice-writer.ts`, which can call exactly two functions:
- * `record_sim_turn` and `record_sim_coach_analysis`. Calling them as the rep had let a rep's token
- * write both sides of a practice turn and their own score (`BE-W144`). Every authorisation decision
- * still runs as the rep — the request is begun with the rep's token, and each write must name it.
+ * **What this file USED to say, and why it is no longer true.** Until W1-Z it said the service-role
+ * key was "not read here at all — there is no reference to it, so it cannot be reached for later by
+ * someone fixing a 401 in a hurry." That was `C30`'s real guarantee: not a rule, an ABSENCE. `BE-C69`
+ * (W1-Z) spent it — the practice writes must come from the gateway, not the rep (`BE-W144`), so the key
+ * is now in this process. **The absence is gone and nothing can bring it back while that is true.**
+ *
+ * **What replaces it (`BE-C70`, W2-A).** The key is read in exactly ONE place —
+ * `_shared/practice-writer.ts` — which exports one function returning a writer for exactly two
+ * functions (`record_sim_turn`, `record_sim_coach_analysis`), never the key or the client. This file
+ * does not name the key. `services/api/scripts/check-service-role-reads.mjs` fails CI if a second read
+ * appears anywhere under `supabase/functions`, or any read of the whole environment or of a name that is
+ * not spelled out. Every authorisation decision still runs as the rep.
  *
  * **The gateway is deliberately dumb (`C30`).** It:
  *
@@ -51,7 +55,7 @@ import { createStubProvider, stubProviderRefusal } from '../_shared/stub-provide
 import { INDIA_PROFILES, createBedrockProvider } from '../_shared/bedrock-provider.ts';
 import type { IndiaProfileId } from '../_shared/bedrock-provider.ts';
 import { bedrockConverse } from '../_shared/bedrock-client.ts';
-import { practiceWriter } from '../_shared/practice-writer.ts';
+import { practiceWriterFromEnv } from '../_shared/practice-writer.ts';
 import type { StubShape } from '../_shared/stub-provider.ts';
 
 /**
@@ -284,18 +288,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
     });
   }
 
-  // W1-Z A (`BE-C69`): the practice paths write turns and scores through the service-role writer,
-  // which can call exactly those two functions. Read only here, only for these two features.
-  const writerFor = (): ControlPlaneRpc | null => {
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    return serviceRoleKey === undefined ? null : practiceWriter(supabaseUrl, serviceRoleKey);
-  };
-
   try {
     if (feature === 'ai_doctor' || feature === 'ai_coach') {
-      const writer = writerFor();
+      // W1-Z A (`BE-C69`) / W2-A (`BE-C70`): the practice paths write turns and scores through the
+      // service-role writer. This file never names the key; the writer module reads it.
+      const writer = practiceWriterFromEnv(supabaseUrl);
       if (writer === null) {
-        return json(500, { code: 'misconfigured', message: 'SUPABASE_SERVICE_ROLE_KEY unset' });
+        return json(500, {
+          code: 'misconfigured',
+          message: 'the practice writer is not configured',
+        });
       }
       if (feature === 'ai_coach') {
         const result = await analyseSimSession({
