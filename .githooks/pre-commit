@@ -11,7 +11,7 @@
 # **What it runs, and why it does not list the steps itself.** `scripts/ci-local.mjs` derives
 # its step list by reading `.github/workflows/ci.yml`, for a reason that file argues at
 # length: a hand-kept parallel list has already drifted three times in this repository, and
-# it drifts in the direction of claiming MORE coverage than it has. So this hook names three
+# it drifts in the direction of claiming MORE coverage than it has. So this hook names its
 # steps by their COMMAND and lets that script find them. If `ci.yml` renames or removes one,
 # `--only` matches zero steps and this hook FAILS rather than quietly checking less.
 #
@@ -28,15 +28,21 @@
 #   - It cannot stop `git commit --no-verify`. Git allows the bypass by design. CI is still
 #     the enforcement; this is the thing that tells you before the push.
 #
+# **W1-Y D3 — and the id check, first.** It fired on four merges in two days (FE-D14/15/16/17,
+# FE-CR-8/9/10), every time AFTER a push, every time a branch citing an id it never registered.
+# It runs in under a second, so it costs this hook nothing. A hook only covers clones that ran
+# `hooks:install` — not a bot's commits, nor another machine's — so the gate that covers those
+# is a required CI check on `main` (`docs/log/backend.md`, W1-Y D2).
+#
 # **Enable it once per clone:** `pnpm hooks:install`. Git does not read `core.hooksPath` from
 # the repository — that is a security property, not an oversight, since a cloned repo must
 # not be able to run code on `git commit` without being asked.
 
 set -e
 
-echo "pre-commit: typecheck, lint and format (MR-54 B1). Bypass with --no-verify."
+echo "pre-commit: ids, typecheck, lint and format (MR-54 B1, W1-Y D3). Bypass with --no-verify."
 
-if ! node scripts/ci-local.mjs --only=typecheck,lint,format:check; then
+if ! node scripts/ci-local.mjs --only=check-ids,typecheck,lint,format:check; then
   echo ""
   echo "COMMIT REFUSED — a step CI runs has failed above."
   echo "Fix it, or commit with --no-verify and own the red build."

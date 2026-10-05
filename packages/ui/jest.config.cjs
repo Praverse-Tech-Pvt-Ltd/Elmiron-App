@@ -80,6 +80,13 @@ module.exports = {
   // field's measured choice, so the two render suites stay on one rule.
   testTimeout: 20_000,
 
+  // W1-Y C. The 28 September timeouts above, and the 5 on 5 October, were blamed on load. The
+  // measured cause is the WORKER COUNT: each worker transforms the same cold module graph at once.
+  // Cache cleared, 20-core machine: default workers → slowest first test 20.3 s (over the bound
+  // it was raised to) and 41.8 s in all; 4 workers → 5.6 s and 17.3 s. The same cap as field
+  // (`apps/field/jest.config.cjs`, with its table); 3 is a 4-core CI runner's default already.
+  maxWorkers: 3,
+
   // Build artifacts are not source. apps/field/dist holds a compiled Hermes bundle
   // that contains supabase-js's entire SDK; a runner walking it is slow at best and
   // misleading at worst. See the search convention in docs/gotchas.md.

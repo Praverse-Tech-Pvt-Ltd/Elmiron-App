@@ -93,6 +93,23 @@ module.exports = {
   // and the environment, so it belongs here rather than on one `it`.
   testTimeout: 20_000,
 
+  // W1-Y C. **The cold start scales with the number of WORKERS, not with the machine's load.**
+  // Every worker transforms and loads the same cold module graph at once, so more workers make
+  // each first test SLOWER. Measured on a 20-core machine, cache cleared before each run:
+  //
+  //   workers   slowest first test   suites failing (timeout)   whole run
+  //   19 (default)      36.9 s                9                  56.9 s
+  //   10 (50%)          22.3 s                2                  34.8 s
+  //    4                12.5 s                0                  23.3 s
+  //    3                11.2 s                0                  24.0 s
+  //
+  // Every one of the 9 failures was the FIRST test in its file; the median later test took 0.07 s.
+  // So this caps the cause and leaves the bound alone. 3 is what a 4-core CI runner already uses by
+  // default (cores − 1), so CI is unchanged; it only stops a big machine from timing itself out.
+  // The slowest first test left is `offline-day*`, which reloads the app twice ON PURPOSE
+  // (`jest.resetModules()` to simulate death): 11–13 s cold, about 60% of the bound.
+  maxWorkers: 3,
+
   // Build artifacts are not source. apps/field/dist holds a compiled Hermes bundle
   // that contains supabase-js's entire SDK; a runner walking it is slow at best and
   // misleading at worst. See the search convention in docs/gotchas.md.
