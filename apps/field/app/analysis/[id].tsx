@@ -1,31 +1,33 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
-import { ApiRequestError } from '@fieldforce/core';
-import type { Analysis, ConsentRecord, Doctor, Visit } from '@fieldforce/core';
+import type { Analysis, ConsentRecord } from '@fieldforce/core';
 import { AnalysisScreen, Screen } from '@fieldforce/ui';
 import type { AnalysisFinding } from '@fieldforce/ui';
 import type { CitationSpanProps } from '@fieldforce/ui';
-import { createClientForScenario } from '../../src/api';
 import { coachingEnabled } from '../../src/features';
-import { NO_AUDIO_NOTE, retentionNote } from '../../src/coaching/content';
+import {
+  AI_PROVENANCE_NOTE,
+  NO_AUDIO_NOTE,
+  NO_FINDINGS_NOTE,
+  retentionNote,
+} from '../../src/coaching/content';
 import { isWorkedWell, orderedFindings, statusNote, timestampFrom } from '../../src/coaching/feed';
-// MR-25 C1. This screen still READS from the mock at :4010, which sends the territory's
-// own offset, so the character slice is correct here. **DELETE THE DISABLE BELOW WHEN
-// THIS SCREEN IS CONVERTED** and move to dayMonthIn / clockIn with the zone from
-// usePulledStore(). MR-21 converted app/visit/[id].tsx and kept clockFrom; the gotcha
-// entry did not stop it, and this line sitting on the import is what will.
-// eslint-disable-next-line no-restricted-imports
-import { dayMonthFrom } from '../../src/doctors/profile';
+import { listConsentForVisit, readMyAnalysis } from '../../src/coaching/server';
+import { usePulledStore } from '../../src/sync/pulled-store';
+import { dayMonthIn } from '../../src/today/territory-day';
 
 /**
  * Phase 4 D2 — one analysis and its evidence.
  *
- * **Opening this screen is an event, not a read.** `getAnalysis` is what stamps
- * `mrViewedAt` server-side, which is what turns "you see it before your manager
- * acts on it" from a claim the UI makes about itself into something the audit log
- * can support. So the analysis is fetched by id here rather than picked out of the
- * list the feed already holds.
+ * **FE-D16. It reads the real server.** The analysis comes from `read_analysis` and the consent
+ * line from `list_consent_records`, both the console's own functions, which an MR may call. The
+ * visit and doctor come from the pulled store. It used to read the mock at `127.0.0.1:4010`.
+ *
+ * **Opening this screen is NOT recorded as a view, despite what this comment used to say.**
+ * `read_analysis` does not stamp `mrViewedAt`; only a reply does (`audit_log.sql:487`). So the
+ * screen makes no claim about who has seen the analysis first. FE-CR-9 asks backend whether
+ * reading should stamp it.
  *
  * **No citation gets a play control.** `CitationSpan.onPlay` is omitted for every
  * quote, and `NO_AUDIO_NOTE` says why: this build has no audio capability, so no
@@ -45,15 +47,13 @@ function Analysis(): ReactNode {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
+  const { store, zone } = usePulledStore();
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
-  const [visit, setVisit] = useState<Visit | null>(null);
-  const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [consent, setConsent] = useState<ConsentRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
 
   useEffect(() => {
-    const client = createClientForScenario();
     let cancelled = false;
     /**
      * Read through a call, not directly.
@@ -67,43 +67,55 @@ function Analysis(): ReactNode {
      */
     const stopped = (): boolean => cancelled;
 
-    void client
-      .getAnalysis(id)
-      .then(async (found) => {
+    void readMyAnalysis(id)
+      .then(async (outcome) => {
         if (stopped()) return;
+        if (outcome.kind !== 'loaded') {
+          setFailure(
+            outcome.kind === 'refused' && outcome.refusal.code === 'not_permitted'
+              ? {
+                  title: 'You do not have access to this analysis',
+                  detail: `The server refused this request (${outcome.refusal.sqlState}).`,
+                }
+              : {
+                  title: 'Could not load this analysis',
+                  detail:
+                    outcome.kind === 'mismatch'
+                      ? outcome.detail
+                      : `The server refused this request (${outcome.refusal.sqlState}).`,
+                },
+          );
+          return;
+        }
+        // The server answers an analysis that is not this MR's with `data: null` — an absence,
+        // not an error. It is still not something to show as a blank analysis.
+        if (outcome.value === null) {
+          setFailure({
+            title: 'This analysis is not available to you',
+            detail: 'It does not exist, or it is not one of yours.',
+          });
+          return;
+        }
+        const found = outcome.value;
         setAnalysis(found);
-        const [visits, doctors, consents] = await Promise.all([
-          client.listVisits(),
-          client.listDoctors(),
-          // Settled separately: the consent ledger being unreachable must not take
-          // the analysis down with it.
-          client.listConsentRecords({ visitId: found.visitId }).catch(() => null),
-        ]);
+        // Settled separately: the consent ledger being unreachable must not take the analysis
+        // down with it.
+        const consents = await listConsentForVisit(found.visitId).catch(() => null);
         if (stopped()) return;
-        const theVisit = visits.items.find((candidate) => candidate.id === found.visitId) ?? null;
-        setVisit(theVisit);
-        setDoctor(
-          theVisit === null
-            ? null
-            : (doctors.items.find((candidate) => candidate.id === theVisit.doctorId) ?? null),
-        );
         setConsent(
-          (consents?.items ?? [])
+          (consents?.kind === 'loaded' ? consents.value : [])
             .filter((record) => !record.isWithdrawal)
+            .slice()
             .sort((a, b) => a.capturedAt.localeCompare(b.capturedAt))
             .at(-1) ?? null,
         );
       })
       .catch((error: unknown) => {
         if (stopped()) return;
-        setFailure(
-          error instanceof ApiRequestError && error.code === 'permission_denied'
-            ? { title: 'You do not have access to this analysis', detail: error.message }
-            : {
-                title: 'Could not load this analysis',
-                detail: error instanceof Error ? error.message : 'Unknown failure',
-              },
-        );
+        setFailure({
+          title: 'Could not load this analysis',
+          detail: error instanceof Error ? error.message : 'Unknown failure',
+        });
       })
       .finally(() => {
         if (!stopped()) setLoading(false);
@@ -157,6 +169,9 @@ function Analysis(): ReactNode {
           return [mapped];
         });
 
+  const visit = analysis === null ? undefined : store.visit.get(analysis.visitId);
+  const doctor = visit === undefined ? undefined : store.doctor.get(visit.doctorId);
+
   return (
     <Screen scrollable>
       <AnalysisScreen
@@ -175,14 +190,17 @@ function Analysis(): ReactNode {
         onReply={() => {
           router.push(`/reply/${id}`);
         }}
-        provenanceNote={
-          analysis === null || analysis.mrViewedAt === null
-            ? 'Written by the system from the transcript. Your manager has not opened this yet.'
-            : 'Written by the system from the transcript. You read it first.'
+        noFindingsNote={
+          analysis !== null && analysis.status === 'completed' && analysis.findings.length === 0
+            ? NO_FINDINGS_NOTE
+            : null
         }
+        // FE-D16. AI-written, said plainly. The claims about who opened it first are gone: no
+        // server record backs them (FE-CR-9).
+        provenanceNote={AI_PROVENANCE_NOTE}
         reply={analysis?.mrResponse ?? null}
         statusNote={analysis === null ? null : statusNote(analysis)}
-        whenLabel={visit?.startedAt == null ? 'This visit' : dayMonthFrom(visit.startedAt)}
+        whenLabel={visit?.startedAt == null ? 'This visit' : dayMonthIn(visit.startedAt, zone)}
       />
     </Screen>
   );

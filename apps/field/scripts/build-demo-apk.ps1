@@ -27,6 +27,13 @@
 .PARAMETER CheckOnly
   Run every refusal check and stop. Builds nothing.
 
+.PARAMETER CoachingCheck
+  FE-D16. A local check build with Coaching ON, which is never a demo build. With this switch,
+  EXPO_PUBLIC_COACHING_ENABLED must be exactly 'true' (anything else is refused), and the APK is
+  named field-force-demo-<ip>-<date>-<commit>-coaching-check.apk, so it can never be mistaken for
+  the demo APK. Without it, a set EXPO_PUBLIC_COACHING_ENABLED is refused exactly as before.
+  EXPO_PUBLIC_RECORDING_ENABLED is refused either way.
+
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File apps\field\scripts\build-demo-apk.ps1 -Ip 192.168.1.15
 #>
@@ -35,7 +42,9 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$Ip,
 
-  [switch]$CheckOnly
+  [switch]$CheckOnly,
+
+  [switch]$CoachingCheck
 )
 
 $ErrorActionPreference = 'Stop'
@@ -228,6 +237,17 @@ function Invoke-Checks {
   }
   foreach ($name in $MustBeUnset) {
     $current = [Environment]::GetEnvironmentVariable($name, 'Process')
+    # FE-D16. -CoachingCheck allows Coaching ON, and only as exactly 'true'. The APK is then named
+    # -coaching-check, never the demo name. Recording stays refused either way.
+    if ($CoachingCheck -and $name -eq 'EXPO_PUBLIC_COACHING_ENABLED') {
+      if ($current -eq 'true') {
+        Write-Ok "$name = true (-CoachingCheck: NOT a demo build; the APK is named -coaching-check)"
+      } else {
+        Write-Refusal "-CoachingCheck needs $name set to exactly 'true' (it is '$current')."
+        $failures++
+      }
+      continue
+    }
     if (-not [string]::IsNullOrWhiteSpace($current)) {
       Write-Refusal "$name is set ('$current'). Coaching stays hidden and recording off in a demo build: unset it."
       $failures++
@@ -355,13 +375,18 @@ function Invoke-Build {
   Write-Step "Copying to $DemoApkDir (never overwriting)"
   $null = New-Item -ItemType Directory -Force -Path $DemoApkDir
   $date = Get-Date -Format 'yyyy-MM-dd'
-  $target = Join-Path $DemoApkDir "field-force-demo-$Ip-$date-$commit.apk"
+  $suffix = if ($CoachingCheck) { '-coaching-check' } else { '' }
+  $target = Join-Path $DemoApkDir "field-force-demo-$Ip-$date-$commit$suffix.apk"
   if (Test-Path $target) { throw "$target already exists; not overwriting it. Move it aside yourself if you mean to replace it." }
   [IO.File]::Copy($apk, $target, $false)
 
   $size = (Get-Item $target).Length
   Write-Host ''
-  Write-Host 'DEMO APK READY' -ForegroundColor Green
+  if ($CoachingCheck) {
+    Write-Host 'COACHING-CHECK APK READY: Coaching is ON. NOT FOR THE DEMO.' -ForegroundColor Yellow
+  } else {
+    Write-Host 'DEMO APK READY' -ForegroundColor Green
+  }
   Write-Host "  path:   $target"
   # Invariant culture: on this laptop's en-IN culture {0:N0} printed 102,073,371 as "10,20,73,371".
   Write-Host ([string]::Format([Globalization.CultureInfo]::InvariantCulture, '  size:   {0:N0} bytes ({1:N1} MB)', $size, ($size / 1MB)))
@@ -370,7 +395,7 @@ function Invoke-Build {
 
 $code = 0
 try {
-  Write-Host "build-demo-apk: -Ip $Ip$(if ($CheckOnly) { ' -CheckOnly' })"
+  Write-Host "build-demo-apk: -Ip $Ip$(if ($CheckOnly) { ' -CheckOnly' })$(if ($CoachingCheck) { ' -CoachingCheck' })"
   $failures = Invoke-Checks
   if ($failures -gt 0) {
     Write-Host ''

@@ -62,6 +62,12 @@ export interface AnalysisScreenProps {
   readonly onReply: () => void;
   /** "Written by the system from the recording. Your manager has not opened this yet." */
   readonly provenanceNote: string;
+  /**
+   * FE-D16. Set when the analysis is complete but the server returned no findings, which the
+   * real `read_analysis` does for every analysis today (FE-CR-8). Shown as its own state, so a
+   * blank analysis never looks like one that found nothing to say about the visit.
+   */
+  readonly noFindingsNote?: string | null;
   readonly loading?: boolean;
   readonly failure?: { readonly title: string; readonly detail: string } | null;
 }
@@ -111,6 +117,7 @@ export const AnalysisScreen = ({
   provenanceNote,
   loading = false,
   failure = null,
+  noFindingsNote = null,
 }: AnalysisScreenProps): ReactNode => {
   if (failure !== null) {
     return (
@@ -138,6 +145,10 @@ export const AnalysisScreen = ({
         // when the model cannot cite without speculating, so it reads as the system
         // declining to guess about the MR rather than as a fault.
         <Banner detail={statusNote} title="Nothing was written about this visit" tone="info" />
+      )}
+
+      {noFindingsNote === null ? null : (
+        <Banner detail={noFindingsNote} title="No findings were returned" tone="info" />
       )}
 
       <Findings findings={worked} heading="What worked" />
