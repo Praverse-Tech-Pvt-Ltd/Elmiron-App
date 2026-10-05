@@ -662,3 +662,25 @@ disagreement could be checked, because the operator's text was not provided.**
   (every object, including the private `audio` bucket of consent recordings) both accept it (local demo
   key: HTTP 200 for both). A change that reached for the key outside the writer could do those things.
   The check is what stands between a hurried change and them; the database grants are not.
+
+## `BE-C71` — **`BE-W146` (the forgeable request log) deferred, with a trigger that reverses it** (W2-A B, 5 October)
+
+- **What a rep can write, measured.** On their OWN request still `started`: the status (`completed`,
+  `failed`, `blocked`), `model_provider`, `model_name`, input and output token counts, flags (the known
+  list), the error code, and knowledge versions (only approved ones of their company). Not another rep's
+  request (`r.user_id = caller`). They can also begin requests without the gateway — each counts against
+  their own allowance.
+- **What reads it, measured.** `ai_begin_request` — the allowance — counts rows begun today
+  (`started_at`), whatever their status, so a forged completion changes nobody's allowance; the two
+  practice writers require the request to be `started`, so closing it early sabotages only the rep's own
+  turn; an admin may `SELECT` the table, but no screen, report or export does. Nothing in either app or the
+  console reads it.
+- **The argument, both ways.** For fixing now: a log that can be forged is not a log, and the token counts
+  become the cost record the day the model is live. Against: no reader today; a rep can falsify only their
+  own rows; and the fix — closing through the gateway's service-role writer — touches all five flows and
+  their tests and **widens what the key reaches**: the writer could then close ANY rep's request, where
+  today each rep can touch only their own. That is a real cost, so it is paid when it buys something.
+- **Decided: defer, with a trigger** — whichever first: **production AI traffic** (real
+  `AI_PROVIDER=bedrock` with real secrets), or **any screen, report or export reading `ai_requests` model,
+  token or status fields**. Written into `docs/ai-platform/KEY-DAY-CHECKLIST.md` as a gate before
+  production AI, where the trigger will be read on the day it fires.

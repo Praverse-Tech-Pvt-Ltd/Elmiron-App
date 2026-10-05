@@ -157,3 +157,12 @@ calls.** In order, each with its proof:
 three AWS values as Edge Function secrets (the operator's dashboard, or `supabase secrets set` with a
 fresh access token), the merge, and the deploy — and a production prompt approved by a REAL second
 admin (Q-14).
+
+## Before PRODUCTION AI traffic — one gate added (W2-A B, `BE-C71`)
+
+**Fix `BE-W146` first.** A rep can close their own AI request as `completed` with any model name and
+token counts, because `ai_complete_request` runs as the rep. Deferred on 5 October because nothing reads
+those fields yet — but the day real model calls happen in production, those token counts become the cost
+record. **The trigger, whichever comes first:** production AI traffic (the deploy of `AI_PROVIDER=bedrock`
+with real secrets), or any screen, report or export that reads `ai_requests` model, token or status
+fields. Neither has happened; the local hour above may proceed without it.
