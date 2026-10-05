@@ -3745,3 +3745,202 @@ C's fix, D's hook line and E's score are on the branch of this commit, for a PR.
 repository admin's to apply. **No credential appears anywhere in the diff** (checked against the env
 file's values before commit). **The local env file still exists** (`services/api/supabase/functions/.env`,
 git-ignored) — needed the moment access is granted; deleted when the AI work finishes, per item 1.
+
+### W1-Z — the score, and the wire
+
+**5 October 2026.** The practice score anyone could write, fixed; the two AI screens wired to the real
+gateway and proved end to end — neither needing AWS; the missing screens sized; the public repository
+measured; the status table with its blockers corrected.
+
+#### The previous push's CI
+
+`7fcfa08` (W1-Y, PR #18 head): **CI green**, run `37285888296`, SHA = that commit. Database runner:
+**Test Files 81 passed (81)**, **Tests 1115 passed | 2 skipped | 4 todo (1121)**; unit runner: core 203 |
+4 todo, ui-tokens 59, ui 4 + 328, mock 43, field 707 + 272, console 76.
+
+#### The brief's preconditions, checked rather than assumed
+
+**PR #18 is NOT merged** (open; this branch is built on its head `7fcfa08`, so a PR from it carries #18's
+commits too). **No ruleset** exists on `main`. The repository is **still public**. None blocked the work.
+
+#### The priority override — did it fire? **No.** `NOT_AUTHORIZED`, both models, at the start and between every part.
+
+#### A — the score anyone can write (`BE-W144`, `BE-W145`, `BE-C69`)
+
+**A1 — the full shape, before changing anything.** A rep's own token could produce a complete, false
+trail: (1) **both sides of a turn** — `record_sim_turn(session, rep_text, doctor_text, …)` checked only
+that the session was the caller's and open; (2) **the score** — `record_sim_coach_analysis` checked
+ownership, that the session had ended, and the shape, and took `model_provider` / `model_name` from the
+caller, while `prompt_version_id` came from the session, so the row pointed at the REAL approved prompt;
+(3) **a matching request-log row** — `ai_begin_request` and `ai_complete_request` are granted to
+`authenticated`, and a completion takes the caller's model, provider and token counts. An admin reading
+it would see an approved prompt, a named model, token counts and a score — all invented.
+
+**A2 — the choice.** The gateway calls the database AS THE REP (`C30`), so whatever it can write, the rep
+can write; proof of origin needs something the rep does not hold. **Chosen: the two writers are granted
+to `service_role` ONLY** (`20261005000200`, built from the installed definitions), and each must name an
+OPEN `ai_requests` row of the right feature, begun by the rep who owns the session — the rep and their
+company now come from that row, not from a caller identity the service role does not have. The gateway
+reads `SUPABASE_SERVICE_ROLE_KEY` on the `ai_doctor` / `ai_coach` paths only, through
+`_shared/practice-writer.ts`, which refuses any function name but those two before a network call.
+Every decision still runs as the rep. **Alternatives, and why they lost:** a database check that a
+request is open (the rep can open one); a dedicated signing secret (keeps the gateway key-free, but one
+more value to provision in three environments while the team waits on the keys it already needs);
+waiting until an admin sees a score (the cheap window is now). The key is in every Edge Function's
+environment whether read or not, so reading it adds a code path, not an exposure. Recorded as `BE-C69`,
+amending `C30` narrowly; the gateway's header says so.
+
+**A3 — tests reversed, and saying so in their bodies:** `sim-gateway.spec.ts`'s `endedSession`, `record`,
+and the "turn 99" test wrote turns and scores AS THE REP — green while the defect stood; they now write
+through the gateway (`asGateway`, the service role, bound to a request the rep began). The core unit test
+"an identity refusal (42501) is NOT swallowed — it still propagates" asserted the opposite of the new
+behaviour and is rewritten as "a WRITER refusal (42501) closes the request too — REVERSED in W1-Z", with
+the reason. The recorder-count test now expects **10** arguments (the 9-argument one the rep could call
+is dropped, not left beside it).
+
+**A4 — `BE-W145`:** every refused practice write now CLOSES the request — `failed`, with the SQLSTATE in
+`error_code` (`write_refused_23505`, `write_refused_42501`; `analysis_refused` + `schema_invalid` for a
+shape refusal as before) — for the turn as well as the score.
+
+**A5 — two-sided, with mutants.** Database: the rep's token refused (42501) and the gateway's write with
+the same open request stored; a request of the wrong feature, a closed request, another rep's request, and
+a replayed request each refused. **Mutants** (applied to the live database, spec re-run, restored):
+turn re-granted to the rep → exactly the turn test; score re-granted → exactly the score test; turn
+accepts any feature → exactly the feature test; **turn accepts a closed request → the SAME test** (it
+covers both halves); replay allowed → exactly the replay test; session owner unchecked → exactly the
+other-rep test; **score accepts any feature → nothing, at first** — the score writer's feature check had
+no test; one added, it then failed exactly that test. Core: score written through the rep → **six**
+tests (the rep's fake refuses it as the database does, so every test reaching the write fails); request
+id dropped → exactly one; `BE-W145` reverted → **two** (the 42501 and 23505 closings); **turn written
+through the rep → SURVIVED** — `history.test.ts` used one fake for both connections; split, and a test
+added; it then failed **two** (the new one, and the briefing test, whose turn the rep's connection now
+refuses). Practice spec **51 tests**, core **207**.
+
+**Found, not fixed — `BE-W146`:** `ai_complete_request` runs as the rep, so a rep can still close their
+own request as `completed` with any model and token counts. A practice SCORE can no longer be forged; a
+request-log ROW can.
+
+#### B — the two screens that talked to a sample
+
+**B1.** `apps/field/src/practice/live.ts` (`createLivePracticeBackend`) and
+`apps/field/src/assistant/live.ts` (`createLiveAssistantTransport`) implement the SAME interfaces as the
+samples — **no screen changed**. They reach Supabase as the signed-in rep with plain `fetch`
+(`src/live-rest.ts`: PostgREST for reads and RPCs, `ai-gateway` for the features), so the same code runs
+on a phone and in the API tests without adding the Supabase client to `services/api` (a dependency).
+They send the gateway only what it reads; the persona, stance, objection and history fields in the
+screens' request bodies are the server's to supply (`BE-W136`) and are not sent.
+
+**B2 — the two read RPCs FE-CR-11 asked for: not needed, not built.** Measured: the rep's existing row
+rules give them approved personas (with the brief) and scenarios of their company, and their own
+sessions, turns and analyses; the session itself is read through `sim_session_context`, the server's own
+copy. The stance values match (`sceptical`).
+
+**B3 — end to end, by the screens' own transport.** `sim-gateway.spec.ts` "W1-Z B3" drives
+`createLivePracticeBackend` as the signed-in rep against the local stack and the stub: scenarios offered
+→ start → a turn through the gateway (`replied`, the stub's marker) → read (two turns, open, the brief)
+→ end → analyse (`analysed`) → read the analysis (`stub`, score 0, seven dimensions) → the session reads
+`ended` with its analysis id → my sessions → module titles. `mr-chat.spec.ts` "W1-Z B3" drives
+`createLiveAssistantTransport`: answered, with the marker and the allowance; and with nobody signed in,
+nothing is sent (`28000`). Both load `apps/field` by path (it resolves imports the bundler's way;
+`apps/field`'s own typecheck holds them to the interfaces). **Mutants:** no signed-in check → exactly the
+chat test; turn sent as the wrong feature → exactly the practice test; analysis id never read back →
+exactly the practice test; **a refused read ignored → SURVIVED** — an expired token would have shown an
+empty list; a test added (a bad token must throw `401`), it then failed exactly that test.
+**One local run refused the rep's token, "JWT issued at future"; the repeat passed, and so did the clean
+run.** Measured: a fresh token is issued 0.7 s in the PAST and accepted at once; the containers' clocks
+match. **Not explained** — a transient clock offset in Docker's VM fits but is not shown.
+
+**B4 — the flags stay off, and `transport.ts` still exports the sample.** What a rep would read today is
+the stub's marker sentence; and every screen says "sample data". Both `transport.ts` files now say where
+the live implementation is and why it is not wired.
+
+**B5 — what is left for each, the day access lands. More than "switch the flag on":**
+
+| | Chatbot (`mr_chat`) | AI Doctor practice + AI Analysis (`ai_doctor`, `ai_coach`) |
+| --- | --- | --- |
+| 1 | Model access; `AI_PROVIDER=bedrock`; the six steps of `KEY-DAY-CHECKLIST.md` | Same |
+| 2 | An approved `mr_chat` prompt version and the feature switched on for the company — needs the **second admin** (Q-14) | Approved `ai_doctor` and `ai_coach` prompts, **and approved personas and scenarios** — authored in the console, approved by a second admin (Q-14); none exist in production |
+| 3 | `src/assistant/transport.ts`: export `createLiveAssistantTransport({ baseUrl: appConfig.supabaseUrl, apiKey: appConfig.supabasePublishableKey, accessToken: from the session })` | `src/practice/transport.ts`: the same, `createLivePracticeBackend` |
+| 4 | The screen's "sample data" wording, and the flag's meaning (`EXPO_PUBLIC_ASSISTANT_SAMPLE`) — a screen change | Same, `EXPO_PUBLIC_PRACTICE_SAMPLE` and the three practice screens |
+| 5 | A new app build (the APK build has not been re-measured since W1-T) | Same |
+| | **About ½ day of engineering** after 1–2 | **About ½ day** after 1–2 |
+
+#### C — what the app still cannot do: two numbers
+
+Measured first: **no loader exists for either feature's content** — no script inserts knowledge documents
+or courses; the console's knowledge page reviews and approves but cannot create; nothing in the console
+touches courses or lessons.
+
+* **Product Q&A — about 3 days:** one app screen (question, answer, citations with document and version,
+  the refusals, the allowance) on the assistant screen's pattern and `live-rest.ts` ≈ 2 days; a loader
+  for the operator's approved documents ≈ 1 day. Review and approval already exist. Its content waits on
+  Q-9 and its approval on Q-14.
+* **LMS — about 6 days with a loader, 10–12 with console authoring:** four app screens (my courses, a
+  course, a lesson with "complete", the tutor in the lesson) ≈ 4–5 days; a course loader ≈ 1 day;
+  assignment ≈ ½ day (`assign_course` exists, no screen calls it).
+* **Product Q&A is cheaper** — one screen, an existing pattern, an existing approval path — against four
+  screens and two missing admin paths. **Estimates, not measurements.** Built: neither.
+
+#### D — the public repository
+
+**D1 — what is exposed.** The operator's own messages verbatim (`docs/operator/`); the deploy runbook;
+every finding about what the system cannot do (logs, status tables, the 4 October score); the draft
+privacy notice and territory template; the team's names (17 files); two company email addresses; and
+**the production database's identity** — `pgfdbzoapmleqtoezhoa`, Mumbai, in `.ai-collab/constraints.md`
+and `.mcp.json` since 10 August, which with the pooler host is half of a login. **D2 — the history:**
+every added line on every one of 26 refs (232,802 lines) scanned for AWS key ids, private-key blocks,
+GitHub, Slack, Google, Stripe and model-vendor keys, JWTs, Supabase secret keys and database URLs with a
+password — values never printed, only classified. **No real credential.** The two JWTs are issued by
+`supabase-demo` (the public demonstration keys every local Supabase install ships with); all thirteen
+database URLs are local defaults, `[YOUR-PASSWORD]`, or `secret` against deliberately fake hosts.
+**D3 — put to the operator as Q-20** (`docs/operator-inputs.md` section 9): what is visible; that private
+exceeds the free build minutes (**measured: 743 job-minutes in 7 days ≈ 3,200 a month**) and, I believe,
+needs a paid plan for branch protection — those plan figures flagged as unverified. Setting unchanged.
+
+#### E — the status table, blockers corrected
+
+| MODULE | STATUS | OWNER | BLOCKER | ETA |
+| --- | --- | --- | --- | --- |
+| Core MR workflow — server and app | DONE | Maanav | Not run on a device since the merges | — |
+| AI Doctor practice + AI Analysis — wiring | DONE | Maanav | — (proved end to end on the stub; flag off by design) | — |
+| AI Doctor practice + AI Analysis — real answers | BLOCKED | AWS account owner, then operator | Model access; approved prompts, personas, scenarios (second admin, Q-14); then ½ day to switch | ½ day after both |
+| Chatbot — wiring | DONE | Maanav | — | — |
+| Chatbot — real answers | BLOCKED | AWS account owner, then operator | Model access; approved prompt (Q-14); then ½ day to switch | ½ day after both |
+| Practice score integrity (`BE-W144`, `BE-W145`) | DONE | Maanav | — | — |
+| Request-log integrity (`BE-W146`) | POST-4-OCT | Maanav | None — engineering can proceed | about 1 day |
+| Product Q&A — app screen | POST-4-OCT | Maanav | None for the screen; its content waits on Q-9 and Q-14 | about 3 days |
+| LMS — app screens | POST-4-OCT | Maanav | None for the screens; content needs a loader | about 6 days |
+| Recorded-visit Coaching / Analysis / Reply | POST-4-OCT | Maanav | Nothing writes analyses; recording deferred, Q-13 | — |
+| Production deploy | BLOCKED | Operator, then Maanav | Q-19; then `BE-W143`; stopped at runbook 0.1 | about 1 day after the answer |
+| Backup | BLOCKED | Operator, then Maanav | Q-19; red from 16 October | ½ day after the answer |
+| Merge PR #18 and this PR | BLOCKED | Maanav | A merge only Maanav makes | minutes |
+| Branch protection on `main` | BLOCKED | Repository admin | Not applied (0 rulesets, measured) — W1-Y D2's command | minutes |
+| Repository visibility | BLOCKED | Operator | Q-20 | minutes, once decided |
+| Day planning (manager plans) | BLOCKED | Operator | Q-16, Q-17, Q-18 | 10–15 working days after the answers |
+| Second admin / consent legal name / sample cap | BLOCKED | Operator | Q-14 / Q-11 / Q-10 | same day / ½ day / ½ day |
+| Demo build (APK) | BLOCKED | Maanav | Not re-measured since W1-T | — |
+
+#### Checks
+
+* Static, before the tests: typecheck **0 errors**, lint **0 errors** (one frontend warning), format clean;
+  ids **clean** (`BE-C69`, `BE-W146` registered in the commit that first cites them).
+* **Clean-database check: All 28 step(s) passed** — database **Test Files 81 passed (81)**, **Tests 1123
+  passed | 2 skipped | 4 todo (1129)** (the two skipped: the gated live Bedrock tests); core 11 files, 207
+  | 4 todo; field 50 files, 707, and 39 screen suites, 272; ui 4 and 30 screen suites, 328; console 76;
+  ui-tokens 59; mock 43; browser **7 passed, 0 skipped, 0 failed**. Function server from the repository
+  root, confirmed from its log.
+
+#### What I got wrong
+
+* Twice more, a bulk edit through the shell evaluated my backticks and garbled comments (the core test
+  file) — reverted and redone with the editor. The third time this session family; the habit is: never
+  pass backticked text through a shell string.
+* Two mutants survived my first tests (the turn written through the rep; a refused read ignored) and one
+  check had no test at all (the score writer's feature). Each found by mutating, each closed.
+
+#### Where I stopped
+
+**All five parts done; the override never fired.** Everything is on `w1-z-backend`, built on PR #18's
+head, for a PR to `main`; merging is Maanav's. The flags are off. **No credential appears anywhere in the
+diff** (checked against the env file's values before every commit). **The local env file still exists**
+(`services/api/supabase/functions/.env`, git-ignored) — needed the moment access is granted.
