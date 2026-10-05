@@ -32,5 +32,42 @@ export default defineConfig({
     // A per-file identity budget backs it up, so a suite that mints more than one world's
     // worth fails the build naming itself. `tests/identity-budget.spec.ts` proves both.
     minWorkers: 1,
+
+    // ------------------------------------------------------------------------
+    // W1-H A — `BE-W125` CLOSED BY NOT SHARING THE DATABASE.
+    //
+    // **One spec file at a time. This suite does not run files in parallel.**
+    //
+    // The defect: 73 spec files shared one Postgres. Some suites COMMIT global
+    // `app_thresholds` rows (the Edge Function runs out of process and cannot see a
+    // transaction); one suite performs DDL, which takes ACCESS EXCLUSIVE. Concurrently,
+    // those deadlock — `40P01`, in a different test almost every time.
+    //
+    // **Measured on a clean database with the Edge Function served, 8 runs each:**
+    //
+    //   file parallelism : 1 failing run of 8, wall clock 52-90s (median 55s)
+    //   one file at a time: 0 failing runs of 8, wall clock 98-100s
+    //
+    // **So it costs about 45 seconds and removes the whole class.** Not a mitigation and
+    // not a retry — with one file running there is nothing to contend with, so the race
+    // cannot occur rather than occurring less often.
+    //
+    // **Why not per-worker databases**, which was the first idea and is the expensive one:
+    // 15 of the 73 spec files reach the database through PostgREST, GoTrue or the Edge
+    // Function, and those are pointed at ONE database by the Supabase stack itself. Giving
+    // each worker its own database would isolate 58 files and leave those 15 sharing — the
+    // deadlock class surviving in exactly the suites most likely to hit it, plus a permanent
+    // fork in how a test reaches the database. Days of work to half-fix it.
+    //
+    // **What this costs, stated plainly:** the api suite is roughly twice as slow. CI's
+    // database job goes from about 5m23s to about 6m20s. That is the price of a signal that
+    // means something — at 1 spurious red in 8, a red was no longer evidence about the change
+    // under test, which is the condition this project correctly called a broken signal when
+    // `BE-W92` was in it.
+    //
+    // **If somebody re-enables parallelism**, the advisory lock in `tests/global-thresholds.ts`
+    // is what keeps the `app_thresholds` half safe; it is currently uncontended, not removed.
+    // The DDL half has no such guard, so re-enabling brings `BE-W125` straight back.
+    fileParallelism: false,
   },
 });

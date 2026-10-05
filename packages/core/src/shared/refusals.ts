@@ -36,6 +36,8 @@ import { z } from 'zod';
  * | `45008`  |      1 | consent older than the maximum sync lag (FIX-12) |
  * | `45009`  |      1 | audio recorded in the future (MR-54 `BE-W96`) |
  * | `45010`  |      1 | audio older than the maximum sync lag (MR-54 `BE-W96`) |
+ * | `45011`  |      3 | AI feature switched off or not configured (AI-D0) |
+ * | `45012`  |      1 | AI daily allowance used up (AI-D0) |
  *
  * **`45004` was minted in FIX-09 and never reached this table.** A server-side code with
  * no client-side mapping renders as `unrecognised`, which is honest and useless: the MR is
@@ -69,6 +71,14 @@ export const RefusalCodeSchema = z.enum([
    */
   'recording_in_future',
   'recording_too_old_to_accept',
+  /**
+   * AI-D0, 45011. Switched off, OR not configured for this organisation (no approved prompt, no
+   * daily limit). One code for both: to the person asking, either way the feature is not on,
+   * and neither is theirs to fix.
+   */
+  'ai_feature_disabled',
+  /** AI-D0, 45012. The caller's daily AI allowance is used up. It resets at midnight, India time. */
+  'ai_rate_limited',
   'append_only',
   'invalid_for_this_record',
   'references_missing_record',
@@ -138,6 +148,11 @@ export const BY_SQLSTATE: Readonly<Record<string, { code: RefusalCode; actionabl
   // Actionable, but NOT by waiting: an upload refused for age only gets older. The outbox
   // treats a server verdict as terminal, so this dead-letters rather than retrying forever.
   '45010': { code: 'recording_too_old_to_accept', actionable: true },
+  // AI-D0. Not actionable: switching a feature on, approving a prompt or setting a limit is an
+  // admin's decision, never a next step the person asking can take.
+  '45011': { code: 'ai_feature_disabled', actionable: false },
+  // Actionable, by waiting: the allowance resets at midnight, India time.
+  '45012': { code: 'ai_rate_limited', actionable: true },
   '23001': { code: 'append_only', actionable: false },
   '23514': { code: 'invalid_for_this_record', actionable: false },
   '23503': { code: 'references_missing_record', actionable: false },

@@ -1,0 +1,4 @@
+level,name,code,parent_code,company
+National,India (example),EXAMPLE-IN,,Example Company
+Region,West (example),EXAMPLE-IN-W,EXAMPLE-IN,Example Company
+Area,Pune (example),EXAMPLE-IN-W-PUN,EXAMPLE-IN-W,Example Company

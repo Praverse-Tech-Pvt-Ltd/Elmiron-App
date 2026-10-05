@@ -1,0 +1,142 @@
+name: PR mergeability
+
+# ============================================================================
+# W1-D A3 — THIS WORKFLOW IS INERT UNTIL IT IS ON THE DEFAULT BRANCH. READ THIS FIRST.
+#
+# **It cannot run from a feature branch, and that is not a bug in it — it is how GitHub resolves
+# triggers.** `schedule`, `push` and `workflow_dispatch` are all read from the DEFAULT branch's copy
+# of a workflow file. While this file exists only on `worktree-ai-platform-phase-a`, GitHub will
+# neither schedule it nor offer it for dispatch. **It does nothing. It protects nothing.**
+#
+# **Why it was not made to work from here.** The obvious fix is to put the check inside `ci.yml`,
+# which does run on the pull request — and that fix is void, because `ci.yml` is suppressed by
+# exactly the condition this check reports: a conflicting PR produces no run at all. A check that
+# is silent precisely when it is needed is worse than one that is honestly absent, and this
+# repository has a documented history of inert controls that looked like protection
+# (`docs/gotchas.md`, FIX-07: *"a control that cannot be exercised is not a control"*).
+#
+# So the honest state is declared here rather than assumed away: **inert until PR #2 merges.**
+#
+# ## WHAT A SESSION MUST DO BY HAND UNTIL THEN — two commands, every session, before trusting CI
+#
+#   gh pr view 2 --json mergeable,mergeStateStatus
+#   # CONFLICTING -> re-read after 30s before believing it (see the re-verify step below), then:
+#   git fetch origin main && git merge origin/main   # resolve, commit, push
+#
+# And if a push produced no CI run at all:
+#
+#   gh api "repos/Praverse-Tech-Pvt-Ltd/Elmiron-App/actions/runs?head_sha=$(git rev-parse HEAD)" #     --jq '.workflow_runs[] | "\(.name) \(.status)/\(.conclusion)"'
+#   # empty output = no run was ever CREATED. That is the silent-conflict signature, not a slow run.
+#
+# **This block should be deleted the day the file reaches `main`**, because from that moment the
+# statement above becomes false — and a stale warning in a workflow is the same failure class as a
+# stale count in `CLAUDE.md`.
+# ============================================================================
+
+# W1-C B3 — the check that makes a CONFLICTING pull request LOUD instead of silent.
+#
+# **The defect this exists for.** A `pull_request` workflow runs against `refs/pull/N/merge`. GitHub
+# cannot build that ref while the PR conflicts with its base, so **no workflow run is created at
+# all** — no failure, no annotation, no email. On 28 September PR #2 lost CI three times this way,
+# twice without anyone provoking it, and each time the only symptom was an absence.
+#
+# **Why this cannot live in `ci.yml`.** That is the trap. A check inside the PR's own workflow is
+# suppressed by the very condition it is meant to report: if the PR conflicts, `ci.yml` does not run,
+# so a mergeability job inside it would never fire precisely when it was needed. **A workflow that
+# cannot report its own absence is the exact shape this project keeps finding.**
+#
+# So this runs from the DEFAULT BRANCH, where no PR's conflict state can suppress it:
+#
+#   * on a schedule, so a PR that goes stale overnight is caught without anyone pushing;
+#   * on every push to `main` — which is when a PR *becomes* conflicting, because merging one PR is
+#     what conflicts the others;
+#   * and by hand, because a check nobody can trigger is one nobody can re-run.
+#
+# It reports on EVERY open PR rather than a hard-coded number. Naming PR #2 would make the check
+# stale the moment #2 merges, which is the failure mode `CLAUDE.md` is entirely about.
+
+on:
+  schedule:
+    # 06:15 UTC daily — before the working day in IST, so a conflict that appeared overnight is
+    # already reported when someone starts.
+    - cron: '15 6 * * *'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  mergeable:
+    name: no open PR is silently conflicting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report every open PR's mergeable state, and fail on a conflict
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -o pipefail
+
+          # `mergeable` is computed lazily: GitHub returns null until it has finished. Polling is
+          # required, not defensive -- a null read would otherwise be indistinguishable from CLEAN
+          # and this check would pass on exactly the PRs it exists to catch.
+          for attempt in 1 2 3 4 5 6; do
+            unknown=0
+            gh pr list --repo "$REPO" --state open --json number,title,mergeable,isDraft \
+              > /tmp/prs.json
+            if [ "$(jq 'length' /tmp/prs.json)" = "0" ]; then
+              echo "No open pull requests."
+              exit 0
+            fi
+            unknown=$(jq '[.[] | select(.mergeable == "UNKNOWN")] | length' /tmp/prs.json)
+            if [ "$unknown" = "0" ]; then break; fi
+            echo "mergeable still UNKNOWN for $unknown PR(s); waiting (attempt $attempt/6)"
+            sleep 10
+          done
+
+          jq -r '.[] | "PR #\(.number)  \(.mergeable)  draft=\(.isDraft)  \(.title)"' /tmp/prs.json
+
+          conflicting=$(jq -r '[.[] | select(.mergeable == "CONFLICTING")] | length' /tmp/prs.json)
+          still_unknown=$(jq -r '[.[] | select(.mergeable == "UNKNOWN")] | length' /tmp/prs.json)
+
+          if [ "$still_unknown" != "0" ]; then
+            # Not a failure. GitHub genuinely does not know yet, and calling that a conflict would
+            # make the check cry wolf on a PR opened seconds earlier.
+            echo "::warning title=Mergeability unknown::GitHub had not finished computing mergeability for $still_unknown PR(s). Re-run this check."
+          fi
+
+          # A CONFLICTING reading is RE-VERIFIED before it fails the job, and this is not caution
+          # for its own sake -- it was measured. Immediately after a push, GitHub served
+          # `mergeable: CONFLICTING` for a PR that was in fact clean, and settled to MERGEABLE about
+          # 15 seconds later. W1-C read that transient as a real conflict and said so.
+          #
+          # The poll above does NOT catch it, because GitHub returned a confident wrong answer rather
+          # than UNKNOWN. So the only defence is to ask again: a real conflict persists, a racing
+          # read does not. Without this, the check fails on almost every push to `main` -- the exact
+          # trigger it needs most -- and a check that cries wolf is one people switch off.
+          if [ "$conflicting" != "0" ]; then
+            echo "$conflicting PR(s) read as CONFLICTING; re-verifying in 30s before failing"
+            sleep 30
+            gh pr list --repo "$REPO" --state open --json number,title,mergeable,isDraft               > /tmp/prs.json
+            conflicting=$(jq -r '[.[] | select(.mergeable == "CONFLICTING")] | length' /tmp/prs.json)
+            if [ "$conflicting" = "0" ]; then
+              echo "::notice title=Transient::The CONFLICTING reading did not survive a re-check. Not failing."
+            fi
+          fi
+
+          if [ "$conflicting" != "0" ]; then
+            jq -r '.[] | select(.mergeable == "CONFLICTING")
+                   | "::error title=PR #\(.number) is CONFLICTING and its CI is SILENT::GitHub cannot build refs/pull/\(.number)/merge, so no CI run is created for this PR at all -- it is not failing, it is absent. Merge origin/main into the branch to restore it."' \
+              /tmp/prs.json
+            echo "::error::A conflicting PR produces NO workflow run. The absence of a red tick is not a green one."
+            exit 1
+          fi
+
+          echo "Every open PR is mergeable; no CI is being silently suppressed."

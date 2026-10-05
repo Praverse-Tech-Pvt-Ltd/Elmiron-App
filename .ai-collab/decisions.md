@@ -2217,3 +2217,394 @@ and an MR cannot tell which screen they are on.
 the loss is the entire queue, not one item. `loadQueueState` would read the torn value as
 `unreadable` (FE-W44), so every writer refuses rather than overwrites, and that stops a second loss.
 It does not recover the first.
+
+### An id collision, and why W1-A's nine rulings moved to C21-C29
+
+**Recorded because a renumbering that is not explained looks like a mistake later.**
+
+Two sessions ran in parallel on 28 September 2026 and **both minted `C20`** from the same
+high-water mark of `C19`. The frontend session's `C20` (FE-D1, immediately above) **merged to `main`
+first** -- PRs #3, #4 and #5 landed between 08:07Z and 08:17Z -- so it keeps the id, and W1-A's
+nine rulings, which were still on an unmerged branch, shift by one to **`C21`-`C29`**.
+
+**The mapping, for anyone holding the earlier numbers:**
+
+| W1-A originally | Now | Ruling |
+| --- | --- | --- |
+| `C20` | **`C21`** | R1 -- no real doctor conversation or recording |
+| `C21` | **`C22`** | R2 -- practice simulation is in scope |
+| `C22` | **`C23`** | R3 -- AI analysis in scope for practice and learning |
+| `C23` | **`C24`** | R4 -- AI-generated text is never born approved |
+| `C24` | **`C25`** | R5 -- no patient information anywhere |
+| `C25` | **`C26`** | R6 -- the operator is the approver |
+| `C26` | **`C27`** | scores, the safe default |
+| `C27` | **`C28`** | R7 -- target 4 October 2026 |
+| `C28` | **`C29`** | R8 -- the real-doctor rows are deferred |
+
+**The cause was structural, not carelessness, and it will recur.** `.ai-collab/decisions.md` mints
+ids by reading its own highest, and two branches cannot both do that safely. Nothing in the repo
+reserves a range or detects a duplicate. Registered as **`BE-W118`**.
+
+## Operator decisions — 28 September 2026 (recorded in W1-A)
+
+**Nine rulings, recorded before any work started.** Eight are the operator's `R1`–`R8`; the ninth
+(`C27`) is the safe default this session was instructed to build to on scores. They are numbered
+`C21`–`C29`. They were **originally minted as `C20`–`C28`** against a high-water mark of `C19`
+(MR-54) and shifted by one when the frontend session's `C20` reached `main` first — the collision
+note immediately above this section has the mapping and the cause.
+
+Each names the register row it resolves or defers. The register numbering `#1`–`#36` is the
+client-facing one in `docs/ai-platform/decisions-pending.html`; `D`/`X` ids are
+`docs/ai-platform/phase-a-recon.md` §3/§4.
+
+| Ruling | Id | Resolves / defers |
+| --- | --- | --- |
+| R1 no real recording | **C21** | ratifies the `C3`/`#18` posture; makes it a decision |
+| R2 simulation in scope | **C22** | **resolves `X4` / `#15`** |
+| R3 AI analysis in scope | **C23** | resolves the in-scope half of `X4` / `#15` |
+| R4 LMS AI draft text | **C24** | new hard rule; bounded by `#7` / `D5` |
+| R5 no patient information | **C25** | **resolves `X1` / `#12`** |
+| R6 operator approves content | **C26** | **resolves `D8` / `#9`**; ratifies `X5` / `#16` |
+| (F1) scores, safe default | **C27** | resolves the buildable half of `X2` / `#14`; `#14` stays open |
+| R7 target 4 October 2026 | **C28** | — |
+| R8 real-doctor rows deferred | **C29** | **defers `#18`–`#26`** |
+
+**What these nine do NOT do.** They do not unblock a single live AI call. `#4` / `D1` (where the
+gateway runs) and `#5` / `D2` (which provider, and may data leave India) remain open, and every
+feature below needs both. That is stated here so a reader of this section alone cannot conclude
+that AI is now startable.
+
+
+### C21 — No real doctor conversation or recording in this release
+
+**Decided (operator).** The consultation-recording feature stays **built and switched off**. Its
+feature flag stays `false` in the repository and its production guard stays enforced — the app
+refuses to start if the flag is turned on against anything but a local target.
+
+**Resolves nothing. Ratifies** the posture that `C3` (the PV/DPDP signatory, register `#18`)
+forced. The difference is that the posture is now a decision rather than a consequence of a
+missing signature, so a later signature does not automatically switch it on.
+
+**What follows.** `transcript_analysis`, `pv_screening` and `complaint_screening` stay out of scope
+for this release whatever `#18` does later, because there is no real conversation for them to
+analyse. Their flags stay off.
+
+**Not chosen:** removing the feature. It is built, tested and flag-guarded; deleting it would throw
+away work that `#18` may release, and a deletion is not reversible the way a flag is.
+
+
+### C22 — AI doctor SIMULATION / PRACTICE is in scope
+
+**Decided (operator).** Practice simulations with no real doctor are in scope for this release.
+
+**Resolves `X4` / register `#15`.** The recorded rule *"coaching is out of v1"* (`C4`) is hereby
+**scoped**: it covers coaching on **real doctor visits**, which is employee monitoring (`C8`). It
+does **not** cover practice simulations an MR chose to run against a synthetic persona.
+
+**Why the distinction holds.** `C4`'s reasoning was about analysing a real consultation without a
+written §3.6 and a named human. A simulation has no doctor, no patient, no consent ledger and no
+clinical content — none of `C4`'s reasons reach it.
+
+**Not chosen:** reading `C4` as covering everything coaching-shaped. That reading would have
+blocked the only AI work this release can do.
+
+
+### C23 — AI analysis is in scope for practice and learning
+
+**Decided (operator).** AI analysis is in scope for practice simulations, performance feedback on
+those simulations, product knowledge, objection handling, communication, and learning progress.
+
+**Resolves** the in-scope half of `X4` / `#15`, with `C22`.
+
+**Bounded by `C27`.** "Performance feedback" does **not** authorise a manager-facing score.
+
+**Bounded by `C21`.** No analysis of a real visit, a real transcript or real audio.
+
+
+### C24 — LMS may use AI-generated text as DRAFT knowledge
+
+**Decided (operator).** The LMS may use AI-generated text extensively, **as draft knowledge to be
+refined and finalised later**.
+
+**The hard rule this creates, and it is the most dangerous line in this release.**
+**AI-generated text is never born approved.** It enters as a **draft** version, is labelled with
+the fact that a model produced it, and can only become approved through the existing four-eyes
+path (`20260924000600_knowledge.sql`). **No seed, script or migration may insert approved
+knowledge.**
+
+**The line `C24` does not cross, and it is a regulatory line, not an engineering preference.**
+`C24` permits AI-generated **training** text. **Product claims, indications and prescribing
+information are regulated promotional content and must come from the client** (register `#7` /
+`D5`). A model may draft how to *explain* a product; it may not be the source of what the product
+*does*. A draft must therefore show which market and which product it claims to be about, so a
+reviewer can see when a draft has crossed from training into promotion.
+
+**Not chosen:** trusting the approver to notice. A review screen that does not show the market and
+product a draft claims makes four-eyes a formality.
+
+
+### C25 — No patient information anywhere in the MR app
+
+**Decided (operator).** No patient information anywhere in this app. Where patient-related data
+exists at all, it is **admin-only**.
+
+**Resolves `X1` / register `#12`.** The existing guardrails stay —
+`packages/core/src/field/gateway/guardrails.ts` refuses before any model call — and **no
+patient-facing assistant is built in this repository**. `patient_education` stays absent from
+`AI_FEATURES`.
+
+**Not chosen:** adding patient tables "for later". `constraints.md` — *"Zero patient or clinical
+data in this repo. Not even placeholder tables."* — is untouched.
+
+
+### C26 — Content approval is performed by the operator
+
+**Decided (operator).** The operator is the named approver for knowledge and for AI prompt
+versions.
+
+**Resolves `D8` / register `#9`**, and ratifies `X5` / `#16` — the mechanism (a named `admin`
+holding the approve action plus a stored written attestation, three roles kept) was already built
+by AI-C1 and is now confirmed as the intended shape.
+
+**The consequence the operator must act on.** The four-eyes rule holds: the author may never
+approve their own content. **So the operator needs their own `admin` account, separate from whoever
+drafts.** With one admin account, every approval is refused `42501`. This is account provisioning
+for a human, not an engineering task.
+
+**Not chosen:** a medical-reviewer role. A fourth role may never exist here (`constraints.md`).
+Medical sign-off is a **process** fact — a named admin who is the medical reviewer — recorded in
+the attestation text.
+
+
+### C27 — Scores: the safe default, and the question that remains
+
+**Decided (build to the safe default; one question still open).** Scores exist on **practice
+simulations** and **LMS assessments**, visible to **the MR themselves** and to the **company
+admin**. **Not on any manager surface**, and **no team averages or rankings**, until the recorded
+rule is amended in writing.
+
+**Resolves the buildable half of `X2` / register `#14`. Does not resolve `#14`.** The open question
+is put to the operator in `docs/blocked-on-you.md`: *may a manager see an MR's practice scores?*
+
+**Why the default is the safe one.** `constraints.md` — *"Never add a ranking, score, rank,
+percentile or grade to `analyses` or the manager surface"* — is asserted by tests
+(`packages/core/src/field/analysis.ts:7-10`). Building to MR-and-admin visibility keeps that rule
+intact. Building to manager visibility would break it, and a build may not break it.
+
+**What each answer costs.** (a) MR-only — the rule stands, nothing to amend, §34's team averages
+stay out. (b) Manager-visible — the rule must be **formally amended in writing**, and it becomes
+**employee monitoring**, which brings the `C8` reasoning and an HR/legal question with it. Register
+`#17` is the adjacent unanswered question about whether a manager may see AI usage at all.
+
+**Not built this session, in either case:** a manager-facing score surface.
+
+
+### C28 — Target: the MR field app functionally complete by 4 October 2026
+
+**Decided (operator).** The target is 4 October 2026.
+
+**Recorded with its limit, because a target met on paper and not in the app is this project's named
+failure mode.** `docs/ai-platform/AI-SPEC.md` carries a page headed *"What 4 October can and cannot
+include"* setting each in-scope feature against this date. The short form: **nothing that needs a
+live model can be built until `#4` and `#5` are answered**, and neither is an engineering task.
+What is buildable without them is the draft-labelling and approval path, the route wiring, and the
+console review screen.
+
+
+### C29 — The real-doctor decisions are DEFERRED, not blockers
+
+**Decided (operator).** Register rows **`#18` to `#26`** — the PV/DPDP signatory, the speech vendor
+for real visits, the doctor's notice, what a withdrawal means, and the consent clocks — are
+**deferred**. No work waits on them.
+
+**Resolves nothing. Changes the status** of nine rows from *blocking* to *deferred*, which is a
+real change: `#18` (`C3`) sat at rank 3 of the unblocking table in `docs/ai-platform/INVENTORY.md`
+§D3, gating ~9 items. Those items are now **out of this release** rather than waiting.
+
+**Two consequences recorded rather than deferred with them.**
+
+1. **`#26`'s two clocks still decide whether a recording can be filed at all**, and since `C18`
+   they also bound `recorded_at` on every audio upload. Deferring the ratification does not make
+   the unratified defaults go away; it means the app ships with two numbers nobody has confirmed.
+   That is acceptable **only** because `C21` keeps the recording path off.
+2. **`#21` is the DOCTOR's notice. The reps' notice is a different row and is not deferred.**
+   `blocked-on-you` 2.6 / `FE-W52` — the reps' transparency notice, six of eight claims false or
+   partly false — is outside the `#18`–`#26` range, is still live on `main`, and `C29` does not
+   touch it.
+
+**Not deferred:** `#1` (UCPMP cap, CI red 6 November), `#2` (per-company settings), `#3` (registered
+legal name, cost accrues daily), `#4`–`#11`, `#14`, `#17`, and `#27`–`#36`.
+
+
+## Operator decisions — 28 September 2026 (recorded in W1-B)
+
+**Two rulings, `C30` and `C31`.** `C29` was the previous highest (W1-A, after the `BE-W118`
+renumbering). **Recorded after Part A rather than before it**, because CI had produced no run for
+four commits and nothing else in the session could be evidenced until that was fixed; the ordering
+deviation is noted rather than presented as the plan.
+
+
+### C30 — The AI gateway runs as a Supabase Edge Function
+
+**Decided (operator). This answers register `#4` / `D1`, the decision that gated every AI
+feature.** Approved as recommended in `docs/ai-platform/phase-a-recon.md` §4's option (a).
+
+**The gateway stays deliberately dumb, and that is the whole design.** It holds the vendor key,
+calls the model, validates the output, and writes results back through RPCs **as the user's token**.
+**It may not grant anything the database would refuse.**
+
+**Why that constraint is the point, not a detail.** `.ai-collab/constraints.md`: *"RLS is the
+enforcement layer, never application code."* A gateway calling RPCs with a `service_role` key would
+move every authorisation decision out of Postgres and into a TypeScript file — the feature would
+appear to work and the tenant boundary would be gone. Passing the caller's JWT through keeps
+`ai_begin_request` deciding, as it does for a database test today.
+
+**What this unblocks:** the runtime half of `product_qa`, `mr_chat`, `lms_tutor`, `ai_doctor` and
+`ai_coach`. **What it does NOT unblock:** any of them actually answering, because `#5` is still
+open — see `C31`. Rank 1 of `INVENTORY.md` §D3 is now closed; rank 2 is not.
+
+**Not chosen:** a separate Node service (option b — *"exactly the second backend the prompt and
+`architecture.md` both warn against"*) and workers-only (option c — *"cannot serve interactive
+chat or a live AI Doctor"*). `BE-W7`'s original objection to Edge Functions was re-measured on
+24 September and no longer holds on testability; its second point — one more place for logic to
+live — stands and is answered by keeping the function dumb.
+
+
+### C31 — `#5` / `D2` is NOT answered, and was not guessed
+
+**Recorded (operator). India / Mumbai data residency STANDS.** The operator asked for a shortlist
+of providers that can meet it, text **and** voice, judged on quality, latency, cost, and data and
+privacy terms, and will finalise immediately after reading it.
+
+**Delivered: `docs/ai-platform/PROVIDER-SHORTLIST.md`**, with every claim carrying the vendor URL
+and the date read, and **17 cells marked UNVERIFIED** rather than filled in.
+
+**The three findings the operator should read before choosing.**
+
+1. **OpenAI's direct API fails the requirement on its own documentation.** India is a **storage**
+   residency region and **not a processing** region; regional processing is US, Europe and the UAE
+   only, and the docs say OpenAI *"may also process and temporarily store Customer Content outside
+   of the Region"*. Storing in Mumbai while inferring in Virginia is not residency.
+2. **AWS Bedrock in the India geography is the only candidate documenting both halves** — routing
+   *only* within India (`ap-south-1`/`ap-south-2`) and zero data retention by default. **Its one
+   documented exception — abuse-flagged content retained for offline review — does not say where
+   that copy lives**, and that is the most important unverified cell in the document.
+3. **Voice is not funded.** On the cheapest verified vendor, at 20 reps practising 80 minutes a
+   month, voice costs **≈$58/month against a $10–40 budget**, and text-to-speech is five times the
+   speech-to-text half. There is no volume at which it fits. **Recommendation: Sarvam for voice,
+   and voice waits** — it also has nothing to run on, since AI Doctor does not exist.
+
+**Recommendation for text: AWS Bedrock India, with Sarvam beside it once Sarvam's written
+no-training and retention terms exist.** Sarvam is cheaper, Indian and best on Indian languages on
+a published third-party benchmark it did not author (**5.0% Hindi WER against OpenAI's 33.9%**),
+but its retention and training terms are absent from every vendor page I could read, and a
+marketing summary is not a term.
+
+**Not decided, and engineering must not decide it:** the vendor. `C30`'s adapter ships as a stub
+that cannot run outside a local target, so the repository still names no vendor.
+
+**One item that is NOT deferred by `C29`, and the operator must resolve it about their own
+organisation:** a vendor contract needs a **signatory**. `C29` deferred register `#18`, the
+PV/DPDP signatory, for *real doctor* work. A data processing agreement with an AI vendor needs
+someone to sign it whether or not a doctor is ever recorded.
+
+
+## Reviewer rulings — 28 September 2026 (recorded in W1-C)
+
+**Three rulings, and they are the first to use the new per-track id namespace `BE-C<n>`** — which
+is itself one of them (`BE-C3`). `C1`–`C31` keep their names; nothing is renumbered again.
+
+
+### BE-C1 — `BE-W115`: build the detection report, not the session-scoped flag
+
+**Decided (reviewer).** Build the **detection report** now. **Do not** build the session-scoped flag.
+
+**The reasoning, which is the part worth keeping.** A `BYPASSRLS` caller is an **insider holding the
+service key**. That is a different threat from the one four-eyes exists to stop — a colleague
+approving their own draft — and defending against it with a session flag buys little while adding a
+mechanism this schema has nowhere, with its own failure mode (a flag left set). **Detection is
+cheap, honest, and does not pretend the hole is closed.**
+
+**`BE-W115` stays OPEN** with this reasoning attached, rather than being closed by a partial fix.
+
+**The note that travels with it, restated because it is the load-bearing half:** the four-eyes path
+is **sound for every route an application offers**. A signed-in admin — including the operator under
+`C26` — reaches `approve_knowledge_version`, which refuses an author approving their own work, an
+empty attestation, and a version not in review. **What fails is the claim that bypass is
+impossible**, not the control itself. `C24`'s wording — *"no seed, script or migration may INSERT
+approved knowledge"* — is true as written and is not true of an **update**.
+
+**Not chosen:** closing `BE-W115` because detection exists. A report is evidence after the fact, not
+prevention, and recording it as closed would be the "a flag nobody displays is a log line with extra
+steps" failure in reverse.
+
+
+### BE-C2 — CR-4: the geofence verdict keeps the centre point; the check-in is FLAGGED as approximate
+
+**Decided (reviewer).** The geofence **verdict** keeps using the centre point. Do **not** widen or
+narrow it by accuracy. Instead, **flag the check-in as approximate when `accuracy_metres` exceeds the
+clinic's geofence radius.** Nothing is refused on the flag.
+
+**Why the verdict is left alone, in the reviewer's words: a verdict that silently changes meaning
+with fix quality is worse than one that is wrong the same way every time.** An accuracy-widened
+geofence would mean "inside" meant something different for every check-in, and no screen or report
+could say which. Wrong-but-consistent is auditable; wrong-but-variable is not.
+
+**The division of labour this sets, and it matches the repository's standing rule** (`constraints.md`,
+FIX-02 — *"Re-derive facts the server owns. Record facts the client witnessed."*):
+
+| | |
+| --- | --- |
+| **The flag** | a fact the **device reported**. Recorded, not re-derived |
+| **The verdict** | the **server's rule**. Re-derived at write time, ignoring what the client thinks |
+
+**Not chosen:** refusing an approximate check-in. A rep who granted approximate-only location (which
+the operator ruled acceptable at first run, FE-D2 10) would otherwise be unable to work at all.
+
+
+### BE-C3 — Ids are minted per track: `BE-C<n>` and `FE-C<n>`
+
+**Decided (reviewer). This is the fix for `BE-W118`.** Two tracks minted `C20` independently on
+28 September because each read the same file's highest id, which is only correct on one branch at a
+time.
+
+**From now on: the backend track mints `BE-C<n>`, the frontend track mints `FE-C<n>`, each from its
+own sequence, starting at 1.** The existing `C1`–`C31` **stay as they are** — they are cited in
+migrations, tests, screens and three registers, and renaming them would cost more than the ambiguity
+they carry.
+
+**Where this rule lives, because a rule only one track reads is not a rule.** It is recorded in
+three places on purpose:
+
+1. **`CLAUDE.md`** — loaded into every session of **both** tracks before any code is read. This is
+   the only file with that property, and an id-namespace rule is exactly the kind of claim that
+   belongs there: it holds for all time and needs no command to check it.
+2. **`docs/contract-requests.md`** — the file the two tracks use to talk to each other.
+3. **here**, because this is where decisions are recorded.
+
+**What it does not fix:** `BE-W` and `FE-W` work-item ids are minted the same way from
+`COMPLETION-PLAN.md`, and they are **already** per-track by prefix, so the same collision cannot
+happen to them. `BE-W118` stays open for the CI half of its root cause — two tracks appending to the
+same documents — which `W1-C` Part B addresses separately.
+
+---
+
+## Where new decisions go, from 29 September 2026 — `BE-W120`
+
+**This index is the only part of this file that is meant to stay short and stable.** It changes only
+when a track is added, so two sessions cannot conflict in it.
+
+| Track | Appends to |
+| --- | --- |
+| Backend / AI platform | **`.ai-collab/decisions-backend.md`** |
+| Frontend / field app | **`.ai-collab/decisions-frontend.md`** |
+
+**Everything above this line stays here, including `C1`–`C31`.** Nothing moved, so no citation
+breaks.
+
+**Why**, in one paragraph, so it is not re-litigated: both tracks appended here and to
+`PROJECT-OVERVIEW.md`, and **all four conflicts observed on 28 September were in those two files**.
+A conflicting pull request gets **no CI run at all** — GitHub cannot build `refs/pull/N/merge` — so
+a conflict in a *log file* was silently removing the branch's verification. It does **not** fix id
+collisions; `BE-C3`'s per-track prefixes did that, and `BE-W118` conflating the two is what made the
+`C20` renumbering a surprise.

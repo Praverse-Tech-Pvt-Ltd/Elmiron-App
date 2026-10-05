@@ -169,6 +169,9 @@ export default tseslint.config(
       '**/.next/**',
       '.pnpm-store/**',
       'services/api/supabase/.temp/**',
+      // W1-N: git-ignored copies for the reviewer. Copied .ts files belong to no tsconfig, so a
+      // type-aware lint run from the root would fail on them; they are never authored here.
+      'review-handoff/**',
     ],
   },
   js.configs.recommended,
@@ -206,6 +209,10 @@ export default tseslint.config(
             '**/*.test.tsx',
             '**/*.spec.ts',
             '**/tests/**',
+            // W1-G D1: the browser suite and its helpers. `e2e/` is the console's test directory
+            // the way `tests/` is the api's -- a helper beside a spec is still test code, and it
+            // must be allowed the same devDependencies the spec next to it uses.
+            '**/e2e/**',
             '**/*.config.ts',
             '**/*.config.mjs',
           ],
