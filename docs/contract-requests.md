@@ -1021,3 +1021,19 @@ branches land — and the model is still unavailable (AWS access, `docs/operator
 on the merged code both still read the mock.
 
 **Status:** open — asked 2 October.
+
+### `FE-CR-7` and `FE-CR-11` — **LANDED on `main`** (5 October, W1-W A)
+
+**In one line: the app can now import the chat, allowance and AI Doctor practice shapes from
+`@fieldforce/core` on `main` — `MrChatResult`, `AiAllowanceSchema` (with `resetsAt`),
+`StartSimSessionResponseSchema`, `SimTurnResult`, `SimCoachAnalysisSchema` — so `src/assistant/contract.ts`
+and `src/practice/contract.ts` can go.**
+
+* PR #2 merged as `bf68c9c`; CI green on that commit (database: 80 files, 1102 passed). Before it, `main`
+  had none of `packages/core/src/field/ai.ts`, `simulation.ts` or `gateway/`; now all are exported from
+  the package root.
+* **One consequence for you: PR #13 (`fe-d14-screens`) now CONFLICTS with `main`**, so GitHub runs no CI
+  on it (the "PR mergeability" job said so on `bf68c9c`). One file: `docs/contract-requests.md`, where
+  both sides appended at the old end. Resolution is to keep both blocks. PRs #14 and #15 are mergeable.
+* **New since `FE-CR-7` was answered** (`BE-C67`): the request log can now say `output_truncated` — an AI
+  answer cut off at its length limit. The app sees the same `failed` result as before; nothing to change.

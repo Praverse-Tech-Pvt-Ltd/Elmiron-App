@@ -1,7 +1,7 @@
 {
-  "_comment": "W1-B C1. `zod` is a BARE specifier in packages/core/dist, which Deno cannot resolve on its own. Pinned to the version packages/core/package.json declares so the gateway validates with the same zod the tests do -- a different major here would mean the contract the function enforces is not the contract the suite proved. W1-V A: the AWS SDK's Bedrock runtime client, approved W1-U2, pinned EXACTLY -- used only by _shared/bedrock-client.ts.",
+  "_comment": "W1-B C1. `zod` is a BARE specifier in packages/core/dist, which Deno cannot resolve on its own. W1-V A: the AWS SDK's Bedrock runtime client, approved W1-U2, used only by _shared/bedrock-client.ts. W1-W D: every version here is EXACT and equal to what pnpm-lock.yaml resolves for the workspace that tests it -- zod was the range ^4.1.12, which the deployed function would have resolved on deploy day. `services/api/scripts/check-function-pins.mjs` fails CI when they disagree.",
   "imports": {
-    "zod": "npm:zod@^4.1.12",
+    "zod": "npm:zod@4.4.3",
     "@aws-sdk/client-bedrock-runtime": "npm:@aws-sdk/client-bedrock-runtime@3.1144.0"
   }
 }

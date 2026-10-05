@@ -26,6 +26,7 @@ genuinely need credentials, legal text or master data."* Every decision you have
 | **Q-16** | Your answer | **May a manager plan for their direct reports only, or for everyone beneath them?** — section 7 | Manager planning (item 10) | No — but nothing of manager planning is built until Q-16–Q-18 are answered |
 | **Q-17** | Your answer | **Does the manager plan on the web console or on the phone?** — section 7 | Manager planning screens | Same |
 | **Q-18** | Your answer | **Does an MR's unplanned visit need the manager's approval before, after, or never?** — section 7 | Unplanned visits (`FE-W28`) | Same |
+| **Q-19** | Your answer | **Where may a full copy of the production database be kept: GitHub, a storage bucket you provide, or Supabase's own backups?** — section 8 | **The production deploy you approved** — its first step is a backup from today. And the backup job, which goes red from 16 October | **Yes — the deploy cannot start without it** |
 
 **Why Q-3 and Q-12 are here when the reviewer's brief asked for four items:** your rule covers anything
 needing credentials or legal text, and these two are exactly that. Where the brief and your rule
@@ -328,3 +329,36 @@ answers every unplanned visit.
 
 **The day figures above are estimates, not measurements.** The assumptions behind them are listed in
 `docs/design/MANAGER-PLANS-THE-DAY.md`, "What the estimate assumes".
+
+## 8. Q-19 — where may a backup of the production database be kept?
+
+**5 October 2026, W1-W E.** One question, one word: **GitHub**, **Bucket**, or **Supabase**.
+
+**Why it is urgent now.** You approved the production deploy (item 8). **Its first step is a backup
+taken today** (`docs/DEPLOY-RUNBOOK.md` 0.1), and there is no backup, because nobody has said where one
+may go. So the deploy is approved and cannot start. It was attempted on 5 October and stopped at that
+step — nothing in production was changed.
+
+**A second date.** The backup job has been allowed to sit idle until **15 October**. From
+**16 October** (UTC) it turns red, every Monday it runs, until this is answered or the date is moved
+in a commit that says why.
+
+**Why it is your decision.** A copy of this database holds every user account, doctors' names, the
+consent records and adverse-event text. Where it is kept is a data-protection choice, not a technical
+one (`docs/blocked-on-you.md` 6.3).
+
+| Answer | What it means | What it costs | Work after your answer |
+| --- | --- | --- | --- |
+| **Supabase** | Supabase's own daily backups, part of the paid plan you approved | Nothing extra — if the plan includes backups, which has never been checked (6.2) | Confirm the plan is active and takes backups; change runbook step 0.1 to "a Supabase backup from today exists". **About 1 hour** |
+| **GitHub** | The copy is kept with the code, as a GitHub file kept about 90 days | Free | Add the step that stores it. **About half a day** |
+| **Bucket** | Your own storage (Amazon S3, Google Cloud), with a key you create | A few dollars a month, plus creating the bucket and key | Add the step that stores it there. **About half a day** |
+
+**Engineering's recommendation, not a default:** **Supabase.** The data stays with the company that
+already holds it, with no new place and no new key (where Supabase stores its backups has not been checked). This one is not ours to default.
+
+**Found while preparing this question (`BE-W143`):** whichever answer you give, **we still have to add a
+step**. The backup job today would make a copy, check it, and then throw it away — it never stores it
+anywhere. The note in the job that says "no code change needed" is wrong. That is engineering's
+mistake, not something you need to act on; the times above include fixing it.
+
+**The time estimates are ours, not measured.**

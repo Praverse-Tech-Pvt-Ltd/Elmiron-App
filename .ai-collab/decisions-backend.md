@@ -591,3 +591,29 @@ disagreement could be checked, because the operator's text was not provided.**
   default working hours can only ever be TEMPORARY (the 60-day expiry checks the key, not the scope —
   `BE-W140`); and the UCPMP decision check runs with no caller, reads only the GLOBAL cap, and would still
   fail the build on 6 November after a company sets its own cap (`BE-W141`).
+
+## `BE-C67` — **a cut-off answer is not a broken one: `output_truncated`** (W1-W C, 5 October)
+
+- **What the vendor reports, measured from the pinned SDK, not from documentation:** `StopReason` in
+  `@aws-sdk/client-bedrock-runtime` 3.1144.0 (`dist-types/models/enums.d.ts`) has nine values —
+  `content_filtered`, `end_turn`, `guardrail_intervened`, `malformed_model_output`, `malformed_tool_use`,
+  `max_tokens`, `model_context_window_exceeded`, `stop_sequence`, `tool_use`. An answer cut off at the
+  token limit is `max_tokens`.
+- **What the log said before:** the adapter read `max_tokens` as an ordinary finish, the half-answer
+  failed `JSON.parse`, and the request was logged **`schema_invalid`, error code `not_json`** — beside
+  garbage output. `BE-C64`'s confusion by a second door, and the coach (the longest output) first.
+- **Decided: a NEW flag, `output_truncated`**, not an existing one. `schema_invalid` would keep the
+  confusion; `provider_error` would say the call failed when it succeeded; `model_refused` would say the
+  model declined when it did not. The remedy differs too — a truncation is fixed by the prompt version's
+  `maxTokens`, nothing else is.
+- **Made exactly as `BE-C64` was:** `LlmResult.truncated` set from the vendor's stop reason, never from
+  the text; `generateStructured` reports it before parsing; `invalidOutput` logs `output_truncated`;
+  `20261005000100` lets the database accept it; its rollback refuses while one is recorded (`BE-C65`).
+  Decided by backend for the same reason as `BE-C64`: re-measured on 5 October, **nothing reads
+  `ai_requests`** but its two writers (`ai_begin_request`, `ai_complete_request`; no view), and no app
+  file on `main` or on the three unmerged frontend branches reads `flags` or `error_code`. Only ADDS.
+- **Every stop reason, decided** (`STOP_REASON_MEANING`, keyed on the SDK's own type, so a new one fails
+  to typecheck): `content_filtered`, `guardrail_intervened` → refused; `max_tokens`,
+  `model_context_window_exceeded` → truncated; `end_turn`, `stop_sequence`, `tool_use`,
+  `malformed_tool_use`, `malformed_model_output` → handed to validation, which decides (§38).
+  **W1-V's `refusal` is not on the list** — it came from documentation — and is removed.

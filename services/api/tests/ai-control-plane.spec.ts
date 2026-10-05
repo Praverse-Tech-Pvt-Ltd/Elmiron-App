@@ -768,3 +768,64 @@ describe.skipIf(!reachable)(
     });
   },
 );
+
+/**
+ * W1-W C (`BE-C67`). The `output_truncated` rollback follows `BE-C65`: it refuses, by name, while a
+ * truncated answer is recorded, and rolls back cleanly when none is. Run EXACTLY as committed.
+ */
+describe.skipIf(!reachable)(
+  'W1-W C — the output_truncated rollback refuses to rewrite history',
+  () => {
+    const ROLLBACK = readFileSync(
+      new URL(
+        '../rollbacks/20261005000100_ai_request_flag_output_truncated.down.sql',
+        import.meta.url,
+      ),
+      'utf8',
+    );
+
+    /** One request that ran and was cut off at the token limit, written the way the flows write it. */
+    const recordTruncation = async (client: Client): Promise<void> => {
+      const mr = world.users.puneMr;
+      const prompt = await client.query<{ id: string }>(
+        `insert into public.ai_prompt_versions
+         (organisation_id, feature, version_number, system_prompt, created_by_user_id)
+       values ($1, 'mr_chat', 998, 'W1-W C', $2) returning id`,
+        [world.organisationId, mr.id],
+      );
+      const request = await client.query<{ id: string }>(
+        `insert into public.ai_requests (organisation_id, user_id, feature, prompt_version_id)
+       values ($1, $2, 'mr_chat', $3) returning id`,
+        [world.organisationId, mr.id, prompt.rows[0]?.id],
+      );
+      await client.query(
+        `update public.ai_requests set status = 'failed', completed_at = clock_timestamp(),
+              flags = array['output_truncated'], error_code = 'output_truncated' where id = $1`,
+        [request.rows[0]?.id],
+      );
+    };
+
+    it('a recorded truncation BLOCKS the rollback, by name — the row is not rewritten', async () => {
+      await inRolledBackTransaction(async (client) => {
+        await recordTruncation(client);
+        await expect(client.query(ROLLBACK)).rejects.toMatchObject({ code: '55000' });
+      });
+    });
+
+    it('with none recorded, it rolls back cleanly and output_truncated leaves the list', async () => {
+      await inRolledBackTransaction(async (client) => {
+        const before = await client.query<{ n: string }>(
+          `select count(*) n from public.ai_requests where 'output_truncated' = any (flags)`,
+        );
+        expect(Number(before.rows[0]?.n), 'precondition: no truncation recorded').toBe(0);
+        await client.query(ROLLBACK);
+        const { rows } = await client.query<{ def: string }>(
+          `select pg_get_constraintdef(oid) as def from pg_constraint
+          where conrelid = 'public.ai_requests'::regclass and conname = 'ai_requests_flags_known'`,
+        );
+        expect(rows[0]?.def).not.toContain('output_truncated');
+        expect(rows[0]?.def).toContain('model_refused');
+      });
+    });
+  },
+);

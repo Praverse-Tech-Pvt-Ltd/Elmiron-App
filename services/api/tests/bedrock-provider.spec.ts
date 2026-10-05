@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { ProviderError, providerFailure } from '@fieldforce/core';
+import {
+  MrChatOutputSchema,
+  ProviderError,
+  generateStructured,
+  invalidOutput,
+  providerFailure,
+} from '@fieldforce/core';
 import type { LlmGenerateRequest } from '@fieldforce/core';
 import {
   BedrockConfigurationError,
@@ -127,6 +133,56 @@ describe('A3 — what the vendor reports is mapped, and its message never leaves
       flags: ['provider_error'],
       errorCode: 'provider_error',
     });
+  });
+});
+
+/**
+ * W1-W C (`BE-C67`). A cut-off answer is not a broken one. The same half-answer is sent twice; only
+ * the vendor's stop reason differs, so the two outcomes are told apart by the SIGNAL, never the text.
+ * Run through `generateStructured` and `invalidOutput` — exactly what the five flows log.
+ */
+describe('W1-W C — a truncated answer is not a malformed one', () => {
+  const HALF = '{"inScope": true, "answer": "Tap Day end, then confirm the odome';
+  const halfWith = (stopReason: string) => () =>
+    Promise.resolve({
+      output: { message: { content: [{ text: HALF }] } },
+      stopReason,
+      usage: { inputTokens: 31, outputTokens: 4096 },
+    });
+  const logged = async (stopReason: string) => {
+    const provider = createBedrockProvider({
+      region: 'ap-south-1',
+      profileId: INDIA_PROFILES.sonnet,
+      converse: fake(halfWith(stopReason)).converse,
+    });
+    const structured = await generateStructured(provider, MrChatOutputSchema, {
+      messages: request().messages,
+      modelConfig: { maxTokens: 4096 },
+      signal: new AbortController().signal,
+    });
+    if (structured.ok) throw new Error('a half answer must never validate');
+    return invalidOutput(structured.reason);
+  };
+
+  it('max_tokens: the half answer is logged output_truncated', async () => {
+    expect(await logged('max_tokens')).toEqual({
+      flags: ['output_truncated'],
+      errorCode: 'output_truncated',
+    });
+  });
+
+  it('the IDENTICAL half answer with an ordinary stop is still logged schema_invalid', async () => {
+    expect(await logged('end_turn')).toEqual({ flags: ['schema_invalid'], errorCode: 'not_json' });
+  });
+
+  it('model_context_window_exceeded is a length limit too: truncated, not refused', async () => {
+    const result = await createBedrockProvider({
+      region: 'ap-south-1',
+      profileId: INDIA_PROFILES.haiku,
+      converse: fake(halfWith('model_context_window_exceeded')).converse,
+    }).generate(request());
+    expect(result.truncated).toBe(true);
+    expect(result.refused).toBeUndefined();
   });
 });
 

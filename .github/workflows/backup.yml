@@ -40,9 +40,11 @@ name: Database backup
 #
 # ## The re-enable trigger, named
 #
-# **Set the `BACKUP_DESTINATION` secret.** That is the trigger — there is nothing else to do and
-# no code change required. The moment it exists this workflow starts backing up on its schedule.
-# The options and their costs are in `docs/blocked-on-you.md` → 6.3.
+# **The operator's answer to Q-19, then a step that stores the copy there.** W1-W (`BE-W143`): this
+# said "set the secret, no code change required" — FALSE. The secret is only tested for emptiness;
+# nothing reads its value, and no step uploads the artefact, so with it set this job would produce
+# and verify a dump that the runner then discards. The options and their costs are in
+# `docs/operator-inputs.md` section 8 and `docs/blocked-on-you.md` → 6.3.
 #
 # ## The deferral, dated
 #
@@ -109,13 +111,13 @@ jobs:
             echo "::error::This is NOT a broken backup. Nothing was produced, because there is still"
             echo "::error::nowhere lawful to put it. A dump of this database contains the consent ledger,"
             echo "::error::doctors' names, adverse-event report text and every auth identity."
-            echo "::error::TO FIX: set the BACKUP_DESTINATION secret. Options and costs are in"
+            echo "::error::TO FIX: the operator answers Q-19 (docs/operator-inputs.md section 8), then a step stores the copy (BE-W143). Options and costs are also in"
             echo "::error::docs/blocked-on-you.md section 6.3. To defer again, change DEFERRAL_EXPIRES"
             echo "::error::in .github/workflows/backup.yml in a commit that says why."
             exit 1
           fi
 
-          echo "::notice title=BE-W11 deliberately disabled::Waiting on the backup destination decision. Deferred until $DEFERRAL_EXPIRES. Re-enable by setting the BACKUP_DESTINATION secret."
+          echo "::notice title=BE-W11 deliberately disabled::Waiting on the backup destination decision. Deferred until $DEFERRAL_EXPIRES. Needs the operator's answer to Q-19 AND a step that stores the copy (BE-W143) -- the secret alone stores nothing."
           echo "proceed=false" >> "$GITHUB_OUTPUT"
           {
             echo "## Database backup — deliberately disabled"
@@ -126,7 +128,7 @@ jobs:
             echo "| --- | --- |"
             echo "| Waiting on | a destination for the backup artefact — a data-processing decision |"
             echo "| Recorded in | \`docs/blocked-on-you.md\` section 6.3 |"
-            echo "| Re-enable trigger | **set the \`BACKUP_DESTINATION\` secret** — no code change needed |"
+            echo "| Re-enable trigger | **the operator's answer to Q-19, then a step that stores the copy** (BE-W143) — the secret alone stores nothing |"
             echo "| Deferred until | **$DEFERRAL_EXPIRES** — this job goes red after that date |"
             echo ""
             echo "Nothing was produced. The destination check runs before the dump precisely so"

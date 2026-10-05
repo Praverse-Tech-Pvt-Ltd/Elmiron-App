@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
 import {
+  BENCHMARK_CUT_OFF_TEXT,
   BENCHMARK_MATCHING_QUESTION,
   PRODUCT_QA_BENCHMARK,
   PRODUCT_QA_OUTPUT_SCHEMA_NAME,
@@ -171,6 +172,10 @@ const scripted = (behaviour: ScriptedModelBehaviour, calls: { n: number }): LlmP
         return r('It is fine to store it anywhere.');
       case 'refuses':
         return r('I cannot help with that request.').then((x) => ({ ...x, refused: true }));
+      case 'returns_cut_json':
+        return r(BENCHMARK_CUT_OFF_TEXT);
+      case 'truncates':
+        return r(BENCHMARK_CUT_OFF_TEXT).then((x) => ({ ...x, truncated: true }));
       case 'times_out':
         return new Promise(() => undefined);
       case 'must_not_be_called':
