@@ -1037,3 +1037,25 @@ and `src/practice/contract.ts` can go.**
   both sides appended at the old end. Resolution is to keep both blocks. PRs #14 and #15 are mergeable.
 * **New since `FE-CR-7` was answered** (`BE-C67`): the request log can now say `output_truncated` — an AI
   answer cut off at its length limit. The app sees the same `failed` result as before; nothing to change.
+
+### Status notes — 5 October 2026 (backend): three entries above are out of date
+
+Appended, not edited — each entry above stays as written; this records when each stopped being true.
+
+* **`FE-CR-7` ("NOT LANDED", 1 October night) — LANDED.** PR #2 merged on 5 October as `bf68c9c`.
+  **Checked as importable, not only present:** on a clean checkout of `main`, after building
+  `@fieldforce/core`, `import('@fieldforce/core')` from `apps/field` returns `AiAllowanceSchema`,
+  `StartSimSessionResponseSchema`, `SimCoachAnalysisSchema` and `MrChatOutputSchema`, and the type
+  declarations carry `MrChatResult` and `SimTurnResult`. The same holds for `FE-CR-11` (practice).
+* **`BE-CR-7` (2 October) asks Dev a question. Dev has left the project** (Maanav, 5 October). The
+  question still needs answering — which of `fe-d14-screens`, `fe-d16-coaching`, `fe-d17-practice`
+  goes to `main` — and its **owner is not yet named**.
+* **`BE-CR-6` (1 October) says "Dev owns the screen"** — the same: the screen's owner is not yet named.
+* **The PR #13 conflict reported in the entry just above is resolved** on `fe-d14-screens`:
+  `1721dca` (a merge of `main`) and `09ad0dd` (leftover markers removed), both by the Copilot agent.
+  Checked: no conflict marker remains; the file lost **0** lines against `main` and **0** against the
+  branch's previous head `ca57d84`; the frontend requests come before the backend answers; and PR #13's
+  change against `main` is exactly what it was before the merge (29 files, +2265 / −197). **Note:
+  `1721dca` itself was committed with conflict markers in this file** — the branch tip is clean, but
+  that commit is not. **CI has not run on either commit**: both read `action_required`, because GitHub
+  holds runs a bot triggered until somebody with write access approves them.
