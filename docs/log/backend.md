@@ -3944,3 +3944,183 @@ needs a paid plan for branch protection — those plan figures flagged as unveri
 head, for a PR to `main`; merging is Maanav's. The flags are off. **No credential appears anywhere in the
 diff** (checked against the env file's values before every commit). **The local env file still exists**
 (`services/api/supabase/functions/.env`, git-ignored) — needed the moment access is granted.
+
+### W2-A — the key, the log, the device
+
+**5 October 2026.** The service-role key made unreachable by accident; the forgeable request log argued
+and given a trigger; the app built and opened for the first time since the merges.
+
+#### The previous push's CI
+
+`a984b40` (W1-Z, PR #19 head): **CI green**, run `37292091173`, SHA = that commit. Database runner:
+**Test Files 81 passed (81)**, **Tests 1123 passed | 2 skipped | 4 todo (1129)**; unit runner: core 207 |
+4 todo, ui-tokens 59, ui 4 + 328, mock 43, field 707 + 272, console 76. PRs #18 and #19 then merged
+(`5c7b2a3`); CI green on `main` there. **Still no ruleset on `main`, and the repository is still public.**
+
+#### The priority override — did it fire? **No.** `NOT_AUTHORIZED`, both models, at the start and between every part.
+
+#### A — the property `C30` had, and no longer has (`BE-C70`)
+
+**A1 — said plainly.** `C30`'s guarantee was an ABSENCE: no reference to the service-role key anywhere in
+the function, so nobody in a hurry could reach for it. `BE-C69` spent it, rightly, and
+`ai-gateway/index.ts` still said "not read here at all". The header now says what it used to say, why it
+is no longer true, and what replaces it.
+
+**A2 — enumerated from the files.** `supabase/functions`: six code files (`ai-gateway/index.ts`,
+`_shared/{bedrock-client,bedrock-provider,core,practice-writer,stub-provider}.ts`) plus the git-ignored
+local `.env`, not opened. Environment reads: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `AI_PROVIDER`,
+`AWS_REGION`, the two AWS values, and **one** read of the key — in the GATEWAY (`index.ts:290`). `packages/core/src`,
+which the function imports: **no environment read at all**. **Changed:** the read moved INTO
+`_shared/practice-writer.ts`, which now exports one function (`practiceWriterFromEnv`) returning the
+two-function writer — never the key, never the client; the gateway no longer names the key (the one
+error message that did is reworded). **The check** — `services/api/scripts/check-service-role-reads.mjs`,
+a CI step in the static job — fails if the key's name appears in code (comments excepted) anywhere but that
+one read; if anything calls `Deno.env.toObject()`; if any `Deno.env.get` names its variable other than as
+a literal; if the writer exports anything else or its allow-list is not exactly the two names; or if
+`packages/core` reads the environment. **It cannot catch** deliberate obfuscation or a third-party
+package — it guards the hurried change, as `C30` did.
+
+**A3 — two-sided.** The repository passes; a copy with a second read, the name parked in a variable, a
+whole-environment read, a computed name, an extra export, a widened list, the read moved to the wrong file,
+or core reading `process.env` each fails, naming the file; the name in a comment does not. **Mutants of the
+checker:** whole-environment rule off, computed-name rule off, export rule off, list rule off, core rule
+off — **exactly one test each**; "more than one read allowed" — **two** (the second read and the parked
+name, both "a second mention"); comments counted as code — **nine** (the writer's own header names the
+key, so without stripping everything fails: structural, not overlap); **"one read but in the wrong file"
+— SURVIVED**: exactly one read, misplaced, was untested; a test added, it then failed exactly that test.
+Spec 11/11. The practice suite, against the served gateway after the move: **52/52**.
+
+**A4 — what else the key could reach, measured, not reassured.** Through the **database**, little: the
+service role holds REFERENCES/TRIGGER on 42 public tables and TRUNCATE on 30, but **no
+SELECT/INSERT/UPDATE/DELETE** — over REST it is refused (`403 42501` on `consent_records`,
+`sim_coach_analyses`, `user_profiles`); it may EXECUTE four functions — the two practice writers,
+`ingest_transcript`, `visible_territory_ids`. Through Supabase's **other services**, a great deal — and
+this is what `C30`'s absence made impossible: the **auth admin API** (`GET /auth/v1/admin/users` → 200:
+every account, to list, create or delete) and **Storage** (`GET /storage/v1/bucket` → 200, listing the
+private `audio` bucket of consent recordings). Measured on the LOCAL stack with its public demonstration
+key. Nothing in our code can narrow those; Supabase grants them to the key itself. The check is what
+stands between a hurried change and them.
+
+#### B — the log that can still be forged (`BE-W146`, `BE-C71`)
+
+**B1 — what a rep can write, and what reads it.** On their OWN `started` request: status
+(`completed`/`failed`/`blocked`), model provider and name, token counts, flags, error code, and approved
+knowledge versions; never another rep's (`r.user_id = caller`). **Readers:** `ai_begin_request` (the
+allowance counts rows BEGUN today, whatever their status — a forged completion changes nobody's allowance);
+the two practice writers (require `started` — closing early sabotages only the rep's own turn); an admin
+may `SELECT` it, but **no screen, report or export does**; nothing in either app or the console reads it.
+
+**B2 — argued.** For now: a forgeable log is not a log, and its token counts become the cost record the day
+the model is live. Against: no reader; a rep can falsify only their own rows; and the fix — close through
+the service-role writer — reaches all five flows and their tests and **widens what the key can do** (the
+writer could then close ANY rep's request). **Deferred, with a trigger**: before production AI traffic, or
+before anything reads `ai_requests` model/token/status fields — written into
+`docs/ai-platform/KEY-DAY-CHECKLIST.md` as a gate before production AI, where it will be read on the day.
+
+#### C — the app nobody had opened since the merges
+
+**C1 — a build IS possible here, with nothing installed.** The week-old blocker was not a missing tool: the
+demo script PINS CMake `3.31.6` (CMake 3.22.1's ninja is not long-path aware), and the Android SDK holds
+only `3.22.1`. **But Visual Studio 18 ships CMake `4.3.1` with ninja `1.13.2`.** `expo prebuild` (clean;
+no tracked file changed) + `local.properties` `cmake.dir` pointing there + JDK 17 → **`BUILD SUCCESSFUL in
+15m 23s`, 374 tasks** (`:app:assembleDebug`). The SDK has no `cmdline-tools`, so installing 3.31.6 would
+need Android Studio; pointing at the existing CMake avoids that. **The demo script still forces 3.31.6** —
+unchanged; to be decided.
+
+**C2 — the core day, end to end, on the Pixel 6a emulator, against a seeded local stack** (`db:reset` +
+`seed:day`: one rep, three doctors, five visits — 2 of today's 3 completed by the seed). Every write checked
+in the database afterwards. Emulator start needed `-skip-adb-auth` (headless, the authorisation prompt
+cannot be tapped); the AVD's data was not touched.
+
+| Screen | What it showed | Server, checked |
+| --- | --- | --- |
+| Sign-in | Form; an amber "Times may be wrong — could not get your territory's timezone" banner | — |
+| Today (after sign-in) | "Getting today's plan", banner still up; ~25 s later: "Started 13:50", **next visit Dr Asha Deshpande (DEMO), Main clinic, Pune, scheduled 13:00**, **2 of 3 attended**, "Everything sent"; banner GONE | 2 completed + 1 planned today; 07:30 UTC = 13:00 India; first start 08:20 UTC = 13:50 — **all correct** |
+| Microphone first-run | "Your note, in your own words" — chose "I'll type my reports" | — |
+| Visit | "Not started", "I am here — check in" | — |
+| Check-in (1st) | Android location prompt, then "turn on device location"; then **"This check-in cannot be sent yet — the phone could not find your position in time"** | honest: location had just been switched on |
+| Check-in (2nd) | **"You are checked in · Checked in 17:10"** | visit `in_progress`, 11:40:23 UTC; ONE `check_in` accepted. **Stored position 39.24, −123.15 — California, `outside`, 13,353 km from the clinic** (the emulator's provider ignored my Pune fix) — **the rep was told nothing** |
+| Consent | The seeded notice in full, version/language/hash shown; "Yes, that's fine" | ONE `consented` record, `en-IN`. **The visit screen showed no sign of it afterwards** — "Ask about recording" offered again, unchanged |
+| Samples | Form (name as on the pack, kind, packs, ₹ value), and an honest "This app does not count your samples against the UCPMP cap"; "Recorded, 1 recorded against this visit" | ONE `sample_and_input` accepted. **The rupee sign may render as a different glyph** — the text is `₹`; I am not certain from the image |
+| Check-out | "Visit finished · Checked in 17:10" (no check-out time shown); "Write your report" appears | visit `completed`, 11:44:41 UTC; ONE `check_out` |
+| Call report | Three fields, "Every word here is yours"; "Report sent — your manager sees this next time" | ONE `call_report` accepted; one row |
+| Today (after) | "That's everyone on the plan · 3 of 3 · Everything sent", "How today ended" | correct |
+| Day End | "Nothing is being recorded", **first check-in 13:50, last check-out 17:14**, **3 of 3**, **0.0 km** with the per-km rate honestly unknown | correct: one stored position, the seed's visits have none |
+| Mileage | "This month 0.0 km"; "5 Oct — 0.0 km · **1 check-ins**" | correct number; **"1 check-ins"** is a plural bug |
+| Me | Settings, three marked "Not yet — this setting does not control anything in this build" | — |
+
+**C3 — what was found.** No screen read the wrong thing: every number matched the database, every write
+arrived exactly once (5 items, 1 each). Found: (1) **an outside check-in is accepted and the REP is not told**
+— by design the manager sees `geofence_status`, but a rep whose phone gives a bad position looks like they
+faked a visit and never knows; (2) **consent leaves no trace on the visit screen** — nothing says it was
+given, and it can be asked again (a second record); (3) **"1 check-ins"**; (4) **no check-out time** on the
+finished visit; (5) **the ₹ glyph** — unconfirmed; (6) **the demo script still checks the mock at :4010**
+"for Day end" — Day End no longer reads the mock (`#13`). None blocks the day.
+
+**C4 — the two device gates, as lists.**
+
+*A signed build on a real handset:* (1) a **release key** — `prebuild` signs release with the DEBUG
+keystore (`signingConfig signingConfigs.debug`), so no build so far was signed in the sense a store or MDM
+requires; who holds the key is a decision; (2) the build path — VS CMake works here (C1); the demo script
+must accept it or 3.31.6 must be installed; (3) a **physical handset** — none attached to this machine;
+(4) a **server it can reach** — production is at 19 migrations, deploy blocked on Q-19 (`BE-W143`), so a
+handset today could only talk to a development server on the same network; (5) drop the stale mock check.
+**C2 changed (2) — no longer a blocker — and proved the code path on an emulator; (1), (3), (4) unchanged.**
+
+*A full offline day, 20+ queued writes arriving exactly once:* (1) the build and emulator path now exist
+(C1, C2); (2) a seeded day with enough visits for 20+ writes (`seed:day` gives 3 today — extend, or seed
+twice); (3) cut the network mid-day (`adb shell svc wifi disable` / `svc data disable`, or the emulator's
+network off), do the day, restore it; (4) check `sync_items` — every item `accepted`, exactly once, by the
+id minted at press; (5) repeat once on a physical handset. **C2 changed (1); the run itself was not done
+this session.** The logic is covered by `offline-day.test.tsx` (death and re-flush, in jest) — not on a
+device.
+
+#### D — the status table (measured this session, or cited)
+
+| MODULE | STATUS | OWNER | BLOCKER | ETA |
+| --- | --- | --- | --- | --- |
+| Core MR day — on an emulator against a local stack | DONE | Maanav | — | — |
+| Core MR day — on a real handset, signed | BLOCKED | Operator, then Maanav | A release key (who holds it), a handset, a reachable server (Q-19) | about 1 day after all three |
+| Offline day, 20+ writes, exactly once — on a device | IN PROGRESS | Maanav | — (build and emulator path now exist; run not done) | about ½ day |
+| Demo build script | IN PROGRESS | Maanav | Forces CMake 3.31.6 and checks a mock nothing reads | about ½ day |
+| AI Doctor practice + AI Analysis — wiring | DONE | Maanav | — | — |
+| AI Doctor practice + AI Analysis — real answers | BLOCKED | AWS account owner, then operator | Model access; approved prompts, personas, scenarios (Q-14) | ½ day after both |
+| Chatbot — wiring | DONE | Maanav | — | — |
+| Chatbot — real answers | BLOCKED | AWS account owner, then operator | Model access; approved prompt (Q-14) | ½ day after both |
+| Service-role key reachable from one place (`BE-C70`) | DONE | Maanav | — | — |
+| Request-log integrity (`BE-W146`) | POST-4-OCT | Maanav | None; deferred with a trigger (`BE-C71`) | about 1 day, before production AI |
+| Field findings from C2 (rep not told of outside check-in; consent invisible on the visit; "1 check-ins"; no check-out time) | POST-4-OCT | Maanav | None | about 1 day |
+| Product Q&A — app screen | POST-4-OCT | Maanav | None for the screen; content waits on Q-9, Q-14 | about 3 days |
+| LMS — app screens | POST-4-OCT | Maanav | None for the screens; content needs a loader | about 6 days |
+| Production deploy | BLOCKED | Operator, then Maanav | Q-19, then `BE-W143` | about 1 day after the answer |
+| Backup | BLOCKED | Operator, then Maanav | Q-19; red from 16 October | ½ day after the answer |
+| Branch protection on `main` | BLOCKED | Repository admin | Not applied (0 rulesets, measured) | minutes |
+| Repository visibility | BLOCKED | Operator | Q-20 | minutes, once decided |
+| Day planning (manager plans) | BLOCKED | Operator | Q-16, Q-17, Q-18 | 10–15 working days after the answers |
+| Second admin / consent legal name / sample cap | BLOCKED | Operator | Q-14 / Q-11 / Q-10 | same day / ½ day / ½ day |
+
+#### Checks
+
+* Static first: typecheck **0 errors**, lint **0 errors** (one frontend warning), format clean; ids clean
+  (`BE-C70`, `BE-C71` registered in the commits that first cite them).
+* **Clean-database check: All 29 step(s) passed** (one more than W1-Z: the service-role check, step 10) —
+  database **Test Files 82 passed (82)**, **Tests 1134 passed | 2 skipped | 4 todo (1140)** (the two
+  skipped: the gated live Bedrock tests); core 11 files, 207 | 4 todo; field 50 files, 707, and 39 screen
+  suites, 272; ui 4 and 30 screen suites, 328; console 76; ui-tokens 59; mock 43; browser **7 passed, 0
+  skipped, 0 failed**. Function server from the repository root, confirmed from its log.
+
+#### What I got wrong
+
+* My first view-hierarchy read after a tap found nothing and I nearly re-tapped; the emulator was simply
+  slow and the tap had landed. Waiting on what the screen says, not on time, fixed it.
+* I set the emulator's GPS to the clinic and assumed the check-in used it; the stored row shows the
+  provider kept California. The test of the geofence path is therefore NOT done — only the record of it.
+* The W1-T/W1-Y status tables carried "CMake 3.31.6 missing" for a week without anyone asking whether
+  another CMake was on the machine. That includes me.
+
+#### Where I stopped
+
+**All four parts done; the override never fired.** On `w2-a-backend`, for a PR to `main`. Emulator, Metro,
+the function server and the database stopped. **No credential appears anywhere in the diff** (checked
+against the env file's values before every commit). **The local env file still exists**
+(`services/api/supabase/functions/.env`, git-ignored) — needed the moment access is granted.
