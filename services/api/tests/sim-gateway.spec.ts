@@ -8,7 +8,7 @@ import {
   StartSimSessionResponseSchema,
 } from '@fieldforce/core';
 import { requireDatabase, withClient } from './db.js';
-import { API_URL, asUser, signIn, withIdentityLock } from './auth.js';
+import { ANON_KEY, API_URL, asUser, signIn, withIdentityLock } from './auth.js';
 import type { ProfileLike } from './auth.js';
 import { acquireGlobalThresholds } from './global-thresholds.js';
 import { seedFixtures } from './fixtures.js';
@@ -1458,3 +1458,102 @@ describe.skipIf(!live)(
     });
   },
 );
+
+/**
+ * W1-Z B3 — the practice screens' OWN transport, end to end, against the local stack and the stub.
+ *
+ * Not a test calling the gateway: it drives `createLivePracticeBackend` from `apps/field` — the object
+ * the screens call through `PracticeBackend` — as the signed-in rep, through every method the screens
+ * use. Loaded by path because `apps/field` resolves imports the bundler's way; `apps/field`'s own
+ * typecheck holds it to the `PracticeBackend` interface.
+ */
+describe.skipIf(!live)('W1-Z B3 — the live practice transport, end to end, as the rep', () => {
+  it('scenarios → start → turn → read → end → analyse → read the analysis → my sessions', async () => {
+    const { fileURLToPath } = await import('node:url');
+    const livePath = fileURLToPath(
+      new URL('../../../apps/field/src/practice/live.ts', import.meta.url),
+    );
+    const { createLivePracticeBackend } = (await import(livePath)) as {
+      createLivePracticeBackend: (c: {
+        baseUrl: string;
+        apiKey: string;
+        accessToken: () => Promise<string | null>;
+      }) => {
+        listScenarios(): Promise<{ scenarios: readonly { id: string }[] }>;
+        start(scenarioId: string): Promise<{ sessionId: string; personaDisplayName: string }>;
+        turn(body: Record<string, unknown>): Promise<{ status: number; body: unknown }>;
+        readSession(sessionId: string): Promise<{
+          state?: string;
+          turns: readonly { role: string; text: string }[];
+          personaBrief: string;
+          analysisId?: string | null;
+        } | null>;
+        end(sessionId: string): Promise<void>;
+        analyse(body: Record<string, unknown>): Promise<{ status: number; body: unknown }>;
+        readAnalysis(analysisId: string): Promise<{
+          overallScore: number;
+          modelProvider: string;
+          dimensionScores: Record<string, number>;
+        } | null>;
+        listMySessions(): Promise<readonly { sessionId: string; analysisId: string | null }[]>;
+        moduleTitles(ids: readonly string[]): Promise<Record<string, string>>;
+      };
+    };
+    const backend = createLivePracticeBackend({
+      baseUrl: API_URL,
+      apiKey: ANON_KEY,
+      accessToken: () => Promise.resolve(mrToken),
+    });
+
+    // The approved scenario this file's setup created is offered.
+    const { scenarios } = await backend.listScenarios();
+    expect(scenarios.map((s) => s.id)).toContain(scenarioId);
+
+    const started = await backend.start(scenarioId);
+    expect(started.personaDisplayName.length).toBeGreaterThan(0);
+
+    // A turn, through the gateway, as the rep — answered by the stub, written by the gateway's writer.
+    const turn = await backend.turn({
+      feature: 'ai_doctor',
+      sessionId: started.sessionId,
+      repText: 'It keeps below 25 degrees.',
+    });
+    expect(turn.status).toBe(200);
+    const replied = turn.body as { kind: string; reply: string };
+    expect(replied.kind).toBe('replied');
+    // B4: what reaches a rep today is the stub's marker — a sentence no working system produces.
+    expect(replied.reply).toContain('PRACTICE STUB');
+
+    const open = await backend.readSession(started.sessionId);
+    expect(open?.state).toBe('open');
+    expect(open?.turns.map((t) => t.role)).toEqual(['rep', 'doctor']);
+    expect(open?.personaBrief.length).toBeGreaterThan(0);
+
+    await backend.end(started.sessionId);
+    const analysed = await backend.analyse({ feature: 'ai_coach', sessionId: started.sessionId });
+    expect(analysed.status).toBe(200);
+    const result = analysed.body as { kind: string; analysisId: string };
+    expect(result.kind).toBe('analysed');
+
+    const analysis = await backend.readAnalysis(result.analysisId);
+    expect(analysis?.modelProvider).toBe('stub');
+    expect(analysis?.overallScore).toBe(0);
+    expect(Object.keys(analysis?.dimensionScores ?? {})).toHaveLength(SIM_COACH_DIMENSIONS.length);
+
+    const ended = await backend.readSession(started.sessionId);
+    expect(ended?.state).toBe('ended');
+    expect(ended?.analysisId).toBe(result.analysisId);
+    const mine = await backend.listMySessions();
+    expect(mine.find((s) => s.sessionId === started.sessionId)?.analysisId).toBe(result.analysisId);
+    expect(await backend.moduleTitles([])).toEqual({});
+
+    // A REFUSED read must throw, never read as "nothing there". Added after a mutant that ignored the
+    // refusal survived: an expired token would have shown the rep an empty practice list.
+    const refused = createLivePracticeBackend({
+      baseUrl: API_URL,
+      apiKey: ANON_KEY,
+      accessToken: () => Promise.resolve('not-a-token'),
+    });
+    await expect(refused.listMySessions()).rejects.toMatchObject({ status: 401 });
+  });
+});

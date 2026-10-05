@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
 import { requireDatabase, withClient } from './db.js';
-import { API_URL, asUser, signIn, withIdentityLock } from './auth.js';
+import { ANON_KEY, API_URL, asUser, signIn, withIdentityLock } from './auth.js';
 import { acquireGlobalThresholds } from './global-thresholds.js';
 import type { ProfileLike } from './auth.js';
 import { seedFixtures } from './fixtures.js';
@@ -570,5 +570,55 @@ describe.skipIf(!live)('W1-S C — mr_chat is single-turn: a history is refused,
       expect(r.status, JSON.stringify(r.body)).toBe(200);
       expect(r.body['kind']).toBe('answered');
     }
+  });
+});
+
+/**
+ * W1-Z B3 — the assistant screen's OWN transport, end to end: `createLiveAssistantTransport` from
+ * `apps/field`, the function the screen will call, as the signed-in rep. Loaded by path for the reason
+ * given in `sim-gateway.spec.ts`, W1-Z B3.
+ */
+describe.skipIf(!live)('W1-Z B3 — the live assistant transport, end to end, as the rep', () => {
+  it('the screen’s body reaches the gateway as the rep, and the answer comes back unchanged', async () => {
+    const { fileURLToPath } = await import('node:url');
+    const livePath = fileURLToPath(
+      new URL('../../../apps/field/src/assistant/live.ts', import.meta.url),
+    );
+    const { createLiveAssistantTransport } = (await import(livePath)) as {
+      createLiveAssistantTransport: (c: {
+        baseUrl: string;
+        apiKey: string;
+        accessToken: () => Promise<string | null>;
+      }) => (body: { feature: 'mr_chat'; message: string }) => Promise<{
+        status: number;
+        body: unknown;
+      }>;
+    };
+    const send = createLiveAssistantTransport({
+      baseUrl: API_URL,
+      apiKey: ANON_KEY,
+      accessToken: () => Promise.resolve(mrToken),
+    });
+
+    const answered = await send({
+      feature: 'mr_chat',
+      message: 'How do I submit a call report from the app? [STUB:in-scope]',
+    });
+    expect(answered.status).toBe(200);
+    const body = answered.body as { kind: string; answer: string; allowance?: unknown };
+    expect(body.kind).toBe('answered');
+    // B4: the stub's marker — what a rep would read today, and why the flag stays off.
+    expect(body.answer).toContain('PRACTICE STUB');
+    expect(body.allowance).toBeDefined();
+
+    // POSITIVE CONTROL on the identity: with no signed-in rep, nothing is sent at all.
+    const signedOut = createLiveAssistantTransport({
+      baseUrl: API_URL,
+      apiKey: ANON_KEY,
+      accessToken: () => Promise.resolve(null),
+    });
+    await expect(signedOut({ feature: 'mr_chat', message: 'hello' })).rejects.toMatchObject({
+      code: '28000',
+    });
   });
 });
