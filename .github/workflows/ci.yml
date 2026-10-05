@@ -125,6 +125,11 @@ jobs:
       # the deployed function does not run. Exact, and equal, or the build fails.
       - name: The Edge Function runs the dependency versions the tests run
         run: node services/api/scripts/check-function-pins.mjs
+      # W2-A A (`BE-C70`). C30 once guaranteed by ABSENCE that the service-role key could not be
+      # reached for in a hurry; BE-C69 spent that. This is what replaces it: exactly one read, in
+      # `_shared/practice-writer.ts`, which can call two functions and exports nothing else.
+      - name: The service-role key is read in exactly one place
+        run: node services/api/scripts/check-service-role-reads.mjs
       - run: pnpm turbo run test --filter @fieldforce/core
       # The WCAG contrast guard. It fails the build when a design token drops below
       # its required ratio, and it had never run here — the step simply did not

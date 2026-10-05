@@ -11,21 +11,29 @@
  * the database grants to `service_role` only, and which each refuse unless they name an OPEN request
  * the rep began under their own token for the right feature on their own session. So authorisation
  * stays in Postgres and as the rep; this proves only origin. Any other function name is refused HERE,
- * before a network call, so the key cannot be reached for to "fix a 401 in a hurry".
+ * before a network call.
  *
- * **Why the service-role key, not a new signing secret.** Supabase supplies `SUPABASE_SERVICE_ROLE_KEY`
- * to every Edge Function whether or not the code reads it, so reading it adds a code path, not an
- * exposure; a dedicated secret would add a value to provision in three environments.
+ * **W2-A A: the key is READ here, and nowhere else (`BE-C70`).** `C30`'s real guarantee was that the
+ * key had no reference anywhere in the function, so nobody fixing a 401 in a hurry could reach for it.
+ * `BE-C69` spent that property. What replaces it: this module is the only code that reads the key; it
+ * exports ONE function, which returns a writer for the two names above and nothing else — never the key,
+ * never the client. `services/api/scripts/check-service-role-reads.mjs` fails the build if a second
+ * read appears anywhere under `supabase/functions`, if anything reads the whole environment or a
+ * variable whose name is not spelled out, if this module exports anything else, or if the list below
+ * changes.
  */
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import type { ControlPlaneRpc } from './core.ts';
 
-export const PRACTICE_WRITES: ReadonlySet<string> = new Set([
+const PRACTICE_WRITES: ReadonlySet<string> = new Set([
   'record_sim_turn',
   'record_sim_coach_analysis',
 ]);
 
-export const practiceWriter = (supabaseUrl: string, serviceRoleKey: string): ControlPlaneRpc => {
+/** The gateway's practice writer, or null when the key is not configured. The key never leaves here. */
+export const practiceWriterFromEnv = (supabaseUrl: string): ControlPlaneRpc | null => {
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (serviceRoleKey === undefined || serviceRoleKey.length === 0) return null;
   const client = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });

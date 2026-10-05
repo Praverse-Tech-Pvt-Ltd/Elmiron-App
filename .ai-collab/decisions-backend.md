@@ -641,3 +641,24 @@ disagreement could be checked, because the operator's text was not provided.**
 - **Not covered (`BE-W146`):** the request log itself. `ai_complete_request` runs as the rep, so a rep
   can still close their own request as `completed` with any model name and token counts. A practice
   SCORE can no longer be forged; a request-log ROW can.
+
+## `BE-C70` — **the service-role key is read in exactly one place, and the build fails otherwise** (W2-A A, 5 October)
+
+- **What `BE-C69` spent, said plainly.** `C30`'s guarantee was an ABSENCE: the Edge Function had no
+  reference to the service-role key, so nobody fixing a 401 in a hurry could reach for it. `BE-C69` was
+  right — the practice writes must come from the gateway — and it ended that absence. Nothing restores it
+  while the key is in the process.
+- **What replaces it.** `_shared/practice-writer.ts` is the only code that reads the key; it exports one
+  function, which returns a writer for `record_sim_turn` and `record_sim_coach_analysis` and never the key
+  or the client. The gateway no longer names the key. `services/api/scripts/check-service-role-reads.mjs`
+  (CI, static job) fails if the name appears in code anywhere else under `supabase/functions`, if anything
+  reads the whole environment or a variable whose name is not literal, if the writer exports anything
+  else or its list changes, or if `packages/core` reads the environment. It cannot catch deliberate
+  obfuscation or a third-party package.
+- **What the key can reach, measured (A4) — not reassured.** Through the DATABASE, little: the service role
+  holds no SELECT/INSERT/UPDATE/DELETE on any public table (REST answers 403 `42501`), and may EXECUTE four
+  functions — the two practice writers, `ingest_transcript`, `visible_territory_ids`. Through Supabase's
+  OTHER services, a great deal: the auth admin API (every account — list, create, delete) and Storage
+  (every object, including the private `audio` bucket of consent recordings) both accept it (local demo
+  key: HTTP 200 for both). A change that reached for the key outside the writer could do those things.
+  The check is what stands between a hurried change and them; the database grants are not.
