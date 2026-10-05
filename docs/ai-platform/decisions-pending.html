@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Elmiron Platform — Decisions Required</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+  :root {
+    --ink: #1b2330; --muted: #5b6676; --line: #d9dee6; --soft: #f4f6f9;
+    --accent: #0f4c81; --red: #a4262c; --red-soft: #fbeaea; --amber: #8a5a00; --amber-soft: #fff5de;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; color: var(--ink); font-size: 10pt; line-height: 1.45; margin: 0; background: #fff; }
+  h1 { font-size: 22pt; margin: 0 0 4px; color: var(--accent); letter-spacing: -0.2px; }
+  h2 { font-size: 13pt; color: var(--accent); margin: 22px 0 6px; padding-bottom: 4px; border-bottom: 2px solid var(--accent); break-after: avoid; }
+  h3 { font-size: 10.5pt; margin: 14px 0 4px; break-after: avoid; }
+  p { margin: 4px 0 8px; }
+  .sub { color: var(--muted); font-size: 10.5pt; margin-bottom: 14px; }
+  .meta { display: flex; gap: 22px; font-size: 9pt; color: var(--muted); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 7px 0; margin-bottom: 16px; }
+  .meta b { color: var(--ink); }
+  .box { border: 1px solid var(--line); background: var(--soft); border-radius: 6px; padding: 10px 14px; margin: 10px 0 14px; break-inside: avoid; }
+  .box.red { background: var(--red-soft); border-color: #efc2c4; }
+  .box h3 { margin-top: 0; }
+  ul { margin: 4px 0 6px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0 12px; font-size: 9pt; }
+  thead { display: table-header-group; }
+  th { text-align: left; background: var(--accent); color: #fff; font-weight: 600; padding: 6px 7px; }
+  td { padding: 6px 7px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr { break-inside: avoid; }
+  tbody tr:nth-child(even) td { background: #fafbfc; }
+  td.n { width: 26px; font-weight: 700; color: var(--accent); }
+  td.owner { width: 92px; white-space: nowrap; }
+  .rec { display: block; margin-top: 3px; color: #1e5a2e; font-style: italic; }
+  .ref { color: var(--muted); font-size: 8pt; }
+  .tag { display: inline-block; font-size: 8pt; font-weight: 700; padding: 1px 6px; border-radius: 10px; }
+  .tag.red { background: var(--red-soft); color: var(--red); }
+  .tag.amber { background: var(--amber-soft); color: var(--amber); }
+  .dates td:first-child { white-space: nowrap; font-weight: 700; }
+  .pb { break-before: page; }
+  .foot { margin-top: 18px; font-size: 8.5pt; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; }
+  dl { margin: 0; } dt { font-weight: 700; margin-top: 6px; } dd { margin: 0 0 2px 0; color: var(--ink); }
+</style>
+</head>
+<body>
+
+<h1>Elmiron Platform — Decisions Required</h1>
+<div class="sub">Field-force app, recording pipeline and the new AI / LMS platform</div>
+<div class="meta">
+  <span><b>Date:</b> 28 September 2026</span>
+  <span><b>Prepared by:</b> Maanav Shah, Praverse Tech (backend)</span>
+  <span><b>For:</b> Senior management and the client</span>
+  <span><b>Status:</b> Confidential</span>
+</div>
+
+<h2>1. Summary</h2>
+<p>The backend has no engineering work left that it can complete on its own. <b>Every remaining item is a decision</b> that belongs to the client, legal, the hosting owner, or management. This document lists all of them in one place, ordered by urgency, with a recommendation where we have one.</p>
+
+<div class="box">
+  <h3>Where the AI / LMS platform stands</h3>
+  <ul>
+    <li><b>Built and tested (not yet live in the app):</b> product catalogue, learning management (courses, lessons, assignments, progress), an approved-knowledge library with two-person approval, the AI control layer (approved prompts, usage log, on/off switches, daily limits), and the complete logic for the first AI feature — <b>product questions answered only from approved, cited material</b>.</li>
+    <li><b>Safety built in:</b> the AI never answers without an approved source; questions containing patient details are refused before anything is sent to an AI provider; no conversation text is stored.</li>
+    <li><b>What stops it going live:</b> decisions #4 and #5 below — where the AI service runs, and which AI provider may be used (including whether data may leave India).</li>
+  </ul>
+</div>
+
+<div class="box red">
+  <h3>If only five decisions can be made now</h3>
+  <ol style="margin:4px 0 0 18px;padding:0">
+    <li><b>#1 UCPMP sample cap</b> — the build is set to fail on <b>6 November</b>.</li>
+    <li><b>#3 Registered legal name on the consent notice</b> — every consent captured without it is permanently defective and cannot be corrected later.</li>
+    <li><b>#2 Company-level settings</b> — due <b>31 October</b>; also needed for per-company AI controls.</li>
+    <li><b>#4 and #5 AI hosting and AI provider</b> — together these unblock the whole AI platform.</li>
+    <li><b>#14 Scores in training and coaching</b> — unblocks assessments and certification.</li>
+  </ol>
+</div>
+
+<h3>Key dates</h3>
+<table class="dates">
+  <thead><tr><th>Date</th><th>What happens</th><th>Decision</th></tr></thead>
+  <tbody>
+    <tr><td>Every day</td><td>Consents are captured without the organisation's legal name; these records can never be amended</td><td>#3</td></tr>
+    <tr><td>16 Oct 2026</td><td>Automated warnings begin about the missing UCPMP cap</td><td>#1</td></tr>
+    <tr><td>31 Oct 2026</td><td>Deadline for deciding whether settings belong to a company</td><td>#2</td></tr>
+    <tr><td>6 Nov 2026</td><td>The build fails until the UCPMP cap is set</td><td>#1</td></tr>
+  </tbody>
+</table>
+
+<h2>2. Urgent — dated, or getting more expensive every day</h2>
+<table>
+  <thead><tr><th>#</th><th>Decision needed</th><th>Why it matters</th><th>Owner</th></tr></thead>
+  <tbody>
+    <tr><td class="n">1</td><td><b>UCPMP sample cap</b> — the number, what it is counted against (per doctor / per item / per month), and whether promotional inputs count as well as samples.</td><td><span class="tag red">6 Nov</span> Until set, samples are accepted but not counted against any limit. Engineering must not pick a number: a limit built on an invented figure looks enforced while being wrong.</td><td class="owner">Client</td></tr>
+    <tr><td class="n">2</td><td><b>Should settings belong to a company?</b> Today all companies on the platform share one set of thresholds.</td><td><span class="tag amber">31 Oct</span> Also needed before AI features can be switched on, or limited, per company.</td><td class="owner">Client</td></tr>
+    <tr><td class="n">3</td><td><b>Registered legal name of the organisation</b> for the consent notice doctors see, and confirmation that MRs' names may be shown to doctors.</td><td><span class="tag red">Daily</span> Consent records are permanent by design (so they cannot be tampered with). The same property means a record captured without the name can never be fixed.</td><td class="owner">Client</td></tr>
+  </tbody>
+</table>
+
+<h2>3. The AI and learning platform</h2>
+<table>
+  <thead><tr><th>#</th><th>Decision needed</th><th>Why it matters / our recommendation</th><th>Owner</th></tr></thead>
+  <tbody>
+    <tr><td class="n">4</td><td><b>Where the AI service runs.</b> Inside the existing Supabase platform ("Edge Functions") or as a separate server.</td><td>Nothing AI can run without it.<span class="rec">Recommended: inside Supabase. Tested locally and it keeps all access rules in the existing, audited database — no second backend.</span></td><td class="owner">Praverse + reviewer</td></tr>
+    <tr><td class="n">5</td><td><b>Which AI provider, and may questions and answers leave India?</b> Current rule: data stays in Mumbai.</td><td>Blocks the first live AI feature. The approved AI budget (about $10–40 per month) fits product Q&amp;A; it will not cover a voice "AI Doctor" at scale.</td><td class="owner">Client + Legal</td></tr>
+    <tr><td class="n">6</td><td><b>Approve adding vector search</b> (a database extension for meaning-based search).</td><td>Improves search quality. Keyword search works today as a safe fallback.</td><td class="owner">Praverse</td></tr>
+    <tr><td class="n">7</td><td><b>The product catalogue</b> — the products and brand names, and who supplies the approved labels and prescribing information.</td><td>No real product content can be loaded without it. Note: "ELMIRON" is a third-party trademark; the actual product list has not been provided.</td><td class="owner">Client</td></tr>
+    <tr><td class="n">8</td><td><b>Markets:</b> does a country/market belong to the company, or to each piece of content?</td><td>Decides how India vs. export content is kept apart.<span class="rec">Built as: market belongs to the content. Please confirm.</span></td><td class="owner">Client</td></tr>
+    <tr><td class="n">9</td><td><b>Named medical / scientific approver</b> for knowledge and AI prompts.</td><td>Nothing can be approved without a second person. Each company needs <b>at least two admins</b>: the author cannot approve their own content.</td><td class="owner">Client</td></tr>
+    <tr><td class="n">10</td><td><b>Notifications</b> (course due, certificate issued, escalations) — build them, and by which channel (mobile push needs a Firebase project)?</td><td>The brief assumes notifications exist; none do today.</td><td class="owner">Praverse + Client</td></tr>
+    <tr><td class="n">11</td><td><b>Uploading documents (PDF)</b> into the knowledge library — approve adding a PDF-reading component.</td><td>Today approved text is pasted in; upload needs one new software component.</td><td class="owner">Praverse</td></tr>
+  </tbody>
+</table>
+
+<h2 class="pb">4. Where the AI brief conflicts with rules already agreed</h2>
+<p>The AI / LMS brief asks for several things that contradict decisions already recorded for this project. We have <b>not</b> worked around any of them. Each needs a named person to decide.</p>
+<table>
+  <thead><tr><th>#</th><th>The conflict</th><th>Our recommendation (not a ruling)</th><th>Owner</th></tr></thead>
+  <tbody>
+    <tr><td class="n">12</td><td><b>Patient data.</b> The brief asks for patient-detail detection, patient details in safety reports, and a future patient-facing assistant. The agreed rule: <i>no patient or clinical data in this system</i>; patient data lives in the separate clinical system.</td><td>Build any patient-facing assistant in the clinical system. In this system the AI only <i>flags</i> a possible safety issue; the case itself is handled in the clinical system.</td><td class="owner">Client + Legal</td></tr>
+    <tr><td class="n">13</td><td><b>Safety-report details.</b> The brief asks AI to extract structured details of adverse events. The agreed rule: no severity, priority or confidence fields on those reports, so software never pre-judges a safety case.</td><td>Keep the rule. The AI flags; a person judges. This matches the brief's own "AI must not close a safety case".</td><td class="owner">Client (PV)</td></tr>
+    <tr><td class="n">14</td><td><b>Scores.</b> The brief asks for AI Coach scores, skill scores and team averages for managers. The agreed rule: <i>no scores or rankings on anything managers see</i>.</td><td>Choose one: (a) practice scores visible only to the MR; (b) amend the rule to allow scores for managers; (c) written, evidence-based feedback only. <b>Blocks assessments and certification.</b></td><td class="owner">Client + management</td></tr>
+    <tr><td class="n">15</td><td><b>Coaching is out of version 1</b> (agreed). Does that also cover AI Coach and AI Doctor on <i>practice</i> sessions (no real doctor involved)?</td><td>Needs a ruling. Blocks AI Coach and AI Doctor.</td><td class="owner">Client</td></tr>
+    <tr><td class="n">16</td><td><b>Content approver role.</b> The brief implies a medical-reviewer role; the agreed rule allows three roles only (MR, manager, admin).</td><td>Built as: a named admin approves and signs a written attestation, and cannot approve their own content. Please confirm.</td><td class="owner">Client</td></tr>
+    <tr><td class="n">17</td><td><b>Can managers see which AI features an MR used, and when?</b> That is monitoring of the employee.</td><td>Built as: <b>no</b> — only the MR and the company admin (for cost and safety review). Please confirm.</td><td class="owner">Client + HR</td></tr>
+  </tbody>
+</table>
+
+<h2>5. Recording and transcripts — built, but cannot be switched on</h2>
+<p>The consultation-recording feature is complete and tested, and is deliberately switched off. It cannot reach a real doctor until these are resolved.</p>
+<table>
+  <thead><tr><th>#</th><th>Decision needed</th><th>Why it matters</th><th>Owner</th></tr></thead>
+  <tbody>
+    <tr><td class="n">18</td><td><b>A named pharmacovigilance / data-protection (PV / DPDP) signatory.</b></td><td>Blocks audio permanently, and with it all AI analysis of real visits (safety screening, complaint detection, coaching on real calls).</td><td class="owner">Client</td></tr>
+    <tr><td class="n">19</td><td><b>Speech-to-text provider</b>, chosen on its measured accuracy for Hinglish.</td><td>Transcript handling is built but has nothing feeding it. Must accept no-training and deletion terms.</td><td class="owner">Client</td></tr>
+    <tr><td class="n">20</td><td><b>Consent from employees</b> whose voices are used to test providers — needs the provider list, a retention date and a named contact for withdrawal.</td><td>Blocks collecting the test recordings, and therefore #19.</td><td class="owner">Client + Legal</td></tr>
+    <tr><td class="n">21</td><td><b>The notice doctors read before being recorded.</b> It currently does not mention AI processing or SOP monitoring.</td><td>A doctor agreeing to today's wording is not agreeing to what actually happens.</td><td class="owner">Client + Legal</td></tr>
+    <tr><td class="n">22</td><td><b>May an adverse-event report contain patient information, and may it leave the platform?</b></td><td>Decides how safety reports are stored and passed on.</td><td class="owner">Client (PV)</td></tr>
+  </tbody>
+</table>
+
+<h2>6. What a doctor's consent means</h2>
+<table>
+  <thead><tr><th>#</th><th>Decision needed</th><th>Why it matters</th><th>Owner</th></tr></thead>
+  <tbody>
+    <tr><td class="n">23</td><td><b>Is a doctor's second answer a withdrawal of the first, or a separate answer?</b></td><td>Decides how withdrawals are recorded. Open for several weeks.</td><td class="owner">Client</td></tr>
+    <tr><td class="n">24</td><td><b>When a doctor withdraws consent, must audio already on the MR's phone be deleted?</b></td><td>Tested: a withdrawal does not stop a recording already running, and that audio stays on the phone (nothing reaches the company). Two recorded rules contradict each other; one must be chosen.</td><td class="owner">Client</td></tr>
+    <tr><td class="n">25</td><td><b>Which language of the consent notice an MR is shown first.</b></td><td>Recorded on each consent; the current order is arbitrary.</td><td class="owner">Client</td></tr>
+    <tr><td class="n">26</td><td><b>Confirm two time limits:</b> 72 hours (maximum delay before a consent or recording must reach the server) and 120 seconds (tolerance for a phone clock running ahead).</td><td>Both are unconfirmed defaults, and they now decide whether a recording can be filed at all.</td><td class="owner">Client</td></tr>
+  </tbody>
+</table>
+
+<h2>7. Data, retention and operations</h2>
+<table>
+  <thead><tr><th>#</th><th>Decision needed</th><th>Why it matters</th><th>Owner</th></tr></thead>
+  <tbody>
+    <tr><td class="n">27</td><td><b>Data-controller model</b> — who is the legal controller of each kind of clinical record.</td><td>Needed on every clinical record; blocks the patient app.</td><td class="owner">Client</td></tr>
+    <tr><td class="n">28</td><td><b>Reference data and working hours per territory.</b></td><td>MRs cannot record visits without them; the company-wide default expires 60 days after it is set.</td><td class="owner">Client</td></tr>
+    <tr><td class="n">29</td><td><b>Does a deleted recording really disappear</b> from storage versions, soft-delete and provider backups?</td><td>Decides whether "destroyed" in the destruction log is true — the 90-day promise is about the audio itself.</td><td class="owner">Hosting owner</td></tr>
+    <tr><td class="n">30</td><td><b>Recovering audio after a restore.</b> A database restore brings back the records but not the audio files.</td><td>Current recovery plan covers the records only.</td><td class="owner">Hosting owner</td></tr>
+    <tr><td class="n">31</td><td><b>Update production before loading any reference data</b> (a sequencing rule, not a backlog item).</td><td>Loading data first would conflict with pending database changes.</td><td class="owner">Hosting owner</td></tr>
+    <tr><td class="n">32</td><td><b>Re-decide point-in-time recovery.</b></td><td>Both reasons behind the original decision no longer hold.</td><td class="owner">Hosting owner</td></tr>
+    <tr><td class="n">33</td><td><b>Where backups may lawfully be stored.</b></td><td>Backups are built and proven; they have nowhere approved to go.</td><td class="owner">Hosting owner + Legal</td></tr>
+    <tr><td class="n">34</td><td><b>One email to Supabase support</b> to confirm platform facts the recovery runbook depends on.</td><td>Several recovery steps are currently unverified.</td><td class="owner">Hosting owner</td></tr>
+    <tr><td class="n">35</td><td><b>Supabase paid plan</b> — about $25 per month.</td><td>The free tier automatically paused production for two weeks in August.</td><td class="owner">Hosting owner</td></tr>
+    <tr><td class="n">36</td><td><b>Recording blocked access attempts that fail before the database is reached.</b></td><td>Closing this last gap in the audit trail means logging outside the database; a trade-off to choose knowingly.</td><td class="owner">Praverse + Hosting owner</td></tr>
+  </tbody>
+</table>
+
+<h2>8. Glossary</h2>
+<dl>
+  <dt>UCPMP</dt><dd>Uniform Code for Pharmaceutical Marketing Practices — the Indian code limiting samples and gifts to doctors.</dd>
+  <dt>PV (pharmacovigilance)</dt><dd>Monitoring and reporting of side effects (adverse events) of medicines.</dd>
+  <dt>DPDP</dt><dd>India's Digital Personal Data Protection Act, 2023.</dd>
+  <dt>Adverse event (AE)</dt><dd>Any harmful or unintended effect in a person taking a medicine.</dd>
+  <dt>Approved knowledge</dt><dd>Product and training material that a second, named person has reviewed and approved before the AI may use it.</dd>
+  <dt>Four-eyes approval</dt><dd>The person who writes content can never be the person who approves it.</dd>
+</dl>
+
+<div class="foot">
+  <b>Sources.</b> Items 1–3 and 18–36 are from the project's decision register (<span class="ref">docs/blocked-on-you.md</span>, summarised in <span class="ref">BACKEND-DECISIONS.md</span>, 24 Sep 2026); items 4–17 are from the AI platform review (<span class="ref">docs/ai-platform/phase-a-recon.md</span>). If any item has been answered since, the decision register is the record of truth.
+  <br><b>Internal references</b> for engineering follow-up: #1 BE-W21 · #2 BE-W106 · #3 BE-W93 · #4–11 D1, D2, D3, D5, D6, D8, D9 · #12–17 X1, X3, X2, X4, X5, C8 · #18–22 5.8, 4.2 / BE-W32, E1, E2 / BE-W109, 4.1 · #23–26 BE-W95, FE-W70, 5.12, 5.10 · #27–36 5.5, 5.7, 4.4, 7.2, 6.1, 6.2, 6.3 / BE-W11, 7.3, 5.2, BE-W102.
+</div>
+
+</body>
+</html>

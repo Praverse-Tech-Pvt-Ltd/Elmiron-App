@@ -1,0 +1,21 @@
+-- Rollback for W1-I -- `mr_chat_scope_terms()` is dropped. No table, no data, nothing else moves.
+--
+-- **What rolling back MEANS, and it is worse than "mr_chat stops working".** This function is one
+-- half of what stops the general assistant answering product questions:
+-- `packages/core/src/field/gateway/mr-chat.ts` calls it, refuses a QUESTION naming one of the
+-- organisation's products, and — the half a prompt cannot do — **discards an ANSWER that names one.**
+--
+-- Without the function, `answerMrChat` throws on the `mr_chat_scope_terms` call, so every `mr_chat`
+-- request fails with the generic failure message. **That is the safe direction**: the feature becomes
+-- unavailable rather than becoming unguarded. It was written that way on purpose — the call sits
+-- before the model call, so a missing catalogue cannot silently degrade into an unchecked assistant.
+--
+-- **The client must be rolled back with this**, for the same reason `20260929000200`'s rollback says
+-- so: roll back `packages/core` and `supabase/functions/` together, or `mr_chat` returns a failure on
+-- every message and no message explains why. **`product_qa`, `ai_doctor` and `ai_coach` are
+-- unaffected** — they do not call this function.
+--
+-- **Nothing about the catalogue itself changes.** `public.products` is not touched here; this only
+-- removes the read.
+
+drop function if exists public.mr_chat_scope_terms();

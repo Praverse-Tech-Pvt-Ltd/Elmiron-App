@@ -186,13 +186,21 @@ describe.skipIf(!reachable)('BE-W96 — a recording too old for the device’s w
 });
 
 describe.skipIf(!reachable)('BE-W96 — the codes reach the client contract', () => {
-  it('both are raised by complete_upload, which is what error-contract.spec.ts derives from', async () => {
+  it('both are raised on complete_upload’s path, which is what error-contract.spec.ts derives from', async () => {
     await inRolledBackTransaction(async (client) => {
-      const { rows } = await client.query<{ prosrc: string }>(
-        `select p.prosrc from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-          where n.nspname = 'public' and p.proname = 'complete_upload'`,
-      );
-      const source = rows[0]?.prosrc ?? '';
+      const sourceOf = async (name: string): Promise<string> => {
+        const { rows } = await client.query<{ prosrc: string }>(
+          `select p.prosrc from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+            where n.nspname = 'public' and p.proname = $1`,
+          [name],
+        );
+        return rows[0]?.prosrc ?? '';
+      };
+      // W1-N BE-W129: `complete_upload` is now a thin wrapper that logs a refusal before passing it
+      // on; the body that raises is the original, renamed -- not retyped -- to
+      // `complete_upload_unlogged`. So the wrapper must DELEGATE to it, and the codes live there.
+      expect(await sourceOf('complete_upload')).toContain('public.complete_upload_unlogged(');
+      const source = await sourceOf('complete_upload_unlogged');
       expect(source).toContain('45009');
       expect(source).toContain('45010');
       // And the rule this replacement inherited is still there -- a `create or replace` that

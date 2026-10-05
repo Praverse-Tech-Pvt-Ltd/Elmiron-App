@@ -67,9 +67,21 @@ beforeAll(async () => {
 const mirrorTable = async (client: Client): Promise<string> => {
   const name = `mr07_d2_mirror_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
   await client.query(
+    // W1-G C1 / BE-W125. NO foreign key to public.organisations, deliberately.
+    //
+    // `create table ... references public.organisations` takes a SHARE ROW EXCLUSIVE lock on
+    // `organisations` -- the one table nearly every other suite inserts into through
+    // `seedFixtures()`. That is the cycle CI reported on a DOCS-ONLY commit: this suite waiting
+    // for a lock on its own new table while another waited for RowExclusive on `organisations`,
+    // each blocking the other (40P01).
+    //
+    // The key is that the FK buys this test NOTHING. It asserts how a RESTRICTIVE policy composes
+    // with a PERMISSIVE one; referential integrity is not part of the claim, and the ids below are
+    // real organisation ids either way. Removing it removes the only lock this suite takes on a
+    // table anybody else touches.
     `create table public.${name} (
        id uuid primary key,
-       organisation_id uuid not null references public.organisations (id)
+       organisation_id uuid not null
      )`,
   );
   await client.query(`alter table public.${name} enable row level security`);
@@ -202,10 +214,17 @@ describe.skipIf(!reachable)('D2 — a restrictive tenant boundary cannot be wide
             and position('current_user_organisation_id()' in pg_get_expr(p.polqual, p.polrelid)) > 0
           order by c.relname`,
       );
-      // MR-07 D's seven, plus MR-51 C3's eighteen (BE-W83). `app_thresholds` is absent on
-      // purpose: it is BE-W106, awaiting the operator (C13).
+      // MR-07 D's seven, plus MR-51 C3's eighteen (BE-W83), plus AI-B1's four catalogue tables
+      // (`20260924000400`), AI-B2's seven LMS tables (`20260924000500`), AI-C1's three knowledge
+      // tables (`20260924000600`) and AI-D0's two (`20260924000700`). `app_thresholds` is
+      // absent on purpose: it is BE-W106, awaiting the operator (C13). W1-M D1 adds
+      // `ai_allowance_warnings` (`20261001000200`); W1-N B adds `write_rejections`
+      // (`20261001000300`) -- found missing by this test on the first full run, as intended.
       expect(rows.rows.map((r) => r.relname)).toEqual([
         'adverse_event_reports',
+        'ai_allowance_warnings',
+        'ai_prompt_versions',
+        'ai_requests',
         'beat_plan_entries',
         'beat_plans',
         'call_report_approvals',
@@ -214,8 +233,21 @@ describe.skipIf(!reachable)('D2 — a restrictive tenant boundary cannot be wide
         'check_outs',
         'clinic_addresses',
         'consent_text_versions',
+        'course_assignments',
+        'course_enrolments',
+        'course_modules',
+        'course_versions',
+        'courses',
         'doctors',
+        'knowledge_chunks',
+        'knowledge_document_versions',
+        'knowledge_documents',
+        'lesson_completions',
+        'lessons',
+        'markets',
         'organisations',
+        'product_markets',
+        'products',
         'recordings',
         'samples_and_inputs',
         'sync_batches',
@@ -224,12 +256,14 @@ describe.skipIf(!reachable)('D2 — a restrictive tenant boundary cannot be wide
         'sync_items',
         'territories',
         'territory_shift_windows',
+        'therapy_areas',
         'upload_grants',
         'user_profiles',
         'visit_audio_quarantine',
         'visit_audio_quarantine_clearances',
         'visits',
         'voice_notes',
+        'write_rejections',
       ]);
     });
   });
