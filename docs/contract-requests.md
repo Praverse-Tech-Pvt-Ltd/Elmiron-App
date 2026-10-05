@@ -1031,6 +1031,78 @@ first", "Your manager has not opened this yet"). Nothing on screen backs them.
 
 ---
 
+### FE-CR-11 — Land the AI Doctor practice-session contract on `main`, with read functions for the app
+
+| | |
+| --- | --- |
+| Date | 2026-10-01 |
+| Requester | Frontend (FE-D17, on the operator's ruling that this release's "AI analysis" is AI Doctor practice) |
+| Owner asked | Backend |
+| Needed | The practice backend on `main`, plus three app-facing reads and three answers. Details below |
+| Status | **Open** |
+
+**Why.** The operator ruled on 1 October that Coaching, Analysis and Reply analyse **AI Doctor
+practice sessions**, not recorded consultations. The practice backend exists **only** on
+`worktree-ai-platform-phase-a`. Frontend may not import from it, so the app cannot be wired to it
+until it is on `main`. A grep of `origin/main` for `sim_`, `ai_doctor`, `ai_coach`, `persona` and
+`scenario` finds nothing.
+
+**What is on the branch (read only):**
+
+- **Tables:** `sim_personas`, `sim_scenarios`, `sim_sessions`, `sim_turns`, `sim_coach_analyses`
+  (`20260929000100_simulation_core.sql:50-229`). `suggested_modules` and the seven dimensions come
+  from `20261001000100_coach_nine_dimensions.sql`.
+- **RPCs:** `start_sim_session`, `end_sim_session` (`20260929000200_simulation_rpcs.sql:212-278,
+  353-389`).
+- **Gateway features:** `ai_doctor` (a turn) and `ai_coach` (the analysis)
+  (`services/api/supabase/functions/ai-gateway/index.ts:202-249`).
+- **Shapes:** `packages/core/src/field/simulation.ts`. `SimCoachAnalysisSchema` (`:246-277`) covers
+  every item on the operator's list:
+  - product knowledge, scientific accuracy, communication, opening, objection handling, response
+    relevance, closing;
+  - strengths and improvements, each citing a turn;
+  - up to 3 suggested modules.
+- **Visibility already matches the ruling:** the MR sees their own and an admin can read; managers
+  are blocked (`simulation_core.sql:281-297`, tested in `sim-gateway.spec.ts:769-788, 853-866`). No
+  team or rank field exists.
+
+**Needed on `main`:**
+
+1. **The migrations and `simulation.ts`**, with core client methods and `API_PATHS` entries. Today
+   there are none, only the RPC names (`simulation.ts:310-327`).
+2. **Read functions for the app.** "My sessions", and "one session with its turns and analysis",
+   exist on the branch only as direct table reads (`simulation_core.sql:285-297`). An RPC per read,
+   in the same `{ data, readAt, auditLogId }` envelope as `read_analysis`, would let the app parse
+   them as it parses everything else.
+3. **The frontend contract written down.** `docs/ai-platform/api-contracts.md` on the branch
+   predates the simulation work and has no section for it. Its line `:200-202` ("scoring blocked by
+   X2/X4") is out of date.
+
+**Three questions:**
+
+1. **Reply.** No practice analysis has a reply: no column and no RPC, and `sim_coach_analyses` is
+   append-only (`simulation_core.sql:406-408`). Should an MR be able to reply to a practice
+   analysis? If not, the Reply screen leaves this release's scope.
+2. **An MR can write their own scores.** `record_sim_coach_analysis` and `record_sim_turn` are
+   granted to `authenticated` (`20260929000200…:534`; `20261001000100…:282`), and the spec stores a
+   score as an MR (`sim-gateway.spec.ts:566, 577-595`). The app will never call them, but anyone
+   with an MR's token can. Is that intended?
+3. **The gateway trusts the client's text.** `ai_doctor` takes `personaBrief`, `personaStance`,
+   `objection` and `history` from the request body, and `ai_coach` takes the `turns`
+   (`index.ts:208-213, 244-246`). The database checks only that a cited turn index exists
+   (`20261001000100…:201-206`). Should the gateway read the persona and the stored turns from the
+   database instead? The app will send the stored values either way, but the analysis can only be
+   trusted if the server takes them from its own rows.
+
+**Until this lands:**
+
+- **There is no real model.** Every practice reply is the stub marker, every score is 0
+  (`stub-provider.ts:97-159`), and a deployed gateway answers `503 no_provider`.
+- **No seeded content.** Approved prompts, personas and scenarios have to be created through the
+  console with two admins, for four-eyes approval.
+
+---
+
 ## Answers — 1 October 2026, evening (backend, W1-P)
 
 ### `BE-CR-6` — the AI allowance on the rep's screen (`BE-W128`, operator `BE-C30`, screen owned by Dev)

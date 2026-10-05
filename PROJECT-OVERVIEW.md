@@ -22711,3 +22711,99 @@ $ git diff --name-only origin/main...HEAD | grep -E '^(services|packages/core|sc
 
 **PR #13 (FE-D14/D15):** CI run 36853943162 at `ca57d84`, both jobs **success**. PR #14's CI is
 reported in the hand-off.
+
+### FE-D17 — AI Doctor practice on sample data, and the clock lint in packages/ui
+
+**1 October 2026, branch `fe-d17-practice`**, off `fe-d16-coaching`. PR #15, against
+`fe-d16-coaching`, **not merged**.
+
+#### The operator's clarification, and what it changed
+
+**AI analysis in this release means AI Doctor practice**: a practice conversation is analysed and
+the MR gets structured feedback. It does not mean recorded consultations, and everything about
+real-call analysis is deferred as one scope.
+
+**Visibility for practice:** the MR sees their own, an admin can access it, and a manager sees no
+individual score, ranking or team average.
+
+**One repository, confirmed.** `@fieldforce/core` stays imported from the workspace, and the
+operator withdrew the contract-drift concern.
+
+#### The audit before building
+
+**The practice backend is on `worktree-ai-platform-phase-a` only. Nothing of it is on `main`.**
+A grep of `origin/main` for `sim_`, `ai_doctor`, `ai_coach`, `persona` and `scenario` finds 0
+real hits.
+
+**On the branch it is built and tested end to end against the stub** (`sim-gateway.spec.ts:297-403`):
+
+- the tables `sim_personas`, `sim_scenarios`, `sim_sessions`, `sim_turns`, `sim_coach_analyses`;
+- the RPCs `start_sim_session` and `end_sim_session`;
+- the gateway features `ai_doctor` and `ai_coach`.
+
+**The analysis shape** (`simulation.ts:246-277`) covers all ten items in the operator's list:
+
+- seven dimension scores;
+- strengths and improvements, each citing a turn;
+- up to 3 suggested modules.
+
+**Visibility already matches the ruling** (`simulation_core.sql:281-297`, tested).
+
+**Missing even there:**
+
+- read RPCs for "my sessions" and "one session" (only direct table reads);
+- core client methods and `API_PATHS`;
+- a frontend contract doc;
+- any MR reply to a practice analysis.
+
+**Two trust gaps:**
+
+- an MR can write their own scores (`record_sim_coach_analysis` is granted to authenticated);
+- the gateway takes the persona and turn text from the client body.
+
+**The FE-D16 wiring targets the deferred real-call scope.** It stays hidden behind
+`coachingEnabled`.
+
+#### Commits (each red, then green)
+
+| Commit | What | Red → green |
+| --- | --- | --- |
+| `ecef224` | `eslint.config.mjs`: `noDeviceClockAsNow` and `noLocalCalendarReads` for `packages/ui/**`; its tests get the calendar rules only | the five banned shapes linted as `packages/ui/src/Spinner.tsx`: **0** errors (as `apps/field`: 5) → **5**; as a ui test: **3** (calendar). The real ui tree is clean |
+| `fbd5e4f` | **FE-CR-11** | docs |
+| `70d6169` | `apps/field/src/practice/`: `contract.ts` (mirror; dimension labels in the operator's words), `flow.ts` (the stored session plus the typed text only; fail-closed mappers, so a stub reply is "not available"), `sample.ts` (in memory; "Sample reply", `modelProvider: 'sample'`), `transport.ts` (`PracticeBackend`) | suite failed to load → 13/13, including a whole start → turn → end → analysis run |
+| `5e9037d` | `PracticeHomeScreen`, `PracticeSessionScreen`, `PracticeAnalysisScreen`. Each doctor turn is labelled "AI practice doctor"; feedback cites "<dimension> · Turn N"; an AI-written note and the visibility note; a stub analysis shows no scores | suite failed to load → 17/17. ui jest 328/328 |
+| `3eb838e` | Routes `/practice`, `/practice/session/[id]`, `/practice/analysis/[id]`, and the Me row "AI Doctor practice", behind `EXPO_PUBLIC_PRACTICE_SAMPLE` (off). The sample ids were made UUID-shaped | routes: suite failed to load → 8/8 (the payload test holds a real doctor in the store; none of it is sent). Nav: 1 failed (flag on) / 1 passed (flag-off control) → 2/2. Field jest 272/272, vitest 707/707 |
+| `a3178e4` | Gap map update | docs |
+
+#### FE-CR-11
+
+**The ask:** the practice contract and migrations on `main`, read RPCs in the
+`{ data, readAt, auditLogId }` envelope, and the contract written down.
+
+**Three questions:**
+
+1. Reply for practice: none exists.
+2. MR-writable scores.
+3. Should the gateway read the persona and turns from its own rows?
+
+#### Not done
+
+- **No APK and no device walkthrough.** The operator asked for device testing once integration is
+  stable. The practice screens run on sample data until FE-CR-11 lands, and the last flag-on build
+  was stopped by memory (FE-D16).
+- **No CI job for Android rendering or devices yet.** Recorded as an open item, for when
+  integration is stable.
+
+#### Boundary and CI
+
+```
+$ git diff --name-only origin/main...HEAD | grep -E '^(services|packages/core|scripts)/|seed|migrations'
+(no output: boundary clean)
+```
+
+- **Not touched:** `services`, `packages/core`, migrations, the seed script and the root
+  `scripts/`.
+- **Changed:** `eslint.config.mjs` (root config) and app code.
+- **No dependency was added.**
+- `pnpm run typecheck` 9/9, `lint` 7/7 (one warning that predates this work), `format:check` clean.
+- **PR #15's CI** is reported in the hand-off.
