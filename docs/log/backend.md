@@ -3312,3 +3312,219 @@ the list for that hour is A6. **No credential appears anywhere in the diff** (th
 against the env file's values before commit). **The local env file still exists**
 (`services/api/supabase/functions/.env`, git-ignored) — it is needed the moment access is granted, and is
 deleted when the AI work finishes, per item 1.
+
+### W1-W — merged, and the deploy's first step
+
+**5 October 2026.** The operator approved production. PR #2 merged; the deploy stopped at its first
+step, as predicted, and for one more reason than predicted; then the two defects review found, the
+backup question, and the status table.
+
+#### The previous push's CI
+
+`723f5d7` (W1-V): **CI green**, run `37007705638`, SHA = that commit. Database runner: **Test Files 80
+passed (80)**, **Tests 1102 passed | 2 skipped | 4 todo (1108)**. Unit runner: core 11 files, 201 passed
+| 4 todo; ui-tokens 59; ui 4; mock 43; field 46 files, 664; console 8 files, 76.
+
+#### The priority override — did it fire? **No.**
+
+`GetFoundationModelAvailability` at the start and between every part, the last just before this
+section: both models `authorizationStatus: NOT_AUTHORIZED`, `agreementAvailability: NOT_AVAILABLE`.
+
+#### A — PR #2 merged
+
+* **Guard:** branch `worktree-ai-platform-phase-a`, HEAD `723f5d7` = remote, clean; `main` had nothing
+  this branch lacked. PR #2 `CLEAN` / `MERGEABLE`, both checks SUCCESS on `723f5d7`.
+* **Merged** with `--merge --match-head-commit 723f5d7…` (a merge commit, as PRs #9–#12 were; refused if
+  anything newer had appeared): **`bf68c9c`**, 04:24 UTC. **CI on `main` green on `bf68c9c`** (run
+  `37263392812`): database **80 files, 1102 passed | 2 skipped | 4 todo (1108)**; unit runner as above.
+  Migration drift on the same push: green, 19 of 96 applied.
+* **What it put on `main`:** 59 commits, 173 files, +39,166 / −49 — 79 under `services/api`, 26 under
+  `packages/core`, 19 under `apps/console`. **The two contracts Dev waited on since 1 October are now on
+  `main`:** before the merge `main` had none of `packages/core/src/field/ai.ts`, `simulation.ts` or
+  `gateway/`; now `MrChatResult`, `AiAllowanceSchema`, `StartSimSessionResponseSchema`, `SimTurnResult`
+  and `SimCoachAnalysisSchema` are exported from the package root (`FE-CR-7`, `FE-CR-11`).
+* **Found: the merge made PR #13 conflict.** The "PR mergeability" workflow failed on `bf68c9c`: PR #13
+  (`fe-d14-screens`, Day End and Mileage on real data) `CONFLICTING`, still so after its 30-second
+  re-check, so GitHub runs no CI on it. `git merge-tree`: one file, `docs/contract-requests.md`, both
+  sides appended at the old end. Keep both. Dev's branch — not touched. PRs #14 and #15 are mergeable.
+* **A3** — `docs/contract-requests.md`, "`FE-CR-7` and `FE-CR-11` — LANDED on `main`": *the app can now
+  import the chat, allowance and practice shapes from `@fieldforce/core` on `main`, so its two copied
+  contract files can go* — with the PR #13 conflict and its fix.
+
+#### B — the production deploy: STOPPED AT 0.1
+
+* **0.1, run exactly as written** (Database backup, *Run workflow* on `main`): run `37264597473`, on
+  `bf68c9c`. **Green — and 0 artefacts.** Every step after "Is there a destination for this artefact?"
+  was skipped; the notice: *"BE-W11 deliberately disabled … Deferred until 2026-10-15"*. The runbook's
+  proof is "a green run today; **its artefact listed on the run**" — the second half fails. **Stopped.**
+  Nothing after 0.1 was run; nothing in production changed. Repository secrets: three, none of them
+  `BACKUP_DESTINATION`.
+* **What also passes 0.1's first half:** a run that did nothing on purpose. A green backup run is not a
+  backup.
+* **Read, not run:** the merge push's own drift run (`37263392693`) — **19 of 96 applied, clean prefix,
+  nothing applied without a file**: the shape 0.2 predicts.
+* **The paid plan: NOT checked** — not reached; the runbook now says to confirm it before 1.1.
+* **The runbook was stale:** 0.4 predicted 74 migrations ending `20261002000100`; `main` now holds 96, so
+  **77 pending, ending `20261002000400`**. 0.2, 0.4, 1.1, 1.2 and S1 updated. Three of the 77 were never
+  in the W1-S rehearsal (`20261002000200`, `…0300`, `…0400`); recorded.
+* **B4 — the resume state** is the runbook's new last section: what ran, what was read, what was not
+  started, and the order to resume in.
+* **More than one operator answer is needed — see E.**
+
+#### C — a truncated answer is not a broken one (`BE-C67`)
+
+**C1 — measured.** All five features reach the log through one path: `generateStructured` →
+`invalidOutput`. The W1-V adapter read `max_tokens` as an ordinary finish, so the cut-off half of a JSON
+answer failed `JSON.parse` and was logged **`schema_invalid`, `error_code` `not_json`** — beside garbage.
+Shown by the test that sends the identical half-answer with `end_turn`, and by mutant C-M1 (W1-V's
+behaviour restored), which fails exactly the `max_tokens` test. Every flow asks for JSON, so a cut-off
+answer was never SHOWN half-finished — it was mislabelled.
+
+**C2 — decided: a NEW flag, `output_truncated`**, made as `BE-C64` was: `LlmResult.truncated` from the
+vendor's stop reason; `generateStructured` reports it before parsing; `invalidOutput` logs it;
+`20261005000100` lets the database accept it; its rollback refuses while one is recorded (`BE-C65`). Not
+an existing flag: `schema_invalid` keeps the confusion, `provider_error` says the call failed when it
+did not, `model_refused` says the model declined. Decided by backend because, **re-measured today,
+nothing reads `ai_requests`** but `ai_begin_request` and `ai_complete_request` (no view), and no app file
+on `main` or on the three unmerged frontend branches reads `flags` or `error_code`. Recorded in
+`.ai-collab/decisions-backend.md`; `BE-C67` registered first.
+
+**C3 — two-sided, by the signal.** The identical half-answer: with `max_tokens` → `output_truncated`;
+with `end_turn` → `schema_invalid`. The same pair as product-QA benchmarks, through the real control
+plane (`cut-json-unsignalled`, `output-truncated`, both sending `BENCHMARK_CUT_OFF_TEXT`). Rollback:
+blocks with a recorded truncation (55000), clean without one.
+
+**C4 — every stop reason, checked against the list in the pinned SDK** —
+`@aws-sdk/client-bedrock-runtime` 3.1144.0, `dist-types/models/enums.d.ts`, `StopReason`, nine values:
+
+| Stop reason | Means here |
+| --- | --- |
+| `end_turn` | complete — validation decides |
+| `stop_sequence` | complete — cannot occur: no stop sequences are sent |
+| `tool_use`, `malformed_tool_use` | complete — cannot occur: no tools are sent; would fail validation |
+| `malformed_model_output` | complete — the vendor saying what validation then finds: `schema_invalid` |
+| `content_filtered`, `guardrail_intervened` | **refused** (`BE-C64`) |
+| `max_tokens`, `model_context_window_exceeded` | **truncated** (`BE-C67`) |
+
+**Found: W1-V's third "refusal" stop reason, `refusal`, is not on the list.** It came from documentation,
+which is exactly what the brief suspected. Removed. The table is keyed on the SDK's own `StopReason`
+type, so an SDK that adds a value fails to typecheck (mutant C-M6: `TS2741 Property 'max_tokens' is
+missing`). I am not certain `model_context_window_exceeded` means the output was cut off rather than that
+the input alone overflowed; either way the answer is incomplete, and the flag says so.
+
+**Mutants.** C-M1 (max_tokens complete) and C-M2 (context window complete): one adapter test each,
+nothing in core. C-M3 (flow ignores `truncated`) and C-M4 (logged as `schema_invalid`): **one test in
+EACH of two suites** — the core benchmark and the adapter spec prove the same behaviour at two layers.
+**C-M5 (every parse failure called truncated) killed TWO core benchmarks** — `invalid-structured-response`
+and `cut-json-unsignalled`, both "garbage stays `schema_invalid`". Rollback: no guard → exactly the
+"blocks" test; always refuses → exactly the "clean" test.
+
+#### D — two pins, one version
+
+**D2.** `services/api/scripts/check-function-pins.mjs`, a CI step in the static job: every `npm:` import
+in `deno.json` must be EXACT, resolved by some workspace in `pnpm-lock.yaml`'s `importers`, and equal to
+what every such workspace resolves. A comparison, nothing cleverer.
+
+**It failed on the repository as committed — on zod, not the SDK.** `deno.json` said `npm:zod@^4.1.12`,
+a range, with no Deno lockfile: the deployed function would take the newest 4.x on deploy day, while the
+tests run the lockfile's 4.4.3 — drift that needs nobody to edit a file. Pinned to `4.4.3`. The check then
+passed; the parser was read back (zod 4.4.3, SDK 3.1144.0, 52 packages) before trusting the pass. The
+function loaded with 4.4.3: its own log shows `ai-gateway` serving requests while all four gateway suites
+passed.
+
+**Mutants (6 tests):** ranges allowed → exactly the range test; untested package allowed → exactly that
+test; **drift allowed → TWO** (SDK drift, and the decoy version under `packages:` — both drift cases);
+always failing → all six including the positive control. **One survived:** removing "stop at the end of
+`importers:`" — an equivalent mutant, because the lockfile's other sections never match the dependency
+pattern's indentation. The line is defensive only.
+
+**D3 — the sweep, from the catalogue** (every tracked `package.json`, `deno.json`, `config.toml`,
+`.nvmrc`, `pnpm-workspace.yaml`, `app.json`, workflow):
+
+| What | Where it runs vs where it is tested | Verdict |
+| --- | --- | --- |
+| AWS SDK | `deno.json` vs lockfile | was agreeing; now checked |
+| zod | `deno.json` RANGE vs lockfile 4.4.3 | **was drifting-capable; pinned, checked** |
+| SDK's and zod's own dependencies | Deno resolves on deploy day vs lockfile | **open — `BE-W142`** (no Deno lockfile) |
+| Supabase CLI | root `package.json` → lockfile 2.113.0, used by local, CI and the runbook's deploy commands | one pin |
+| Node | `.nvmrc` 24, `engines` `>=24 <25`; the function does not run Node | one pin |
+| pnpm | `packageManager` 11.21.0, read by `pnpm/action-setup` | one pin |
+| Edge runtime | local: CLI-chosen `supabase-edge-runtime-1.74.3` (Deno 2.1.4); production: Supabase's own | **cannot be pinned from here**; recorded |
+| Postgres | `config.toml` `major_version = 17` vs production's | **production's not measured** |
+| `packages/core` in the function | the built `dist` at deploy time | runbook 1.3 builds it first |
+
+#### E — the backup deadline
+
+**E1 — exactly what happens.** `backup.yml` compares `date -u +%Y-%m-%d` to `DEFERRAL_EXPIRES`
+(`'2026-10-15'`) as strings, `TODAY > DEFERRAL_EXPIRES`. On the 15th it is still green; **from 16 October
+00:00 UTC (05:30 India) any run is red**; the schedule is `25 2 * * 1`, so **the first scheduled red is
+Monday 19 October**, and every Monday after. What clears it: setting `BACKUP_DESTINATION`, or moving
+the date in a commit that says why.
+
+**Found while establishing what clears it (`BE-W143`): setting the secret does not make a backup.** Its
+value is read by nothing — only tested for emptiness — and no step uploads the artefact: with it set, the
+job would dump the database into the runner's temporary folder, verify it, and the runner would discard
+it. The workflow's own text said "no code change needed"; **false**, corrected in three places in
+`backup.yml`. So the reviewer's "blocked on one operator answer, not on engineering" — and my own first
+draft of the resume state — were both wrong: it is one answer, THEN about half a day of engineering
+(about an hour if the answer is Supabase's own backups).
+
+**E2 — put to the operator as Q-19** (`docs/operator-inputs.md`, its table and section 8): *"Where may a
+full copy of the production database be kept: GitHub, a storage bucket you provide, or Supabase's own
+backups?"* — with each answer's cost and the work after it, the 16 October date, and the contradiction
+said plainly: **the deploy is approved and its first step is not.** The backup was not on the operator's
+consolidated list at all before today — only in `blocked-on-you.md` 6.3 and `FE-CR-1`. Engineering's
+recommendation, not a default: Supabase.
+
+#### F — the status table (measured this session, or cited)
+
+| MODULE | STATUS | OWNER | BLOCKER | ETA |
+| --- | --- | --- | --- | --- |
+| Core MR workflow — server | DONE | Maanav | — | — |
+| Core MR workflow — app | IN PROGRESS | Dev | PR #13 CONFLICTING (one file); Day End and Mileage on `main` still read the mock | on merge of #13 |
+| Contracts for chat and practice | DONE | Maanav | — | — |
+| Bedrock adapter | DONE | Maanav | No live call yet (model access) | — |
+| Production deploy | BLOCKED | Operator, then Maanav | Q-19 (where backups go); then `BE-W143`; stopped at runbook 0.1 | about 1 day after the answer |
+| Backup | BLOCKED | Operator, then Maanav | Q-19; red from 16 October | ½ day after the answer |
+| Product Q&A / Chatbot / LMS Tutor / AI Doctor / AI Analysis | BLOCKED | AWS account owner | Model access `NOT_AUTHORIZED` (measured today); then the second admin | under 1 hour to first live call after access |
+| Day planning (manager plans) | BLOCKED | Operator | Q-16, Q-17, Q-18 — no answer recorded | 10–15 working days of effort after the answers |
+| LMS (app screens) | POST-4-OCT | Dev | No LMS screen on `main` | — |
+| Second admin | BLOCKED | Operator | Q-14 — no name recorded | same day |
+| Consent in production | BLOCKED | Operator | Q-11 — legal name not recorded | ½ day |
+| Sample cap | BLOCKED | Operator | Q-10 — the number not recorded | ½ day |
+| Demo build (APK) | BLOCKED | Dev | Not re-measured since W1-T (CMake 3.31.6 missing then) | — |
+
+#### Checks
+
+* Static first: `pnpm typecheck` **0 errors**; `pnpm lint` **0 errors, 1 warning** (frontend's
+  `beat-plan-route.test.tsx`, not mine); `pnpm format:check` clean. The second static run (after Part D)
+  was red on my own new spec — an untyped `.mjs` import; fixed with a `.d.mts`, as every other script has.
+* `node scripts/check-ids.mjs` — now compared against `origin/main` (rule 2 live since the merge): 305
+  rows unchanged, 308 registered (`BE-C67`, `BE-W142`, `BE-W143` — each before citing).
+* **Clean-database check: All 28 step(s) passed** (one more than W1-V: the pin check) — database **Test
+  Files 81 passed (81)**, **Tests 1115 passed | 2 skipped | 4 todo (1121)** — the two skipped are the
+  gated live Bedrock tests; core 11 files, 203 | 4 todo; field 46 files, 664; console 8 files, 76;
+  ui-tokens 59; ui 4; mock 43; browser **7 passed, 0 skipped, 0 failed**. The function server was started
+  from the repository root in a restart loop and confirmed from its own log; it served the gateway suites
+  without restarting.
+* Docker Desktop was not running at the start; started it.
+
+#### What I got wrong
+
+* **W1-V's `refusal` stop reason** — chosen from documentation, not the SDK's list. Removed.
+* **zod was left a range in `deno.json`** under a W1-B comment calling it "pinned"; in W1-V I edited that very comment and pinned the SDK
+  exactly beside it without noticing the line above.
+* **I first wrote "No engineering change is needed" into the resume state**, repeating the workflow's
+  claim before reading the steps that would run. Corrected before commit.
+* I first wrote that Supabase's backups keep the data "in India" — unchecked. Removed.
+* My first bulk edit of core put backticks through the shell and garbled three comments; reverted and
+  redone file by file.
+
+#### Where I stopped
+
+**All six parts done; the override never fired.** The deploy is stopped at runbook 0.1 — **an operator
+answer (Q-19), then about half a day of engineering (`BE-W143`)**, then 0.1 again; resume state in the
+runbook. The live AI calls still wait on AWS model access only. **No credential appears anywhere in the
+diff** (checked against the env file's values before commit). **The local env file still exists**
+(`services/api/supabase/functions/.env`, git-ignored) — needed the moment access is granted; deleted when
+the AI work finishes, per item 1.

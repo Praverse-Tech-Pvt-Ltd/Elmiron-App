@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PRODUCT_QA_BENCHMARK } from './benchmarks.js';
+import { BENCHMARK_CUT_OFF_TEXT, PRODUCT_QA_BENCHMARK } from './benchmarks.js';
 import type { ProductQaBenchmarkCase, ScriptedModelBehaviour } from './benchmarks.js';
 import { detectPatientSignals } from './guardrails.js';
 import { PRODUCT_QA_OUTPUT_SCHEMA_NAME, answerProductQuestion } from './product-qa.js';
@@ -112,6 +112,10 @@ const scriptedProvider = (behaviour: ScriptedModelBehaviour, recorded: Recorded)
         return Promise.resolve(reply('Sure! Benchmarol should be stored somewhere cool.'));
       case 'refuses':
         return Promise.resolve({ ...reply('I cannot help with that request.'), refused: true });
+      case 'returns_cut_json':
+        return Promise.resolve(reply(BENCHMARK_CUT_OFF_TEXT));
+      case 'truncates':
+        return Promise.resolve({ ...reply(BENCHMARK_CUT_OFF_TEXT), truncated: true });
       case 'times_out':
         return new Promise(() => undefined);
       case 'must_not_be_called':

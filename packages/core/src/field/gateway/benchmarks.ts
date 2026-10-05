@@ -39,6 +39,14 @@ export type ScriptedModelBehaviour =
    * two apart, so a case that passes here distinguishes on the signal, not on a string.
    */
   | 'refuses'
+  /** `BENCHMARK_CUT_OFF_TEXT` — the first half of a JSON answer — with no signal: genuinely malformed. */
+  | 'returns_cut_json'
+  /**
+   * W1-W C (`BE-C67`). The SAME `BENCHMARK_CUT_OFF_TEXT`, but the vendor reports it stopped at a length
+   * limit (`LlmResult.truncated`). Paired with `returns_cut_json`: identical text, so a case that passes
+   * distinguishes on the signal, not on a string.
+   */
+  | 'truncates'
   /** Never answers. */
   | 'times_out'
   /** The case must end before the model is reached; calling it is itself a failure. */
@@ -67,6 +75,9 @@ export interface ProductQaBenchmarkCase {
 /** The question every "matching" case is about. The benchmark knowledge fixture answers it. */
 export const BENCHMARK_MATCHING_QUESTION =
   'What is the storage temperature for Benchmarol tablets?';
+
+/** The first half of a valid answer, as a token limit would leave it. Both runners send exactly this. */
+export const BENCHMARK_CUT_OFF_TEXT = '{"supported": true, "answer": "Store Benchmarol below 25';
 
 export const PRODUCT_QA_BENCHMARK: readonly ProductQaBenchmarkCase[] = [
   {
@@ -178,6 +189,38 @@ export const PRODUCT_QA_BENCHMARK: readonly ProductQaBenchmarkCase[] = [
       kind: 'not_available',
       modelCalled: true,
       flags: ['model_refused'],
+      requestStatus: 'failed',
+    },
+  },
+  {
+    id: 'cut-json-unsignalled',
+    description:
+      'The first half of a JSON answer with NO signal from the vendor — genuinely malformed. Logged ' +
+      'schema_invalid, as before (W1-W C).',
+    question: BENCHMARK_MATCHING_QUESTION,
+    knowledge: 'matching',
+    model: 'returns_cut_json',
+    requiresRealModel: false,
+    expected: {
+      kind: 'not_available',
+      modelCalled: true,
+      flags: ['schema_invalid'],
+      requestStatus: 'failed',
+    },
+  },
+  {
+    id: 'output-truncated',
+    description:
+      'The SAME half answer, but the vendor reports it stopped at a length limit (W1-W C, BE-C67). ' +
+      'Logged output_truncated — NOT schema_invalid, which is what the identical text above is.',
+    question: BENCHMARK_MATCHING_QUESTION,
+    knowledge: 'matching',
+    model: 'truncates',
+    requiresRealModel: false,
+    expected: {
+      kind: 'not_available',
+      modelCalled: true,
+      flags: ['output_truncated'],
       requestStatus: 'failed',
     },
   },

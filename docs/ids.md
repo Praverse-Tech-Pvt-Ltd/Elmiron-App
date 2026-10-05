@@ -311,6 +311,9 @@ bootstrap rows are not restated here; the first file that cites each is the poin
 | `BE-W135` | backend | `mr_chat` and `ai_doctor` sent client-supplied `history` to the model unscreened for patient details; fixed W1-Q E1. Residual: an `assistant`/`doctor` turn is still the client's word |
 | `FE-CR-6` | frontend | carry the AI allowance and its reset time to the app (filed on `fe-d14-screens`); answered W1-Q |
 | `FE-CR-7` | frontend | land the chat contract in `packages/core` on `main` (filed on `fe-d14-screens`); lands with PR #2 |
+| `FE-CR-8` | frontend | what writes an analysis and its findings, and when (filed on `fe-d16-coaching`); open. Row added by backend on 5 October, W1-W, when PR #14 was merged with `main` |
+| `FE-CR-9` | frontend | should opening an analysis stamp `mr_viewed_at` (filed on `fe-d16-coaching`); open. Row added by backend on 5 October, W1-W, when PR #14 was merged with `main` |
+| `FE-CR-10` | frontend | queue a reply offline, and the shape `respond_to_analysis` returns (filed on `fe-d16-coaching`); open. Row added by backend on 5 October, W1-W, when PR #14 was merged with `main` |
 | `BE-C62` | backend | the coach's analysis covers the operator's TEN items; "Strengths" is the existing list, nothing changes (W1-R B) |
 | `BE-C63` | backend | practice-analysis visibility MR + Admin yes, Manager no — measured as met (W1-R B4) |
 | `BE-W136` | backend | the AI doctor and coach took persona brief, stance, objective, objection and turns from the CLIENT although the server holds them; the approved persona brief never reached the model (W1-R C) |
@@ -324,3 +327,8 @@ bootstrap rows are not restated here; the first file that cites each is the poin
 | `BE-W140` | backend | a company's default working hours can only be temporary: the 60-day expiry on `org_default_shift_window` checks the key, not the scope |
 | `BE-W141` | backend | `ucpmp_cap_decision_status` runs with no caller and reads only the GLOBAL cap: a company-level cap would not stop the 6 November build failure |
 | `BE-CR-7` | backend | which items on the operator's 4 October list have a screen and which only a server, measured from the code (W1-V E) |
+| `BE-C67` | backend | a cut-off answer is flagged `output_truncated`, not `schema_invalid`; every Bedrock stop reason decided against the SDK enum (W1-W C) |
+| `BE-W142` | backend | the Edge Function's npm imports are pinned exactly, but their TRANSITIVE dependencies are not: no Deno lockfile is committed, so the deployed function resolves them on deploy day while the tests run pnpm-lock's (W1-W D3) |
+| `BE-W143` | backend | setting `BACKUP_DESTINATION` makes the backup job produce and verify a dump that is then stored NOWHERE: no step uploads it or reads the secret's value, so "no code change needed" is false and the runbook's 0.1 ("its artefact listed on the run") cannot pass on the answer alone (W1-W E) |
+| `FE-D14` | frontend | Day end and Mileage on real data, and the AI-limit warning; first cited in `PROJECT-OVERVIEW.md` (merged with PR #13). Row added by backend on 5 October, W1-W: PR #13 reached `main` unregistered and turned the id check red |
+| `FE-D15` | frontend | the operator's direction, the gap map, and the assistant on sample data; first cited in `PROJECT-OVERVIEW.md` (merged with PR #13). Row added by backend on 5 October, W1-W, for the same reason |

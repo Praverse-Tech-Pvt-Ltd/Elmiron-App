@@ -20,6 +20,8 @@
  *
  * * A model that DECLINES is reported as `refused: true` from the vendor's own stop reason — never
  *   guessed from the text — so the log says `model_refused`, not `schema_invalid`.
+ * * An answer cut off at a length limit is reported as `truncated: true`, the same way (`BE-C67`), so
+ *   the log says `output_truncated`. Every stop reason's meaning: `STOP_REASON_MEANING`.
  * * A failure the vendor NAMES is thrown as `ProviderError(name)` — the name, never the message, which
  *   can echo the request (§52). A failure with no vendor name stays a plain `Error`, which the flows
  *   log as the coarse `provider_error` it always was.
@@ -28,6 +30,8 @@
  */
 import { ProviderError } from './core.ts';
 import type { LlmGenerateRequest, LlmProvider, LlmResult } from './core.ts';
+// TYPE ONLY: erased at runtime, so this file still never loads the SDK (only `bedrock-client.ts` does).
+import type { StopReason } from '@aws-sdk/client-bedrock-runtime';
 
 /** The one region this adapter will run in. */
 export const BEDROCK_REGION = 'ap-south-1';
@@ -43,15 +47,40 @@ export const INDIA_PROFILES = {
 export type IndiaProfileId = (typeof INDIA_PROFILES)[keyof typeof INDIA_PROFILES];
 
 /**
- * Stop reasons that mean the model DECLINED rather than finished. `content_filtered` and
- * `guardrail_intervened` are Bedrock Converse values; `refusal` is included for a model that reports
- * declining by that name. A stop reason not listed is not a refusal.
+ * W1-W C (`BE-C67`). What every stop reason the vendor can return MEANS here — checked against the
+ * SDK's own `StopReason` enum (`@aws-sdk/client-bedrock-runtime` 3.1144.0, `dist-types/models/enums.d.ts`),
+ * not against documentation. Keyed on that type, so an SDK that adds a stop reason fails to typecheck
+ * until somebody decides what it means.
+ *
+ * * `refused` — the model or a filter DECLINED (`BE-C64`): logged `model_refused`.
+ * * `truncated` — the answer stopped at a LENGTH LIMIT (`BE-C67`): logged `output_truncated`.
+ * * `complete` — handed to the flow's own validation, which is the authority on whether it is usable
+ *   (§38). `stop_sequence`, `tool_use` and `malformed_tool_use` cannot occur — this adapter sends no
+ *   stop sequences and no tools — and `malformed_model_output` is the vendor saying what validation
+ *   will then find; all three reach the log as `schema_invalid` if the text does not validate.
+ *
+ * W1-V's set also held `refusal`. **It is not a Bedrock stop reason** — it was taken from
+ * documentation, not from this list — so it is gone.
  */
-export const REFUSAL_STOP_REASONS: ReadonlySet<string> = new Set([
-  'content_filtered',
-  'guardrail_intervened',
-  'refusal',
-]);
+export const STOP_REASON_MEANING: Readonly<
+  Record<StopReason, 'complete' | 'refused' | 'truncated'>
+> = {
+  end_turn: 'complete',
+  stop_sequence: 'complete',
+  tool_use: 'complete',
+  malformed_tool_use: 'complete',
+  malformed_model_output: 'complete',
+  content_filtered: 'refused',
+  guardrail_intervened: 'refused',
+  max_tokens: 'truncated',
+  model_context_window_exceeded: 'truncated',
+};
+
+/** A stop reason this SDK does not list is read as `complete`: validation still decides. */
+const meaningOf = (stopReason: string | undefined): 'complete' | 'refused' | 'truncated' =>
+  stopReason !== undefined && Object.hasOwn(STOP_REASON_MEANING, stopReason)
+    ? STOP_REASON_MEANING[stopReason as StopReason]
+    : 'complete';
 
 /** The subset of the Converse request this adapter sends. */
 export interface ConverseInput {
@@ -152,6 +181,7 @@ export const createBedrockProvider = (config: {
         throw new Error('the Bedrock call failed');
       }
 
+      const meaning = meaningOf(out.stopReason);
       const text = (out.output?.message?.content ?? []).map((part) => part.text ?? '').join('');
       return {
         text,
@@ -161,9 +191,8 @@ export const createBedrockProvider = (config: {
         },
         provider: 'bedrock',
         model: config.profileId,
-        ...(out.stopReason !== undefined && REFUSAL_STOP_REASONS.has(out.stopReason)
-          ? { refused: true }
-          : {}),
+        ...(meaning === 'refused' ? { refused: true } : {}),
+        ...(meaning === 'truncated' ? { truncated: true } : {}),
       };
     },
   };

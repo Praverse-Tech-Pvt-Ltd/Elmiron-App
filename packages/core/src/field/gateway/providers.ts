@@ -35,6 +35,13 @@ export interface LlmResult {
    * this it was logged as `schema_invalid`: indistinguishable from a model that produced garbage.
    */
   readonly refused?: boolean;
+  /**
+   * W1-W C (`BE-C67`). True when the VENDOR reports the answer stopped at a length limit — the token
+   * limit or the context window — again a stop reason, never a guess from the text. A cut-off JSON
+   * answer fails to parse, so without this it was logged `schema_invalid` beside garbage: the
+   * confusion `BE-C64` removed for refusals, arriving by a second door.
+   */
+  readonly truncated?: boolean;
 }
 
 export interface LlmGenerateRequest {
@@ -86,7 +93,7 @@ export type StructuredResult<T> =
   | { readonly ok: true; readonly value: T; readonly raw: LlmResult }
   | {
       readonly ok: false;
-      readonly reason: 'not_json' | 'schema_mismatch' | 'refused';
+      readonly reason: 'not_json' | 'schema_mismatch' | 'refused' | 'truncated';
       readonly raw: LlmResult;
     };
 
@@ -103,6 +110,8 @@ export const generateStructured = async <S extends z.ZodType>(
   const raw = await provider.generate({ ...request, json: true });
   // A declined answer is reported as such, before any attempt to read it as JSON (`BE-C64`).
   if (raw.refused === true) return { ok: false, reason: 'refused', raw };
+  // A cut-off answer is reported as such, before its first half fails to parse (`BE-C67`).
+  if (raw.truncated === true) return { ok: false, reason: 'truncated', raw };
   let parsed: unknown;
   try {
     parsed = JSON.parse(stripCodeFence(raw.text));
@@ -196,11 +205,17 @@ export const providerFailure = (
 /**
  * How a reply that could not be used is logged, in every flow. **A refusal is not malformed output**:
  * it is flagged `model_refused`, so "the model declined" and "the model produced garbage" are two
- * counts, not one. Malformed output is logged exactly as before.
+ * counts, not one. **Nor is a cut-off answer** (`BE-C67`): it is flagged `output_truncated`. Malformed
+ * output is logged exactly as before.
  */
 export const invalidOutput = (
-  reason: 'not_json' | 'schema_mismatch' | 'refused',
-): { readonly flags: ['model_refused' | 'schema_invalid']; readonly errorCode: string } =>
+  reason: 'not_json' | 'schema_mismatch' | 'refused' | 'truncated',
+): {
+  readonly flags: ['model_refused' | 'output_truncated' | 'schema_invalid'];
+  readonly errorCode: string;
+} =>
   reason === 'refused'
     ? { flags: ['model_refused'], errorCode: 'model_refused' }
-    : { flags: ['schema_invalid'], errorCode: reason };
+    : reason === 'truncated'
+      ? { flags: ['output_truncated'], errorCode: 'output_truncated' }
+      : { flags: ['schema_invalid'], errorCode: reason };

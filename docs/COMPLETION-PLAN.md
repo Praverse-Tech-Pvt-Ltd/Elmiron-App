@@ -2811,3 +2811,15 @@ revisited. Nothing below was fixed in W1-S; this table only makes the register t
 | **`BE-W138` — CLOSED** | **`write_rejections` is append-only** (`20261002000400`): the same statement-level `reject_mutation` trigger as its fully append-only peers; its grants, forced RLS and `on delete restrict` keys already matched. Proved as the owner: UPDATE, DELETE and TRUNCATE all refused `23001`, the row unchanged, inserts still written. **Nothing took advantage of the gap:** no code updates or deletes the table, and production does not have it — 19 of 93 migrations applied (drift run 36975013243) | — | — |
 | **Dated checks — swept (W1-V B3)** | Of the other dated alarms, none has the UCPMP blind spot: `BE-W106` reads the schema and company rows directly; migration drift is cleared by the deploy itself; the backup deferral by a secret the job reads. **The backup deferral (`BE-W11`) expires 15 October** — 13 days — and then the backup job goes red until `BACKUP_DESTINATION` is set or the date is moved in a commit that says why | **OPERATOR** (`FE-CR-1`) | — |
 | **`BE-W139` — status** | Three questions put to the operator as **Q-16, Q-17, Q-18** (`docs/operator-inputs.md` section 7), each with its cost and a default for "you decide"; the estimate's assumptions written down (`docs/design/MANAGER-PLANS-THE-DAY.md`). Not built | **OPERATOR** | 10–15d |
+
+### Added by W1-W — 5 October 2026 (merged; the deploy's first step)
+
+| Id | What | Owner | Size |
+| --- | --- | --- | --- |
+| **PR #2 — MERGED** | `bf68c9c`, CI green on it. `FE-CR-7` (chat, allowance) and `FE-CR-11` (practice) are on `main`. **It made PR #13 conflict** (`docs/contract-requests.md` only) | Dev (resolve #13) | minutes |
+| **Production deploy — STOPPED AT 0.1** | The backup run is green with **0 artefacts**. Nothing in production changed; production is still at 19 of 96 migrations. Resume state: `docs/DEPLOY-RUNBOOK.md`, last section | **OPERATOR** (Q-19), then ENGINEERING | ½d after the answer |
+| **`BE-W143`** | **Setting `BACKUP_DESTINATION` stores nothing**: the job would make a copy, verify it, and discard it with the runner. "No code change needed" was false; corrected in the workflow | ENGINEERING, after Q-19 | ½d (1h for "Supabase") |
+| **Backup deferral** | Expires 15 October; **red from 16 October (UTC)**, first scheduled red Monday 19 October | **OPERATOR** (Q-19) | — |
+| **`BE-C67`** (decision) | A cut-off answer is logged `output_truncated`, not `schema_invalid`. Every Bedrock stop reason decided against the SDK's enum; W1-V's `refusal` was not on it and is removed | — | done |
+| **Function pins** | `deno.json` must name exactly what `pnpm-lock.yaml` resolves — CI step. Found zod as a RANGE (`^4.1.12`); pinned to the tested 4.4.3 | — | done |
+| **`BE-W142`** | The function's npm imports are exact; their **transitive** dependencies are not (no Deno lockfile) | ENGINEERING | ½d, unmeasured |

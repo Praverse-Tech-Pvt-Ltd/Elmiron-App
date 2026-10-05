@@ -59,6 +59,8 @@ export const AI_REQUEST_FLAGS = [
   'provider_error',
   /** W1-S B (`BE-C64`): the vendor reported the model declined — not malformed output. */
   'model_refused',
+  /** W1-W C (`BE-C67`): the vendor reported the answer stopped at a length limit — cut off, not malformed. */
+  'output_truncated',
 ] as const;
 export const AiRequestFlagSchema = z.enum(AI_REQUEST_FLAGS);
 export type AiRequestFlag = z.infer<typeof AiRequestFlagSchema>;

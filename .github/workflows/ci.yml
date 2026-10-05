@@ -120,6 +120,11 @@ jobs:
       # below still EXECUTES them, because a rollback that has never run is a claim.
       - name: Every migration has a rollback file
         run: node services/api/scripts/verify-rollbacks.mjs --files-only
+      # W1-W D. The Edge Function loads its packages from `deno.json`; every test loads them from
+      # `pnpm-lock.yaml`. The day those two name different versions, the tests prove a dependency
+      # the deployed function does not run. Exact, and equal, or the build fails.
+      - name: The Edge Function runs the dependency versions the tests run
+        run: node services/api/scripts/check-function-pins.mjs
       - run: pnpm turbo run test --filter @fieldforce/core
       # The WCAG contrast guard. It fails the build when a design token drops below
       # its required ratio, and it had never run here — the step simply did not

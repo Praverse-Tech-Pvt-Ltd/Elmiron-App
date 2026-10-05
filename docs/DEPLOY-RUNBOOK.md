@@ -53,9 +53,9 @@ in the operator's order, and this maps them:
 | # | Command | Proves it worked | If it did not |
 | --- | --- | --- | --- |
 | 0.1 | GitHub → Actions → **Database backup** → *Run workflow* on `main`; wait for green | A green run today; its artefact listed on the run | **Stop.** No deploy without a backup from today |
-| 0.2 | GitHub → Actions → **Migration drift** → *Run workflow* on `main` | Notice: *"Production has applied the first 19 of 93 migrations, in order, with nothing applied that has no file here"* | Any other shape — an out-of-band version, a gap — **stop**: someone changed production by hand; read the job's own message |
+| 0.2 | GitHub → Actions → **Migration drift** → *Run workflow* on `main` | Notice: *"Production has applied the first 19 of 96 migrations, in order, with nothing applied that has no file here"* | Any other shape — an out-of-band version, a gap — **stop**: someone changed production by hand; read the job's own message |
 | 0.3 | The three counts below, in the Supabase SQL editor (read-only) | You know which branch two migrations will take | See the table under it |
-| 0.4 | `pnpm exec supabase --workdir services/api db push --db-url "$PROD_DB_URL" --dry-run` | *"Would push these migrations:"* followed by **74** names, first `20260907000100`, last `20261002000100`. Nothing changes | A different count — **stop**; production is not where 0.2 said |
+| 0.4 | `pnpm exec supabase --workdir services/api db push --db-url "$PROD_DB_URL" --dry-run` | *"Would push these migrations:"* followed by **77** names, first `20260907000100`, last `20261002000400` (W1-W, 5 October: `main` now holds 96; was 74 / `20261002000100`). Nothing changes | A different count — **stop**; production is not where 0.2 said |
 
 **0.3 — the counts two pending migrations depend on:**
 
@@ -89,8 +89,8 @@ own. Renewing is one more row like 3.2; replacing it is 3.1 below. "Local territ
 
 | # | Command | Proves it worked | If it did not |
 | --- | --- | --- | --- |
-| 1.1 | `pnpm exec supabase --workdir services/api db push --db-url "$PROD_DB_URL" --yes` | Ends *"Finished supabase db push."*, exit 0; **74** "Applying migration" lines. Rehearsal: **8 seconds** on an empty copy | It stops at ONE migration, exits 1 and names the file, statement and SQLSTATE. **Everything before that file stays applied; that file is rolled back whole** (rehearsed: nothing of it was left behind). **Fix the cause, then run 1.1 again — it resumes at that file** (rehearsed: 18 remaining applied). **Re-running without fixing the cause fails on the same file** |
-| 1.2 | Actions → **Migration drift** → *Run workflow* on `main` | **Green with no notice**: *"No drift. 93 migration(s), all applied."* (rehearsed locally with `check:migration-drift`) | A shortfall means 1.1 did not finish — back to 1.1 |
+| 1.1 | `pnpm exec supabase --workdir services/api db push --db-url "$PROD_DB_URL" --yes` | Ends *"Finished supabase db push."*, exit 0; **77** "Applying migration" lines (W1-W; was 74). Rehearsal: **8 seconds** on an empty copy | It stops at ONE migration, exits 1 and names the file, statement and SQLSTATE. **Everything before that file stays applied; that file is rolled back whole** (rehearsed: nothing of it was left behind). **Fix the cause, then run 1.1 again — it resumes at that file** (rehearsed: 18 remaining applied). **Re-running without fixing the cause fails on the same file** |
+| 1.2 | Actions → **Migration drift** → *Run workflow* on `main` | **Green with no notice**: *"No drift. 96 migration(s), all applied."* (rehearsed locally with `check:migration-drift`) | A shortfall means 1.1 did not finish — back to 1.1 |
 | 1.3 | `pnpm --filter @fieldforce/core build` then `pnpm exec supabase --workdir services/api functions deploy ai-gateway --project-ref <production ref>` | The CLI lists `ai-gateway` as deployed | **Not rehearsed** — see the limits. Read the CLI's error; the most likely is a stale `packages/core/dist` |
 | 1.4 | Pushing again: `…db push --db-url "$PROD_DB_URL" --yes` | *"Remote database is up to date"*, nothing applied (rehearsed: "up to date") | — this is the safe re-run check, not a step that changes anything |
 
@@ -164,7 +164,7 @@ TOKEN=$(curl -s -X POST "$API/auth/v1/token?grant_type=password" -H "apikey: $AN
 
 | # | Command | Expected answer | If not |
 | --- | --- | --- | --- |
-| S1 | Migration drift workflow (as 1.2) | *"No drift. 93 migration(s), all applied."* | Schema incomplete — step 1 |
+| S1 | Migration drift workflow (as 1.2) | *"No drift. 96 migration(s), all applied."* | Schema incomplete — step 1 |
 | S2 | `echo ${#TOKEN}` | A number in the hundreds (rehearsal: 907). **0 = sign-in failed** | Wrong password, or 4.1 not confirmed |
 | S3 | `curl -s -X POST "$API/rest/v1/rpc/my_shift_window" -H "apikey: $ANON" -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{}'` | With item 9's value (row 3.2): `{"source": "org_default", "window": {"shiftStart": "09:00:00", "shiftEnd": "18:00:00", "activeWeekdays": [1, 2, 3, 4, 5, 6], …}}`. Once per-territory hours exist (row 3.1): `"source": "territory"` | Nothing = no hours at all — the fallback is missing or has **expired**, and **check-in will refuse**; back to row 3.2 |
 | S4 | `curl -s -X POST "$API/rest/v1/rpc/sync_pull" -H "apikey: $ANON" -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{}'` | JSON with keys `changes, hasMore, nextCursor, serverTime, completeness` | An error code here means the app cannot load the rep's day |
@@ -212,3 +212,33 @@ still open Today to nothing.
    (`verify-rollbacks.mjs`), **but rolling production back drops the data in the tables it removes.**
    A failed deploy is fixed forward (step 1.1's "fix, then re-run"), not rolled back, unless the
    operator decides otherwise with the backup from 0.1 in hand.
+
+## Deploy attempt — 5 October 2026 (W1-W): STOPPED AT 0.1. Resume from here
+
+**State, as somebody else could pick it up.** Nothing in production was changed.
+
+| Step | Done? | What was read | Run |
+| --- | --- | --- | --- |
+| PR #2 merged | **Yes** | merge commit `bf68c9c`; CI green on it (database: 80 files, 1102 passed / 2 skipped / 4 todo) | CI `37263392812` |
+| 0.1 backup | **Ran — FAILED its prediction** | The run is **green, but it has 0 artefacts**: every step after *"Is there a destination for this artefact?"* was skipped, and the job's own notice reads *"BE-W11 deliberately disabled … Deferred until 2026-10-15"*. **A green backup run is not a backup** — the second half of 0.1's proof ("its artefact listed on the run") is the half that fails | `37264597473` |
+| 0.2 drift | Not run (stopped at 0.1) | Read-only, already produced by the merge push: **19 of 96 applied, a clean prefix, nothing applied without a file** — the shape 0.2 predicts | `37263392693` |
+| 0.3 – 0.4, 1.x onward | **Not started** | — | — |
+| Paid plan | **Not checked** — not reached; confirm it is ACTIVE before 1.1, do not infer it from the approval | — | — |
+
+**What resumes it — one operator answer, THEN engineering.**
+
+1. **The operator answers Q-19** (`docs/operator-inputs.md` section 8): GitHub, a bucket, or Supabase's
+   own backups.
+2. **Engineering makes the backup land there** — about half a day, about an hour for "Supabase".
+   **Setting `BACKUP_DESTINATION` alone is NOT enough** (`BE-W143`): the job would then make a copy,
+   verify it, and store it nowhere — no step uploads it — so 0.1's "its artefact listed on the run" still
+   could not pass. For "Supabase", 0.1 itself changes to "a Supabase backup from today exists".
+3. Re-run 0.1 and require **both** a green run **and** a stored copy from today; then continue at 0.2,
+   in order.
+
+**Updated on 5 October because `main` moved:** 0.2, 0.4, 1.1, 1.2 and S1 now expect **96** migrations
+(77 pending: first `20260907000100`, last `20261002000400`). **Three of the 77 were never part of the
+W1-S rehearsal** on a production-shaped copy — `20261002000200` (the `model_refused` flag),
+`20261002000300` (UCPMP sees company caps), `20261002000400` (rejection log append-only). Each is a
+`create or replace function`, a trigger, or a check-constraint change; each applies in order from an
+empty database in every CI run, and none rewrites a table.
