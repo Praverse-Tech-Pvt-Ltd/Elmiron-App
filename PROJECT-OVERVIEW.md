@@ -22432,3 +22432,192 @@ The full answers, each with its citation, are in **`docs/frontend-facts-2026-10-
 - Answers to FE-CR-1 to FE-CR-5.
 - Whether to extend the clock lint to `packages/ui`, `packages/core` and `apps/console`.
 - The CI run on `593e5f0` (36845650674) was still in its database job when this was written.
+
+### FE-D14 — Day end and Mileage on real data, and the AI-limit warning
+
+**1 October 2026, branch `fe-d14-screens`**, off `main` at `dbc17dd` (PR #12 already merged). PR #13,
+**not merged**.
+
+#### Phase A stopped, as instructed: no written source names "six screens"
+
+- `BE-C48` (`.ai-collab/decisions-backend.md:489`, on `worktree-ai-platform-phase-a` only) says
+  "the six remaining app screens and the AI-limit warning", and names none.
+- Backend recorded the same gap: "CANNOT ASSESS — no document names them"
+  (`docs/log/backend.md:2096` on that branch).
+- The only written "six" is CR-3's list of mock screens (`docs/contract-requests.md:63-64`). One
+  of those is already done, and three are Coaching screens, which stay hidden.
+- The operator then defined FE-D14 as: Day end and Mileage on real data, the AI-limit warning,
+  and verify. The operator's message (FE-D15) confirms the source names no "six".
+
+#### Commits (each red, then green)
+
+| Commit | What | Red → green |
+| --- | --- | --- |
+| `6fb2f15` | **Mileage** reads `daily_mileage` (`listMileage`), not `GET /mileage` on the mock. The total is the sum of the server's days. The MR-25 C1 lint exemption is removed | `mileage-route.test.tsx` 7 failed / 1 passed (the no-clock control) → 8/8. `capture/mileage.test.ts` 3/3 |
+| `e58ac35` | **Day end**: visits from the pulled store by Today's own `onDay` (now exported from `today/plan.ts`), distance from `daily_mileage`, times through `clockIn` in the territory zone (Supabase sends UTC, so the old slice would have shown 03:25 for 08:55). Counts stay null until a pull lands. A pull refused as `not_permitted` is the denial state | `day-end-route.test.tsx`, run against the OLD route: 10 failed / 1 passed (the no-day control) → 11/11. `home-route` 14/14 and `src/today` 119/119 unchanged |
+| `e5fdfcd` | **AI-limit warning**, `packages/ui/src/AiAllowanceNotice.tsx`. It shows the warning before the limit, "unavailable until it resets" at the limit, and nothing when no usage was reported. Every figure is a prop from the server; with no reset time it says so; sample figures are labelled. **FE-CR-6** | suite failed to load (no component) → 7/7 |
+
+- **The first Day end red was my own test's fault.** It mocked `loadQueueState` with the wrong
+  shape. The mock was removed, and the corrected test was run against the old route (`git stash`
+  of the route, then `pop`) for an honest red.
+- **No reachable screen reads the mock now.** Coaching, Analysis and Reply still do, and stay
+  hidden.
+
+#### FE-CR-6 — the allowance and its reset time, to the app
+
+- `ai_begin_request` returns `requestsUsedToday`, `dailyLimit` and `allowanceWarning`.
+- But `MrChatResult` carries none of them (`BE-W128`).
+- No contract carries a reset time. The only statement of it is a SQL `HINT`, "resets at midnight,
+  India time", and the gateway's 429 body drops it.
+
+### FE-D15 — the operator's direction, the gap map, and the assistant on sample data
+
+**1 October 2026, same branch, `fe-d14-screens`.** PR #13.
+
+#### The direction file and the gap map
+
+- **`docs/direction-2026-09-28.md`** (`a0e91df`): the operator's start-of-week message, verbatim,
+  under a one-line header. `docs/` is outside Prettier (`.prettierignore`), so the text stays
+  byte for byte.
+- **`docs/frontend-gap-map-2026-10-01.md`** (`b07ca2d`) covers each of the 14 Dev-section lines,
+  with status, evidence, and blocker and owner. Summary:
+  - **done:** Transitions;
+  - **done on sample data:** Chatbot UI;
+  - **blocked:** Chatbot answer flow (FE-CR-7, C-1), and Maps and live tracking UI (C-2, A-1, D-3,
+    plus a dependency approval);
+  - **not started:** Smoothness;
+  - **partial:** the rest.
+- **"Six screens":** the source names none. Eight concrete remaining screens are listed. Only C4's
+  rows are frontend-only.
+- **Maps plan, with no dependency added:**
+  - `react-native-maps` plus a C-2 key, compiled in through `app.json`, so every key change is a
+    new build;
+  - no new permission;
+  - the APK size impact is **not established** until a spike is built.
+- **Found while writing it:** clinic coordinates do **not** reach the phone. `ClinicAddressRow`
+  maps them to `null` on purpose (`packages/core/src/field/endpoints.ts:971-987`), so a map of
+  stops needs a contract change first. "Open in Maps" by address text needs nothing.
+- **A recorded design decision conflicts with the brief:** `BeatPlanScreen.tsx:18`, "There is no
+  map". The operator should confirm the reversal before any map is built.
+
+#### The assistant — commits (each red, then green)
+
+| Commit | What | Red → green |
+| --- | --- | --- |
+| `4fa8c5f` | **FE-CR-7**: land the chat contract in `packages/core` on `main`. It cites the request, result, refusal, placeholder and usage shapes on `worktree-ai-platform-phase-a`, read only | docs |
+| `ebbce78` | `apps/field/src/assistant/`. `request.ts` builds `{ feature: 'mr_chat', message }` from a string, with no history. `outcome.ts` maps the gateway to answer / refusal / not_available / at_limit / offline / error, failing closed; a stub-marked "answer" is never an answer. `contract.ts` is a local mirror until FE-CR-7. `sample.ts` is an added fixture where a keyword picks the state | suite failed to load (no modules) → 18/18 |
+| `06dda1d` | `packages/ui/src/AssistantScreen.tsx`. There is no design in `docs/design/`, so it uses existing components only. Eight distinct states. Sample replies are labelled "Sample reply, not from the assistant" and never "Assistant" | suite failed to load → 13/13. Whole ui jest 306/306 |
+| `74b0010` | `app/assistant.tsx` and the Me → Assistant row, behind `EXPO_PUBLIC_ASSISTANT_SAMPLE` (off by default). The flag off means no row, and a deep link goes to Today | route suite failed to load. Nav: 1 failed (flag on) / 1 passed (flag-off control) → 13/13 |
+| `4502b04` | `docs/demo-path-2026-10-01.md`: Day end and Mileage REAL (the query matched), the assistant not in the demo build and why, the new APK path | docs |
+
+**What the tests hold the assistant to:**
+
+- **The payload.** The pulled store in the test holds a doctor, and the request must be exactly
+  `{ feature, message }`, with no name, id, history, patient, visit or clinic in it.
+- **No placeholder shown as an answer.** A 503 `no_provider`, or a stub-marked reply, must never
+  render as `assistant-answer`.
+
+#### FE-CR-7 — the chat contract, and three questions for backend
+
+1. **The local stub's placeholder is indistinguishable from a refusal.** The stub answers
+   `{ inScope: false }`, and that becomes `out_of_scope`.
+2. **No `history` is sent.** Is a single-turn chat acceptable?
+3. **The allowance belongs on the result** (FE-CR-6).
+
+#### APKs
+
+**Setup note.** The first sample build refused before doing anything, and changed nothing. Three
+required values (`EXPO_PUBLIC_APP_JWT_AUDIENCE`, `_SITE_URL`, `_DEEP_LINK_SCHEME`) were not in
+the environment. They were set from `docs/demo-path-2026-10-01.md:178-180`.
+
+**Both builds ran with the emulator shut down** (`adb emu kill`, no wipe). Free memory was 3.6 GB.
+
+| | Sample (screenshots only) | **Demo** |
+| --- | --- | --- |
+| Path | `C:\dev\demo-apk\field-force-demo-192.168.1.15-2026-10-01-b07ca2d-assistant-sample.apk` (renamed from the script's output; nothing deleted) | **`C:\dev\demo-apk\field-force-demo-192.168.1.15-2026-10-01-b07ca2d.apk`** |
+| Size | 102,092,611 bytes | 102,092,611 bytes (97.4 MB) |
+| Commit | `b07ca2d` | `b07ca2d` |
+| Flags | `EXPO_PUBLIC_ASSISTANT_SAMPLE=true` (it also drives the AI-limit sample figures; there is no separate flag) | Coaching and assistant both off |
+| sha256 | `9f89fac2c843…` | `2c553aae3d01…` |
+
+- Both were installed with `adb install -r` → `Success`.
+- `firstInstallTime` was unchanged (2026-08-27 16:04:38), so nothing was uninstalled.
+- **The flag difference was confirmed on the device,** not from the files. The sizes are equal to
+  the byte, and the Hermes bundles carry the same strings either way. The sample build shows the
+  Assistant row; the demo build does not.
+
+#### Walkthrough
+
+**Sample APK** (`C:\dev\demo-screenshots\fe-d15\sample\`):
+
+- `00-me-assistant-row`;
+- `01-empty`, `02-answer`, `03-refusal`, `04-not-available`;
+- `05-warning`, which is the AI-limit warning, "80 of today's 100", resets 00:00 on 2 Oct;
+- `06-offline`, `07-error-retry`, `08-at-limit`, with Send disabled.
+
+**Sending was not captured.** The sample fixture answers instantly, so the state never stays on
+screen long enough. It is covered by `assistant-route.test.tsx`. No artificial delay was added.
+
+**Demo APK** (`C:\dev\demo-screenshots\fe-d15\demo\`):
+
+- `01-me-no-assistant`: the tabs are Today, Doctors and Me, and Coaching is absent;
+- `02-deeplink-assistant-goes-to-today`;
+- `03-day-end-real`, `04-mileage-real`.
+
+#### The query check (4b)
+
+**Seed.** A fresh local fixture day was seeded with `seed:day -- --another` (`demo-b1b789ac`). It
+refuses non-localhost and is additive.
+
+**On screen, signed in as that rep:**
+
+- Day end: 2 of 3 attended, first check-in 14:02, last check-out 15:42, 0.0 km;
+- Mileage: 0.0 km, "No mileage yet".
+
+**Direct read-only query** (`begin read only` … `rollback`, in `supabase_db_Elmiron-App`):
+
+- visits today, by `visit_day`: completed=2, planned=1;
+- started and completed: 14:02 / 15:42 IST;
+- check_ins this month: 0;
+- `daily_mileage('2026-10-01','2026-10-31')`, called **as that rep** (JWT claims set,
+  `set local role authenticated`): 0 rows, 0 metres.
+
+**Match.** A non-zero distance was **not exercised on the device**, because the seed creates no
+check-ins. It is covered by `day-end-route` and `mileage-route`. No check-in was needed, so the
+location helper was not run.
+
+#### Two slips, reported
+
+1. **A screenshot was overwritten.** `04-not-available.png` was written twice: the first capture
+   showed the empty state because Send had not fired, and the retake overwrote it. That is an
+   overwrite of my own file without asking, which the standing rule forbids. After it, every
+   capture had a unique name.
+2. **A password was printed.** A redaction `sed` failed and printed the local fixture password for
+   `demo-b1b789ac` into the session transcript. It works only on the local seeded stack. It is not
+   in any repo file.
+
+Nothing else was deleted, uninstalled or cleared. The `regx-*` containers were not touched.
+
+#### Boundary and CI
+
+```
+$ git diff --name-only origin/main...HEAD | grep -E '^(services|packages/core|scripts)/|seed|migrations'
+(no output: boundary clean)
+```
+
+**Locally**, before the builds:
+
+- `pnpm run typecheck`: 9/9;
+- `lint`: 7/7, with one warning that predates this work;
+- `format:check`: clean;
+- tests:
+  - core 38;
+  - ui-tokens 59 (`contrast.test.ts` 22/22);
+  - ui vitest 4 and jest 306;
+  - mock 43;
+  - field vitest 685 and jest 252;
+  - console 37.
+
+**No dependency was added.** `package.json` and `pnpm-lock.yaml` are unchanged.
+
+**PR #13's CI** is reported in the hand-off.

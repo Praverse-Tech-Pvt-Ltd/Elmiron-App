@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import { Banner, Button, Screen, SettingsScreen } from '@fieldforce/ui';
+import { assistantSampleEnabled } from '../../src/features';
 import { useSession } from '../../src/session';
 import { settingsGroups } from '../../src/settings/content';
 import { QUEUE_UNREADABLE, loadQueueState } from '../../src/sync/async-storage-store';
@@ -55,6 +56,14 @@ export default function Me(): ReactNode {
           onOpenLocation: () => {
             router.push('/onboarding/location');
           },
+          // FE-D15. Only with the sample flag on; off, the row does not exist.
+          ...(assistantSampleEnabled
+            ? {
+                onOpenAssistant: () => {
+                  router.push('/assistant');
+                },
+              }
+            : {}),
         })}
       />
 
