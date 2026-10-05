@@ -1322,3 +1322,92 @@ Appended, not edited. `FE-CR-11` is filed on `fe-d17-practice` (PR #15); `FE-CR-
   `20260923000100_console_reads_contract_shape.sql` — returns `'findings', '[]'`. **Coaching and Analysis
   have a screen and a server and no path between them; the AWS key does not change that**, because the
   coach writes practice analyses (`sim_coach_analyses`), not analyses of real visits.
+
+## Answers — 5 October 2026 (backend, W1-Y): the questions left with no owner (`BE-C68`)
+
+`FE-CR-8`, `FE-CR-9`, `FE-CR-10` and `FE-CR-11` questions 1 and 2 were asked of backend by a frontend
+developer who has since left. One person now owns both sides, so each is answered here — from the code
+on `main` at `bc8ccdc`, not from the record. Nothing is built by these answers.
+
+### `FE-CR-8` — what writes an analysis? **Nothing, and this release does not need it to**
+
+**Re-established, not carried over.** On `main`, nothing outside the test fixtures inserts into
+`public.analyses`, and `analysis_contract_row` — defined once, in
+`20260923000100_console_reads_contract_shape.sql` — returns `'findings', '[]'`. The AI coach writes
+`sim_coach_analyses` (practice), a different table.
+
+**The contradiction, and the decision.** The operator's clarification of 1 October, as FE-D17 recorded it
+(`docs/frontend-gap-map-2026-10-01.md`, "Update — FE-D17"; **the operator's own words are not in the
+repository**), is that this release's "AI analysis" means **AI Doctor practice**. The Coaching tab, the
+Analysis screen and the Reply screen read `analyses`, the recorded-visit table.
+
+* **Decided: "AI Analysis" in this release is the practice feedback screen** (`app/practice/analysis/[id].tsx`),
+  which shows a `sim_coach_analyses` row. **Coaching, Analysis and Reply stay hidden** behind
+  `EXPO_PUBLIC_COACHING_ENABLED` (off): with nothing writing `analyses` they could only ever be empty.
+* **Why not point Coaching at practice analyses instead:** they are different objects — a practice score
+  has dimensions and suggested modules, a visit analysis has findings and a manager reply — and one screen
+  pretending to be both would be wrong for both.
+* **Size — what makes "AI Analysis" real**, all on top of AWS model access:
+  1. the practice transport calls the gateway instead of the sample
+     (`apps/field/src/practice/transport.ts`, today `createSamplePracticeBackend()`): **about 1 day**,
+     frontend;
+  2. two read functions, "my sessions" and "one session with its turns and analysis" (`FE-CR-11` item 2):
+     **about 1 day**, backend — or the app reads the tables directly under the existing row rules;
+  3. `BE-W144` (below) **before** an admin is shown any score: **about 1 day**, backend;
+  4. approved personas, scenarios and prompts — needs the second admin (`Q-14`).
+* **Real-visit analysis** needs recording, which is deferred (`BE-C17`), and the PV/DPDP signatory
+  (`Q-13`). **POST-4-OCT.**
+
+### `FE-CR-9` — should reading an analysis mark it seen? **Not now; and the promise it would support is not enforced anywhere**
+
+**Measured:** `mr_viewed_at` appears in three places only — the column, `respond_to_analysis`
+(`coalesce(mr_viewed_at, now())`), and the read contract that returns it. **No row rule reads it.**
+`list_analyses` returns every analysis of anyone in `visible_user_ids()` — a manager's whole team —
+whether or not the rep has opened it. So "your manager can only see what you have already seen" is
+**not true today**, and stamping the column on read would not make it true.
+
+* **Decided: no change this release** — no recorded-visit analysis exists (above), so there is nothing
+  to see first.
+* **When recorded-visit analysis ships:** stamp it with a **separate** call (`mark_analysis_viewed`), not
+  inside `read_analysis`. A read that writes is a different kind of function — it cannot be `stable`, it
+  needs its own grant and audit, and every caller of a read would start writing. And the promise needs
+  **its own rule** in `list_analyses` / `read_analysis` for managers, or it stays a sentence. FE-D16's
+  removal of "You read it first" / "Your manager has not opened this yet" was right.
+
+### `FE-CR-10` — should a reply queue offline? **No**
+
+* **(1) Queue it? No.** The reply screen's own design is right
+  (`apps/field/app/reply/[analysisId].tsx`): a half-written argument should not land in a manager's
+  queue the moment signal returns. A reply is deliberate; it is sent while online, and if the send fails
+  the text stays on the screen. A sync entity, an idempotency key and a `sync_push` path would cost about
+  a day to build an outcome nobody wants. And the screen is hidden this release.
+* **(2) Should `respond_to_analysis` return the `Analysis` contract? Not now.** The app does not read the
+  return; reshaping it has no reader. Revisit with recorded-visit analysis.
+
+### `FE-CR-11` question 2 — any rep's token can write their own practice score. **Measured: worse than a score. Fix before any score reaches an admin (`BE-W144`)**
+
+**What it allows, measured from the code and from tests that pass in every CI run:**
+
+* **A rep can write the AI doctor's side of the conversation.** `record_sim_turn(session, rep_text,
+  doctor_text, …)` checks only that the session is the caller's and not ended. `sim-gateway.spec.ts` does
+  exactly this as the rep — `record_sim_turn($1, $2, 'doctor')` — green in CI on `bc8ccdc`. So `BE-W136`'s
+  fix (the coach scores the STORED conversation) can be handed a conversation the rep wrote both halves of.
+* **A rep can write their own score, labelled as any model.** `record_sim_coach_analysis` checks
+  ownership, that the session has ended, and the shape — not that the gateway or a model produced it.
+  `p_model_provider` / `p_model_name` are the caller's. The same spec stores a score as the rep, labelled
+  `'stub', 'no-model'`.
+* **A self-written score blocks the real one.** `sim_coach_analyses_once unique (session_id)`: one
+  analysis per session. The coach flow's write then fails with `23505`, which it does not handle (it
+  closes only `22023` / `23514`), so it rethrows and **the AI request is left open** after the model was
+  paid for (`BE-W145`).
+
+**Decided:** acceptable **only while no admin sees a score** — today none does (no console screen reads
+`sim_coach_analyses`). **Before one does:** the two writers are revoked from `authenticated` and called
+by the gateway with a key the app does not hold, the rep's identity passed from the request the gateway
+already authenticated. About a day, including the tests that set sessions up as the rep.
+
+### `FE-CR-11` question 1 — can a rep reply to a practice analysis? **No. The Reply screen leaves this release**
+
+A practice analysis has **no manager reader** — by the ruling, managers see no individual practice
+score — so a reply would have nobody to read it. No column, no function, nothing to build. The Reply
+screen belongs to recorded-visit analysis and stays hidden with it.
