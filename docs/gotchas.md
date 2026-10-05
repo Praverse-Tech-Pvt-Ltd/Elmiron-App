@@ -3629,3 +3629,423 @@ three of fifteen: `seed:mr` says *"against **API URL** host"*, and `backup:datab
 
 **A sweep that returns a round, small, satisfying number and that you did not have to reject
 anything from.** Every one of the three above returned exactly that.
+
+### Replacing a SQL function: GENERATE the new body from the live definition, never retype it
+
+**The rule.** When a migration replaces an existing function, produce the new body from
+`pg_proc.prosrc` (or `pg_get_functiondef`) and apply the change to *that*, rather than transcribing
+the function from a migration file by reading it.
+
+```bash
+# The authoritative body of what is actually installed:
+psql "$SUPABASE_DB_URL" -At -c "select prosrc from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public' and p.proname = '<fn>'" > /tmp/orig.sql
+# then patch /tmp/orig.sql programmatically and paste the result into the migration
+```
+
+**Why this is a rule and not a preference — three defects in ONE hand-transcribed function body,
+W1-C A2, `record_check_in`.** The draft was written by reading
+`20260911000300_check_in_starts_the_visit.sql`, and it:
+
+1. **Dropped the idempotency block entirely.** The live function begins
+   `select * into v_existing from public.check_ins c where c.id = p_id; if found then … return
+   v_existing; end if;` — which is what makes a replayed check-in return the existing row instead of
+   colliding on the primary key. **Removing it would have broken the offline replay path the frontend
+   had just proved** (FE-D1: queued writes survive process death and flush exactly once). Nothing in
+   the API suite asserted it, so nothing would have caught it.
+2. **Renamed a helper.** It called `public.within_shift_window`; the real name is
+   `public.is_within_shift`. That one would have failed loudly, which is the least bad of the three.
+3. **Changed a refusal message.** The live text names the timestamp and the territory; the draft did
+   not. A client mapping messages would have drifted silently.
+
+**Why reading the file is not equivalent to reading the function.** A function may have been
+redefined by a LATER migration than the one you found — `record_check_in` is defined in at least two
+— so the file you are reading may not be what is installed. `prosrc` cannot be stale by construction.
+
+**The tell that this rule was needed:** defect 1 was invisible. The migration applied, the suite
+passed, and the loss would have surfaced on a rep's phone in an area with no signal. A test asserting
+idempotency was added in the same session **because nothing else in the suite would have noticed its
+absence.**
+
+### STALE STATE: a local green means nothing until the state it ran against is known
+
+**One class, three worked examples, all in the same run of sessions (W1-B → W1-D).** They look
+unrelated — a server, a file, a database — and they are the same failure: **something the run
+depended on was left over from earlier, so the result described the machine rather than the code.**
+
+**The tell is always the same: the result was BETTER than it should have been.** Staleness does not
+usually produce a red; it produces a green that has not earned itself.
+
+#### 1. A stale BUNDLE — `BE-W119`
+
+`supabase functions serve` hot-reloads the function directory. It does **not** reload
+`packages/core/dist`, which the Edge Function imports from outside it.
+
+**Measured:** with the server running, the patient guardrail was removed from
+`answerProductQuestion` **entirely** and core was rebuilt — the gateway suite returned **9 passed**.
+Restarting the server turned the same mutant into **2 failed, 7 passed** with the positive control
+still green.
+
+> **A mutation that kills nothing is a stale-bundle suspicion before it is a proof of anything.**
+
+Rebuild **and restart** before believing any gateway result. It caught the same session twice: the
+second time, a mutant was reverted in source without a rebuild, and the test failed against code
+that was already correct.
+
+#### 2. A stale READING — W1-C A2
+
+A migration replaced `record_check_in` by transcribing it from the migration file that appeared to
+define it. **Three defects in one body:** it dropped the idempotency block (which would have broken
+the offline replay path the frontend had just proved), renamed `is_within_shift`, and changed a
+refusal message.
+
+**Why reading the file is not reading the function:** a later migration may have redefined it, so
+the file you found may not be what is installed. **Generate the body from `pg_proc.prosrc`.**
+`prosrc` cannot be stale by construction.
+
+#### 3. A stale DATABASE — W1-D
+
+Three defects shipped green locally and red on CI, **all three for the same reason**: this machine's
+database carried state from earlier sessions while CI starts clean.
+
+**Demonstrated deliberately (W1-E B3), same commit, same guard, opposite answers:**
+
+| Run | `rls.spec.ts` |
+| --- | --- |
+| **dirty** — the revoke applied by hand in an earlier session, no migration doing it | **98 passed** |
+| **clean** — `db reset`, migrations only | **1 failed**, naming `sim_content_before_insert` |
+
+The clean run reproduces CI exactly, because it is what CI does.
+
+#### What to do about it
+
+**`pnpm hooks:install`, and the pre-push hook resets the database and runs what CI runs**
+(`scripts/verify-clean-db.mjs`). It gates the **push**, not the commit: a reset plus the API suite
+is minutes, and `.githooks/pre-commit` already records that *a hook that costs minutes is a hook
+people pass `--no-verify` to.*
+
+**The generalisation, which is the point of collecting these three:**
+
+> **Before trusting a green, name the state it ran against — the bundle, the file, the database —
+> and ask whether CI will have the same one. If the answer is "probably", it is not evidence.**
+
+---
+
+## 29 September 2026 — a pure function in a `'use client'` module is not a function on the server
+
+`/practice` typechecked, linted, and passed 24 render tests. The first request with a real cookie
+returned **500**:
+
+> Attempted to call `simPersonaRow()` from the server but `simPersonaRow` is on the client. It's not
+> possible to invoke a client function from the server.
+
+`simPersonaRow` is pure — it takes a row and returns a row. It lived in `sim-content.tsx`, which
+starts with `'use client'`, and **a `'use client'` module's exports are client *references*, not
+values.** The Server Component that imported it got a proxy, and calling it threw at request time.
+
+**Why nothing caught it.** `tsc` sees a function with the right type, because the boundary is a
+build-time convention TypeScript does not model. `eslint` had no rule for it. The render tests
+import the module *as a client*, which is the one context where it works. **Nothing in the local
+checks requests a page**, and requesting a page is the only thing that fails.
+
+**The fix:** the pure part moved to `sim-content-row.ts`, with no directive, so both sides can call
+it. The rule generalises:
+
+> **Put pure helpers a page will call in a module with no `'use client'` directive, even when only
+> client components use them today.** The directive is about *who may execute this module*, not
+> about where the code happens to sit.
+
+**And the wider one, which this repository keeps re-learning:** this is the "built and never called"
+failure in its exact shape. Everything was green; nothing had requested the page. **A green suite
+tells you what the suite exercised, and a page nobody fetched is not exercised.**
+
+---
+
+## 29 September 2026 — a check a page can satisfy by accident is not a check
+
+The cross-tenant assertion for `/practice` looked for `"Dr A. Sharma (practice)"` in the HTML served
+to an admin of a *different* company, and expected it to be absent. It was present, which looked
+like a tenancy leak.
+
+It was not. That exact string is **example text inside the form's own caution** — *"Use a label such
+as 'Dr A. Sharma (practice)'"* — so the check was matching static copy that every visitor is served,
+and would have failed identically against an empty database.
+
+The fix was to assert on a name unique to that run (`Dr Practice <run-id> (practice)`), which no
+page can contain unless a row put it there.
+
+> **Before believing a negative assertion, ask what else could satisfy it.** A string that appears
+> in the page's own copy, a default, a placeholder, an error page — any of these makes
+> `expect(html).not.toContain(x)` a coin toss. **Assert on something only the thing under test could
+> have produced**, and prefer a value minted by the run over a literal you also wrote into the
+> source.
+
+---
+
+## 29 September 2026 — a git hook added on a branch does not fire
+
+`core.hooksPath` is one absolute path, shared by every worktree through the common `.git`
+directory. Here it points into the **main checkout's working tree**. So a hook file tracked on a
+feature branch exists in that branch's worktree and is **never executed**, because git reads the
+hook from the path, and the path resolves to whatever branch the main checkout happens to be on.
+
+W1-E added `.githooks/pre-push` and verified it by running the script it calls. That proves the
+script works. **It does not prove the hook fires**, and on the first real push it did not: `git
+push` printed its remote lines and exited 0, with the guard silently absent.
+
+> **Installing a hook and exercising a hook are two different claims.** Prove the second the only
+> way it can be proved: make the hook fail on purpose and confirm the operation is blocked. A hook
+> that has never refused anything is indistinguishable from a hook that is not there.
+
+Registered as `BE-W123`.
+
+---
+
+## 29 September 2026 — a green suite can be green against an app whose JavaScript never loads
+
+The first browser run failed all three specs at the sign-in form. The page rendered, the fields
+filled, the button clicked, and nothing happened: `/_next/static/chunks/main-app.js` answered
+**404**, React never hydrated, and the form fell back to a native submit that reloaded `/sign-in`
+with the fields cleared. The cause was a dev server left running from before `pnpm add` relinked
+`node_modules` — environmental, not a product defect.
+
+**What it exposes is not environmental.** Until that run, nothing in this repository requested a
+page, and nothing ran the page's client bundle. Typecheck, lint, 76 unit and render tests and a
+full HTTP proof would all have been green against an application no user could sign in to.
+
+> **A suite that never loads the page cannot tell you the page works.** Render tests import the
+> module; HTTP proofs talk to the server; neither executes the bundle the browser actually fetches.
+> Keep one test that opens a real browser, signs in through the real form, and clicks.
+
+The related trap: **new test files are not covered by anything unless something names them.**
+`tsconfig.json` included `src/**` only and `lint` was `eslint src`, so the new spec and the
+Playwright config were typechecked and linted by nothing until both were widened. **A test file that
+is not typechecked is a test file that silently rots.**
+
+---
+
+## 29 September 2026 — two suites cannot both own a global row, and append-only hides it
+
+`ai-control-plane.spec.ts` asserts that a feature with **no** `app_thresholds` row refuses `45011`.
+`ai-gateway.spec.ts` and `sim-gateway.spec.ts` must **commit** `ai_feature_enabled:*` rows
+globally, because the Edge Function runs out of process and cannot see a transaction. Run together,
+the absence assertion sees the other suite's flag and fails.
+
+The suite's own header says *"written as the owner inside that transaction, so no other suite ever
+sees them"* — **true of what it writes, silent about what it reads.**
+
+**The part that made it rare instead of always red.** `app_thresholds` is append-only, so the
+gateway suites revert by appending a `false` row rather than deleting. After they finish, the
+absence assertion passes again — **for the wrong reason**: it is reading a row that says off, not
+the absence of a row. So the test is wrong far more often than it is red.
+
+> **Isolation is a claim about reads as well as writes.** A suite that writes only inside a
+> transaction can still be broken by a row somebody else committed, and an append-only table makes
+> that breakage intermittent — the "cleanup" leaves a row behind that satisfies the assertion for a
+> different reason.
+
+Registered as `BE-W124`. Reproduce with:
+
+```bash
+pnpm --filter @fieldforce/api exec vitest run \
+  tests/ai-control-plane.spec.ts tests/ai-gateway.spec.ts tests/sim-gateway.spec.ts
+```
+
+---
+
+## 29 September 2026 — every check in this repository can pass against a console that is broken in a browser
+
+**The class.** `jsdom` render tests **import a module and mount a component**. They never fetch a
+URL, never run the built bundle, and never execute the page the browser is actually served. So the
+entire local check suite is blind to any defect that lives between "the module is correct" and "the
+page works" — which is where framework boundaries, hydration and the build output live.
+
+**It is not hypothetical. It happened twice in two days.**
+
+1. `/practice` returned **500** on its first real request: a pure function exported from a
+   `'use client'` module is a client *reference* on the server, and calling it throws.
+2. The console **did not hydrate at all**: `/_next/static/chunks/main-app.js` answered **404**, so
+   React never attached and the sign-in form fell back to a native submit that silently reloaded
+   the page with the fields cleared.
+
+**The checks that would each have passed, by name, on both:**
+
+| Check | Why it cannot see this |
+| --- | --- |
+| `tsc --noEmit` (9 workspaces) | the `'use client'` boundary is a build-time convention TypeScript does not model, and a 404 is not a type |
+| `eslint` (7 workspaces) | no rule covers either |
+| `prettier --check` | formatting |
+| `vitest` render tests (jsdom) | they import the module **as a client**, the one context where it works, and mount it directly |
+| `vitest` node tests | no DOM at all |
+| the API suite, 976 tests, on a reset database | tests the server; the console is not involved |
+| an HTTP proof against PostgREST | talks to the database's API, never to the web app |
+| `verify-clean-db` | runs the above, on a clean database — the same blindness, more slowly |
+
+**Every one of those was green while the console could not be signed into.**
+
+> **A suite that never loads the page cannot tell you the page works.** Keep at least one check that
+> opens a real browser, requests a real URL, and interacts. `apps/console/e2e/practice.spec.ts`
+> is that check, and `.github/workflows/ci.yml` runs it so it does not depend on one laptop.
+
+**The assertion that catches it specifically**, rather than by luck: a control that is `disabled`
+until React state changes. Typing into the form can only enable it if `onChange` handlers are
+attached, which only happens after the bundle loads and hydrates. **Server HTML can never satisfy
+it.** The suite carries its own negative control — a second test that blocks every
+`/_next/static/**` request and asserts the button *stays* disabled — so the first test cannot
+quietly stop being a hydration check.
+
+**One measurement worth keeping:** blocking only `main-app.js` was **not** enough — the dev build
+boots React from more than one chunk and the page hydrated anyway. *"The client bundle does not
+load"* has to mean all of it.
+
+---
+
+## 29 September 2026 — a gate that a leftover file can answer is not a gate
+
+W1-G D2 added a CI step to prove the browser suite had actually executed: read the run's JSON
+report, fail if fewer than N tests passed. The reasoning was sound — `playwright test` exits 0 when
+it matches **no test files at all**, so a green step is not evidence that anything ran.
+
+**Then the gate failed a run that had just passed all 7 tests, reporting `5 passed`.**
+
+Two mistakes, and the second is the one worth keeping:
+
+1. `PLAYWRIGHT_JSON_OUTPUT_NAME` did not reach the reporter, so the JSON went to **stdout** and no
+   file was written.
+2. **A `playwright-results.json` from an earlier local run was still on disk**, with 5 tests in it,
+   from before the second spec file existed. The gate read that.
+
+**So the proof-of-execution step was itself satisfiable by an artefact of a previous run.** Had the
+stale file said 7, the gate would have passed a run in which nothing executed — the exact failure it
+was built to catch, in the thing built to catch it.
+
+> **A check that reads an artefact must own that artefact's lifetime.** Delete it before the run
+> that is supposed to produce it, or verify it is newer than the run. Otherwise the check answers a
+> question about the past.
+
+The fix is both halves: the output path is declared in `playwright.config.ts` so it cannot depend on
+an environment variable arriving, and the CI step `rm -f`s the report before running.
+
+**The general shape, which this repository has now found in a bundle, a function body, a database,
+a knowledge graph and a test report:** *when a check reads something it did not just produce, ask
+what produced it and when.*
+
+---
+
+## 29 September 2026 — a turbo task whose `outputs` do not match what it writes caches NOTHING, and replays it
+
+`turbo.json` declared `build: { outputs: ["dist/**"] }` for every workspace. `@fieldforce/console`
+builds with **Next**, which writes `.next/`, not `dist/`. So turbo recorded a cache entry
+**containing nothing**, and on the next run reported:
+
+```
+ Tasks:    3 successful, 3 total
+ Cached:    2 cached, 3 total
+```
+
+**while producing no build at all.** `next start` then died with *"Could not find a production build
+in the '.next' directory"*, surfacing to Playwright as the entirely uninformative
+`Process from config.webServer was not able to start. Exit code: 1`.
+
+**Turbo does warn** — `WARNING no output files found for task @fieldforce/console#build` — and the
+warning scrolls past in the middle of a build log, which is where warnings go to die. `3 successful`
+is the line a human reads.
+
+> **A cache key without matching outputs is a cache that stores absence and replays it as success.**
+> When adding a task to turbo, check that `outputs` matches what the tool actually writes — and
+> check it by **deleting the output, forcing a cache hit, and confirming the output comes back**.
+
+Fixed as `outputs: ["dist/**", ".next/**", "!.next/cache/**"]` — `.next/cache` excluded because it
+is Next's own incremental cache, not build output. Verified two-sided: a cold build produces
+`.next/BUILD_ID`, and deleting `.next` then re-running restores it **from the cache** rather than
+silently producing nothing.
+
+**This is the same family as the stale bundle, the stale database and the stale test report.** The
+common shape: **something reported success for work it did not do, because what it checked was not
+what mattered.**
+
+---
+
+## 30 September 2026 — THE PATTERN: six things that reported success for work they had not done
+
+Six separate defects across this project share one shape, and naming the shape is worth more than any
+of the six fixes. **In every case a check passed, or a step reported success, while the work it stood
+for had not happened — because what was examined was not what mattered.**
+
+| # | What reported success | What had actually happened | How it was found |
+| --- | --- | --- | --- |
+| 1 | **A test suite**, 9 passed | `functions serve` was executing a **previous** `packages/core/dist`. A mutation that deleted the patient guardrail entirely still passed | `BE-W119` — a mutant that killed nothing |
+| 2 | **A migration file read**, transcribed by hand | A later migration had **redefined the function**, so the file read was not what was installed. The retyped body dropped an idempotency block that the offline replay path depends on | W1-C A2 — three defects in one hand-copied body |
+| 3 | **`rls.spec.ts`, 98 of 98** | This machine's database carried grants from earlier sessions. On a reset database it fails 1 of 98 | W1-E B3 — a two-sided measurement, dirty vs clean |
+| 4 | **A knowledge graph**, every node carrying a file and a line number | Five weeks stale: **39 of 56 migrations** and **80% of tracked files** absent; `apps/field` represented by a deleted `placeholder.ts` | `MR-35 D1` — and the graph was deleted rather than rebuilt |
+| 5 | **A CI proof-of-execution gate**, `browser suite: 5 passed` | The run it was reporting on had just passed **7**. The JSON went to stdout; a **five-test report from an earlier local run** was still on disk, and the gate read that | W1-G D2 — the gate caught its own defect |
+| 6 | **`turbo run build`**, `3 successful, 2 cached` | **No build at all.** `outputs: ["dist/**"]` does not match `.next`, so turbo cached nothing and replayed that nothing as success. `next start` then died with *"Could not find a production build"* | W1-G — and turbo **did** warn; the warning scrolled past while `3 successful` was the line read |
+
+### The rule
+
+> **When a check reads something it did not just produce, ask what produced it and when.**
+>
+> A bundle, a file on disk, a database's accumulated state, a derived index, a report, a build cache —
+> each is an input the check did not create. If the check cannot tell a fresh one from a stale one, it
+> is not checking the thing you think it is.
+
+### And the two sharper corollaries, both learned the hard way
+
+**Absence is loud; staleness is silent — and staleness is the dangerous one.** Instance 6 was caught
+in a day *because* the cache restored nothing and `next start` refused outright. Had it restored a
+**stale** `.next`, the browser suite would have passed against yesterday's code while reporting on
+today's, and nothing would have complained. **We were lucky in the direction of the failure.**
+
+**Sometimes the correct fix is to leave the artefact UNDECLARED.** W1-H B1 enumerated all 25 turbo
+task instances and found a second mismatch: `typecheck` declares no `outputs` but
+`apps/console/tsconfig.json` sets `incremental: true`, so the task writes
+`apps/console/tsconfig.tsbuildinfo`. **That one is deliberately not "fixed".** A `tsbuildinfo` tells
+`tsc` what it has already checked; restoring one from a cache keyed on a different input set could let
+`tsc --noEmit` skip work and report success — **turning a speed cache into instance 7 of this table.**
+Leaving it undeclared costs a little time on a cache hit and cannot mislead. **The test for whether an
+output belongs in `outputs` is not "does the task write it" — it is "does something later CONSUME it,
+and is a cached copy always as good as a fresh one".**
+
+### How to check it, rather than trust it
+
+For any cached task, the two-sided proof takes one minute and is the only thing that settles it:
+
+```bash
+# 1. cold: does the task produce the artefact at all?
+rm -rf <output>; turbo run <task> --filter <pkg>; ls <output>   # expect: present
+# 2. cache hit: does a REPLAY reproduce it?
+rm -rf <output>; turbo run <task> --filter <pkg>; ls <output>   # expect: present, "Cached: n cached"
+```
+
+If step 2 leaves the artefact missing, the task is caching nothing and reporting success — regardless
+of what the summary line says.
+
+---
+
+## 30 September 2026 — a readiness probe whose success condition admits the failure it exists to detect
+
+CI's Edge Function step waited for the gateway to answer, then declared it ready:
+
+```bash
+if [ -n "$code" ] && [ "$code" != "000" ]; then echo "ai-gateway answered HTTP $code"; exit 0; fi
+```
+
+It printed **`ai-gateway answered HTTP 502`** and exited 0. **502 means the function is down.** Kong
+listens on `:54321` from the moment `supabase start` returns, so it answers `502`/`503` for a function
+whose runtime has not started — a non-`000` code that means the *opposite* of ready.
+
+Thirty-five tests across four suites then failed with `503 name resolution failed`, which reads exactly
+like a code regression. The code was fine.
+
+> **A readiness check must test for the SUCCESS it wants, not for the absence of one failure mode.**
+> "Something answered" is not "the thing I need answered". Name the codes that prove the service is up
+> — here `401` or `400`, the function *refusing* a request, which only a running function does — and
+> keep waiting on everything else.
+
+**Print the code you are still waiting on.** The original was silent until it succeeded or timed out,
+so a stuck runtime and a slow one looked identical.
+
+**This is the same family as the six stale-artefact instances above, one level up.** Those were checks
+reading something they did not produce; this is a check whose *condition* was wider than its claim. The
+question generalises: **when a check passes, ask what else would also have made it pass.**

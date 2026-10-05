@@ -179,6 +179,54 @@ describe.skipIf(!reachable)('the UCPMP cap decision has a deadline that bites', 
     });
   });
 
+  /**
+   * W1-V B (`BE-W141`). A cap set for a COMPANY answers the question. CI calls this function with
+   * no signed-in caller, so `threshold()` sees only the global row — before
+   * `20261002000300_ucpmp_decision_sees_company_caps.sql` a company's cap left the alarm standing.
+   */
+  const companyCap = async (client: Client, value: string): Promise<void> => {
+    const org = await client.query<{ id: string }>(
+      `insert into public.organisations (name) values ('W1-V B fixture -- rolled back') returning id`,
+    );
+    await client.query(
+      `insert into public.app_thresholds (key, value, scope, organisation_id, note, effective_from)
+       values ('ucpmp_sample_cap_quantity', $1::jsonb, 'organisation', $2, 'W1-V B fixture', now() - interval '1 second')`,
+      [value, org.rows[0]?.id],
+    );
+  };
+
+  it('W1-V B: a cap set for a company resolves the deadline, even after the date', async () => {
+    await inRolledBackTransaction(async (client) => {
+      await supersede(client, 'ucpmp_sample_cap_decision_due', '"2026-01-01T00:00:00Z"', 2);
+      await companyCap(client, '10');
+      const s = await status(client);
+      expect(s['capConfigured']).toBe(true);
+      expect(s['overdue']).toBe(false);
+      expect(s['warn']).toBe(false);
+    });
+  });
+
+  it('W1-V B: with no cap anywhere it still warns, and still fails on the date', async () => {
+    // The other side. A company row that sets the cap to null is not an answer either.
+    await inRolledBackTransaction(async (client) => {
+      await companyCap(client, 'null');
+      await supersede(
+        client,
+        'ucpmp_sample_cap_decision_due',
+        JSON.stringify(new Date(Date.now() + 10 * 86_400_000).toISOString()),
+        2,
+      );
+      const warning = await status(client);
+      expect(warning['capConfigured']).toBe(false);
+      expect(warning['warn']).toBe(true);
+
+      await supersede(client, 'ucpmp_sample_cap_decision_due', '"2026-01-01T00:00:00Z"', 1);
+      const due = await status(client);
+      expect(due['capConfigured']).toBe(false);
+      expect(due['overdue']).toBe(true);
+    });
+  });
+
   it('the threshold row cannot be quietly edited or deleted', async () => {
     // `app_thresholds` carries a statement-level reject_mutation trigger, which is what
     // makes "a deferral is on the record" true rather than aspirational.
@@ -322,20 +370,34 @@ describe.skipIf(!reachable)('MR-53 E3 — a duplicated deadline row is read once
       // Both rows are really there -- otherwise this test proves nothing about duplicates.
       expect(Number(rows.rows[0]?.count)).toBeGreaterThanOrEqual(2);
 
-      const verdict = evaluateSettingsModelDebt(await settingsStatus(client));
-      expect(verdict.warnings).toHaveLength(1);
-      expect(verdict.clear).toBe(true);
+      // W1-L Part C: `be_w106_decision_status()` can no longer produce a warning at all --
+      // the decision it was waiting for was MADE, so `settingsScoped` is permanently true and
+      // `warn` permanently false. The property these two tests actually pin is not the debt; it
+      // is `threshold()` reading ONE row. So they now assert that directly, on the same key.
+      const resolved = await client.query<{ value: unknown }>(
+        `select public.threshold('be_w106_settings_model_decision_due') as value`,
+      );
+      expect(resolved.rows).toHaveLength(1);
+      expect(JSON.stringify(resolved.rows[0]?.value)).toBe(due);
+      expect(evaluateSettingsModelDebt(await settingsStatus(client)).clear).toBe(true);
     });
   });
 
   it('the LATEST effective row governs, and a future-dated one does not yet', async () => {
     await inRolledBackTransaction(async (client) => {
+      const due = async (): Promise<string> => {
+        const r = await client.query<{ value: string }>(
+          `select public.threshold('be_w106_settings_model_decision_due') #>> '{}' as value`,
+        );
+        return r.rows[0]?.value ?? '';
+      };
+
       await supersede(client, 'be_w106_settings_model_decision_due', '"2026-01-01T00:00:00Z"', 3);
-      expect((await settingsStatus(client))['overdue']).toBe(true);
+      expect(await due()).toContain('2026-01-01');
 
       // A later row moves it: this is what a deferral is.
       await supersede(client, 'be_w106_settings_model_decision_due', '"2099-01-01T00:00:00Z"', 2);
-      expect((await settingsStatus(client))['overdue']).toBe(false);
+      expect(await due()).toContain('2099-01-01');
 
       // A row stamped into the FUTURE is not yet in effect -- `effective_from <= now()` -- so the
       // overdue date above comes back. A deferral written that way would look filed and change
@@ -345,6 +407,7 @@ describe.skipIf(!reachable)('MR-53 E3 — a duplicated deadline row is read once
          values ('be_w106_settings_model_decision_due', '"2099-06-01T00:00:00Z"'::jsonb, 'global',
                  now() + interval '1 day', 'MR-53 E3 fixture: not yet in effect')`,
       );
+      expect(await due()).toContain('2099-01-01');
       expect((await settingsStatus(client))['dueAt']).toContain('2099-01-01');
     });
   });

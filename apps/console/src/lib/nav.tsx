@@ -16,6 +16,16 @@ import { SignOut } from './sign-out';
  */
 const ITEMS: readonly { readonly label: string; readonly href?: string }[] = [
   { label: 'Coaching queue', href: '/coaching' },
+  // W1-A E3. A link, not plain text, because the screen behind it exists — the rule this list
+  // already keeps. It is the operator's own destination under `C26`.
+  { label: 'Knowledge approvals', href: '/knowledge' },
+  // W1-F B. A link for the same reason: the screen exists. Until it did, a practice session could
+  // not be started at all — `start_sim_session` refuses a scenario that is not approved, and
+  // nothing but a test could approve one.
+  { label: 'Practice doctors', href: '/practice' },
+  // W1-G E1 / BE-W122. Before this route existed, the only way to create the prompt a
+  // practice session needs was a script writing SQL.
+  { label: 'AI prompts', href: '/prompts' },
   { label: 'Consent versions', href: '/admin' },
   { label: 'Users & roles' },
   { label: 'Audit log' },

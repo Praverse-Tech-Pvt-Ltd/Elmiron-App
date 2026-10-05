@@ -38,3 +38,7 @@ docs/design/
 # passed. Found by scripts/ci-local.mjs running build before format:check, in CI's order,
 # for the first time. Same reasoning as `.claude/` above.
 apps/console/next-env.d.ts
+
+# W1-N: the per-session review folder -- git-ignored copies, so `format:check` must not see them
+# either. Same reasoning as `.claude/` above: a file nobody can commit must not fail a local check.
+review-handoff/

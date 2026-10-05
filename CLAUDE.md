@@ -15,6 +15,51 @@
 > demonstration: a stale count had been reaching every session unchallenged. The snapshots
 > now live in `docs/graphify-notes.md`.
 
+## Decision ids are minted PER TRACK — `BE-C<n>` and `FE-C<n>`
+
+**This is here because it is the only file both tracks load before reading any code, and because it
+holds for all time and needs no command to check it.** Ruling `BE-C3`, 28 September 2026.
+
+| Track | Mints |
+| --- | --- |
+| Backend / AI platform | **`BE-C<n>`** |
+| Frontend / field app | **`FE-C<n>`** |
+
+Each sequence starts at 1 and is independent. **`C1`–`C31` keep their names** — they are cited in
+migrations, tests, screens and three registers, and renaming them would cost more than the ambiguity
+they carry.
+
+**The same rule applies to CONTRACT REQUESTS — ruling `BE-C4`, 29 September 2026.** The frontend
+filed a voice-note item as `CR-5`; `CR-5` was already the practice session API. **`BE-C3` fixed
+decisions and not contract requests, so the same collision happened again.**
+
+| Track | Mints |
+| --- | --- |
+| Backend / AI platform | **`BE-CR<n>`** |
+| Frontend / field app | **`FE-CR<n>`** |
+
+**On the operator's instruction (FE-D13, 1 October 2026), `CR-1`–`CR-4` were renamed `FE-CR-1`–`FE-CR-4`**
+— each heading keeps "(was CR-n)" so old citations resolve. **`CR-5` (the practice session API) keeps
+its name.** So **`FE-CR-1` is `BACKUP_DESTINATION`**, and the voice-note item `BE-C4` once called
+`FE-CR-1` is **`FE-CR-5`**. Read `docs/contract-requests.md` for the current owner of an id; never
+infer it from this paragraph.
+
+**Change ids follow the same rule**: the backend mints `BE-W<n>` (work items) and the frontend
+`FE-W<n>` / `FE-D<n>`, each from its own sequence. **Register an id in its file before citing it.**
+
+**Minting an id means adding its ONE row to `docs/ids.md`; an id there is never reused, renumbered or
+re-meant.** CI enforces it (W1-Q C) — the check, runnable locally:
+
+```bash
+node scripts/check-ids.mjs   # once, own track, registered before cited, never changed vs origin/main
+```
+
+**Why the rule exists, so nobody "simplifies" it away.** On 28 September two sessions ran in parallel
+and **both minted `C20`** — each read the highest id in `.ai-collab/decisions.md`, which is only
+correct on one branch at a time. The frontend's reached `main` first, so nine backend rulings were
+renumbered across 15 files during a merge. **Nothing in the repository reserved a range or detected
+the duplicate.** `BE-W118`.
+
 ## The knowledge graph — CHECK WHETHER ONE EXISTS BEFORE RELYING ON IT
 
 **There is no checked-in graph. `graphify-out/` is gitignored, so its state is a fact about

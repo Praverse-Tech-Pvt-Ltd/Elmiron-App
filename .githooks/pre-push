@@ -1,0 +1,36 @@
+#!/bin/sh
+#
+# W1-E B1/B2 — the CLEAN-DATABASE check, on the push.
+#
+# **Why a push hook and not a commit hook.** `.githooks/pre-commit` states the rule this follows:
+# *"a hook that costs minutes is a hook people pass `--no-verify` to, and a bypassed control is not
+# a control."* A reset re-applies 85 migrations and the database job then runs the whole API suite,
+# which is minutes. A commit is cheap and frequent; **a push is the moment the work becomes somebody
+# else's problem and the moment CI will judge it**, so the expensive check belongs here.
+#
+# **Why it exists at all.** W1-D pushed a commit that was green locally and RED on CI for three
+# separate defects, all three of which passed locally because this machine's database carried state
+# from earlier sessions while CI starts clean. That was the third staleness failure in one run of
+# sessions — after a stale bundle (`BE-W119`) and a stale reading of a function body (W1-C A2).
+# `docs/gotchas.md` records the class with all three worked examples. **Three failures of discipline
+# is this repository's threshold for a mechanism.**
+#
+# **It does not keep its own list of steps.** `scripts/verify-clean-db.mjs` resets, then delegates to
+# `scripts/ci-local.mjs --with-db`, which derives every step by reading `.github/workflows/ci.yml`.
+# A hand-kept parallel list has already drifted three times here, and it drifts in the direction of
+# claiming MORE coverage than it has.
+#
+# **Enable it once per clone:** `pnpm hooks:install`. Git does not read `core.hooksPath` from the
+# repository — a security property, not an oversight.
+
+set -e
+
+echo "pre-push: clean-database verification (W1-E B1). Bypass with --no-verify."
+echo "This RESETS the local database. Anything you left in it will be gone."
+
+if ! node scripts/verify-clean-db.mjs; then
+  echo ""
+  echo "PUSH REFUSED — see above."
+  echo "Push with --no-verify and own the red build, or fix it first."
+  exit 1
+fi

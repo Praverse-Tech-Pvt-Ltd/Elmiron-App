@@ -20904,6 +20904,1252 @@ the seeded clinic (FE-D11)".
 No code changed. This commit is `docs/demo-path-2026-10-01.md` and `PROJECT-OVERVIEW.md` only. Nothing
 under `services`, `packages/core`, migrations or the seed script changed: they were read, not
 edited. No build was installed. Nothing was deleted.
+---
+
+### W1-A — simulation-only AI
+
+**28 September 2026.** The checkout guard passed first: namespace `@fieldforce/core` in
+`packages/core/package.json`, remote `Praverse-Tech-Pvt-Ltd/Elmiron-App`, `f34ceef` an ancestor of
+HEAD — **exit 0**, toplevel
+`D:/Praverse/Elmiron-App/.claude/worktrees/ai-platform-phase-a`.
+
+**Everything lands on `worktree-ai-platform-phase-a`** (= draft PR #2), which was **10 commits
+ahead of `main` and unmerged** when this session started. The three documents the brief told me to
+read first — `docs/ai-platform/INVENTORY.md`, `phase-a-recon.md`, `api-contracts.md` — **exist only
+on that branch.** Answering `#8`/`D10` (branch or main) would merge 8 artefacts and 6 migrations;
+it remains unanswered.
+
+#### The operator's eight rulings, recorded before any work started
+
+Nine ids, `C21`–`C29` (`C19` was the previous highest). `C27` is the ninth: the scores default this
+session was told to build to.
+
+| Ruling | Id | Register effect |
+| --- | --- | --- |
+| R1 no real recording | **`C21`** | ratifies the `C3`/`#18` posture as a decision rather than a consequence |
+| R2 simulation in scope | **`C22`** | **resolves `X4` / `#15`** — `C4` is scoped to real visits |
+| R3 AI analysis in scope | **`C23`** | resolves the in-scope half of `X4` / `#15` |
+| R4 LMS AI draft text | **`C24`** | new hard rule; bounded by `#7`/`D5` |
+| R5 no patient information | **`C25`** | **resolves `X1` / `#12`** |
+| R6 operator approves | **`C26`** | **resolves `D8` / `#9`**; ratifies `X5` / `#16` |
+| (F1) scores, safe default | **`C27`** | resolves the buildable half of `X2` / `#14`; `#14` stays open |
+| R7 target 4 October | **`C28`** | — |
+| R8 real-doctor rows deferred | **`C29`** | **defers `#18`–`#26`** |
+
+**Two things `C29` does not do, recorded because silence would imply it did.** `#26`'s two
+unratified clocks still bound `recorded_at` on every audio upload (`C18`) — tolerable only while
+`C21` keeps the path off. And `#21` is the **doctor's** notice: the **reps'** notice (`FE-W52`,
+`blocked-on-you` 2.6) is outside the deferred range, still wrong on `main`, and still waiting.
+
+#### Part A — `docs/ai-platform/AI-SPEC.md`, the week's gate
+
+Written for a non-engineer. Six in-scope capabilities (`product_qa`, `mr_chat`, `lms_tutor`,
+`ai_doctor`, `ai_coach`, voice-in-practice) each with A1–A8; four out of scope with one line each;
+two Mermaid diagrams with every box marked **BUILT / PARTLY BUILT / DOES NOT EXIST** and evidence
+for each BUILT; a front approval page; and a reality page headed *"What 4 October can and cannot
+include."*
+
+**The reality page's finding, unsoftened: none of the six can start, and not one is waiting on
+engineering.** `#4` (where the gateway runs) and `#5` (which provider, may data leave India) gate
+all six. What 4 October can contain is a **working approval pipeline with no AI in it** — useful,
+and not an AI feature.
+
+**The sharpest sentence in the spec, on voice practice: an employee's recorded voice is the
+payload.** If the speech vendor is overseas, recordings of employees' voices leave India. That is a
+different question from `#19` (the vendor for **real** visits, deferred) and it is unanswered.
+
+#### Part B — what changed, and what deliberately did not
+
+| | |
+| --- | --- |
+| **B1 route wiring** | 15 LMS/knowledge/prompt RPC paths added to `API_PATHS`, **interpolated from `LMS_RPC`/`KNOWLEDGE_RPC`/`AI_RPC`** so a rename cannot leave a stale string. `ai_begin_request` and `ai_complete_request` are **deliberately absent** — they are the gateway's, and a path would invite an app to put the model call in the client. A test asserts their absence, so a later addition is a decision, not a drift |
+| **B2 contract guards** | `contract.test.ts` guarded `catalogue.ts` and `lms.ts` only. Added guards over `ai.ts`, `knowledge.ts` and `gateway/` — 27 new cases, including **the request log has no column for the question or the answer** (§52, asserted structurally) and a positive control that the patient guardrail does **not** fire on an ordinary product question |
+| **B3 audit gap** | **THE PREMISE IS FALSE. Measured, not assumed: 15 of the 16 tables the five PR #2 migrations create already carry `write_audit_row`.** The one that does not is `knowledge_chunks`, and it should stay that way on `C17`'s reasoning. **No migration written.** `INVENTORY.md` is five days old and registered a gap its own subject had closed — the third recorded instance in this repo of a register asserting a stale claim with more authority than the code |
+| **B4 the 17 grants** | **All 17 are necessary. None revoked.** The reason is structural: three application roles (`mr`, `field_manager`, `admin`) collapse into one Postgres role (`authenticated`), so revoking does not restrict a function to admins — it makes it callable by nobody. The real exposure is `anon`, and `privilege-posture.spec.ts` already guards it as a **mechanism with three positive controls**. Adding a weaker assertion beside it would be noise. Two of the 17 now have a real consumer (E3) |
+| **B5 jest** | **FIXED. `testMatch: ['<rootDir>/**/*.test.tsx']` matched an ABSOLUTE path, and `**` does not traverse a dot-segment — so every worktree under `.claude/worktrees/` discovered ZERO tests.** Dropping the `<rootDir>/` prefix makes jest glob from `roots` instead. Measured both ways: `jest --listTests` printed **0 paths before**, the full suite after. **415 render tests restored** |
+| **B6 seeding** | **Nothing seeded.** No product, no approved knowledge, no prompt version. `#7` and `C24` |
+| **B7 `C21` in code** | **Confirmed, nothing built.** No tracked file sets the flag (only `.env.example` and `apps/console/.env.example` are tracked; the flag lives in the git-ignored `apps/field/.env`). `readRecordingFlag` **throws** rather than quietly returning false against a non-local target. The server half ships `false` and `20260923000400:152` **raises** if it is ever true. `config.test.ts` — 13 cases including *"is OFF when nothing asks for it — the shipping state"*, *"a production-shaped target REFUSES to start"*, and a **positive control** that a local stack may enable it |
+| **`purge_expired_sync_events`** | Still has no runner. Registered by `INVENTORY.md` B4-3; **not fixed.** Cost to register one: a workflow step beside the retention job, ~0.5d, and it needs a retention answer for `sync_events` that nobody has given |
+
+#### Part E — the hard rule, and the screen
+
+**`20260928000100_knowledge_authorship.sql`** (migration 81, with its rollback). Two gaps closed,
+both found by reading AI-C1 rather than recalling it:
+
+1. **Nothing recorded who wrote the text.** Added `authorship` (`human` | `ai_generated`) and
+   `authoring_model`, with a check that the two cannot disagree. `human` is the default, because
+   defaulting to `ai_generated` would relabel history.
+2. **The insert trigger COERCED where it should REFUSE.** `new.status := 'draft'` meant an insert
+   claiming `approved` **succeeded silently as a draft** — the stored outcome right, the signal
+   wrong, which is the worse failure: a seed asking for approved knowledge got a success and an
+   author who believed the content was live. It now raises `23514`.
+
+**`BE-W115` registered, not fixed:** a BYPASSRLS caller can still reach `approved` by two direct
+UPDATEs, because four eyes lives in the RPC body, not the trigger. Closing it needs a
+session-scoped flag this schema does not have anywhere, which `constraints.md` requires asking
+about first. **The cheap route a seed would actually take is closed.**
+
+**E3, `apps/console/src/app/knowledge/` + `lib/knowledge-review.tsx` + `lib/knowledge-review-list.tsx`,
+with a nav entry.** The draft text with its line breaks intact, who or what produced it, where it
+came from, the attestation box, Approve and Reject as identical controls. **The approve control is
+drawn only when the server would allow the decision** — and the component's own header says why
+that is legibility, not enforcement: *"hiding a control is not enforcement, and this file must
+never be cited as the thing that enforces four eyes."*
+
+**This route is the first app code in either app that calls the knowledge layer.** `INVENTORY.md`'s
+central finding is that zero of PR #2's eight pieces had ever been called by an app; a
+`KnowledgeReview` component with no route would have been the ninth.
+
+**E4 rendered, not just written:** the screen shows the **market** and the **product** a draft
+claims to be about, and a draft naming a product carries the regulated-content caution — because
+`C24` permits AI-drafted *training* text and product claims must come from the client (`#7`), and
+code cannot tell those apart. A human can, given those two facts.
+
+**E2, the account list, which is a task for a human and not for engineering:**
+
+| Account | Held by | Does |
+| --- | --- | --- |
+| Drafting admin | whoever writes or generates content | creates and submits drafts. **Cannot approve** |
+| Approving admin | **the operator, personally** | reviews, attests, approves or rejects |
+
+**With one admin account, four eyes refuses every approval `42501`, and `C24`'s whole path cannot
+be exercised once.**
+
+#### Part F — scores
+
+**`C27` built to the safe default, and the honest shape of that: there was nothing to add a score
+to.** No `sim_*` table exists in any migration (verified by search) and the LMS has no assessment,
+score, grade or pass mark — `contract.test.ts` already asserted the absence for nine LMS schemas.
+So "build to the safe default" meant **keeping scores out and pinning that**, which W1-A extended
+to `AiRequestSchema`. Building score storage would first require the simulation and assessment
+features, which `#4` and `#5` block.
+
+**`F2`'s question is in `docs/blocked-on-you.md` in one line**, with what each answer costs.
+**`F3`: no manager-facing score surface was built, and would not be under either answer.**
+
+#### Parts C and D — `docs/ai-platform/W1-A-recon.md`
+
+Measured, nothing built. **21 dependencies in `apps/field`, enumerated from the manifest:**
+`expo-location` is the only location one; **no map dependency, no notification dependency, no
+background-task dependency.**
+
+- **C1 maps.** Today: discrete fixes only, foreground permission only, nothing cached,
+  `Accuracy.Balanced`, two call sites. Four options costed in dependencies and money; **not
+  chosen.** The larger cost of a real map is not the Google bill — it is that a native module means
+  **Expo Go can no longer run the app**.
+- **C2 live tracking.** **Unwritten, and not a dependency.** The conflict: the notice awaiting your
+  approval since 21 September promises *"Nothing between visits, and nothing in the background"*;
+  continuous tracking is a **separate purpose under DPDP** needing its own notice and basis; and
+  OEM battery behaviour cannot be reproduced on an emulator — which reopens `FE-G1`, `FE-G2`,
+  `G-PERF` and `FE-W52`.
+- **C3 notifications.** None exist; §44 assumes they do. Push needs a Firebase project, a native
+  dependency, a key and **a named account owner**. In-app-only needs nothing and **cannot reach a
+  rep who does not open the app**. Recommendation: in-app-only this release — it covers everything
+  in scope, and push would later read the same table.
+- **D1 a correction.** The brief said production is 45 migrations behind. **The repo's last
+  verified figure is 19 applied (14 August, `BE-W8`, read over the pooler by `BE-W40`), and there
+  are now 81 files — so 62 pending, not 45.** Production itself remains unmeasurable from here.
+- **D2, one ordered list:** **pre-flight query → shift hours → migrate (62) → reference data →
+  paid plan**, each with what breaks if skipped. The pre-flight query is one query nobody has run,
+  and if it returns non-zero counts **this is an incident, not a deployment** — the deploy would
+  close a cross-tenant read and destroy the evidence of how long it was open.
+
+#### Counts, from each runner's own summary lines
+
+| Workspace / runner | Summary line | vs. `INVENTORY.md`'s PR #2 figure |
+| --- | --- | --- |
+| core / vitest | `Test Files 5 passed (5)` · `Tests 106 passed \| 4 skipped (110)` | was 79 passed; **+27** (B2) |
+| console / vitest | `Test Files 7 passed (7)` · `Tests 52 passed (52)` | was 37; **+15** (E3) |
+| **api / vitest** | `Test Files 69 passed (69)` · `Tests 929 passed \| 4 skipped (933)` | was **14 passed / 819 skipped** |
+| field / jest | `Test Suites: 21 passed, 21 total` · `Tests: 162 passed, 162 total` | was **DID NOT RUN** |
+| ui / jest | `Test Suites: 22 passed, 22 total` · `Tests: 253 passed, 253 total` | was **DID NOT RUN** |
+| ui-tokens / vitest | `Test Files 3 passed (3)` · `Tests 54 passed (54)` | unchanged |
+| ui / vitest | `Test Files 1 passed (1)` · `Tests 4 passed (4)` | unchanged |
+| field / vitest | `Test Files 40 passed (40)` · `Tests 613 passed (613)` | unchanged |
+| mock / vitest | `Test Files 1 passed (1)` · `Tests 43 passed (43)` | unchanged |
+
+**The API row is the session's largest single result and it is not a W1-A achievement — it is a
+Docker daemon.** `INVENTORY.md` recorded that **PR #2's five specs had no recorded green run with a
+database at all**, and that 819 of 920 API cases had never executed on this machine. Docker was
+started, all 81 migrations applied, and **they run and pass.** Anyone re-deriving the "89% never
+executed" figure should know it was an artefact of a stopped daemon.
+
+**`ui / jest` needs one caveat, and `docs/gotchas.md` already predicted it.** Run in parallel while
+Docker Desktop was starting, **7 tests failed on `Exceeded timeout of 5000 ms`** with suites taking
+32–38 s. Run serially: **22 suites, 253 tests, all pass in 9.5 s.** `apps/field` showed the same
+shape — 2 failures at 58 s, then 21/162 green at 12.2 s. **No timeout was added to mask it**: the
+gotchas file's own rule is that a green suite on a loaded machine is not evidence and a red one is
+not necessarily a defect, and CI is the arbiter.
+
+**Checks, all three read in full:** `pnpm typecheck` → **`Tasks: 9 successful, 9 total`**.
+`pnpm lint` → **`Tasks: 7 successful, 7 total`**, exit 0 (one **pre-existing** warning in
+`@fieldforce/field`, an unused eslint-disable directive, untouched). `prettier --check .` → **"All
+matched files use Prettier code style!"** after writing 4 source files; `PROJECT-OVERVIEW.md`,
+`docs/` and `.ai-collab/` are all in `.prettierignore`, so **no formatter ran over this section or
+any document above.** `verify-rollbacks --files-only` → **every one of 81 migrations has a rollback
+file.**
+
+#### Mutation testing — two-sided, every mechanism this session added
+
+| Mutant | Result |
+| --- | --- |
+| Remove `searchApprovedKnowledge` from `API_PATHS` | **1 test failed** — the wiring assertion |
+| **Declare** `ai_begin_request`'s path (the other side) | **1 test failed** — "the two GATEWAY rpcs are deliberately NOT declared" |
+| Restore AI-C1's coercing insert trigger, columns kept | **9 failed, 4 passed.** Every refusal died; **the POSITIVE CONTROL survived** — so the table is not merely refusing everything |
+| Remove the author check from `approvalAffordance` | **3 failed, 12 passed** — the two author assertions and the render, with the third-admin positive control intact |
+| Restore the jest `<rootDir>/` prefix | **0 tests discovered**, jest exit 1 |
+
+#### Where this stopped, and why
+
+**Parts A, B, C, D, E and F are complete. The stop is a CONDITIONAL STOP THE BRIEF DEFINED**, on
+one item inside Part E: **`BE-W115`**, the UPDATE route to approved knowledge. It is registered
+with its mechanism, its cost and the reason it was not taken — a session-scoped flag is machinery
+this schema has nowhere, and `constraints.md` requires asking before introducing it. **That is an
+"ask before doing" stop, not an out-of-room stop.**
+
+**Two things a reader should not conclude from a session this green.** Every AI capability in
+`AI-SPEC.md` is still **UNVERIFIED in the §56 sense** — built, tested, and called by no screen —
+**except** the knowledge approval path, which now has exactly one consumer. And every number above
+is from **this machine's local stack**; there is still no `handset` result anywhere in this
+repository, and no result of any kind against a hosted Supabase project.
+
+#### W1-A postscript — `pnpm ci:local --with-db` failed, and the api row above needs its caveat
+
+**Run after the W1-A commit, because the pre-commit hook says to.** Steps **1–16 passed** —
+including the `PROJECT-OVERVIEW.md` append-only guard, `pnpm install --frozen-lockfile`, build,
+typecheck, lint, format:check, the rollback guard, and **every workspace test suite**. **Step 17,
+the database job, failed.**
+
+**Two pre-existing intermittent failures, registered as `BE-W116` and `BE-W117`.** Neither is
+`BE-W114`, which was closed with a different mechanism. **Measured over four runs — two with W1-A's
+new spec file present, two with it excluded — two of four failed in each condition**, so the rate is
+roughly one in two and adding a 70th spec file did not cause it.
+
+- **`BE-W116`** — a Postgres **deadlock** between `ai-control-plane.spec.ts:72` and
+  `ai-product-qa.spec.ts:97`, both creating a reviewer admin through `asOwner` in concurrent
+  rolled-back transactions.
+- **`BE-W117`** — `refused-reads-audited.spec.ts` asserts an **absolute** `audit_log` count
+  (`expected '4845' to be '4843'`), so any other spec's legitimate audit rows fail it. The property
+  it checks still holds; the assertion is wrong.
+
+**So the api count in the table above — `69 files, 929 passed, 4 skipped` — is one green run of a
+suite that fails about half the time, and is reported that way rather than as a green suite.** It
+remains the first time PR #2's five specs have run against a database at all, which was the point;
+it is not evidence that the api job is reliable. `docs/gotchas.md`'s rule applied: both were
+investigated to a named mechanism rather than re-run to green.
+
+**Neither is fixed here.** Both contain a choice — a shared fixture reviewer versus serialising the
+api project; an actor filter versus an id watermark — and making that choice silently inside an
+unrelated commit is how a test architecture drifts. The cost of leaving them is stated in the
+register: **CI's database job fails roughly one run in two.**
+
+#### W1-A — CI DID NOT RUN on HEAD, and I could not make it
+
+**The brief asked for CI by workflow name with a SHA equal to HEAD. There is no such run, and that
+is the record.**
+
+| | |
+| --- | --- |
+| HEAD | **`325fcc0`**, pushed to `worktree-ai-platform-phase-a` (draft PR #2, head confirmed `325fcc0`) |
+| Runs for `325fcc0` | **none** |
+| Runs for `fd52f24` and `4388541` | **none** |
+| Last run on this branch | **`CI` · `pull_request` · `cb604e0` · success**, 28 Sep **06:41Z** — the previous session's commit |
+
+**What was ruled out, each by a command rather than a guess.** The `CI` workflow is `active`
+(`actions/workflows`); Actions is enabled for the repo with `allowed_actions: all`
+(`actions/permissions`); `ci.yml`'s trigger is a bare `on: pull_request:` with **no** path or draft
+filter; the PR is open and its `headRefOid` **is** `325fcc0`; and the account is a normal user token
+with `repo` and `workflow` scope, not a `GITHUB_TOKEN` (which would explain it, since pushes made
+with one do not create runs). **Other branches ran the same morning** — `fe-d4-demo` at 08:30Z,
+08:43Z, 08:52Z and 09:03Z, all green — so the runner fleet was working within the hour.
+
+**Not determinable from this machine:** org-level Actions billing, which is the remaining plausible
+cause and needs `admin:org` to read. `gh pr checks 2` reports *"no checks reported"*.
+
+**And I cannot force it: `ci.yml` has no `workflow_dispatch` trigger.** The routes a human has are
+to re-push, to mark PR #2 ready for review, or to close and reopen it — all of which fire
+`pull_request`, and none of which I should do unasked to a shared PR.
+
+**So the strongest statement this session can make about the pushed commits is the LOCAL one**, and
+it is deliberately not dressed up as CI: `pnpm ci:local` steps 1–16 pass and **step 17, the database
+job, fails on the two pre-existing intermittents registered as `BE-W116` and `BE-W117`**. Whether CI
+would go green is unknown, and note that CI has been green on this branch throughout — including at
+`cb604e0` — which is itself weak evidence that those two intermittents bite less often on CI's load
+profile than on this machine's one-run-in-two.
+
+**Adding `workflow_dispatch` to `ci.yml` would have made this diagnosable and is the obvious small
+fix. It is not done here:** it changes a CI trigger, which is a change to the mechanism that guards
+every branch, and it belongs in a commit whose subject is that and not this.
+
+
+---
+
+### W1-B — the gateway
+
+**28 September 2026.** Checkout guard first: namespace `@fieldforce/core`, remote
+`Praverse-Tech-Pvt-Ltd/Elmiron-App`, `f34ceef` an ancestor of HEAD — **exit 0**, toplevel
+`D:/Praverse/Elmiron-App/.claude/worktrees/ai-platform-phase-a`, branch
+`worktree-ai-platform-phase-a` (PR #2).
+
+#### Part A — why CI stopped, which was none of the things it looked like
+
+**The cause: PR #2 conflicted with `main`, so GitHub could not build `refs/pull/2/merge`, and a
+`pull_request` workflow has nothing to run against.** No run object is created and nothing anywhere
+says so.
+
+```
+gh pr view 2 --json mergeable,mergeStateStatus
+{"mergeable":"CONFLICTING","mergeStateStatus":"DIRTY"}
+```
+
+**`ci.yml` carries no filters at all** — `on: pull_request:` is bare and `push:` is `main`-only — so
+A1's "filter question before a permissions question" resolves to neither. The timing is exact:
+
+| When | What |
+| --- | --- |
+| **06:41Z** | `cb604e0` — the last CI run on this branch, **success** |
+| **08:07Z / 08:12Z / 08:17Z** | PRs **#3, #4, #5** merge to `main`, adding **27 commits** and conflicting this branch |
+| 09:23Z, 09:47Z, 09:52Z, 09:57Z | four pushes, **no run created** |
+| **09:59Z** | PR #6 on `fe-d4-demo`, **not** conflicting, runs green |
+
+**That last row is what ruled out the alternatives**: the fleet was working, billing was fine, and
+PR #2 has been a **draft since 24 September** and ran fine until 06:41Z, so draft state was not it
+either.
+
+**A3 — fixed two ways.** `origin/main` merged (commit `9f7538e`), and **`workflow_dispatch` added
+to `ci.yml`**, which is worth having on its own: `gh workflow run CI --ref <branch>` distinguishes
+"CI is broken" from "CI was never asked" in one command, and this session had no way to do that.
+
+**A4 — the green run, by workflow name, SHA equal to HEAD:**
+
+```
+CI | pull_request | 9f7538e638a13e5059116e9c998b34a5963004aa | completed/success
+```
+
+**The database job passed, so `BE-W116` and `BE-W117` did not bite this run.** They remain real at
+roughly one run in two, and one green run is not evidence that they are gone.
+
+#### The merge exposed an id collision, and it is the more consequential half
+
+**Both sessions minted `C20`.** W1-A's nine rulings and the FE-D1 session's send-first ruling took
+the same id from the same high-water mark of `C19`. **FE-D1's reached `main` first, so it keeps
+`C20`**, and W1-A's shift to **`C21`–`C29`** across 15 files. The mapping is written into
+`.ai-collab/decisions.md` so a reader holding the old numbers can follow it, and
+`docs/demo-path-2026-10-01.md`'s references to ruling `C20` are **theirs** and untouched.
+
+**`BE-W118`** — ids are minted by reading a file's own highest, which is only correct on one branch
+at a time, and nothing reserves a range or detects a duplicate. The same applies to `BE-W`/`FE-W`.
+Recommended fix: a CI check that fails on a duplicate `### C<n>` heading.
+
+**The merge also produced the right jest config by itself** — W1-A's `testMatch` fix, which restores
+discovery inside a worktree, plus `main`'s `testTimeout: 20_000` on `packages/ui`, the asymmetry
+W1-A flagged and deliberately did not fix.
+
+#### Part B — `docs/ai-platform/PROVIDER-SHORTLIST.md`
+
+**Recommendation in one line: AWS Bedrock in the India geography for text, with Sarvam beside it
+once Sarvam's written no-training and retention terms exist; Sarvam for voice, and voice waits.**
+**17 cells are marked UNVERIFIED** and listed together at the end.
+
+**Three findings worth reading even if the document is not.**
+
+1. **OpenAI's direct API fails the residency requirement on its own documentation.** India is a
+   **storage** residency region and **not a processing** region — regional processing is US, Europe
+   (EEA + Switzerland) and the UAE only, and the docs say OpenAI *"may also process and temporarily
+   store Customer Content outside of the Region"*. Storing in Mumbai while inferring in Virginia is
+   the exact failure the residency question exists to catch.
+2. **AWS Bedrock is the only candidate documenting both halves** — *"routes requests only within the
+   India geography"* across `ap-south-1`/`ap-south-2`, and *"zero data retention… does not store
+   model inputs or outputs"*. **Its one documented exception — abuse-flagged content retained for
+   offline review — does not say where that copy lives.** That is the most important UNVERIFIED cell
+   in the document.
+3. **Voice is not funded, and the arithmetic is the finding.** At 20 reps × 80 minutes a month on
+   the cheapest verified vendor: speech-in ≈ $9, **speech-out ≈ $49**, before the model turns —
+   **≈$58/month against a $10–40 budget**, scaling linearly. There is no volume at which it fits.
+   Text is the opposite: Product Q&A at 4,400 calls/month costs **≈₹354 ≈ $4**.
+
+**Quality evidence is a published third-party benchmark, not a vendor claim.** *Voice of India*
+(arXiv 2604.19151v2, 24 May 2026, AI4Bharat/IIT Madras with Josh Talks): **Sarvam 5.0% Hindi WER,
+best on 13 of 15 languages; Gemini 3 Pro 6.0%; Microsoft 11.4%; OpenAI GPT-4o Transcribe 33.9% and
+~64.2% average.** The conflict of interest is stated in the document: Sarvam co-authored the
+*second* benchmark, *Indic DiarBench*, but not the one carrying these numbers.
+
+**`C30` and `C31` recorded** — the Edge Function approved, `#5` explicitly not guessed.
+
+#### Part C — the gateway, built and proven through HTTP
+
+**`services/api/supabase/functions/ai-gateway/`.** The property it exists to preserve: **it calls the
+control plane as the USER'S token, never as a service role.** `SUPABASE_SERVICE_ROLE_KEY` is not
+read in the function at all — not read and ignored, so it cannot be reached for later by someone
+fixing a 401 in a hurry.
+
+**The flow is imported, not rewritten.** `answerProductQuestion` has 35 tests over it including the
+order of its steps; a second copy in Deno would be a second set of guarantees.
+
+**C2 — one adapter, a stub that says so.** It returns `supported: false` on every call, which
+`answerProductQuestion` maps to the "approved information not available" sentence, and it names
+itself `stub` in the request log. **It throws on construction against a non-local target**, for the
+same reason `loadAppConfig` throws on `APP_RECORDING_ENABLED`: silently ignoring the request leaves
+whoever set it believing the feature is on. **No vendor is named anywhere in the repository.**
+
+**C3/C4 — `services/api/tests/ai-gateway.spec.ts`, 9 tests, all passing.** The first test in this
+repository that reaches the gateway as a phone would: a real GoTrue password sign-in, a real `POST`
+to `:54321/functions/v1/ai-gateway`, and the function's own Deno process calling the RPCs as that
+user. Proven end to end: the approved prompt version the database chose is on the audit row; the
+row is attributed to the **MR**, not a service role; `45011` arrives as HTTP 403 with the flag off
+and `45012` as HTTP 429 over the allowance; and the cost fields are populated.
+
+**C4's assertion is about state, not a message, and that was the point.** The stub sets
+`provider = 'stub'` with non-null token counts on **every** call, so
+
+> **`ai_requests.model_provider IS NULL` on a blocked request is a fact only reachable if
+> `generate` never ran.**
+
+Asserted with its positive control — the same call without patient details records `stub` and
+non-null tokens — so a null cannot mean a broken insert.
+
+**C5 — CI now serves the function**, and **the order of the two commands in that step is the whole
+step.** See below.
+
+#### `BE-W119` — the mutation that failed to fail, and what it exposed
+
+**The first attempt at C7's mutation passed, and that was the finding.** With `functions serve`
+already running, `product-qa.ts` was mutated to remove the patient guardrail **entirely** and core
+was rebuilt. The suite returned **9 passed**.
+
+**`functions serve` hot-reloads the function directory. It does not reload
+`packages/core/dist`, which the function imports from outside it.** The server was still executing
+the old bundle. **A green gateway suite can be testing code that is no longer in the tree** — the
+worst shape a test-infrastructure defect can take, and the exact thing this repo's "a command that
+exits 0 is not a command that worked" rule is about.
+
+**Restarting the server turned the same mutant into the right answer.** Registered as `BE-W119`;
+mitigated in CI by building **before** serving, with the reasoning written into the step.
+
+#### Mutation — two-sided, and one that kills exactly one test
+
+| Mutant | Result |
+| --- | --- |
+| **Guardrail removed** from `answerProductQuestion`, server restarted | **2 failed, 7 passed** — both "blocked with NO provider recorded" tests died and **the POSITIVE CONTROL survived**, so the table is not merely refusing everything |
+| **Guardrail removed**, server **not** restarted | **9 passed** — `BE-W119`, above |
+| **`STUB_MODEL_NAME` changed** | **exactly 1 failed, 8 passed** — the cost-fields test alone |
+
+#### Parts D and E, in `docs/blocked-on-you.md`
+
+**D — `BE-W115`.** Four options costed. **Recommend (a) a session-scoped flag, with (d) a detection
+report alongside**; (a) is the only one that closes it and needs permission for a mechanism this
+schema has nowhere. **What is and is not at risk:** the four-eyes path is **sound for every route an
+application offers**, including the operator's review screen. What fails is the claim that it is
+*impossible* — `C24`'s "no seed, script or migration may **insert** approved knowledge" is true as
+written, and is not true of an **update**.
+
+**E1 — 62 pending, and a correction left visible.** 81 migration files, 19 applied to production on
+**14 August 2026**, last measured **15 September** by `BE-W40` over the pooler; nothing has measured
+production since and nothing here can. **This section's own first draft said 82 and 63** — the brief
+said 45, W1-A corrected it to 62, and I nearly moved it to 63 by arithmetic instead of running one
+command. Three numbers in two weeks for one fact.
+
+**E2 — the order: pre-flight query → shift hours → migrate → reference data → paid plan**, each with
+what breaks if skipped. **The pre-flight query is one query nobody has run, and if it returns
+non-zero counts this is an incident, not a deployment.**
+
+#### Counts, from each runner's own summary lines
+
+| Workspace / runner | Summary line |
+| --- | --- |
+| core / vitest | `Test Files 5 passed (5)` · `Tests 106 passed \| 4 skipped (110)` |
+| ui-tokens / vitest | `Test Files 3 passed (3)` · `Tests 54 passed (54)` |
+| ui / vitest | `Test Files 1 passed (1)` · `Tests 4 passed (4)` |
+| console / vitest | `Test Files 7 passed (7)` · `Tests 52 passed (52)` |
+| field / vitest | `Test Files 44 passed (44)` · `Tests 637 passed (637)` |
+| **api / vitest — the gateway suite** | **`Test Files 1 passed (1)` · `Tests 9 passed (9)`** |
+
+`typecheck` **9 successful, 9 total**. `lint` **7 successful, 7 total**, exit 0, one pre-existing
+warning in `@fieldforce/field` untouched. `prettier --check .` **"All matched files use Prettier code
+style!"**
+
+**One thing the counts do not show, and it is worth stating:** the Edge Function's own TypeScript is
+**not** typechecked by `pnpm typecheck` — it sits outside every workspace `tsconfig`, and `Deno` and
+`jsr:` specifiers would not resolve there anyway. Its correctness rests entirely on
+`ai-gateway.spec.ts` exercising it over HTTP. That is a real gap and it is the reason C5's CI step
+matters more than it looks.
+
+#### Where this stopped
+
+**Parts A, B, C, D and E are complete.** The stop is `BE-W115`, unchanged from W1-A and still an
+**ASK-BEFORE-DOING** stop: option (a) needs permission for a mechanism this schema has nowhere, and
+D2 costs it rather than building it.
+
+**Two things a reader should not conclude.** The gateway runs against a **stub**, so nothing in this
+session is evidence that any model works — `#5` is open and `C31` did not guess it. And every number
+above is from **this machine's local stack**; there is still no handset result anywhere in this
+repository and no result of any kind against a hosted Supabase project.
+
+#### W1-B postscript — C5's CI step, proven both ways, and the two defects it caught on the way
+
+**The step was wrong the first time, and CI is what said so.** Recorded in this order because the
+order is the lesson.
+
+| Run | SHA | Result |
+| --- | --- | --- |
+| 1 | `20e727a` | **FAILURE** at `Start Supabase and apply migrations` — `failed to read file: open packages/core/dist/field/gateway/providers.js: no such file or directory` |
+| 2 | `af3ef26` | **SUCCESS**, both jobs. Serve step printed `ai-gateway answered HTTP 401`; the suite reported `✓ tests/ai-gateway.spec.ts (9 tests)` |
+| 3 | `147c4e7` | **FAILURE**, deliberately — the red proof |
+| 4 | `f8c4f7c` | the revert |
+
+**Defect 1, mine: `supabase start` resolves the Edge Functions' import graph.** It does not merely
+start containers. `_shared/core.ts` imports `packages/core/dist`, which is gitignored and built in
+the *other* job, so the database job died before a single migration test ran — and **building inside
+the serve step was two steps too late.** The build is now its own step before `supabase start`.
+
+**It passed locally only because `dist` was already present from an earlier build.** That is the
+canonical shape of *"a command that exits 0 is not a command that worked"*, and it is the second
+time in one session that a local green was an artefact of stale state — `BE-W119` was the first.
+
+**The green run answers the question C5 exists to ask.** The risk was never that the gateway tests
+fail; it was that they **skip themselves** and a green CI means nothing about the gateway.
+`✓ tests/ai-gateway.spec.ts (9 tests)` — not `9 skipped` — is the evidence that they ran on a clean
+runner where `BE-W119`'s stale-bundle problem cannot occur. The full API suite in CI:
+**`Tests 938 passed | 4 skipped (942)`**.
+
+**The red proof, with the prediction made before the run.** `147c4e7` pointed the function's import
+at a module that does not exist, and its commit message named the two steps that could catch it. It
+failed at the earlier one:
+
+```
+failed to read file: open
+services/api/supabase/functions/_shared/stub-provider-DELIBERATELY-BROKEN.ts:
+no such file or directory
+```
+
+**One honest correction, because "CI went red" is worthless if two causes are collapsed into one.**
+That run *also* failed `format:check`, and that was my mistake rather than part of the proof — the
+break was written with a PowerShell `-NoNewline` write that stripped the file's trailing newline.
+**The import failure is the proof; the missing newline is noise.**
+
+**What is proven and what is not.** Proven: a function that cannot resolve its imports fails CI
+before any test runs, and the gateway suite genuinely executes. **Not provoked: a function that
+resolves but never answers** — the case the wait loop exists for. The loop is written and
+commented; it has not been made to fire.
+
+**And the Part A finding got stronger without being asked.** `main` moved again mid-session (PR #6,
+10:45Z), PR #2 went `CONFLICTING` a second time, and CI stopped again. **This branch loses CI
+silently on a cadence set by other people's merges**, because both sides append to the same shared
+documents and an append conflicts with every other append at the same end of a file. `BE-W118`
+covers the id half of that root cause; the CI half is why `workflow_dispatch` matters more than it
+looked.
+
+
+---
+
+### W1-C — unblocking the frontend
+
+**28 September 2026.** Checkout guard first: namespace `@fieldforce/core`, remote
+`Praverse-Tech-Pvt-Ltd/Elmiron-App`, `f34ceef` an ancestor of HEAD — **exit 0**, toplevel
+`D:/Praverse/Elmiron-App/.claude/worktrees/ai-platform-phase-a`, branch
+`worktree-ai-platform-phase-a` (PR #2).
+
+**Was a merge of `main` needed first? At session start, NO** — `main` had not moved and
+`gh pr view 2` reported `MERGEABLE / CLEAN`. **It was needed twice later**, once for real (PR #7,
+8 commits) and once not at all — see the correction below.
+
+#### Three rulings, and the first use of the id namespace one of them creates
+
+`BE-C1`, `BE-C2`, `BE-C3`. **`BE-C3` establishes that the backend mints `BE-C<n>` and the frontend
+mints `FE-C<n>`**, each from its own sequence; `C1`–`C31` keep their names. It is recorded in
+**`CLAUDE.md`** — the only file both tracks load before reading any code — as well as in
+`decisions.md` and `docs/contract-requests.md`, **because a rule only one track reads is not a rule.**
+
+#### Part A — the frontend's four requests, answered
+
+**CR-3 is the one that unblocks six screens, and the answer is yes on all five.**
+`services/api/tests/cr3-mr-reads.spec.ts` — **10 tests passing** — signs in as the fixture MR through
+**real GoTrue**, calls each function over **real HTTP** with that MR's token, and parses every
+response through the exact exported schema.
+
+**Why the existing suite did not already answer it.** `console-reads-contract.spec.ts` proves three
+of the five parse — **as an `admin`**. `list_analyses` and `list_consent_records` branch on role, and
+`read_analysis` returns `data: null` out of scope, so **an admin passing proves nothing about an MR.**
+And reading the grant answers neither half: `grant execute … to authenticated` is true for all five
+and says nothing about what the body does with `current_app_role()`.
+
+**One naming answer, which is the "or" in the frontend's question.** `daily_mileage` is the only one
+of the five that is not a `jsonb` builder — it is `returns table (mr_id, travel_date, …)`, so
+PostgREST serialises those names literally and **the wire is snake_case**, which is why MR-52 A2's
+camelCase sweep never touched it. **Not a defect: `MileageRowSchema` is the wire shape and
+`fromMileageRow` is the mapper**, already used at `apps/field/src/capture/visits.ts:102`. A **negative
+control** asserts `MileageDaySchema` does *not* parse the wire, so a later camelCase conversion turns
+the double-mapping into a red test instead of a silent bug.
+
+**CR-4 / `BE-C2`** — `20260928000200_approximate_check_in.sql`. `check_ins.location_is_approximate`,
+true when the device's accuracy radius **exceeds the clinic's geofence radius** — the one threshold
+with a meaning rather than a taste, because an error radius larger than the circle cannot place the
+rep inside or outside it. **NULL where the question has no answer**, including every pre-existing row:
+`false` would assert a good fix. **The verdict is byte-for-byte unchanged**, and a test asserts a 5 m
+and a 5 km fix at the same point give the **same verdict and different flags**, so a future session
+widening the geofence by accuracy reverses the ruling visibly. **Nothing is refused on the flag.**
+
+**Three defects in my own first draft of that migration, all from transcribing a function body by
+reading it.** It **dropped the idempotency block** that makes a replayed check-in return the existing
+row — which would have broken the offline replay path the frontend had just proved in FE-D1 — used
+`within_shift_window` for what is really `is_within_shift`, and changed a refusal message. **The
+committed version is generated from `pg_proc.prosrc`** with three surgical additions, and a test now
+asserts idempotency because nothing else in the suite would have noticed its absence. **Anything that
+re-states an existing function should be generated from the authoritative definition, not from a
+reading of it.**
+
+**CR-1 — NOT SET, and the date is no longer conditional.** `gh secret list` returns exactly three
+secrets and `BACKUP_DESTINATION` is not among them; **no environments exist** and `backup.yml`
+declares none, so an environment secret cannot apply; **only the organisation level is unreadable**
+(`HTTP 403`, needs org admin) and is marked UNVERIFIED. Unless an org secret supplies it, **Database
+backup goes red from 2026-10-16 UTC, first on the schedule Monday 2026-10-19.**
+
+**CR-2 — corrected** in `handoff-frontend.md:259`. The 30 September deadline was retired on
+22 September **by answering its question** (`C7`); contract I3 is register `#19` and is deferred, with
+no deadline attached.
+
+#### Part B — and a correction I have to make about my own reading
+
+**`.github/workflows/pr-mergeable.yml`** makes a conflicting PR loud. **It runs from the default
+branch** — schedule, push to `main`, and dispatch — because a mergeability job inside `ci.yml` would
+be suppressed by the very condition it reports. **A workflow that cannot report its own absence is
+the exact shape this project keeps finding.**
+
+**THE CORRECTION.** I reported a fifth conflict today. **There was no fifth conflict.** `gh pr view 2`
+returned `CONFLICTING` immediately after a push, and 15 seconds later returned `MERGEABLE / UNSTABLE`
+with `main` unmoved. **It was a racing read and I called it a conflict.**
+
+**That mistake improved the check, which is the only good thing about it.** The poll I had written
+waits out `UNKNOWN` — but GitHub returned a **confident wrong answer**, not `UNKNOWN`, so the poll
+would not have caught it. **The check now re-verifies a `CONFLICTING` reading after 30 seconds before
+failing**: a real conflict persists, a racing read does not. Without that, it would have failed on
+almost every push to `main` — the trigger it needs most — and **a check that cries wolf is one people
+switch off.**
+
+**The real count for the day is four conflicts, not five**, all in `PROJECT-OVERVIEW.md` or
+`.ai-collab/decisions.md`.
+
+**B1 proposes `BE-W120`** — per-track append files, with the shared document keeping a stable index.
+It says what it costs a reader (two files to interleave by date) and **that it would not have
+prevented the `C20` collision**, which needed `BE-C3` instead. `BE-W118` conflated those two problems
+and the conflation is why the renumbering was a surprise.
+
+**B2 — recommendation: merge PR #2 after the 4 October demo, and take it out of draft now.** The
+AGAINST case is entirely about **timing** — 82 migrations including a rewrite of `record_check_in`,
+which is on the demo's critical path — and it expires on 5 October, while the conflict cost compounds
+daily. **Not merged; that is the operator's.**
+
+**And a limitation of B3 that is an argument for B2:** `schedule`, `push: branches: [main]` and
+`workflow_dispatch` all resolve against the **default branch**, so **this check does nothing until
+PR #2 merges.** The fix for silent CI cannot be switched on while the problem is happening.
+
+#### Part C — the five provider gaps
+
+**Two emails drafted ready to send**, in `PROVIDER-SHORTLIST.md` §10.1 — to AWS on where
+abuse-flagged content is processed and stored and whether Bedrock trains on customer data; to Sarvam
+on written retention, no-training and sub-processor terms. Both short, both answerable with a yes, a
+no, or a clause reference. **Neither is engineering's to send: both need someone who can sign what
+comes back**, the same unnamed signatory as register `#18`.
+
+**Google, gap 5: retried once, still UNVERIFIED.** The documentation renders client-side and the fetch
+returns the navigation shell. **A third attempt is not evidence.** Google is not eliminated — it is
+unassessed on the one question that matters, and the question to ask is the same shape as AWS's.
+
+**C3 — the latency harness exists and runs.** `services/api/scripts/measure-provider-latency.mjs`,
+vendor-neutral, configured entirely by environment variables so **the repository still names no
+provider**. Proven both ways: **exit 2 with instructions when unconfigured**, and a real measurement
+against a local echo endpoint (5 calls, p50 33 ms, p95 63 ms). It reports **p50, p95, max and
+time-to-first-byte and deliberately no mean** — one outlier in twenty moves a mean by half a second
+and moves p95 to the number a rep would complain about. It also refuses to guess where it ran:
+`measuredFrom` is null unless told, because **a latency number without a location is not a
+measurement.**
+
+**C4 — the line the shortlist lacked.** Self-hosting an open model in the project's own India region
+is **the only option where residency is a fact rather than a contractual term** — no sub-processor, no
+retention question, no abuse-monitoring exception, because nothing leaves the machine. Costed as an
+order of magnitude and **marked UNVERIFIED rather than invented**: a mid-range GPU instance runs in
+the low hundreds of dollars a month if left on, against ≈$4 for the text workload on a hosted API.
+What it trades away: Indian-language quality (Sarvam's 5.0% Hindi WER), somebody else's operations,
+elasticity, and the voice half entirely. **It becomes the right answer if the two emails come back
+unsatisfactory**, and Sarvam's own air-gapped offering is the cheapest route to it.
+
+**C5 — the exchange rate is flagged at the point of use**, not only in the appendix. And §10.4 does
+the sensitivity: the rupee would have to reach **₹128 = $1** before voice fell inside the budget and
+**₹12 = $1** before text rose above it, so **neither conclusion depends on the assumption.**
+
+#### Part E — the demo path, and what it can honestly show
+
+**`docs/demo-path-2026-10-01.md` commits to a 16-step walkthrough on a real phone, against the local
+stack on the laptop's LAN address.** Ten lines, each marked as it stands today:
+
+| # | What it shows | Today |
+| --- | --- | --- |
+| 1 | Sign in — Supabase Auth password grant | **BUILT** |
+| 2–5 | First run: location, notifications, battery, "what we record" | **BUILT** (device permissions). Notifications grant **changes nothing — nothing sends any** |
+| 6–7 | Today and Beat plan, from `sync_pull` | **BUILT.** No map, no reorder, by decision |
+| 8 | Microphone permission, once per phone | **BUILT** |
+| 9 | **Check-in** — `record_check_in` | **BUILT**, and its listed caveat is now **answered**: `BE-C2` flags an approximate fix |
+| 10 | Consent — reads the notice, writes through `sync_push` | **BUILT** |
+| 11 | Samples | **BUILT**, and the UCPMP cap is **inert** — `#1` unset, so samples are accepted uncounted and the screen says so |
+| 12 | Voice note — real upload to the `audio` bucket | **BUILT.** **Nothing transcribes it** |
+| 13–15 | Check-out, call report, offline queue and flush | **BUILT** |
+| 16 | **Day end** — visits and mileage | **STUBBED — reads the mock.** Its caveat is now **answered**: CR-3 says `daily_mileage` works for an MR, so this is a frontend-only switch |
+| — | Coaching, Analysis, Reply | **HIDDEN by flag** (`P6`), because their content is mock AI output |
+| — | **Any AI feature: Product Q&A, AI Doctor, AI Coach** | **DOES NOT EXIST on the demo path.** Not in the document at all |
+
+**E2 — what the demo cannot show while `#5` is unanswered, and what it should not pretend.**
+
+**It cannot show a single AI answer.** The gateway is deployed and audited and answers through a
+**stub** that always returns "approved information not available". There is no product catalogue
+(`#7`), no approved knowledge, and no model. **AI Doctor does not exist at all.** The demo path is
+honest about this by omission — it contains no AI step — and that is the right shape.
+
+**Should a stubbed answer be shown to an audience? No.** Two reasons, and the second is the stronger.
+A stub that renders a plausible sentence teaches the room that the feature works; the audience cannot
+see the difference and will repeat what they saw. And **the stub's only honest output is a refusal** —
+"approved information not available" — which would be shown as a working AI feature declining, when in
+fact no model was called. **Either reading misleads.** The demo should say the AI platform is built to
+the gateway and waiting on a provider decision, and show the **console approval screen** instead:
+that is real, it is the thing `C24` makes safe, and it demonstrates the pipeline that makes AI content
+trustworthy without pretending any AI ran.
+
+**What the demo can honestly add from this session:** nothing on the phone. Everything W1-C built is
+backend and console. **The one demo-relevant change is that item 16's blocker is answered** — Day end
+can leave the mock, if the frontend has time before Thursday.
+
+#### Counts, from each runner's own summary lines
+
+| Workspace / runner | Summary line |
+| --- | --- |
+| **api / vitest — `cr3-mr-reads.spec.ts`** | **`Test Files 1 passed (1)` · `Tests 10 passed (10)`** |
+| **api / vitest — `approximate-check-in.spec.ts`** | **`Test Files 1 passed (1)` · `Tests 6 passed (6)`** |
+| api / vitest — both together | `Test Files 2 passed (2)` · `Tests 16 passed (16)` |
+| latency harness, unconfigured | exit **2**, with instructions |
+| latency harness, against a local echo | 5 calls, p50 **33 ms**, p95 **63 ms**, exit 0 |
+
+`typecheck` **9 successful, 9 total**. `lint` **7 successful, 7 total**, exit 0, one pre-existing
+warning in `@fieldforce/field` untouched. `prettier --check .` **"All matched files use Prettier code
+style!"**
+
+#### WHERE THIS STOPPED — Part D was not started, and that is a judgement not a shortfall
+
+**This is a CONDITIONAL STOP THE BRIEF DEFINED.** The stop rule says to complete parts in order and
+**after each, judge whether the session has room to do the next one WELL.** After Part C, it does not.
+
+**Part D is the largest part of this brief** — persona and scenario tables with their own four-eyes
+approval lifecycle (D1), sessions and turns, tenant-scoped and audited (D2), a turn exchange through
+the gateway (D3), a server-validated coach contract under `C27` (D4), an end-to-end HTTP suite with
+two-sided cross-tenant refusals (D5), and a two-sided mutation requiring a rebuild and a server
+restart each time (D7). That is comparable to the whole of W1-B Part C.
+
+**Why starting it would have been worse than stopping.** The only version of Part D that fits the
+remaining room is D1 and D2 — **the tables, with no gateway route, no test and no consumer.** That is
+precisely this repository's characteristic defect, and `INVENTORY.md`'s central finding is that
+**zero of PR #2's eight pieces had ever been called by an app.** Adding a ninth would have been the
+worst available outcome: a schema that looks like progress, is cited as progress, and is exercised by
+nothing.
+
+**Part E was done anyway, out of order, deliberately.** It costs ten lines and it is **time-critical**
+— the demo is Thursday 1 October and the question "can we show an AI feature" needed an answer before
+then, not after Part D. Recorded as a deviation rather than presented as the plan.
+
+**Nothing in Part D is blocked.** It needs no decision, `#5` included — the stub provider and the
+deployed gateway are enough to build it against. **It is the obvious first thing for the next
+session**, and the order it should be built in is D1 → D2 → D3 → D5, with D4's contract written
+before D3 so the turn exchange has a shape to validate against.
+
+**Two things a reader should not conclude.** The gateway still answers through a **stub**, so nothing
+here is evidence that any model works. And every number above is from **this machine's local stack**;
+there is still no handset result anywhere in this repository and no result of any kind against a
+hosted Supabase project.
+
+
+---
+
+### W1-D — the practice foundation
+
+**29 September 2026.** Checkout guard first: namespace `@fieldforce/core`, remote
+`Praverse-Tech-Pvt-Ltd/Elmiron-App`, `f34ceef` an ancestor of HEAD — **exit 0**, branch
+`worktree-ai-platform-phase-a`, HEAD `ea08768` at session start.
+
+**Was a merge of `main` needed first? NO.** `main` had not moved (`git log HEAD..origin/main` empty)
+and `gh pr view 2` reported **`MERGEABLE / CLEAN`** on the first read, so the 30-second re-read this
+project's own correction introduced was not needed. Recorded because "no merge was needed" is a
+measurement here, not an assumption.
+
+#### Part A — four small things
+
+**A1 — the approximate flag reaches the contract.** `CheckInSchema` gains
+`locationIsApproximate: z.boolean().nullable().optional()`.
+
+**Both modifiers are load-bearing and they mean different things.** `.optional()` because a response
+that does not carry the field must still parse — `sync_pull` does not carry it, and a required key
+would have broken every existing consumer the moment it was added. `.nullable()` because the column
+is. **Absent = this response does not carry the field. Null = the server has no answer.** And
+**null never means "the fix was fine"**: three cases produce it — a check-in written before
+`20260928000200`, a device that sent no accuracy, and a visit with no clinic to compare against.
+Rendering any of those as "precise" would be the overstatement `FE-W52` had to correct.
+
+**A2 — the pg_proc rule is in `docs/gotchas.md`**, with the three defects that make it persuasive
+rather than as a preference: transcribing `record_check_in` by reading it **dropped the idempotency
+block** (which would have broken the offline replay path FE-D1 had just proved), **renamed
+`is_within_shift`**, and **changed a refusal message**. A function may also have been redefined by a
+later migration than the one you find, so the file you read may not be what is installed; `prosrc`
+cannot be stale by construction.
+
+**A3 — the inert guard, decided rather than left ambiguous.** `pr-mergeable.yml` **cannot** run from
+a feature branch: `schedule`, `push` and `workflow_dispatch` all resolve against the default branch's
+copy. **Making it work from here is impossible in the way that matters** — the only place it could
+run is `ci.yml`, which is suppressed by exactly the condition it reports. So the file now **declares
+its own inertness at the top**, with the two commands a session must run by hand instead, and with
+the instruction to delete that block the day it reaches `main` — because from that moment the warning
+becomes false, which is the same failure class as a stale count in `CLAUDE.md`.
+
+**A4 — already delivered in W1-C** and deliberately **not duplicated**: `docs/blocked-on-you.md`
+carries the organisation-secret question with the settling command and the **16 October** date. A
+second entry in an append-only file would be noise.
+
+#### Part B — AI Doctor, contract first
+
+**Order: D4 → D1 → D2 → D3 → D5, so nothing existed without something reaching it.**
+
+**B1 — the coach analysis contract** (`packages/core/src/field/simulation.ts`), written before
+anything could produce one. Overall score and five dimension scores, all 0–100 integers; at least one
+strength **and** one improvement; a summary; and **every finding must cite the turn it is about** —
+the same rule `analysis.ts` already enforces for real-visit findings, because an unciteable criticism
+is one a rep cannot check or argue with.
+
+**Why a score is permitted here when `constraints.md` forbids one elsewhere, and neither half is
+bent.** That rule says *"never add a ranking, score, rank, percentile or grade to `analyses` or the
+manager surface."* **This is not `analyses`** — that table holds analyses of real doctor visits, which
+is employee monitoring (`C8`). **And it is not a manager surface** — `C27` puts practice scores in
+front of the MR and the company admin and nobody else, enforced in RLS rather than in a client filter.
+**There is deliberately no team, cohort, percentile, rank or comparison field anywhere**, so a score
+cannot become a leaderboard by someone writing a `GROUP BY`, and `contract.test.ts` asserts their
+absence by name.
+
+**B2 — personas and scenarios are admin-editable rows**, addable without a deployment, carrying the
+**same** lifecycle as approved knowledge: the same `knowledge_version_status` enum imported rather
+than redeclared, the same arrows, the same four-eyes rule expressed as a **table CHECK as well as** an
+RPC refusal, the same stored attestation, and W1-A E1's refuse-don't-coerce insert rule applied from
+the start. `submit/approve/reject_sim_content` cover **both** tables with one implementation.
+**Registered honestly:** this is the third place the pattern appears, and extracting one generic
+helper across knowledge, prompt versions and simulation content is **`BE-W121`** — not attempted here,
+because doing it would rewrite two working subsystems in a session whose job was to add a third.
+
+**B3 — the session** records who, which scenario and persona, product, market, **the approved prompt
+version pinned for its whole life**, the knowledge versions accumulated across turns, start, end and
+turn count. Turns are server-indexed, contiguous and append-only.
+
+**B4 — the turn exchange goes through the W1-B gateway, and it is still ONE function.** No second
+Edge Function, no second upload path, **no service-role key** — the only occurrence of
+`SUPABASE_SERVICE_ROLE_KEY` in the file is the comment explaining why it is absent. `feature` selects
+a flow; the token handling, which is the whole security model, is shared, so a property proved once
+holds for all three features.
+
+**The stub had to become shape-aware**, and the shapes carry W1-C E2's ruling in code: every stubbed
+reply contains **`[PRACTICE STUB …]`** and **the coach's scores are all zero**. A stubbed doctor saying
+"Yes, tell me more about the dosing" would be indistinguishable from a working feature to anyone
+watching, including the person who built it.
+
+#### B5 — proven end to end, over HTTP
+
+`services/api/tests/sim-gateway.spec.ts` — **18 tests, all passing.** Real GoTrue sign-in, real
+`POST` to `:54321/functions/v1/ai-gateway`, the function's own Deno process calling the RPCs as that
+user. **start → turn → end → analysis**, with the analysis row parsed through
+`SimCoachAnalysisSchema`, attributed to the rep rather than a service role, and carrying
+`modelProvider = 'stub'`.
+
+**Cross-tenant, two-sided with positive controls:** the rival organisation cannot start a session,
+cannot add a turn over HTTP, and reads **0 sessions, 0 turns, 0 analyses** — while our own rep reads
+more than zero with the same query, so the zeros mean something. **And `C27` is asserted where it is
+enforced: a FIELD MANAGER reads 0 sessions and 0 analyses**, because `visible_user_ids()` is
+deliberately absent from those policies. That is the test that fails if someone adds it "for
+consistency" — which is exactly the mutation run below.
+
+**B6 — asserted, not commented.** Read from `information_schema` rather than from the migration: **no
+`sim_*` foreign key reaches `doctors`, `visits`, `consent_records`, `analyses`, `recordings`,
+`voice_notes`, `upload_grants` or `transcripts`**; **no column could hold audio** (no `audio`,
+`storage_key`, `bucket`, `mime`, `duration_seconds`); **no column is named for a patient**. Each has
+a positive control so a broken query cannot read as a pass. And a rep turn carrying patient details is
+**refused before any provider call** — proved by `model_provider IS NULL` on the blocked request,
+which is only reachable if `generate` never ran — **and the refused turn is not stored at all**, so
+the details never enter the rep's history.
+
+#### B7 — mutation, two-sided, and BE-W119 caught me again
+
+| Mutant | Result |
+| --- | --- |
+| **Patient guardrail disabled** in the `ai_doctor` flow (rebuilt **and** restarted) | **exactly 1 failed, 17 passed** — the guardrail assertion alone |
+| **`visible_user_ids()` added** to the session RLS policy — the "for consistency" change | **the `C27` manager test failed**, as designed |
+
+**And the second run exposed my own mistake, which is worth more than the mutation.** After mutant 2
+I restored `sim-doctor.ts` **but did not rebuild and restart**, and the guardrail test failed a second
+time — against source that was already correct. **`functions serve` was still executing the previous
+bundle.** That is `BE-W119` exactly, on a session that had the rule written in front of it, and it is
+the second time in three sessions that a local result was an artefact of stale state. The rule is not
+"remember to rebuild"; it is **treat any unexpected gateway result as a stale-bundle suspicion first.**
+
+#### Part C — the demo, 1 October
+
+**C1 stands: no stubbed AI answer is shown.** Unchanged.
+
+**C2 — the console approval screen, opened in a browser with a real signed-in session.** Not the route
+existing; the page rendering. A second admin was created (four eyes needs two), an **AI-drafted**
+knowledge version was authored and submitted by the *other* admin, and the page was fetched twice with
+real `@supabase/ssr` session cookies.
+
+**What the OPERATOR (the second admin) actually sees — HTTP 200:**
+
+> Knowledge awaiting your approval · *"Nothing here is answerable to a rep until you approve it. You
+> cannot approve a version you wrote or submitted — a second admin must."* · **Probexa storage guidance
+> (demo)** · `version 1` `in_review` `no market` `not about a product` · **Who produced this text: A
+> model: demo-model-v1** · *"A model produced this text. Approving it makes it answerable to reps as
+> company-approved material. Read it as a draft, not as a summary you are confirming."* · Where it came
+> from: Training deck, edition 4, page 11 · the text, line breaks intact · **Your attestation —
+> required to approve** · **Or a reason — required to reject** · **[Approve] [Reject]**
+
+**What the AUTHOR sees — the same page, HTTP 200, controls ABSENT:**
+
+> …the same draft and provenance… then *"You drafted this version, so you cannot approve it. Four eyes:
+> a second admin must review it. The server refuses an author's own approval whatever this screen
+> shows."*
+>
+> `Approve button: False` · `Reject button: False`
+
+**C3 — what on PR #2 could affect the demo path, measured rather than assumed.**
+
+| | |
+| --- | --- |
+| Field app source changed by PR #2 | **None.** `git diff origin/main...HEAD -- apps/field packages/ui packages/ui-tokens` touches only the two `jest.config.cjs` files — test discovery, not runtime |
+| `packages/core` | **+1,961 lines, all additive** — new files plus two additions: `refusals.ts` gains `45011`/`45012`, `entities.ts` gains one **optional** field |
+| Demo-path functions **redefined** | **Exactly one: `record_check_in`** (`20260928000200`), which is demo item 9 |
+| `record_check_out`, `sync_pull` | **Comment mentions only** — checked by excluding comment lines; no redefinition |
+| `capture_consent`, `sync_push`, `begin_upload`, `my_shift_window` | **untouched** |
+| New `sim_*` tables | not on the demo path, and asserted to reference nothing the field app uses |
+
+**So the honest answer is not "it should be fine" — it is one named function, with one named
+residual risk.** `record_check_in` was **generated from `pg_proc.prosrc`** rather than retyped, adds
+one nullable column, and its idempotency is now asserted by a test that did not exist before. The
+field app does not read the new column.
+
+**The residual risk is which branch the demo laptop runs.** The demo uses the **local stack**, built
+by `db:reset` from the migrations in the checked-out tree. **On `main`, none of PR #2's migrations
+exist and nothing changes. On this branch, `record_check_in` is the rewritten one.** That is a choice
+somebody must make explicitly before Thursday, and it has not been made.
+
+#### Part D — two lines for the operator
+
+**D1 — the vendor emails are ready to send without editing**, in
+`docs/ai-platform/PROVIDER-SHORTLIST.md` §10.1: one to AWS (where abuse-flagged content is processed
+and stored; training use), one to Sarvam (written retention, no-training, sub-processors, and whether
+the published rates are current). Both are quoted blocks with a subject line, answerable with a yes, a
+no or a clause reference. **Neither is engineering's to send: both need someone who can sign what comes
+back.**
+
+**D2 — what is waiting on a person, in one place:**
+
+| | Waiting on | Date, only where one is already wired |
+| --- | --- | --- |
+| **`#5`** | the AI provider, and whether data may leave India | — |
+| **`#7`** | the product catalogue, and who supplies approved labels | — |
+| **`#1`** | the UCPMP cap value | **CI red 6 November**, warning from 16 October |
+| **`#3`** | the organisation's registered legal name | cost accrues daily; consent rows are append-only and cannot be repaired |
+| **the organisation secret** | is `BACKUP_DESTINATION` an org secret? | **backup job red from 16 October** |
+| **the production deploy** | pre-flight query → shift hours → migrate → reference data → paid plan | — |
+
+#### Counts, from each runner's own summary lines
+
+| Workspace / runner | Summary line |
+| --- | --- |
+| core / vitest | `Test Files 5 passed (5)` · `Tests 111 passed \| 4 skipped (115)` |
+| **api / vitest — `sim-gateway.spec.ts`** | **`Test Files 1 passed (1)` · `Tests 18 passed (18)`** |
+| api / vitest — the four gateway/contract suites together | `Test Files 4 passed (4)` · `Tests 43 passed (43)` |
+
+`typecheck` **9 successful, 9 total**. `lint` **7 successful, 7 total**, exit 0. `prettier --check .`
+**"All matched files use Prettier code style!"** `verify-rollbacks --files-only` — **every one of 84
+migrations has a rollback file**, and both new ones state what rolling back *means*, including that
+`20260929000200` must be run **before** `20260929000100` because the functions reference the tables.
+
+#### WHERE THIS STOPPED, and what reaches what
+
+**Parts A, B, C and D are complete.** Part B ran through **D5**, so the stop rule's condition is
+satisfied: **nothing here is a table with no consumer.**
+
+| What exists | What reaches it |
+| --- | --- |
+| `sim_personas`, `sim_scenarios` | `submit/approve/reject_sim_content`, exercised by 5 tests |
+| `sim_sessions`, `sim_turns` | `start_sim_session`, `record_sim_turn` via the **deployed Edge Function** over HTTP |
+| `sim_coach_analyses` | `record_sim_coach_analysis` via the gateway's `ai_coach` flow |
+| the coach contract | validated **twice** — in Zod inside the gateway, and again in the database, because a future caller that is not the gateway cannot skip the second |
+
+**What is NOT reached by an app screen: all of it.** There is no AI Doctor UI in `apps/field`, and
+this session did not build one — the brief did not ask for it and `AI-SPEC.md` already records the
+screen as DOES NOT EXIST. **So the §56 status of AI Doctor is UNVERIFIED**, exactly as `product_qa`'s
+was after W1-B: built, tested, reached by a test rather than by a rep.
+
+**Two things a reader should not conclude.** The gateway still answers through a **stub**, so nothing
+here is evidence that any model works — the doctor's every reply literally says so. And every number
+above is from **this machine's local stack**; there is still no handset result anywhere in this
+repository and no result of any kind against a hosted Supabase project.
+
+#### W1-D postscript — CI found three defects the local run could not, and BE-W116 is closed
+
+**The W1-D push was green on the static job and RED on the database job.** All three causes were
+mine, all three were caught by guards this repository already had, and **all three were invisible
+locally because this machine's database carried state from earlier sessions while CI starts clean.**
+
+| # | What broke | Why local passed |
+| --- | --- | --- |
+| 1 | `sim_content_before_insert` / `_before_update` left **`anon`-executable** — named by `rls.spec.ts` AND `privilege-posture.spec.ts` B1 | nothing local re-checks the grant population between runs |
+| 2 | my suite **leaked a committed global threshold** into `ai-control-plane.spec.ts`, turning its `45011` refusal into a pass | this database already had a limit row from earlier sessions |
+| 3 | **`BE-W116`** — the reviewer-creation deadlock, at `ai-product-qa.spec.ts:97` | it is one run in two, and the local run was the other one |
+
+**On (1).** `20260929000200` revoked the seven RPCs and forgot the two trigger functions, because a
+trigger function feels like something nobody calls — **it is callable by name, by anyone.** Neither
+is dangerous to invoke directly; both read trigger-only variables and error outside a trigger. **That
+is not the point.** The guard exists because the next un-revoked function might not be harmless, and
+*a posture that holds by luck is not a posture*. Fixed in a **new** migration, `20260929000300`,
+because `constraints.md` permits editing an applied one only under the MR-35 B3 exception whose first
+condition — that no database has applied it — is false here.
+
+**On (2), and it was LATENT rather than new.** `sim-gateway.spec.ts` must COMMIT
+`ai_daily_requests_per_user`, because an Edge Function reads on its own connection and cannot see an
+open transaction. `ai-control-plane.spec.ts` asserts that an **unset** limit raises `45011`, and a
+committed row makes it set. **`ai-gateway.spec.ts` has committed the same key since W1-B** — the
+collision was a race nobody had lost yet, and a second such suite made it reliably fatal.
+
+**The fix is at the source, because `services/api/vitest.config.ts` rejects tuned constants in as
+many words** — its own comment records `maxWorkers: 6` being re-tuned four times before the burst was
+removed at its source. So the parallelism was **not** capped. Instead that case now sets the
+threshold to JSON null **inside its own rolled-back transaction**, making it deterministic on any
+machine whatever else is committed. **Same fix as `BE-W114`'s `onlyOurOverdueRows`:** push the
+pre-existing state out of the window rather than hope it is absent.
+
+**On (3) — `BE-W116` is closed, and W1-D is why it had to be.** Four spec files each create a second
+admin for four eyes, each inserting `auth.users` then `user_profiles`; run concurrently, two invert
+their lock order. It was registered in W1-B at roughly one run in two and left unfixed — **and W1-D
+added a fourth such suite, which made it likelier rather than finding it. Fixing it here is therefore
+not scope creep: this session increased the rate.**
+
+The fix is the one `tests/auth.ts` already made for identity bursts: **hold the same advisory lock
+that serialises `POST /admin/users`.** At most one reviewer is created at a time across all workers,
+whatever the suite count — **there is no number for the author of the fifth suite to re-tune.**
+
+**Full API suite, one run, after the fixes: `Test Files 73 passed (73)` · `Tests 972 passed | 4
+skipped (976)`.** The run before it was 72 passed / 1 failed on `BE-W116`; the run before that failed
+on all three.
+
+**The lesson this session keeps re-learning, now three times over.** `BE-W119` was a stale bundle;
+the W1-C migration draft was a stale reading of a function; these three were stale database state.
+**Every one of them made a local green mean less than it appeared to, and in every case CI or a
+deliberate mutation was what said so.**
+
+
+---
+
+### W1-E — clean database, clean grants
+
+**29 September 2026.** Checkout guard first: namespace `@fieldforce/core`, remote
+`Praverse-Tech-Pvt-Ltd/Elmiron-App`, `f34ceef` an ancestor of HEAD — **exit 0**, branch
+`worktree-ai-platform-phase-a`.
+
+#### Part A — the push is still blocked. BLOCKAGE, and not re-diagnosed.
+
+**`ac9ed20` remains stranded.** `git push` → *"Failed to connect to github.com port 443 after 21044
+ms"*. The diagnosis from the previous session stands and was not repeated: DNS resolves
+(`20.207.73.82`), `google.com` and `registry.npmjs.org` return 200, `githubstatus.com` reports **All
+Systems Operational**, and every GitHub route — HTTPS 443, `ssh.github.com:443`, `github.com:22` —
+times out. **GitHub is up; this machine cannot reach it.**
+
+**So A2 and A3 cannot be answered, and no CI result is claimed for any SHA.** The last CI result that
+exists is `4346511`'s, which was red on three defects — all three fixed in `ac9ed20` and verified
+locally, and verified again this session **on a database that was reset**.
+
+**A merge of `origin/main` could not be attempted either**, for the same reason. Everything below
+therefore rests on the `origin/main` last fetched at **10:28 IST today**, and that is stated wherever
+it matters rather than left implicit.
+
+#### Part B — the third staleness failure becomes a mechanism
+
+**All three of W1-D's defects were invisible locally because this machine's database carried state
+from earlier sessions while CI starts clean.** That was the third distinct staleness failure in one
+run of sessions, after `BE-W119`'s stale bundle and W1-C's stale reading of a function body.
+**Three failures of discipline is this repository's threshold for a mechanism.**
+
+**B1 — `scripts/verify-clean-db.mjs`, wired to `.githooks/pre-push`.** It does two things and only
+one of them is new:
+
+1. `pnpm db:reset` — **drops the database and re-applies every migration onto an empty one.**
+2. `node scripts/ci-local.mjs --with-db` — **the existing path, unchanged**, which derives its steps
+   by reading `.github/workflows/ci.yml`.
+
+**There is deliberately no second list of steps.** `ci-local.mjs` argues that case at length and a
+hand-kept parallel list has already drifted three times here — always in the direction of claiming
+more coverage than it has.
+
+**B2 — it gates the PUSH, not the commit, and the reason is in the repo already.**
+`.githooks/pre-commit` states it: *"a hook that costs minutes is a hook people pass `--no-verify` to,
+and a bypassed control is not a control."* A reset re-applies **85 migrations** and the database job
+then runs the whole API suite. A commit is cheap and frequent; **a push is the moment the work
+becomes somebody else's problem and the moment CI will judge it.**
+
+It **fails loudly** when the stack is unreachable rather than skipping — *a check that passes when it
+did not run is the inert control this repository keeps finding* — and it does **not** try to guess
+when it can be skipped, because any such heuristic would have skipped a TypeScript test file leaking
+a database row.
+
+**B3 — the positive control, same commit, same guard, opposite answers.** W1-D defect 1's shape was
+reproduced exactly: the revoke migration was moved aside, and the revoke applied **by hand** as an
+earlier session would have.
+
+| Run | `rls.spec.ts` |
+| --- | --- |
+| **DIRTY** — hand-fixed database, no migration performing the revoke | **`Tests 98 passed (98)`** — green |
+| **CLEAN** — `db reset`, migrations only | **`Tests 1 failed | 97 passed (98)`**, naming `sim_content_before_insert` |
+
+The leaked `ai_daily_requests_per_user` row planted alongside it also vanished in the reset, so the
+one mechanism addresses both shapes. Migration restored afterwards; `98 passed` again.
+
+**A correction to my own first attempt at B3, left visible.** I first planted the threshold row and
+expected the dirty run to *pass* — it **failed**. I had the direction backwards: a leaked limit makes
+a correct refusal test go red, which is a **false red**, not a false green. The demonstration B3 asks
+for — *dirty passes, clean catches* — is the grant case above, and that is why it was used.
+
+**B4 — `docs/gotchas.md` gains one entry with all three worked examples**, because the pattern is
+what generalises: *before trusting a green, name the state it ran against — the bundle, the file, the
+database — and ask whether CI will have the same one.* **The tell is that the result was better than
+it should have been.** Staleness rarely produces a red.
+
+#### Part C — grants, enumerated from the catalogue
+
+**C1 — 160 functions in `public`, enumerated from `pg_proc`**, not from any list anyone wrote:
+
+```sql
+select p.oid::regprocedure, p.prokind from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public';
+```
+
+**All 160 are `prokind = 'f'`. anon-executable: 0. PUBLIC-executable: 0.** That is the count
+**checked**, which is the number the brief asked for — the count *fixed* was two, and it is the less
+interesting figure.
+
+**C2 — why the guard did not catch it locally. Two reasons, and only one is Part B's.**
+
+1. **It was never run.** Before the W1-D push I ran the new suite and the suites I thought it
+   touched. `rls.spec.ts` and `privilege-posture.spec.ts` were not among them. **That is a
+   discipline failure, not a staleness one** — the guard worked perfectly the first time it was
+   asked, which was on CI.
+2. **Had it been run, the answer would have depended on the database.** B3 demonstrates exactly
+   that: the same guard, same commit, green on a dirty database and red on a clean one.
+
+**Part B's mechanism closes both**, and that is the argument for gating rather than remembering:
+`verify-clean-db.mjs` runs *everything CI runs* on a reset database, so neither "I did not run that
+one" nor "my database disagreed with CI's" survives it.
+
+**C3 — mutation on a clean database.** One function granted to `anon`:
+
+| | |
+| --- | --- |
+| mutant | `grant execute on function public.sim_content_before_insert() to anon` |
+| result | **2 suites failed** — `rls.spec.ts` *"fails the build if a new function is left anon-executable"* naming `sim_content_before_insert`, and `privilege-posture.spec.ts` B1 |
+| restored | **`Tests 104 passed (104)`** |
+
+#### Part D — the practice API, handed to the frontend
+
+**`docs/contract-requests.md` → CR-5.** All four calls with who may call them, the schema names in
+`packages/core`, every refusal with its SQLSTATE, and what a screen shows for each. Three are
+ordinary RPCs; one is the Edge Function. **No new transport, no new auth, no upload path.**
+
+**D2 — build the screen against the stub, do not ship it.** The reasoning rather than a preference:
+the contract will not move when `#5` is answered — swapping the stub for a real adapter is **one
+file**, and 18 tests pin the shapes — so **building early costs nothing if the contract holds**,
+while **shipping early costs the feature's credibility with the first reps who touch it**, because
+every stubbed reply is the same marker string. Build it behind a flag that ships off, the same shape
+as `C21`'s recording feature.
+
+**D3 — what is missing is content and two accounts, not engineering.** Eight items, none blocked by
+`#5`: a second admin (four eyes refuses every approval with one), a persona and a scenario each
+drafted and approved by the *other* admin, approved `ai_doctor` and `ai_coach` prompt versions with
+the right `outputSchemaName`, and three `app_thresholds` keys that all ship off or unset.
+**Steps 2–5 need a console screen that does not exist** — the knowledge approval screen is the
+working model, and building its persona/scenario equivalent is the obvious next piece.
+
+#### Part E — the merge question
+
+**E1 — the case against has NOT expired: today is 29 September and the demo is 1 October.** The
+recommendation is unchanged — **merge after the demo, un-draft now.**
+
+**What merging would involve, measured against the `origin/main` last fetched at 10:28 IST:**
+
+| | |
+| --- | --- |
+| Commits | **29** |
+| Migrations landing on `main` | **10** |
+| Diff | **80 files, 19,125 insertions, 7 deletions** |
+| `apps/field` runtime | **untouched** — only the two `jest.config.cjs` files |
+| Mergeable? | **UNKNOWN.** `gh pr view` is unreachable, and this branch has conflicted five times in three days |
+
+**What CI would run afterwards that it does not run today.** The workflow is the same — `ci.yml`
+fires on `push: branches: [main]`. **What changes is that two things stop being inert:**
+`pr-mergeable.yml` begins to run at all (its `schedule`, `push` and `workflow_dispatch` triggers all
+resolve against the **default branch**, so today it protects nothing), and CI begins running these
+ten migrations on every `main` push rather than only on this PR.
+
+**E2 — not merged.** That is the operator's.
+
+**E3 — until the merge, the manual check is the only protection.** `pr-mergeable.yml` is inert, and
+its own file says so at the top. The two commands are in that header and at the top of this brief.
+
+#### Counts, from each runner's own summary lines
+
+| Runner | Summary line |
+| --- | --- |
+| **api / vitest, full, on a RESET database** | **`Test Files 73 passed (73)`** · **`Tests 972 passed \| 4 skipped (976)`** |
+| api / vitest — `rls` + `privilege-posture`, after the C3 mutant was reverted | `Test Files 2 passed (2)` · `Tests 104 passed (104)` |
+| api / vitest — `rls.spec.ts`, dirty (B3) | `Tests 98 passed (98)` |
+| api / vitest — `rls.spec.ts`, clean (B3) | `Tests 1 failed \| 97 passed (98)` |
+
+`typecheck` **9 successful, 9 total**. `lint` **7 successful, 7 total**, exit 0. `prettier --check .`
+**"All matched files use Prettier code style!"**
+
+#### WHERE THIS STOPPED
+
+**Parts B, C, D and E are complete. Part A is a BLOCKAGE** — environmental, outside this session's
+control, and already diagnosed.
+
+**One thing a reader should not conclude.** The full API suite passing on a reset database is the
+strongest local evidence this project can produce, and **it is still not CI.** `ac9ed20` and
+everything in this section are unpushed, no workflow has judged them, and the last CI verdict on this
+branch is a red one on a commit whose defects are now fixed. **That gap closes when the network
+does.**
+
+---
+
+## Where the phase log continues, from 29 September 2026 — `BE-W120`
+
+**This index is deliberately short and stable.** It changes only when a track is added, so two
+sessions cannot conflict in it.
+
+| Track | Appends to |
+| --- | --- |
+| Backend / AI platform | **`docs/log/backend.md`** — starts at **W1-F** |
+| Frontend / field app | **`docs/log/frontend.md`** |
+
+**Everything above this line stays here.** Nothing moved, so no citation anywhere in the repository
+breaks, and this file remains the entry point and remains append-only.
+
+**Why.** Both tracks appended here, and **every conflict observed on 28 September — four in one
+day — was in this file or `.ai-collab/decisions.md`.** A conflicting pull request gets **no CI run
+at all**, because GitHub cannot build `refs/pull/N/merge`; so a conflict in a *log file* was
+silently removing PR #2's verification. `docs/blocked-on-you.md` is **not** split: it is
+operator-facing, one voice is the point, and it is appended to far less often.
+
+**What this does not fix:** conflicts in shared **code**, and the `C20` id collision — which needed
+per-track *prefixes* and got them (`BE-C3`). Two problems, two fixes.
+
+**What it costs:** a reader must now interleave two dated files to reconstruct a week. The
+interleaving in this file is how the racing of two tracks was visible, and that is no longer free.
 
 ### FE-D12 — final pre-demo pass
 

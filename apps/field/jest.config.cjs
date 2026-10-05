@@ -41,7 +41,32 @@ module.exports = {
   setupFiles: ['<rootDir>/jest.setup.cjs'],
 
   // The other half of the boundary. Narrower than jest's default on purpose.
-  testMatch: ['<rootDir>/**/*.test.tsx'],
+  //
+  // W1-A B5 -- the `<rootDir>/` prefix was REMOVED, and the reason is not cosmetic.
+  //
+  // With `'<rootDir>/**/*.test.tsx'` jest matches the pattern against each candidate's ABSOLUTE
+  // path, and `**` does not traverse a dot-segment. A checkout whose path contains one -- which
+  // is every git worktree under `.claude/worktrees/` -- therefore discovers ZERO tests and jest
+  // exits 1 with `No tests found`:
+  //
+  //   testMatch: D:/...\.claude/worktrees/<name>/apps/field/**/*.test.tsx - 0 matches
+  //   157 files checked.
+  //
+  // That is the worst shape a test-discovery bug can take: `pnpm test` is RED for a reason that
+  // looks like a broken config, `scripts/test-counts.mjs` exits 1, and 415 render tests across
+  // this workspace and `packages/ui` are silently unrunnable for anyone reviewing from a
+  // worktree. It is not a property of the branch -- CI checks out normally and was unaffected --
+  // which is exactly why it went unnoticed.
+  //
+  // Without the prefix, jest globs from `roots` (which defaults to `[rootDir]`) instead of
+  // matching an absolute path, so the dot-segment in the checkout path is never part of the
+  // pattern's subject. `roots` is unchanged, `testPathIgnorePatterns` still excludes
+  // node_modules/dist/.expo/android/ios, and the vitest/jest extension boundary that
+  // `runner-boundary.test.ts` enforces is byte-for-byte the same: `*.test.tsx` and nothing else.
+  //
+  // Verified both ways in the worktree: `jest --listTests` printed 0 paths before and the full
+  // suite after.
+  testMatch: ['**/*.test.tsx'],
 
   // MR-22 A2. Jest's 5000 ms default is too tight for this suite ON CI, and the failure
   // it produced was blamed on machine load for five sessions.

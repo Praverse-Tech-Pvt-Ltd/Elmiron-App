@@ -4,6 +4,16 @@ on:
   pull_request:
   push:
     branches: [main]
+  # W1-B A3 -- a workflow nobody can trigger by hand is one nobody can re-run after a flake,
+  # and it is also the fastest way to tell "CI is broken" apart from "CI was never asked".
+  #
+  # This session lost time to exactly that distinction. Four pushed commits produced NO run,
+  # and with only the two triggers above there was no way to ask for one: `pull_request` fires
+  # against `refs/pull/N/merge`, and **GitHub cannot build that ref while the PR conflicts with
+  # its base**, so a conflicting PR silently stops producing runs. It looks identical to a
+  # disabled workflow, a billing stop or a permissions problem, and none of those was true.
+  # `gh workflow run CI --ref <branch>` now distinguishes them in one command.
+  workflow_dispatch:
 
 # MR-41 B1 -- `set -o pipefail`, as a mechanism rather than a reminder.
 #
@@ -63,6 +73,19 @@ jobs:
             git diff "$BASE...HEAD" -- PROJECT-OVERVIEW.md | grep '^-[^-]' | head -40
             exit 1
           fi
+
+      # W1-Q C. The id rule was a paragraph in CLAUDE.md three times, and ids collided three
+      # times (C20; CR-5; FE-CR-1). This is the rule as a check: every BE-/FE- id has one row in
+      # docs/ids.md, minted by its own track, cited only after it is registered, and never
+      # changed once it is in the base. Same base as the guard above, for the same reason.
+      - name: Every BE-/FE- id is registered once and never reused
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="origin/${{ github.base_ref }}"
+          else
+            BASE="${{ github.event.before }}"
+          fi
+          node scripts/check-ids.mjs "$BASE"
 
       - uses: pnpm/action-setup@v4
 
@@ -137,6 +160,27 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # W1-B C5 -- BUILD `@fieldforce/core` BEFORE `supabase start`, not before `functions serve`.
+      #
+      # This step exists because putting the build in the serve step was WRONG and CI said so:
+      #
+      #   failed to read file: open packages/core/dist/field/gateway/providers.js:
+      #   no such file or directory
+      #
+      # `supabase start` does not just start containers -- it RESOLVES THE EDGE FUNCTIONS' IMPORT
+      # GRAPH as it brings the edge runtime up. `supabase/functions/_shared/core.ts` imports
+      # `packages/core/dist`, which is gitignored, and `pnpm run build` runs in the OTHER job. So
+      # the database job reached `supabase start` with no `dist` and the whole job died before a
+      # single migration test ran.
+      #
+      # It passed locally only because `dist` was already there from an earlier build -- the exact
+      # shape of "a command that exits 0 is not a command that worked".
+      #
+      # Only `@fieldforce/core` is built, not the whole graph: it is the one thing the functions
+      # import, and the static job already builds everything else.
+      - name: Build @fieldforce/core, which the Edge Function imports
+        run: pnpm --filter @fieldforce/core build
+
       # Proves every migration applies to an empty database, in order.
       # auth is required: the Gate 0 suite signs a fixture user in through GoTrue
       # to prove the hand-built JWT claims match the ones the auth hook really mints.
@@ -159,6 +203,54 @@ jobs:
       - name: Log lock waits, so a deadlock names its relations
         run: node services/api/scripts/enable-lock-logging.mjs
 
+      # W1-B C5 -- CI must actually RUN the Edge Function, or `ai-gateway.spec.ts` skips itself
+      # and a green run means nothing about the gateway.
+      #
+      # THE BUILD IS NOT IN THIS STEP, and that is the corrected version of this comment.
+      # `packages/core` is built in its own step ABOVE, before `supabase start`, because
+      # `supabase start` resolves the functions' imports itself -- see that step. What remains true,
+      # and was established by a mutation that failed to fail: `functions serve` hot-reloads the
+      # FUNCTION directory; it does NOT
+      # reload `packages/core/dist`, which the function imports from outside that directory. With
+      # the server already running, W1-B rebuilt core with the patient guardrail deliberately
+      # removed, re-ran the suite, and got NINE PASSES -- the server was still executing the old
+      # bundle. Restarting it turned the same mutant into two failures, which is the result that
+      # proved the test was real.
+      #
+      # So: BUILD, then SERVE. A build after a serve is invisible, and the symptom is the worst
+      # one available -- a suite that passes while testing code that is no longer in the tree.
+      # Registered as `BE-W119`.
+      #
+      # The wait loop is not a sleep. `supabase functions serve` prints its banner before the
+      # runtime can answer, so a fixed sleep either wastes CI time or races; polling until the
+      # function returns ANY status code -- 401 from the no-token path is a perfectly good
+      # "something is listening" -- fails fast and explains itself if it never does.
+      - name: Serve the AI gateway Edge Function
+        run: |
+          pnpm exec supabase --workdir services/api functions serve --no-verify-jwt &
+          # W1-K: the readiness condition is 401-or-400, NOT "any answer that is not 000".
+          #
+          # **The previous condition passed on 502, and 502 means the function is DOWN.** Kong is
+          # listening on :54321 from the moment `supabase start` finishes, so it answers 502 or 503
+          # for a function whose runtime has not come up — a non-000 code that means the opposite of
+          # ready. This step printed `ai-gateway answered HTTP 502`, exited 0, and 35 tests in the
+          # four gateway suites then failed with `503 name resolution failed`, looking exactly like a
+          # code regression.
+          #
+          # 401 (no bearer token) or 400 (bad body) is the FUNCTION refusing, which is the function
+          # running. Those are the only two codes that prove the runtime is up.
+          for _ in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X POST               http://127.0.0.1:54321/functions/v1/ai-gateway               -H 'content-type: application/json' -d '{}' || true)
+            if [ "$code" = "401" ] || [ "$code" = "400" ]; then
+              echo "ai-gateway answered HTTP $code — the function is serving"
+              exit 0
+            fi
+            echo "waiting for ai-gateway (last HTTP $code)"
+            sleep 2
+          done
+          echo "FAILED: the ai-gateway function never answered 401/400 on :54321" >&2
+          exit 1
+
       # Includes services/api/tests/rls.spec.ts — the Gate 0 adversarial suite.
       # SUPABASE_DB_URL being set does not make the tests run; db.ts hard-fails in CI
       # if the database is unreachable, so a green run always means they executed.
@@ -179,6 +271,87 @@ jobs:
         # the guarantee below -- `db.ts` can only hard-fail on an unreachable database if
         # the tests actually execute.
         run: pnpm turbo run test --filter @fieldforce/api --force
+
+      # ----------------------------------------------------------------------
+      # W1-G D1/D2 -- THE BROWSER SUITE RUNS HERE, not only on one laptop.
+      #
+      # Why it must run in CI at all. `apps/console/e2e` was kept out of `turbo run test` because
+      # CI had no browser, and that was right -- a suite that cannot run is worse than one that is
+      # not wired up. But LOCAL-ONLY is how this repository loses checks: the graph rotted, the
+      # pre-push hook never fired from a worktree, and `verify-clean-db` had to be run by hand.
+      # Three instances of the same failure. A check only one machine can run is a check that
+      # stops being run.
+      #
+      # It lives in the DATABASE job because it needs the whole stack: Postgres, PostgREST and
+      # GoTrue are already up here, and the suite signs real people in through the real sign-in
+      # form. The static job has none of that.
+      #
+      # It is NOT in `turbo run test`, still, and deliberately: `turbo.json` would then demand a
+      # browser in every context that runs tests, including a developer's laptop mid-edit.
+      # ----------------------------------------------------------------------
+      - name: Install Chromium for the console browser suite
+        run: pnpm --filter @fieldforce/console exec playwright install --with-deps chromium
+
+      # THIS JOB BUILDS ONLY `@fieldforce/core`, by design — the step above says so, and says the
+      # static job builds everything else. The console needs `@fieldforce/ui-tokens` too, and the
+      # first attempt at this discovered that the hard way: `next build` failed with
+      # `Can't resolve '@fieldforce/ui-tokens'` on six files, reported to Playwright only as
+      # `Process from config.webServer was not able to start. Exit code: 1`.
+      #
+      # `--filter @fieldforce/console` with turbo's `build: { dependsOn: ["^build"] }` builds the
+      # workspace dependencies first and the console last. It is a NAMED step so the next failure
+      # of this kind names itself.
+      - name: Build the console and the workspace packages it imports
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_KEY: sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
+        run: pnpm turbo run build --filter @fieldforce/console
+
+      - name: Browser suite — the console, in a real browser
+        env:
+          CI: 'true'
+          # `next start` reads these from the environment. The publishable key is public by design:
+          # every row it can reach is decided by the signed-in user's JWT and the RLS policies.
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_KEY: sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
+        # The stale report is DELETED before the run. Without this the proof step below can read a
+        # report from an earlier run and pass — which it did, reporting 5 tests for a run that had
+        # just passed 7. The reporter's output path is declared in `playwright.config.ts`.
+        run: |
+          rm -f apps/console/playwright-results.json
+          pnpm --filter @fieldforce/console test:e2e
+
+      # W1-G D2 -- PROVE IT RAN, the way the serve step proves the function is live.
+      #
+      # A green Playwright step and a Playwright step that executed tests are different claims.
+      # `playwright test` exits 0 when it matches NO test files at all -- a renamed directory, a
+      # bad `testDir`, a `grep` left in the config -- and the job would go green having checked
+      # nothing. This reads the run's own report and fails if fewer than five tests were expected
+      # or any were skipped, and it PRINTS the number so a human reading the log sees it.
+      # The floor rises when specs are added; it is a floor, not an exact count, so adding a test
+      # never fails the build and DELETING the suite always does.
+      - name: Prove the browser suite actually executed
+        run: |
+          f=apps/console/playwright-results.json
+          test -f "$f" || { echo "FAILED: $f does not exist, so the browser suite produced no report" >&2; exit 1; }
+          # An absolute path: `require('./x')` resolves relative to the module, and for `node -e`
+          # that is the CWD -- which is easy to get wrong when a step's CWD changes.
+          expected=$(node -e "const r=require(process.argv[1]);console.log(r.stats.expected)" "$PWD/$f")
+          skipped=$(node -e "const r=require(process.argv[1]);console.log(r.stats.skipped)" "$PWD/$f")
+          unexpected=$(node -e "const r=require(process.argv[1]);console.log(r.stats.unexpected)" "$PWD/$f")
+          echo "browser suite: $expected passed, $skipped skipped, $unexpected failed"
+          if [ "$expected" -lt 7 ] || [ "$skipped" -ne 0 ] || [ "$unexpected" -ne 0 ]; then
+            echo "FAILED: expected at least 7 passing browser tests and no skips." >&2
+            exit 1
+          fi
+
+      - name: Keep the browser suite's traces when it fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: apps/console/test-results/
+          retention-days: 7
 
       # BE-W21. `ucpmp_sample_cap_quantity` is null on purpose -- nothing in this
       # repository states the UCPMP ceiling, and a constraint built on an invented
