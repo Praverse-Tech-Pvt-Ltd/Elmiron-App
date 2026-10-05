@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
-import { ApiRequestError } from '@fieldforce/core';
 import type { Analysis } from '@fieldforce/core';
 import { AnalysisReplyScreen, Screen } from '@fieldforce/ui';
-import { createClientForScenario } from '../../src/api';
 import { coachingEnabled } from '../../src/features';
+import { readMyAnalysis, respondToMyAnalysis } from '../../src/coaching/server';
 import { NO_AUDIO_NOTE, REPLY_NOTE } from '../../src/coaching/content';
 import { orderedFindings } from '../../src/coaching/feed';
 
@@ -25,6 +24,11 @@ import { orderedFindings } from '../../src/coaching/feed';
  * the send fails the text stays on screen and the MR can try again — which is the
  * right failure for something they have just composed, and the wrong one for a
  * check-in, which is why this does not go through `sendOrQueue`.
+ *
+ * **FE-D16.** It reads the analysis through `read_analysis` and sends through
+ * `respond_to_analysis`, the real functions, instead of the mock at `127.0.0.1:4010`. It still
+ * cannot be queued even if that were wanted: the sync queue has no entity for a reply. FE-CR-10
+ * asks backend whether it should have one. A failed send says so, and the text stays on screen.
  */
 /**
  * FE-D4 1. Unreachable unless `coachingEnabled` (off by default): a deep link lands on Today, and
@@ -51,29 +55,46 @@ function Reply(): ReactNode {
   const [sendFailure, setSendFailure] = useState<{ title: string; detail: string } | null>(null);
 
   useEffect(() => {
-    const client = createClientForScenario();
     let cancelled = false;
 
-    void client
-      .getAnalysis(analysisId)
-      .then((found) => {
+    void readMyAnalysis(analysisId)
+      .then((outcome) => {
         if (cancelled) return;
-        setAnalysis(found);
-        // An existing reply is loaded for editing rather than replaced blind: the
-        // contract attaches `mrResponse` beside the findings, and an MR reopening
-        // this screen is amending what they said, not starting again.
-        setValue((current) => (current === '' ? (found.mrResponse ?? '') : current));
+        if (outcome.kind === 'loaded' && outcome.value !== null) {
+          const found = outcome.value;
+          setAnalysis(found);
+          // An existing reply is loaded for editing rather than replaced blind: the
+          // contract attaches `mrResponse` beside the findings, and an MR reopening
+          // this screen is amending what they said, not starting again.
+          setValue((current) => (current === '' ? (found.mrResponse ?? '') : current));
+          return;
+        }
+        setFailure(
+          outcome.kind === 'loaded'
+            ? {
+                title: 'This analysis is not available to you',
+                detail: 'It does not exist, or it is not one of yours.',
+              }
+            : outcome.kind === 'refused' && outcome.refusal.code === 'not_permitted'
+              ? {
+                  title: 'You do not have access to this analysis',
+                  detail: `The server refused this request (${outcome.refusal.sqlState}).`,
+                }
+              : {
+                  title: 'Could not load the finding',
+                  detail:
+                    outcome.kind === 'mismatch'
+                      ? outcome.detail
+                      : `The server refused this request (${outcome.refusal.sqlState}).`,
+                },
+        );
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        setFailure(
-          error instanceof ApiRequestError && error.code === 'permission_denied'
-            ? { title: 'You do not have access to this analysis', detail: error.message }
-            : {
-                title: 'Could not load the finding',
-                detail: error instanceof Error ? error.message : 'Unknown failure',
-              },
-        );
+        setFailure({
+          title: 'Could not load the finding',
+          detail: error instanceof Error ? error.message : 'Unknown failure',
+        });
       });
 
     return () => {
@@ -102,20 +123,26 @@ function Reply(): ReactNode {
     setSaved(null);
     setSendFailure(null);
 
-    void createClientForScenario()
-      .respondToAnalysis(analysis.id, { response: value.trim() })
-      .then(() => {
-        // Back to the analysis, where the reply now appears beside the findings —
-        // the MR sees where it landed rather than being told it was sent.
-        router.replace(`/analysis/${analysis.id}`);
+    void respondToMyAnalysis(analysis.id, value.trim())
+      .then((outcome) => {
+        if (outcome.kind === 'sent') {
+          // Back to the analysis, where the reply now appears beside the findings —
+          // the MR sees where it landed rather than being told it was sent.
+          router.replace(`/analysis/${analysis.id}`);
+          return;
+        }
+        setSendFailure({
+          title: 'Your reply was not sent',
+          detail: `The server refused it (${outcome.refusal.sqlState}). What you wrote is still on the screen.`,
+        });
       })
-      .catch((error: unknown) => {
+      .catch(() => {
+        // FE-D16. No answer at all: usually no signal. Said plainly, because a rep could
+        // otherwise assume it waits in the queue like a check-in does (FE-CR-10).
         setSendFailure({
           title: 'Your reply was not sent',
           detail:
-            error instanceof Error
-              ? `${error.message} What you wrote is still on the screen.`
-              : 'What you wrote is still on the screen.',
+            'The server could not be reached. Replies cannot be queued on this phone yet, so it is not saved. What you wrote is still on the screen: send it again when you have signal.',
         });
       })
       .finally(() => {

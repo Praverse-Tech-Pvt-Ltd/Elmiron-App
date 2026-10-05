@@ -71,6 +71,12 @@ export interface CoachingFeedScreenProps {
   };
   readonly loading?: boolean;
   readonly failure?: { readonly title: string; readonly detail: string } | null;
+  /**
+   * FE-D16. Why no analysis can be made at all, such as recording off in this build. Shown
+   * instead of the empty card, so an empty feed that cannot fill is not mistaken for a working
+   * one with nothing in it yet.
+   */
+  readonly unavailable?: { readonly title: string; readonly detail: string } | null;
 }
 
 const styles = StyleSheet.create({
@@ -98,6 +104,9 @@ const styles = StyleSheet.create({
  * target line and no ceiling brought in from outside, because any of those would
  * turn a count into a measurement against a standard.
  */
+/** FE-D16. On every row of model-written findings, so none reads as a person's note. */
+export const AI_WRITTEN_LABEL = 'Written by an AI model, not by a person';
+
 const barHeight = (count: number, highest: number): number =>
   highest === 0 ? 4 : Math.max(4, Math.round((count / highest) * 44));
 
@@ -111,6 +120,7 @@ export const CoachingFeedScreen = ({
   trend,
   loading = false,
   failure = null,
+  unavailable = null,
 }: CoachingFeedScreenProps): ReactNode => {
   if (failure !== null) {
     return (
@@ -139,7 +149,11 @@ export const CoachingFeedScreen = ({
 
       {loading ? <Spinner label="Getting your coaching" /> : null}
 
-      {rows.length === 0 && !loading ? (
+      {rows.length === 0 && !loading && unavailable !== null ? (
+        <Banner detail={unavailable.detail} title={unavailable.title} tone="info" />
+      ) : null}
+
+      {rows.length === 0 && !loading && unavailable === null ? (
         <Card>
           <BodyText>Nothing has been reviewed yet</BodyText>
           <Label muted>
@@ -155,6 +169,11 @@ export const CoachingFeedScreen = ({
               <Heading>{row.doctorName}</Heading>
               <Label muted>{row.whenLabel}</Label>
             </View>
+
+            {/* FE-D16. The findings are a model's text, and the row says so before them. */}
+            {row.statusNote === null && row.findings.length > 0 ? (
+              <Label muted>{AI_WRITTEN_LABEL}</Label>
+            ) : null}
 
             {row.statusNote === null ? (
               row.findings.map((finding) => (

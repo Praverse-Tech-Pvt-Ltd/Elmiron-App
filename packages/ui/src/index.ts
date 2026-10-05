@@ -22,6 +22,29 @@ export { AiAllowanceNotice, SAMPLE_FIGURES_NOTE } from './AiAllowanceNotice';
 export type { AiAllowanceNoticeProps, AiAllowanceState } from './AiAllowanceNotice';
 export { AssistantScreen, SAMPLE_REPLY_LABEL } from './AssistantScreen';
 export type { AssistantNotice, AssistantScreenProps, AssistantTurn } from './AssistantScreen';
+export {
+  PracticeAnalysisScreen,
+  PRACTICE_AI_NOTE,
+  PRACTICE_VISIBILITY_NOTE,
+} from './PracticeAnalysisScreen';
+export type {
+  PracticeAnalysisScreenProps,
+  PracticeDimensionRow,
+  PracticeFindingRow,
+  PracticeModuleRow,
+} from './PracticeAnalysisScreen';
+export { PracticeHomeScreen, SAMPLE_PRACTICE_NOTE } from './PracticeHomeScreen';
+export type {
+  PracticeHomeScreenProps,
+  PracticeScenarioRow,
+  PracticeSessionRow,
+} from './PracticeHomeScreen';
+export { PracticeSessionScreen } from './PracticeSessionScreen';
+export type {
+  PracticeNotice,
+  PracticeSessionScreenProps,
+  PracticeTurnRow,
+} from './PracticeSessionScreen';
 export { AnalysisReplyScreen } from './AnalysisReplyScreen';
 export type { AnalysisReplyScreenProps } from './AnalysisReplyScreen';
 export { AnalysisScreen } from './AnalysisScreen';

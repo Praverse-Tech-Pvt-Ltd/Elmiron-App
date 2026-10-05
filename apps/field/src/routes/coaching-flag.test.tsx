@@ -45,13 +45,16 @@ jest.mock('expo-router', () => {
 // only whether the screen MOUNTS (flag on) or redirects (flag off).
 const mockGetAnalysis = jest.fn(() => new Promise(() => undefined));
 const mockListAnalyses = jest.fn(() => new Promise(() => undefined));
-jest.mock('../api', () => ({
-  createClientForScenario: () => ({
-    getAnalysis: mockGetAnalysis,
-    listAnalyses: mockListAnalyses,
-    listVisits: jest.fn(() => new Promise(() => undefined)),
-    listDoctors: jest.fn(() => new Promise(() => undefined)),
-  }),
+// FE-D16 — the screens read the REAL functions now (`src/coaching/server.ts`), so that is what is
+// observed. The question this suite asks is unchanged: mount (flag on) or redirect (flag off).
+jest.mock('../coaching/server', () => ({
+  readMyAnalysis: () => mockGetAnalysis(),
+  listMyAnalyses: () => mockListAnalyses(),
+  listConsentForVisit: jest.fn(() => new Promise(() => undefined)),
+  respondToMyAnalysis: jest.fn(() => new Promise(() => undefined)),
+}));
+jest.mock('../coaching/recording-flag', () => ({
+  loadRecordingEnabled: () => Promise.resolve(false),
 }));
 jest.mock('../sync/pulled-store', () => ({
   usePulledStore: () => ({

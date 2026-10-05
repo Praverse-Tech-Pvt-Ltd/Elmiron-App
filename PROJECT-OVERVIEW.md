@@ -22621,3 +22621,189 @@ $ git diff --name-only origin/main...HEAD | grep -E '^(services|packages/core|sc
 **No dependency was added.** `package.json` and `pnpm-lock.yaml` are unchanged.
 
 **PR #13's CI** is reported in the hand-off.
+
+### FE-D16 — Coaching, Analysis and Reply made ready, still hidden
+
+**1 October 2026, branch `fe-d16-coaching`**, off `fe-d14-screens` (PR #13 not merged yet). PR #14,
+against `fe-d14-screens`, **not merged**. `coachingEnabled` stays off in every committed default
+and in the demo build.
+
+#### The answer, from the code
+
+**None of the three screens works on the day the AWS key lands, and the key alone changes
+nothing.**
+
+- **Nothing writes an analysis.** No code on `main` or on `worktree-ai-platform-phase-a` writes
+  `public.analyses`. Only test fixtures do (`services/api/tests/fixtures.ts:514-517`).
+- **The AI branch's coach writes elsewhere:** `sim_coach_analyses`, for practice sessions.
+- **Findings are always empty.** `analysis_contract_row` emits `'findings', '[]'::jsonb`
+  (`20260923000100_console_reads_contract_shape.sql:92`).
+
+The full audit table is in `docs/frontend-facts-2026-10-01.md`, "Coaching readiness".
+
+| | Coaching (D1) | Analysis (D2) | Reply (D3) |
+| --- | --- | --- | --- |
+| Before | mock (`createClientForScenario`) | mock | mock, sent directly |
+| Real function, on `main` | `list_analyses` | `read_analysis`, `list_consent_records` | `respond_to_analysis` |
+| MR may call it | yes (`visible_user_ids`, no reason needed) | yes (`data: null` out of scope) | yes (own analysis only) |
+| Shape matches core | yes, but findings always `[]` | yes, same | **no**: a raw snake_case return |
+| Verdict | NEEDS WIRING (done) + NEEDS CONTRACT | NEEDS WIRING (done) + NEEDS CONTRACT | NEEDS WIRING (done, direct) + NEEDS CONTRACT to queue |
+
+#### Commits (each red, then green)
+
+| Commit | What | Red → green |
+| --- | --- | --- |
+| `f0cadb6` | `src/coaching/server.ts`: the four functions through `db.rpc`, each read parsed with core's schema (`ListAnalysesPageSchema`, `ReadAnalysisResponseSchema`, `ListConsentRecordsPageSchema`). A response that does not parse is `mismatch`, never reshaped. The reply's return is not read. `zod` is typed structurally, because `apps/field` does not declare it | suite failed to load → 9/9 |
+| `5c4be09` | FE-CR-8, FE-CR-9, FE-CR-10 | docs |
+| `51f3633` | `CoachingFeedScreen` `unavailable`. "Written by an AI model, not by a person" on every row of findings. `AnalysisScreen` `noFindingsNote` | 3 failed / 2 passed (the positive controls) → 5/5. ui jest 311/311 |
+| `114747b` | The three routes on the real functions. Visits and doctors from the pulled store; `dayMonthIn` and `clockIn` in the territory zone (three MR-25 C1 lint exemptions removed). With recording off, Coaching is "not available yet" (`src/coaching/recording-flag.ts`: a flag that cannot be read is off). Analysis: `data: null` is "not available to you"; no findings is its own state; the provenance is AI-written, and the "You read it first" and "Your manager has not opened this yet" claims are removed (FE-CR-9). Reply: offline says "cannot be queued … not saved", and the text stays | `coaching-real-routes.test.tsx` against the OLD routes: 10/10 failed → 10/10. `coaching-flag` and `reply-route` were moved from the mock client to the server module, with the same assertions. field jest 262/262, vitest 694/694 |
+| `1097db0` | The "Coaching readiness" answer and audit, in `docs/frontend-facts-2026-10-01.md` | docs |
+| `b1c87de` | `build-demo-apk.ps1 -CoachingCheck`: with the switch, Coaching must be exactly `true` and the APK is named `-coaching-check`. Without it, the refusal is unchanged. Recording is refused either way. **This changed the script the demo builds come from, on the operator's answer to a question asked in this session** | `-CheckOnly` before the change: REFUSED. After: (A) the switch with `true` passes; (B) `true` without the switch is REFUSED; (C) the switch without `true` is REFUSED |
+
+#### The new FE-CRs
+
+- **FE-CR-8** — what writes analyses and their findings, and when. Nothing does today.
+- **FE-CR-9** — should `read_analysis` stamp `mr_viewed_at`? Only a reply does
+  (`audit_log.sql:487`). The core client and the 3 September handoff both assumed reading did.
+  It is what backs the feed's "You're seeing this before your manager acts on it"
+  (`SEEN_FIRST`). That line is design-rule copy, kept as it is and flagged here: it is not backed
+  by the server today.
+- **FE-CR-10** — a reply cannot go through the queue: there is no sync entity for it
+  (`packages/core/src/field/sync.ts:12-21`, `20260813000200_offline_sync.sql:48-57`), so it has no
+  idempotency key to carry. And `respond_to_analysis` returns a raw snake_case row
+  (`audit_log.sql:496`).
+
+#### Not done, and why
+
+- **The coaching-check APK was not built.** The run with `-CoachingCheck` passed every check,
+  prebuilt, pinned CMake, and was in Gradle when **Claude Code stopped it for low system memory**.
+  The emulator had been shut down normally first (8.5 GB free at the start). It was not retried.
+  The tree is clean, and no partial APK was copied to `C:\dev\demo-apk`.
+- **So there are no screenshots** in `C:\dev\demo-screenshots\fe-d16\`.
+- **The demo APK's Coaching state is unchanged.** The emulator still has the FE-D15 demo APK
+  installed (`b07ca2d`, Coaching hidden: FE-D15 `01-me-no-assistant`, tabs Today, Doctors, Me), so
+  there was nothing to reinstall.
+- **Two of the requested screenshots could not be taken even with an APK:**
+  - **One analysis:** the local stack cannot produce one without a direct SQL insert, which would
+    be faking one. None was made.
+  - **"Reply queued while offline":** a reply cannot be queued (FE-CR-10). Offline it says so.
+- **"Coaching with no analyses" and "not available" are one screen in a demo-shaped build.**
+  Recording is refused by the build script, so the empty feed always shows "not available yet".
+  The plain empty feed appears only with recording on, as in the route test.
+
+#### Boundary and CI
+
+```
+$ git diff --name-only origin/main...HEAD | grep -E '^(services|packages/core|scripts)/|seed|migrations'
+(no output: boundary clean)
+```
+
+- **Not touched:** `services`, `packages/core`, migrations, the seed script and the root
+  `scripts/`.
+- **One app script changed:** `apps/field/scripts/build-demo-apk.ps1`.
+- **No dependency was added.**
+- **Locally:**
+  - field jest 262/262 and vitest 694/694;
+  - ui jest 311/311;
+  - typecheck clean;
+  - lint: one warning that predates this work;
+  - format clean.
+
+**PR #13 (FE-D14/D15):** CI run 36853943162 at `ca57d84`, both jobs **success**. PR #14's CI is
+reported in the hand-off.
+
+### FE-D17 — AI Doctor practice on sample data, and the clock lint in packages/ui
+
+**1 October 2026, branch `fe-d17-practice`**, off `fe-d16-coaching`. PR #15, against
+`fe-d16-coaching`, **not merged**.
+
+#### The operator's clarification, and what it changed
+
+**AI analysis in this release means AI Doctor practice**: a practice conversation is analysed and
+the MR gets structured feedback. It does not mean recorded consultations, and everything about
+real-call analysis is deferred as one scope.
+
+**Visibility for practice:** the MR sees their own, an admin can access it, and a manager sees no
+individual score, ranking or team average.
+
+**One repository, confirmed.** `@fieldforce/core` stays imported from the workspace, and the
+operator withdrew the contract-drift concern.
+
+#### The audit before building
+
+**The practice backend is on `worktree-ai-platform-phase-a` only. Nothing of it is on `main`.**
+A grep of `origin/main` for `sim_`, `ai_doctor`, `ai_coach`, `persona` and `scenario` finds 0
+real hits.
+
+**On the branch it is built and tested end to end against the stub** (`sim-gateway.spec.ts:297-403`):
+
+- the tables `sim_personas`, `sim_scenarios`, `sim_sessions`, `sim_turns`, `sim_coach_analyses`;
+- the RPCs `start_sim_session` and `end_sim_session`;
+- the gateway features `ai_doctor` and `ai_coach`.
+
+**The analysis shape** (`simulation.ts:246-277`) covers all ten items in the operator's list:
+
+- seven dimension scores;
+- strengths and improvements, each citing a turn;
+- up to 3 suggested modules.
+
+**Visibility already matches the ruling** (`simulation_core.sql:281-297`, tested).
+
+**Missing even there:**
+
+- read RPCs for "my sessions" and "one session" (only direct table reads);
+- core client methods and `API_PATHS`;
+- a frontend contract doc;
+- any MR reply to a practice analysis.
+
+**Two trust gaps:**
+
+- an MR can write their own scores (`record_sim_coach_analysis` is granted to authenticated);
+- the gateway takes the persona and turn text from the client body.
+
+**The FE-D16 wiring targets the deferred real-call scope.** It stays hidden behind
+`coachingEnabled`.
+
+#### Commits (each red, then green)
+
+| Commit | What | Red → green |
+| --- | --- | --- |
+| `ecef224` | `eslint.config.mjs`: `noDeviceClockAsNow` and `noLocalCalendarReads` for `packages/ui/**`; its tests get the calendar rules only | the five banned shapes linted as `packages/ui/src/Spinner.tsx`: **0** errors (as `apps/field`: 5) → **5**; as a ui test: **3** (calendar). The real ui tree is clean |
+| `fbd5e4f` | **FE-CR-11** | docs |
+| `70d6169` | `apps/field/src/practice/`: `contract.ts` (mirror; dimension labels in the operator's words), `flow.ts` (the stored session plus the typed text only; fail-closed mappers, so a stub reply is "not available"), `sample.ts` (in memory; "Sample reply", `modelProvider: 'sample'`), `transport.ts` (`PracticeBackend`) | suite failed to load → 13/13, including a whole start → turn → end → analysis run |
+| `5e9037d` | `PracticeHomeScreen`, `PracticeSessionScreen`, `PracticeAnalysisScreen`. Each doctor turn is labelled "AI practice doctor"; feedback cites "<dimension> · Turn N"; an AI-written note and the visibility note; a stub analysis shows no scores | suite failed to load → 17/17. ui jest 328/328 |
+| `3eb838e` | Routes `/practice`, `/practice/session/[id]`, `/practice/analysis/[id]`, and the Me row "AI Doctor practice", behind `EXPO_PUBLIC_PRACTICE_SAMPLE` (off). The sample ids were made UUID-shaped | routes: suite failed to load → 8/8 (the payload test holds a real doctor in the store; none of it is sent). Nav: 1 failed (flag on) / 1 passed (flag-off control) → 2/2. Field jest 272/272, vitest 707/707 |
+| `a3178e4` | Gap map update | docs |
+
+#### FE-CR-11
+
+**The ask:** the practice contract and migrations on `main`, read RPCs in the
+`{ data, readAt, auditLogId }` envelope, and the contract written down.
+
+**Three questions:**
+
+1. Reply for practice: none exists.
+2. MR-writable scores.
+3. Should the gateway read the persona and turns from its own rows?
+
+#### Not done
+
+- **No APK and no device walkthrough.** The operator asked for device testing once integration is
+  stable. The practice screens run on sample data until FE-CR-11 lands, and the last flag-on build
+  was stopped by memory (FE-D16).
+- **No CI job for Android rendering or devices yet.** Recorded as an open item, for when
+  integration is stable.
+
+#### Boundary and CI
+
+```
+$ git diff --name-only origin/main...HEAD | grep -E '^(services|packages/core|scripts)/|seed|migrations'
+(no output: boundary clean)
+```
+
+- **Not touched:** `services`, `packages/core`, migrations, the seed script and the root
+  `scripts/`.
+- **Changed:** `eslint.config.mjs` (root config) and app code.
+- **No dependency was added.**
+- `pnpm run typecheck` 9/9, `lint` 7/7 (one warning that predates this work), `format:check` clean.
+- **PR #15's CI** is reported in the hand-off.

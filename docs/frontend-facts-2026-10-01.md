@@ -448,3 +448,52 @@ This is raised as **FE-CR-5** in `docs/contract-requests.md`.
   instruction.
 - **FE-CR-5** was appended: whether the voice-note retention promise is kept in production.
 - No backend-owned file was edited.
+
+---
+
+## Coaching readiness (FE-D16)
+
+**Paste-ready answer:**
+
+1. **None of the three screens (Coaching, Analysis, Reply) will work the day the AWS key lands, and the key alone changes nothing.** Nothing on `main` or on the AI branch writes an analysis, and findings are hard-coded empty. All three are now wired to the real functions on `main`, still hidden behind the flag (FE-D16).
+2. **The backend needs to answer three contract questions first:**
+   - **FE-CR-8:** what writes analyses and their findings;
+   - **FE-CR-9:** whether opening an analysis is recorded, which is what backs "you see it first";
+   - **FE-CR-10:** whether a reply should be queued offline, and the shape `respond_to_analysis` returns.
+3. **Turning the flag on also needs:**
+   - the **AWS key** (C-1);
+   - **consultation recording switched on**: the build flag `EXPO_PUBLIC_RECORDING_ENABLED` and the server's `recording_permission`;
+   - **a decision on who may see a rep's analysis** (§3.6). Until then, the feed's "You're seeing this before your manager acts on it" (`apps/field/src/coaching/content.ts`, `SEEN_FIRST`) is not backed by the server.
+
+### Audit
+
+| | Coaching tab (D1) | Analysis (D2) | Reply (D3) |
+| --- | --- | --- | --- |
+| Route → component | `app/(tabs)/coaching.tsx` → `CoachingFeedScreen` | `app/analysis/[id].tsx` → `AnalysisScreen` | `app/reply/[analysisId].tsx` → `AnalysisReplyScreen` |
+| Data **before** FE-D16 | **Mock**: `listAnalyses`, `listVisits`, `listDoctors` through `createClientForScenario()` (`coaching.tsx:71-74` at `fe-d14-screens`) | **Mock**: `getAnalysis`, `listVisits`, `listDoctors`, `listConsentRecords` (`[id].tsx:70-81`) | **Mock**: `getAnalysis` (`:57-58`), and `respondToAnalysis` sent directly (`:105-106`) |
+| Real function | `list_analyses`, latest at `20260923000100_console_reads_contract_shape.sql:103` (**on `main`**) | `read_analysis` (`…:31`) and `list_consent_records` (`…:144`) (**on `main`**) | `respond_to_analysis`, `20260811000300_audit_log.sql:461` (**on `main`**, never redefined) |
+| MR may call it | Yes. Granted to authenticated (`20260811000400_rls_policies.sql:319`); scoped by `visible_user_ids()` (`…:137`), which for an MR is themselves (`20260908000900_organisation_scoping.sql:271-273`); no reason needed (`:122`) | Yes (`rls_policies.sql:318, 347`). Out of scope returns `data: null` (`…:68`) | Yes (`rls_policies.sql:320`). Only the caller's own analysis (`audit_log.sql:488-489`), else `42501` |
+| Matches the schema in `packages/core` | Yes: `ListAnalysesPageSchema` (`endpoints.ts:354`). **But `findings` is always `[]`** (`…console_reads_contract_shape.sql:92`) | Yes: `ReadAnalysisResponseSchema` and `ListConsentRecordsPageSchema`. Same empty findings | **No**: it returns a raw snake_case row (`audit_log.sql:496`), not `AnalysisSchema`. FE-D16 does not read the return |
+| States before | loading, failure, denial, empty | loading, failure, denial, refused/pending/failed | load failure, send failure, empty-reply guard |
+| States missing (all **added in FE-D16**) | not available (recording off); the AI-written label on rows | not found (`data: null`); completed with no findings; AI provenance without unbacked "who saw it" claims | honest offline: "cannot be queued, not saved" |
+| Design | `docs/design/phase4-coaching-and-console.dc.html` D1 FEED (`:60`) | D2 ANALYSIS (`:105`) | D3 REPLY (`:141`) |
+| Classification | **NEEDS WIRING** (done) + **NEEDS CONTRACT** (FE-CR-8) | **NEEDS WIRING** (done) + **NEEDS CONTRACT** (FE-CR-8, FE-CR-9) | **NEEDS WIRING** (done; direct, not queued) + **NEEDS CONTRACT** to queue (FE-CR-10) |
+
+**Nothing is READY.**
+
+- **No analysis can exist on `main`.** The only rows ever inserted are test fixtures
+  (`services/api/tests/fixtures.ts:514-517`).
+- **The AI branch's coach writes elsewhere.** It writes `sim_coach_analyses`, for practice
+  sessions (`20261001000100_coach_nine_dimensions.sql:259`), not analyses of real visits.
+- **No local analysis can be shown without faking one.** A local stack can produce an analysis only
+  by a direct SQL insert, which would be faking one, so none was made.
+
+**Reply is not queued, and cannot be without a backend contract.**
+
+- **No sync entity exists for a reply.** `packages/core/src/field/sync.ts:12-21` has none, and
+  neither does the database enum (`20260813000200_offline_sync.sql:48-57`).
+- **So a reply has no idempotency key** to give it.
+- **The route's existing design also argues against queueing**
+  (`app/reply/[analysisId].tsx:23-27`): a half-written argument should not land in a manager's
+  queue when signal returns.
+- **FE-CR-10 asks.**

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import { Banner, Button, Screen, SettingsScreen } from '@fieldforce/ui';
-import { assistantSampleEnabled } from '../../src/features';
+import { assistantSampleEnabled, practiceSampleEnabled } from '../../src/features';
 import { useSession } from '../../src/session';
 import { settingsGroups } from '../../src/settings/content';
 import { QUEUE_UNREADABLE, loadQueueState } from '../../src/sync/async-storage-store';
@@ -61,6 +61,14 @@ export default function Me(): ReactNode {
             ? {
                 onOpenAssistant: () => {
                   router.push('/assistant');
+                },
+              }
+            : {}),
+          // FE-D17. Only with the practice sample flag on; off, the row does not exist.
+          ...(practiceSampleEnabled
+            ? {
+                onOpenPractice: () => {
+                  router.push('/practice');
                 },
               }
             : {}),

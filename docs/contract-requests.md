@@ -944,6 +944,165 @@ the real gateway. Each item below is cited on that branch:
 
 ---
 
+### FE-CR-8 — What writes an analysis and its findings, and when?
+
+| | |
+| --- | --- |
+| Date | 2026-10-01 |
+| Requester | Frontend (FE-D16, the Coaching readiness audit) |
+| Owner asked | Backend |
+| Needed | An answer: which function or job will insert `public.analyses` rows and their findings, and is it planned for `main`? |
+| Status | **Open**. A question |
+
+**Why.** FE-D16 wired Coaching and Analysis to `list_analyses` and `read_analysis`. On `main`
+today, both screens can only ever be empty or show an analysis with no findings:
+
+- **Nothing on `main` writes `public.analyses`.** Only test fixtures insert rows
+  (`services/api/tests/fixtures.ts:514-517`, `consent-audio.spec.ts:673`). `seed-day.mjs` creates
+  none, and `seed-one-mr.mjs:19-25` says so on purpose.
+- **Findings are hard-coded empty.** `analysis_contract_row` emits `'findings', '[]'::jsonb`
+  (`20260923000100_console_reads_contract_shape.sql:92`). Its header says the engine is due "week
+  10, contract I5" (`:13-16`).
+- **The AI branch does not write them either.** `ai_coach` on `worktree-ai-platform-phase-a` writes
+  `public.sim_coach_analyses` (`20261001000100_coach_nine_dimensions.sql:259`, and
+  `packages/core/src/field/gateway/sim-doctor.ts:199-234`), which holds practice sessions, not
+  analyses of real visits.
+
+**So the AWS key alone does not make Coaching work.** A model needs a path from a consented
+recording and a transcript to an `analyses` row with findings. Is that path designed, and on which
+branch?
+
+---
+
+### FE-CR-9 — Should opening an analysis stamp `mr_viewed_at`?
+
+| | |
+| --- | --- |
+| Date | 2026-10-01 |
+| Requester | Frontend (FE-D16) |
+| Owner asked | Backend |
+| Needed | A yes or no. If yes, `read_analysis` stamps `mr_viewed_at` when the caller is the analysis's own MR |
+| Status | **Open**. A question |
+
+**Why.**
+
+- **Only replying stamps it.** `respond_to_analysis` sets `mr_viewed_at = coalesce(mr_viewed_at,
+  now())` (`20260811000300_audit_log.sql:487`). No other migration writes the column.
+- **Reading does not.** `read_analysis` (`20260923000100…:31`) only reads.
+- **The core client assumed it does** (`packages/core/src/field/client.ts:466-473`), and so did
+  the frontend's own 3 September handoff (`handoff-frontend.md`, "`getAnalysis` … please
+  confirm").
+- **The design rests on it.** "Your manager can only see what you've already seen" (phase 4 D1)
+  is a promise about this column.
+
+Until this is answered, FE-D16 removed the screen's claims built on the column ("You read it
+first", "Your manager has not opened this yet"). Nothing on screen backs them.
+
+---
+
+### FE-CR-10 — Queue a reply offline, and the shape `respond_to_analysis` returns
+
+| | |
+| --- | --- |
+| Date | 2026-10-01 |
+| Requester | Frontend (FE-D16) |
+| Owner asked | Backend |
+| Needed | (1) Should a reply be queued offline? If yes, it needs a sync entity, an idempotency key and a `sync_push` path. (2) Should `respond_to_analysis` return the `Analysis` contract? |
+| Status | **Open**. Two questions |
+
+**Why.**
+
+1. **A reply cannot go through the queue today.** The sync entity list has no analysis response
+   (`packages/core/src/field/sync.ts:12-21`; the database enum at
+   `20260813000200_offline_sync.sql:48-57`). The latest `apply_sync_item` raises "not yet accepted
+   by sync" for anything else (`20260911000400_sync_row_identity_from_payload_id.sql:59, 235`). So
+   FE-D16 calls `respond_to_analysis` directly. With no signal the send fails, and the text stays on
+   the screen, as the reply route's existing design says (`apps/field/app/reply/[analysisId].tsx:23-27`).
+   A queued reply would also need an answer to that design's point: a half-written argument
+   should not land in a manager's queue the moment signal returns.
+2. **The return is a raw row.** `respond_to_analysis` returns `to_jsonb(v_row)`, snake_case, with
+   no `findings` and no `transcriptId` (`20260811000300_audit_log.sql:496`). That is not
+   `AnalysisSchema`, which core's REST `respondToAnalysis` parses (`client.ts:486-492`). FE-D16
+   does not read the return, and does not reshape it. Should it go through `analysis_contract_row`
+   like the reads?
+
+**Also noted:** the only test of an MR calling these four functions, `cr3-mr-reads.spec.ts`, is on
+`worktree-ai-platform-phase-a` only, not on `main`.
+
+---
+
+### FE-CR-11 — Land the AI Doctor practice-session contract on `main`, with read functions for the app
+
+| | |
+| --- | --- |
+| Date | 2026-10-01 |
+| Requester | Frontend (FE-D17, on the operator's ruling that this release's "AI analysis" is AI Doctor practice) |
+| Owner asked | Backend |
+| Needed | The practice backend on `main`, plus three app-facing reads and three answers. Details below |
+| Status | **Open** |
+
+**Why.** The operator ruled on 1 October that Coaching, Analysis and Reply analyse **AI Doctor
+practice sessions**, not recorded consultations. The practice backend exists **only** on
+`worktree-ai-platform-phase-a`. Frontend may not import from it, so the app cannot be wired to it
+until it is on `main`. A grep of `origin/main` for `sim_`, `ai_doctor`, `ai_coach`, `persona` and
+`scenario` finds nothing.
+
+**What is on the branch (read only):**
+
+- **Tables:** `sim_personas`, `sim_scenarios`, `sim_sessions`, `sim_turns`, `sim_coach_analyses`
+  (`20260929000100_simulation_core.sql:50-229`). `suggested_modules` and the seven dimensions come
+  from `20261001000100_coach_nine_dimensions.sql`.
+- **RPCs:** `start_sim_session`, `end_sim_session` (`20260929000200_simulation_rpcs.sql:212-278,
+  353-389`).
+- **Gateway features:** `ai_doctor` (a turn) and `ai_coach` (the analysis)
+  (`services/api/supabase/functions/ai-gateway/index.ts:202-249`).
+- **Shapes:** `packages/core/src/field/simulation.ts`. `SimCoachAnalysisSchema` (`:246-277`) covers
+  every item on the operator's list:
+  - product knowledge, scientific accuracy, communication, opening, objection handling, response
+    relevance, closing;
+  - strengths and improvements, each citing a turn;
+  - up to 3 suggested modules.
+- **Visibility already matches the ruling:** the MR sees their own and an admin can read; managers
+  are blocked (`simulation_core.sql:281-297`, tested in `sim-gateway.spec.ts:769-788, 853-866`). No
+  team or rank field exists.
+
+**Needed on `main`:**
+
+1. **The migrations and `simulation.ts`**, with core client methods and `API_PATHS` entries. Today
+   there are none, only the RPC names (`simulation.ts:310-327`).
+2. **Read functions for the app.** "My sessions", and "one session with its turns and analysis",
+   exist on the branch only as direct table reads (`simulation_core.sql:285-297`). An RPC per read,
+   in the same `{ data, readAt, auditLogId }` envelope as `read_analysis`, would let the app parse
+   them as it parses everything else.
+3. **The frontend contract written down.** `docs/ai-platform/api-contracts.md` on the branch
+   predates the simulation work and has no section for it. Its line `:200-202` ("scoring blocked by
+   X2/X4") is out of date.
+
+**Three questions:**
+
+1. **Reply.** No practice analysis has a reply: no column and no RPC, and `sim_coach_analyses` is
+   append-only (`simulation_core.sql:406-408`). Should an MR be able to reply to a practice
+   analysis? If not, the Reply screen leaves this release's scope.
+2. **An MR can write their own scores.** `record_sim_coach_analysis` and `record_sim_turn` are
+   granted to `authenticated` (`20260929000200…:534`; `20261001000100…:282`), and the spec stores a
+   score as an MR (`sim-gateway.spec.ts:566, 577-595`). The app will never call them, but anyone
+   with an MR's token can. Is that intended?
+3. **The gateway trusts the client's text.** `ai_doctor` takes `personaBrief`, `personaStance`,
+   `objection` and `history` from the request body, and `ai_coach` takes the `turns`
+   (`index.ts:208-213, 244-246`). The database checks only that a cited turn index exists
+   (`20261001000100…:201-206`). Should the gateway read the persona and the stored turns from the
+   database instead? The app will send the stored values either way, but the analysis can only be
+   trusted if the server takes them from its own rows.
+
+**Until this lands:**
+
+- **There is no real model.** Every practice reply is the stub marker, every score is 0
+  (`stub-provider.ts:97-159`), and a deployed gateway answers `503 no_provider`.
+- **No seeded content.** Approved prompts, personas and scenarios have to be created through the
+  console with two admins, for four-eyes approval.
+
+---
+
 ## Answers — 1 October 2026, evening (backend, W1-P)
 
 ### `BE-CR-6` — the AI allowance on the rep's screen (`BE-W128`, operator `BE-C30`, screen owned by Dev)

@@ -238,6 +238,8 @@ bootstrap rows are not restated here; the first file that cites each is the poin
 | `FE-D11` | frontend | existing at bootstrap; first cited in `PROJECT-OVERVIEW.md` |
 | `FE-D12` | frontend | existing at bootstrap; first cited in `PROJECT-OVERVIEW.md` |
 | `FE-D13` | frontend | existing at bootstrap; first cited in `CLAUDE.md` |
+| `FE-D16` | frontend | Coaching, Analysis and Reply made ready, still hidden; first cited in `PROJECT-OVERVIEW.md` (PR #14). Row added by backend on 5 October, W1-W, when PR #14 was merged with `main` |
+| `FE-D17` | frontend | AI Doctor practice on sample data, and the clock lint in packages/ui; first cited in `PROJECT-OVERVIEW.md` (PR #15). Row added by backend on 5 October, W1-W, when PR #15 was merged with its base |
 | `FE-W1` | frontend | existing at bootstrap; first cited in `.ai-collab/decisions.md` |
 | `FE-W2` | frontend | existing at bootstrap; first cited in `.ai-collab/decisions.md` |
 | `FE-W3` | frontend | existing at bootstrap; first cited in `.ai-collab/decisions.md` |

@@ -368,6 +368,31 @@ export default tseslint.config(
     },
   },
   {
+    // FE-D17 — THE CLOCK AND CALENDAR RULES REACH packages/ui.
+    //
+    // FE-D13 §5 found they stopped at apps/field: no block targeted packages/ui, so a component
+    // could read the handset's clock or calendar and nothing would say so. It had no violation
+    // then, but convention is not enforcement, and this rule took three sessions to close in
+    // apps/field (MR-14, MR-15 A2, MR-28 A2).
+    //
+    // A component's answer is simpler than a screen's: it never reads a clock at all. Every time
+    // it shows arrives as a formatted string prop, which the route builds with dayIn / clockIn /
+    // dayMonthIn in the territory's zone. `noComponentMaterials` does not apply here, because
+    // packages/ui is where the components live.
+    files: ['packages/ui/**/*.ts', 'packages/ui/**/*.tsx'],
+    rules: {
+      'no-restricted-syntax': ['error', ...noDeviceClockAsNow, ...noLocalCalendarReads],
+    },
+  },
+  {
+    // The same block's test half, the field tests' rule: a test may take the handset's clock for a
+    // fixture, but never read a calendar in the device's zone (MR-32 A2).
+    files: ['packages/ui/**/*.test.ts', 'packages/ui/**/*.test.tsx'],
+    rules: {
+      'no-restricted-syntax': ['error', ...noLocalCalendarReads],
+    },
+  },
+  {
     // Plain JS: config files and the rollback verifier script. Node globals, and no
     // type-aware rules, since these are outside any tsconfig project.
     files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
