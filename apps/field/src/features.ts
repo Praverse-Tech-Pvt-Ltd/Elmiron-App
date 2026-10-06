@@ -45,3 +45,13 @@ export const assistantSampleEnabled: boolean = process.env.EXPO_PUBLIC_ASSISTANT
  * replaces `src/practice/transport.ts`, not this flag's meaning.
  */
 export const practiceSampleEnabled: boolean = process.env.EXPO_PUBLIC_PRACTICE_SAMPLE === 'true';
+
+/**
+ * W2-C C / `BE-W160` — Product Q&A, on the REAL transport.
+ *
+ * **Off by default.** Unlike the two above there is no sample behind it: on, it asks the real
+ * `ai-gateway`, which today answers "approved information not available" to everything — true, and
+ * the first thing a pilot company will see. Turned on when the company wants reps to see that answer,
+ * or when approved material and model access are both in place.
+ */
+export const productQaEnabled: boolean = process.env.EXPO_PUBLIC_PRODUCT_QA === 'true';

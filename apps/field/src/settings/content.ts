@@ -33,6 +33,8 @@ export interface SettingsNavigation {
   readonly onOpenAssistant?: () => void;
   /** FE-D17. Present only when `practiceSampleEnabled`; absent, there is no practice row. */
   readonly onOpenPractice?: () => void;
+  /** W2-C C / `BE-W160`. Present only when `productQaEnabled`; absent, there is no row. */
+  readonly onOpenProductQa?: () => void;
 }
 
 export const settingsGroups = (
@@ -78,6 +80,17 @@ export const settingsGroups = (
               detail: 'Sample data. Practise a visit with an AI doctor and get feedback.',
               state: 'available' as const,
               onPress: nav.onOpenPractice,
+            },
+          ]),
+      ...(nav.onOpenProductQa === undefined
+        ? []
+        : [
+            {
+              id: 'product-qa',
+              title: 'Product questions',
+              detail: 'Answered only from your company’s approved material, with the source shown.',
+              state: 'available' as const,
+              onPress: nav.onOpenProductQa,
             },
           ]),
     ],

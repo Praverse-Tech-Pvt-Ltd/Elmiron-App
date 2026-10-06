@@ -59,6 +59,8 @@ export { BottomSheet } from './BottomSheet';
 export type { BottomSheetProps } from './BottomSheet';
 export { Button } from './Button';
 export type { ButtonProps, ButtonVariant } from './Button';
+export { ProductQaScreen } from './ProductQaScreen';
+export type { ProductQaScreenProps, ProductQaView } from './ProductQaScreen';
 export { AdverseEventScreen } from './AdverseEventScreen';
 export type { AdverseEventScreenProps } from './AdverseEventScreen';
 export { CallReportScreen } from './CallReportScreen';
