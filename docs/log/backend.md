@@ -4395,3 +4395,219 @@ for a PR to `main`. Emulator, Metro, the function server and the database stoppe
 credential appears anywhere in the diff** (checked against the env file's values before every commit).
 The local env file still exists (`services/api/supabase/functions/.env`, git-ignored) — needed the moment
 access is granted.
+
+### W2-C — the untrue screens, and day one
+
+**6 October 2026.** Branch `w2-c-backend` from `main` at `a05f2e7` (PR #21 confirmed MERGED on GitHub,
+09:29 UTC — checked, not assumed). Checkout clean; `review-handoff/` deleted at the start.
+
+#### The previous push's CI
+
+`f1288c3` (W2-B, PR #21 head): workflow **CI** green, run `37440944612`, SHA = that commit. Database
+runner **Test Files 83 passed (83)**, **Tests 1146 passed | 2 skipped | 4 todo (1152)**; unit runner core
+210 | 4 todo, ui-tokens 59, ui 4 + 331, mock 43, field 719 + 287, console 76; browser 7 passed, 0 skipped,
+0 failed. `main` after the merge (`a05f2e7`): CI green, run `37443294532`. **Measured again: 0 rulesets
+on `main`; the repository is still PUBLIC.**
+
+#### The priority override — did it fire? **No.** `NOT_AUTHORIZED`, both models, at the start and between every part.
+
+#### A — the screens that said untrue things
+
+**A1 — the clock (`BE-W157`), and the sweep.** The catalogue sweep (`clockFrom(` by name) found two live
+calls: the sync line (the known one) and `route-labels.ts:clockFromOrNull` (no callers left). **The
+second sweep, under a different definition** — any time of day rendered without the territory's zone:
+character slices from position 11, `get*` getters, `toLocale*String` — found **one more live instance
+beyond the known one: the doctor profile's "best time to catch them"** (`doctors/availability.ts`). It
+read the hour (`slice(11, 13)`) and the weekday by character from Supabase `startedAt` values, which are
+UTC: a 10:00 IST visit is `04:30Z`, so the window said 04:00–05:00, and a visit before 05:30 IST counted
+on the previous weekday. The console's one slice (`overrides-panel.tsx:37`) reads `toISOString()` and
+labels it "UTC" — honest, left.
+
+**Why it kept coming back — the useful finding.** The lint control banned `clockFrom` and the raw slice
+in `apps/field/app/` only, on the grounds that the helpers stayed "legitimate in `src/` for the screens
+still on the mock". No screen is on the mock. Every recurrence since MR-24 was a HELPER in `src/` called
+by a screen the ban covered and never reached. **And every one of their tests used `+05:30` timestamps —
+the mock's shape — so the slice passed them all while showing UTC on the device;** one test's comment
+described the defect as the feature ("slicing keeps the server's offset").
+
+**Fixed:** the sync line and the availability window now read in the territory's zone (`clockIn`,
+`dayIn`); `clockFrom` and `clockFromOrNull` are DELETED, not labelled; the raw slice from position 11 is
+banned across ALL of `apps/field` (the widened rule caught two test files at once — one a deliberate
+demonstration, kept with a reasoned disable). New tests use the server's `Z` shape, both sides: a Supabase
+stamp reads in IST, and the same stamp in a UTC territory reads in UTC.
+
+**A2 — the four that claimed a state the server had not given.**
+* **`BE-W149`** — `witnessedStage` now reads each item's STATUS: queued/in flight is pending, SYNCED is
+  confirmed, FAILED/CONFLICT moves nothing (a check-in the server refused used to move the stage and say
+  "waiting to send").
+* **`BE-W155`** — Doctors offline shows the list it holds; the two server DECISIONS (session expired,
+  not permitted) still replace it; anything else replaces only an EMPTY list. `FE-W62`'s rule, on the
+  screen that missed it.
+* **`BE-W153`** — the copy of the visit screen left under the consent screen keeps itself current: it
+  re-reads the queue and the witnessed answer on every change, so Back shows the truth. The queued-work
+  banner ("cannot be sent yet") also now clears once delivered. Navigation unchanged (two Backs remain —
+  a nuisance, not an untrue claim).
+* **`BE-W154`** — Today and the route lay the queue over the visits (`visitsAsWitnessed`, the visit
+  screen's own rule): a visit finished offline counts as done and is no longer "next". **Its second half
+  — the second same-doctor visit unreachable — was MY test setup:** in W2-B I inserted visits by SQL with
+  no plan entries; the route is one stop per plan entry by design.
+
+**A3.** **`BE-W156`** — the report header dates by the server's `visitDay` when `completedAt` is not yet
+known, and never prints a dangling "·". **`BE-W150` NOT changed:** the gate is recorded in the code as an
+OPERATOR ruling (FE-D2 2, `api-target.ts:10-11`). Its premise — screens reading through the mock — is
+gone, but re-ruling it is the operator's; I removed it, read the ruling, and put it back.
+
+**A4.** Two-sided throughout, the ordinary case asserted every time (no time invented, an empty queue
+changes nothing, a denial is still a denial, the banner stays while the work is still waiting, a
+completed visit still dates by the territory). **Mutants 16/16 killed.**
+
+**A5 — is there one test that would have caught most of them? Yes, and it is worth building
+(`BE-W158`).** All of A's defects, and W2-B's, share one cause: each unit was tested with inputs its
+author chose — mock-shaped timestamps, recording ON, a freshly mounted screen, an empty queue — and
+nothing ran the SHIPPED configuration. The one test: a jest "day" through the real route modules, the
+real outbox, queue and storage, fed a `sync_pull` fixture **captured from the real local server**
+(`seed:day`, Supabase `Z` timestamps, recording off) by a script that regenerates it, with the push
+client replaced only at the RPC boundary by captured `sync_push` answers. Drive: open Today, check in
+offline, consent, back, check out, flush, return to Today and the route, open Doctors offline. Assert
+every visible sentence against the fixture's truth. **It would have caught** `BE-W157` and the
+availability window (Z data), `BE-W149`, `BE-W151` (Today stale), `BE-W153` (if it renders two visit
+screens), `BE-W154`, `BE-W155`, `BE-W156` and W2-B's consent regression (recording off). **It would
+not** have caught `BE-W150` (build configuration), `BE-W152` (supabase-js error semantics, unless the fake
+models them) or anything only a device shows (GPS, the stale embedded bundle). About a day to build;
+its value is the captured fixture — the fake cannot drift into the mock's shape, which is precisely
+how every one of these hid.
+
+#### B — the rep can flag a possible side effect (`BE-W159`, `BE-C36`)
+
+**B2 — measured before designing.** The server already had it: `adverse_event_reports` (append-only,
+audited, NO severity/triage/score column by design, a fifteen-day statutory clock stamped from the
+server's receipt) and `report_adverse_event`, granted to `authenticated`, idempotent on the device's id,
+refusing another rep's visit (42501) and an empty description (22023). **Nothing could reach it from the
+phone, and nothing offline** — it was not a sync kind.
+
+**B3 — built, smallest honest thing.** `adverse_event` joins the sync kinds (`20261006000200`, one
+branch to the existing function; enum values cannot be dropped, so the rollback restores the function and
+an `adverse_event` item is then refused 0A000). The flag is offered on the visit (during and after), one
+field — what the rep was told — and nothing else: no severity, no assessment, no patient field. Sent:
+"Flag sent"; offline: "Flag saved … you do not have to write it again"; it replays as itself.
+
+**B4 — two-sided, including "nothing patient-identifying can be required".** Structurally: the table has
+no patient, age, phone, address, severity, triage or score column (asserted), and the contract strips any
+field it does not name. Actively: text containing an obvious identifier — a phone number (with or without
++91), an email, a twelve-digit ID — withholds Send and says why; ordinary clinical text full of numbers
+(doses, days, BP, a PIN code) is NOT blocked. **Names cannot be detected and are not attempted**; the
+screen asks for none, in words. **My own detector was wrong first:** "+91 98765 43210" collapsed into
+twelve digits and read as an ID number — caught by its own test. **Mutants 10/10 client + the server
+branch** (its removal fails 4 of 5 database tests; the fifth is the structural column check). **BM10
+SURVIVED first** — the route's own guard was never exercised because the screen's disabled button stopped
+every press; the test written for it then passed its two "sends nothing" cases for the wrong reason (it
+pressed stale props with empty text), and only its own positive control noticed.
+
+**B5 — no operator answer was needed.** `D-15` (who operates the PV process downstream) remains open and
+is not the rep's screen.
+
+#### C — Product Q&A has a screen (`BE-W160`)
+
+**Built** the way the chatbot was, minus the sample: `src/product-qa/` (request, outcome, live transport),
+`ProductQaScreen`, `app/product-qa.tsx`, a Me row — all behind `EXPO_PUBLIC_PRODUCT_QA`, off. **C2 —
+"approved information not available" is its own plain card** ("No approved answer for this yet", the
+server's sentence, and where the question goes meanwhile) — never an error, never "switched off". An
+answer always shows its source; one with no source, or a stub's text, is not shown as approved.
+
+**C3 — end to end, by the screen's own transport and mapping** (`createLiveProductQaTransport`,
+`productQaOutcome`, loaded from `apps/field`), against the local stack with the stub, as the signed-in
+rep: feature switched off → 403 → "switched off"; switched on with an approved prompt and NO knowledge →
+200 `not_available` → the honest state; signed out → nothing sent. Ran, not skipped. **Mutants 10/10.**
+**Found:** `BE-W161` — the assistant reads the 429 reset time from the top of the body; the gateway puts
+it in `allowance`, so the assistant's limit message never says when it resets.
+
+**C4 — what is left for it on the day access lands:** (1) approved product material loaded, chunked and
+approved by two admins — the screen says "not available" until then, truthfully; (2) a `product_qa`
+prompt approved by two admins (E3's draft); (3) the organisation's flag `ai_feature_enabled:product_qa`
+and a daily limit; (4) `EXPO_PUBLIC_PRODUCT_QA=true` in the build; (5) one live question with real
+material, read by a person against its source before reps see it.
+
+#### D — the key with a deadline (`BE-W162`); the request log not reached
+
+**D2 — done and proved.** The writer reads `SUPABASE_SECRET_KEYS` and uses the key named
+`practice_writer`, or `default` until one exists. **Measured first:** the local runtime does receive
+`SUPABASE_SECRET_KEYS` (one key, `default`) — by a temporary probe that reported presence only, never a
+value, deleted before any commit. **Proof:** the practice suite 52/52 on the new non-JWT key; **negative
+control:** with no usable key, 13 fail — so the pass ran the new code. The check moved with it: the one
+allowed read is now the named keys, and the LEGACY key is in rule 6 — named nowhere; a legacy read put
+back in the writer itself fails (new test). Mutants 4/4. One hosted step left, once: create the named key.
+
+**D1 (`BE-W146`) — not done.** D3: D2 first, because it has a date. Its trigger ("before production AI")
+is unchanged and still in the key-day checklist.
+
+#### E — not reached (ROOM)
+
+Stopped after D for room, not for a blockage. E is a day of writing that must be done carefully — five
+instruction sets (the coach's "scientific accuracy" and "response relevance" turned into criteria a model
+can score against), six personas, one runbook and a live suite over five features — and rushing the text
+two admins must approve would be worse than starting it fresh. **E5, as things stand (an estimate):** the
+technical path on the day — model access, secrets, deploy, the live suite, switching transports — about
+3–4 hours with the existing checklists; the content path — prompts, personas and scenarios drafted and
+approved by two admins — is days of people's time, not hours, and none of it is drafted yet.
+
+#### F — the status table (measured this session, or cited)
+
+| MODULE | STATUS | OWNER | BLOCKER | ETA |
+| --- | --- | --- | --- | --- |
+| Untrue screens `BE-W149`, `W153`–`W157` + the clock sweep | DONE | Maanav | — | — |
+| `BE-W150` — the start-up gate on an unused address | BLOCKED | Operator | Re-rule FE-D2 2 (its premise, screens on the mock, is gone) | minutes, once decided |
+| One shipped-configuration test (`BE-W158`) | POST-4-OCT | Maanav | None | about 1 day |
+| Adverse-event flag (`BE-W159`, `BE-C36`) | DONE | Maanav | — | — |
+| Who operates the PV process downstream (`D-15`) | BLOCKED | Operator | `D-15`, the signatory | — |
+| Product Q&A — screen (`BE-W160`) | DONE | Maanav | — | — |
+| Product Q&A — real answers | BLOCKED | Operator, then AWS account owner | Approved material and an approved prompt (two admins, Q-14); model access | ½ day after all |
+| Assistant limit reset time (`BE-W161`) | POST-4-OCT | Maanav | None | an hour |
+| Practice writer off the legacy key (`BE-W162`) | DONE | Maanav | — | — |
+| Named `practice_writer` key on the hosted project | BLOCKED | Operator | Created in the dashboard, once | minutes |
+| Request-log integrity (`BE-W146`) | POST-4-OCT | Maanav | None; trigger is production AI (`BE-C71`) | about 1 day |
+| Day one as one path, live suite over five features (E1, E2) | IN PROGRESS | Maanav | — (not started this session; next) | about ½ day |
+| Five instruction sets and six personas drafted (E3, E4) | IN PROGRESS | Maanav | — (not started this session; next) | about 1 day |
+| Instruction sets and personas approved | BLOCKED | Operator | Two admins (Q-14) | after the drafts |
+| Core MR day — emulator, local stack | DONE | Maanav | — | — |
+| Offline day (`FE-G2`) — emulator | DONE | Maanav | — | — |
+| Offline day — real radio off, on a handset | BLOCKED | Operator, then Maanav | A handset; a release build | about ½ day after both |
+| Core MR day — real handset, signed | BLOCKED | Operator, then Maanav | A release key (who holds it), a handset, a reachable server (Q-19) | about 1 day after all three |
+| AI Doctor practice + AI Analysis — real answers | BLOCKED | AWS account owner, then operator | Model access; approved prompts, personas, scenarios (Q-14) | ½ day after both |
+| Chatbot — real answers | BLOCKED | AWS account owner, then operator | Model access; approved prompt (Q-14) | ½ day after both |
+| Production deploy | BLOCKED | Operator, then Maanav | Q-19, then `BE-W143` | about 1 day after the answer |
+| Backup | BLOCKED | Operator, then Maanav | Q-19; red from 16 October | ½ day after the answer |
+| Branch protection on `main` | BLOCKED | Repository admin | Not applied (0 rulesets, measured 6 Oct) | minutes |
+| Repository visibility | BLOCKED | Operator | Q-20 (still PUBLIC, measured 6 Oct) | minutes, once decided |
+| Day planning (manager plans) | BLOCKED | Operator | Q-16, Q-17, Q-18 | 10–15 working days after the answers |
+| Demo build script | IN PROGRESS | Maanav | Still forces CMake 3.31.6 | about ½ day |
+
+#### Checks
+
+* Static first, every commit: typecheck 0 errors, lint 0 errors (the one existing frontend warning),
+  format clean; ids clean (`BE-W158`–`BE-W162` each registered in the commit that first cites it).
+* **Clean-database check: All 29 step(s) passed** — database **Test Files 85 passed (85)**, **Tests 1154
+  passed | 2 skipped | 4 todo (1160)** (the two skipped: the gated live Bedrock tests); core 12 files,
+  210 | 4 todo; field 53 files, 746, and 42 screen suites, 307; ui 4 and 31 screen suites, 332; console
+  76; ui-tokens 59; mock 43; browser **7 passed, 0 skipped, 0 failed**; the service-role step "read in
+  exactly one place". Function server from the repository root, confirmed serving.
+* Mutants, all two-sided: A 16/16, B 10/10 client + the server branch, C 10/10, D2 4/4 — two
+  survivors on the way (BM10, and CM1 which did not run at first), each resolved by a test or a rerun.
+
+#### What I got wrong
+
+* **I removed the `BE-W150` gate before reading that it was an operator ruling,** then put it back. The
+  change was right on the facts and not mine to make.
+* My adverse-event detector misread "+91 98765 43210" as an ID number; its own test caught it.
+* My first route-guard test pressed stale props and passed two cases for the wrong reason; its positive
+  control caught it.
+* Two of my mutation-harness generations broke on my own string splicing and were rewritten.
+* My first Part C mutant (CM1) did not run — Prettier had reflowed the line I anchored on; rerun on the
+  formatted text and killed.
+
+#### Where I stopped
+
+**After Part D2, for ROOM.** Parts A, B, C and D2 done and committed; D1 and E not started. The override
+never fired. On `w2-c-backend` for a PR to `main`. Emulator not used this session; Metro, the function
+server and the database stopped at the end. **No credential appears anywhere in the diff** (checked
+against the env file's values before every commit; the key probe reported names only and was never
+committed). The local env file still exists, git-ignored, needed the moment access is granted.
