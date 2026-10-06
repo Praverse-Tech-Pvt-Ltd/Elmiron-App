@@ -1,5 +1,8 @@
 # The hour the AWS key arrives — checklist (W1-Q D)
 
+> **To DO day one, follow `DAY-ONE.md` (W2-D A) — one page, one command (`pnpm ai:live`).** This file is
+> the record of how its steps and predictions were derived; where the two differ, `DAY-ONE.md` is later.
+
 **Written before the key, on purpose. The adapter is NOT written here** (`D3`): code that cannot be
 exercised is a claim. This file is so the first hour is spent connecting, not discovering.
 

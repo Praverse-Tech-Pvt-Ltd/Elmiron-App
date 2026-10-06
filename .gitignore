@@ -112,3 +112,5 @@ playwright-results.json
 # W1-N: the per-session review folder. Rebuilt from scratch every session -- copies of the files a
 # reviewer needs -- and never committed: the copies would be stale the moment the originals move.
 review-handoff/
+# W2-D: and its zip, beside it — rebuilt from the folder every session, never committed.
+review-handoff.zip

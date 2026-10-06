@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { LlmGenerateRequest } from '@fieldforce/core';
 import {
@@ -6,6 +5,7 @@ import {
   createBedrockProvider,
 } from '../supabase/functions/_shared/bedrock-provider.ts';
 import { bedrockConverse } from '../supabase/functions/_shared/bedrock-client.ts';
+import { modelAccessGate, readCredential } from './live-credential.js';
 
 /**
  * W1-V A5 — the LIVE Bedrock calls, gated so they SKIP with a stated reason rather than fail.
@@ -26,28 +26,6 @@ const never = (): never => {
   throw new Error('the gate was ready but built no client');
 };
 
-const ENV_FILE = new URL('../supabase/functions/.env', import.meta.url);
-
-const readCredential = (): {
-  accessKeyId: string | undefined;
-  secretAccessKey: string | undefined;
-  region: string | undefined;
-} | null => {
-  if (!existsSync(ENV_FILE)) return null;
-  const env = Object.fromEntries(
-    readFileSync(ENV_FILE, 'utf8')
-      .split(/\r?\n/u)
-      .map((l) => /^\s*([A-Z_]+)\s*=\s*(.*?)\s*$/u.exec(l))
-      .filter((m): m is RegExpExecArray => m !== null)
-      .map((m) => [m[1], (m[2] ?? '').replace(/^"|"$/gu, '')]),
-  ) as Record<string, string>;
-  return {
-    accessKeyId: env['AWS_ACCESS_KEY_ID'],
-    secretAccessKey: env['AWS_SECRET_ACCESS_KEY'],
-    region: env['AWS_REGION'],
-  };
-};
-
 const request = (text: string, signal = AbortSignal.timeout(30_000)): LlmGenerateRequest => ({
   messages: [
     { role: 'system', content: 'Reply with JSON only: {"ok": true}.' },
@@ -58,33 +36,7 @@ const request = (text: string, signal = AbortSignal.timeout(30_000)): LlmGenerat
   signal,
 });
 
-const gate = await (async (): Promise<{ ready: boolean; reason: string }> => {
-  const credential = readCredential();
-  if (credential === null || !credential.accessKeyId || !credential.secretAccessKey) {
-    return {
-      ready: false,
-      reason: 'no credential (services/api/supabase/functions/.env absent or incomplete)',
-    };
-  }
-  try {
-    const converse = bedrockConverse({
-      accessKeyId: credential.accessKeyId,
-      secretAccessKey: credential.secretAccessKey,
-    });
-    await createBedrockProvider({
-      region: credential.region,
-      profileId: INDIA_PROFILES.haiku,
-      converse,
-    }).generate(request('Say OK.'));
-    return { ready: true, reason: 'model access granted' };
-  } catch (error) {
-    const name =
-      (error as { vendorCode?: string; name?: string }).vendorCode ?? (error as Error).name;
-    return name === 'AccessDeniedException' || name === 'ValidationException'
-      ? { ready: false, reason: `model access not granted (${name})` }
-      : { ready: false, reason: `probe failed (${name})` };
-  }
-})();
+const gate = await modelAccessGate();
 
 describe('W1-V A5 — live Bedrock, gated', () => {
   it(`gate: ${gate.ready ? 'READY' : `SKIPPING — ${gate.reason}`}`, () => {
