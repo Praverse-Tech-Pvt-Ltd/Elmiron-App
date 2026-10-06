@@ -117,3 +117,29 @@ describe('W2-A A — the service-role key is reachable from exactly one place', 
     expect(failuresFor(functions)).toEqual([]);
   });
 });
+
+/**
+ * W2-B E — the OTHER doors. Supabase hands every Edge Function `SUPABASE_SECRET_KEYS` (which "will
+ * bypass Row Level Security") and `SUPABASE_DB_URL` (a Postgres login) by default, beside the
+ * service-role key. Rules 1-5 guarded one of the three; each of these passed them before rule 6.
+ */
+describe('W2-B E — credentials with the key’s reach are not named in function code at all', () => {
+  for (const name of ['SUPABASE_SECRET_KEYS', 'SUPABASE_SECRET_KEY', 'SUPABASE_DB_URL']) {
+    it(`a read of ${name} fails, naming the file`, () => {
+      const failures = failuresFor(
+        withFile('_shared/stub-provider.ts', (t) => `${t}\nconst k = Deno.env.get('${name}');\n`),
+      );
+      expect(failures).toEqual([
+        expect.stringMatching(new RegExp(`stub-provider\\.ts: names ${name}\\b`, 'u')),
+      ]);
+    });
+  }
+
+  it('POSITIVE CONTROL: naming them in a COMMENT is not a read', () => {
+    const functions = withFile(
+      'ai-gateway/index.ts',
+      (t) => `${t}\n// never SUPABASE_SECRET_KEYS or SUPABASE_DB_URL here\n`,
+    );
+    expect(failuresFor(functions)).toEqual([]);
+  });
+});
