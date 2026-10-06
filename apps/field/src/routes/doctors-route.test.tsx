@@ -158,6 +158,26 @@ describe('app/doctors.tsx — how the client presents a server decision', () => 
     expect(screen.queryByText('You do not have access to this list')).toBeNull();
   });
 
+  // W2-C A2 / `BE-W155`. Offline on the emulator: "Could not load doctors" over a list the phone
+  // HOLDS -- `FE-W62`'s defect on another screen.
+  const holding = () => ({ ...emptyLocalStore(), doctor: new Map([[DOCTOR.id, DOCTOR]]) });
+
+  it('BE-W155: offline with doctors on the phone, the LIST is shown, not the banner', async () => {
+    mockStore.mockReturnValue(
+      pulled({ store: holding(), status: 'failed', failure: { kind: 'unreachable' } }),
+    );
+    await render(<Doctors />);
+    expect(await screen.findByText(/Dr Asha Deshpande/u)).toBeTruthy();
+    expect(screen.queryByText('Could not load doctors')).toBeNull();
+  });
+
+  it('BE-W155: a DENIAL is still a denial, whatever the phone holds — a decision, not a stale read', async () => {
+    mockStore.mockReturnValue(pulled({ store: holding(), status: 'failed', failure: denial }));
+    await render(<Doctors />);
+    expect(await screen.findByText('You do not have access to this list')).toBeTruthy();
+    expect(screen.queryByText(/Dr Asha Deshpande/u)).toBeNull();
+  });
+
   it('does not offer "On plan" when there is no plan for today', async () => {
     // MR-14 B9, updated by MR-44 B. **This comment's original reason is no longer true and
     // the assertion is still right**, which is exactly what it was written to force: it said

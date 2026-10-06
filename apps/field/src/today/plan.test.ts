@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DoctorSchema, VisitSchema } from '@fieldforce/core';
 import type { Doctor, Visit } from '@fieldforce/core';
-import { clockFrom, summariseDay } from './plan';
+import { summariseDay } from './plan';
 
 /**
  * Inputs are parsed through the contract's own schemas rather than written as
@@ -242,13 +242,6 @@ describe('the times shown are the server’s', () => {
 
   it('has no start time before the first visit begins', () => {
     expect(summariseDay([visit({ startedAt: null })], [doctor()], DAY).startedAt).toBeNull();
-  });
-
-  it('reads the clock off the timestamp instead of reinterpreting its offset', () => {
-    // The offset belongs to the territory, not to the handset. Parsing this through
-    // `Date` on a phone set to UTC would render 04:34 and move every visit in the
-    // day by five and a half hours.
-    expect(clockFrom('2026-08-10T10:04:00+05:30')).toBe('10:04');
   });
 });
 

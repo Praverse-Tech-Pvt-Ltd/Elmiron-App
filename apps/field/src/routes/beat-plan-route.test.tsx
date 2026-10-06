@@ -21,6 +21,9 @@ jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 
 // eslint-disable-next-line import/first
 import BeatPlanRoute from '../../app/beat-plan';
+import { asyncStorageQueueStore, setQueueOwner } from '../sync/async-storage-store';
+import { checkInQueueItem, checkOutQueueItem } from '../sync/outbox';
+import { emptyQueue } from '../sync/reducer';
 
 const MR = '22222222-2222-4222-8222-2222222222aa';
 const TERRITORY = '22222222-2222-4222-8222-222222222222';
@@ -152,6 +155,43 @@ describe('BE-W89 — the screen renders the plan from the pulled store', () => {
 
     // Two entries, one visit completed.
     expect(screen.getByText('2 planned · 1 done')).toBeTruthy();
+  });
+
+  it('W2-C A2 / BE-W154: a visit finished OFFLINE counts as done — "0 done" after four was the emulator', async () => {
+    const PLANNED = {
+      ...VISIT,
+      id: '44444444-4444-4444-8444-444444444445',
+      doctorId: D2,
+      status: 'planned',
+      startedAt: null,
+      completedAt: null,
+    };
+    const fix = {
+      latitude: 18.5204,
+      longitude: 73.8567,
+      accuracyMetres: 10,
+      capturedAt: '2026-09-21T05:00:00.000Z',
+    };
+    const body = (id: string) => ({
+      id,
+      visitId: PLANNED.id,
+      coordinates: fix,
+      source: 'manual' as const,
+      occurredAt: fix.capturedAt,
+    });
+    setQueueOwner(MR);
+    await asyncStorageQueueStore.save({
+      ...emptyQueue,
+      items: [
+        checkInQueueItem(body('77777777-7777-4777-8777-777777777791')),
+        checkOutQueueItem(body('77777777-7777-4777-8777-777777777792')),
+      ],
+    });
+    mockStore.mockReturnValue(pulled({ store: store({ visits: [VISIT, PLANNED] }) }));
+    await render(<BeatPlanRoute />);
+
+    expect(await screen.findByText('2 planned · 2 done')).toBeTruthy();
+    await asyncStorageQueueStore.save(emptyQueue);
   });
 });
 

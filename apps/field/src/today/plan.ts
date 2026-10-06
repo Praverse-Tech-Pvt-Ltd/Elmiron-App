@@ -227,39 +227,14 @@ export const summariseDay = (
   };
 };
 
-/**
- * "10:04" by slicing the characters — **VALID ONLY FOR MOCK-BACKED SCREENS.**
+/*
+ * `clockFrom` LIVED HERE AND IS GONE — W2-C A1 / `BE-W157`.
  *
- * **MR-15 A2 found the assumption under this false against the real server.** The comment
- * that stood here said: *"The contract sends an offset (`2026-08-10T10:04:00+05:30`), and
- * that offset is the territory's, not the handset's. Slicing keeps the time the server
- * meant."*
- *
- * `services/mock` does send `+05:30` — every fixture in it does, which is why this looked
- * right for the whole of the frontend's life. **Supabase sends `+00:00`.** Slicing that
- * keeps UTC and prints it as though it were local, so a visit at `07:30+00:00` — 13:00 in
- * Asia/Kolkata — rendered to the MR as "Scheduled 07:30". Five and a half hours early,
- * measured on the device.
- *
- * Screens reading the pulled store use `clockIn(iso, zone)` instead. This stays for the
- * screens still on `:4010`, where the premise still holds, and it is labelled rather than
- * left as a trap: **converting a screen to real data means replacing this call**, and any
- * screen that forgets will show times that are wrong by the territory's UTC offset.
- *
- * Still on it today: `app/(tabs)/coaching.tsx`, `app/day-end.tsx`, and
- * `route-labels.ts:clockFromOrNull` for `app/beat-plan.tsx`. The same applies to
- * `dayMonthFrom` in `src/doctors/profile.ts` and the slices in `src/doctors/availability.ts`.
- *
- * **MR-24: the warning above did not work.** `app/visit/[id].tsx` was converted to the
- * pulled store in MR-21 and kept this call, so a check-in stamped 11:15:34 IST rendered as
- * "Checked in 05:45" on the emulator — the MR-14 defect, in a screen converted after
- * MR-14 found it. Now on `clockIn`.
- *
- * **`src/sync/indicator.ts:51` is still on this call and is NOT entitled to it.** It
- * formats `lastSyncedAt`, which since MR-18 comes from `sync_push`'s `serverTime` — a
- * Supabase `Z` timestamp, not a territory offset. Its own comment describes the
- * five-and-a-half-hour bug and then keeps the slice that causes it. Left here rather than
- * changed blind: it was NOT observed wrong on the device (the chip rendered no time during
- * MR-24), and a fix nobody has seen fail is a fix nobody can show works.
+ * It was `iso.slice(11, 16)`: "10:04" by slicing characters, correct only while the server sent the
+ * territory's own offset. The mock did; Supabase sends `Z`. It was found five and a half hours wrong
+ * on the device in MR-14, again in MR-24 (`app/visit/[id].tsx`), and again in W2-B (the sync line,
+ * "Everything sent. 07:22" at 12:52 IST) — each time AFTER the trap had been written up, because the
+ * lint ban covered `app/` and the slice kept coming back through helpers in `src/`. Its justification
+ * was "the screens still on :4010"; no screen is on :4010 any more. Deleted rather than labelled, and
+ * the raw slice is now banned across `apps/field`. Use `clockIn(iso, zone)` from `./territory-day`.
  */
-export const clockFrom = (iso: string): string => iso.slice(11, 16);

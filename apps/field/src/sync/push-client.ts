@@ -1,6 +1,7 @@
 import uuid from 'expo-modules-core/src/uuid';
 import { SyncPushResponseSchema, knownSyncWarnings } from '@fieldforce/core';
 import type {
+  CreateAdverseEventFlagRequest,
   SyncWarning,
   CreateCallReportRequest,
   CreateCheckInRequest,
@@ -154,6 +155,8 @@ export interface OutboxWriteClient {
   createConsentRecord: (body: CreateConsentRecordRequest) => Promise<PushAccepted>;
   createSampleAndInput: (body: CreateSampleAndInputRequest) => Promise<PushAccepted>;
   createCallReport: (body: CreateCallReportRequest) => Promise<PushAccepted>;
+  /** W2-C B / `BE-W159`. The rep FLAGS a possible adverse event (`BE-C36`). Nothing is assessed. */
+  createAdverseEventFlag: (body: CreateAdverseEventFlagRequest) => Promise<PushAccepted>;
   /** MR-51 D1 / `FE-W29`. Upload, then finalise through `sync_push`, then forget the phone's copy. */
   uploadVoiceNote: (body: VoiceNoteUpload) => Promise<PushAccepted>;
   /**
@@ -372,6 +375,7 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
     createConsentRecord: (body) => push('consent_record', body),
     createSampleAndInput: (body) => push('sample_and_input', body),
     createCallReport: (body) => push('call_report', body),
+    createAdverseEventFlag: (body) => push('adverse_event', body),
     uploadVoiceNote: (body) => uploadAudio('voice_note', body),
     uploadRecording: (body) => uploadAudio('recording', body, { bitrateKbps: body.bitrateKbps }),
   };

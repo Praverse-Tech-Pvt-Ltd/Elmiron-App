@@ -3,6 +3,9 @@ import { SyncQueueItemSchema } from '@fieldforce/core';
 import type { SyncQueueItem } from '@fieldforce/core';
 import { indicatorStateFor } from './indicator';
 import { emptyQueue } from './reducer';
+import { UTC_FALLBACK } from '../today/territory-day';
+
+const IST = { timeZone: 'Asia/Kolkata', source: 'territory' } as const;
 
 const item = (over: Partial<SyncQueueItem> = {}): SyncQueueItem =>
   SyncQueueItemSchema.parse({
@@ -27,7 +30,7 @@ describe('waiting is never red', () => {
       ...emptyQueue,
       items: [item(), item({ id: '15151515-1515-4515-8515-151515151502' })],
     };
-    expect(indicatorStateFor({ kind: 'loaded', state: state })).toEqual({
+    expect(indicatorStateFor({ kind: 'loaded', state: state }, IST)).toEqual({
       kind: 'waiting',
       count: 2,
     });
@@ -35,14 +38,14 @@ describe('waiting is never red', () => {
 
   it('does not turn waiting red however many attempts it has taken', () => {
     const state = { ...emptyQueue, items: [item({ attemptCount: 9 })] };
-    expect(indicatorStateFor({ kind: 'loaded', state: state }).kind).toBe('waiting');
+    expect(indicatorStateFor({ kind: 'loaded', state: state }, IST).kind).toBe('waiting');
   });
 });
 
 describe('only a real failure is critical', () => {
   it('reports failed work as failed, with the attempts behind it', () => {
     const state = { ...emptyQueue, items: [item({ status: 'failed', attemptCount: 5 })] };
-    expect(indicatorStateFor({ kind: 'loaded', state: state })).toEqual({
+    expect(indicatorStateFor({ kind: 'loaded', state: state }, IST)).toEqual({
       kind: 'failed',
       count: 1,
       attempts: 5,
@@ -59,7 +62,7 @@ describe('only a real failure is critical', () => {
         item({ id: '15151515-1515-4515-8515-151515151502', status: 'failed', attemptCount: 3 }),
       ],
     };
-    expect(indicatorStateFor({ kind: 'loaded', state: state }).kind).toBe('failed');
+    expect(indicatorStateFor({ kind: 'loaded', state: state }, IST).kind).toBe('failed');
   });
 });
 
@@ -67,7 +70,7 @@ describe('when nothing is outstanding', () => {
   it('is idle with no time at all on an empty queue', () => {
     // Not the device clock. The queue screen's rule — never show a device time as
     // though the server had confirmed something — applies to this line too.
-    expect(indicatorStateFor({ kind: 'loaded', state: emptyQueue })).toEqual({
+    expect(indicatorStateFor({ kind: 'loaded', state: emptyQueue }, IST)).toEqual({
       kind: 'idle',
       at: null,
     });
@@ -78,7 +81,7 @@ describe('when nothing is outstanding', () => {
       ...emptyQueue,
       items: [item({ status: 'synced', syncedAt: '2026-09-02T12:09:00+05:30' })],
     };
-    expect(indicatorStateFor({ kind: 'loaded', state: state })).toEqual({
+    expect(indicatorStateFor({ kind: 'loaded', state: state }, IST)).toEqual({
       kind: 'idle',
       at: '12:09',
     });
@@ -96,7 +99,7 @@ describe('when nothing is outstanding', () => {
         }),
       ],
     };
-    expect(indicatorStateFor({ kind: 'loaded', state: state })).toEqual({
+    expect(indicatorStateFor({ kind: 'loaded', state: state }, IST)).toEqual({
       kind: 'idle',
       at: '12:09',
     });
@@ -112,21 +115,34 @@ describe('the last-sent time is a clock, not a timestamp', () => {
       ...emptyQueue,
       items: [item({ status: 'synced', syncedAt: '2026-09-02T12:09:00+05:30' })],
     };
-    const result = indicatorStateFor({ kind: 'loaded', state: state });
+    const result = indicatorStateFor({ kind: 'loaded', state: state }, IST);
     expect(result).toEqual({ kind: 'idle', at: '12:09' });
   });
 
-  it('keeps the offset the server sent rather than the handset’s idea of it', () => {
-    // The Z form is UTC. An MR in IST reading it off their own screen would have
-    // been five and a half hours out; slicing characters keeps the server's offset.
+  it('W2-C / BE-W157: a Supabase Z stamp reads as the TERRITORY’s clock, not UTC', () => {
+    // THE SHAPE THE SERVER SENDS. Every other case in this file uses `+05:30`, the mock's shape,
+    // and the old character slice passed all of them while showing UTC on the device:
+    // "Everything sent. 07:22" at 12:52 IST. 08:57Z is 14:27 in Asia/Kolkata.
     const state = {
       ...emptyQueue,
       items: [item({ status: 'synced', syncedAt: '2026-09-02T08:57:43.905Z' })],
     };
-    expect(indicatorStateFor({ kind: 'loaded', state: state }).kind).toBe('idle');
-    expect(JSON.stringify(indicatorStateFor({ kind: 'loaded', state: state }))).not.toMatch(
-      /T|Z|\./u,
-    );
+    expect(indicatorStateFor({ kind: 'loaded', state: state }, IST)).toEqual({
+      kind: 'idle',
+      at: '14:27',
+    });
+  });
+
+  it('the zone decides it: the same stamp in a UTC territory is 08:57', () => {
+    // The other side, so the case above cannot pass by hard-coding +5:30.
+    const state = {
+      ...emptyQueue,
+      items: [item({ status: 'synced', syncedAt: '2026-09-02T08:57:43.905Z' })],
+    };
+    expect(indicatorStateFor({ kind: 'loaded', state: state }, UTC_FALLBACK)).toEqual({
+      kind: 'idle',
+      at: '08:57',
+    });
   });
 });
 
@@ -139,13 +155,13 @@ describe('the last-sent time is a clock, not a timestamp', () => {
  */
 describe('FE-W44 — the queue could not be read', () => {
   it('is never idle, because "Everything sent" would be a claim about the SERVER', () => {
-    expect(indicatorStateFor({ kind: 'unreadable' })).toEqual({ kind: 'unreadable' });
+    expect(indicatorStateFor({ kind: 'unreadable' }, IST)).toEqual({ kind: 'unreadable' });
   });
 
   it('THE POSITIVE CONTROL: a genuinely empty queue is still idle', () => {
     // Without this, the case above is satisfiable by never reporting idle at all, which
     // would put a red badge on the home screen of every MR who has nothing outstanding.
-    expect(indicatorStateFor({ kind: 'loaded', state: emptyQueue })).toEqual({
+    expect(indicatorStateFor({ kind: 'loaded', state: emptyQueue }, IST)).toEqual({
       kind: 'idle',
       at: null,
     });

@@ -13,7 +13,7 @@ import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 // MR-25 C1 asked for this on conversion: the day in the TERRITORY's zone, not a character slice of
 // the ISO string (which was right only for the mock's own offset). The lint exception is gone.
-import { dayMonthIn } from '../../src/today/territory-day';
+import { dayMonthIn, dayMonthOfDate } from '../../src/today/territory-day';
 
 /**
  * C6 — the call report binding, for one visit.
@@ -32,7 +32,15 @@ export default function CallReport(): ReactNode {
   const visit = visitsFromStore(store).find((candidate) => candidate.id === visitId);
   const doctor = doctorsFromStore(store).find((candidate) => candidate.id === visit?.doctorId);
   const doctorName = doctor?.fullName ?? 'This visit';
-  const dateLabel = visit?.completedAt == null ? '' : dayMonthIn(visit.completedAt, zone);
+  // W2-C A3 / `BE-W156`. Offline, `completedAt` does not exist yet -- the server has not seen the
+  // check-out -- and the header read "Dr … · " with nothing after the dot. `visitDay` is the
+  // SERVER's day for the visit (MR-47), already in the territory's calendar, so it can stand in.
+  const dateLabel =
+    visit?.completedAt != null
+      ? dayMonthIn(visit.completedAt, zone)
+      : visit?.visitDay != null
+        ? (dayMonthOfDate(visit.visitDay) ?? '')
+        : '';
   const [summary, setSummary] = useState('');
   const [objections, setObjections] = useState('');
   const [nextStep, setNextStep] = useState('');

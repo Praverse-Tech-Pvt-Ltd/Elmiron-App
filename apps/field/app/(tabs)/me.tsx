@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import { Banner, Button, Screen, SettingsScreen } from '@fieldforce/ui';
-import { assistantSampleEnabled, practiceSampleEnabled } from '../../src/features';
+import {
+  assistantSampleEnabled,
+  practiceSampleEnabled,
+  productQaEnabled,
+} from '../../src/features';
 import { useSession } from '../../src/session';
 import { settingsGroups } from '../../src/settings/content';
 import {
@@ -80,6 +84,14 @@ export default function Me(): ReactNode {
             ? {
                 onOpenPractice: () => {
                   router.push('/practice');
+                },
+              }
+            : {}),
+          // W2-C C / `BE-W160`. Only with the Product Q&A flag on; off, the row does not exist.
+          ...(productQaEnabled
+            ? {
+                onOpenProductQa: () => {
+                  router.push('/product-qa');
                 },
               }
             : {}),

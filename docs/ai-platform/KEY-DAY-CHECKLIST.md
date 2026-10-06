@@ -174,3 +174,10 @@ writer (`_shared/practice-writer.ts`) reads exactly that key; on the day it is d
 turn fails closed ("the practice writer is not configured"). Before then: move the writer to a NAMED
 secret key from `SUPABASE_SECRET_KEYS`, and move rule 1 of `check-service-role-reads.mjs` with it — rule
 6 forbids that name today, so CI will say so the moment the writer changes.
+
+**DONE — W2-C D2, 6 October (`BE-W162`).** The writer now reads `SUPABASE_SECRET_KEYS` and uses the key
+named `practice_writer`, or the project's `default` key until one exists; the legacy key is named nowhere
+in function code, and the check forbids it. Proved locally: the practice suite 52/52 on the new key, and
+13 of it failing with no usable key (so the pass was real). **One step left, on the hosted project, once:**
+in Settings → API Keys, create a secret key named `practice_writer` — then it can be rotated alone. Not
+required for the writer to work; `default` serves until then.

@@ -80,13 +80,20 @@ export default function Doctors(): ReactNode {
               title: 'You do not have access to this list',
               detail: 'The server refused this request for your account.',
             }
-          : {
-              title: 'Could not load doctors',
-              detail:
-                pullFailure.kind === 'refused'
-                  ? `The server refused this sync (${pullFailure.refusal.sqlState}).`
-                  : 'The app could not reach the server. It will try again when you come back to it.',
-            };
+          : // W2-C A2 / `BE-W155`. **A failed refresh is not "no doctors".** This branch was
+            // unconditional and the list renders ONLY the banner when given a failure, so offline
+            // on the emulator the rep saw "Could not load doctors" over a list the phone holds --
+            // `FE-W62`'s defect, which the visit screen fixed in MR-49, on another screen. The two
+            // server DECISIONS above stay unconditional; anything else only replaces an EMPTY list.
+            doctors.length > 0
+            ? null
+            : {
+                title: 'Could not load doctors',
+                detail:
+                  pullFailure.kind === 'refused'
+                    ? `The server refused this sync (${pullFailure.refusal.sqlState}).`
+                    : 'The app could not reach the server. It will try again when you come back to it.',
+              };
   const loading = status === 'loading';
 
   // `Date.now()` is read once per data change rather than per render: a list whose

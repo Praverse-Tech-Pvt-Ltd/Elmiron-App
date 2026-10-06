@@ -152,7 +152,7 @@ export default function DayEnd(): ReactNode {
         }}
         planned={summary?.planned ?? null}
         rateNote={RATE_NOTE}
-        sync={indicatorStateFor(queue)}
+        sync={indicatorStateFor(queue, zone)}
       />
     </Screen>
   );

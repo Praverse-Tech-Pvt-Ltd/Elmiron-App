@@ -13,9 +13,10 @@
  *   4. `_shared/practice-writer.ts` exports exactly one name, `practiceWriterFromEnv` — never the key,
  *      never the client — and its allow-list is exactly `record_sim_turn`, `record_sim_coach_analysis`;
  *   5. `packages/core/src`, which the function imports, reads no environment at all;
- *   6. (W2-B E) the OTHER credentials the platform hands every Edge Function by default — the new
- *      secret keys (`SUPABASE_SECRET_KEYS`, and `SUPABASE_SECRET_KEY`, the local single-key fallback)
- *      and the direct database URL (`SUPABASE_DB_URL`) — are not named in function code AT ALL.
+ *   6. (W2-B E) the OTHER credentials the platform hands every Edge Function by default — since W2-C
+ *      D2 the LEGACY service-role key (`SUPABASE_SERVICE_ROLE_KEY`), `SUPABASE_SECRET_KEY` (the local
+ *      single-key fallback) and the direct database URL (`SUPABASE_DB_URL`) — are not named in
+ *      function code AT ALL. (Until W2-C the legacy key was the one read and the new keys were here.)
  *      Supabase's own guide says a secret key "will bypass Row Level Security", and the database URL
  *      is a Postgres login. Rules 1-5 guarded one of three equivalent doors; a hurried change
  *      reaching for either of the others passed them.
@@ -33,12 +34,17 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
-export const KEY_NAME = 'SUPABASE_SERVICE_ROLE_KEY';
+/**
+ * W2-C D2 / `BE-W162` — the ONE key read is now the named secret keys, `SUPABASE_SECRET_KEYS`, and the
+ * legacy `SUPABASE_SERVICE_ROLE_KEY` has moved into rule 6: named nowhere. Supabase retires the legacy
+ * key at the end of 2026 (`BE-C72`); the writer moved off it while nothing depended on the timing.
+ */
+export const KEY_NAME = 'SUPABASE_SECRET_KEYS';
 export const WRITER_PATH = '_shared/practice-writer.ts';
 export const WRITER_ALLOWED = ['record_sim_coach_analysis', 'record_sim_turn'];
 /** Rule 6 — credentials with the key's reach (or more) that the function must never name. */
 export const EQUIVALENT_CREDENTIALS = [
-  'SUPABASE_SECRET_KEYS',
+  'SUPABASE_SERVICE_ROLE_KEY',
   'SUPABASE_SECRET_KEY',
   'SUPABASE_DB_URL',
 ];

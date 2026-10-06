@@ -1,6 +1,10 @@
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import { BeatPlanScreen, Screen } from '@fieldforce/ui';
+import type { SyncQueueItem } from '@fieldforce/core';
+import { visitsAsWitnessed } from '../src/capture/visit';
+import { loadQueueState, onQueueChanged } from '../src/sync/async-storage-store';
 import { usePulledStore } from '../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../src/sync/selectors';
 import { beatPlanView } from '../src/today/beat-plan-view';
@@ -108,12 +112,30 @@ export default function BeatPlanRoute(): ReactNode {
   const router = useRouter();
   const { store, status, today, zone } = usePulledStore();
 
+  // W2-C A2 / `BE-W154`. The queue, kept current, so the route counts what this phone witnessed:
+  // offline on the emulator it said "0 done" after four visits and kept a finished visit "Next".
+  const [items, setItems] = useState<readonly SyncQueueItem[]>([]);
+  useEffect(() => {
+    let live = true;
+    const read = (): void => {
+      void loadQueueState().then((load) => {
+        if (live) setItems(load.kind === 'loaded' ? load.state.items : []);
+      });
+    };
+    read();
+    const stop = onQueueChanged(read);
+    return () => {
+      live = false;
+      stop();
+    };
+  }, []);
+
   const view = beatPlanView({
     status,
     today,
     plans: [...store.beat_plan.values()],
     entries: [...store.beat_plan_entry.values()],
-    visits: visitsFromStore(store),
+    visits: visitsAsWitnessed(visitsFromStore(store), items),
     doctors: doctorsFromStore(store),
   });
 

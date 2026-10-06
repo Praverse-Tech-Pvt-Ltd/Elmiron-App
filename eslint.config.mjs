@@ -139,6 +139,16 @@ const noLocalCalendarReads = [
       "These format in the DEVICE's timezone and locale. An MR's handset is not the territory. Use dayIn / clockIn / dayMonthIn from src/today/territory-day, where the zone comes from the server.",
   },
   {
+    // W2-C A1 / `BE-W157`. Moved here from the `app/`-only block below, and widened from `(11, 16)`
+    // to any slice starting at 11. Every recurrence of the five-and-a-half-hour defect since MR-24
+    // was a HELPER in `src/` — `clockFrom` behind the sync line, `hourOf` behind "best time to catch
+    // them" (`slice(11, 13)`) — called by a screen the old ban covered and never reached.
+    selector:
+      'CallExpression[callee.property.name=/^(slice|substring|substr)$/][arguments.0.value=11]',
+    message:
+      'Characters 11 onward of an ISO string are its time, in whatever offset the string carries — UTC, for Supabase. This is the five-and-a-half-hour defect (MR-14, MR-24, W2-B). Use clockIn(iso, zone) from src/today/territory-day.',
+  },
+  {
     selector: "NewExpression[callee.name='Date'][arguments.length>1]",
     message:
       "`new Date(y, m, d)` constructs in the DEVICE's timezone, so the instant it produces depends on where the phone is. Use `Date.UTC(...)` when you need calendar arithmetic on values you already hold, or the helpers in src/today/server-window. `new Date(iso)` and `new Date(ms)` are single-argument and are not restricted.",
@@ -293,18 +303,8 @@ export default tseslint.config(
         {
           paths: [restrictedReactNativeImports],
           patterns: [
-            {
-              group: ['**/today/plan', '**/today/plan.js', '../../src/today/plan'],
-              importNames: ['clockFrom'],
-              message:
-                'clockFrom is a character slice of the ISO string and is only correct while the server sends the territory offset — Supabase sends Z. This is the MR-14 defect, reintroduced by MR-21 in a screen converted after it was documented. Use clockIn(iso, zone) from src/today/territory-day, with zone from usePulledStore().',
-            },
-            {
-              group: ['**/today/route-labels', '**/today/route-labels.js'],
-              importNames: ['clockFromOrNull'],
-              message:
-                'clockFromOrNull wraps clockFrom, which is a character slice. Use clockIn(iso, zone) from src/today/territory-day and handle null at the call site.',
-            },
+            // W2-C A1: `clockFrom` and `clockFromOrNull` are DELETED, so their import bans went with
+            // them; the raw slices they wrapped are banned across apps/field in `noOffsetNaiveSlices`.
             {
               group: ['**/doctors/profile', '**/doctors/profile.js'],
               importNames: ['dayMonthFrom'],
@@ -324,12 +324,6 @@ export default tseslint.config(
             'CallExpression[callee.property.name=/^(toLocaleTimeString|toLocaleDateString|toLocaleString)$/]',
           message:
             "toLocale*String formats in the DEVICE's timezone and locale. An MR's handset is not the territory. Use clockIn(iso, zone) or dayIn(iso, zone) from src/today/territory-day, where the zone comes from the server.",
-        },
-        {
-          selector:
-            "CallExpression[callee.property.name='slice'][arguments.0.value=11][arguments.1.value=16]",
-          message:
-            'Slicing characters 11-16 out of an ISO string reads the time in whatever offset the string carries — UTC, for Supabase. This is the MR-14 five-and-a-half-hour defect. Use clockIn(iso, zone) from src/today/territory-day.',
         },
         {
           selector:

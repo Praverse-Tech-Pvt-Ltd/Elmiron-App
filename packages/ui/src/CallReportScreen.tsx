@@ -80,7 +80,8 @@ export const CallReportScreen = ({
   <>
     <View style={styles.head}>
       <Title>Your report</Title>
-      <Label muted>{`${doctorName} · ${dateLabel}`}</Label>
+      {/* W2-C A3 / `BE-W156`: no dangling "·" when there is no date to put after it. */}
+      <Label muted>{dateLabel === '' ? doctorName : `${doctorName} · ${dateLabel}`}</Label>
     </View>
 
     {failure === null ? null : (

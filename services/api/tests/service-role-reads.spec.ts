@@ -15,7 +15,8 @@ import type { SourceFile } from '../scripts/check-service-role-reads.mjs';
  */
 
 const repo = loadRepository();
-const KEY = 'SUPABASE_SERVICE_ROLE_KEY';
+// W2-C D2: the one key read is now the NAMED secret keys; the legacy key is in rule 6.
+const KEY = 'SUPABASE_SECRET_KEYS';
 
 /** The real files, with one file's text changed. */
 const withFile = (path: string, change: (text: string) => string): SourceFile[] =>
@@ -124,7 +125,7 @@ describe('W2-A A — the service-role key is reachable from exactly one place', 
  * service-role key. Rules 1-5 guarded one of the three; each of these passed them before rule 6.
  */
 describe('W2-B E — credentials with the key’s reach are not named in function code at all', () => {
-  for (const name of ['SUPABASE_SECRET_KEYS', 'SUPABASE_SECRET_KEY', 'SUPABASE_DB_URL']) {
+  for (const name of ['SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_KEY', 'SUPABASE_DB_URL']) {
     it(`a read of ${name} fails, naming the file`, () => {
       const failures = failuresFor(
         withFile('_shared/stub-provider.ts', (t) => `${t}\nconst k = Deno.env.get('${name}');\n`),
@@ -138,8 +139,20 @@ describe('W2-B E — credentials with the key’s reach are not named in functio
   it('POSITIVE CONTROL: naming them in a COMMENT is not a read', () => {
     const functions = withFile(
       'ai-gateway/index.ts',
-      (t) => `${t}\n// never SUPABASE_SECRET_KEYS or SUPABASE_DB_URL here\n`,
+      (t) => `${t}\n// never SUPABASE_SERVICE_ROLE_KEY or SUPABASE_DB_URL here\n`,
     );
     expect(failuresFor(functions)).toEqual([]);
+  });
+
+  it('W2-C D2: the LEGACY key read back IN THE WRITER fails — the move cannot be quietly undone', () => {
+    const failures = failuresFor(
+      withFile(
+        '_shared/practice-writer.ts',
+        (t) => `${t}\nconst legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');\n`,
+      ),
+    );
+    expect(failures).toEqual([
+      expect.stringMatching(/practice-writer\.ts: names SUPABASE_SERVICE_ROLE_KEY\b/u),
+    ]);
   });
 });

@@ -173,6 +173,18 @@ export const dayMonthIn = (iso: string, zone: TerritoryZone): string => {
  * runtime does render `24`, `renders midnight as 00:00 and never as 24:00` fails and says
  * so.
  */
+/**
+ * W2-C A3 — "6 Oct" from a calendar DATE (`YYYY-MM-DD`) the server already reckoned in the
+ * territory, such as `visit.visitDay`. A date has no time and no offset, so there is nothing to
+ * convert; anything that is not exactly a date gives `null` rather than a guess.
+ */
+export const dayMonthOfDate = (date: string): string | null => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(date);
+  if (match === null) return null;
+  const month = MONTHS[Number(match[2]) - 1];
+  return month === undefined ? null : `${String(Number(match[3]))} ${month}`;
+};
+
 export const clockIn = (iso: string, zone: TerritoryZone): string => {
   const parts = partsIn(iso, zone.timeZone);
   return `${parts['hour'] ?? '00'}:${parts['minute'] ?? '00'}`;

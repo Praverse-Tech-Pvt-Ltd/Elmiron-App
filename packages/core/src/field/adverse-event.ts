@@ -64,6 +64,25 @@ export const AdverseEventReportSchema = z.object({
 });
 export type AdverseEventReport = z.infer<typeof AdverseEventReportSchema>;
 
+/**
+ * W2-C B / `BE-W159` — what the phone sends when a rep FLAGS a possible adverse event (`BE-C36`).
+ *
+ * **Four fields, and the absences are the design.** Who is the signed-in rep, stamped by the server;
+ * when is the phone's moment (`clientReportedAt`) beside the server's receipt, which starts the
+ * statutory clock; what is the rep's own words. There is NO patient field, NO severity, NO
+ * seriousness, NO outcome: the ruling is that the rep flags and performs no medical assessment, and
+ * patient-identifiable information stays out. A field that is not here cannot be required.
+ */
+export const CreateAdverseEventFlagRequestSchema = z.object({
+  /** Device-generated: the idempotency key, so a replay is the same report and the same clock. */
+  id: UuidSchema,
+  visitId: UuidSchema,
+  /** What the rep noticed, in their words. Required — the server refuses an empty flag. */
+  reportedText: z.string().trim().min(1).max(4000),
+  clientReportedAt: IsoDateTimeSchema,
+});
+export type CreateAdverseEventFlagRequest = z.infer<typeof CreateAdverseEventFlagRequestSchema>;
+
 /** Because the thing that gets missed is a deadline nobody was counting. */
 export const AdverseEventClockSchema = z.object({
   id: UuidSchema,

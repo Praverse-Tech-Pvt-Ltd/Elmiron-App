@@ -9,6 +9,7 @@ import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import type { QueueLoad } from '../../src/sync/async-storage-store';
 import { summariseDay } from '../../src/today/plan';
+import { visitsAsWitnessed } from '../../src/capture/visit';
 import { beatPlanView, onPlanDoctorIds } from '../../src/today/beat-plan-view';
 import { clockIn, dayMonthIn } from '../../src/today/territory-day';
 import type { TerritoryZone } from '../../src/today/territory-day';
@@ -115,6 +116,12 @@ const MrToday = (): ReactNode => {
   // MR-49 D1 / `FE-W60`. The day also includes today's PLAN stops that have no visit yet --
   // chosen by the same `beatPlanView` the Beat plan screen and the Doctors chip use, so there
   // is one definition of "today's plan". `null` (not settled, or no plan) is no stops.
+  // W2-C A2 / `BE-W154`. The visits as this phone WITNESSED them: offline, a visit the rep had
+  // finished was still "Next visit" here. The sync line on this screen says what is unsent.
+  const visits = visitsAsWitnessed(
+    visitsFromStore(store),
+    queue?.kind === 'loaded' ? queue.state.items : [],
+  );
   const planDoctorIds =
     onPlanDoctorIds(
       beatPlanView({
@@ -122,14 +129,12 @@ const MrToday = (): ReactNode => {
         today,
         plans: [...store.beat_plan.values()],
         entries: [...store.beat_plan_entry.values()],
-        visits: visitsFromStore(store),
+        visits,
         doctors: doctorsFromStore(store),
       }),
     ) ?? new Set<string>();
   const summary =
-    today === null
-      ? null
-      : summariseDay(visitsFromStore(store), doctorsFromStore(store), today, planDoctorIds);
+    today === null ? null : summariseDay(visits, doctorsFromStore(store), today, planDoctorIds);
   const startedAt = summary?.startedAt ?? null;
   const next = summary?.next ?? null;
 
@@ -224,7 +229,7 @@ const MrToday = (): ReactNode => {
               inProgress: next.inProgress,
             }
       }
-      sync={queue === null ? null : indicatorStateFor(queue)}
+      sync={queue === null ? null : indicatorStateFor(queue, zone)}
       onOpenQueue={() => {
         router.push('/queue');
       }}

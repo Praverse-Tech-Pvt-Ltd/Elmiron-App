@@ -17,6 +17,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 import { setQueueOwner } from '../sync/async-storage-store';
+import { UTC_FALLBACK, clockIn } from '../today/territory-day';
 import {
   WITNESSED_KEY,
   describeWitnessed,
@@ -41,7 +42,8 @@ const answer = (over: Partial<WitnessedConsent> = {}): WitnessedConsent => ({
   ...over,
 });
 
-const clock = (iso: string): string => iso.slice(11, 16);
+// W2-C A1: the territory formatter in UTC, rather than the character slice the lint now bans.
+const clock = (iso: string): string => clockIn(iso, UTC_FALLBACK);
 
 beforeEach(() => {
   disk.clear();

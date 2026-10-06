@@ -30,11 +30,34 @@ const PRACTICE_WRITES: ReadonlySet<string> = new Set([
   'record_sim_coach_analysis',
 ]);
 
+/**
+ * W2-C D2 / `BE-W162` — the key is a NAMED secret key, not the legacy service-role key.
+ *
+ * Supabase retires the legacy `service_role` key at the end of 2026 (`BE-C72`). The platform hands
+ * every function its new secret keys as one JSON object, `SUPABASE_SECRET_KEYS`, keyed by name. This
+ * writer uses the key named `practice_writer` when the project has one — create it in Settings → API
+ * Keys so this writer can be rotated without touching anything else — and the project's `default`
+ * key until then. The legacy variable is no longer read anywhere; the check now forbids it.
+ */
+const PRACTICE_WRITER_KEY_NAME = 'practice_writer';
+
+const secretKey = (): string | null => {
+  const raw = Deno.env.get('SUPABASE_SECRET_KEYS');
+  if (raw === undefined || raw.length === 0) return null;
+  try {
+    const keys = JSON.parse(raw) as Record<string, unknown>;
+    const chosen = keys[PRACTICE_WRITER_KEY_NAME] ?? keys['default'];
+    return typeof chosen === 'string' && chosen.length > 0 ? chosen : null;
+  } catch {
+    return null;
+  }
+};
+
 /** The gateway's practice writer, or null when the key is not configured. The key never leaves here. */
 export const practiceWriterFromEnv = (supabaseUrl: string): ControlPlaneRpc | null => {
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  if (serviceRoleKey === undefined || serviceRoleKey.length === 0) return null;
-  const client = createClient(supabaseUrl, serviceRoleKey, {
+  const key = secretKey();
+  if (key === null) return null;
+  const client = createClient(supabaseUrl, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   return {
