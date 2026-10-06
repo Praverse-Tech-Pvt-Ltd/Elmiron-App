@@ -3,11 +3,10 @@ import type { ReactNode } from 'react';
 import { Redirect, useRouter } from 'expo-router';
 import { BodyText, Heading, ListRow, Screen, TodayScreen } from '@fieldforce/ui';
 import { useSession } from '../../src/session';
-import { loadQueueState } from '../../src/sync/async-storage-store';
+import { loadQueueState, onQueueChanged } from '../../src/sync/async-storage-store';
 import { indicatorStateFor } from '../../src/sync/indicator';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
-import { emptyQueue } from '../../src/sync/reducer';
 import type { QueueLoad } from '../../src/sync/async-storage-store';
 import { summariseDay } from '../../src/today/plan';
 import { beatPlanView, onPlanDoctorIds } from '../../src/today/beat-plan-view';
@@ -66,7 +65,9 @@ const MrToday = (): ReactNode => {
   const router = useRouter();
   // `FE-W44`. The LOAD, not the state: an unreadable queue is not an empty one, and
   // "Everything sent" over a queue this app could not read is the worst thing it says.
-  const [queue, setQueue] = useState<QueueLoad>({ kind: 'loaded', state: emptyQueue });
+  // W2-B C / `BE-W151`. `null` until the first read lands. This started as an EMPTY queue, so every
+  // mount drew "Everything sent" before the queue had been read at all -- seen on the emulator.
+  const [queue, setQueue] = useState<QueueLoad | null>(null);
   // MR-14 B2/B3. The day comes from the store the pull maintains, not from
   // `createClientForScenario()`. This line is the read conversion.
   const {
@@ -85,12 +86,22 @@ const MrToday = (): ReactNode => {
     // an MR who checks in offline and comes straight back here must see the item
     // waiting — a home screen that says "everything sent" over an unsent check-in
     // is the single most damaging thing this app could tell them.
+    //
+    // W2-B C / `BE-W151`. **It was not.** The effect ran once per MOUNT and a tab stays mounted, so
+    // offline on the emulator this screen said "Everything sent" over six queued writes -- the
+    // sentence above, verbatim. Now it re-reads whenever the queue is written: work queued on another
+    // screen, a flush that lands while this one is in view, a change of who is signed in.
     let live = true;
-    void loadQueueState().then((next) => {
-      if (live) setQueue(next);
-    });
+    const read = (): void => {
+      void loadQueueState().then((next) => {
+        if (live) setQueue(next);
+      });
+    };
+    read();
+    const stop = onQueueChanged(read);
     return () => {
       live = false;
+      stop();
     };
   }, []);
 
@@ -213,7 +224,7 @@ const MrToday = (): ReactNode => {
               inProgress: next.inProgress,
             }
       }
-      sync={indicatorStateFor(queue)}
+      sync={queue === null ? null : indicatorStateFor(queue)}
       onOpenQueue={() => {
         router.push('/queue');
       }}

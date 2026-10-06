@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen, waitFor } from '@testing-library/react-native';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { BodyText } from '@fieldforce/ui';
 
@@ -17,6 +18,7 @@ import { BodyText } from '@fieldforce/ui';
  */
 
 const mockGetSession = jest.fn<() => Promise<unknown>>();
+const mockSignOut = jest.fn<() => Promise<{ error: Error | null }>>();
 const mockOnAuthStateChange = jest.fn<(fn: unknown) => unknown>(() => ({
   data: { subscription: { unsubscribe: jest.fn() } },
 }));
@@ -27,7 +29,7 @@ jest.mock('./supabase', () => ({
       getSession: () => mockGetSession(),
       onAuthStateChange: (fn: unknown) => mockOnAuthStateChange(fn),
       signInWithPassword: jest.fn(),
-      signOut: jest.fn(),
+      signOut: () => mockSignOut(),
     },
   },
 }));
@@ -84,5 +86,55 @@ describe('SessionProvider — a session that cannot be READ is not a hung app', 
     await waitFor(() => {
       expect(screen.getByText('status:signed-in')).toBeTruthy();
     });
+  });
+});
+
+/**
+ * W2-B C / `BE-W152` — a sign-out the server did not take must not look like one that it did.
+ *
+ * supabase-js reports a failed sign-out in `{ error }` rather than throwing. `signOut` awaited it and
+ * returned, so the Me screen's `.catch` -- the banner "You are still signed in" -- could not run.
+ * Offline on the emulator, Sign out did nothing and said nothing.
+ */
+describe('SessionProvider — signOut reports a failure it was GIVEN, not only one thrown', () => {
+  const SignOutProbe = (): ReactNode => {
+    const { signOut, status } = useSession();
+    const [result, setResult] = useState('pending');
+    useEffect(() => {
+      if (status === 'loading') return;
+      signOut().then(
+        () => {
+          setResult('resolved');
+        },
+        () => {
+          setResult('rejected');
+        },
+      );
+    }, [status]);
+    return <BodyText>{`signout:${result}`}</BodyText>;
+  };
+
+  const renderProbe = async (): Promise<void> => {
+    mockGetSession.mockReset();
+    mockGetSession.mockResolvedValue({ data: { session: null } });
+    await render(
+      <SessionProvider>
+        <SignOutProbe />
+      </SessionProvider>,
+    );
+  };
+
+  it('REJECTS when supabase answers with an error — so the caller can say so', async () => {
+    mockSignOut.mockReset();
+    mockSignOut.mockResolvedValue({ error: new Error('Network request failed') });
+    await renderProbe();
+    expect(await screen.findByText('signout:rejected')).toBeTruthy();
+  });
+
+  it('resolves when supabase answers without one', async () => {
+    mockSignOut.mockReset();
+    mockSignOut.mockResolvedValue({ error: null });
+    await renderProbe();
+    expect(await screen.findByText('signout:resolved')).toBeTruthy();
   });
 });

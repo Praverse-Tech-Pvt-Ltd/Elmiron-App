@@ -56,10 +56,35 @@ let owner: string | null = null;
 /** Called by `SessionProvider` whenever the signed-in user changes. */
 export const setQueueOwner = (userId: string | null): void => {
   owner = userId;
+  // A different owner is a different queue; a screen showing the last one is showing someone else's.
+  announce();
 };
 
 /** Whose queue is being read and written right now. */
 export const queueOwner = (): string | null => owner;
+
+/**
+ * W2-B C / `BE-W151` — tell the screens that show the queue that it changed.
+ *
+ * Today and Me read the queue ONCE, at mount, and a tab stays mounted: on the emulator offline,
+ * Today said "Everything sent" over six queued writes, and Me told a rep signing out "21 things have
+ * not been sent" after all 21 had been. Both screens' comments said the queue was read "on every
+ * visit". Every write to the queue goes through `save` below (`devicePersistence.write`, so
+ * `sendOrQueue` and `flushOutbox` both), so announcing it here reaches both kinds of change —
+ * work queued on another screen, and a flush that lands while the screen is in view.
+ */
+const listeners = new Set<() => void>();
+
+export const onQueueChanged = (listener: () => void): (() => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+
+const announce = (): void => {
+  for (const listener of listeners) listener();
+};
 
 /** Exported for the test that pins it: the shared key is not a key this module reads. */
 export const QUEUE_KEYS = { legacyShared: LEGACY_SHARED_KEY, forUser: keyFor } as const;
@@ -109,6 +134,7 @@ export const asyncStorageQueueStore: SyncQueueStore = {
     // half-applied transition.
     if (owner === null) throw new Error('No one is signed in, so there is no queue to write.');
     await AsyncStorage.setItem(keyFor(owner), JSON.stringify(state));
+    announce();
   },
 };
 
@@ -182,4 +208,5 @@ export const clearQueue = async (): Promise<void> => {
   } catch {
     // Nothing to do.
   }
+  announce();
 };

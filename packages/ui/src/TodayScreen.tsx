@@ -99,7 +99,11 @@ export interface TodayScreenProps {
    */
   readonly stillOnPlan?: number;
   readonly next: TodayNextVisit | null;
-  readonly sync: SyncQueueState;
+  /**
+   * `null` while the queue has not been read yet (W2-B C): nothing is drawn, because the only
+   * honest thing to say about an unread queue is nothing — the empty default said "Everything sent".
+   */
+  readonly sync: SyncQueueState | null;
   readonly onOpenQueue: () => void;
   /**
    * C10/A9 — "What this app records about me", reachable from home every day and
@@ -279,7 +283,7 @@ export const TodayScreen = ({
         </Card>
       )}
 
-      <SyncQueueIndicator onPress={onOpenQueue} state={sync} />
+      {sync === null ? null : <SyncQueueIndicator onPress={onOpenQueue} state={sync} />}
 
       <View style={styles.spacer} />
 

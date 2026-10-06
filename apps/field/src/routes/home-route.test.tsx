@@ -1,6 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { BodyText as mockBodyText } from '@fieldforce/ui';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const mockSession = jest.fn();
 jest.mock('../session', () => ({ useSession: () => mockSession() }));
@@ -29,6 +30,9 @@ jest.mock('expo-router', () => ({
 }));
 
 import Home from '../../app/(tabs)/home';
+import { asyncStorageQueueStore, setQueueOwner } from '../sync/async-storage-store';
+import { checkInQueueItem } from '../sync/outbox';
+import { emptyQueue } from '../sync/reducer';
 
 const signedInAs = (role: string) => ({ status: 'signed-in', role, signOut: jest.fn() });
 
@@ -285,5 +289,92 @@ describe('app/home.tsx — the visit the MR is standing inside is never hidden',
     expect(await screen.findByText('Nothing planned for today')).toBeTruthy();
     expect(screen.queryByText('Start the visit to Dr Asha Deshpande')).toBeNull();
     expect(screen.queryByText('Continue the visit to Dr Asha Deshpande')).toBeNull();
+  });
+});
+
+/**
+ * W2-B C / `BE-W151` — Today said "Everything sent" over six queued writes.
+ *
+ * Offline on the emulator: a whole visit queued on the visit screen, back to Today, and the sync
+ * line still said "Everything sent". The queue was read once per MOUNT, and a tab stays mounted —
+ * against this screen's own comment, which calls that sentence "the single most damaging thing
+ * this app could tell them".
+ */
+describe('app/home.tsx — W2-B C, the sync line follows the queue while Today stays mounted', () => {
+  const queuedCheckIn = () =>
+    checkInQueueItem({
+      id: '77777777-7777-4777-8777-777777777771',
+      visitId: '77777777-7777-4777-8777-777777777772',
+      coordinates: {
+        latitude: 18.5204,
+        longitude: 73.8567,
+        accuracyMetres: 10,
+        capturedAt: '2026-09-14T11:00:00+05:30',
+      },
+      source: 'manual',
+      occurredAt: '2026-09-14T11:00:00+05:30',
+    });
+
+  it('work queued ELSEWHERE turns "Everything sent" into "waiting" without leaving Today', async () => {
+    setQueueOwner('22222222-2222-4222-8222-222222222299');
+    await asyncStorageQueueStore.save(emptyQueue);
+    mockSession.mockReturnValue(signedInAs('mr'));
+    mockStore.mockReturnValue(emptyPulled());
+    await render(<Home />);
+    expect(await screen.findByText('Everything sent')).toBeTruthy();
+
+    // The visit screen's write, as `sendOrQueue` makes it: through the store's `save`.
+    await asyncStorageQueueStore.save({ ...emptyQueue, items: [queuedCheckIn()] });
+
+    expect(await screen.findByText(/waiting/u)).toBeTruthy();
+    expect(screen.queryByText('Everything sent')).toBeNull();
+  });
+
+  it('before the queue has been READ, Today claims nothing — not "Everything sent"', async () => {
+    // The first render used an EMPTY queue as its starting state, so every mount drew "Everything
+    // sent" until the read landed. Hold the read open and look.
+    setQueueOwner('22222222-2222-4222-8222-222222222299');
+    // Swapped and put back by hand: `getItem` is already a jest mock in this environment, and
+    // `spyOn(...).mockRestore()` on a mock wipes its implementation for every later test.
+    const storage = AsyncStorage as unknown as { getItem: (key: string) => Promise<string | null> };
+    const original = storage.getItem;
+    storage.getItem = () => new Promise<string | null>(() => undefined);
+    try {
+      mockSession.mockReturnValue(signedInAs('mr'));
+      mockStore.mockReturnValue(emptyPulled());
+      await render(<Home />);
+      expect(await screen.findByText('Nothing planned for today')).toBeTruthy();
+      expect(screen.queryByText('Everything sent')).toBeNull();
+    } finally {
+      storage.getItem = original;
+    }
+  });
+
+  it('a change of WHO is signed in shows the new owner’s queue, not the last one’s', async () => {
+    setQueueOwner('22222222-2222-4222-8222-222222222297');
+    await asyncStorageQueueStore.save(emptyQueue);
+    setQueueOwner('22222222-2222-4222-8222-222222222299');
+    await asyncStorageQueueStore.save({ ...emptyQueue, items: [queuedCheckIn()] });
+    mockSession.mockReturnValue(signedInAs('mr'));
+    mockStore.mockReturnValue(emptyPulled());
+    await render(<Home />);
+    expect(await screen.findByText(/waiting/u)).toBeTruthy();
+
+    setQueueOwner('22222222-2222-4222-8222-222222222297');
+
+    expect(await screen.findByText('Everything sent')).toBeTruthy();
+  });
+
+  it('and back: a flush that empties the queue while Today is open says so', async () => {
+    setQueueOwner('22222222-2222-4222-8222-222222222299');
+    await asyncStorageQueueStore.save({ ...emptyQueue, items: [queuedCheckIn()] });
+    mockSession.mockReturnValue(signedInAs('mr'));
+    mockStore.mockReturnValue(emptyPulled());
+    await render(<Home />);
+    expect(await screen.findByText(/waiting/u)).toBeTruthy();
+
+    await asyncStorageQueueStore.save(emptyQueue);
+
+    expect(await screen.findByText('Everything sent')).toBeTruthy();
   });
 });
