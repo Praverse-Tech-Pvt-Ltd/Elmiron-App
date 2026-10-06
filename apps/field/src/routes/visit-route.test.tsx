@@ -80,6 +80,7 @@ import { SyncPushRefusal } from '../sync/push-client';
 import type { OutboxWriteClient } from '../sync/push-client';
 import { flushOutbox } from '../sync/outbox';
 import { CHECK_IN_APPROXIMATE, CHECK_IN_OUTSIDE } from '../capture/visit';
+import { recordWitnessedConsent } from '../consent/witnessed';
 import VisitRoute from '../../app/visit/[id]';
 
 const visit = VisitSchema.parse({
@@ -399,5 +400,70 @@ describe('app/visit/[id].tsx — BE-C5, a check-in the clinic could not confirm 
     await screen.findByText('Leaving — check out');
     expect(screen.queryByText(CHECK_IN_OUTSIDE)).toBeNull();
     expect(screen.queryByText(CHECK_IN_APPROXIMATE)).toBeNull();
+  });
+});
+
+/**
+ * W2-B B1 — after the doctor answers, the visit screen says so and stops offering to ask.
+ *
+ * Seen on the emulator on 5 October: consent recorded "Yes", and the visit screen showed nothing and
+ * offered "Ask about recording" again. A REGRESSION of MR-49 (`FE-W55`): `7403c25` gated the
+ * witnessed sentence on recording being switched on, and the card was hard-coded `unasked`.
+ */
+describe('app/visit/[id].tsx — W2-B B1, the doctor’s answer on this phone', () => {
+  const during = (): void => {
+    loaded();
+    const held = mockStore() as Record<string, unknown>;
+    const inProgress = { ...visit, status: 'in_progress', startedAt: '2026-09-11T12:00:00+05:30' };
+    mockStore.mockReturnValue({
+      ...held,
+      store: { ...(held['store'] as object), visit: new Map([[visit.id, inProgress]]) },
+    });
+  };
+
+  it('an answer witnessed here is SHOWN, and "Ask about recording" is not offered again', async () => {
+    await AsyncStorage.clear();
+    during();
+    await recordWitnessedConsent({
+      visitId: visit.id,
+      outcome: 'consented',
+      capturedAt: '2026-09-11T06:40:00.000Z',
+      syncItemId: '55555555-5555-4555-8555-5555555555ee',
+    });
+    await render(<VisitRoute />);
+    expect(await screen.findByText('The doctor agreed to a recording.')).toBeTruthy();
+    expect(screen.getByText(/^On this phone at /u)).toBeTruthy();
+    expect(screen.queryByText('Ask about recording')).toBeNull();
+  });
+
+  it('W2-B B3: a FINISHED visit says when it ended, and a running one does not invent an end', async () => {
+    await AsyncStorage.clear();
+    loaded();
+    const held = mockStore() as Record<string, unknown>;
+    const done = {
+      ...visit,
+      status: 'completed',
+      startedAt: '2026-09-11T11:40:00+05:30',
+      completedAt: '2026-09-11T11:44:00+05:30',
+    };
+    mockStore.mockReturnValue({
+      ...held,
+      store: { ...(held['store'] as object), visit: new Map([[visit.id, done]]) },
+    });
+    await render(<VisitRoute />);
+    expect(await screen.findByText('Checked in 11:40 · checked out 11:44')).toBeTruthy();
+
+    during();
+    await render(<VisitRoute />);
+    expect(await screen.findByText('Checked in 12:00')).toBeTruthy();
+  });
+
+  it('with NO answer on this phone, the rep is offered the question — and no answer is claimed', async () => {
+    await AsyncStorage.clear();
+    during();
+    await render(<VisitRoute />);
+    expect(await screen.findByText('Ask about recording')).toBeTruthy();
+    expect(screen.queryByText('The doctor agreed to a recording.')).toBeNull();
+    expect(screen.queryByText('Noted — no recording.')).toBeNull();
   });
 });

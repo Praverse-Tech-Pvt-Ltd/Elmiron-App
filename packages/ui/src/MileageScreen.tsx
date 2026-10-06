@@ -103,7 +103,8 @@ export const MileageScreen = ({
       <View style={styles.rows}>
         {days.map((day) => (
           <ListItem
-            detail={`${day.distanceLabel} · ${String(day.checkInCount)} check-ins`}
+            // W2-B B3. "1 check-ins" on the emulator, 5 October: the count was pluralised blind.
+            detail={`${day.distanceLabel} · ${String(day.checkInCount)} ${day.checkInCount === 1 ? 'check-in' : 'check-ins'}`}
             key={day.id}
             // Every row is a day that happened. There is no verdict on it here —
             // approval is the manager's, and this screen is the MR's record.

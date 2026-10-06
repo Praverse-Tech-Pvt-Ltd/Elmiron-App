@@ -147,7 +147,7 @@ describe('after the recording question is answered', () => {
       />,
     );
 
-    expect(screen.getByText('He agreed to a recording.')).toBeTruthy();
+    expect(screen.getByText('The doctor agreed to a recording.')).toBeTruthy();
     expect(screen.getByText(/nothing is being captured/iu)).toBeTruthy();
   });
 

@@ -58,6 +58,36 @@ export const witnessedConsentFor = async (visitId: string): Promise<WitnessedCon
   return [...mine].sort((a, b) => a.capturedAt.localeCompare(b.capturedAt)).at(-1) ?? null;
 };
 
+/**
+ * W2-B B1 — the doctor's answer as the visit screen's CONSENT CARD shows it, or null to keep asking.
+ *
+ * **Why this exists: a regression.** MR-49 (`b50fb55`) put `describeWitnessed` on every visit
+ * through the recording block, which was always `never_asked` then. MR-53 (`7403c25`) re-gated it
+ * on the server answering `blocked`; with recording OFF (`C3`) the answer is `off`, so the sentence
+ * was never drawn again, and the consent card had been hard-coded `unasked` throughout — the rep
+ * recorded "Yes" and the screen offered "Ask about recording" as if nothing had happened.
+ *
+ * - `consented` / `declined`, sent or still queued: the card, with when and whether it has gone.
+ * - `failed` / `conflict` in the queue: null — the server did not accept the answer, so the
+ *   question is open again and the queue screen carries the refusal.
+ * - `not_asked`, or nothing witnessed: null, and the rep may ask.
+ */
+export const witnessedCard = (
+  witnessed: WitnessedConsent | null,
+  queue: readonly Pick<SyncQueueItem, 'id' | 'status'>[],
+  clock: (iso: string) => string,
+): { readonly outcome: 'consented' | 'declined'; readonly answeredLabel: string } | null => {
+  if (witnessed === null || witnessed.outcome === 'not_asked') return null;
+  const item = queue.find((candidate) => candidate.id === witnessed.syncItemId);
+  if (item?.status === 'failed' || item?.status === 'conflict') return null;
+  const at = `On this phone at ${clock(witnessed.capturedAt)}`;
+  return {
+    outcome: witnessed.outcome,
+    answeredLabel:
+      item?.status === 'queued' || item?.status === 'in_flight' ? `${at} · waiting to send` : at,
+  };
+};
+
 /** Exported for the test that pins the per-user key. */
 export const WITNESSED_KEY = keyFor;
 
