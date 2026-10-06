@@ -1,5 +1,6 @@
 import {
   ApiRequestError,
+  CreateAdverseEventFlagRequestSchema,
   CreateCallReportRequestSchema,
   CreateConsentRecordRequestSchema,
   CreateSampleAndInputRequestSchema,
@@ -8,6 +9,7 @@ import {
 } from '@fieldforce/core';
 import type {
   ApiErrorCode,
+  CreateAdverseEventFlagRequest,
   SyncWarning,
   CreateCallReportRequest,
   SyncRejectionCode,
@@ -310,6 +312,27 @@ export const callReportQueueItem = (
     operation,
     entityId: body.visitId,
     payload: { ...body, __queueEntity: 'call_report' },
+    status: 'queued',
+    attemptCount: 1,
+    lastError: null,
+    clientCreatedAt: nowIso(),
+    syncedAt: null,
+  });
+
+/**
+ * W2-C B / `BE-W159` — a possible adverse event the rep FLAGGED, as a queue row (`BE-C36`).
+ *
+ * Queued like every other write, because the place a rep hears about a side effect is a clinic,
+ * and a flag typed with no signal and then lost is the worst write this app could lose. The id is
+ * the server's idempotency key: a replay is the same report and the same statutory clock.
+ */
+export const adverseEventQueueItem = (body: CreateAdverseEventFlagRequest): SyncQueueItem =>
+  SyncQueueItemSchema.parse({
+    id: body.id,
+    entity: 'adverse_event',
+    operation: 'create',
+    entityId: body.visitId,
+    payload: { ...body, __queueEntity: 'adverse_event' },
     status: 'queued',
     attemptCount: 1,
     lastError: null,
@@ -696,6 +719,12 @@ const sendFor = (client: OutboxWriteClient, item: SyncQueueItem): SendPlan => {
     case 'call_report':
       return plan(CreateCallReportRequestFrom(item), (body) => client.createCallReport(body));
 
+    // W2-C B / `BE-W159`. A flag replays as a flag.
+    case 'adverse_event':
+      return plan(CreateAdverseEventFlagRequestFrom(item), (body) =>
+        client.createAdverseEventFlag(body),
+      );
+
     // MR-51 D1 / `FE-W29`. A voice note replays as a voice note: upload, then finalise.
     case 'voice_note':
       return plan(voiceNoteUploadFrom(item.payload), (body) => client.uploadVoiceNote(body));
@@ -827,6 +856,14 @@ const CreateSampleAndInputRequestFrom = (
 const CreateCallReportRequestFrom = (item: SyncQueueItem): CreateCallReportRequest | null => {
   if (!payloadIs(item, 'call_report')) return null;
   const parsed = CreateCallReportRequestSchema.safeParse(item.payload);
+  return parsed.success ? parsed.data : null;
+};
+
+const CreateAdverseEventFlagRequestFrom = (
+  item: SyncQueueItem,
+): CreateAdverseEventFlagRequest | null => {
+  if (!payloadIs(item, 'adverse_event')) return null;
+  const parsed = CreateAdverseEventFlagRequestSchema.safeParse(item.payload);
   return parsed.success ? parsed.data : null;
 };
 

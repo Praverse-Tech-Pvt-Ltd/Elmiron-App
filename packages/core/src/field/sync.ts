@@ -18,6 +18,9 @@ export const SyncEntitySchema = z.enum([
   'voice_note',
   'recording',
   'sample_and_input',
+  // W2-C B / `BE-W159`. A possible adverse event the rep FLAGS (`BE-C36`), queued like every
+  // other write so a flag typed with no signal is not lost.
+  'adverse_event',
 ]);
 export type SyncEntity = z.infer<typeof SyncEntitySchema>;
 

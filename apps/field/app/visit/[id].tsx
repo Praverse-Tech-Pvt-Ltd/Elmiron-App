@@ -617,6 +617,9 @@ export default function VisitRoute(): ReactNode {
         onRecordVoiceNote={() => {
           router.push(`/voice-note/${visit?.id ?? id}`);
         }}
+        onFlagAdverseEvent={() => {
+          router.push(`/adverse-event/${visit?.id ?? id}`);
+        }}
         {...(availability.kind === 'allowed' && block === null && !recorderState.isRecording
           ? { onStartRecording: startRecording }
           : {})}

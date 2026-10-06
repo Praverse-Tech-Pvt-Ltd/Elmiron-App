@@ -49,6 +49,26 @@ describe('the action moves with the visit', () => {
     expect(screen.queryByText(line)).toBeNull();
   });
 
+  it('W2-C B / BE-C36: offers "Flag a possible side effect" in and after the visit, not before', async () => {
+    const onFlag = (): void => undefined;
+    await render(<VisitScreen {...props({ stage: 'before', onFlagAdverseEvent: onFlag })} />);
+    expect(screen.queryByText('Flag a possible side effect')).toBeNull();
+    await render(
+      <VisitScreen
+        {...props({
+          stage: 'during',
+          actionLabel: 'Leaving — check out',
+          onFlagAdverseEvent: onFlag,
+        })}
+      />,
+    );
+    expect(screen.getByText('Flag a possible side effect')).toBeTruthy();
+    await render(
+      <VisitScreen {...props({ stage: 'after', actionLabel: null, onFlagAdverseEvent: onFlag })} />,
+    );
+    expect(screen.getByText('Flag a possible side effect')).toBeTruthy();
+  });
+
   it('offers nothing once the visit is finished', async () => {
     await render(<VisitScreen {...props({ stage: 'after', actionLabel: null })} />);
     expect(screen.getByText('Visit finished')).toBeTruthy();

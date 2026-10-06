@@ -120,6 +120,11 @@ export interface VisitScreenProps {
   /** D7. Offered on every visit, consent or not — a voice note has no third party. */
   readonly onRecordVoiceNote?: () => void;
   /**
+   * W2-C B / `BE-C36` — flag a possible side effect. Offered once the rep is in the visit, where
+   * they would hear of one, and after it, in case it comes up at the door.
+   */
+  readonly onFlagAdverseEvent?: () => void;
+  /**
    * Phase 3 — where the visit stands on the recording question.
    *
    * `unasked` is not "no". It is the ordinary state of a visit nobody has raised it
@@ -201,6 +206,7 @@ export const VisitScreen = ({
   recordingBlockedReason = null,
   recordingNotice = null,
   onRecordVoiceNote,
+  onFlagAdverseEvent,
   recording,
   consent,
   loading = false,
@@ -339,6 +345,13 @@ export const VisitScreen = ({
         ) : null}
         {stage !== 'before' && onRecordVoiceNote !== undefined ? (
           <Button label="Record a voice note" onPress={onRecordVoiceNote} variant="secondary" />
+        ) : null}
+        {stage !== 'before' && onFlagAdverseEvent !== undefined ? (
+          <Button
+            label="Flag a possible side effect"
+            onPress={onFlagAdverseEvent}
+            variant="secondary"
+          />
         ) : null}
         {stage === 'during' && onRecordSamples !== undefined ? (
           <Button label="Record what you left" onPress={onRecordSamples} variant="secondary" />
