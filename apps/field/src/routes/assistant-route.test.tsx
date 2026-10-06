@@ -180,7 +180,17 @@ describe('FE-D15 — the states, through the route', () => {
   it('at the limit, it says so and Send stops working', async () => {
     mockTransport.mockResolvedValue({
       status: 429,
-      body: { code: '45012', resetsAt: '2026-10-01T18:30:00.000Z' },
+      // The gateway's real 429 (`BE-W161`): the reset instant is inside `allowance`.
+      body: {
+        code: '45012',
+        message: 'ai daily limit reached',
+        allowance: {
+          warning: true,
+          requestsUsedToday: 104,
+          dailyLimit: 104,
+          resetsAt: '2026-10-01T18:30:00.000Z',
+        },
+      },
     });
     await render(<Assistant />);
 

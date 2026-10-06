@@ -14,6 +14,9 @@
  *
  * `allowance` on a result, and `resetsAt` on a 429, are NOT on the branch. They are the shape
  * FE-CR-6 proposes, read here only if present, so the app needs no change if backend accepts them.
+ *
+ * Update, W2-D D1 (`BE-W161`): both are sent (W1-P C, W1-Q E2) — and on a 429 the reset instant is
+ * INSIDE `allowance`, not beside it.
  */
 
 export const MR_CHAT_FEATURE = 'mr_chat';

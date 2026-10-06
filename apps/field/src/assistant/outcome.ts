@@ -53,7 +53,13 @@ export const outcomeFromGateway = ({ status, body }: GatewayResponse): Assistant
   const code = record === null ? null : record['code'];
 
   if (status === 429 && code === '45012') {
-    return { kind: 'at_limit', resetsAt: isoOrNull(record?.['resetsAt']) };
+    // `BE-W161`: the gateway sends the reset instant inside `allowance` (`limitReached`), not at
+    // the top level.
+    const allowance = record?.['allowance'];
+    return {
+      kind: 'at_limit',
+      resetsAt: isRecord(allowance) ? isoOrNull(allowance['resetsAt']) : null,
+    };
   }
   if ((status === 503 && code === 'no_provider') || (status === 403 && code === '45011')) {
     return { kind: 'not_available' };
