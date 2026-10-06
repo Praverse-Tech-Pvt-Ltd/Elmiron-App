@@ -4,10 +4,24 @@ import {
   clockIn,
   dayIn,
   dayMonthIn,
+  dayMonthOfDate,
   territoryToday,
   zoneCaveat,
 } from './territory-day';
 import type { TerritoryZone } from './territory-day';
+
+describe('W2-C A3 — dayMonthOfDate, a calendar date with no clock in it', () => {
+  it('formats a server day as written', () => {
+    expect(dayMonthOfDate('2026-10-06')).toBe('6 Oct');
+    expect(dayMonthOfDate('2026-01-31')).toBe('31 Jan');
+  });
+
+  it('refuses anything that is not exactly a date — a timestamp included', () => {
+    expect(dayMonthOfDate('2026-10-06T18:45:00Z')).toBeNull();
+    expect(dayMonthOfDate('2026-13-01')).toBeNull();
+    expect(dayMonthOfDate('')).toBeNull();
+  });
+});
 
 /**
  * MR-15 A2 — the day boundary, at the edges that actually matter.
@@ -33,6 +47,8 @@ describe('the clock reads in the territory, not in the string', () => {
     // slicing looked correct for the whole of the frontend's life. Both readings agree
     // here, so this is a fix to a wrong frame rather than a change of convention.
     expect(clockIn('2026-08-10T10:04:00+05:30', IST)).toBe('10:04');
+    // The banned shape, on purpose: this line exists to show what the slice did when it was right.
+    // eslint-disable-next-line no-restricted-syntax -- the demonstration, not a use
     expect('2026-08-10T10:04:00+05:30'.slice(11, 16)).toBe('10:04');
   });
 

@@ -42,9 +42,18 @@ import {
 } from '../../src/sync/outbox';
 import type { SendOutcome } from '../../src/sync/outbox';
 import { queueOwner } from '../../src/sync/async-storage-store';
-import { describeWitnessed, witnessedCard, witnessedConsentFor } from '../../src/consent/witnessed';
+import {
+  describeWitnessed,
+  onWitnessedChanged,
+  witnessedCard,
+  witnessedConsentFor,
+} from '../../src/consent/witnessed';
 import type { WitnessedConsent } from '../../src/consent/witnessed';
-import { QUEUE_UNREADABLE, loadQueueState } from '../../src/sync/async-storage-store';
+import {
+  QUEUE_UNREADABLE,
+  loadQueueState,
+  onQueueChanged,
+} from '../../src/sync/async-storage-store';
 import type { QueueLoad } from '../../src/sync/async-storage-store';
 import { emptyQueue } from '../../src/sync/reducer';
 import { unavailableReason } from '../../src/capture/preconditions';
@@ -64,6 +73,14 @@ import { hasAnsweredMicrophoneRationale } from '../../src/onboarding/progress';
  * transparency screen makes.
  */
 /** MR-50 E2 / `FE-W64`. Said when a settled pull does not hold the visit asked for. */
+/**
+ * W2-C A2. What the rep is told when a check-in or check-out is QUEUED. It is shown only while
+ * something for this visit is still waiting: on the emulator it stayed up after the flush had
+ * delivered the item, so the screen said "cannot be sent yet" about work the server already held.
+ */
+const SAVED_ON_PHONE =
+  'Saved on this phone. It will send by itself when you have signal — nothing is lost.';
+
 const VISIT_NOT_ON_PHONE = {
   title: 'This visit is not on this phone',
   detail:
@@ -217,19 +234,32 @@ export default function VisitRoute(): ReactNode {
    * answer on this phone.
    */
   const [witnessed, setWitnessed] = useState<WitnessedConsent | null>(null);
+  // W2-C A2 / `BE-W153`. **Kept current while mounted, not read once.** The consent screen returns
+  // with `router.replace`, so the visit screen that opened it stays mounted underneath -- and Back
+  // showed that copy as it was: "Ask about recording" and check-out offered again on a visit the rep
+  // had finished (emulator, 2 of 2 visits). Every copy now re-reads the witnessed answer and the
+  // queue whenever either changes, so whichever one Back reveals says what is true.
   useEffect(() => {
     let live = true;
-    void witnessedConsentFor(id).then((found) => {
-      if (live) setWitnessed(found);
-    });
+    const read = (): void => {
+      void witnessedConsentFor(id).then((found) => {
+        if (live) setWitnessed(found);
+      });
+    };
+    read();
+    const stop = onWitnessedChanged(read);
     return () => {
       live = false;
+      stop();
     };
   }, [id]);
   const refreshQueue = useCallback(() => {
     void loadQueueState().then(setQueueLoad);
   }, []);
-  useEffect(refreshQueue, [refreshQueue]);
+  useEffect(() => {
+    refreshQueue();
+    return onQueueChanged(refreshQueue);
+  }, [refreshQueue]);
 
   // **MR-26 B2. The stage the client WITNESSED, not only the one the server confirmed.**
   //
@@ -476,9 +506,7 @@ export default function VisitRoute(): ReactNode {
         // here and only here: a queued write is the half of `witnessedStage` the outbox
         // owns, and re-pulling would ask an unreachable server a question it cannot answer.
         refreshQueue();
-        setBlocked(
-          'Saved on this phone. It will send by itself when you have signal — nothing is lost.',
-        );
+        setBlocked(SAVED_ON_PHONE);
         return;
       } catch (error: unknown) {
         if (error instanceof ApiRequestError && error.code === 'permission_denied') {
@@ -504,7 +532,17 @@ export default function VisitRoute(): ReactNode {
     <Screen scrollable>
       <VisitScreen
         actionLabel={actionLabelFor(stage)}
-        blocked={blocked}
+        blocked={
+          // W2-C A2. The queued-work sentence lasts only while the work is still waiting.
+          blocked === SAVED_ON_PHONE &&
+          !queue.items.some(
+            (item) =>
+              item.entityId === visit?.id &&
+              (item.status === 'queued' || item.status === 'in_flight'),
+          )
+            ? null
+            : blocked
+        }
         blockedWrite={blockedWrite}
         busy={busy}
         clinic={clinic === undefined ? null : `${clinic.label}, ${clinic.city}`}

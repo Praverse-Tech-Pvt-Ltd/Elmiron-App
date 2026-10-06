@@ -1,3 +1,6 @@
+import { clockIn, dayIn } from '../today/territory-day';
+import type { TerritoryZone } from '../today/territory-day';
+
 /**
  * B9's "Best time to catch him" and B3's "Best window".
  *
@@ -45,19 +48,24 @@ export interface Availability {
 /**
  * The weekday of a contract timestamp, in the territory's own calendar.
  *
- * The date portion is read as characters and rebuilt as a UTC date purely to ask
- * which weekday it is. Passing the whole ISO string to `Date` and calling
- * `getDay()` would answer in the handset's timezone, which moves an evening visit
- * onto the previous or next day and quietly corrupts the pattern.
+ * W2-C A1. **This read the characters of the timestamp itself**, on the belief that its offset was
+ * the territory's — the same belief as `clockFrom`, and false the same way: the doctor profile feeds
+ * Supabase `startedAt` values, which are UTC. A visit at 10:00 IST is `04:30Z`, so "Best time to
+ * catch them" said 04:00–05:00, and a visit before 05:30 IST counted on the previous weekday.
+ *
+ * Now the instant is read in the territory's zone first (`dayIn`), and only that DATE is rebuilt as
+ * a UTC date to ask its weekday — which is calendar arithmetic on a date, not a reading of a time.
  */
-const weekdayOf = (iso: string): number => {
-  const year = Number(iso.slice(0, 4));
-  const month = Number(iso.slice(5, 7));
-  const day = Number(iso.slice(8, 10));
+const weekdayOf = (iso: string, zone: TerritoryZone): number => {
+  const date = dayIn(iso, zone);
+  const year = Number(date.slice(0, 4));
+  const month = Number(date.slice(5, 7));
+  const day = Number(date.slice(8, 10));
   return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
 };
 
-const hourOf = (iso: string): number => Number(iso.slice(11, 13));
+/** The hour of a timestamp in the territory's zone — `clockIn` gives "HH:MM". */
+const hourOf = (iso: string, zone: TerritoryZone): number => Number(clockIn(iso, zone).slice(0, 2));
 
 const listDays = (days: readonly string[]): string =>
   days.length <= 1
@@ -70,13 +78,17 @@ const pad = (hour: number): string => `${String(hour).padStart(2, '0')}:00`;
  * @param startedAt the server-stamped start of each completed visit with this
  * doctor, most recent first. Only the last `sample` are considered.
  */
-export const availabilityFrom = (startedAt: readonly string[], sample = 5): Availability | null => {
+export const availabilityFrom = (
+  startedAt: readonly string[],
+  zone: TerritoryZone,
+  sample = 5,
+): Availability | null => {
   const recent = startedAt.slice(0, sample);
   if (recent.length < MINIMUM_VISITS) return null;
 
   const counts = new Map<number, number>();
   for (const iso of recent) {
-    const day = weekdayOf(iso);
+    const day = weekdayOf(iso, zone);
     counts.set(day, (counts.get(day) ?? 0) + 1);
   }
 
@@ -90,7 +102,7 @@ export const availabilityFrom = (startedAt: readonly string[], sample = 5): Avai
 
   if (repeated.length === 0) return null;
 
-  const hours = recent.map(hourOf).filter((hour) => Number.isFinite(hour));
+  const hours = recent.map((iso) => hourOf(iso, zone)).filter((hour) => Number.isFinite(hour));
   const earliest = Math.min(...hours);
   // The band ends at the top of the hour the latest visit began, so a visit that
   // started at 12:50 is inside 11:00–13:00 rather than excluded by 12:00.

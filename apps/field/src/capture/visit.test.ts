@@ -10,6 +10,7 @@ import {
   checkInRequest,
   checkInWarningsFor,
   stageOf,
+  visitsAsWitnessed,
   witnessedStage,
 } from './visit';
 
@@ -140,9 +141,14 @@ describe('MR-26 B2: witnessedStage — facts the client saw itself record', () =
       updatedAt: '2026-09-11T00:00:00.000Z',
     }) satisfies Visit;
 
-  const q = (entity: string, entityId: string): { entity: string; entityId: string } => ({
+  const q = (
+    entity: string,
+    entityId: string,
+    status = 'queued',
+  ): { entity: string; entityId: string; status: string } => ({
     entity,
     entityId,
+    status,
   });
   const V = '55555555-5555-4555-8555-555555555501';
 
@@ -203,6 +209,64 @@ describe('MR-26 B2: witnessedStage — facts the client saw itself record', () =
     for (const status of ['planned', 'in_progress', 'completed', 'not_met', 'cancelled'] as const) {
       expect(witnessedStage(visit(status), []).stage).toBe(stageOf(visit(status)));
     }
+  });
+
+  // W2-C A2 / `BE-W149`: what an item may claim depends on what the server SAID about it.
+  it('a check-out the server ACCEPTED is a finished visit — not "waiting to send"', () => {
+    // Seen on the emulator: fully accepted, and the screen said "Visit finished — waiting to send".
+    const result = witnessedStage(visit('planned'), [
+      q('check_in', V, 'synced'),
+      q('check_out', V, 'synced'),
+    ]);
+    expect(result).toEqual({ stage: 'after', pending: false });
+  });
+
+  it('a check-in the server ACCEPTED is a confirmed check-in, before the pull catches up', () => {
+    expect(witnessedStage(visit('planned'), [q('check_in', V, 'synced')])).toEqual({
+      stage: 'during',
+      pending: false,
+    });
+  });
+
+  it('a check-in the server REFUSED moves nothing — it did not happen there', () => {
+    for (const status of ['failed', 'conflict']) {
+      expect(witnessedStage(visit('planned'), [q('check_in', V, status)]), status).toEqual({
+        stage: 'before',
+        pending: false,
+      });
+    }
+  });
+
+  it('BE-W154: with nothing queued, the visits come back UNCHANGED — the same objects', () => {
+    const visits = [visit('planned'), visit('in_progress'), visit('completed')];
+    const out = visitsAsWitnessed(visits, []);
+    expect(out).toEqual(visits);
+    out.forEach((each, i) => {
+      expect(each).toBe(visits[i]);
+    });
+  });
+
+  it('BE-W154: a queued check-out makes the visit COMPLETED for the lists; a refused one does not', () => {
+    const [done] = visitsAsWitnessed([visit('planned')], [q('check_in', V), q('check_out', V)]);
+    expect(done?.status).toBe('completed');
+    const [refused] = visitsAsWitnessed([visit('planned')], [q('check_out', V, 'failed')]);
+    expect(refused?.status).toBe('planned');
+    // And no time is invented: a queued check-in has no server stamp.
+    expect(done?.startedAt).toBeNull();
+  });
+
+  it('BE-W154: a queued check-in makes it IN PROGRESS; another visit’s work moves nothing', () => {
+    const [mine] = visitsAsWitnessed([visit('planned')], [q('check_in', V)]);
+    expect(mine?.status).toBe('in_progress');
+    const [other] = visitsAsWitnessed([visit('planned')], [q('check_out', 'another-visit')]);
+    expect(other?.status).toBe('planned');
+  });
+
+  it('an item still IN FLIGHT is pending, exactly as a queued one is', () => {
+    expect(witnessedStage(visit('planned'), [q('check_in', V, 'in_flight')])).toEqual({
+      stage: 'during',
+      pending: true,
+    });
   });
 });
 

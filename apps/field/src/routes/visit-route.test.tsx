@@ -467,3 +467,67 @@ describe('app/visit/[id].tsx — W2-B B1, the doctor’s answer on this phone', 
     expect(screen.queryByText('Noted — no recording.')).toBeNull();
   });
 });
+
+/**
+ * W2-C A2 / `BE-W153` — the copy of the visit screen that Back reveals must say what is true.
+ *
+ * The consent screen returns with `router.replace`, so the visit screen that opened it stays mounted
+ * underneath; on the emulator, Back showed it offering "Ask about recording" and check-out again on a
+ * visit the rep had finished. These render ONE screen and change things around it without remounting.
+ */
+describe('app/visit/[id].tsx — W2-C A2, a mounted visit screen stays current', () => {
+  const press = async (): Promise<void> => {
+    await render(<VisitRoute />);
+    await screen.findByText(/Dr Asha Deshpande/u);
+    await fireEvent.press(screen.getByText('I am here — check in'));
+  };
+
+  it('an answer recorded ELSEWHERE appears here, and the question is no longer offered', async () => {
+    await AsyncStorage.clear();
+    loaded();
+    mockCreateCheckIn.mockRejectedValue(new Error('Network request failed'));
+    await press();
+    expect(await screen.findByText('Ask about recording')).toBeTruthy();
+
+    // What the consent screen does, while this screen sits underneath it.
+    await recordWitnessedConsent({
+      visitId: visit.id,
+      outcome: 'consented',
+      capturedAt: '2026-09-11T06:40:00.000Z',
+      syncItemId: '55555555-5555-4555-8555-5555555555ef',
+    });
+
+    expect(await screen.findByText('The doctor agreed to a recording.')).toBeTruthy();
+    expect(screen.queryByText('Ask about recording')).toBeNull();
+  });
+
+  it('the "cannot be sent yet" banner STAYS while the check-in is still waiting', async () => {
+    // The ordinary half: nothing has been delivered, so the sentence is still true.
+    await AsyncStorage.clear();
+    loaded();
+    mockCreateCheckIn.mockRejectedValue(new Error('Network request failed'));
+    await press();
+    expect(await screen.findByText(/Saved on this phone/u)).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.getByText(/Saved on this phone/u)).toBeTruthy();
+  });
+
+  it('…and GOES when a flush delivers it, without leaving the screen', async () => {
+    await AsyncStorage.clear();
+    loaded();
+    mockCreateCheckIn.mockRejectedValue(new Error('Network request failed'));
+    await press();
+    expect(await screen.findByText(/Saved on this phone/u)).toBeTruthy();
+
+    const client = { createCheckIn: jest.fn(async () => Promise.resolve({ warnings: [] })) };
+    const result = await flushOutbox(client as unknown as OutboxWriteClient);
+    expect(result.sent).toBe(1);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Saved on this phone/u)).toBeNull();
+    });
+    // BE-W149 on the same screen: accepted, so no longer "waiting to send".
+    expect(screen.queryByText('Checked in — waiting to send')).toBeNull();
+    expect(screen.getByText('You are checked in')).toBeTruthy();
+  });
+});

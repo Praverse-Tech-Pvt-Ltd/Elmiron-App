@@ -63,7 +63,11 @@ export interface WitnessedStage {
 
 export const witnessedStage = (
   visit: Visit | null,
-  queued: readonly { readonly entity: string; readonly entityId: string }[],
+  queued: readonly {
+    readonly entity: string;
+    readonly entityId: string;
+    readonly status: string;
+  }[],
 ): WitnessedStage => {
   const confirmed = stageOf(visit);
   if (visit === null) return { stage: confirmed, pending: false };
@@ -73,16 +77,48 @@ export const witnessedStage = (
   // queue would be the client overruling the server rather than anticipating it.
   if (confirmed === 'after') return { stage: 'after', pending: false };
 
+  // W2-C A2 / `BE-W149`. **The item's STATUS decides what it may claim.** This read every item
+  // as "waiting to send", so a visit the server had fully accepted said "Visit finished —
+  // waiting to send" until the next pull landed (seen on the emulator), and a check-in the server
+  // REFUSED still moved the stage and said it was waiting.
+  //   `queued` / `in_flight` — this phone recorded it and has not been answered: pending.
+  //   `synced`               — the server ACCEPTED it: the stage is confirmed, not pending.
+  //   `failed` / `conflict`  — the server did not take it: it moves nothing.
   const forThisVisit = queued.filter((item) => item.entityId === visit.id);
-  if (forThisVisit.some((item) => item.entity === 'check_out')) {
-    return { stage: 'after', pending: true };
-  }
+  const has = (entity: string, statuses: readonly string[]): boolean =>
+    forThisVisit.some((item) => item.entity === entity && statuses.includes(item.status));
+  const ACCEPTED = ['synced'];
+  const WAITING = ['queued', 'in_flight'];
+
+  if (has('check_out', ACCEPTED)) return { stage: 'after', pending: false };
+  if (has('check_out', WAITING)) return { stage: 'after', pending: true };
   if (confirmed === 'during') return { stage: 'during', pending: false };
-  if (forThisVisit.some((item) => item.entity === 'check_in')) {
-    return { stage: 'during', pending: true };
-  }
+  if (has('check_in', ACCEPTED)) return { stage: 'during', pending: false };
+  if (has('check_in', WAITING)) return { stage: 'during', pending: true };
   return { stage: confirmed, pending: false };
 };
+
+/**
+ * W2-C A2 / `BE-W154` — the day's visits, with what this phone WITNESSED laid over them.
+ *
+ * Today's "Next visit" and the route read `visit.status`, which only a pull moves. Offline on the
+ * emulator, a visit the rep had checked into and out of was still Today's "next visit", and the route
+ * said "0 done" after four. The visit screen already knew better through `witnessedStage`; this is
+ * the same rule for the screens that list visits, so the three cannot disagree.
+ *
+ * The status moves (`during` → `in_progress`, `after` → `completed`); the TIMES do not — a queued
+ * check-in has no server stamp, and inventing one from the device would be the clock defect again.
+ * "Not sent yet" is said where it is already said: the sync line beside these screens.
+ */
+export const visitsAsWitnessed = (
+  visits: readonly Visit[],
+  items: readonly { readonly entity: string; readonly entityId: string; readonly status: string }[],
+): Visit[] =>
+  visits.map((visit) => {
+    const { stage } = witnessedStage(visit, items);
+    if (stage === stageOf(visit)) return visit;
+    return { ...visit, status: stage === 'after' ? 'completed' : 'in_progress' };
+  });
 
 export const stageOf = (visit: Visit | null): VisitStage => {
   if (visit === null) return 'before';

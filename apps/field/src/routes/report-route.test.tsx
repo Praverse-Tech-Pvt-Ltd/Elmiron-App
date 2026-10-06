@@ -120,4 +120,19 @@ describe('FE-D4 2 — call report labels from the phone', () => {
 
     expect(screen.getByText(/This visit/u)).toBeTruthy();
   });
+
+  // W2-C A3 / `BE-W156`. Offline on the emulator the header read "Dr … · " with nothing after it:
+  // the check-out had not reached the server, so `completedAt` did not exist yet.
+  it('BE-W156: before the server has the check-out, the header dates it by the server’s DAY', async () => {
+    mockStore.mockReturnValue(pulled([{ ...visit, completedAt: null }]));
+    await render(<CallReport />);
+    expect(await screen.findByText('Dr Asha Deshpande · 21 Sep')).toBeTruthy();
+  });
+
+  it('BE-W156: with no day at all, it names the doctor and leaves NO dangling dot', async () => {
+    mockStore.mockReturnValue(pulled([{ ...visit, completedAt: null, visitDay: null }]));
+    await render(<CallReport />);
+    expect(await screen.findByText('Dr Asha Deshpande')).toBeTruthy();
+    expect(screen.queryByText(/·/u)).toBeNull();
+  });
 });

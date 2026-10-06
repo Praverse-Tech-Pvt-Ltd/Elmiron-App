@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { MINIMUM_VISITS, availabilityFrom, availabilitySentence } from './availability';
+import { MINIMUM_VISITS, availabilityFrom as from, availabilitySentence } from './availability';
+import { UTC_FALLBACK } from '../today/territory-day';
+
+const IST = { timeZone: 'Asia/Kolkata', source: 'territory' } as const;
+/** The suite's default: the territory is India, as every fixture below assumes. */
+const availabilityFrom = (startedAt: readonly string[], sample?: number) =>
+  from(startedAt, IST, sample);
 
 // 2026-08-04 is a Tuesday; 2026-08-06 a Thursday; 2026-08-07 a Friday.
 const TUE_1120 = '2026-08-04T11:20:00+05:30';
@@ -63,5 +69,42 @@ describe('the territory’s calendar, not the handset’s', () => {
       '2026-08-18T23:30:00+05:30',
     ];
     expect(availabilityFrom(lateTuesdays)?.days).toBe('Tuesdays');
+  });
+});
+
+/**
+ * W2-C A1 — the shape the SERVER sends. Every case above uses `+05:30`, the mock's shape, and the old
+ * character slices passed them all; the doctor profile feeds Supabase `startedAt`, which is `Z`.
+ */
+describe('W2-C A1 — Supabase Z timestamps read in the territory', () => {
+  it('the window is the IST hours, not the UTC ones', () => {
+    // 05:50Z = 11:20 IST; 06:15Z = 11:45; 07:20Z = 12:50 (Thu); 06:40Z = 12:10 (Thu); 04:00Z = 09:30.
+    const z = [
+      '2026-08-04T05:50:00Z',
+      '2026-08-11T06:15:00Z',
+      '2026-08-06T07:20:00Z',
+      '2026-08-13T06:40:00Z',
+      '2026-08-07T04:00:00Z',
+    ];
+    expect(availabilityFrom(z)).toEqual({
+      days: 'Tuesdays and Thursdays',
+      window: '09:00–13:00',
+      fromVisits: 5,
+    });
+  });
+
+  it('an early-morning IST visit counts on ITS weekday, not the UTC date before it', () => {
+    // 22:45Z on Tuesday is 04:15 on WEDNESDAY in India.
+    const earlyWednesdays = [
+      '2026-08-04T22:45:00Z',
+      '2026-08-11T22:45:00Z',
+      '2026-08-18T22:45:00Z',
+    ];
+    expect(availabilityFrom(earlyWednesdays)?.days).toBe('Wednesdays');
+  });
+
+  it('the zone decides it: the same stamps in a UTC territory are Tuesdays', () => {
+    const stamps = ['2026-08-04T22:45:00Z', '2026-08-11T22:45:00Z', '2026-08-18T22:45:00Z'];
+    expect(from(stamps, UTC_FALLBACK)?.days).toBe('Tuesdays');
   });
 });

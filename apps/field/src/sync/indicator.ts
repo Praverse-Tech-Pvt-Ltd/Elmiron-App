@@ -1,6 +1,7 @@
 import type { SyncQueueState as UiSyncQueueState } from '@fieldforce/ui';
 import type { QueueLoad } from './async-storage-store';
-import { clockFrom } from '../today/plan';
+import { clockIn } from '../today/territory-day';
+import type { TerritoryZone } from '../today/territory-day';
 import { summarise } from './reducer';
 
 /**
@@ -16,7 +17,7 @@ import { summarise } from './reducer';
  * red — an MR offline all morning has done nothing wrong." Waiting, whatever the
  * count and however long, is the ordinary condition of the job.
  */
-export const indicatorStateFor = (load: QueueLoad): UiSyncQueueState => {
+export const indicatorStateFor = (load: QueueLoad, zone: TerritoryZone): UiSyncQueueState => {
   // `FE-W44`. Taking the LOAD rather than the state is the fix: a caller cannot reach the
   // queue without first saying what it will do when there isn't one.
   if (load.kind === 'unreadable') return { kind: 'unreadable' };
@@ -50,9 +51,13 @@ export const indicatorStateFor = (load: QueueLoad): UiSyncQueueState => {
   // hand it a contract ISO timestamp — "Everything sent 2026-09-03T08:57:43.905Z"
   // sat on the MR's home screen, milliseconds, Z suffix and all. Worse than ugly:
   // the Z is UTC, so an MR in IST was being shown a time five and a half hours off
-  // the one they would have read off the clock. `clockFrom` slices the characters
-  // rather than parsing, which keeps the offset the server sent.
-  return { kind: 'idle', at: latest === undefined ? null : clockFrom(latest) };
+  // the one they would have read off the clock.
+  //
+  // W2-B D / `BE-W157`. **And then it kept doing exactly that.** The fix above was `clockFrom`, a
+  // character slice that keeps whatever offset the string carries -- and `syncedAt` is
+  // `sync_push`'s `serverTime`, a Supabase `Z` timestamp. Seen on the emulator: "Everything sent.
+  // 07:22" at 12:52 IST. The time is the TERRITORY's, read from the server's instant.
+  return { kind: 'idle', at: latest === undefined ? null : clockIn(latest, zone) };
 };
 
 /**

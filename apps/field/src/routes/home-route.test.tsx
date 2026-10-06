@@ -290,6 +290,36 @@ describe('app/home.tsx — the visit the MR is standing inside is never hidden',
     expect(screen.queryByText('Start the visit to Dr Asha Deshpande')).toBeNull();
     expect(screen.queryByText('Continue the visit to Dr Asha Deshpande')).toBeNull();
   });
+
+  it('W2-C A2 / BE-W154: a check-in queued on THIS phone makes it a visit in progress, offline', async () => {
+    // The same planned visit as above — the server has not heard of the check-in. Today read the
+    // server's status alone, so offline it went on offering a visit the rep had already started.
+    const id = '66666666-6666-4666-8666-666666666608';
+    setQueueOwner('22222222-2222-4222-8222-222222222202');
+    await asyncStorageQueueStore.save({
+      ...emptyQueue,
+      items: [
+        checkInQueueItem({
+          id: '77777777-7777-4777-8777-777777777799',
+          visitId: id,
+          coordinates: {
+            latitude: 18.5204,
+            longitude: 73.8567,
+            accuracyMetres: 10,
+            capturedAt: '2026-09-14T05:00:00.000Z',
+          },
+          source: 'manual',
+          occurredAt: '2026-09-14T05:00:00.000Z',
+        }),
+      ],
+    });
+    mockSession.mockReturnValue(signedInAs('mr'));
+    mockStore.mockReturnValue(withVisit(visitOf('planned', id)));
+    await render(<Home />);
+
+    expect(await screen.findByText('Continue the visit to Dr Asha Deshpande')).toBeTruthy();
+    await asyncStorageQueueStore.save(emptyQueue);
+  });
 });
 
 /**

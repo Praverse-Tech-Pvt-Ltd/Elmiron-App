@@ -79,6 +79,7 @@ export default function DoctorProfile(): ReactNode {
             (profile?.recentVisits ?? [])
               .map((entry) => entry.startedAt)
               .filter((at): at is string => at !== null),
+            zone,
           ),
         )}
         boundary={BOUNDARY}

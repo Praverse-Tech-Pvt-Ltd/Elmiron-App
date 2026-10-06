@@ -42,12 +42,29 @@ const readAll = async (userId: string): Promise<readonly WitnessedConsent[]> => 
   }
 };
 
+/**
+ * W2-C A2 / `BE-W153` — tell a visit screen that is still mounted that an answer was recorded.
+ *
+ * The consent screen returns with `router.replace`, which leaves the visit screen that opened it
+ * mounted underneath. That copy read the witnessed answer once, at mount, so pressing Back showed it
+ * with the question still open — "Ask about recording" again, on the emulator, after the doctor
+ * had answered. Same shape as the queue's `onQueueChanged`.
+ */
+const listeners = new Set<() => void>();
+export const onWitnessedChanged = (listener: () => void): (() => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+
 /** Called by the consent screen when an answer was SENT or QUEUED — never on a refusal. */
 export const recordWitnessedConsent = async (entry: WitnessedConsent): Promise<void> => {
   const userId = queueOwner();
   if (userId === null) return;
   const held = await readAll(userId);
   await AsyncStorage.setItem(keyFor(userId), JSON.stringify([...held, entry]));
+  for (const listener of listeners) listener();
 };
 
 /** The latest answer this phone witnessed for this visit, for the signed-in MR only. */
