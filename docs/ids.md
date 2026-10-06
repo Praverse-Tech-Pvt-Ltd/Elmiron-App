@@ -350,5 +350,6 @@ bootstrap rows are not restated here; the first file that cites each is the poin
 | `BE-W154` | backend | offline, Today's "Next visit" and the route view ignore queued work — the finished visit is still "next", the route says "0 done" — and a second visit to the same doctor today cannot be reached from the route (W2-B C; not fixed) |
 | `BE-W155` | backend | offline, the Doctors tab says "Could not load doctors" though the phone holds them — `FE-W62`'s defect on another screen (W2-B C; not fixed) |
 | `BE-W156` | backend | the call-report header renders "Dr … · " with nothing after the dot (W2-B C, offline; not fixed) |
+| `BE-W157` | backend | Today's sync line formats its time with `clockFrom`, the character slice that shows UTC on Supabase data: "Everything sent. 07:22" at 12:52 IST (W2-B D, emulator; not fixed) |
 | `BE-C71` | backend | `BE-W146` deferred with a trigger: fixed before production AI traffic or before anything reads `ai_requests` model, token or status fields — written into the key-day checklist (W2-A B) |
 | `BE-C72` | backend | `BE-C70`'s check reduces ACCIDENTAL use and changes nothing about capability; rule 6 added (function code may not name `SUPABASE_SECRET_KEYS`, `SUPABASE_SECRET_KEY` or `SUPABASE_DB_URL`); no narrower key exists on the hosted platform as documented; move the writer off the legacy key before end of 2026 (W2-B E) |

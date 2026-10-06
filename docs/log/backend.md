@@ -4124,3 +4124,274 @@ device.
 the function server and the database stopped. **No credential appears anywhere in the diff** (checked
 against the env file's values before every commit). **The local env file still exists**
 (`services/api/supabase/functions/.env`, git-ignored) — needed the moment access is granted.
+
+### W2-B — what the emulator found
+
+**5–6 October 2026.** Paused at the operator's 18:15 cut-off on the 5th (only the start-up and Part A's
+reading done, nothing committed), resumed on the 6th. Branch `w2-b-backend` from `main` at `418853e`
+(PR #20 confirmed MERGED on GitHub, 12:20 UTC on the 5th — checked, not assumed). `review-handoff/`
+deleted at the start.
+
+#### The previous push's CI
+
+`9aed7a8` (W2-A, PR #20 head): workflow **CI** green, run `37306479311`, SHA = that commit. Database runner
+**Test Files 82 passed (82)**, **Tests 1134 passed | 2 skipped | 4 todo (1140)**; unit runner core 207 |
+4 todo, ui-tokens 59, ui 4 + 328, mock 43, field 707 + 272, console 76; browser 7 passed, 0 skipped, 0
+failed. `main` after the merge (`418853e`): CI green, run `37308827068`. **Measured again: 0 rulesets on
+`main`, and the repository is still PUBLIC.**
+
+#### The priority override — did it fire? **No.** `NOT_AUTHORIZED`, both models, at the start of each day and between every part.
+
+#### A — the decision that was taken and never built (`BE-C5` → `BE-W147`)
+
+**A1.** `BE-C5` gives a MEANING and no sentence — the rep is told "in one plain line, that the clinic
+could not be confirmed — and told nothing about consequences". The brief's "use its wording" is half
+right: there was no wording. The two lines say exactly that and stop.
+
+**A2 — one line, the coarse fix first, from the ruling.** `BE-C2` says the approximate flag "is a fact
+recorded beside the verdict, not a second verdict", and that a fix wider than the geofence means the
+verdict "was decided by a coin". So: one line, two reasons, and the approximate reason WINS — saying
+"your phone placed you away from it" over a coin-toss verdict would be the overstatement. `unavailable`
+(clinic never located) is NOT warned: `BE-C5` rules on an off-site check-in, and that is not a fact
+about the rep. Recorded as a choice, open to the operator.
+
+**What building it found first:** the phone never received the verdict. `sync_push` has carried a
+per-item `warnings` array since `20260813000200`, stored it and replayed it on a duplicate — and the push
+client returned `{ receivedAt }` alone, the outbox wrote `warnings: []` on both paths, and **no screen
+read the warnings at all**: `stale_beat_plan` has been sent to the phone and dropped since August. The
+existing push-client test PINNED the drop (`toEqual({ receivedAt })`). Built: `20261006000100` (the
+check-in branch of `apply_sync_item` warns `check_in_outside_geofence` / `check_in_location_approximate`;
+the rest byte-for-byte the installed definition, with rollback), `knownSyncWarnings` in core (filters,
+never throws — an app older than the server stores and ignores), push client and outbox carry them,
+the visit screen shows the line for a SENT check-in and for a QUEUED one answered by a later flush.
+
+**A3 — two-sided.** Database (`check-in-caveat.spec.ts`, 8 tests through `sync_push`): ordinary
+check-in → no warning; no accuracy → none (null is "not assessed"); outside → accepted AND warned, never
+refused; coarse at the clinic → approximate only; both; an unlocated clinic → none; a replayed item gets
+the same warning back; and a CONTRACT test that every server spelling is one the app knows. Client: unit
+tests for the line and the lookup, push-client (accepted, duplicate, unknown dropped), the visit route
+(sent: outside / ordinary / coarse; queued-then-flushed: outside / ordinary), and `VisitScreen`.
+**Mutants — server 5/5 killed, after M5 (warn on anything not `inside`) SURVIVED and forced the
+unlocated-clinic test; client 11/11, after C3 (stop filtering unknown warnings) SURVIVED** — the field
+app resolves `@fieldforce/core` to its BUILT `dist/`, so field tests never saw core's source; a core test
+was added and kills it alone. The half a careless test skips — the ordinary check-in says NOTHING — is
+asserted at every layer.
+
+**A4 — the finding behind the finding.** 102 decisions read (`C1`–`C31`, `BE-C1`–`BE-C71`); 63
+require something to be built: **43 built, 9 partly, 3 not built but with a work item, and 8 NOT BUILT
+WITH NO WORK ITEM** — `BE-C5`, `BE-C14`/`BE-C47` (notifications), `BE-C15` (PDF upload), `BE-C16`
+(vector search), `BE-C28` (voice via Transcribe), `BE-C35` (six personas — the code has four stances,
+`simulation.ts:42`), `BE-C45` (live tracking), `BE-C46` (maps). By id alone, **48 of 71 `BE-C` ids are
+cited by neither code nor a work item.** Worst three: **`BE-C5`** (now built); **`BE-C36`** — an
+adverse-event table exists and the rep has NO screen to flag one ("adverse" appears nowhere in
+`apps/field/app`, checked), the company's reporting duty for side effects; **`BE-C1`** — the detection
+report for approvals that bypass four eyes is not built, so a direct UPDATE can approve product claims
+with no second reviewer and nothing notices. Also found: `BE-C45` (live tracking, decided) is blocked by
+a test that fails the build on any background-location request; `BE-C60`'s pointer to `BE-W129` is wrong.
+**The process finding:** a ruling becomes work only if someone mints a work item, and nothing checks that
+anyone did. Decisions and work items are two registers with no link a check can follow. *(The sweep was
+run by a sub-agent; the worst three were re-checked by hand.)*
+
+#### B — the other five, and whether one is a regression (`BE-W148`)
+
+**B1 — a REGRESSION, and not a merge's.** `b50fb55` (21 Sep, MR-49 C, `FE-W55`) drew the witnessed
+sentence on every visit through the recording block, which was always `never_asked` then. **`7403c25`
+(23 Sep, MR-53 A/B, a direct commit) re-gated it on the server answering `blocked`** — its message says
+"that case now still uses describeWitnessed", true only with recording ON; with recording off (`C3`) the
+answer is `off` and the sentence is never drawn. And the consent card has been hard-coded `unasked` on
+every branch: MR-49 fixed the sentence and never the button. Fixed: the card shows what THIS PHONE
+witnessed ("On this phone at 11:57 · waiting to send"), stops offering "Ask about recording", re-opens
+the question if the queue says the server refused the answer. **Also: the card said "He agreed to a
+recording" and "His answer" — the app does not know the doctor's gender;** now neutral.
+
+**B2 — what came back with it: nothing found.** The last ten merges (`f2487e8`..`418853e`): no
+hand-resolved hunk (`git show --cc`), no file deleted; every deleted line carrying an MR-/FE-W/BE-W
+marker reads as an intended replacement (checked by hand where the sweep had not: `593e5f0`'s "FE-W4"
+line went in FE-D12's rewrite of what the build records). The regression was a direct commit — which is
+exactly why a merge sweep could not have caught it.
+
+**B3 — fixed:** "1 check-ins" → "1 check-in"; a finished visit says "Checked in 14:02 · checked out
+14:11" (seen on the emulator); the demo script no longer checks a mock nothing calls (`EXPO_PUBLIC_API_BASE_URL`
+is still set — `app/_layout.tsx` refuses to start a release build without it, though no app file
+imports the mock any more: `BE-W150`). Parse-checked; NOT run, because its clean-tree refusal stops it
+on a dirty tree. **The ₹ "finding" was mine:** DM Sans maps U+20B9 in all four weights (read from the
+TTF's cmap) and the enlarged glyph is the rupee. A real device uses the same bundled font, so no device
+was needed.
+
+**B4 — could a test have caught each, and why none did.**
+
+| Defect | Could a test have? | Why none did |
+| --- | --- | --- |
+| Off-site check-in not told | Yes — `sync_push` → screen, warning present | Never built: a ruling with no work item. And the push-client test asserted `{ receivedAt }` EXACTLY, pinning the drop |
+| Consent invisible | Yes — render the visit with recording OFF and a witnessed answer | The tests ran the configuration the author changed (recording `blocked`), never the one every build ships (`off`) |
+| "1 check-ins" | Yes — a render of `MileageScreen` | It had no render test; the route test asserts the total, not the row's sentence |
+| No check-out time | Only if someone had said it should show | Never specified; `VisitScreen` has had a `durationLabel` prop no caller passes |
+| ₹ | — not a defect | A font-coverage test would have settled it in seconds, and prevented my false alarm |
+| Stale mock check | Barely — the scripts have no tests | A claim in prose ("only Day end needs it") that nothing checks |
+
+**The useful thing:** a suite this large tests each unit in the configuration its author chose; nothing
+runs the SHIPPED configuration as a person would (recording off, offline, a tab that stays mounted).
+Part C found five more of the same kind in an afternoon.
+
+#### C — the offline day (`FE-G2`), on the Pixel 6a emulator
+
+**C2 — PASSED, as written.** Signed in online, then the backend taken away (the API gateway stopped:
+`10.0.2.2:54321` refuses). Offline, 4 visits: check-in, consent, sample, check-out, report each, plus a
+voice note — **21 writes across all six kinds a rep can write in this build** (`recording` is off, `C3`).
+A cold start with all 21 on disk (force-stop, relaunch: "21 waiting · no signal"). ~44 minutes offline
+with a 180-second token (`jwt_expiry` set for the run, restored before any commit). Reconnected: **all 21
+`accepted`, ONE attempt each; every payload id found in its own kind's table and no other (no check-out
+filed as a check-in); one row per write; 4 visits moved; the voice note's object in `audio`, 41,816
+bytes, matching.** Check-ins kept their offline time (11:56–12:15) and their `inside` verdict.
+
+**C3 — driven deliberately.** *Another rep's sign-in:* rep A queued 2 voice notes offline, signed out
+("2 things have not been sent… Nobody else who signs in on this phone will see or send them"); rep B (a
+second tenant) signed in and synced with the backend up — **nothing of A's shown to B, nothing sent as B
+(0 items under B)**; A signed back in → both notes arrived, once, with their audio. *Expired token
+offline:* the 21 above, ~44 minutes past expiry. *Write queued before a cold start:* the 21 above.
+
+**What the run FOUND — the useful part.**
+* **`BE-W151` (fixed): Today said "Everything sent" over six queued writes**; Me told a rep signing out
+  "21 things have not been sent yet" after all 21 had gone. Both read the queue once per MOUNT and a tab
+  stays mounted — against Today's own comment, which calls that sentence "the single most damaging thing
+  this app could tell them". Today also drew "Everything sent" before its first read. Fixed: the store
+  announces every save, clear and owner change; Today and Me re-read; Today claims nothing until read.
+* **`BE-W152` (fixed): Sign out did nothing offline, and said nothing.** supabase-js RETURNS the failure,
+  so Me's "You are still signed in" banner (MR-28 C2's fix for exactly this, on shared handsets) could
+  never show. Now it does. **Open for the operator:** should an offline sign-out clear the phone anyway
+  (local sign-out) while the server session lives until it expires?
+* **`BE-W153`:** after consent, Back reveals the earlier visit screen with stale state — offering "Ask
+  about recording" and check-out again on a finished visit (2 of 2 visits). Not fixed.
+* **`BE-W154`:** offline, Today's "Next visit" and the route ignore queued work (the finished visit is
+  still next; "0 done"), and a second visit to the same doctor today cannot be reached. Not fixed.
+* **`BE-W155`:** offline, the Doctors tab says "Could not load doctors" while the phone holds them —
+  `FE-W62`'s defect on another screen. Not fixed.
+* **`BE-W156`:** the report header reads "Dr … · " with nothing after the dot. Not fixed.
+* **`BE-W157`:** "Everything sent. 07:22" at 12:52 IST — the sync line formats with `clockFrom`, the
+  character slice the codebase's own comments warn shows UTC on Supabase data: the 5½-hour defect, still
+  on the home screen. Not fixed.
+* **`BE-W149` seen live:** a visit fully accepted by the server read "Visit finished — waiting to send".
+* **By design, recorded:** the flusher runs on start, on returning to the app and on sign-in — not on
+  reconnection with the app open; a rep who regains signal mid-screen sends nothing until they leave and
+  come back.
+
+**C4 — what it proves and what it does not.** It proves the queue: durable across a cold start,
+per-rep, exactly once, the right kind, through an expired token, on an Android 15 image, with this
+build's JS. It does NOT prove: **a real radio** — offline was the backend refusing, not the radio off
+(with the radio off, this DEBUG build cold-starts from a stale bundle embedded in the APK — it showed a
+Coaching tab with sample data — so a radio-off test needs a release build); **a real handset** —
+OEM battery managers, real GPS, real storage pressure, real time; **a signed release build**; **a day's
+length** (~1 hour here, not 8). The handset gate stays open until somebody holds one.
+
+**Method notes, for the next person:** headless emulators ignore `geo fix` (that, not the app, was the
+5 October "California"); the app's Balanced request goes to the NETWORK provider, which offline has
+nothing — drive it with `cmd location providers set-test-provider-location`, pushed continually; a
+debug build's warning toast covers the bottom button.
+
+#### D — the geofence, exercised (on the device, against seeded clinics)
+
+| Case | How | Server | The phone said |
+| --- | --- | --- | --- |
+| Inside | Pune clinic, phone at the clinic, 10 m fix, sent | `inside`, 0 m, warnings `{}` | "You are checked in · Checked in 14:02" — **no line** |
+| Outside | seeded clinic 1° north (~111 km), queued offline, flushed | `outside`, **111,195 m**, `check_in_outside_geofence` | after the flush, reopening the visit: **"The clinic could not be confirmed: your phone placed you away from it."** — visit still started |
+| Coarse | Pune clinic, phone there with a 5,000 m fix, sent | `inside`, approximate, `check_in_location_approximate` | **"…your phone's position was too rough to tell."** |
+
+Both verdicts driven; the coarse case also shows `BE-C2` holding on a real flow — 5 km of uncertainty
+left the verdict `inside`. Part A is exercised, not assumed. Limits: the line for a queued check-in
+appears when the rep comes back to the visit, not while they are on it (the visit screen re-reads the
+queue on entry and after its own writes).
+
+#### E — the key's reach, stated so nobody misreads it (`BE-C72`)
+
+**E1/E2.** The key reaches the auth admin API and the `audio` bucket, and did before `BE-C69`: the
+platform supplies it to every function. **`BE-C70`'s check reduces ACCIDENTAL use and changes nothing
+about CAPABILITY** — now written into the check's header and `BE-C72`. **And it guarded one door of
+three:** Supabase's guide lists `SUPABASE_SECRET_KEYS` (which "bypass Row Level Security") and
+`SUPABASE_DB_URL` among every function's default secrets. Rule 6 now fails CI if function code names
+either; proved both ways (15 tests; each removal kills exactly its own test).
+
+**E3 — can it be narrowed? No, on the hosted platform, as documented.** Named secret keys exist for
+ROTATION — every secret key "bypass[es] Row Level Security and [has] full access"; the guide documents no
+way to stop the platform injecting its defaults. A custom Postgres role with its own JWT narrows what the
+CODE uses, not what the function HOLDS. [Medium confidence on "no opt-out" — an absence of a documented
+option, not a documented no.] **With a date:** the legacy `service_role` key works "until the end of 2026";
+the practice writer reads it, so it must move to a named secret key first — now a gate in the key-day
+checklist.
+
+#### F — the status table (measured this session, or cited)
+
+| MODULE | STATUS | OWNER | BLOCKER | ETA |
+| --- | --- | --- | --- | --- |
+| Core MR day — emulator, local stack | DONE | Maanav | — | — |
+| Offline day (`FE-G2`), 21 writes, exactly once — emulator | DONE | Maanav | — | — |
+| Offline day — real radio off, on a physical handset | BLOCKED | Operator, then Maanav | A handset; a release build (a debug build cold-starts from a stale bundle with the radio off) | about ½ day after both |
+| Core MR day — real handset, signed | BLOCKED | Operator, then Maanav | A release key (who holds it), a handset, a reachable server (Q-19) | about 1 day after all three |
+| Off-site / approximate check-in told to the rep (`BE-C5`, `BE-W147`) | DONE | Maanav | — | — |
+| Geofence inside / outside / coarse — driven on the emulator | DONE | Maanav | — | — |
+| Consent shown after it is given (`BE-W148`, regression) | DONE | Maanav | — | — |
+| "1 check-ins", check-out time, demo mock check | DONE | Maanav | — | — |
+| Today / Me truthful while mounted (`BE-W151`) | DONE | Maanav | — | — |
+| Sign-out failure shown (`BE-W152`) | DONE | Maanav | — | — |
+| Offline sign-out clears the phone? | BLOCKED | Operator | Decision: clear locally while the server session lives on, or refuse | minutes, once decided |
+| Offline findings `BE-W149`, `BE-W150`, `BE-W153`–`BE-W157` | POST-4-OCT | Maanav | None | about 2 days |
+| Decisions with no work item (7 besides `BE-C5`; `BE-C36` adverse-event flag worst) | BLOCKED | Operator, then Maanav | Owners and order for the seven | ½ day to mint, then per item |
+| Key reach stated; three doors guarded (`BE-C72`) | DONE | Maanav | — | — |
+| Practice writer off the legacy key | POST-4-OCT | Maanav | None; before Supabase ends legacy keys (end of 2026) | ½ day |
+| Demo build script | IN PROGRESS | Maanav | Still forces CMake 3.31.6 | about ½ day |
+| AI Doctor practice + AI Analysis — wiring | DONE | Maanav | — | — |
+| AI Doctor practice + AI Analysis — real answers | BLOCKED | AWS account owner, then operator | Model access; approved prompts, personas, scenarios (Q-14) | ½ day after both |
+| Chatbot — wiring | DONE | Maanav | — | — |
+| Chatbot — real answers | BLOCKED | AWS account owner, then operator | Model access; approved prompt (Q-14) | ½ day after both |
+| Request-log integrity (`BE-W146`) | POST-4-OCT | Maanav | None; deferred with a trigger (`BE-C71`) | about 1 day, before production AI |
+| Product Q&A — app screen | POST-4-OCT | Maanav | None for the screen; content waits on Q-9, Q-14 | about 3 days |
+| LMS — app screens | POST-4-OCT | Maanav | None for the screens; content needs a loader | about 6 days |
+| Production deploy | BLOCKED | Operator, then Maanav | Q-19, then `BE-W143` | about 1 day after the answer |
+| Backup | BLOCKED | Operator, then Maanav | Q-19; red from 16 October | ½ day after the answer |
+| Branch protection on `main` | BLOCKED | Repository admin | Not applied (0 rulesets, measured 6 Oct) | minutes |
+| Repository visibility | BLOCKED | Operator | Q-20 (still PUBLIC, measured 6 Oct) | minutes, once decided |
+| Day planning (manager plans) | BLOCKED | Operator | Q-16, Q-17, Q-18 | 10–15 working days after the answers |
+| Second admin / consent legal name / sample cap | BLOCKED | Operator | Q-14 / Q-11 / Q-10 | same day / ½ day / ½ day |
+
+#### Checks
+
+* Static first, every commit: typecheck 0 errors, lint 0 errors (the one existing frontend warning,
+  `beat-plan-route.test.tsx:22`), format clean; ids clean (`BE-W147`–`BE-W157`, `BE-C72` each registered
+  in the commit that first cites it).
+* **Clean-database check, second run: All 29 step(s) passed** — database **Test Files 83 passed (83)**,
+  **Tests 1146 passed | 2 skipped | 4 todo (1152)** (the two skipped are the gated live Bedrock tests);
+  core 12 files, 210 | 4 todo; field 50 files, 719, and 39 screen suites, 287; ui 4 and 31 screen suites,
+  331; console 76; ui-tokens 59; mock 43; browser **7 passed, 0 skipped, 0 failed**; the service-role step
+  "read in exactly one place; 6 function files and 35 core files checked". The first run was red — see
+  below.
+* Mutants, all two-sided: A server 5/5, A client 11/11, B 7/7, C 7/7, E 3/3 — two survivors on the way
+  (M5, C3), each now killed by a test written for it.
+
+#### What I got wrong
+
+* I appended a test block through a shell heredoc — against the standing rule (test files in the
+  editor). Read back and found intact; every later test went through the editor.
+* **A local demo password reached this transcript.** The sign-in helper typed rep B's seeded password
+  into the email field after a keyboard dialog stole focus. It is a fabricated account on the local stack,
+  destroyed by `db reset` — not the credential and not a personal one — and it is in no file or commit
+  (grep of every staged diff: 0). The helper now refuses to type a password unless the password field is
+  confirmed focused.
+* I launched the emulator headless again, so Maanav could not see it, and lost time to its ignored GPS
+  before learning that headless was the cause.
+* I misjudged the clock twice — doubted a correct "Checked in 14:02", and called an outside check-in
+  "about 14:03" that the database says was 14:05:06. Both times the app was right and I was not; both
+  were checked against the database before anything was written down.
+* Two of my own mutation harness runs failed on my splicing, not on the code; both were rerun.
+* **The first clean-database check was RED, and one red was mine.** `sync-push-enforcement.spec.ts`
+  read `apply_sync_item`'s text for `perform public.record_check_in`; my migration made it an assignment.
+  My mutants had run my own spec only, never the whole database suite after changing a shared function.
+  The other red — `tenant-boundary-restrictive` timing out after 412 s of wall clock on a 30 s limit — had
+  no lock wait in the Postgres log and passed alone; there was a power outage on this machine during the
+  run, which fits a stall. I cannot prove that, so it is recorded here and the full check was rerun.
+
+#### Where I stopped
+
+**All six parts done; the override never fired; no stop rule was needed.** Commits on `w2-b-backend`
+for a PR to `main`. Emulator, Metro, the function server and the database stopped at the end. **No
+credential appears anywhere in the diff** (checked against the env file's values before every commit).
+The local env file still exists (`services/api/supabase/functions/.env`, git-ignored) — needed the moment
+access is granted.
