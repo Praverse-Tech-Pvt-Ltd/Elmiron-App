@@ -179,6 +179,58 @@ describe('EXACTLY ONCE — B4', () => {
     }));
     await expect(push.createCheckIn(checkIn)).resolves.toEqual({
       receivedAt: '2026-09-10T09:00:00.000+00:00',
+      warnings: [],
+    });
+  });
+
+  it('W2-B A / BE-C5: a DUPLICATE carries the warning stored on the first landing', async () => {
+    // The rep whose answer was lost at the clinic door is the one who most needs the line, and the
+    // replay is the only answer they will ever get.
+    const { push } = clientWith(() => ({
+      data: response({
+        results: [
+          {
+            id: ITEM,
+            status: 'duplicate',
+            rejectionCode: null,
+            sqlState: null,
+            sqlDetail: null,
+            sqlHint: null,
+            rejectionDetail: null,
+            warnings: ['check_in_outside_geofence'],
+          },
+        ],
+      }),
+      error: null,
+    }));
+    await expect(push.createCheckIn(checkIn)).resolves.toEqual({
+      receivedAt: '2026-09-10T09:00:00.000+00:00',
+      warnings: ['check_in_outside_geofence'],
+    });
+  });
+
+  it('W2-B A: an ACCEPTED item returns its warnings, and drops one this build does not know', async () => {
+    // Dropped, not thrown: a server that learns a warning before the app must not fail the push.
+    const { push } = clientWith(() => ({
+      data: response({
+        results: [
+          {
+            id: ITEM,
+            status: 'accepted',
+            rejectionCode: null,
+            sqlState: null,
+            sqlDetail: null,
+            sqlHint: null,
+            rejectionDetail: null,
+            warnings: ['check_in_location_approximate', 'a_warning_from_the_future'],
+          },
+        ],
+      }),
+      error: null,
+    }));
+    await expect(push.createCheckIn(checkIn)).resolves.toEqual({
+      receivedAt: '2026-09-10T09:00:00.000+00:00',
+      warnings: ['check_in_location_approximate'],
     });
   });
 

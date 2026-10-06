@@ -1,6 +1,7 @@
 import uuid from 'expo-modules-core/src/uuid';
-import { SyncPushResponseSchema } from '@fieldforce/core';
+import { SyncPushResponseSchema, knownSyncWarnings } from '@fieldforce/core';
 import type {
+  SyncWarning,
   CreateCallReportRequest,
   CreateCheckInRequest,
   CreateCheckOutRequest,
@@ -104,6 +105,8 @@ export interface PushAccepted {
    * available without a schema change.
    */
   readonly receivedAt: string;
+  /** W2-B A / `BE-W147`. What the server said beside "accepted" — the ones this build knows. */
+  readonly warnings: readonly SyncWarning[];
 }
 
 /**
@@ -238,8 +241,11 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
     }
 
     switch (verdict.status) {
+      // W2-B A / `BE-W147`. **The warnings are returned, not dropped.** The server has sent them
+      // since `20260813000200`; this arm returned the clock alone, so `stale_beat_plan` and — from
+      // `BE-C5` — "the clinic could not be confirmed" died here, one function after the wire.
       case 'accepted':
-        return { receivedAt: response.serverTime };
+        return { receivedAt: response.serverTime, warnings: knownSyncWarnings(verdict.warnings) };
       // **A duplicate is a SUCCESS, not a failure.** It means this exact item is already
       // recorded -- the write landed and the acknowledgement did not. Treating it as an
       // error would dead-letter work the server already holds, and asking the MR to do
@@ -248,8 +254,10 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
       // Written as its own arm rather than a fallthrough: `no-fallthrough` is on, and a
       // shared arm would put this reasoning where a reader cannot see which case it is
       // about.
+      // The duplicate carries the warnings `sync_items` stored on the first landing, which is how a
+      // rep whose answer was lost at the clinic door is still told.
       case 'duplicate':
-        return { receivedAt: response.serverTime };
+        return { receivedAt: response.serverTime, warnings: knownSyncWarnings(verdict.warnings) };
       case 'rejected':
       case 'dead_lettered':
         throw new SyncPushRefusal({
@@ -307,7 +315,9 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
     const already = await notes.storedAt(body.noteId);
     if (already !== null) {
       if (notes.fileExists(uri)) notes.removeFile(uri);
-      return { receivedAt: already };
+      // No `sync_push` ran, so the server said nothing beside "stored" -- and audio carries no
+      // warning of any kind.
+      return { receivedAt: already, warnings: [] };
     }
 
     if (!notes.fileExists(uri)) {

@@ -1,4 +1,4 @@
-import type { CreateCheckInRequest, Coordinates, Visit } from '@fieldforce/core';
+import type { CreateCheckInRequest, Coordinates, SyncWarning, Visit } from '@fieldforce/core';
 import type { FixOutcome } from './location';
 
 /**
@@ -151,6 +151,51 @@ export const checkInRequest = (draft: CheckInDraft): CreateCheckInRequest => ({
 
 /** Check-out is the same shape. The server distinguishes them by endpoint. */
 export const checkOutRequest = checkInRequest;
+
+/**
+ * W2-B A / `BE-W147` — `BE-C5`'s one plain line: the clinic could not be confirmed.
+ *
+ * **What the ruling fixes and what it leaves to the copy.** `BE-C5` gives the MEANING — the rep is
+ * told "that the clinic could not be confirmed — and told nothing about consequences, because none
+ * are decided" — and no sentence. So both lines say exactly that and stop: no "your manager will
+ * see", no "this may affect", no warning colour.
+ *
+ * **One line, and the coarse fix wins.** `BE-C2`: when the fix is wider than the geofence the
+ * verdict "was decided by a coin", so an `outside` beside an approximate fix is not a fact about
+ * where the rep stood, and saying "your phone placed you away from it" would be the overstatement.
+ */
+export const CHECK_IN_APPROXIMATE =
+  "The clinic could not be confirmed: your phone's position was too rough to tell.";
+export const CHECK_IN_OUTSIDE =
+  'The clinic could not be confirmed: your phone placed you away from it.';
+
+export const checkInCaveat = (warnings: readonly SyncWarning[]): string | null => {
+  if (warnings.includes('check_in_location_approximate')) return CHECK_IN_APPROXIMATE;
+  if (warnings.includes('check_in_outside_geofence')) return CHECK_IN_OUTSIDE;
+  return null;
+};
+
+/**
+ * The warnings the server gave this visit's check-ins, from the queue state.
+ *
+ * A check-in that was QUEUED is answered later, during a flush, maybe on another screen; the reducer
+ * keeps the item (as `synced`) and its warnings by item id, so this screen can still say it when the
+ * rep comes back. `entityId` is the visit — see `witnessedStage` above.
+ */
+export const checkInWarningsFor = (
+  visitId: string,
+  queue: {
+    readonly items: readonly {
+      readonly id: string;
+      readonly entity: string;
+      readonly entityId: string;
+    }[];
+    readonly warnings: Readonly<Record<string, readonly SyncWarning[]>>;
+  },
+): readonly SyncWarning[] =>
+  queue.items
+    .filter((item) => item.entity === 'check_in' && item.entityId === visitId)
+    .flatMap((item) => queue.warnings[item.id] ?? []);
 
 /**
  * What the primary action says at each stage.

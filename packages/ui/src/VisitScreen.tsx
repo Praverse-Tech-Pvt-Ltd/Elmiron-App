@@ -68,6 +68,14 @@ export interface VisitScreenProps {
   /** "17 min" once the visit is finished. */
   readonly durationLabel?: string | null;
   /**
+   * W2-B A / `BE-C5` — one plain line when the server could not confirm the clinic.
+   *
+   * Under the check-in time, in the same card, in the same text style: it is a fact about the
+   * check-in, not an alarm. `BE-C5` tells the rep nothing about consequences, and a warning colour
+   * would say there are some.
+   */
+  readonly checkInCaveat?: string | null;
+  /**
    * Offered only once the visit is finished. A report written before check-out is a
    * report about a visit that has not happened yet.
    */
@@ -186,6 +194,7 @@ export const VisitScreen = ({
   blockedWrite,
   startedLabel = null,
   durationLabel = null,
+  checkInCaveat = null,
   onWriteReport,
   onRecordSamples,
   onStartRecording,
@@ -248,6 +257,7 @@ export const VisitScreen = ({
           </View>
         )}
         {startedLabel === null ? null : <BodyText>{startedLabel}</BodyText>}
+        {checkInCaveat === null ? null : <BodyText>{checkInCaveat}</BodyText>}
       </Card>
 
       {consent === undefined || consent.outcome === 'unasked' ? null : (

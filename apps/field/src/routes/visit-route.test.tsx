@@ -44,7 +44,14 @@ jest.mock('../capture/location', () => ({
   takeFix: jest.fn(async () =>
     Promise.resolve({
       kind: 'fix',
-      coordinates: { latitude: 18.5204, longitude: 73.8567, accuracyMetres: 8 },
+      // `capturedAt` as a real fix carries it. Without it the QUEUED payload cannot be read back
+      // on a flush (W2-B A found this: the flush blocked the item as unreadable and sent nothing).
+      coordinates: {
+        latitude: 18.5204,
+        longitude: 73.8567,
+        accuracyMetres: 8,
+        capturedAt: '2026-09-11T12:00:00+05:30',
+      },
     }),
   ),
 }));
@@ -70,6 +77,9 @@ jest.mock('expo-router', () => ({
 
 import { setQueueOwner } from '../sync/async-storage-store';
 import { SyncPushRefusal } from '../sync/push-client';
+import type { OutboxWriteClient } from '../sync/push-client';
+import { flushOutbox } from '../sync/outbox';
+import { CHECK_IN_APPROXIMATE, CHECK_IN_OUTSIDE } from '../capture/visit';
 import VisitRoute from '../../app/visit/[id]';
 
 const visit = VisitSchema.parse({
@@ -293,5 +303,101 @@ describe('app/visit/[id].tsx — FE-D2 6, a refused press does not take the scre
       expect(mockCreateCheckIn).toHaveBeenCalledTimes(2);
     });
     expect(screen.queryByText('That was refused')).toBeNull();
+  });
+});
+
+/**
+ * W2-B A / `BE-W147` — `BE-C5`: the rep is TOLD when the clinic could not be confirmed.
+ *
+ * On 5 October the emulator checked in 13,353 km from the clinic, the server stored `outside`, and the
+ * screen said "You are checked in" and nothing else. The ruling to tell the rep had stood since 29
+ * September.
+ *
+ * **Both arrival paths, and both sides of each.** Sent at once, the warning rides the send's answer;
+ * queued, it arrives on a later flush and must be read back from the queue. And on each, an ordinary
+ * check-in must say NOTHING — the half a careless test skips, and the half that decides whether a rep
+ * learns to read the line or to ignore it.
+ */
+describe('app/visit/[id].tsx — BE-C5, a check-in the clinic could not confirm says so', () => {
+  const pressCheckIn = async (): Promise<void> => {
+    await render(<VisitRoute />);
+    await screen.findByText(/Dr Asha Deshpande/u);
+    await fireEvent.press(screen.getByText('I am here — check in'));
+  };
+
+  it('SENT: an outside verdict shows the one line', async () => {
+    await AsyncStorage.clear();
+    loaded();
+    mockCreateCheckIn.mockResolvedValue({
+      receivedAt: '2026-09-11T12:01:00+05:30',
+      warnings: ['check_in_outside_geofence'],
+    });
+    await pressCheckIn();
+    expect(await screen.findByText(CHECK_IN_OUTSIDE)).toBeTruthy();
+  });
+
+  it('SENT: an ordinary check-in shows NO line', async () => {
+    await AsyncStorage.clear();
+    loaded();
+    mockCreateCheckIn.mockResolvedValue({ receivedAt: '2026-09-11T12:01:00+05:30', warnings: [] });
+    await pressCheckIn();
+    // Wait for the branch that WOULD have set it, so the absence below is not just "too early".
+    await waitFor(() => {
+      expect(mockRefresh).toHaveBeenCalled();
+    });
+    expect(screen.queryByText(CHECK_IN_OUTSIDE)).toBeNull();
+    expect(screen.queryByText(CHECK_IN_APPROXIMATE)).toBeNull();
+  });
+
+  it('SENT: a coarse fix says "too rough", not "away" — BE-C2, the verdict was a coin', async () => {
+    await AsyncStorage.clear();
+    loaded();
+    mockCreateCheckIn.mockResolvedValue({
+      receivedAt: '2026-09-11T12:01:00+05:30',
+      warnings: ['check_in_outside_geofence', 'check_in_location_approximate'],
+    });
+    await pressCheckIn();
+    expect(await screen.findByText(CHECK_IN_APPROXIMATE)).toBeTruthy();
+    expect(screen.queryByText(CHECK_IN_OUTSIDE)).toBeNull();
+  });
+
+  const flushWith = async (answer: unknown): Promise<void> => {
+    const client = { createCheckIn: jest.fn(async () => Promise.resolve(answer)) };
+    const result = await flushOutbox(client as unknown as OutboxWriteClient);
+    // The control both QUEUED cases rest on: the flush really sent the item. Without it, a flush
+    // that blocked the item (as the first draft's fixture made it do) passes the NO-line case.
+    expect(result.sent).toBe(1);
+  };
+
+  it('QUEUED: the warning from a LATER flush is shown when the rep comes back to the visit', async () => {
+    await AsyncStorage.clear();
+    loaded();
+    mockCreateCheckIn.mockRejectedValue(new Error('Network request failed'));
+    await pressCheckIn();
+    await screen.findByText(/Saved on this phone/u);
+    expect(screen.queryByText(CHECK_IN_OUTSIDE)).toBeNull();
+
+    await flushWith({
+      receivedAt: '2026-09-11T12:05:00+05:30',
+      warnings: ['check_in_outside_geofence'],
+    });
+    await render(<VisitRoute />);
+    expect(await screen.findByText(CHECK_IN_OUTSIDE)).toBeTruthy();
+  });
+
+  it('QUEUED: an ordinary flushed check-in shows NO line', async () => {
+    await AsyncStorage.clear();
+    loaded();
+    mockCreateCheckIn.mockRejectedValue(new Error('Network request failed'));
+    await pressCheckIn();
+    await screen.findByText(/Saved on this phone/u);
+
+    await flushWith({ receivedAt: '2026-09-11T12:05:00+05:30', warnings: [] });
+    await render(<VisitRoute />);
+    // Wait for the queue to be read (the stage moves to `during` from it), so the absence below is
+    // an answer and not "too early".
+    await screen.findByText('Leaving — check out');
+    expect(screen.queryByText(CHECK_IN_OUTSIDE)).toBeNull();
+    expect(screen.queryByText(CHECK_IN_APPROXIMATE)).toBeNull();
   });
 });

@@ -4,9 +4,11 @@ import {
   CreateConsentRecordRequestSchema,
   CreateSampleAndInputRequestSchema,
   SyncQueueItemSchema,
+  knownSyncWarnings,
 } from '@fieldforce/core';
 import type {
   ApiErrorCode,
+  SyncWarning,
   CreateCallReportRequest,
   SyncRejectionCode,
   CreateCheckInRequest,
@@ -72,7 +74,11 @@ export const devicePersistence: QueuePersistence = {
  */
 export type SendOutcome =
   /** The server answered and accepted it. Nothing is queued. */
-  | { readonly kind: 'sent' }
+  | {
+      readonly kind: 'sent';
+      /** W2-B A / `BE-W147`. What the server said beside "accepted" — `BE-C5`'s line lives here. */
+      readonly warnings: readonly SyncWarning[];
+    }
   /** The server answered and refused. Nothing is queued; the MR is told. */
   | {
       readonly kind: 'refused';
@@ -326,8 +332,8 @@ export const sendOrQueue = async (
   store: QueuePersistence = devicePersistence,
 ): Promise<SendOutcome> => {
   try {
-    await send();
-    return { kind: 'sent' };
+    const response = await send();
+    return { kind: 'sent', warnings: serverWarnings(response) };
   } catch (error: unknown) {
     // **Both refusal classes, and MR-24 found out the expensive way what happens with
     // only one.** This branch read `ApiRequestError` alone, which is what the REST client
@@ -383,6 +389,20 @@ const serverReceivedAt = (response: unknown): string | null => {
   if (typeof response !== 'object' || response === null) return null;
   const value = (response as { receivedAt?: unknown }).receivedAt;
   return typeof value === 'string' ? value : null;
+};
+
+/**
+ * W2-B A / `BE-W147` — the server's warnings out of a send's response, or none.
+ *
+ * The same rule as `serverReceivedAt` above: a response this build does not recognise yields
+ * nothing rather than a guess, and never costs the verdict. Before this, both the immediate send and
+ * the flush wrote `warnings: []` whatever the server had said.
+ */
+const serverWarnings = (response: unknown): readonly SyncWarning[] => {
+  if (typeof response !== 'object' || response === null) return [];
+  const value = (response as { warnings?: unknown }).warnings;
+  if (!Array.isArray(value)) return [];
+  return knownSyncWarnings(value.filter((entry): entry is string => typeof entry === 'string'));
 };
 
 /**
@@ -515,7 +535,9 @@ export const flushOutbox = async (
           // Null on an accepted item, as the contract states -- absence means success.
           sqlState: null,
           explanation: null,
-          warnings: [],
+          // W2-B A. The server's, carried. This was `[]` -- the reducer keeps warnings per item, and
+          // nothing on this path ever gave it one.
+          warnings: serverWarnings(response),
           attemptsRemaining: 0,
           // **The server's, or none.** This read `nowIso()` under the comment "the
           // server answered, so this is the server's clock by definition". It was the

@@ -22,9 +22,12 @@ import { takeFix } from '../../src/capture/location';
 import {
   actionLabelFor,
   blockedReason,
+  checkInCaveat,
   checkInRequest,
+  checkInWarningsFor,
   witnessedStage,
 } from '../../src/capture/visit';
+import type { SyncWarning } from '@fieldforce/core';
 import { blockReason, elapsedLabel, recordingLabel } from '../../src/capture/recording';
 import type { RecordingBlock } from '../../src/capture/recording';
 import { keepRecording } from '../../src/capture/voice-note-files';
@@ -241,6 +244,20 @@ export default function VisitRoute(): ReactNode {
   const { stage, pending: stagePending } = witnessedStage(visit, queue.items);
 
   /**
+   * W2-B A / `BE-W147` — `BE-C5`: the rep is TOLD when the clinic could not be confirmed.
+   *
+   * Two sources, because a check-in reaches the server two ways. Sent at once: the warnings come
+   * back on the send's own answer and are held here. Queued: they arrive on a later flush and the
+   * queue keeps them by item, so they are read back from there. Either way the line is the server's
+   * verdict, never this phone's guess about its own fix.
+   */
+  const [sentCheckInWarnings, setSentCheckInWarnings] = useState<readonly SyncWarning[]>([]);
+  const caveat = checkInCaveat([
+    ...sentCheckInWarnings,
+    ...(visit === null ? [] : checkInWarningsFor(visit.id, queue)),
+  ]);
+
+  /**
    * Whether a consultation may be recorded right now.
    *
    * The device check, which exists so the refusal happens *before* the microphone
@@ -439,6 +456,7 @@ export default function VisitRoute(): ReactNode {
           // The server has the visit and only the server can say what stage it is in, so
           // the fix is to ask it rather than to assume: `refresh()` re-pulls, and the
           // stage moves because the SERVER moved it.
+          if (stage === 'before') setSentCheckInWarnings(sendResult.warnings);
           refreshPulled();
           return;
         }
@@ -583,6 +601,7 @@ export default function VisitRoute(): ReactNode {
         }}
         stage={stage}
         stagePending={stagePending}
+        checkInCaveat={caveat}
         startedLabel={
           // MR-24 B. `clockFrom` is a CHARACTER SLICE of the ISO string, correct only
           // while the server sends the territory's own offset -- which the mock at :4010
