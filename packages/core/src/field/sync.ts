@@ -56,9 +56,32 @@ export const SyncRejectionCodeSchema = z.enum([
 ]);
 export type SyncRejectionCode = z.infer<typeof SyncRejectionCodeSchema>;
 
-/** Accepted, but with something the MR should know. */
-export const SyncWarningSchema = z.enum(['stale_beat_plan']);
+/**
+ * Accepted, but with something the MR should know.
+ *
+ * W2-B A / `BE-W147`. The two `check_in_*` warnings are `BE-C5`'s: the clinic could not be
+ * confirmed — the position was outside the geofence, or (`BE-C2`) too coarse to judge it.
+ */
+export const SyncWarningSchema = z.enum([
+  'stale_beat_plan',
+  'check_in_outside_geofence',
+  'check_in_location_approximate',
+]);
 export type SyncWarning = z.infer<typeof SyncWarningSchema>;
+
+/**
+ * The warnings this build knows, out of the wire's `string[]`.
+ *
+ * **Filtered, never parsed strictly.** The wire type is deliberately open, so a server that learns a
+ * new warning before this app does must not fail the whole push — that would turn a fact the rep
+ * cannot be shown yet into a write that never lands. An unknown warning is dropped here, which is
+ * exactly what this build would have done with it anyway.
+ */
+export const knownSyncWarnings = (raw: readonly string[]): SyncWarning[] =>
+  raw.flatMap((warning) => {
+    const parsed = SyncWarningSchema.safeParse(warning);
+    return parsed.success ? [parsed.data] : [];
+  });
 
 /**
  * The server's durable record of a queued item. A rejection lives here until it is

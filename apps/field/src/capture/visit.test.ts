@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { CreateCheckInRequestSchema, VisitSchema } from '@fieldforce/core';
 import type { Coordinates, Visit } from '@fieldforce/core';
-import { actionLabelFor, blockedReason, checkInRequest, stageOf, witnessedStage } from './visit';
+import {
+  CHECK_IN_APPROXIMATE,
+  CHECK_IN_OUTSIDE,
+  actionLabelFor,
+  blockedReason,
+  checkInCaveat,
+  checkInRequest,
+  checkInWarningsFor,
+  stageOf,
+  witnessedStage,
+} from './visit';
 
 const coordinates: Coordinates = {
   latitude: 18.5204,
@@ -193,5 +203,55 @@ describe('MR-26 B2: witnessedStage — facts the client saw itself record', () =
     for (const status of ['planned', 'in_progress', 'completed', 'not_met', 'cancelled'] as const) {
       expect(witnessedStage(visit(status), []).stage).toBe(stageOf(visit(status)));
     }
+  });
+});
+
+describe('W2-B A / BE-C5 — the one line', () => {
+  it('says nothing for an ordinary check-in, and nothing for a warning that is not about it', () => {
+    expect(checkInCaveat([])).toBeNull();
+    expect(checkInCaveat(['stale_beat_plan'])).toBeNull();
+  });
+
+  it('says "away" for an outside verdict', () => {
+    expect(checkInCaveat(['check_in_outside_geofence'])).toBe(CHECK_IN_OUTSIDE);
+  });
+
+  it('says "too rough" for a coarse fix — and that wins over outside (BE-C2: the verdict was a coin)', () => {
+    expect(checkInCaveat(['check_in_location_approximate'])).toBe(CHECK_IN_APPROXIMATE);
+    expect(checkInCaveat(['check_in_outside_geofence', 'check_in_location_approximate'])).toBe(
+      CHECK_IN_APPROXIMATE,
+    );
+  });
+
+  it('BE-C5: neither line says anything about consequences', () => {
+    for (const line of [CHECK_IN_OUTSIDE, CHECK_IN_APPROXIMATE]) {
+      expect(line).toMatch(/^The clinic could not be confirmed/u);
+      expect(line).not.toMatch(/manager|review|pay|flag|report|record/iu);
+    }
+  });
+});
+
+describe('W2-B A — the warnings the queue holds for THIS visit', () => {
+  const item = (id: string, entity: string, entityId: string) => ({ id, entity, entityId });
+  const V = 'visit-1';
+
+  it('reads a check-in of this visit, and nothing else', () => {
+    const queue = {
+      items: [
+        item('a', 'check_in', V),
+        item('b', 'check_in', 'another-visit'),
+        item('c', 'check_out', V),
+      ],
+      warnings: {
+        a: ['check_in_outside_geofence'],
+        b: ['check_in_location_approximate'],
+        c: ['check_in_location_approximate'],
+      } as const,
+    };
+    expect(checkInWarningsFor(V, queue)).toEqual(['check_in_outside_geofence']);
+  });
+
+  it('is empty when this visit has no warned check-in', () => {
+    expect(checkInWarningsFor(V, { items: [item('a', 'check_in', V)], warnings: {} })).toEqual([]);
   });
 });

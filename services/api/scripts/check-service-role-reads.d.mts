@@ -11,6 +11,7 @@ export interface SourceFile {
 export declare const KEY_NAME: string;
 export declare const WRITER_PATH: string;
 export declare const WRITER_ALLOWED: string[];
+export declare const EQUIVALENT_CREDENTIALS: string[];
 export declare const stripComments: (text: string) => string;
 export declare const checkServiceRoleReads: (
   functions: SourceFile[],

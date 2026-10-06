@@ -22,9 +22,12 @@ import { takeFix } from '../../src/capture/location';
 import {
   actionLabelFor,
   blockedReason,
+  checkInCaveat,
   checkInRequest,
+  checkInWarningsFor,
   witnessedStage,
 } from '../../src/capture/visit';
+import type { SyncWarning } from '@fieldforce/core';
 import { blockReason, elapsedLabel, recordingLabel } from '../../src/capture/recording';
 import type { RecordingBlock } from '../../src/capture/recording';
 import { keepRecording } from '../../src/capture/voice-note-files';
@@ -39,7 +42,7 @@ import {
 } from '../../src/sync/outbox';
 import type { SendOutcome } from '../../src/sync/outbox';
 import { queueOwner } from '../../src/sync/async-storage-store';
-import { describeWitnessed, witnessedConsentFor } from '../../src/consent/witnessed';
+import { describeWitnessed, witnessedCard, witnessedConsentFor } from '../../src/consent/witnessed';
 import type { WitnessedConsent } from '../../src/consent/witnessed';
 import { QUEUE_UNREADABLE, loadQueueState } from '../../src/sync/async-storage-store';
 import type { QueueLoad } from '../../src/sync/async-storage-store';
@@ -241,6 +244,20 @@ export default function VisitRoute(): ReactNode {
   const { stage, pending: stagePending } = witnessedStage(visit, queue.items);
 
   /**
+   * W2-B A / `BE-W147` — `BE-C5`: the rep is TOLD when the clinic could not be confirmed.
+   *
+   * Two sources, because a check-in reaches the server two ways. Sent at once: the warnings come
+   * back on the send's own answer and are held here. Queued: they arrive on a later flush and the
+   * queue keeps them by item, so they are read back from there. Either way the line is the server's
+   * verdict, never this phone's guess about its own fix.
+   */
+  const [sentCheckInWarnings, setSentCheckInWarnings] = useState<readonly SyncWarning[]>([]);
+  const caveat = checkInCaveat([
+    ...sentCheckInWarnings,
+    ...(visit === null ? [] : checkInWarningsFor(visit.id, queue)),
+  ]);
+
+  /**
    * Whether a consultation may be recorded right now.
    *
    * The device check, which exists so the refusal happens *before* the microphone
@@ -439,6 +456,7 @@ export default function VisitRoute(): ReactNode {
           // The server has the visit and only the server can say what stage it is in, so
           // the fix is to ask it rather than to assume: `refresh()` re-pulls, and the
           // stage moves because the SERVER moved it.
+          if (stage === 'before') setSentCheckInWarnings(sendResult.warnings);
           refreshPulled();
           return;
         }
@@ -524,22 +542,26 @@ export default function VisitRoute(): ReactNode {
         }
         loading={loading}
         onAction={advance}
-        consent={{
+        consent={
           /*
-            MR-21 B6. `unasked` because the client HOLDS no consent record, not because it
-            knows the doctor was never asked -- `sync_pull` omits `consent_record` by its
-            own declaration. The three-branch mapping that stood here is gone rather than
-            left unreachable: TypeScript narrowed `consent` to `never` the moment the list
-            became empty, which is the compiler saying the branches cannot run. Restoring
-            them is part of adding the entity to the pull, not something to keep warm.
+            W2-B B1. **What THIS PHONE witnessed, when it witnessed one** -- MR-49's rule, which
+            `7403c25` had left reachable only with recording switched on. The server's ledger is
+            still not in the pull (MR-21 B6); this is the device's own record of the answer it
+            captured, labelled "on this phone", and it decides nothing.
           */
-          outcome: 'unasked',
-          // No answer on this phone, so no time to show. Never the device's clock.
-          answeredLabel: null,
-          onAsk: () => {
-            router.push(`/consent/${visit?.id ?? id}`);
-          },
-        }}
+          witnessedCard(witnessed, queue.items, (iso) => clockIn(iso, zone)) ?? {
+            /*
+              MR-21 B6. `unasked` because the client HOLDS no consent record, not because it
+              knows the doctor was never asked -- `sync_pull` omits `consent_record` by its
+              own declaration.
+            */
+            outcome: 'unasked',
+            answeredLabel: null,
+            onAsk: () => {
+              router.push(`/consent/${visit?.id ?? id}`);
+            },
+          }
+        }
         {...(recorderState.isRecording && authorising !== null
           ? {
               recording: {
@@ -583,6 +605,7 @@ export default function VisitRoute(): ReactNode {
         }}
         stage={stage}
         stagePending={stagePending}
+        checkInCaveat={caveat}
         startedLabel={
           // MR-24 B. `clockFrom` is a CHARACTER SLICE of the ISO string, correct only
           // while the server sends the territory's own offset -- which the mock at :4010
@@ -595,7 +618,15 @@ export default function VisitRoute(): ReactNode {
           // means replacing this call" -- and lists the screens still entitled to it.
           // This screen was not on that list. The warning existed and the conversion
           // walked past it.
-          visit?.startedAt == null ? null : `Checked in ${clockIn(visit.startedAt, zone)}`
+          // W2-B B3. A finished visit showed when it started and never when it ended; the
+          // server's `completed_at` was in the store the whole time.
+          visit?.startedAt == null
+            ? null
+            : `Checked in ${clockIn(visit.startedAt, zone)}${
+                visit.completedAt == null
+                  ? ''
+                  : ` · checked out ${clockIn(visit.completedAt, zone)}`
+              }`
         }
       />
     </Screen>

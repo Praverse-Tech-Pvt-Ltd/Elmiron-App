@@ -33,6 +33,22 @@ describe('the action moves with the visit', () => {
     expect(screen.getByText('Checked in 11:56')).toBeTruthy();
   });
 
+  it('W2-B A / BE-C5: shows the check-in caveat under the check-in time, and nothing when there is none', async () => {
+    const line = 'The clinic could not be confirmed: your phone placed you away from it.';
+    const during = {
+      stage: 'during' as const,
+      actionLabel: 'Leaving — check out',
+      startedLabel: 'Checked in 11:56',
+    };
+    await render(<VisitScreen {...props({ ...during, checkInCaveat: line })} />);
+    expect(screen.getByText(line)).toBeTruthy();
+    // Still checked in: the line qualifies the check-in, it does not replace it.
+    expect(screen.getByText('You are checked in')).toBeTruthy();
+
+    await render(<VisitScreen {...props(during)} />);
+    expect(screen.queryByText(line)).toBeNull();
+  });
+
   it('offers nothing once the visit is finished', async () => {
     await render(<VisitScreen {...props({ stage: 'after', actionLabel: null })} />);
     expect(screen.getByText('Visit finished')).toBeTruthy();
@@ -131,7 +147,7 @@ describe('after the recording question is answered', () => {
       />,
     );
 
-    expect(screen.getByText('He agreed to a recording.')).toBeTruthy();
+    expect(screen.getByText('The doctor agreed to a recording.')).toBeTruthy();
     expect(screen.getByText(/nothing is being captured/iu)).toBeTruthy();
   });
 

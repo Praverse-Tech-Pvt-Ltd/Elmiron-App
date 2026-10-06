@@ -390,7 +390,9 @@ describe.skipIf(!reachable)('THE FINDING: consent through sync_push skips captur
         `select prosrc from pg_proc where proname = 'apply_sync_item'`,
       );
       const body = src.rows[0]?.prosrc ?? '';
-      expect(body).toMatch(/perform public\.record_check_in/);
+      // W2-B A (`20261006000100`): the check-in branch now KEEPS the row `record_check_in` returns,
+      // to read its verdict, so the call is an assignment rather than a `perform`. Still the RPC.
+      expect(body).toMatch(/(?:perform|v_check_in :=) public\.record_check_in\(/);
       expect(body).toMatch(/perform public\.record_check_out/);
       expect(body).toMatch(/perform public\.complete_upload/);
       // And consent does now too, which is BE-W74.

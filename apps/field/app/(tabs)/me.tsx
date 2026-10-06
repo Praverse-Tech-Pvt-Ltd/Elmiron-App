@@ -5,7 +5,11 @@ import { Banner, Button, Screen, SettingsScreen } from '@fieldforce/ui';
 import { assistantSampleEnabled, practiceSampleEnabled } from '../../src/features';
 import { useSession } from '../../src/session';
 import { settingsGroups } from '../../src/settings/content';
-import { QUEUE_UNREADABLE, loadQueueState } from '../../src/sync/async-storage-store';
+import {
+  QUEUE_UNREADABLE,
+  loadQueueState,
+  onQueueChanged,
+} from '../../src/sync/async-storage-store';
 import { unsentBeforeSignOut } from '../../src/sync/indicator';
 
 /**
@@ -24,16 +28,23 @@ export default function Me(): ReactNode {
   const [unsent, setUnsent] = useState<{ title: string; detail: string } | null>(null);
   useEffect(() => {
     let live = true;
-    void loadQueueState().then((load) => {
-      if (!live) return;
-      setUnsent(
-        load.kind === 'unreadable'
-          ? { title: 'This app could not read your queue', detail: QUEUE_UNREADABLE }
-          : unsentBeforeSignOut(load.state.items),
-      );
-    });
+    // W2-B C / `BE-W151`. Re-read on every change to the queue, not once per mount: on the emulator
+    // this told a rep signing out "21 things have not been sent yet" after all 21 had been.
+    const read = (): void => {
+      void loadQueueState().then((load) => {
+        if (!live) return;
+        setUnsent(
+          load.kind === 'unreadable'
+            ? { title: 'This app could not read your queue', detail: QUEUE_UNREADABLE }
+            : unsentBeforeSignOut(load.state.items),
+        );
+      });
+    };
+    read();
+    const stop = onQueueChanged(read);
     return () => {
       live = false;
+      stop();
     };
   }, []);
 

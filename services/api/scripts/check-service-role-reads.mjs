@@ -12,7 +12,18 @@
  *      the key under another spelling;
  *   4. `_shared/practice-writer.ts` exports exactly one name, `practiceWriterFromEnv` — never the key,
  *      never the client — and its allow-list is exactly `record_sim_turn`, `record_sim_coach_analysis`;
- *   5. `packages/core/src`, which the function imports, reads no environment at all.
+ *   5. `packages/core/src`, which the function imports, reads no environment at all;
+ *   6. (W2-B E) the OTHER credentials the platform hands every Edge Function by default — the new
+ *      secret keys (`SUPABASE_SECRET_KEYS`, and `SUPABASE_SECRET_KEY`, the local single-key fallback)
+ *      and the direct database URL (`SUPABASE_DB_URL`) — are not named in function code AT ALL.
+ *      Supabase's own guide says a secret key "will bypass Row Level Security", and the database URL
+ *      is a Postgres login. Rules 1-5 guarded one of three equivalent doors; a hurried change
+ *      reaching for either of the others passed them.
+ *
+ * **What this buys, said so nobody misreads it in six months: it reduces ACCIDENTAL use and changes
+ * nothing about CAPABILITY.** The platform injects all three into every function whatever the code
+ * does; a function that never names them still holds them. The check makes reaching for them a
+ * visible, reviewed change — that is all.
  *
  * **What it cannot catch:** deliberate obfuscation (a name assembled from pieces that are not literal
  * reads, `globalThis`-indexed access), or a third-party package reading the environment. It is a guard
@@ -25,6 +36,12 @@ import { join, relative } from 'node:path';
 export const KEY_NAME = 'SUPABASE_SERVICE_ROLE_KEY';
 export const WRITER_PATH = '_shared/practice-writer.ts';
 export const WRITER_ALLOWED = ['record_sim_coach_analysis', 'record_sim_turn'];
+/** Rule 6 — credentials with the key's reach (or more) that the function must never name. */
+export const EQUIVALENT_CREDENTIALS = [
+  'SUPABASE_SECRET_KEYS',
+  'SUPABASE_SECRET_KEY',
+  'SUPABASE_DB_URL',
+];
 
 /** Removes `//` and `/* *\/` comments, keeping strings intact enough for these patterns. */
 export const stripComments = (text) =>
@@ -41,6 +58,13 @@ export const checkServiceRoleReads = (functions, core) => {
     const code = stripComments(text);
     const names = code.split(KEY_NAME).length - 1;
     if (names > 0) namedAt.push({ path, names, code });
+    for (const name of EQUIVALENT_CREDENTIALS) {
+      if (new RegExp(`\\b${name}\\b`).test(code)) {
+        failures.push(
+          `${path}: names ${name}, which reaches as far as the service-role key — function code must not`,
+        );
+      }
+    }
     if (/Deno\s*\.\s*env\s*\.\s*toObject\s*\(/.test(code)) {
       failures.push(
         `${path}: reads the WHOLE environment (Deno.env.toObject), which includes the key`,

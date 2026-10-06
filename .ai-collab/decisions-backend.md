@@ -684,3 +684,32 @@ disagreement could be checked, because the operator's text was not provided.**
   `AI_PROVIDER=bedrock` with real secrets), or **any screen, report or export reading `ai_requests` model,
   token or status fields**. Written into `docs/ai-platform/KEY-DAY-CHECKLIST.md` as a gate before
   production AI, where the trigger will be read on the day it fires.
+
+## `BE-C72` — **what `BE-C70`'s check bought, said so nobody misreads it; and the two doors it left open** (W2-B E, 6 October)
+
+- **The framing, corrected.** `BE-C70`'s last line says the check "is what stands between a hurried
+  change and" the auth admin API and the `audio` bucket. That is true of **accidental USE** and says
+  nothing about **CAPABILITY**. The platform supplies the key to every Edge Function whatever the code
+  does — before `BE-C69` too — so the function has always been able to reach both. **The check reduces
+  accidental use; it changes nothing about what the function can do.** Read `BE-C70` with this beside it.
+- **The doors it left open, from Supabase's own guide** ("Environment variables",
+  `supabase.com/docs/guides/functions/secrets`, read 6 October). Every Edge Function has by default:
+  `SUPABASE_SERVICE_ROLE_KEY` (legacy), **`SUPABASE_SECRET_KEYS`** — the new keys, which "will bypass Row
+  Level Security" — and **`SUPABASE_DB_URL`**, a direct Postgres connection string. `BE-C70` guarded the
+  first only; a hurried change reaching for either of the others passed it. **Closed as rule 6:** neither
+  (nor `SUPABASE_SECRET_KEY`, the local single-key fallback) may be named in function code at all.
+  Proved both ways (`service-role-reads.spec.ts`, 15 tests; removing each name from the rule kills
+  exactly its own test).
+- **Can the capability be narrowed? On the hosted platform, no — as far as the documentation says.**
+  Named secret keys exist, but for independent ROTATION: the migration guide says secret keys "bypass Row
+  Level Security and have full access to your data", every one of them. The guide documents no way to
+  stop the platform injecting its default secrets. The one narrowing available is to give database-only
+  work a custom Postgres role and a JWT minted for it — which narrows what the CODE uses, not what the
+  function HOLDS. **That is the end of it** unless Supabase ships a scoped key. [Medium confidence on
+  "no opt-out": it is the absence of a documented option, not a documented "no".]
+- **A trigger with a date on it.** The same guide: the legacy `anon` and `service_role` keys "keep
+  working until the end of 2026". The practice writer reads `SUPABASE_SERVICE_ROLE_KEY`; when the legacy
+  keys are deactivated it gets nothing, `practiceWriterFromEnv` returns null, and every practice turn
+  fails closed ("the practice writer is not configured"). **Before the legacy keys are switched off**,
+  move the writer to a NAMED secret key read from `SUPABASE_SECRET_KEYS`, and move rule 1 of the check
+  with it — the check will say so, because rule 6 forbids that name today.

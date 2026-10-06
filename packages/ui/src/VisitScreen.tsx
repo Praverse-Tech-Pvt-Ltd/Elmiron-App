@@ -68,6 +68,14 @@ export interface VisitScreenProps {
   /** "17 min" once the visit is finished. */
   readonly durationLabel?: string | null;
   /**
+   * W2-B A / `BE-C5` — one plain line when the server could not confirm the clinic.
+   *
+   * Under the check-in time, in the same card, in the same text style: it is a fact about the
+   * check-in, not an alarm. `BE-C5` tells the rep nothing about consequences, and a warning colour
+   * would say there are some.
+   */
+  readonly checkInCaveat?: string | null;
+  /**
    * Offered only once the visit is finished. A report written before check-out is a
    * report about a visit that has not happened yet.
    */
@@ -186,6 +194,7 @@ export const VisitScreen = ({
   blockedWrite,
   startedLabel = null,
   durationLabel = null,
+  checkInCaveat = null,
   onWriteReport,
   onRecordSamples,
   onStartRecording,
@@ -248,6 +257,7 @@ export const VisitScreen = ({
           </View>
         )}
         {startedLabel === null ? null : <BodyText>{startedLabel}</BodyText>}
+        {checkInCaveat === null ? null : <BodyText>{checkInCaveat}</BodyText>}
       </Card>
 
       {consent === undefined || consent.outcome === 'unasked' ? null : (
@@ -261,7 +271,10 @@ export const VisitScreen = ({
         */
         <Card>
           <BodyText>
-            {consent.outcome === 'declined' ? 'Noted — no recording.' : 'He agreed to a recording.'}
+            {/* W2-B B1. "He agreed" assumed the doctor's gender; the app does not know it. */}
+            {consent.outcome === 'declined'
+              ? 'Noted — no recording.'
+              : 'The doctor agreed to a recording.'}
           </BodyText>
           {consent.answeredLabel == null ? null : <Label muted>{consent.answeredLabel}</Label>}
           {consent.outcome === 'consented' ? (
@@ -269,8 +282,8 @@ export const VisitScreen = ({
             // is FE-W4 and nothing in this build can capture it; a screen that
             // implied otherwise would have them speak as though it were.
             <Label muted>
-              Recording is not in this build, so nothing is being captured. His answer is on the
-              record either way.
+              Recording is not in this build, so nothing is being captured. The doctor’s answer is
+              on the record either way.
             </Label>
           ) : null}
         </Card>

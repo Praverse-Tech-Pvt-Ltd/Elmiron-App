@@ -12,7 +12,8 @@
     - `supabase status` gives no publishable key;
     - a required EXPO_PUBLIC_* value is missing, empty or malformed;
     - EXPO_PUBLIC_COACHING_ENABLED or EXPO_PUBLIC_RECORDING_ENABLED is set (both stay off in a demo).
-  Warns, and still builds, if the mock does not answer at http://<Ip>:4010: only Day end needs it.
+  Does not check the mock at :4010: nothing in the app calls it (W2-B B3). EXPO_PUBLIC_API_BASE_URL
+  is still set, only because app/_layout.tsx refuses to start a release build without it.
 
   Then: clean prebuild with DEMO_CLEARTEXT_HOSTS=<Ip>; re-apply and verify the CMake 3.31.6 pin;
   build with the JS bundle forced to rebuild; verify the APK (display name, cleartext hosts, baked
@@ -93,22 +94,11 @@ foreach ($name in $Touched) { $Saved[$name] = [Environment]::GetEnvironmentVaria
 
 function Write-Step([string]$Text) { Write-Host "==> $Text" -ForegroundColor Cyan }
 function Write-Ok([string]$Text) { Write-Host "    ok: $Text" -ForegroundColor Green }
-function Write-Warn([string]$Text) { Write-Host "    WARNING: $Text" -ForegroundColor Yellow }
 function Write-Refusal([string]$Text) { Write-Host "    REFUSED: $Text" -ForegroundColor Red }
 
 function Test-AbsoluteUrl([string]$Value) {
   $uri = $null
   return [Uri]::TryCreate($Value, [UriKind]::Absolute, [ref]$uri) -and ($uri.Scheme -in @('http', 'https'))
-}
-
-function Test-Answers([string]$Url, [int]$TimeoutSec) {
-  # Any HTTP response counts as answering, including an error status: the server is there.
-  try {
-    $null = Invoke-WebRequest -UseBasicParsing -TimeoutSec $TimeoutSec -Uri $Url
-    return $true
-  } catch [System.Net.WebException] {
-    return ($null -ne $_.Exception.Response)
-  }
 }
 
 function Test-Healthy([string]$Url) {
@@ -203,6 +193,7 @@ function Invoke-Checks {
 
   Write-Step 'Checking the required EXPO_PUBLIC_* values (list: packages/core/src/shared/config.ts)'
   $env:EXPO_PUBLIC_SUPABASE_URL = "http://${Ip}:54321"
+  # Still required: app/_layout.tsx shows "not set up" without it, though nothing calls it (W2-B B3).
   $env:EXPO_PUBLIC_API_BASE_URL = "http://${Ip}:4010"
   Write-Ok "EXPO_PUBLIC_SUPABASE_URL = $env:EXPO_PUBLIC_SUPABASE_URL (from -Ip)"
   Write-Ok "EXPO_PUBLIC_API_BASE_URL = $env:EXPO_PUBLIC_API_BASE_URL (from -Ip)"
@@ -254,13 +245,9 @@ function Invoke-Checks {
     }
   }
 
-  Write-Step "Checking the mock at http://${Ip}:4010"
-  if (Test-Answers "http://${Ip}:4010/" 3) {
-    Write-Ok 'the mock answers'
-  } else {
-    Write-Warn ("the mock does not answer at http://${Ip}:4010. Building anyway: only Day end " +
-      "needs it. Before the demo, start it and set up the port proxy (demo path, section 3.4).")
-  }
+  # W2-B B3. The mock check that stood here ("only Day end needs it") is gone: Day end left the
+  # mock in #13, and no file under apps/field/app or apps/field/src imports the mock client any
+  # more. Checking a server nothing calls taught the reader that the demo needs it.
 
   return $failures
 }

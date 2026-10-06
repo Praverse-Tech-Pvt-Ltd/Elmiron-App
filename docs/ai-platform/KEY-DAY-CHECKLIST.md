@@ -166,3 +166,11 @@ those fields yet — but the day real model calls happen in production, those to
 record. **The trigger, whichever comes first:** production AI traffic (the deploy of `AI_PROVIDER=bedrock`
 with real secrets), or any screen, report or export that reads `ai_requests` model, token or status
 fields. Neither has happened; the local hour above may proceed without it.
+
+## Before the LEGACY Supabase keys are switched off — a gate with a date (W2-B E, `BE-C72`)
+
+**Supabase says the legacy `service_role` key keeps working "until the end of 2026".** The practice
+writer (`_shared/practice-writer.ts`) reads exactly that key; on the day it is deactivated every practice
+turn fails closed ("the practice writer is not configured"). Before then: move the writer to a NAMED
+secret key from `SUPABASE_SECRET_KEYS`, and move rule 1 of `check-service-role-reads.mjs` with it — rule
+6 forbids that name today, so CI will say so the moment the writer changes.

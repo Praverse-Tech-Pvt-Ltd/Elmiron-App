@@ -21,6 +21,7 @@ import {
   WITNESSED_KEY,
   describeWitnessed,
   recordWitnessedConsent,
+  witnessedCard,
   witnessedConsentFor,
 } from './witnessed';
 import type { WitnessedConsent } from './witnessed';
@@ -44,6 +45,41 @@ const clock = (iso: string): string => iso.slice(11, 16);
 
 beforeEach(() => {
   disk.clear();
+});
+
+/**
+ * W2-B B1 — the consent card from what this phone witnessed. A REGRESSION: MR-49's sentence was
+ * reachable only with recording on after `7403c25`, and the card was hard-coded `unasked`.
+ */
+describe('W2-B B1 — witnessedCard', () => {
+  const item = (status: string) => [{ id: answer().syncItemId, status }] as const;
+
+  it('an answer that was SENT is the card, with when — and no "waiting"', () => {
+    expect(witnessedCard(answer({ outcome: 'consented' }), [], clock)).toEqual({
+      outcome: 'consented',
+      answeredLabel: 'On this phone at 06:22',
+    });
+  });
+
+  it('an answer still QUEUED says it is waiting to send', () => {
+    expect(witnessedCard(answer(), item('queued') as never, clock)).toEqual({
+      outcome: 'declined',
+      answeredLabel: 'On this phone at 06:22 · waiting to send',
+    });
+    expect(witnessedCard(answer(), item('in_flight') as never, clock)?.answeredLabel).toMatch(
+      /waiting to send$/u,
+    );
+  });
+
+  it('an answer the server did NOT accept re-opens the question', () => {
+    expect(witnessedCard(answer(), item('failed') as never, clock)).toBeNull();
+    expect(witnessedCard(answer(), item('conflict') as never, clock)).toBeNull();
+  });
+
+  it('nothing witnessed, or "not asked", leaves the rep free to ask', () => {
+    expect(witnessedCard(null, [], clock)).toBeNull();
+    expect(witnessedCard(answer({ outcome: 'not_asked' }), [], clock)).toBeNull();
+  });
 });
 
 describe('C3 — scoped to the signed-in MR and the visit', () => {

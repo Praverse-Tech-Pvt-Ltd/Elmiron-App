@@ -84,7 +84,13 @@ export const SessionProvider = ({ children }: { readonly children: ReactNode }):
         if (error !== null) throw error;
       },
       signOut: async (): Promise<void> => {
-        await supabase.auth.signOut();
+        // W2-B C / `BE-W152`. supabase-js REPORTS a failed sign-out in `{ error }`; it does not
+        // throw. The Me screen's `.catch` -- MR-28 C2's fix for a sign-out that "fails silently" on a
+        // shared handset -- therefore never ran: offline on the emulator, Sign out did nothing and
+        // said nothing, and the next person would have held this rep's session. Same shape as
+        // `signIn` above, which always checked.
+        const { error } = await supabase.auth.signOut();
+        if (error !== null) throw error;
       },
     };
   }, [ready, session]);
