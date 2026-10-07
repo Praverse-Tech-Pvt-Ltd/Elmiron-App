@@ -130,6 +130,10 @@ jobs:
       # `_shared/practice-writer.ts`, which can call two functions and exports nothing else.
       - name: The service-role key is read in exactly one place
         run: node services/api/scripts/check-service-role-reads.mjs
+      # W2-F C3 (`BE-C75`). The last status table in docs/log/backend.md cites every one of the
+      # operator's fourteen 4 October items (docs/operator/must-haves.json) and keeps the format.
+      - name: The status table has a row for every operator must-have
+        run: node services/api/scripts/check-status-table.mjs
       - run: pnpm turbo run test --filter @fieldforce/core
       # The WCAG contrast guard. It fails the build when a design token drops below
       # its required ratio, and it had never run here — the step simply did not

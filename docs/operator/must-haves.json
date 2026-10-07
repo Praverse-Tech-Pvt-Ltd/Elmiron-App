@@ -1,0 +1,21 @@
+{
+  "source": "docs/operator/2026-10-02-operator-direction.md, item 16 (4 OCT TARGET) and item 17 (STATUS UPDATE), verbatim",
+  "why": "W2-F C3 (BE-C75): the status table is checked against this list, so an item cannot be absent from it without the check failing. LMS had a row on 6 October and none by 7 October; nobody noticed, because a table built from measurement shows only what was measured.",
+  "statuses": ["DONE", "IN PROGRESS", "BLOCKED", "POST-4-OCT"],
+  "items": [
+    { "key": "OP-1", "item": "Core MR workflow" },
+    { "key": "OP-2", "item": "Day planning/execution" },
+    { "key": "OP-3", "item": "Real backend" },
+    { "key": "OP-4", "item": "Day End" },
+    { "key": "OP-5", "item": "Mileage" },
+    { "key": "OP-6", "item": "LMS" },
+    { "key": "OP-7", "item": "Product Q&A" },
+    { "key": "OP-8", "item": "Chatbot" },
+    { "key": "OP-9", "item": "AI Doctor" },
+    { "key": "OP-10", "item": "AI Analysis / Coaching" },
+    { "key": "OP-11", "item": "Maps (should not destabilise the core demo)" },
+    { "key": "OP-12", "item": "Notifications (should not destabilise the core demo)" },
+    { "key": "OP-13", "item": "Voice (should not destabilise the core demo)" },
+    { "key": "OP-14", "item": "Live tracking (should not destabilise the core demo)" }
+  ]
+}

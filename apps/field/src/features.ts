@@ -55,3 +55,14 @@ export const practiceSampleEnabled: boolean = process.env.EXPO_PUBLIC_PRACTICE_S
  * or when approved material and model access are both in place.
  */
 export const productQaEnabled: boolean = process.env.EXPO_PUBLIC_PRODUCT_QA === 'true';
+
+/**
+ * W2-F B — Learning: the courses assigned to the rep, their lessons, and recording a lesson finished,
+ * on the REAL server.
+ *
+ * **Off by default.** No sample is behind it: on, it reads what the company has published and
+ * assigned, which on a new company is nothing — and the screen says so. Turned on when courses exist
+ * (there is no loader and no console authoring yet) and the company wants reps to see them. The lesson
+ * tutor (`lms_tutor`) is a separate AI feature and is not behind this flag.
+ */
+export const learningEnabled: boolean = process.env.EXPO_PUBLIC_LEARNING === 'true';

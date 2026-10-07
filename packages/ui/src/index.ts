@@ -61,6 +61,8 @@ export { Button } from './Button';
 export type { ButtonProps, ButtonVariant } from './Button';
 export { ProductQaScreen } from './ProductQaScreen';
 export type { ProductQaScreenProps, ProductQaView } from './ProductQaScreen';
+export { CourseScreen, LearningListScreen, LessonScreen } from './LearningScreens';
+export type { CourseView, LearningListView, LessonView } from './LearningScreens';
 export { AdverseEventScreen } from './AdverseEventScreen';
 export type { AdverseEventScreenProps } from './AdverseEventScreen';
 export { CallReportScreen } from './CallReportScreen';

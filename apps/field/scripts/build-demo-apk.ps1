@@ -15,9 +15,12 @@
   Does not check the mock at :4010: nothing in the app calls it (W2-B B3). EXPO_PUBLIC_API_BASE_URL
   is still set, only because app/_layout.tsx refuses to start a release build without it.
 
-  Then: clean prebuild with DEMO_CLEARTEXT_HOSTS=<Ip>; re-apply and verify the CMake 3.31.6 pin;
-  build with the JS bundle forced to rebuild; verify the APK (display name, cleartext hosts, baked
-  Supabase address); copy it to C:\dev\demo-apk\ without overwriting; print path, size and commit.
+  Also refuses if no usable CMake is installed (W2-F A3, see Resolve-Cmake).
+
+  Then: clean prebuild with DEMO_CLEARTEXT_HOSTS=<Ip>; point Gradle at the resolved CMake through
+  android\local.properties (cmake.dir) and verify it from disk; build with the JS bundle forced to
+  rebuild; verify the APK (display name, cleartext hosts, baked Supabase address); copy it to
+  C:\dev\demo-apk\ without overwriting; print path, size and commit.
 
   The Supabase key is read into this process's environment only. It is never printed and never
   written to a file, and every environment variable this script sets is restored when it ends.
@@ -45,7 +48,10 @@ param(
 
   [switch]$CheckOnly,
 
-  [switch]$CoachingCheck
+  [switch]$CoachingCheck,
+
+  # W2-F A3. A CMake install directory (the one holding bin\cmake.exe) to use instead of searching.
+  [string]$CmakeDir = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -54,8 +60,12 @@ $AppDir = Split-Path -Parent $PSScriptRoot          # apps\field
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $AppDir)
 $AndroidDir = Join-Path $AppDir 'android'
 $DemoApkDir = 'C:\dev\demo-apk'
-$CmakeVersion = '3.31.6'
-$CmakePin = "externalNativeBuild { cmake { version '$CmakeVersion' } }"
+# W2-F A3. The script used to FORCE CMake 3.31.6 into build.gradle; this machine has never had it
+# (the SDK holds 3.22.1 only), so no APK could be built with the script for weeks. It now uses a CMake
+# that IS installed -- see Resolve-Cmake -- and the oldest it accepts is the first whose ninja is
+# long-path aware on Windows (docs/gotchas.md: CMake 3.22.1's ninja 1.10 is not).
+$CmakeMinimum = [version]'3.31'
+$Cmake = $null
 
 <#
   THE REQUIRED EXPO_PUBLIC_* VALUES, AND WHERE THIS LIST COMES FROM.
@@ -87,7 +97,7 @@ $MustBeUnset = @('EXPO_PUBLIC_COACHING_ENABLED', 'EXPO_PUBLIC_RECORDING_ENABLED'
 # Everything this script sets in the environment, so it can be put back exactly.
 $Touched = @(
   'EXPO_PUBLIC_SUPABASE_URL', 'EXPO_PUBLIC_API_BASE_URL', 'EXPO_PUBLIC_SUPABASE_KEY',
-  'DEMO_CLEARTEXT_HOSTS', 'ANDROID_HOME', 'JAVA_TOOL_OPTIONS'
+  'DEMO_CLEARTEXT_HOSTS', 'ANDROID_HOME', 'JAVA_TOOL_OPTIONS', 'Path'
 )
 $Saved = @{}
 foreach ($name in $Touched) { $Saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
@@ -249,25 +259,83 @@ function Invoke-Checks {
   # mock in #13, and no file under apps/field/app or apps/field/src imports the mock client any
   # more. Checking a server nothing calls taught the reader that the demo needs it.
 
+  Write-Step "Finding a CMake ($CmakeMinimum or newer) with its own ninja"
+  $script:Cmake = Resolve-Cmake
+  if ($null -eq $script:Cmake) {
+    Write-Refusal ("no usable CMake. Looked at -CmakeDir, the Android SDK's cmake folder (needs " +
+      "$CmakeMinimum or newer -- 3.22.1's ninja is not long-path aware) and Visual Studio's bundled " +
+      "CMake. Install one (Android Studio SDK Manager, or Visual Studio's C++ CMake tools), or pass -CmakeDir.")
+    $failures++
+  } else {
+    Write-Ok "CMake $($script:Cmake.Version) at $($script:Cmake.Dir); ninja $($script:Cmake.NinjaVersion)"
+  }
+
   return $failures
 }
 
-function Set-CmakePin {
-  $gradle = Join-Path $AndroidDir 'app\build.gradle'
-  $text = [IO.File]::ReadAllText($gradle)
-  if ($text -notmatch [regex]::Escape($CmakePin)) {
-    $newline = if ($text.Contains("`r`n")) { "`r`n" } else { "`n" }
-    $pattern = '(?m)^android \{\r?\n'
-    if ($text -notmatch $pattern) { throw "no top-level 'android {' block in $gradle" }
-    $comment = '    // FE-D8 build-demo-apk.ps1 -- docs/gotchas.md: CMake 3.22.1''s ninja is not long-path aware.'
-    $text = [regex]::new($pattern).Replace($text, "android {$newline$comment$newline    $CmakePin$newline", 1)
-    [IO.File]::WriteAllText($gradle, $text, (New-Object System.Text.UTF8Encoding $false))
+<#
+  W2-F A3 -- the CMake to build with, or $null. In order:
+    1. -CmakeDir, if given (refused here if it holds no bin\cmake.exe);
+    2. the newest Android SDK cmake\<version> at or above $CmakeMinimum;
+    3. Visual Studio's bundled CMake (any year, any edition), whose ninja sits in a sibling folder.
+  Each candidate is RUN (`cmake --version`, `ninja --version`): a folder that exists is not a CMake
+  that works. Returns the install directory (for cmake.dir), the version, and ninja's folder.
+#>
+function Get-CmakeCandidate([string]$Dir) {
+  $exe = Join-Path $Dir 'bin\cmake.exe'
+  if (-not (Test-Path $exe)) { return $null }
+  $line = (& cmd.exe /d /c "`"$exe`" --version 2>nul" | Select-Object -First 1)
+  if ($line -notmatch 'cmake version (\d+\.\d+(\.\d+)?)') { return $null }
+  $version = [version]$Matches[1]
+  $ninjaDir = @((Join-Path $Dir 'bin'), (Join-Path (Split-Path -Parent $Dir) 'Ninja')) |
+    Where-Object { Test-Path (Join-Path $_ 'ninja.exe') } | Select-Object -First 1
+  if ($null -eq $ninjaDir) { return $null }
+  $ninjaVersion = (& cmd.exe /d /c "`"$(Join-Path $ninjaDir 'ninja.exe')`" --version 2>nul" | Select-Object -First 1)
+  return [pscustomobject]@{ Dir = $Dir; Version = $version; NinjaDir = $ninjaDir; NinjaVersion = $ninjaVersion }
+}
+
+function Resolve-Cmake {
+  if ($CmakeDir -ne '') {
+    # The same floor applies to a CMake named by hand: 3.22.1 is not made usable by being asked for.
+    return Get-CmakeCandidate $CmakeDir | Where-Object { $null -ne $_ -and $_.Version -ge $CmakeMinimum }
   }
-  # Verify from disk, not from the string just written.
-  $check = [IO.File]::ReadAllText($gradle)
-  if ($check -notmatch "externalNativeBuild\s*\{\s*cmake\s*\{\s*version\s*'$([regex]::Escape($CmakeVersion))'") {
-    throw "the CMake $CmakeVersion pin is not in $gradle after applying it"
+  $sdk = if ([string]::IsNullOrWhiteSpace($env:ANDROID_HOME)) { Join-Path $env:LOCALAPPDATA 'Android\Sdk' } else { $env:ANDROID_HOME }
+  $fromSdk = Get-ChildItem -Path (Join-Path $sdk 'cmake') -Directory -ErrorAction SilentlyContinue |
+    ForEach-Object { Get-CmakeCandidate $_.FullName } |
+    Where-Object { $null -ne $_ -and $_.Version -ge $CmakeMinimum } |
+    Sort-Object Version -Descending | Select-Object -First 1
+  if ($null -ne $fromSdk) { return $fromSdk }
+  $vsRoots = @("$env:ProgramFiles\Microsoft Visual Studio", "${env:ProgramFiles(x86)}\Microsoft Visual Studio")
+  return Get-ChildItem -Path $vsRoots -Directory -ErrorAction SilentlyContinue |
+    ForEach-Object { Get-ChildItem -Path $_.FullName -Directory -ErrorAction SilentlyContinue } |
+    ForEach-Object { Get-CmakeCandidate (Join-Path $_.FullName 'Common7\IDE\CommonExtensions\Microsoft\CMake\CMake') } |
+    Where-Object { $null -ne $_ -and $_.Version -ge $CmakeMinimum } |
+    Sort-Object Version -Descending | Select-Object -First 1
+}
+
+<#
+  Points Gradle at the resolved CMake: `cmake.dir` in android\local.properties (regenerated by every
+  prebuild, so written after it), and that CMake's ninja first on PATH for this process. No version
+  is written into build.gradle any more: a pinned version must be one the SDK holds, which is exactly
+  how the old 3.31.6 pin made every build impossible here.
+#>
+function Set-CmakeDir {
+  $props = Join-Path $AndroidDir 'local.properties'
+  # @(...) around the whole `if`: an `if` that yields an empty array yields $null, and `+=` on $null
+  # then CONCATENATES strings -- the first real run wrote sdk.dir and cmake.dir on one line, and the
+  # check below caught it.
+  $lines = @(if (Test-Path $props) { Get-Content $props | Where-Object { $_ -notmatch '^\s*cmake\.dir\s*=' } })
+  if (-not ($lines | Where-Object { $_ -match '^\s*sdk\.dir\s*=' })) {
+    $lines += 'sdk.dir=' + ($env:ANDROID_HOME -replace '\\', '/')
   }
+  $lines += 'cmake.dir=' + ($Cmake.Dir -replace '\\', '/')
+  [IO.File]::WriteAllLines($props, [string[]]$lines, (New-Object System.Text.UTF8Encoding $false))
+  # Verify from disk, not from the lines just written.
+  $written = @(Get-Content $props | Where-Object { $_ -match '^\s*cmake\.dir\s*=' })
+  if ($written.Count -ne 1 -or $written[0] -ne ('cmake.dir=' + ($Cmake.Dir -replace '\\', '/'))) {
+    throw "cmake.dir is not set exactly once in $props after writing it"
+  }
+  $env:Path = "$($Cmake.NinjaDir);$env:Path"
 }
 
 function Find-Aapt2 {
@@ -338,9 +406,9 @@ function Invoke-Build {
   if ((Get-GitDirt).Count -gt 0) { throw 'prebuild changed tracked files; the build would not match the commit' }
   Write-Ok 'prebuild done; no tracked file changed'
 
-  Write-Step "Applying the CMake $CmakeVersion pin (prebuild removes it)"
-  Set-CmakePin
-  Write-Ok 'pin present in android\app\build.gradle'
+  Write-Step "Pointing Gradle at CMake $($Cmake.Version) (prebuild regenerates local.properties)"
+  Set-CmakeDir
+  Write-Ok "cmake.dir set in android\local.properties; ninja $($Cmake.NinjaVersion) first on PATH"
 
   Write-Step 'Building: :app:createBundleReleaseJsAndAssets --rerun assembleRelease (about 5-10 min)'
   $log = Join-Path $logDir 'gradle.log'
