@@ -8,7 +8,7 @@ import type { AssistantOutcome } from '../src/assistant/outcome';
 import { chatRequestBody } from '../src/assistant/request';
 import type { ChatRequestBody } from '../src/assistant/contract';
 import { assistantTransport } from '../src/assistant/transport';
-import { assistantSampleEnabled } from '../src/features';
+import { assistantEnabled } from '../src/features';
 import { usePulledStore } from '../src/sync/pulled-store';
 import { clockIn, dayMonthIn } from '../src/today/territory-day';
 import type { TerritoryZone } from '../src/today/territory-day';
@@ -16,9 +16,9 @@ import type { TerritoryZone } from '../src/today/territory-day';
 /**
  * FE-D15 — the assistant route.
  *
- * **Sample data only, behind `assistantSampleEnabled` (off by default).** The transport is the
- * sample fixture until FE-CR-7 lands the chat contract on `main`. Off, a deep link goes to Today
- * and Me shows no row.
+ * **The real `ai-gateway`, behind `assistantEnabled` (off by default)** — W2-G A switched it from the
+ * sample fixture. Off, a deep link goes to Today and Me shows no row. A stub-marked reply is shown as
+ * "not available yet", never as an answer (`outcomeFromGateway`).
  *
  * **What is sent is what the rep typed, and nothing else.** `chatRequestBody` takes a string. This
  * route reads the pulled store only for the territory zone, to show the server's reset time, and
@@ -121,7 +121,7 @@ const Assistant = (): ReactNode => {
         notice={screenNotice}
         onChangeDraft={setDraft}
         onSend={sendDraft}
-        sample
+        sample={false}
         sending={sending}
         turns={turns}
       />
@@ -130,5 +130,5 @@ const Assistant = (): ReactNode => {
 };
 
 export default function AssistantRoute(): ReactNode {
-  return assistantSampleEnabled ? <Assistant /> : <Redirect href="/home" />;
+  return assistantEnabled ? <Assistant /> : <Redirect href="/home" />;
 }

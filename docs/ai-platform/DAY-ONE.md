@@ -88,7 +88,7 @@ the first thing day one saw. **W2-E (7 October): #11 fully overtaken; #14, #15 a
 | `BE-W164` (console: schema name, two features, model config, tests) | 3–4 |
 | `BE-W146` (the forgeable request log, before production traffic) | 8 |
 | Deploy, flags, one production request per feature (H8, H10) | 1–2 |
-| The app: assistant and practice transports, wording, a new build (W1-Z B5 3–5) | 8 |
+| ~~The app: assistant and practice transports, wording, a new build (W1-Z B5 3–5)~~ **done W2-G**: both transports are live behind `EXPO_PUBLIC_ASSISTANT` / `EXPO_PUBLIC_PRACTICE` (off); on the day, set both to `true` and run the build script | ½ |
 | **Engineering total** | **about 23–25 hours — three working days** |
 
 | Waiting on a person | Who | Effort once they act | When |

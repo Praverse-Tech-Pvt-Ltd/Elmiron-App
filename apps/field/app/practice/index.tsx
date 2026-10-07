@@ -3,14 +3,14 @@ import type { ReactNode } from 'react';
 import { Redirect, useRouter } from 'expo-router';
 import { PracticeHomeScreen, Screen } from '@fieldforce/ui';
 import type { PracticeScenarioRow, PracticeSessionRow } from '@fieldforce/ui';
-import { practiceSampleEnabled } from '../../src/features';
+import { practiceEnabled } from '../../src/features';
 import { practiceBackend } from '../../src/practice/transport';
 
 /**
  * FE-D17 — AI Doctor practice home: approved scenarios to start, and the rep's own sessions.
  *
- * **Sample data only**, behind `practiceSampleEnabled` (off by default), until FE-CR-11 lands the
- * practice contract on `main`. By the operator's ruling of 1 October, this is what this release's
+ * **The real backend**, behind `practiceEnabled` (off by default) — W2-G A switched it from the
+ * sample. By the operator's ruling of 1 October, this is what this release's
  * "Coaching / Analysis" means: feedback on a practice conversation, not on a recorded visit.
  */
 const STANCE: Readonly<Record<string, string>> = {
@@ -108,7 +108,7 @@ const PracticeHome = (): ReactNode => {
               setStarting(null);
             });
         }}
-        sample
+        sample={false}
         scenarios={scenarios}
         sessions={sessions}
         starting={starting}
@@ -118,5 +118,5 @@ const PracticeHome = (): ReactNode => {
 };
 
 export default function PracticeHomeRoute(): ReactNode {
-  return practiceSampleEnabled ? <PracticeHome /> : <Redirect href="/home" />;
+  return practiceEnabled ? <PracticeHome /> : <Redirect href="/home" />;
 }

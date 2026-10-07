@@ -7,15 +7,16 @@ import type { ChatRequestBody, GatewayResponse } from '../assistant/contract';
 /**
  * FE-D15 — app/assistant.tsx.
  *
- * The transport is the sample fixture today (no real gateway until FE-CR-7 lands). It is mocked
- * here so each case can name the exact reply, and so the REQUEST the route sends can be
- * inspected. The pulled store deliberately holds a doctor, a visit and a clinic, so the payload
- * test proves none of them rides along with what the rep typed.
+ * W2-G A: the route's transport is the LIVE one now (`src/assistant/transport.ts`). It is replaced here
+ * by an injected one so each case can name the exact gateway response, and so the REQUEST the route
+ * sends can be inspected; the live transport itself is proved against the local stack in
+ * `services/api/tests/day-one-states.spec.ts`. The pulled store deliberately holds a doctor, a visit
+ * and a clinic, so the payload test proves none of them rides along with what the rep typed.
  */
 
 let mockAssistantEnabled = true;
 jest.mock('../features', () => ({
-  get assistantSampleEnabled() {
+  get assistantEnabled() {
     return mockAssistantEnabled;
   },
   coachingEnabled: false,
@@ -75,12 +76,13 @@ describe('FE-D15 — the flag', () => {
     expect(screen.queryByText('Ask the assistant')).toBeNull();
   });
 
-  it('with the flag on, the screen opens empty and labelled as sample data', async () => {
+  it('with the flag on, the screen opens empty — and no longer says "sample data"', async () => {
     await render(<Assistant />);
 
     expect(screen.getByText('Ask the assistant')).toBeTruthy();
     expect(screen.getByText('No questions yet')).toBeTruthy();
-    expect(screen.getByText('Sample data')).toBeTruthy();
+    // W2-G A: the transport is live, so the sample banner would now be untrue.
+    expect(screen.queryByText('Sample data')).toBeNull();
   });
 });
 
@@ -103,7 +105,7 @@ describe('FE-D15 — only what the rep typed is sent', () => {
 });
 
 describe('FE-D15 — the states, through the route', () => {
-  it('sending, then a sample answer labelled as sample', async () => {
+  it('sending, then the assistant’s answer — labelled as the assistant’s, not as sample', async () => {
     let settle: (value: GatewayResponse) => void = () => undefined;
     mockTransport.mockReturnValue(
       new Promise((resolve) => {
@@ -115,9 +117,10 @@ describe('FE-D15 — the states, through the route', () => {
     await ask('How do I end my day?');
     expect(screen.getByText('Waiting for the assistant')).toBeTruthy();
 
-    settle(answered('Sample answer. Nothing real.'));
-    expect(await screen.findByText('Sample answer. Nothing real.')).toBeTruthy();
-    expect(screen.getByText('Sample reply, not from the assistant')).toBeTruthy();
+    settle(answered('Open Me, then How today ended.'));
+    expect(await screen.findByText('Open Me, then How today ended.')).toBeTruthy();
+    expect(screen.getByText('Assistant')).toBeTruthy();
+    expect(screen.queryByText('Sample reply, not from the assistant')).toBeNull();
   });
 
   it('a refusal is shown as a refusal', async () => {

@@ -23,7 +23,7 @@ const mockMockClient = jest.fn(() => {
   throw new Error('FE-D16: coaching must not reach the mock server');
 });
 jest.mock('../api', () => ({ createClientForScenario: () => mockMockClient() }));
-jest.mock('../features', () => ({ coachingEnabled: true, assistantSampleEnabled: false }));
+jest.mock('../features', () => ({ coachingEnabled: true, assistantEnabled: false }));
 let mockRecordingEnabled = false;
 jest.mock('../coaching/recording-flag', () => ({
   loadRecordingEnabled: () => Promise.resolve(mockRecordingEnabled),

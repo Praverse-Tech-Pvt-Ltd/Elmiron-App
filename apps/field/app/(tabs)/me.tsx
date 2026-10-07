@@ -3,8 +3,8 @@ import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import { Banner, Button, Screen, SettingsScreen } from '@fieldforce/ui';
 import {
-  assistantSampleEnabled,
-  practiceSampleEnabled,
+  assistantEnabled,
+  practiceEnabled,
   productQaEnabled,
   learningEnabled,
 } from '../../src/features';
@@ -72,16 +72,16 @@ export default function Me(): ReactNode {
           onOpenLocation: () => {
             router.push('/onboarding/location');
           },
-          // FE-D15. Only with the sample flag on; off, the row does not exist.
-          ...(assistantSampleEnabled
+          // FE-D15 / W2-G A. Only with the assistant flag on; off, the row does not exist.
+          ...(assistantEnabled
             ? {
                 onOpenAssistant: () => {
                   router.push('/assistant');
                 },
               }
             : {}),
-          // FE-D17. Only with the practice sample flag on; off, the row does not exist.
-          ...(practiceSampleEnabled
+          // FE-D17 / W2-G A. Only with the practice flag on; off, the row does not exist.
+          ...(practiceEnabled
             ? {
                 onOpenPractice: () => {
                   router.push('/practice');

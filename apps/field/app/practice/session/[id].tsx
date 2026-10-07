@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { PracticeSessionScreen, Screen } from '@fieldforce/ui';
 import type { AiAllowanceState, PracticeNotice } from '@fieldforce/ui';
-import { practiceSampleEnabled } from '../../../src/features';
+import { practiceEnabled } from '../../../src/features';
 import type { PracticeSession, TurnRequestBody } from '../../../src/practice/contract';
 import {
   coachOutcome,
@@ -167,7 +167,7 @@ const PracticeSessionView = (): ReactNode => {
         personaLine={session?.scenarioTitle ?? ''}
         personaName={session?.personaDisplayName ?? ''}
         phase={session?.state === 'ended' ? 'ended' : 'open'}
-        sample
+        sample={false}
         sending={sending}
         turns={session?.turns ?? []}
       />
@@ -176,5 +176,5 @@ const PracticeSessionView = (): ReactNode => {
 };
 
 export default function PracticeSessionRoute(): ReactNode {
-  return practiceSampleEnabled ? <PracticeSessionView /> : <Redirect href="/home" />;
+  return practiceEnabled ? <PracticeSessionView /> : <Redirect href="/home" />;
 }
