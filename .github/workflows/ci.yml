@@ -354,8 +354,9 @@ jobs:
           skipped=$(node -e "const r=require(process.argv[1]);console.log(r.stats.skipped)" "$PWD/$f")
           unexpected=$(node -e "const r=require(process.argv[1]);console.log(r.stats.unexpected)" "$PWD/$f")
           echo "browser suite: $expected passed, $skipped skipped, $unexpected failed"
-          if [ "$expected" -lt 7 ] || [ "$skipped" -ne 0 ] || [ "$unexpected" -ne 0 ]; then
-            echo "FAILED: expected at least 7 passing browser tests and no skips." >&2
+          # W2-G B4: 11 = the seven before plus e2e/learning.spec.ts's four; a lower floor would let them vanish.
+          if [ "$expected" -lt 11 ] || [ "$skipped" -ne 0 ] || [ "$unexpected" -ne 0 ]; then
+            echo "FAILED: expected at least 11 passing browser tests and no skips." >&2
             exit 1
           fi
 

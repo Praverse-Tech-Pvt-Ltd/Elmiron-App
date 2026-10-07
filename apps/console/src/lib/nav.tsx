@@ -26,6 +26,8 @@ const ITEMS: readonly { readonly label: string; readonly href?: string }[] = [
   // W1-G E1 / BE-W122. Before this route existed, the only way to create the prompt a
   // practice session needs was a script writing SQL.
   { label: 'AI prompts', href: '/prompts' },
+  // W2-G B (OP-6). The screen `assign_course` waited for: a rep's Learning shows only assigned courses.
+  { label: 'Course assignments', href: '/learning' },
   { label: 'Consent versions', href: '/admin' },
   { label: 'Users & roles' },
   { label: 'Audit log' },

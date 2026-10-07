@@ -389,3 +389,21 @@ Nothing else breaks: the people already on the team keep their access, and no co
 
 **Engineering's recommendation, not a default: Private, on GitHub Team.** The documents were written
 for the team, not for the world.
+
+## 10. Q-21 — should a course need a second admin's approval before reps can take it?
+
+**7 October 2026, W2-G B5.** One answer: **Yes, four eyes** or **No, one admin publishes**.
+
+**Today one admin publishes a course and reps can take it at once.** Prompts and approved knowledge each
+need a SECOND admin to approve them (the database refuses an approval by the author), because what they
+say reaches reps as if the company said it. A course is training text an admin wrote, and it also reaches
+reps as the company's word — but nothing checks it before it does. This is a choice, not a defect: the
+course rules were written before four eyes was the pattern (`20260924000500_lms_core.sql`).
+
+* **Yes** — engineering adds a review step to course versions (submit → a different admin approves →
+  published), the same shape as prompts: about half a day, and nothing can be taken until two admins
+  exist (Q-14).
+* **No** — nothing changes; the screens built on 7 October already work this way.
+
+**Engineering's lean, not a default: Yes, if courses will carry product information** (dosing, storage,
+claims) — that is regulated content. **No, if they are process training only.** You know which they are.
