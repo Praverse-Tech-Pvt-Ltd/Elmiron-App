@@ -2,8 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { AI_RPC } from '@fieldforce/core';
-import type { AiFeature, AiPromptVersion } from '@fieldforce/core';
+import { AI_RPC, promptDraftRow } from '@fieldforce/core';
+import type { AiPromptVersion, GatewayFeature } from '@fieldforce/core';
 import { tokens } from '@fieldforce/ui-tokens';
 import { browserClient } from './supabase';
 import { Body, Title } from './ui';
@@ -24,7 +24,7 @@ import { PromptDraftForm, PromptReview } from './prompt-review';
 
 export interface PromptListProps {
   readonly versions: readonly AiPromptVersion[];
-  readonly features: readonly AiFeature[];
+  readonly features: readonly GatewayFeature[];
   readonly viewerUserId: string;
 }
 
@@ -51,11 +51,13 @@ export const PromptList = ({ versions, features, viewerUserId }: PromptListProps
           // `version_number` is not sent: the insert trigger computes it and overwrites anything
           // supplied. `organisation_id` and `status` are left to the column default and the
           // trigger, which is what makes "born a draft" true regardless of this file.
-          const { error } = await supabase.from('ai_prompt_versions').insert({
-            feature: input.feature,
-            system_prompt: input.systemPrompt,
-            created_by_user_id: id,
-          });
+          //
+          // W2-E A (`BE-W164`): the columns come from `promptDraftRow`, which derives
+          // `output_schema_name` from the feature. This insert used to send feature and text only,
+          // and every flow refuses a prompt without its schema name — so nothing approved here ran.
+          const { error } = await supabase
+            .from('ai_prompt_versions')
+            .insert({ ...promptDraftRow(input), created_by_user_id: id });
           if (error !== null) throw new Error(error.message);
           refresh();
         }}

@@ -43,6 +43,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
+  GATEWAY_MODEL,
   PRODUCT_QA_FAILED_MESSAGE,
   analyseSimSession,
   answerLessonQuestion,
@@ -91,13 +92,17 @@ interface RequestBody {
 /**
  * W1-V A — which India profile answers each feature, as decided (`docs/ai-platform/AI-SPEC.md`:
  * Sonnet 5 for reasoning-heavy work; Haiku 4.5 for `mr_chat` and `lms_tutor`, `BE-C41`).
+ *
+ * W2-E A3: the tier comes from `GATEWAY_MODEL` in `@fieldforce/core`, the map the console's
+ * `/prompts` screen shows the author. The profile ids stay HERE, beside the adapter that refuses
+ * every other one.
  */
 const BEDROCK_PROFILE: Record<Feature, IndiaProfileId> = {
-  product_qa: INDIA_PROFILES.sonnet,
-  ai_doctor: INDIA_PROFILES.sonnet,
-  ai_coach: INDIA_PROFILES.sonnet,
-  mr_chat: INDIA_PROFILES.haiku,
-  lms_tutor: INDIA_PROFILES.haiku,
+  product_qa: INDIA_PROFILES[GATEWAY_MODEL.product_qa],
+  ai_doctor: INDIA_PROFILES[GATEWAY_MODEL.ai_doctor],
+  ai_coach: INDIA_PROFILES[GATEWAY_MODEL.ai_coach],
+  mr_chat: INDIA_PROFILES[GATEWAY_MODEL.mr_chat],
+  lms_tutor: INDIA_PROFILES[GATEWAY_MODEL.lms_tutor],
 };
 
 const STUB_SHAPE: Record<Feature, StubShape> = {

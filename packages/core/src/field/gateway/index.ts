@@ -10,4 +10,5 @@ export * from './product-qa.js';
 export * from './mr-chat.js';
 export * from './lms-tutor.js';
 export * from './sim-doctor.js';
+export * from './prompt-contract.js';
 export * from './benchmarks.js';

@@ -2,7 +2,14 @@
 
 import { useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import type { AiFeature, AiPromptVersion } from '@fieldforce/core';
+import {
+  GATEWAY_FEATURES,
+  GATEWAY_MODEL,
+  GATEWAY_MODEL_LABEL,
+  GATEWAY_OUTPUT_SCHEMA_NAME,
+  PromptModelConfigSchema,
+} from '@fieldforce/core';
+import type { AiPromptVersion, GatewayFeature, PromptModelConfig } from '@fieldforce/core';
 import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { Body, Card, Heading, Label, MissingNote, Pill } from './ui';
 import { approvalAffordance } from './knowledge-review';
@@ -101,17 +108,73 @@ const runAction = (
 
 // ---------------------------------------------------------------------------
 
+/**
+ * W2-E A3 (`BE-W164`). What a version carries besides its text, said on the screen.
+ *
+ * * **The model is SHOWN, not chosen.** It is fixed per feature in code (`GATEWAY_MODEL`) because the
+ *   gateway maps it to an India inference profile and the adapter refuses any other; a model picker
+ *   here would make data residency a form field.
+ * * **The limits are REQUIRED, with no default filled in.** Left out, the version runs on the
+ *   vendor's defaults — a length and a temperature nobody approved. Typed here, they are frozen
+ *   with the text at submission (`ai_prompt_versions_before_update`), so the approver signs the
+ *   limits as well as the words.
+ * * **The output check is shown, not typed** — derived from the feature by `promptDraftRow`.
+ */
+export const PROMPT_LIMITS_NOTE =
+  'Both limits are required. The approver signs them with the text, and they cannot change after ' +
+  'submission. The drafts in docs/ai-platform/drafts propose numbers for each feature.';
+
+/** `''` while empty: `Number('')` is 0, which would read an empty box as a real temperature. */
+const limitsFrom = (temperature: string, maxTokens: string): PromptModelConfig | null => {
+  if (temperature.trim() === '' || maxTokens.trim() === '') return null;
+  const parsed = PromptModelConfigSchema.safeParse({
+    temperature: Number(temperature),
+    maxTokens: Number(maxTokens),
+  });
+  return parsed.success ? parsed.data : null;
+};
+
+/**
+ * The review card's line about limits and output check, from the row. A version the gateway would
+ * refuse SAYS so before anyone approves it — the approver is the last person who can catch it.
+ */
+export const versionSettings = (version: AiPromptVersion): string => {
+  const parts: string[] = [];
+  const limits = PromptModelConfigSchema.safeParse(version.modelConfig);
+  parts.push(
+    limits.success
+      ? `Temperature ${String(limits.data.temperature)} · longest answer ${String(limits.data.maxTokens)} tokens`
+      : 'No valid limits — this version would run on the vendor’s defaults',
+  );
+  const expected = (GATEWAY_FEATURES as readonly string[]).includes(version.feature)
+    ? GATEWAY_OUTPUT_SCHEMA_NAME[version.feature as GatewayFeature]
+    : null;
+  parts.push(
+    expected !== null && version.outputSchemaName === expected
+      ? `output checked against ${expected}`
+      : 'the gateway will REFUSE this version: its output check is not the one this feature needs',
+  );
+  return parts.join(' · ');
+};
+
 export interface PromptDraftProps {
-  readonly features: readonly AiFeature[];
-  readonly onCreate: (input: { feature: AiFeature; systemPrompt: string }) => Promise<void>;
+  readonly features: readonly GatewayFeature[];
+  readonly onCreate: (input: {
+    feature: GatewayFeature;
+    systemPrompt: string;
+    modelConfig: PromptModelConfig;
+  }) => Promise<void>;
 }
 
 export const PromptDraftForm = ({ features, onCreate }: PromptDraftProps): ReactNode => {
-  const [feature, setFeature] = useState<AiFeature | ''>(features[0] ?? '');
+  const [feature, setFeature] = useState<GatewayFeature | ''>(features[0] ?? '');
   const [systemPrompt, setSystemPrompt] = useState('');
+  const [temperature, setTemperature] = useState('');
+  const [maxTokens, setMaxTokens] = useState('');
   const [state, setState] = useState<State>({ kind: 'idle' });
 
-  const ready = feature !== '' && systemPrompt.trim() !== '';
+  const limits = limitsFrom(temperature, maxTokens);
+  const ready = feature !== '' && systemPrompt.trim() !== '' && limits !== null;
 
   return (
     <Card>
@@ -124,7 +187,7 @@ export const PromptDraftForm = ({ features, onCreate }: PromptDraftProps): React
         style={field()}
         value={feature}
         onChange={(e) => {
-          setFeature(e.target.value as AiFeature);
+          setFeature(e.target.value as GatewayFeature);
         }}
       >
         {features.map((f) => (
@@ -133,6 +196,12 @@ export const PromptDraftForm = ({ features, onCreate }: PromptDraftProps): React
           </option>
         ))}
       </select>
+      {feature !== '' ? (
+        <Body muted>
+          Answered by {GATEWAY_MODEL_LABEL[GATEWAY_MODEL[feature]]} — fixed for this feature. Output
+          checked against {GATEWAY_OUTPUT_SCHEMA_NAME[feature]}.
+        </Body>
+      ) : null}
 
       <Label>The instructions the model is given</Label>
       <textarea
@@ -144,6 +213,28 @@ export const PromptDraftForm = ({ features, onCreate }: PromptDraftProps): React
         }}
       />
       <MissingNote>{PROMPT_REGULATED_CAUTION}</MissingNote>
+
+      <Label>Temperature, from 0 to 1</Label>
+      <input
+        aria-label="Temperature, from 0 to 1"
+        inputMode="decimal"
+        style={field()}
+        value={temperature}
+        onChange={(e) => {
+          setTemperature(e.target.value);
+        }}
+      />
+      <Label>Longest answer, in tokens (1 to 8192)</Label>
+      <input
+        aria-label="Longest answer, in tokens"
+        inputMode="numeric"
+        style={field()}
+        value={maxTokens}
+        onChange={(e) => {
+          setMaxTokens(e.target.value);
+        }}
+      />
+      <Body muted>{PROMPT_LIMITS_NOTE}</Body>
 
       {/* The version number is NOT offered. `ai_prompt_versions_before_insert()` computes it as
           max+1 per organisation per feature and overwrites whatever arrives, so a field here would
@@ -157,9 +248,9 @@ export const PromptDraftForm = ({ features, onCreate }: PromptDraftProps): React
         style={button()}
         disabled={!ready || state.kind === 'busy'}
         onClick={() => {
-          if (feature === '') return;
+          if (feature === '' || limits === null) return;
           runAction(
-            () => onCreate({ feature, systemPrompt: systemPrompt.trim() }),
+            () => onCreate({ feature, systemPrompt: systemPrompt.trim(), modelConfig: limits }),
             'Saved as a draft. Submit it for review when it is ready.',
             setState,
           );
@@ -209,6 +300,11 @@ export const PromptReview = ({
             something they did not read. */}
         <span style={{ whiteSpace: 'pre-wrap' }}>{version.systemPrompt}</span>
       </Body>
+
+      {/* W2-E A3: what the approver signs besides the words. Read from the ROW, so a version
+          written before W2-E — or by hand — shows what it actually carries, including nothing. */}
+      <Label>Limits and output check</Label>
+      <Body>{versionSettings(version)}</Body>
 
       {version.status === 'approved' ? <Body muted>{PROMPT_ONE_APPROVED_NOTE}</Body> : null}
 

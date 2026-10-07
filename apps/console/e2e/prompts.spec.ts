@@ -55,15 +55,48 @@ test('a prompt can be written and approved without anybody touching SQL', async 
   await author.goto('/prompts');
 
   await expect(author.getByRole('heading', { name: 'New prompt' })).toBeVisible();
-  await author.getByLabel('Which feature this prompt is for').selectOption('ai_doctor');
+  // W2-E A (`BE-W164`): every feature with a gateway path is offered — `mr_chat` and `lms_tutor`
+  // were not, so two features could not be authored at all.
+  const featureBox = author.getByLabel('Which feature this prompt is for');
+  await expect(featureBox.locator('option')).toHaveText([
+    'product_qa',
+    'mr_chat',
+    'lms_tutor',
+    'ai_doctor',
+    'ai_coach',
+  ]);
+  await featureBox.selectOption('ai_doctor');
   await author.getByLabel('The instructions the model is given').fill(promptText);
-  await author.getByRole('button', { name: 'Save draft' }).click();
+  await expect(author.getByText('Answered by Claude Sonnet 5, India profile')).toBeVisible();
+
+  // A5, the screen's side: a version the gateway would refuse, or run on defaults, cannot be
+  // saved. No limits, an empty one, or one out of range — the button stays disabled.
+  const save = author.getByRole('button', { name: 'Save draft' });
+  const temperature = author.getByLabel('Temperature, from 0 to 1');
+  const maxTokens = author.getByLabel('Longest answer, in tokens');
+  await expect(save).toBeDisabled();
+  await temperature.fill('0.7');
+  await expect(save).toBeDisabled();
+  await maxTokens.fill('9000');
+  await expect(save).toBeDisabled();
+  await maxTokens.fill('300');
+  await temperature.fill('1.5');
+  await expect(save).toBeDisabled();
+  await temperature.fill('0.7');
+  await expect(save).toBeEnabled();
+  await save.click();
 
   // Version 1: the seeder no longer writes one. The number comes from the insert trigger's max+1,
   // computed by the database and never by this form.
   const card = cardFor(author, 'ai_doctor — version 1');
   await expect(card).toBeVisible();
   await expect(card.getByText('draft', { exact: true })).toBeVisible();
+  // What the approver will sign besides the words, read back from the stored row.
+  await expect(
+    card.getByText(
+      'Temperature 0.7 · longest answer 300 tokens · output checked against SimDoctorTurnOutputSchema',
+    ),
+  ).toBeVisible();
 
   await card.getByRole('button', { name: 'Submit for review' }).click();
   await expect(card.getByText('in_review', { exact: true })).toBeVisible();
