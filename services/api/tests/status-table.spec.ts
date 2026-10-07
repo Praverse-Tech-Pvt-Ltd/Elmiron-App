@@ -1,6 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { checkStatusTable, lastStatusTable } from '../scripts/check-status-table.mjs';
+import {
+  checkRetiredPlans,
+  checkStatusTable,
+  lastStatusTable,
+} from '../scripts/check-status-table.mjs';
 import type { MustHaves } from '../scripts/check-status-table.mjs';
 
 /**
@@ -75,5 +79,38 @@ describe('W2-F C3 — every operator must-have has a row, by construction', () =
   it('the parser reads the table under the heading, and stops where the table does', () => {
     const rows = lastStatusTable(log([row('Only [OP-1]')]));
     expect(rows).toEqual([['Only [OP-1]', 'BLOCKED', 'Operator', 'Q-1', '—']]);
+  });
+});
+
+describe('W2-G C3 (BE-C76) — the retired plan documents stay retired', () => {
+  const banner =
+    '> **RETIRED 7 October 2026 (W2-G C, `BE-C76`) — not a plan any more.**\n> The single list is `docs/operator/must-haves.json`.\n\n# 4 October';
+  const files = (text4: string) => [
+    { path: 'docs/4-OCTOBER.md', text: text4 },
+    { path: 'docs/AFTER-4-OCTOBER.md', text: banner },
+  ];
+
+  it('the list names both date-bound plans', () => {
+    expect(mustHaves.retiredPlans).toEqual(['docs/4-OCTOBER.md', 'docs/AFTER-4-OCTOBER.md']);
+  });
+
+  it('POSITIVE: both carrying the banner pass', () => {
+    expect(checkRetiredPlans(files(banner), mustHaves)).toEqual([]);
+  });
+
+  it('a plan whose banner was removed — revived as "the plan" — fails, naming it', () => {
+    expect(checkRetiredPlans(files('# 4 October — the honest list'), mustHaves)).toEqual([
+      'docs/4-OCTOBER.md: a retired plan must begin with the RETIRED banner naming docs/operator/must-haves.json',
+    ]);
+  });
+
+  it('a banner that does not name the single list fails too', () => {
+    expect(checkRetiredPlans(files('> **RETIRED** see elsewhere'), mustHaves)).toHaveLength(1);
+  });
+
+  it('a listed plan that is missing fails rather than passing on nothing', () => {
+    expect(checkRetiredPlans([files(banner)[1] as never], mustHaves)).toEqual([
+      'docs/4-OCTOBER.md: listed as a retired plan but not found',
+    ]);
   });
 });

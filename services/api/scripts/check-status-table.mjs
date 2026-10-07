@@ -79,6 +79,23 @@ export const checkStatusTable = (log, mustHaves) => {
   return failures;
 };
 
+/**
+ * W2-G C (`BE-C76`) — the plan documents people re-planned against are RETIRED, and stay so. Each file
+ * in `mustHaves.retiredPlans` must begin with the retirement banner that names the single list; a file
+ * that loses it, or is missing, fails. So a second list cannot quietly come back as "the plan".
+ */
+export const checkRetiredPlans = (files, mustHaves) =>
+  (mustHaves.retiredPlans ?? []).flatMap((path) => {
+    const file = files.find((f) => f.path === path);
+    if (file === undefined) return [`${path}: listed as a retired plan but not found`];
+    const head = file.text.split(/\r?\n/).slice(0, 5).join('\n');
+    return /^> \*\*RETIRED/.test(head) && head.includes('docs/operator/must-haves.json')
+      ? []
+      : [
+          `${path}: a retired plan must begin with the RETIRED banner naming docs/operator/must-haves.json`,
+        ];
+  });
+
 const repoFile = (rel) =>
   new URL(`../../../${rel}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 
@@ -89,10 +106,17 @@ if (
 ) {
   const log = readFileSync(repoFile('docs/log/backend.md'), 'utf8');
   const mustHaves = JSON.parse(readFileSync(repoFile('docs/operator/must-haves.json'), 'utf8'));
-  const failures = checkStatusTable(log, mustHaves);
+  const retired = (mustHaves.retiredPlans ?? []).flatMap((path) => {
+    try {
+      return [{ path, text: readFileSync(repoFile(path), 'utf8') }];
+    } catch {
+      return [];
+    }
+  });
+  const failures = [...checkStatusTable(log, mustHaves), ...checkRetiredPlans(retired, mustHaves)];
   if (failures.length === 0) {
     console.log(
-      `The last status table has a row for every one of the operator's ${String(mustHaves.items.length)} items, and keeps the format's rules.`,
+      `The last status table has a row for every one of the operator's ${String(mustHaves.items.length)} items, and keeps the format's rules; ${String(retired.length)} retired plan documents still say so.`,
     );
   } else {
     for (const f of failures) console.log(`::error title=Status table incomplete::${f}`);
