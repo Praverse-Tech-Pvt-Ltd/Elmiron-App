@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
+import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { CourseScreen, Screen } from '@fieldforce/ui';
 import type { CourseView } from '@fieldforce/ui';
 import { learningEnabled } from '../../src/features';
@@ -38,25 +38,30 @@ export const Course = ({
   const [starting, setStarting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  useEffect(() => {
-    let live = true;
-    backend
-      .course(courseId)
-      .then(async (course) => {
-        const state = courseState(courseId, course.versions, course.enrolments);
-        const outline =
-          state.kind === 'started'
-            ? await backend.outline(state.versionId, state.enrolmentId)
-            : null;
-        if (live) setLoaded({ kind: 'loaded', course, outline });
-      })
-      .catch((error: unknown) => {
-        if (live) setLoaded({ kind: 'failed', failure: failureKind(error) });
-      });
-    return () => {
-      live = false;
-    };
-  }, [backend, courseId, attempt]);
+  // W2-G D (found on the emulator): read again every time this screen comes back into view. With a
+  // one-time read, finishing a lesson and pressing Back showed "0 of 2 lessons finished" and the
+  // list "Not started" for a course the server had marked finished.
+  useFocusEffect(
+    useCallback(() => {
+      let live = true;
+      backend
+        .course(courseId)
+        .then(async (course) => {
+          const state = courseState(courseId, course.versions, course.enrolments);
+          const outline =
+            state.kind === 'started'
+              ? await backend.outline(state.versionId, state.enrolmentId)
+              : null;
+          if (live) setLoaded({ kind: 'loaded', course, outline });
+        })
+        .catch((error: unknown) => {
+          if (live) setLoaded({ kind: 'failed', failure: failureKind(error) });
+        });
+      return () => {
+        live = false;
+      };
+    }, [backend, courseId, attempt]),
+  );
 
   const start = (versionId: string): void => {
     setStarting(true);

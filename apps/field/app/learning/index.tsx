@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Redirect, useRouter } from 'expo-router';
+import { Redirect, useFocusEffect, useRouter } from 'expo-router';
 import { LearningListScreen, Screen } from '@fieldforce/ui';
 import type { LearningListView } from '@fieldforce/ui';
 import { learningEnabled } from '../../src/features';
@@ -32,21 +32,26 @@ export const LearningList = ({
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
 
-  useEffect(() => {
-    let live = true;
-    setLoaded({ kind: 'loading' });
-    backend.myCourses().then(
-      (data) => {
-        if (live) setLoaded({ kind: 'loaded', data });
-      },
-      (error: unknown) => {
-        if (live) setLoaded({ kind: 'failed', failure: failureKind(error) });
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [backend, attempt]);
+  // W2-G D (found on the emulator): read again every time this screen comes back into view. With a
+  // one-time read, finishing a lesson and pressing Back showed "0 of 2 lessons finished" and the
+  // list "Not started" for a course the server had marked finished.
+  useFocusEffect(
+    useCallback(() => {
+      let live = true;
+      // No reset to "loading" here: on a return the rows already shown stay until the new ones land.
+      backend.myCourses().then(
+        (data) => {
+          if (live) setLoaded({ kind: 'loaded', data });
+        },
+        (error: unknown) => {
+          if (live) setLoaded({ kind: 'failed', failure: failureKind(error) });
+        },
+      );
+      return () => {
+        live = false;
+      };
+    }, [backend, attempt]),
+  );
 
   const view: LearningListView =
     loaded.kind === 'loading'
@@ -55,6 +60,7 @@ export const LearningList = ({
         ? {
             kind: loaded.failure,
             onRetry: () => {
+              setLoaded({ kind: 'loading' });
               setAttempt((n) => n + 1);
             },
           }
