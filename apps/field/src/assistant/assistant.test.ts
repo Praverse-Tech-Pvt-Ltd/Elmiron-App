@@ -94,12 +94,33 @@ describe('outcomeFromGateway — the mr_chat result', () => {
       kind: 'at_limit',
       resetsAt: null,
     });
+    // W2-D D1 (`BE-W161`): the gateway's real 429 body (`ai-gateway/index.ts`, `limitReached`) puts
+    // the reset instant INSIDE `allowance`. This test used to send it at the top level -- the same
+    // wrong shape the mapping read, so both agreed and the rep was never told when it resets.
+    expect(
+      outcomeFromGateway({
+        status: 429,
+        body: {
+          code: '45012',
+          message: 'ai daily limit reached',
+          allowance: {
+            requestsUsedToday: 104,
+            dailyLimit: 104,
+            warning: true,
+            resetsAt: '2026-10-01T18:30:00.000Z',
+          },
+        },
+      }),
+    ).toEqual({ kind: 'at_limit', resetsAt: '2026-10-01T18:30:00.000Z' });
+  });
+
+  it('a reset time at the top level of a 429 is not the contract, and is not read', () => {
     expect(
       outcomeFromGateway({
         status: 429,
         body: { code: '45012', resetsAt: '2026-10-01T18:30:00.000Z' },
       }),
-    ).toEqual({ kind: 'at_limit', resetsAt: '2026-10-01T18:30:00.000Z' });
+    ).toEqual({ kind: 'at_limit', resetsAt: null });
   });
 
   it('a server error, or a body that is not the contract, is an error', () => {

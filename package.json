@@ -22,7 +22,8 @@
     "db:reset": "supabase --workdir services/api db reset && pnpm db:instrument",
     "db:instrument": "node services/api/scripts/enable-lock-logging.mjs",
     "db:types": "supabase --workdir services/api gen types typescript --local",
-    "functions:serve": "supabase --workdir services/api functions serve --no-verify-jwt"
+    "functions:serve": "supabase --workdir services/api functions serve --no-verify-jwt",
+    "ai:live": "pnpm --filter @fieldforce/api exec vitest run tests/bedrock-live.spec.ts tests/ai-live.spec.ts --reporter=verbose"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

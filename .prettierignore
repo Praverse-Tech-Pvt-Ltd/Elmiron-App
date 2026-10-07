@@ -42,3 +42,7 @@ apps/console/next-env.d.ts
 # W1-N: the per-session review folder -- git-ignored copies, so `format:check` must not see them
 # either. Same reasoning as `.claude/` above: a file nobody can commit must not fail a local check.
 review-handoff/
+
+# W2-D C (`BE-W158`): a CAPTURED server reply, written verbatim by
+# `services/api/scripts/capture-day-pull.mjs`. Regenerated, never edited -- by hand or by a formatter.
+apps/field/src/routes/__fixtures__/

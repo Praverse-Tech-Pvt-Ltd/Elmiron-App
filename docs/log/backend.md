@@ -4611,3 +4611,204 @@ never fired. On `w2-c-backend` for a PR to `main`. Emulator not used this sessio
 server and the database stopped at the end. **No credential appears anywhere in the diff** (checked
 against the env file's values before every commit; the key probe reported names only and was never
 committed). The local env file still exists, git-ignored, needed the moment access is granted.
+
+### W2-D — day one, written down
+
+6 October, 16:52–17:55 IST. Branch `w2-d-backend` from `main` at `f2e9c7b` (PR #22's merge).
+
+**The override did not fire.** Model access was read from the service before Part A (16:52), between
+parts (17:09, 17:46) and before stopping (17:50): both models `authorizationStatus: NOT_AUTHORIZED`,
+`agreementAvailability: NOT_AVAILABLE` each time.
+
+**The previous push's CI, recorded:** `w2-c-backend` at `0eeaf54` — workflow **CI**, run `37454669739`,
+success. Its merge to `main` at `f2e9c7b` — **CI** `37455602096`, **Migration drift** `37455602112`,
+**PR mergeability** `37455602131`, all success.
+
+#### A — day one as one page
+
+* **A1.** `docs/ai-platform/DAY-ONE.md` is the one page; **`pnpm ai:live` the one command**, whose first
+  line says which of five states you are in. It replaces the six steps of `KEY-DAY-CHECKLIST.md` (W1-V A6)
+  and the five of W1-Z B5, and adds the named-key step (`BE-C72`), the deploy and `BE-W146`'s gate.
+  `KEY-DAY-CHECKLIST.md` now points at it in its first lines. **What the old path hid:** its step 3 named
+  `seed-practice-world.mjs`, which creates people only — no product, knowledge, lesson or practice session,
+  so four of the five features had nothing to answer about.
+* **A3.** `services/api/tests/ai-live.spec.ts`: all five features through the real gateway, using the
+  DRAFT instruction sets (B) approved locally by two fixture admins, asserting the audit row (`completed`,
+  `bedrock`, the feature's India profile, real tokens, the approved prompt), plus four patient-detail
+  requests refused before the model (`blocked`, provider null). Gates, each a stated reason: no
+  credential; model access; `AI_PROVIDER` not `bedrock` (the gateway would be the stub); no database; no
+  function. The credential reader moved to `tests/live-credential.ts`, shared with `bedrock-live.spec.ts`.
+  **Watched it skip:** `gate: SKIPPING — model access not granted (ValidationException)` in both files,
+  **2 passed | 11 skipped (13)**. Gates 3–5 cannot be observed while gate 2 is shut; the five drafts were
+  checked to parse (text block starting `DRAFT`, valid JSON config) since that code runs only past the
+  gates. **Not mutation-tested: its assertions cannot execute without access** — the first live run is
+  its first real check.
+* **A2 — the predictions.** The brief said eleven; the table has **thirteen**, and reading the code added
+  three. **Overtaken: #2** (the construction line builds Bedrock under `AI_PROVIDER=bedrock`), **#7** (the
+  abort signal reaches the SDK), **#12** (the stub stays unless that setting is present); **#11 partly**
+  (the adapter honours `maxTokens`, but nothing can set it from the console). **Fixed before the key:**
+  #4, #5 (W1-S B). **Open:** #1, #3, #6, #8, #9, #10, #13. **New, all three findable without the key and
+  all three the first thing day one would have seen:**
+  * **#14 (`BE-W163`)** — the coach's contract never names its JSON keys; the other four flows do. Every
+    analysis would fail `schema_invalid`. The coach draft carries the shape; the fix belongs in code.
+  * **#15 (`BE-W164`)** — the console `/prompts` screen saves only feature and text. **Every flow refuses
+    a prompt with no `output_schema_name` (`prompt_schema_mismatch`)**, so no prompt approved through the
+    documented four-eyes screen can run. The console's browser test approves a prompt and never calls
+    the gateway. **This blocks every production feature.**
+  * **#16 (`BE-W164`)** — that screen offers three features (not `mr_chat`, `lms_tutor`) and no model
+    config.
+* **A4 — the hours.** Engineering about **23–25 hours**: the local path 2, `BE-W163` 1, `BE-W164` 3–4,
+  `BE-W146` 8, deploy and one production request per feature 1–2, the app's two transports and a build 8.
+  **Waiting on people, none dated:** model access (AWS account owner — the whole path waits on it); the
+  drafts' decisions (operator, about half a day); approval (a second admin, Q-14 — none exists); secrets
+  and the named key (operator, minutes); product documents and courses (content owners, plus a loader
+  each). **About three days of engineering, none of it the critical path.** Estimates, not measurements.
+
+#### B — the drafts
+
+`docs/ai-platform/drafts/`: five instruction sets, the personas and scenarios, and a README. Every file
+says DRAFT; **every instruction set's own text begins `DRAFT — NOT APPROVED`**, so a pasted copy still
+says it, and an approver must delete that line on purpose.
+
+* **B1.** Each draft is written against what its flow already appends (`OUTPUT_CONTRACT`): role, scope and
+  judgement only, never the JSON — except the coach, whose contract names no keys (#14). Model configs are
+  proposals; the operator chooses the numbers.
+* **B2 — the coach rubric, and where I would not invent one.** `response_relevance` is scorable from the
+  transcript and is drafted with anchors — **40**: answers questions the doctor did not ask, objection
+  still open at the end, turns that would read the same whatever the doctor said; **70**: each turn answers
+  the last, the objection addressed directly at least once, one drift into a prepared pitch.
+  **`scientific_accuracy` cannot be scored as the word means: the coach is given the transcript, objective
+  and objection, never the approved product material**, so "accurate" could only be judged against the
+  model's own knowledge — what `BE-C37` forbids as a source. **The operator must define it:** (1) accept
+  *scientific discipline* (claims sourced, uncertainty admitted — drafted, and the draft says so in its own
+  text, with 40/70 anchors), (2) send the coach the scenario's approved material (code), or (3) drop the
+  dimension (contract).
+* **B3 — the enum is not short.** Measured: nothing on the server branches on `stance`; it is one prompt
+  line (`sim-doctor.ts:174`) and a label on the practice list. The operator's six (`BE-C35`) are two
+  manners (busy → `rushed`, skeptical → `sceptical`), three characters (scientific → `sceptical`,
+  price-sensitive → `receptive`, competitor-loyal → `hostile`, carried by brief and objection), and **one
+  scenario, not a persona** (the difficult objection). **Not widened** (`BE-C73`). Five personas, six
+  scenarios drafted. **S6 — a doctor reporting a reaction — is a possible adverse event and needs the
+  signatory (`D-15`)** before practice simulates it.
+* **B4.** Where an approver finds them: the console can only show a draft an admin of THAT company authored
+  there, so the drafts live in the repository, reached from `DAY-ONE.md` H5–H6, and **`pnpm ai:live`
+  approves these exact files locally**, so the words meet the real model before a person is asked to sign.
+* **B5 — what is left after the drafts.** Operator: the wording; the numbers; what `scientific_accuracy`
+  means; whether S6 exists; each scenario's product and market; the company facts `mr_chat` may rely on.
+  People: a second admin (Q-14); the AWS account owner; content owners for documents and courses.
+  Engineering: `BE-W164` (blocks production), `BE-W163`, `BE-W146`, the app's two transports and a build.
+
+#### C — one rep's day, shipped configuration (`BE-W158`)
+
+`apps/field/src/routes/shipped-day.test.tsx`. **Real:** the four route modules and the consent screen;
+`SessionProvider`, `OutboxFlusher`, `PulledStoreProvider` (the tree in `_layout.tsx`); the pulled store,
+outbox, queue, reducer and storage. **Replaced only at `resolveClient`** — the one seam every `rpc` goes
+through (its real body is a dynamic import jest cannot run). **The reads are CAPTURED** from the real local
+server by `services/api/scripts/capture-day-pull.mjs`: `sync_pull` (`+00:00` timestamps), `my_shift_window`
+(`Asia/Kolkata`, from the server) and `recording_permission`, plus the token's decoded claims (never the
+token, never the password). `sync_push` records and accepts. The clock is pinned to the capture and moves
+minutes between the rep's actions. **Every visible line of every screen is asserted** — Today, the route,
+the visit, check-in offline, consent, back, check-out, Today offline, the route offline, the flush (three
+items, in the order the work was done), Today and the route after it, Doctors offline.
+
+* **Found while building it: `BE-W165`.** A visit finished on the phone is ticked and counted done (the
+  `BE-W154` overlay) but its times are not overlaid: **the route's stop says "Not started" and Doctors says
+  last seen "yesterday"** for a visit checked in at 17:28 and out at 17:46. Asserted as it is, marked
+  UNTRUE in the test, so the fix must change those lines on purpose. Not fixed.
+* **A false alarm, run down rather than filed.** One run flushed consent after check-out. The queue on disk
+  showed the cause: the reducer orders by `clientCreatedAt`, ties broken by the random item id, and the
+  test's frozen clock gave check-in and consent the same millisecond. A test artefact, not a defect — the
+  clock now moves between actions. Five runs before the change gave three different orders; six runs
+  after it (five by hand, one in the clean-database check) all passed, each asserting the order.
+* **C4 — two defects reintroduced, one at a time, restored after each:**
+  * **`BE-W154` (W2-C) — Today without the queue overlay.** Fails at **HOME OFFLINE**: `- "That's everyone
+    on the plan"` / `+ "Next visit"`, `+ "Dr Asha Deshpande (DEMO)"`.
+  * **The 5½-hour clock (W2-B/W2-C) — the raw UTC slice back in the route.** Fails at **ROUTE**:
+    `- "14:56 · 45 min"` / `+ "09:26 · 45 min"`, `- "15:56 · 40 min"` / `+ "10:26 · 40 min"`.
+* **C5 — its limits** (also at the end of the file): the server's verdicts are not exercised (`sync_push`
+  accepts everything); later pulls replay the capture, so "the next pull heals it" is not shown; the visit
+  screen's legacy consent-record REST read is a stub, not captured; GPS, audio and navigation are
+  stand-ins (navigation follows the app's own `push`/`replace`/`back`, no real stack or tab bar); no
+  process death (that is `offline-day.test.tsx`), and "signal again" is a relaunch, not a foreground event;
+  one tenant, one page, one zone; yesterday's first visit shares today's 14:56; and it is not a device —
+  layout, clipping and fonts are not seen.
+
+#### D — D1 done; D2 not started, for ROOM
+
+* **D1 (`BE-W161`).** The assistant read the 429's reset instant from the top level; the gateway puts it in
+  `allowance`. **The unit test and the route test both sent the same wrong shape, which is why both
+  agreed.** Both now send the gateway's real body, a top-level reset time is asserted NOT read, the
+  sample transport and the contract comment moved with it. Reverting the fix turns exactly the two new
+  unit tests red (17 passed | 2 failed). The route test now shows "It resets at 00:00 on 2 Oct." from the
+  real shape.
+* **D2 (`BE-W146`)** — about a day; not started.
+
+#### E — status
+
+| MODULE | STATUS | OWNER | BLOCKER | ETA |
+| --- | --- | --- | --- | --- |
+| Day one as one page and one command (`DAY-ONE.md`, `pnpm ai:live`) | DONE | Maanav | — | — |
+| Live suite over all five features (`ai-live.spec.ts`) | DONE | Maanav | — (skips: model access not granted) | — |
+| First live run of the five features | BLOCKED | AWS account owner, then Maanav | Model access (`NOT_AUTHORIZED`, measured 17:50) | about 2 hours after |
+| Coach names its JSON keys (`BE-W163`) | POST-4-OCT | Maanav | None | an hour |
+| Console can author a prompt that runs (`BE-W164`) | POST-4-OCT | Maanav | None — **blocks every production feature** | 3–4 hours |
+| Five instruction sets, personas and scenarios drafted | DONE | Maanav | — | — |
+| What the coach's `scientific_accuracy` means | BLOCKED | Operator | Discipline, approved material, or no dimension (B2) | minutes, once decided |
+| Practice scenario S6 (a doctor reports a reaction) | BLOCKED | Operator | `D-15`, the signatory | — |
+| Instruction sets, personas and scenarios approved | BLOCKED | Operator | Two admins (Q-14); `BE-W164` | after both |
+| One shipped-configuration test (`BE-W158`) | DONE | Maanav | — | — |
+| A visit finished on the phone keeps the server's times (`BE-W165`) | POST-4-OCT | Maanav | None | about 2 hours |
+| Assistant limit reset time (`BE-W161`) | DONE | Maanav | — | — |
+| Request-log integrity (`BE-W146`) | POST-4-OCT | Maanav | None; trigger is production AI (`BE-C71`) | about 1 day |
+| Untrue screens `BE-W149`, `W153`–`W157` + the clock sweep | DONE | Maanav | — | — |
+| `BE-W150` — the start-up gate on an unused address | BLOCKED | Operator | Re-rule FE-D2 2 | minutes, once decided |
+| Adverse-event flag (`BE-W159`, `BE-C36`) | DONE | Maanav | — | — |
+| Who operates the PV process downstream (`D-15`) | BLOCKED | Operator | `D-15`, the signatory | — |
+| Product Q&A — screen (`BE-W160`) | DONE | Maanav | — | — |
+| Product Q&A — real answers | BLOCKED | Operator, then AWS account owner | Approved material (Q-9) and a loader; approved prompt (Q-14, `BE-W164`); model access | ½ day after all |
+| Practice writer off the legacy key (`BE-W162`) | DONE | Maanav | — | — |
+| Named `practice_writer` key on the hosted project | BLOCKED | Operator | Created in the dashboard, once | minutes |
+| AI Doctor practice + AI Analysis — real answers | BLOCKED | AWS account owner, then operator | Model access; approvals (Q-14); `BE-W163`, `BE-W164` | ½ day after all |
+| Chatbot — real answers | BLOCKED | AWS account owner, then operator | Model access; approved prompt (Q-14, `BE-W164`) | ½ day after all |
+| Core MR day — emulator, local stack | DONE | Maanav | — | — |
+| Offline day (`FE-G2`) — emulator | DONE | Maanav | — | — |
+| Offline day — real radio off, on a handset | BLOCKED | Operator, then Maanav | A handset; a release build | about ½ day after both |
+| Core MR day — real handset, signed | BLOCKED | Operator, then Maanav | A release key, a handset, a reachable server (Q-19) | about 1 day after all three |
+| Production deploy | BLOCKED | Operator, then Maanav | Q-19, then `BE-W143` | about 1 day after the answer |
+| Backup | BLOCKED | Operator, then Maanav | Q-19; red from 16 October | ½ day after the answer |
+| Branch protection on `main` | BLOCKED | Repository admin | Not applied | minutes |
+| Repository visibility | BLOCKED | Operator | Q-20 | minutes, once decided |
+| Day planning (manager plans) | BLOCKED | Operator | Q-16, Q-17, Q-18 | 10–15 working days after the answers |
+| Demo build script | IN PROGRESS | Maanav | Still forces CMake 3.31.6 | about ½ day |
+
+#### Checks
+
+* Static first, every commit: typecheck 0 errors, lint 0 errors (the one existing frontend warning,
+  `beat-plan-route.test.tsx:22`, not mine), format clean; ids clean (`BE-W163`–`BE-W165`, `BE-C73`
+  registered in the commit that first cites each).
+* **Clean-database check: All 29 step(s) passed.** Database runner **Test Files 86 passed (86)**, **Tests
+  1155 passed | 11 skipped | 4 todo (1170)** — the 11 skips are exactly the two gated live suites
+  (`ai-live` 9, `bedrock-live` 2), whose gate tests ran. Field: vitest **53 files, 747 passed**; jest **43
+  suites, 308 passed** — each one more than W2-C (D1's unit test; the day test). Core 210 | 4 todo; ui 4
+  and 332; console 76; ui-tokens 59; mock 43; browser 7 passed, 0 skipped, 0 failed; the service-role
+  step "read in exactly one place".
+* Mutation, two-sided: D1 — the fix reverted, exactly the two new tests red. C — two real past defects
+  reintroduced, both caught (C4). A3 — not mutable without access, stated above.
+* **No credential in any diff** — every staged diff checked against the env file's values before each
+  commit; the captured fixture holds the token's decoded claims, never a token or password.
+* **This push's CI** is recorded in the next section: a log cannot hold its own commit's result.
+
+#### What I got wrong
+
+* My first day-test run read `repUserId` off a `default` export a JSON require does not have, and my
+  first relaunch did not await `cleanup` — both visible at once, both fixed.
+* I nearly filed the flush order as a defect from one run; the queue on disk said otherwise.
+* A shell substitution ate a path inside a comment of the capture script; seen in the diff and corrected.
+
+#### Where I stopped
+
+**After D1, for ROOM.** Parts A, B, C and D1 done and committed; **D2 (`BE-W146`, about a day) not
+started**. The override never fired. On `w2-d-backend` for a PR to `main`. No emulator this session.
+The function server was not left running; the database is stopped at the end. The local env file still
+exists, git-ignored, needed the moment access is granted — then `pnpm ai:live`, per `DAY-ONE.md`.
+**The first engineering after this: `BE-W164`** — without it no prompt approved in the console can run.

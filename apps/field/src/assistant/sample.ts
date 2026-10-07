@@ -49,7 +49,17 @@ export const sampleTransport = (request: ChatRequestBody): Promise<GatewayRespon
   if (has(message, 'limit')) {
     return Promise.resolve({
       status: 429,
-      body: { code: '45012', message: 'ai daily limit reached', resetsAt: SAMPLE_RESETS_AT },
+      // The gateway's real 429 shape: the reset instant inside `allowance` (`BE-W161`).
+      body: {
+        code: '45012',
+        message: 'ai daily limit reached',
+        allowance: {
+          warning: true,
+          requestsUsedToday: 100,
+          dailyLimit: 100,
+          resetsAt: SAMPLE_RESETS_AT,
+        },
+      },
     });
   }
   if (has(message, 'error')) {
