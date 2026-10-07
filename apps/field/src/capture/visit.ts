@@ -107,8 +107,9 @@ export const witnessedStage = (
  * the same rule for the screens that list visits, so the three cannot disagree.
  *
  * The status moves (`during` → `in_progress`, `after` → `completed`); the TIMES do not — a queued
- * check-in has no server stamp, and inventing one from the device would be the clock defect again.
- * "Not sent yet" is said where it is already said: the sync line beside these screens.
+ * check-in has no server stamp. "Not sent yet" is said where it is already said: the sync line
+ * beside these screens. W2-E D (`BE-W165`): the route and Doctors add `withPhoneTimes`, which
+ * supplies the phone's own times LABELLED as the phone's; Today does not.
  */
 export const visitsAsWitnessed = (
   visits: readonly Visit[],
@@ -119,6 +120,48 @@ export const visitsAsWitnessed = (
     if (stage === stageOf(visit)) return visit;
     return { ...visit, status: stage === 'after' ? 'completed' : 'in_progress' };
   });
+
+/**
+ * W2-E D (`BE-W165`) — the TIMES this phone witnessed, for the screens that list visits.
+ *
+ * `visitsAsWitnessed` moves the status and deliberately not the times, so a visit checked in at
+ * 17:28 and out at 17:46 on this phone was ticked on the route and still read "Not started", and
+ * Doctors said "last seen yesterday". Its comment said a device time "would be the clock defect
+ * again". It would not, if it is SAID to be the phone's: that is the rule the consent card already
+ * follows ("On this phone at 17:28", `witnessed.ts`) and the outbox's own note — never show a device
+ * time AS THOUGH THE SERVER CONFIRMED IT. So the time comes from the queue item this phone wrote
+ * (`clientCreatedAt`), only where the server has none, and `fromPhone` names every visit that got
+ * one so the screen can say so.
+ *
+ * Only for items the server did not refuse (`failed` / `conflict` move nothing, as in
+ * `witnessedStage`); a server time is never replaced. Today's screen does not use this, so its
+ * "Started" line can never become a device time.
+ */
+export const withPhoneTimes = (
+  visits: readonly Visit[],
+  items: readonly {
+    readonly entity: string;
+    readonly entityId: string;
+    readonly status: string;
+    readonly clientCreatedAt: string;
+  }[],
+): { readonly visits: Visit[]; readonly fromPhone: ReadonlySet<string> } => {
+  const fromPhone = new Set<string>();
+  const TAKEN = ['queued', 'in_flight', 'synced'];
+  const at = (visitId: string, entity: string): string | null =>
+    items.find((i) => i.entityId === visitId && i.entity === entity && TAKEN.includes(i.status))
+      ?.clientCreatedAt ?? null;
+  return {
+    visits: visits.map((visit) => {
+      const startedAt = visit.startedAt ?? at(visit.id, 'check_in');
+      const completedAt = visit.completedAt ?? at(visit.id, 'check_out');
+      if (startedAt === visit.startedAt && completedAt === visit.completedAt) return visit;
+      fromPhone.add(visit.id);
+      return { ...visit, startedAt, completedAt };
+    }),
+    fromPhone,
+  };
+};
 
 export const stageOf = (visit: Visit | null): VisitStage => {
   if (visit === null) return 'before';

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import { BeatPlanScreen, Screen } from '@fieldforce/ui';
 import type { SyncQueueItem } from '@fieldforce/core';
-import { visitsAsWitnessed } from '../src/capture/visit';
+import { visitsAsWitnessed, withPhoneTimes } from '../src/capture/visit';
 import { loadQueueState, onQueueChanged } from '../src/sync/async-storage-store';
 import { usePulledStore } from '../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../src/sync/selectors';
@@ -75,9 +75,13 @@ const UNREACHABLE = {
  * The slice was left behind a lint disable with a note saying to remove it on conversion; this
  * is the conversion.
  */
-const stopDetail = (stop: RouteStop, zone: TerritoryZone): string =>
+const stopDetail = (stop: RouteStop, zone: TerritoryZone, fromPhone: boolean): string =>
   [
-    stop.startedAt === null ? null : clockIn(stop.startedAt, zone),
+    // W2-E D (`BE-W165`): a time this phone recorded and the server has not yet returned is SAID to
+    // be the phone's — the consent card's wording — never shown as though the server confirmed it.
+    stop.startedAt === null
+      ? null
+      : `${clockIn(stop.startedAt, zone)}${fromPhone ? ' on this phone' : ''}`,
     stop.minutes === null ? null : `${String(stop.minutes)} min`,
     stop.state === 'cancelled' ? 'cancelled' : null,
     // Attendance, stated plainly. "doctor not available" says what happened without saying
@@ -130,12 +134,14 @@ export default function BeatPlanRoute(): ReactNode {
     };
   }, []);
 
+  // W2-E D (`BE-W165`): and the TIMES it witnessed, labelled as the phone's in `stopDetail`.
+  const witnessed = withPhoneTimes(visitsAsWitnessed(visitsFromStore(store), items), items);
   const view = beatPlanView({
     status,
     today,
     plans: [...store.beat_plan.values()],
     entries: [...store.beat_plan_entry.values()],
-    visits: visitsAsWitnessed(visitsFromStore(store), items),
+    visits: witnessed.visits,
     doctors: doctorsFromStore(store),
   });
 
@@ -163,7 +169,11 @@ export default function BeatPlanRoute(): ReactNode {
           doctorName: stop.doctorName,
           clinic: stop.clinic,
           state: stop.state,
-          detail: stopDetail(stop, zone),
+          detail: stopDetail(
+            stop,
+            zone,
+            stop.visitId !== null && witnessed.fromPhone.has(stop.visitId),
+          ),
         }))}
       />
     </Screen>

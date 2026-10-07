@@ -11,6 +11,7 @@ import {
   checkInWarningsFor,
   stageOf,
   visitsAsWitnessed,
+  withPhoneTimes,
   witnessedStage,
 } from './visit';
 
@@ -260,6 +261,62 @@ describe('MR-26 B2: witnessedStage — facts the client saw itself record', () =
     expect(mine?.status).toBe('in_progress');
     const [other] = visitsAsWitnessed([visit('planned')], [q('check_out', 'another-visit')]);
     expect(other?.status).toBe('planned');
+  });
+
+  // W2-E D (`BE-W165`) — the times this phone witnessed, for the route and Doctors.
+  const qt = (entity: string, status: string, at: string) => ({
+    ...q(entity, V, status),
+    clientCreatedAt: at,
+  });
+  const IN = '2026-09-11T11:58:00.000Z';
+  const OUT = '2026-09-11T12:16:00.000Z';
+
+  it('BE-W165: a check-in and check-out this phone recorded supply the times, and say they did', () => {
+    const { visits, fromPhone } = withPhoneTimes(
+      [visit('completed')],
+      [qt('check_in', 'queued', IN), qt('check_out', 'synced', OUT)],
+    );
+    expect(visits[0]?.startedAt).toBe(IN);
+    expect(visits[0]?.completedAt).toBe(OUT);
+    expect([...fromPhone]).toEqual([V]);
+  });
+
+  it('BE-W165: work the server REFUSED supplies no time — it did not happen there', () => {
+    for (const status of ['failed', 'conflict']) {
+      const { visits, fromPhone } = withPhoneTimes(
+        [visit('planned')],
+        [qt('check_in', status, IN), qt('check_out', status, OUT)],
+      );
+      expect(visits[0]?.startedAt, status).toBeNull();
+      expect(fromPhone.size, status).toBe(0);
+    }
+  });
+
+  it('BE-W165: a time the SERVER holds is never replaced by the phone’s, and is not labelled', () => {
+    const served = { ...visit('completed'), startedAt: '2026-09-11T11:50:00+00:00' };
+    const { visits, fromPhone } = withPhoneTimes([served], [qt('check_in', 'queued', IN)]);
+    expect(visits[0]).toBe(served);
+    expect(fromPhone.size).toBe(0);
+  });
+
+  it('BE-W165: only the half the server lacks is filled — and the visit is then labelled', () => {
+    const half = { ...visit('completed'), startedAt: '2026-09-11T11:50:00+00:00' };
+    const { visits, fromPhone } = withPhoneTimes(
+      [half],
+      [qt('check_in', 'queued', IN), qt('check_out', 'queued', OUT)],
+    );
+    expect(visits[0]?.startedAt).toBe('2026-09-11T11:50:00+00:00');
+    expect(visits[0]?.completedAt).toBe(OUT);
+    expect(fromPhone.has(V)).toBe(true);
+  });
+
+  it('BE-W165: with nothing queued, the visits come back UNCHANGED and nothing is labelled', () => {
+    const visits = [visit('planned'), visit('completed')];
+    const out = withPhoneTimes(visits, []);
+    out.visits.forEach((each, i) => {
+      expect(each).toBe(visits[i]);
+    });
+    expect(out.fromPhone.size).toBe(0);
   });
 
   it('an item still IN FLIGHT is pending, exactly as a queued one is', () => {
