@@ -321,7 +321,10 @@ function Resolve-Cmake {
 #>
 function Set-CmakeDir {
   $props = Join-Path $AndroidDir 'local.properties'
-  $lines = if (Test-Path $props) { @(Get-Content $props | Where-Object { $_ -notmatch '^\s*cmake\.dir\s*=' }) } else { @() }
+  # @(...) around the whole `if`: an `if` that yields an empty array yields $null, and `+=` on $null
+  # then CONCATENATES strings -- the first real run wrote sdk.dir and cmake.dir on one line, and the
+  # check below caught it.
+  $lines = @(if (Test-Path $props) { Get-Content $props | Where-Object { $_ -notmatch '^\s*cmake\.dir\s*=' } })
   if (-not ($lines | Where-Object { $_ -match '^\s*sdk\.dir\s*=' })) {
     $lines += 'sdk.dir=' + ($env:ANDROID_HOME -replace '\\', '/')
   }
