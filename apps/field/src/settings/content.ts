@@ -35,6 +35,8 @@ export interface SettingsNavigation {
   readonly onOpenPractice?: () => void;
   /** W2-C C / `BE-W160`. Present only when `productQaEnabled`; absent, there is no row. */
   readonly onOpenProductQa?: () => void;
+  /** W2-F B. Present only when `learningEnabled`; absent, there is no row. */
+  readonly onOpenLearning?: () => void;
 }
 
 export const settingsGroups = (
@@ -91,6 +93,17 @@ export const settingsGroups = (
               detail: 'Answered only from your company’s approved material, with the source shown.',
               state: 'available' as const,
               onPress: nav.onOpenProductQa,
+            },
+          ]),
+      ...(nav.onOpenLearning === undefined
+        ? []
+        : [
+            {
+              id: 'learning',
+              title: 'Learning',
+              detail: 'The courses assigned to you.',
+              state: 'available' as const,
+              onPress: nav.onOpenLearning,
             },
           ]),
     ],

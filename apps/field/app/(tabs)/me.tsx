@@ -6,6 +6,7 @@ import {
   assistantSampleEnabled,
   practiceSampleEnabled,
   productQaEnabled,
+  learningEnabled,
 } from '../../src/features';
 import { useSession } from '../../src/session';
 import { settingsGroups } from '../../src/settings/content';
@@ -92,6 +93,14 @@ export default function Me(): ReactNode {
             ? {
                 onOpenProductQa: () => {
                   router.push('/product-qa');
+                },
+              }
+            : {}),
+          // W2-F B. Only with the learning flag on; off, the row does not exist.
+          ...(learningEnabled
+            ? {
+                onOpenLearning: () => {
+                  router.push('/learning');
                 },
               }
             : {}),
