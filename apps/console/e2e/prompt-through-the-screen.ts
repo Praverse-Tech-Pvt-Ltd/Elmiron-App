@@ -1,4 +1,5 @@
 import { expect, type Page } from '@playwright/test';
+import type { GatewayFeature } from '@fieldforce/core';
 
 /**
  * W1-G E1 — create and approve an `ai_doctor` prompt **through the screen**, as two admins.
@@ -14,12 +15,19 @@ import { expect, type Page } from '@playwright/test';
 export const approvePromptThroughTheScreen = async (
   author: Page,
   approver: Page,
-  feature: 'ai_doctor' | 'ai_coach' | 'product_qa',
+  feature: GatewayFeature,
   text: string,
+  limits: { readonly temperature: string; readonly maxTokens: string } = {
+    temperature: '0',
+    maxTokens: '800',
+  },
 ): Promise<void> => {
   await author.goto('/prompts');
   await author.getByLabel('Which feature this prompt is for').selectOption(feature);
   await author.getByLabel('The instructions the model is given').fill(text);
+  // W2-E A3: required. Without them the version would run on limits nobody approved.
+  await author.getByLabel('Temperature, from 0 to 1').fill(limits.temperature);
+  await author.getByLabel('Longest answer, in tokens').fill(limits.maxTokens);
   await author.getByRole('button', { name: 'Save draft' }).click();
 
   const card = (page: Page) =>

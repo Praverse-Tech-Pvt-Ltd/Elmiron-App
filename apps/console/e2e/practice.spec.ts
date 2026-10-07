@@ -63,25 +63,45 @@ const signIn = async (page: Page, person: Person): Promise<void> => {
   await page.waitForURL(/\/coaching/);
 };
 
-/** The rep's call, as the field app would make it: a real token, never the service-role key. */
-const startSimSession = async (scenarioId: string): Promise<{ status: number; body: unknown }> => {
+/** A real token for a seeded person, never the service-role key. */
+const tokenFor = async (person: Person): Promise<string> => {
   const auth = await fetch(`${API}/auth/v1/token?grant_type=password`, {
     method: 'POST',
     headers: { apikey: ANON, 'content-type': 'application/json' },
-    body: JSON.stringify({ email: world.rep.email, password: world.password }),
+    body: JSON.stringify({ email: person.email, password: world.password }),
   });
-  const session = (await auth.json()) as { access_token: string };
-  const res = await fetch(`${API}/rest/v1/rpc/start_sim_session`, {
+  return ((await auth.json()) as { access_token: string }).access_token;
+};
+
+/** A POST under a person's own token — for the rep, as the field app would make it. */
+const postAs = async (
+  person: Person,
+  path: string,
+  body: Record<string, unknown>,
+): Promise<{ status: number; body: Record<string, unknown> }> => {
+  const res = await fetch(`${API}${path}`, {
     method: 'POST',
     headers: {
       apikey: ANON,
-      authorization: `Bearer ${session.access_token}`,
+      authorization: `Bearer ${await tokenFor(person)}`,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ p_scenario_id: scenarioId }),
+    body: JSON.stringify(body),
   });
-  return { status: res.status, body: await res.json() };
+  return { status: res.status, body: (await res.json()) as Record<string, unknown> };
 };
+const postAsRep = (path: string, body: Record<string, unknown>) => postAs(world.rep, path, body);
+
+/** A table read under a person's own token, so RLS decides what comes back. */
+const readAs = async (person: Person, query: string): Promise<Record<string, unknown>[]> => {
+  const res = await fetch(`${API}/rest/v1/${query}`, {
+    headers: { apikey: ANON, authorization: `Bearer ${await tokenFor(person)}` },
+  });
+  return (await res.json()) as Record<string, unknown>[];
+};
+
+const startSimSession = (scenarioId: string) =>
+  postAsRep('/rest/v1/rpc/start_sim_session', { p_scenario_id: scenarioId });
 
 const cardFor = (page: Page, title: string) =>
   page.locator('section', { has: page.getByText(title, { exact: true }) });
@@ -108,6 +128,7 @@ test('a practice session becomes startable only after a second admin approves it
     approver,
     'ai_doctor',
     `Practice prompt for run ${world.run}. You are a doctor in a practice conversation.`,
+    { temperature: '0.7', maxTokens: '300' },
   );
 
   // --- the author drafts a persona -----------------------------------------
@@ -217,6 +238,85 @@ test('a practice session becomes startable only after a second admin approves it
   const after = await startSimSession(theScenario);
   expect(after.status).toBe(200);
   expect(after.body).toMatchObject({ personaDisplayName: personaName });
+
+  // --- W2-E A4 (`BE-W164`): the prompts the SCREEN approved, USED by the gateway ----------
+  //
+  // The test that was missing. Everything above stops at "approved", and the gateway's own suites
+  // use prompts written by SQL — so a prompt the screen saved without the schema name every flow
+  // demands was approved here and refused on its first request, and nothing ran both halves.
+  // This is the stub provider (CI and local runs never set `AI_PROVIDER`): it proves the CONSOLE
+  // half — the row the screen writes passes the gateway's prompt checks and is the one used.
+  // Whether a real model answers within those limits is `pnpm ai:live`, gated on model access.
+  await approvePromptThroughTheScreen(
+    author,
+    approver,
+    'ai_coach',
+    `Coach prompt for run ${world.run}. Coach a rep on a practice conversation.`,
+    { temperature: '0', maxTokens: '2000' },
+  );
+
+  // Switching the two features on, and the allowance, for THIS organisation only. No console
+  // screen does this (DAY-ONE H8 is an engineering step); `set_organisation_threshold` is the
+  // admin's own RPC, under the admin's own token, so nothing here is SQL and nothing is global.
+  for (const [key, value] of [
+    ['ai_feature_enabled:ai_doctor', true],
+    ['ai_feature_enabled:ai_coach', true],
+    ['ai_daily_requests_per_user', 20],
+  ] as const) {
+    const set = await postAs(world.authorAdmin, '/rest/v1/rpc/set_organisation_threshold', {
+      p_key: key,
+      p_value: value,
+      p_note: `practice.spec run ${world.run} — a throwaway organisation`,
+    });
+    expect(set.status, JSON.stringify(set.body)).toBe(200);
+  }
+
+  const sessionId = String(after.body['sessionId']);
+  const turn = await postAsRep('/functions/v1/ai-gateway', {
+    feature: 'ai_doctor',
+    sessionId,
+    repText: 'It only needs to stay below 25 degrees, so a cupboard is fine.',
+  });
+  expect(turn.status, JSON.stringify(turn.body)).toBe(200);
+  expect(turn.body['kind'], JSON.stringify(turn.body)).toBe('replied');
+
+  expect(
+    (await postAsRep('/rest/v1/rpc/end_sim_session', { p_session_id: sessionId })).status,
+  ).toBe(200);
+  const analysed = await postAsRep('/functions/v1/ai-gateway', { feature: 'ai_coach', sessionId });
+  expect(analysed.status, JSON.stringify(analysed.body)).toBe(200);
+  expect(analysed.body['kind'], JSON.stringify(analysed.body)).toBe('analysed');
+
+  // The record of both calls, read as the rep, against the prompts read as the approver: each
+  // request completed, on the version the screen approved for that feature.
+  const requests = await readAs(
+    world.rep,
+    `ai_requests?select=feature,status,error_code,prompt_version_id&user_id=eq.${world.rep.userId}&order=started_at`,
+  );
+  const prompts = await readAs(
+    world.approverAdmin,
+    'ai_prompt_versions?select=id,feature,output_schema_name,model_config&status=eq.approved',
+  );
+  expect(requests.map((r) => [r['feature'], r['status'], r['error_code']])).toEqual([
+    ['ai_doctor', 'completed', null],
+    ['ai_coach', 'completed', null],
+  ]);
+  // The rows the gateway used carry what the screen was given — the schema name it derived and
+  // the limits the author typed — not defaults.
+  const usedPrompt = (feature: string) => {
+    const r = requests.find((x) => x['feature'] === feature);
+    return prompts.find((p) => p['id'] === r?.['prompt_version_id']);
+  };
+  expect(usedPrompt('ai_doctor')).toMatchObject({
+    feature: 'ai_doctor',
+    output_schema_name: 'SimDoctorTurnOutputSchema',
+    model_config: { temperature: 0.7, maxTokens: 300 },
+  });
+  expect(usedPrompt('ai_coach')).toMatchObject({
+    feature: 'ai_coach',
+    output_schema_name: 'SimCoachOutputSchema',
+    model_config: { temperature: 0, maxTokens: 2000 },
+  });
 
   await authorContext.close();
   await approverContext.close();

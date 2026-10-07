@@ -7,9 +7,21 @@ import {
 import {
   LMS_TUTOR_FAILED_MESSAGE,
   LMS_TUTOR_OUTPUT_SCHEMA_NAME,
-  answerLessonQuestion,
+  answerLessonQuestion as answerLessonQuestionWith,
 } from './lms-tutor.js';
-import { MR_CHAT_FAILED_MESSAGE, MR_CHAT_OUTPUT_SCHEMA_NAME, answerMrChat } from './mr-chat.js';
+import type { LmsTutorInput } from './lms-tutor.js';
+import {
+  MR_CHAT_FAILED_MESSAGE,
+  MR_CHAT_OUTPUT_SCHEMA_NAME,
+  answerMrChat as answerMrChatWith,
+} from './mr-chat.js';
+import type { MrChatInput } from './mr-chat.js';
+
+/** W2-E C: the close goes to the gateway's writer; one recording fake stands in for both here. */
+const answerMrChat = (input: Omit<MrChatInput, 'writer'>) =>
+  answerMrChatWith({ ...input, writer: input.rpc });
+const answerLessonQuestion = (input: Omit<LmsTutorInput, 'writer'>) =>
+  answerLessonQuestionWith({ ...input, writer: input.rpc });
 import { ProviderError } from './providers.js';
 import type { ControlPlaneRpc, LlmProvider } from './providers.js';
 import { analyseSimSession, takeDoctorTurn } from './sim-doctor.js';
@@ -37,11 +49,21 @@ const LESSON_ID = '44444444-4444-4444-8444-444444444444';
 
 type Call = { fn: string; args: Record<string, unknown> };
 
-/** W1-Z A: the gateway's writer. Nothing may be STORED when the model never answered. */
-const noWrite: ControlPlaneRpc = {
-  call: (fn) =>
-    Promise.reject(new Error(`no practice write expected after a provider failure: ${fn}`)),
-};
+/**
+ * W1-Z A: the gateway's writer. Nothing may be STORED when the model never answered — but since
+ * W2-E C (`BE-W146`) it is also the connection that CLOSES the request, recorded with the rest.
+ */
+const closeOnly = (calls: Call[]): ControlPlaneRpc => ({
+  call: (fn, args) => {
+    if (fn !== 'ai_gateway_complete_request') {
+      return Promise.reject(
+        new Error(`no practice write expected after a provider failure: ${fn}`),
+      );
+    }
+    calls.push({ fn, args: { ...args } });
+    return Promise.resolve({ requestId: '33333333-3333-4333-8333-333333333333' });
+  },
+});
 
 const fakeRpc = (calls: Call[], feature: string, outputSchemaName: string): ControlPlaneRpc => ({
   call: (fn, args) => {
@@ -83,7 +105,7 @@ const fakeRpc = (calls: Call[], feature: string, outputSchemaName: string): Cont
         });
       case 'sim_coach_module_candidates':
         return Promise.resolve([]);
-      case 'ai_complete_request':
+      case 'ai_gateway_complete_request':
         return Promise.resolve({ requestId: REQUEST_ID, status: 'recorded' });
       default:
         throw new Error(`unexpected rpc ${fn}`);
@@ -122,7 +144,7 @@ const throttled: LlmProvider = {
     Promise.reject(new ProviderError('ThrottlingException', 'Rate exceeded: ' + PROSE)),
 };
 
-const completions = (calls: Call[]) => calls.filter((c) => c.fn === 'ai_complete_request');
+const completions = (calls: Call[]) => calls.filter((c) => c.fn === 'ai_gateway_complete_request');
 
 const FLOWS = [
   {
@@ -154,7 +176,7 @@ const FLOWS = [
     run: (calls: Call[], provider: LlmProvider) =>
       takeDoctorTurn({
         rpc: fakeRpc(calls, 'ai_doctor', SIM_DOCTOR_TURN_OUTPUT_SCHEMA_NAME),
-        writer: noWrite,
+        writer: closeOnly(calls),
         provider,
         sessionId: SESSION_ID,
         repText: 'It keeps below 25 degrees.',
@@ -167,7 +189,7 @@ const FLOWS = [
     run: (calls: Call[], provider: LlmProvider) =>
       analyseSimSession({
         rpc: fakeRpc(calls, 'ai_coach', SIM_COACH_OUTPUT_SCHEMA_NAME),
-        writer: noWrite,
+        writer: closeOnly(calls),
         provider,
         sessionId: SESSION_ID,
         timeoutMs: 50,

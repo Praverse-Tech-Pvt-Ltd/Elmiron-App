@@ -1,7 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { DoctorListScreen, Screen } from '@fieldforce/ui';
 import { useRouter } from 'expo-router';
+import type { SyncQueueItem } from '@fieldforce/core';
+import { visitsAsWitnessed, withPhoneTimes } from '../../src/capture/visit';
+import { loadQueueState, onQueueChanged } from '../../src/sync/async-storage-store';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { dayMonthIn } from '../../src/today/territory-day';
 import { beatPlanView, onPlanDoctorIds } from '../../src/today/beat-plan-view';
@@ -30,7 +33,26 @@ export default function Doctors(): ReactNode {
   // MR-14 B2. Doctors and visits come from the store the pull maintains.
   const { store, status, serverTime, today, zone, failure: pullFailure } = usePulledStore();
   const doctors = doctorsFromStore(store);
-  const visits = visitsFromStore(store);
+
+  // W2-E D (`BE-W165`). The queue, kept current, so "last seen" counts a visit finished on this
+  // phone and not yet returned by a pull — it said "yesterday" for a visit checked out minutes
+  // before. The same overlay as the route (`BE-W154`), plus the phone's own times.
+  const [items, setItems] = useState<readonly SyncQueueItem[]>([]);
+  useEffect(() => {
+    let live = true;
+    const read = (): void => {
+      void loadQueueState().then((load) => {
+        if (live) setItems(load.kind === 'loaded' ? load.state.items : []);
+      });
+    };
+    read();
+    const stop = onQueueChanged(read);
+    return () => {
+      live = false;
+      stop();
+    };
+  }, []);
+  const visits = withPhoneTimes(visitsAsWitnessed(visitsFromStore(store), items), items).visits;
 
   /**
    * **"On plan" — `BE-W89`'s last piece, MR-46 D1.**

@@ -25,9 +25,17 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import type { ControlPlaneRpc } from './core.ts';
 
+/**
+ * W2-E C (`BE-W146`, `BE-C74`): a third name, `ai_gateway_complete_request` — the close of EVERY AI
+ * request, which the database now grants to `service_role` alone, so a rep can no longer write their
+ * own request's status, model name or token counts. It is bound to the request ROW (it must exist and
+ * still be `started`), as the two practice writes are. The module and key keep their W1-Z names:
+ * renaming the key would mean an operator re-creating it in the dashboard (`BE-C72`) for no gain.
+ */
 const PRACTICE_WRITES: ReadonlySet<string> = new Set([
   'record_sim_turn',
   'record_sim_coach_analysis',
+  'ai_gateway_complete_request',
 ]);
 
 /**

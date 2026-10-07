@@ -7,8 +7,8 @@ reading `DRAFT — NOT APPROVED`**, so a copy pasted anywhere still says it.
 | File | What | Goes into |
 | --- | --- | --- |
 | `product_qa.md` | instruction set | console `/prompts` |
-| `mr_chat.md` | instruction set | console `/prompts` — **not offered there yet** (`BE-W164`) |
-| `lms_tutor.md` | instruction set | console `/prompts` — **not offered there yet** (`BE-W164`) |
+| `mr_chat.md` | instruction set | console `/prompts` (offered since W2-E, `BE-W164`) |
+| `lms_tutor.md` | instruction set | console `/prompts` (offered since W2-E, `BE-W164`) |
 | `ai_doctor.md` | instruction set | console `/prompts` |
 | `ai_coach.md` | instruction set **and the B2 scoring rubric** | console `/prompts` |
 | `personas-and-scenarios.md` | five personas, six scenarios, the stance finding (`BE-C73`) | console `/practice` |
@@ -44,8 +44,8 @@ enough to remove its first line has not read it closely enough to approve it.
 
 **Engineering:**
 
-10. `BE-W164` — the console cannot author a prompt that runs, cannot author two of the five, and cannot set
-    model config. **Blocks every production feature.**
-11. `BE-W163` — the coach's contract names no keys (the draft works around it).
-12. `BE-W146` — before production AI traffic (`BE-C71`).
+10. ~~`BE-W164`~~ — **fixed W2-E**: the console writes the schema name, offers all five, and requires the
+    two limits — type each draft's proposed numbers into the two boxes when authoring.
+11. ~~`BE-W163`~~ — **fixed W2-E**: the coach's contract names every key; the draft's own JSON block is now optional.
+12. ~~`BE-W146`~~ — **fixed W2-E** (`BE-C74`): the gateway closes every request.
 13. The app's assistant and practice screens onto their live transports, and a build (W1-Z B5).

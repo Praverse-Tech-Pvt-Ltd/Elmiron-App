@@ -92,6 +92,11 @@ export type LmsTutorResult =
 
 export interface LmsTutorInput {
   readonly rpc: ControlPlaneRpc;
+  /**
+   * W2-E C (`BE-W146`). The gateway's own connection (the service role), which alone may close the
+   * request: `ai_gateway_complete_request` is granted to nobody else. `rpc` is the rep's.
+   */
+  readonly writer: ControlPlaneRpc;
   readonly provider: LlmProvider;
   readonly lessonId: string;
   readonly question: string;
@@ -111,7 +116,7 @@ export const LMS_TUTOR_NOT_IN_LESSON_MESSAGE =
  * **Unlike `mr_chat`'s, this text is doing real work** — it names the single source and forbids
  * everything else, which is enforceable because the flow gives the model nothing else to use.
  */
-const OUTPUT_CONTRACT = [
+export const LMS_TUTOR_OUTPUT_CONTRACT = [
   'You are helping a learner understand ONE lesson from their training course.',
   'Answer ONLY from the lesson text below. Do not use any other knowledge.',
   'If the lesson does not answer the question, set "groundedInLesson" to false and leave',
@@ -137,7 +142,7 @@ export const answerLessonQuestion = async (input: LmsTutorInput): Promise<LmsTut
     flags?: readonly AiRequestFlag[];
     errorCode?: string;
   }): Promise<void> => {
-    await rpc.call('ai_complete_request', {
+    await input.writer.call('ai_gateway_complete_request', {
       p_request_id: requestId,
       p_status: args.status,
       p_model_provider: args.raw?.provider ?? null,
@@ -183,7 +188,7 @@ export const answerLessonQuestion = async (input: LmsTutorInput): Promise<LmsTut
     structured = await withTimeout(input.timeoutMs ?? 20_000, (signal) =>
       generateStructured(provider, LmsTutorOutputSchema, {
         messages: [
-          { role: 'system', content: `${begun.systemPrompt}\n\n${OUTPUT_CONTRACT}` },
+          { role: 'system', content: `${begun.systemPrompt}\n\n${LMS_TUTOR_OUTPUT_CONTRACT}` },
           {
             role: 'user',
             content:

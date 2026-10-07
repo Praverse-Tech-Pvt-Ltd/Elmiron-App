@@ -4,10 +4,15 @@ import {
   MR_CHAT_FAILED_MESSAGE,
   MR_CHAT_OUTPUT_SCHEMA_NAME,
   MR_CHAT_OUT_OF_SCOPE_MESSAGE,
-  answerMrChat,
+  answerMrChat as answerMrChatWith,
   namesAProduct,
 } from './mr-chat.js';
+import type { MrChatInput } from './mr-chat.js';
 import type { ControlPlaneRpc, LlmGenerateRequest, LlmProvider } from './providers.js';
+
+/** W2-E C: the close goes to the gateway's writer; one recording fake stands in for both here. */
+const answerMrChat = (input: Omit<MrChatInput, 'writer'>) =>
+  answerMrChatWith({ ...input, writer: input.rpc });
 
 /**
  * W1-I Part B — the `mr_chat` flow against a fake control plane and a scripted model.
@@ -53,7 +58,7 @@ const fakeRpc = (
         });
       case 'mr_chat_scope_terms':
         return Promise.resolve({ terms: opts.terms ?? TERMS });
-      case 'ai_complete_request':
+      case 'ai_gateway_complete_request':
         return Promise.resolve({ requestId: REQUEST_ID, status: 'recorded' });
       default:
         throw new Error(`unexpected rpc ${fn}`);
@@ -76,7 +81,7 @@ const scripted = (body: unknown, recorded: Recorded): LlmProvider => ({
 const fresh = (): Recorded => ({ calls: [], modelRequests: [] });
 
 const completionOf = (r: Recorded): Record<string, unknown> =>
-  r.calls.filter((c) => c.fn === 'ai_complete_request').at(-1)?.args ?? {};
+  r.calls.filter((c) => c.fn === 'ai_gateway_complete_request').at(-1)?.args ?? {};
 
 // ---------------------------------------------------------------------------
 

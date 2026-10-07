@@ -307,11 +307,13 @@ const beginAs = async (
   return out?.r.requestId ?? '';
 };
 
-/** Closes a request begun for a test write, so the log does not keep `started` rows for ever. */
-const closeAs = (profile: ProfileLike, requestId: string, status: 'completed' | 'failed') =>
-  rpcAs(
-    profile,
-    `select public.ai_complete_request($1, $2::public.ai_request_status, 'test', 'test', 0, 0) as r`,
+/**
+ * Closes a request begun for a test write, so the log does not keep `started` rows for ever.
+ * W2-E C (`BE-W146`): as the GATEWAY — the rep can no longer close their own request.
+ */
+const gatewayClose = (requestId: string, status: 'completed' | 'failed') =>
+  asGateway(
+    `select public.ai_gateway_complete_request($1, $2::public.ai_request_status, 'test', 'test', 0, 0) as r`,
     [requestId, status],
   );
 
@@ -342,9 +344,9 @@ const gatewayTurn = async (profile: ProfileLike, sessionId: string, repText: str
       repText,
       requestId,
     ]);
-    await closeAs(profile, requestId, 'completed');
+    await gatewayClose(requestId, 'completed');
   } catch (error) {
-    await closeAs(profile, requestId, 'failed');
+    await gatewayClose(requestId, 'failed');
     throw error;
   }
 };
@@ -500,7 +502,7 @@ describe.skipIf(!live)('W1-D B5 — a practice session end to end', () => {
         [sid, JSON.stringify(SEVEN_SCORES), requestId],
       ),
     ).rejects.toThrow(/turn 99/);
-    await closeAs(world.users.puneMr, requestId, 'failed');
+    await gatewayClose(requestId, 'failed');
   });
 });
 
@@ -655,10 +657,10 @@ describe.skipIf(!live)('W1-M C — nine items, enforced by the database', () => 
           requestId,
         ],
       );
-      await closeAs(world.users.puneMr, requestId, 'completed');
+      await gatewayClose(requestId, 'completed');
       return out;
     } catch (error) {
-      await closeAs(world.users.puneMr, requestId, 'failed');
+      await gatewayClose(requestId, 'failed');
       throw error;
     }
   };
@@ -1376,7 +1378,7 @@ describe.skipIf(!live)(
         sid,
         requestId,
       ]);
-      await closeAs(world.users.puneMr, requestId, 'completed');
+      await gatewayClose(requestId, 'completed');
     });
 
     it('REVERSED: the rep’s own token can no longer write a score — and the coach can', async () => {
@@ -1394,7 +1396,7 @@ describe.skipIf(!live)(
         coachArgs(sid, requestId),
       );
       expect(stored?.r.analysisId).toMatch(/^[0-9a-f-]{36}$/u);
-      await closeAs(world.users.puneMr, requestId, 'completed');
+      await gatewayClose(requestId, 'completed');
     });
 
     it('the gateway’s write needs an OPEN request of the RIGHT feature', async () => {
@@ -1406,10 +1408,10 @@ describe.skipIf(!live)(
           asGateway(`select public.record_sim_turn($1, 'rep', 'doctor', $2) as r`, [sid, coach]),
         ),
       ).toBe('42501');
-      await closeAs(world.users.puneMr, coach, 'failed');
+      await gatewayClose(coach, 'failed');
       // A request that is already CLOSED cannot write either — the binding is to work in flight.
       const closed = await beginAs(world.users.puneMr, 'ai_doctor');
-      await closeAs(world.users.puneMr, closed, 'completed');
+      await gatewayClose(closed, 'completed');
       expect(
         await codeOf(
           asGateway(`select public.record_sim_turn($1, 'rep', 'doctor', $2) as r`, [sid, closed]),
@@ -1425,7 +1427,7 @@ describe.skipIf(!live)(
       await rpcAs(world.users.puneMr, `select public.end_sim_session($1) as r`, [sid]);
       const doctor = await beginAs(world.users.puneMr, 'ai_doctor');
       expect(await codeOf(asGateway(COACH_SQL, coachArgs(sid, doctor)))).toBe('42501');
-      await closeAs(world.users.puneMr, doctor, 'failed');
+      await gatewayClose(doctor, 'failed');
     });
 
     it('another rep’s request cannot write into this rep’s session', async () => {
@@ -1436,7 +1438,7 @@ describe.skipIf(!live)(
           asGateway(`select public.record_sim_turn($1, 'rep', 'doctor', $2) as r`, [sid, theirs]),
         ),
       ).toBe('42501');
-      await closeAs(world.users.nagpurMr, theirs, 'failed');
+      await gatewayClose(theirs, 'failed');
     });
 
     it('one request produces one turn — it cannot be replayed to append more', async () => {
@@ -1454,7 +1456,7 @@ describe.skipIf(!live)(
           ]),
         ),
       ).toBe('22023');
-      await closeAs(world.users.puneMr, requestId, 'completed');
+      await gatewayClose(requestId, 'completed');
     });
   },
 );

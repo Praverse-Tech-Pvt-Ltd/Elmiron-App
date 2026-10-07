@@ -64,3 +64,7 @@ export type {
 // W1-V A -- the Bedrock adapter throws the SAME class the flows' `providerFailure` checks with
 // `instanceof`, so it must come from the same built module, not a copy.
 export { ProviderError } from '../../../../../packages/core/dist/field/gateway/providers.js';
+
+// W2-E A3 (`BE-W164`) -- which model answers each feature, read from the same map the console's
+// `/prompts` screen displays, so the screen cannot name a model the gateway does not call.
+export { GATEWAY_MODEL } from '../../../../../packages/core/dist/field/gateway/prompt-contract.js';

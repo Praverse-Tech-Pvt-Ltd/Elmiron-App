@@ -72,8 +72,7 @@ const fakeRpc = (r: Recorded, opts: { notYours?: boolean } = {}): ControlPlaneRp
         refusal.code = '42501';
         return Promise.reject(refusal);
       }
-      case 'ai_complete_request':
-        return Promise.resolve({ requestId: REQUEST_ID, status: 'recorded' });
+      // W2-E C (`BE-W146`): the close is the writer's now; asked of the rep it is unexpected.
       default:
         throw new Error(`unexpected rpc ${fn}`);
     }
@@ -84,6 +83,7 @@ const fakeRpc = (r: Recorded, opts: { notYours?: boolean } = {}): ControlPlaneRp
 const fakeWriter = (r: Recorded): ControlPlaneRpc => ({
   call: (fn, args) => {
     r.writes.push({ fn, args: { ...args } });
+    if (fn === 'ai_gateway_complete_request') return Promise.resolve({ requestId: REQUEST_ID });
     if (fn !== 'record_sim_turn') throw new Error(`unexpected writer call ${fn}`);
     return Promise.resolve({ turnCount: 2 });
   },
@@ -129,7 +129,7 @@ describe("ai_doctor — the persona and the conversation are the SERVER's (BE-W1
     // the turn AS THE REP passed every test in this file.
     const r = fresh();
     expect((await doctor(r)).kind).toBe('replied');
-    expect(r.writes.map((w) => w.fn)).toEqual(['record_sim_turn']);
+    expect(r.writes.map((w) => w.fn)).toEqual(['record_sim_turn', 'ai_gateway_complete_request']);
     expect(r.writes[0]?.args['p_ai_request_id']).toBe(REQUEST_ID);
     expect(r.calls.map((c) => c.fn)).not.toContain('record_sim_turn');
   });

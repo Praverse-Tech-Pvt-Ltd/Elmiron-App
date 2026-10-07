@@ -81,6 +81,13 @@ describe('W2-A A — the service-role key is reachable from exactly one place', 
     expect(failures).toEqual([expect.stringMatching(/allow-list must be exactly/u)]);
   });
 
+  it('W2-E C: dropping the close from the writer fails too — the list is exact both ways', () => {
+    const failures = failuresFor(
+      withFile(WRITER_PATH, (t) => t.replace("  'ai_gateway_complete_request',\n", '')),
+    );
+    expect(failures).toEqual([expect.stringMatching(/allow-list must be exactly/u)]);
+  });
+
   it('the read moved out of the writer — none left there — fails', () => {
     const functions = withFile(WRITER_PATH, (t) =>
       t.replace(`Deno.env.get('${KEY}')`, "Deno.env.get('SOMETHING_ELSE')"),

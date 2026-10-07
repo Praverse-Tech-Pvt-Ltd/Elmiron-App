@@ -43,6 +43,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
+  GATEWAY_MODEL,
   PRODUCT_QA_FAILED_MESSAGE,
   analyseSimSession,
   answerLessonQuestion,
@@ -91,13 +92,17 @@ interface RequestBody {
 /**
  * W1-V A — which India profile answers each feature, as decided (`docs/ai-platform/AI-SPEC.md`:
  * Sonnet 5 for reasoning-heavy work; Haiku 4.5 for `mr_chat` and `lms_tutor`, `BE-C41`).
+ *
+ * W2-E A3: the tier comes from `GATEWAY_MODEL` in `@fieldforce/core`, the map the console's
+ * `/prompts` screen shows the author. The profile ids stay HERE, beside the adapter that refuses
+ * every other one.
  */
 const BEDROCK_PROFILE: Record<Feature, IndiaProfileId> = {
-  product_qa: INDIA_PROFILES.sonnet,
-  ai_doctor: INDIA_PROFILES.sonnet,
-  ai_coach: INDIA_PROFILES.sonnet,
-  mr_chat: INDIA_PROFILES.haiku,
-  lms_tutor: INDIA_PROFILES.haiku,
+  product_qa: INDIA_PROFILES[GATEWAY_MODEL.product_qa],
+  ai_doctor: INDIA_PROFILES[GATEWAY_MODEL.ai_doctor],
+  ai_coach: INDIA_PROFILES[GATEWAY_MODEL.ai_coach],
+  mr_chat: INDIA_PROFILES[GATEWAY_MODEL.mr_chat],
+  lms_tutor: INDIA_PROFILES[GATEWAY_MODEL.lms_tutor],
 };
 
 const STUB_SHAPE: Record<Feature, StubShape> = {
@@ -288,17 +293,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
     });
   }
 
+  // W1-Z A (`BE-C69`) / W2-A (`BE-C70`): the practice paths write turns and scores through the
+  // service-role writer. W2-E C (`BE-W146`, `BE-C74`): EVERY feature now closes its request through
+  // it -- `ai_gateway_complete_request` is granted to the service role alone -- so it is built for
+  // all five, before the flow begins a request it could not close. This file never names the key;
+  // the writer module reads it.
+  const writer = practiceWriterFromEnv(supabaseUrl);
+  if (writer === null) {
+    return json(500, {
+      code: 'misconfigured',
+      message: 'the gateway writer is not configured',
+    });
+  }
+
   try {
     if (feature === 'ai_doctor' || feature === 'ai_coach') {
-      // W1-Z A (`BE-C69`) / W2-A (`BE-C70`): the practice paths write turns and scores through the
-      // service-role writer. This file never names the key; the writer module reads it.
-      const writer = practiceWriterFromEnv(supabaseUrl);
-      if (writer === null) {
-        return json(500, {
-          code: 'misconfigured',
-          message: 'the practice writer is not configured',
-        });
-      }
       if (feature === 'ai_coach') {
         const result = await analyseSimSession({
           rpc,
@@ -323,6 +332,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (feature === 'mr_chat') {
       const result = await answerMrChat({
         rpc,
+        writer,
         provider,
         message: String(body.message),
       });
@@ -331,6 +341,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (feature === 'lms_tutor') {
       const result = await answerLessonQuestion({
         rpc,
+        writer,
         provider,
         lessonId: String(body.lessonId),
         question: String(body.question),
@@ -339,6 +350,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
     const result = await answerProductQuestion({
       rpc,
+      writer,
       provider,
       question,
       marketId: typeof body.marketId === 'string' ? body.marketId : null,

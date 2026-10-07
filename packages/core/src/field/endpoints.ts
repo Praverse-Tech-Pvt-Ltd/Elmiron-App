@@ -761,7 +761,7 @@ export const API_PATHS = {
   // `AI_RPC` (`ai.ts`). They are interpolated rather than retyped so the two cannot drift;
   // `contract.test.ts` asserts every name in those three tables has a path here.
   //
-  // `ai_begin_request` and `ai_complete_request` are deliberately ABSENT. They are the gateway's
+  // `ai_begin_request` and `ai_gateway_complete_request` are deliberately ABSENT. They are the gateway's
   // (`#4`), called as the user by a runtime that does not exist. No app calls them, and a path
   // here would invite one to. `contract.test.ts` asserts their absence, so a later addition is a
   // decision rather than a drift.

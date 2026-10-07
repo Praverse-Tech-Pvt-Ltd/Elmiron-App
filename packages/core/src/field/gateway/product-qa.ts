@@ -33,7 +33,7 @@ import type { ControlPlaneRpc, LlmProvider, LlmResult } from './providers.js';
  *    nothing, or failing the schema, is discarded and the MR gets the not-available sentence.
  *    Failing closed means the worst outcome of a bad model reply is an unhelpful answer, never an
  *    unsupported claim.
- * 7. `ai_complete_request` records what happened: tokens, the knowledge versions actually cited,
+ * 7. `ai_gateway_complete_request` (the gateway's writer, W2-E) records what happened: tokens, the knowledge versions actually cited,
  *    and flags. Never the question or the answer.
  */
 
@@ -69,6 +69,11 @@ export type ProductQaResult =
 
 export interface ProductQaInput {
   readonly rpc: ControlPlaneRpc;
+  /**
+   * W2-E C (`BE-W146`). The gateway's own connection (the service role), which alone may close the
+   * request: `ai_gateway_complete_request` is granted to nobody else. `rpc` is the rep's.
+   */
+  readonly writer: ControlPlaneRpc;
   readonly provider: LlmProvider;
   readonly question: string;
   readonly marketId: string | null;
@@ -88,7 +93,7 @@ export const PRODUCT_QA_FAILED_MESSAGE =
  * voice; this is the contract with the code, and is not editable per organisation because the
  * code below depends on it.
  */
-const OUTPUT_CONTRACT = [
+export const PRODUCT_QA_OUTPUT_CONTRACT = [
   'Answer ONLY from the numbered sources below. Do not use any other knowledge.',
   'If the sources do not answer the question, set "supported" to false and leave "answer" empty.',
   'Never give advice about an individual patient.',
@@ -125,7 +130,7 @@ export const answerProductQuestion = async (input: ProductQaInput): Promise<Prod
     flags?: readonly AiRequestFlag[];
     errorCode?: string;
   }): Promise<void> => {
-    await rpc.call('ai_complete_request', {
+    await input.writer.call('ai_gateway_complete_request', {
       p_request_id: requestId,
       p_status: args.status,
       p_model_provider: args.raw?.provider ?? null,
@@ -179,7 +184,7 @@ export const answerProductQuestion = async (input: ProductQaInput): Promise<Prod
     structured = await withTimeout(input.timeoutMs ?? 20_000, (signal) =>
       generateStructured(provider, ProductQaOutputSchema, {
         messages: [
-          { role: 'system', content: `${begun.systemPrompt}\n\n${OUTPUT_CONTRACT}` },
+          { role: 'system', content: `${begun.systemPrompt}\n\n${PRODUCT_QA_OUTPUT_CONTRACT}` },
           {
             role: 'user',
             content: `Sources:\n\n${renderSources(sources)}\n\nQuestion: ${question}`,

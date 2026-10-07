@@ -6,7 +6,7 @@ import { KnowledgeVersionStatusSchema } from './knowledge.js';
  * The AI control plane — AI-D0, `20260924000700_ai_control_plane.sql`.
  *
  * The database half of the gateway (master prompt §3, §36, §42, §52). Whatever runs the model —
- * D1 is still open — calls `ai_begin_request` before it and `ai_complete_request` after it,
+ * D1 is still open — calls `ai_begin_request` before it and `ai_gateway_complete_request` after it,
  * **as the signed-in user**. No client calls a model vendor directly, ever.
  *
  * **A feature runs only when** its flag `ai_feature_enabled:<feature>` is true, the organisation
@@ -133,7 +133,8 @@ export const AI_RPC = {
   /** The gateway, as the user, before the model call. */
   aiBeginRequest: 'ai_begin_request',
   /** The gateway, as the same user, after it. Once. */
-  aiCompleteRequest: 'ai_complete_request',
+  /** W2-E C (`BE-W146`): the service role's alone -- the gateway closes every request. */
+  aiGatewayCompleteRequest: 'ai_gateway_complete_request',
 } as const;
 
 export const SubmitAiPromptVersionResponseSchema = z.object({

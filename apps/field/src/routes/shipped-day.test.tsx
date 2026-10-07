@@ -463,10 +463,10 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       'Submitted — not yet approved',
       ASHA,
       '✓',
-      // UNTRUE — `BE-W165`. Checked in at 17:28 and out at 17:46 on this phone; the stop is ticked
-      // and counted done (the queue overlay, `BE-W154`), but its time line still reads the server's
-      // row, which has no start. Asserted AS IT IS so that the fix has to change this line on purpose.
-      'Not started',
+      // `BE-W165`, FIXED W2-E D. This line read "Not started" (marked UNTRUE) for a visit checked in
+      // at 17:28 and out at 17:46 on this phone. Now the phone's own times, SAID to be the phone's —
+      // the server's row still has no start until a pull returns one.
+      '17:28 on this phone · 18 min',
       'Dr Vikram Rao (DEMO)',
       '✓',
       '14:56 · 45 min',
@@ -515,17 +515,18 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       'All',
       'Not seen 30d',
       'On plan',
-      ASHA,
-      '✓',
-      // UNTRUE — `BE-W165` again: seen today at 17:28 on this phone; the server's last visit is
-      // yesterday's.
-      'Urology · Pune · yesterday',
       'Dr Meera Iyer (DEMO)',
       '✓',
       'Urology · Pune · today',
       'Dr Vikram Rao (DEMO)',
       '✓',
       'Nephrology · Pune · today',
+      // `BE-W165`, FIXED W2-E D. Read "yesterday" (marked UNTRUE), and so was FIRST — the list puts
+      // the longest-unseen doctor first. Seen today at 17:46 on this phone, the most recent of the
+      // three, so now last, and said so.
+      ASHA,
+      '✓',
+      'Urology · Pune · today',
       '3 doctors in your territory.',
     ]);
 
@@ -541,8 +542,9 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
  *    geofence, the shift window, the consent rules and duplicate handling are the database's, and
  *    are proved in `services/api/tests`, not here. A refusal path is not driven.
  * 2. **A server that changes.** Later pulls replay the capture; pushes are not applied to them. So
- *    "after the flush, the next pull heals the route" is NOT shown — and `BE-W165` is visible here for
- *    the whole day, where on a device it lasts until a pull after the flush.
+ *    "after the flush, the next pull heals the route" is NOT shown — so the phone's own times
+ *    (`BE-W165`, fixed W2-E D, "on this phone") are what the route shows for the rest of the day here,
+ *    where on a device a pull after the flush replaces them with the server's.
  * 3. **One read is not captured**: the visit screen's legacy REST read of consent records is answered
  *    "none" by a stub `fetch`.
  * 4. **Device edges**: the GPS fix is a fixed coordinate at the clinic; audio is off; navigation is a

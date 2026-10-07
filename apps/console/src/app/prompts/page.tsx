@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { AiPromptVersionSchema } from '@fieldforce/core';
-import type { AiFeature, AiPromptVersion } from '@fieldforce/core';
+import { AiPromptVersionSchema, GATEWAY_FEATURES } from '@fieldforce/core';
+import type { AiPromptVersion, GatewayFeature } from '@fieldforce/core';
 import { tokens } from '@fieldforce/ui-tokens';
 import { signedIn } from '../../lib/session';
 import { Body, MissingNote, Title } from '../../lib/ui';
@@ -13,19 +13,21 @@ import { PromptList } from '../../lib/prompt-review-list';
  * thirteen. Most are blocked by things a prompt cannot unblock — `transcript_analysis`,
  * `pv_screening` and `complaint_screening` need transcripts, which need the PV/DPDP signatory
  * (`C3`). **Offering a prompt box for a feature that cannot run would invite somebody to write one
- * and conclude the feature was ready.** So the list is the three that have a gateway behind them
- * today, and adding to it is a one-line change made when the feature becomes reachable.
+ * and conclude the feature was ready.** So the list is the features that have a gateway behind them
+ * (`GATEWAY_FEATURES`, five since W2-E), and a new one joins when its flow does.
  */
 
 export const dynamic = 'force-dynamic';
 
 /**
- * The features a prompt can currently do anything for.
+ * The features a prompt can currently do anything for: exactly the ones with a gateway path.
  *
- * `product_qa` is the deployed gateway path; `ai_doctor` and `ai_coach` are what a practice session
- * needs. Everything else in `AI_FEATURES` is gated on something a prompt does not supply.
+ * W2-E A (`BE-W164`): this was a hand-written list of three, and `mr_chat` and `lms_tutor` had
+ * gateway paths without being on it — so two features could not be authored at all. It is now
+ * `GATEWAY_FEATURES`, the same list the schema-name map is keyed on, so a feature cannot be offered
+ * without the column the gateway demands, nor have a gateway path without being offered.
  */
-const OFFERED_FEATURES: readonly AiFeature[] = ['product_qa', 'ai_doctor', 'ai_coach'];
+const OFFERED_FEATURES: readonly GatewayFeature[] = GATEWAY_FEATURES;
 
 const COLUMNS =
   'id, organisation_id, feature, version_number, status, system_prompt, output_schema_name, ' +

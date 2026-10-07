@@ -24,7 +24,7 @@ import type { FixtureWorld } from './fixtures.js';
  * AI-D1 — `product_qa` end to end against the REAL control plane.
  *
  * `answerProductQuestion` (packages/core) runs here with a `ControlPlaneRpc` that calls the real
- * functions as the MR — `ai_begin_request`, `search_approved_knowledge`, `ai_complete_request` —
+ * functions as the MR — `ai_begin_request`, `search_approved_knowledge` — and, as the gateway, `ai_gateway_complete_request` —
  * and a scripted model. The first time those three are exercised together, by the code that will
  * call them.
  *
@@ -63,6 +63,33 @@ const pgRpc = (client: Client): ControlPlaneRpc => ({
       return r.rows[0]?.result;
     } catch (error) {
       await client.query('rollback to savepoint rpc');
+      throw error;
+    }
+  },
+});
+
+/**
+ * W2-E C (`BE-W146`). The gateway's writer over the same client: the close is the service role's
+ * alone now. The role switch is inside the savepoint and undone after the call, so the rep's
+ * identity is what the NEXT call wears — exactly as the gateway's two connections behave.
+ */
+const pgWriter = (client: Client): ControlPlaneRpc => ({
+  call: async (fn, args) => {
+    const names = Object.keys(args);
+    const params = names.map((n) => args[n] ?? null);
+    const list = names.map((n, i) => `${n} => $${String(i + 1)}`).join(', ');
+    await client.query('savepoint writer');
+    try {
+      await client.query('set local role service_role');
+      const r = await client.query<{ result: unknown }>(
+        `select public.${fn}(${list}) as result`,
+        params,
+      );
+      await client.query('set local role authenticated');
+      await client.query('release savepoint writer');
+      return r.rows[0]?.result;
+    } catch (error) {
+      await client.query('rollback to savepoint writer');
       throw error;
     }
   },
@@ -189,6 +216,7 @@ const runCase = async (client: Client, c: ProductQaBenchmarkCase) => {
   await asUser(client, world.users.puneMr);
   const result = await answerProductQuestion({
     rpc: pgRpc(client),
+    writer: pgWriter(client),
     provider: scripted(c.model, calls),
     question: c.question,
     marketId: null,
@@ -237,6 +265,7 @@ describe.skipIf(!reachable)('AI-D1 — product_qa benchmark through the real con
       await expect(
         answerProductQuestion({
           rpc: pgRpc(client),
+          writer: pgWriter(client),
           provider: scripted('must_not_be_called', { n: 0 }),
           question: BENCHMARK_MATCHING_QUESTION,
           marketId: null,

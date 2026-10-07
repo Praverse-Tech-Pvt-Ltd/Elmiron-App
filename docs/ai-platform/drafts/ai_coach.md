@@ -21,6 +21,11 @@ model would invent its own names and every analysis would fail as `schema_invali
 (`DAY-ONE.md`). The shape is spelled out below so this draft works either way; the durable fix is in code
 (`BE-W163`), after which the approver may delete that block.
 
+**W2-E: the durable fix is in code.** `SIM_COACH_OUTPUT_CONTRACT` (`sim-doctor.ts`) now spells out the same
+shape, taken from `SimCoachOutputSchema` and agreeing with what `record_sim_coach_analysis` enforces. The
+JSON block at the end of the text below matched it key for key, so nothing in it needed correcting; the
+approver may now delete it, or keep it — the two say the same thing.
+
 ## B2 — the two dimensions the operator named, as criteria
 
 **The finding first: `scientific_accuracy` cannot be scored as written by this system.** The coach is

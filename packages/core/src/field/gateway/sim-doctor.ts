@@ -34,7 +34,7 @@ import type { ControlPlaneRpc, LlmProvider, LlmResult } from './providers.js';
  *    rep is told the doctor could not answer — never a half-parsed object.
  * 5. `record_sim_turn` — the rep turn and the doctor turn stored together, atomically, with the
  *    `ai_requests` id so the conversation is traceable to the request that produced it.
- * 6. `ai_complete_request` records counts, timings and flags. **Never the turn text** — §52, and the
+ * 6. `ai_gateway_complete_request` (the gateway's writer, W2-E) records counts, timings and flags. **Never the turn text** — §52, and the
  *    same reason `product_qa` logs none: the request log is not a transcript.
  *
  * **Why the turn text is stored in `sim_turns` but not in `ai_requests`.** They are different
@@ -56,6 +56,9 @@ export interface SimTurnInput {
    * service-role writer, which can call `record_sim_turn` and `record_sim_coach_analysis` and nothing
    * else. Everything else — the session, the request, the allowance — still goes through `rpc`, as the
    * rep. Before W1-Z the rep's own token could write both sides of a turn (`BE-W144`).
+   *
+   * W2-E C (`BE-W146`): and the request's CLOSE, `ai_gateway_complete_request` — for every feature now,
+   * not only practice. Opening the request stays the rep's (`ai_begin_request`).
    */
   readonly writer: ControlPlaneRpc;
   readonly provider: LlmProvider;
@@ -76,12 +79,35 @@ const sessionContext = async (rpc: ControlPlaneRpc, sessionId: string) =>
  * The approved prompt version supplies the organisation's voice; this supplies the shape and the
  * three rules that make a practice doctor safe to talk to.
  */
-const OUTPUT_CONTRACT = [
+export const SIM_DOCTOR_OUTPUT_CONTRACT = [
   'You are role-playing a doctor in a TRAINING simulation with a medical representative.',
   'You are not a real doctor and this is not a real consultation.',
   'Never give advice about an individual patient, and never ask for patient details.',
   'Stay in character. Raise the objection you were given until it is addressed.',
   'Reply with JSON only: {"reply": string, "objectionAddressed": boolean}.',
+].join('\n');
+
+/**
+ * The fixed half of the coach's system message — the contract with this code.
+ *
+ * W2-E B (`BE-W163`). It used to end "Reply with JSON only." and name not one key, while the other
+ * four flows each spell out theirs: a real model would have invented its own names and every
+ * analysis would have failed `schema_mismatch`. The shape below is `SimCoachOutputSchema`'s — the
+ * shape `record_sim_coach_analysis` also enforces — and the dimension keys are generated from
+ * `SIM_COACH_DIMENSIONS`, so the text cannot name a score the validator does not expect.
+ * `contract-keys.test.ts` checks every key of every flow is named.
+ */
+export const SIM_COACH_OUTPUT_CONTRACT = [
+  'You are coaching a medical representative on a PRACTICE conversation.',
+  'Every finding must cite the turnIndex it is about, and at least one strength and one improvement are required.',
+  `Score 0-100 as whole numbers, overall and on each of: ${SIM_COACH_DIMENSIONS.join(', ')}.`,
+  'suggestedModules: at most three, ONLY moduleIds from the AVAILABLE MODULES list, each with the dimension it addresses and a reason. An empty list is correct when none fits.',
+  'Reply with JSON only, in exactly this shape:',
+  `{"overallScore": integer, "dimensionScores": {${SIM_COACH_DIMENSIONS.map((d) => `"${d}": integer`).join(', ')}},`,
+  ' "strengths": [{"dimension": a dimension name, "title": string, "detail": string, "turnIndex": integer}],',
+  ' "improvements": [the same shape as "strengths"],',
+  ' "suggestedModules": [{"moduleId": string, "dimension": a dimension name, "reason": string}],',
+  ' "summary": string}',
 ].join('\n');
 
 /**
@@ -122,7 +148,7 @@ export const takeDoctorTurn = async (input: SimTurnInput): Promise<SimTurnResult
     flags?: readonly AiRequestFlag[];
     errorCode?: string;
   }): Promise<void> => {
-    await rpc.call('ai_complete_request', {
+    await input.writer.call('ai_gateway_complete_request', {
       p_request_id: requestId,
       p_status: args.status,
       p_model_provider: args.raw?.provider ?? null,
@@ -169,7 +195,7 @@ export const takeDoctorTurn = async (input: SimTurnInput): Promise<SimTurnResult
             role: 'system',
             content: [
               begun.systemPrompt,
-              OUTPUT_CONTRACT,
+              SIM_DOCTOR_OUTPUT_CONTRACT,
               `Your character: ${context.personaBrief}`,
               `Your stance: ${context.personaStance}`,
               `The objection you raise: ${context.objection}`,
@@ -275,7 +301,7 @@ export const analyseSimSession = async (input: {
     flags?: readonly AiRequestFlag[];
     errorCode?: string;
   }): Promise<void> => {
-    await rpc.call('ai_complete_request', {
+    await input.writer.call('ai_gateway_complete_request', {
       p_request_id: requestId,
       p_status: args.status,
       p_model_provider: args.raw?.provider ?? null,
@@ -308,14 +334,7 @@ export const analyseSimSession = async (input: {
         messages: [
           {
             role: 'system',
-            content: [
-              begun.systemPrompt,
-              'You are coaching a medical representative on a PRACTICE conversation.',
-              'Every finding must cite the turnIndex it is about, and at least one strength and one improvement are required.',
-              `Score 0-100 overall and on each of: ${SIM_COACH_DIMENSIONS.join(', ')}.`,
-              'suggestedModules: at most three, ONLY moduleIds from the AVAILABLE MODULES list, each with the dimension it addresses and a reason. An empty list is correct when none fits.',
-              'Reply with JSON only.',
-            ].join('\n'),
+            content: [begun.systemPrompt, SIM_COACH_OUTPUT_CONTRACT].join('\n'),
           },
           {
             role: 'user',
