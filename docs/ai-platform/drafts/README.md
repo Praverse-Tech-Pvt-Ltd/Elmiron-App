@@ -46,6 +46,6 @@ enough to remove its first line has not read it closely enough to approve it.
 
 10. ~~`BE-W164`~~ — **fixed W2-E**: the console writes the schema name, offers all five, and requires the
     two limits — type each draft's proposed numbers into the two boxes when authoring.
-11. `BE-W163` — the coach's contract names no keys (the draft works around it).
+11. ~~`BE-W163`~~ — **fixed W2-E**: the coach's contract names every key; the draft's own JSON block is now optional.
 12. `BE-W146` — before production AI traffic (`BE-C71`).
 13. The app's assistant and practice screens onto their live transports, and a build (W1-Z B5).

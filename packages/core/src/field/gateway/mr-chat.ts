@@ -120,7 +120,7 @@ export const MrChatScopeTermsResponseSchema = z.object({
  * catalogue check on the answer. This text exists so a cooperative model gives a better reply, not
  * so an uncooperative one is stopped.
  */
-const OUTPUT_CONTRACT = [
+export const MR_CHAT_OUTPUT_CONTRACT = [
   'You help a medical representative use their company app: how a process works, where to find a',
   'screen, what a policy says.',
   'You must NOT answer questions about medicines, products, doses, indications or clinical matters.',
@@ -273,7 +273,7 @@ export const answerMrChat = async (input: MrChatInput): Promise<MrChatResult> =>
     structured = await withTimeout(input.timeoutMs ?? 20_000, (signal) =>
       generateStructured(provider, MrChatOutputSchema, {
         messages: [
-          { role: 'system', content: `${begun.systemPrompt}\n\n${OUTPUT_CONTRACT}` },
+          { role: 'system', content: `${begun.systemPrompt}\n\n${MR_CHAT_OUTPUT_CONTRACT}` },
           { role: 'user', content: message },
         ],
         modelConfig: begun.modelConfig,

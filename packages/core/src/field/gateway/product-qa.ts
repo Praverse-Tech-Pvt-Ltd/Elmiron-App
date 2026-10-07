@@ -88,7 +88,7 @@ export const PRODUCT_QA_FAILED_MESSAGE =
  * voice; this is the contract with the code, and is not editable per organisation because the
  * code below depends on it.
  */
-const OUTPUT_CONTRACT = [
+export const PRODUCT_QA_OUTPUT_CONTRACT = [
   'Answer ONLY from the numbered sources below. Do not use any other knowledge.',
   'If the sources do not answer the question, set "supported" to false and leave "answer" empty.',
   'Never give advice about an individual patient.',
@@ -179,7 +179,7 @@ export const answerProductQuestion = async (input: ProductQaInput): Promise<Prod
     structured = await withTimeout(input.timeoutMs ?? 20_000, (signal) =>
       generateStructured(provider, ProductQaOutputSchema, {
         messages: [
-          { role: 'system', content: `${begun.systemPrompt}\n\n${OUTPUT_CONTRACT}` },
+          { role: 'system', content: `${begun.systemPrompt}\n\n${PRODUCT_QA_OUTPUT_CONTRACT}` },
           {
             role: 'user',
             content: `Sources:\n\n${renderSources(sources)}\n\nQuestion: ${question}`,

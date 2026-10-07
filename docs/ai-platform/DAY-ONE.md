@@ -40,7 +40,7 @@ and approved by another. `seed-practice-world.mjs`, which the old step 3 named, 
 | --- | --- | --- |
 | H1 | AWS account owner | Enable model access for both India profiles in `ap-south-1` (the gate above) |
 | H2 | engineering | ~~Fix `BE-W164`~~ **FIXED W2-E** — the console now writes the schema name from the feature, offers all five features and requires the two limits; proved by the browser suite crossing into the gateway (#15, #16 below) |
-| H3 | engineering | **Fix `BE-W163`** — or approve the coach draft, which carries the keys itself (#14) |
+| H3 | engineering | ~~Fix `BE-W163`~~ **FIXED W2-E** — the coach's contract now spells out the JSON (#14) |
 | H4 | engineering | **Fix `BE-W146`** before production AI traffic (`BE-C71`) |
 | H5 | operator | Edit and accept the five drafts and the personas/scenarios (`drafts/README.md` lists the decisions only the operator can make) |
 | H6 | admin A, then a DIFFERENT admin B (Q-14) | `/prompts`: five instruction sets; `/practice`: five personas, six scenarios. Submit as A, approve as B |
@@ -69,13 +69,13 @@ is from the code on 6 October, with the file that shows it.
 | 11 | Long answers pass, and cost | **OVERTAKEN** — the adapter honours `modelConfig.maxTokens` (`bedrock-provider.ts`); each draft proposes a cap; **since W2-E the console requires `temperature` and `maxTokens` on every new version** (`BE-W164`) | the operator chooses the numbers when authoring |
 | 12 | The HTTP suites break against a real provider | **OVERTAKEN** — the stub stays unless `AI_PROVIDER=bedrock`, which CI never sets | step 6: remove the setting before ordinary runs |
 | 13 | Three benchmark cases cannot pass (`BE-W134`) | OPEN, unchanged | `BE-W134` |
-| **14** | **Every coach analysis fails `schema_invalid`** — the coach's contract never names its JSON keys; the other four do (`sim-doctor.ts`, `analyseSimSession`) | **NEW, W2-D** — `BE-W163` | name the keys in the code's contract; meanwhile the coach DRAFT carries them |
+| **14** | **Every coach analysis fails `schema_invalid`** — the coach's contract never names its JSON keys; the other four do (`sim-doctor.ts`, `analyseSimSession`) | **FIXED W2-E** — `BE-W163`: `SIM_COACH_OUTPUT_CONTRACT` names every key; `contract-keys.test.ts` checks all five flows | name the keys in the code's contract; meanwhile the coach DRAFT carries them |
 | **15** | **Every prompt approved in the console fails `prompt_schema_mismatch`** — the screen saves no `output_schema_name` (`prompt-review-list.tsx`), and all five flows refuse a prompt without the right one (`product-qa.ts`, `mr-chat.ts`, `lms-tutor.ts`, `sim-doctor.ts` ×2). The console's browser test approves a prompt and never calls the gateway, which is why nothing saw it | **FIXED W2-E** — `BE-W164`; `promptDraftRow` (`prompt-contract.ts`) and the browser suite's crossing test | the console sets the schema name from the feature (a fixed map from `@fieldforce/core`), never typed |
 | **16** | `mr_chat` and `lms_tutor` cannot be authored at all — `/prompts` offers three features (`prompts/page.tsx`, `OFFERED_FEATURES`); and no feature's `model_config` can be set | **FIXED W2-E** — `BE-W164`: five features offered (`GATEWAY_FEATURES`); limits required; the model shown, not chosen | add the two features (both have gateway paths now); a model-config field |
 
 **Overtaken: #2, #7, #12 fully; #11 partly. Fixed before the key: #4, #5. Open: #1, #3, #6, #8, #9, #10,
 #13. New and open: #14, #15, #16** — all three findable without the key, and all three would have been
-the first thing day one saw. **W2-E (7 October): #11 fully overtaken; #15 and #16 FIXED** — see the rows.
+the first thing day one saw. **W2-E (7 October): #11 fully overtaken; #14, #15 and #16 FIXED** — see the rows.
 
 ## A4 — the hours, split
 

@@ -256,3 +256,62 @@ describe('ai_coach — the score is written by the gateway, never as the rep (W1
     ]);
   });
 });
+
+describe('ai_coach — the model is told the shape it is held to (W2-E B, BE-W163)', () => {
+  it('the system message the model receives spells out the JSON, keys and nesting', async () => {
+    const r = fresh();
+    await run(analysis([]), r);
+    const system = r.modelRequests[0]?.messages.find((m) => m.role === 'system')?.content ?? '';
+    // The shape a model would copy, not just a list of words somewhere in the text.
+    expect(system).toContain('"dimensionScores": {"opening": integer');
+    expect(system).toContain(
+      '"strengths": [{"dimension": a dimension name, "title": string, "detail": string, "turnIndex": integer}]',
+    );
+    expect(system).toContain(
+      '"suggestedModules": [{"moduleId": string, "dimension": a dimension name, "reason": string}]',
+    );
+  });
+
+  it('POSITIVE: an answer in exactly that shape is analysed and stored', async () => {
+    const r = fresh();
+    const out = await run(analysis([]), r);
+    expect(out.kind).toBe('analysed');
+    expect(stored(r)).toHaveLength(1);
+    expect(completionOf(r)['p_status']).toBe('completed');
+  });
+
+  it('NEGATIVE: the plausible snake_case answer a model invents unprompted fails as schema_mismatch', async () => {
+    const r = fresh();
+    const out = await run(
+      {
+        overall_score: 60,
+        dimension_scores: allScores,
+        strengths: [{ dimension: 'opening', title: 'Clear open', detail: 'd', turn_index: 1 }],
+        areas_for_improvement: [
+          { dimension: 'closing', title: 'No next step', detail: 'd', turn_index: 1 },
+        ],
+        suggested_modules: [],
+        summary: 'A fair first attempt.',
+      },
+      r,
+    );
+    expect(out.kind).toBe('failed');
+    expect(stored(r)).toEqual([]);
+    expect(completionOf(r)).toMatchObject({
+      p_status: 'failed',
+      p_flags: ['schema_invalid'],
+      p_error_code: 'schema_mismatch',
+    });
+  });
+
+  it('NEGATIVE: findings as bare sentences — the right keys, the wrong nesting — fail the same way', async () => {
+    const r = fresh();
+    const out = await run(
+      { ...analysis([]), strengths: ['Clear opening'], improvements: ['No next step agreed'] },
+      r,
+    );
+    expect(out.kind).toBe('failed');
+    expect(stored(r)).toEqual([]);
+    expect(completionOf(r)['p_error_code']).toBe('schema_mismatch');
+  });
+});
