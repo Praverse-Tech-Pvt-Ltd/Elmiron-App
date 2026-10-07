@@ -2,8 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { BENCHMARK_CUT_OFF_TEXT, PRODUCT_QA_BENCHMARK } from './benchmarks.js';
 import type { ProductQaBenchmarkCase, ScriptedModelBehaviour } from './benchmarks.js';
 import { detectPatientSignals } from './guardrails.js';
-import { PRODUCT_QA_OUTPUT_SCHEMA_NAME, answerProductQuestion } from './product-qa.js';
+import {
+  PRODUCT_QA_OUTPUT_SCHEMA_NAME,
+  answerProductQuestion as answerProductQuestionWith,
+} from './product-qa.js';
+import type { ProductQaInput } from './product-qa.js';
 import type { ControlPlaneRpc, LlmGenerateRequest, LlmProvider } from './providers.js';
+
+/** W2-E C: the close goes to the gateway's writer; one recording fake stands in for both here. */
+const answerProductQuestion = (input: Omit<ProductQaInput, 'writer'>) =>
+  answerProductQuestionWith({ ...input, writer: input.rpc });
 
 /**
  * AI-D1 — the product_qa flow against a fake control plane and a scripted model.
@@ -71,7 +79,7 @@ const fakeRpc = (
                 ],
               },
         );
-      case 'ai_complete_request':
+      case 'ai_gateway_complete_request':
         return Promise.resolve({ requestId: REQUEST_ID });
       default:
         return Promise.reject(new Error(`unexpected rpc ${fn}`));
@@ -146,7 +154,7 @@ describe('AI-D1 — the product_qa benchmark, guardrail cases', () => {
     expect(result.kind).toBe(c.expected.kind);
     expect(recorded.modelRequests.length > 0, 'model called').toBe(c.expected.modelCalled);
 
-    const completes = recorded.calls.filter((x) => x.fn === 'ai_complete_request');
+    const completes = recorded.calls.filter((x) => x.fn === 'ai_gateway_complete_request');
     expect(completes, 'the request is closed exactly once').toHaveLength(1);
     const completion = completes[0]?.args ?? {};
     expect(completion['p_status']).toBe(c.expected.requestStatus);
@@ -180,7 +188,8 @@ describe('AI-D1 — what the model is and is not shown', () => {
       kind: 'answered',
       citations: [{ chunkId: CHUNK_ID, documentVersionId: VERSION_ID, heading: 'Storage' }],
     });
-    const completion = recorded.calls.find((x) => x.fn === 'ai_complete_request')?.args ?? {};
+    const completion =
+      recorded.calls.find((x) => x.fn === 'ai_gateway_complete_request')?.args ?? {};
     expect(
       completion['p_knowledge_version_ids'],
       'the log names the version the answer rests on',
@@ -196,7 +205,10 @@ describe('AI-D1 — what the model is and is not shown', () => {
     const c = PRODUCT_QA_BENCHMARK.find((x) => x.id === 'patient-phone-number');
     if (c === undefined) throw new Error('missing case');
     const { recorded } = await run(c);
-    expect(recorded.calls.map((x) => x.fn)).toEqual(['ai_begin_request', 'ai_complete_request']);
+    expect(recorded.calls.map((x) => x.fn)).toEqual([
+      'ai_begin_request',
+      'ai_gateway_complete_request',
+    ]);
   });
 
   it('a prompt approved for a different output shape is refused, not guessed at', async () => {
@@ -210,7 +222,7 @@ describe('AI-D1 — what the model is and is not shown', () => {
     });
     expect(result.kind).toBe('failed');
     expect(recorded.modelRequests).toHaveLength(0);
-    expect(recorded.calls.find((x) => x.fn === 'ai_complete_request')?.args).toMatchObject({
+    expect(recorded.calls.find((x) => x.fn === 'ai_gateway_complete_request')?.args).toMatchObject({
       p_status: 'failed',
       p_error_code: 'prompt_schema_mismatch',
     });

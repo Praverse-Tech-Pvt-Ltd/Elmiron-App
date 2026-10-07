@@ -11,7 +11,8 @@
  *   3. every `Deno.env.get(...)` names its variable as a string literal — a computed name could be
  *      the key under another spelling;
  *   4. `_shared/practice-writer.ts` exports exactly one name, `practiceWriterFromEnv` — never the key,
- *      never the client — and its allow-list is exactly `record_sim_turn`, `record_sim_coach_analysis`;
+ *      never the client — and its allow-list is exactly `record_sim_turn`, `record_sim_coach_analysis`
+ *      and (W2-E C, `BE-W146`) `ai_gateway_complete_request`;
  *   5. `packages/core/src`, which the function imports, reads no environment at all;
  *   6. (W2-B E) the OTHER credentials the platform hands every Edge Function by default — since W2-C
  *      D2 the LEGACY service-role key (`SUPABASE_SERVICE_ROLE_KEY`), `SUPABASE_SECRET_KEY` (the local
@@ -41,7 +42,11 @@ import { join, relative } from 'node:path';
  */
 export const KEY_NAME = 'SUPABASE_SECRET_KEYS';
 export const WRITER_PATH = '_shared/practice-writer.ts';
-export const WRITER_ALLOWED = ['record_sim_coach_analysis', 'record_sim_turn'];
+export const WRITER_ALLOWED = [
+  'ai_gateway_complete_request',
+  'record_sim_coach_analysis',
+  'record_sim_turn',
+];
 /** Rule 6 — credentials with the key's reach (or more) that the function must never name. */
 export const EQUIVALENT_CREDENTIALS = [
   'SUPABASE_SERVICE_ROLE_KEY',

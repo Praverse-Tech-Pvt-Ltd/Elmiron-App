@@ -13,7 +13,7 @@ import {
   refusalForSqlState,
 } from '@fieldforce/core';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
-import { asOwner, asUser, withIdentityLock } from './auth.js';
+import { asDatabaseRole, asOwner, asUser, withIdentityLock } from './auth.js';
 import type { ProfileLike } from './auth.js';
 import { acquireGlobalThresholds } from './global-thresholds.js';
 import { seedFixtures } from './fixtures.js';
@@ -495,27 +495,101 @@ describe.skipIf(!reachable)('AI-D0 — prompts are approved like knowledge', () 
   });
 });
 
+/** W2-E C (`BE-W146`): the close, as the gateway makes it — the service role, never the rep. */
+const gatewayClose = (
+  client: Client,
+  requestId: string,
+  status: string,
+  rest = `'provider', 'model', 10, 20`,
+) =>
+  sqlstate(
+    client,
+    `select public.ai_gateway_complete_request($1, $2::public.ai_request_status, ${rest})`,
+    [requestId, status],
+  );
+
 describe.skipIf(!reachable)('AI-D0 — completing a request', () => {
-  it('only the user it belongs to, only once, never back to started', async () => {
+  it('BE-W146: the rep cannot close their own request, under either name', async () => {
     await inRolledBackTransaction(async (client) => {
       await ready(client);
       await asUser(client, world.users.puneMr);
       const { requestId } = await rpc<{ requestId: string }>(client, 'ai_begin_request', [
         'product_qa',
       ]);
-      const complete = (status = 'completed') =>
-        sqlstate(
+      // Before W2-E this was the OWNER's call, and it took any model name and any token counts.
+      expect(
+        await sqlstate(
           client,
-          `select public.ai_complete_request($1, $2::public.ai_request_status, 'provider', 'model', 10, 20)`,
-          [requestId, status],
-        );
+          `select public.ai_complete_request($1, 'completed', 'claude-opus-99', 'free', 1, 1)`,
+          [requestId],
+        ),
+        'the old rep-callable close no longer exists',
+      ).toBe('42883');
+      expect(
+        await gatewayClose(client, requestId, 'completed'),
+        'the gateway close, as the rep',
+      ).toBe('42501');
+      await asDatabaseRole(client, 'anon');
+      expect(await gatewayClose(client, requestId, 'completed'), 'as anon').toBe('42501');
 
-      await asUser(client, world.users.nagpurMr);
-      expect(await complete(), 'someone else').toBe('42501');
+      // The row the rep could have forged is still open, with nothing written into it.
+      await asDatabaseRole(client, 'service_role');
+      expect(
+        await gatewayClose(client, requestId, 'completed'),
+        'POSITIVE: the gateway',
+      ).toBeNull();
+    });
+  });
+
+  it('the gateway closes once, never back to started, and only a request that exists', async () => {
+    await inRolledBackTransaction(async (client) => {
+      await ready(client);
       await asUser(client, world.users.puneMr);
-      expect(await complete('started'), 'back to started').toBe('22023');
-      expect(await complete(), 'the owner').toBeNull();
-      expect(await complete(), 'twice').toBe('22023');
+      const { requestId } = await rpc<{ requestId: string }>(client, 'ai_begin_request', [
+        'product_qa',
+      ]);
+      await asDatabaseRole(client, 'service_role');
+      expect(await gatewayClose(client, randomUUID(), 'completed'), 'no such request').toBe(
+        '42501',
+      );
+      expect(await gatewayClose(client, requestId, 'started'), 'back to started').toBe('22023');
+      expect(await gatewayClose(client, requestId, 'completed'), 'the gateway').toBeNull();
+      expect(await gatewayClose(client, requestId, 'completed'), 'twice').toBe('22023');
+      expect(await gatewayClose(client, requestId, 'failed'), 'reopened as failed').toBe('22023');
+    });
+  });
+
+  it('a failed call still closes as failed, with no model and its error code', async () => {
+    await inRolledBackTransaction(async (client) => {
+      await ready(client);
+      await asUser(client, world.users.puneMr);
+      const { requestId } = await rpc<{ requestId: string }>(client, 'ai_begin_request', [
+        'product_qa',
+      ]);
+      await asDatabaseRole(client, 'service_role');
+      expect(
+        await gatewayClose(
+          client,
+          requestId,
+          'failed',
+          `null, null, null, null, '{}', array['provider_error'], 'provider_timeout'`,
+        ),
+      ).toBeNull();
+      await asUser(client, world.users.puneMr);
+      const { rows } = await client.query<Record<string, unknown>>(
+        `select status, model_provider, model_name, input_tokens, flags, error_code, completed_at is not null as closed
+           from public.ai_requests where id = $1`,
+        [requestId],
+      );
+      expect(rows[0], 'read back by the rep it belongs to').toEqual({
+        status: 'failed',
+        model_provider: null,
+        model_name: null,
+        input_tokens: null,
+        flags: ['provider_error'],
+        error_code: 'provider_timeout',
+        closed: true,
+      });
     });
   });
 
@@ -544,10 +618,12 @@ describe.skipIf(!reachable)('AI-D0 — completing a request', () => {
       await asUser(client, world.users.puneMr);
       const a = await rpc<{ requestId: string }>(client, 'ai_begin_request', ['product_qa']);
       const b = await rpc<{ requestId: string }>(client, 'ai_begin_request', ['product_qa']);
+      // The organisation a source must belong to is now the REQUEST's — the gateway has no caller.
+      await asDatabaseRole(client, 'service_role');
       const withSources = (requestId: string, ids: string[]) =>
         sqlstate(
           client,
-          `select public.ai_complete_request($1, 'completed', 'p', 'm', 1, 1, $2::uuid[])`,
+          `select public.ai_gateway_complete_request($1, 'completed', 'p', 'm', 1, 1, $2::uuid[])`,
           [requestId, ids],
         );
       expect(await withSources(a.requestId, [draft]), 'a draft is not a source').toBe('22023');
@@ -563,24 +639,29 @@ describe.skipIf(!reachable)('AI-D0 — completing a request', () => {
       await ready(client);
       await asUser(client, world.users.puneMr);
       const a = await rpc<{ requestId: string }>(client, 'ai_begin_request', ['product_qa']);
+      await asDatabaseRole(client, 'service_role');
       expect(
         await sqlstate(
           client,
-          `select public.ai_complete_request($1, 'blocked', 'p', 'm', 1, 1, '{}', array['severity_high'])`,
+          `select public.ai_gateway_complete_request($1, 'blocked', 'p', 'm', 1, 1, '{}', array['severity_high'])`,
           [a.requestId],
         ),
         'an invented flag',
       ).toBe('23514');
-      const out = await rpc<{ latencyMs: number; flags: string[] }>(client, 'ai_complete_request', [
-        a.requestId,
-        'blocked',
-        'p',
-        'm',
-        1,
-        1,
-        [],
-        ['possible_adverse_event', 'knowledge_not_available', 'possible_adverse_event'],
-      ]);
+      const out = await rpc<{ latencyMs: number; flags: string[] }>(
+        client,
+        'ai_gateway_complete_request',
+        [
+          a.requestId,
+          'blocked',
+          'p',
+          'm',
+          1,
+          1,
+          [],
+          ['possible_adverse_event', 'knowledge_not_available', 'possible_adverse_event'],
+        ],
+      );
       expect(out.latencyMs).toBeGreaterThanOrEqual(0);
       expect(out.flags, 'deduplicated and ordered').toEqual([
         'knowledge_not_available',
@@ -671,8 +752,16 @@ describe.skipIf(!reachable)('AI-D0 — every RPC response matches @fieldforce/co
       const started = AiBeginRequestResponseSchema.parse(
         await rpc(client, 'ai_begin_request', ['product_qa']),
       );
+      await asDatabaseRole(client, 'service_role');
       AiCompleteRequestResponseSchema.parse(
-        await rpc(client, 'ai_complete_request', [started.requestId, 'completed', 'p', 'm', 5, 7]),
+        await rpc(client, 'ai_gateway_complete_request', [
+          started.requestId,
+          'completed',
+          'p',
+          'm',
+          5,
+          7,
+        ]),
       );
 
       await asUser(client, world.users.admin);

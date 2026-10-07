@@ -24,11 +24,26 @@ import type { ControlPlaneRpc, LlmGenerateRequest, LlmProvider } from './provide
 const SESSION_ID = '77777777-7777-4777-8777-777777777777';
 
 interface Recorded {
-  calls: { fn: string; args: Record<string, unknown> }[];
+  /** `via` says which connection made the call: the rep's (`rpc`) or the gateway's `writer`. */
+  calls: { fn: string; args: Record<string, unknown>; via: 'rpc' | 'writer' }[];
   modelRequests: LlmGenerateRequest[];
 }
 
 const PAST_THE_GATE = 'past the schema check';
+
+/**
+ * W2-E C (`BE-W146`). The gateway's writer: the only connection the database lets close a request.
+ * Anything else asked of it is a flow reaching for the service role where it should not.
+ */
+const fakeWriter = (recorded: Recorded): ControlPlaneRpc => ({
+  call: (fn, args) => {
+    recorded.calls.push({ fn, args: { ...args }, via: 'writer' });
+    if (fn === 'ai_gateway_complete_request') {
+      return Promise.resolve({ requestId: '33333333-3333-4333-8333-333333333333' });
+    }
+    return Promise.reject(new Error(PAST_THE_GATE));
+  },
+});
 
 const fakeRpc = (
   recorded: Recorded,
@@ -36,7 +51,7 @@ const fakeRpc = (
   row: { output_schema_name: string | null; model_config: Record<string, unknown> },
 ): ControlPlaneRpc => ({
   call: (fn, args) => {
-    recorded.calls.push({ fn, args: { ...args } });
+    recorded.calls.push({ fn, args: { ...args }, via: 'rpc' });
     switch (fn) {
       case 'sim_session_context':
         return Promise.resolve({
@@ -63,8 +78,9 @@ const fakeRpc = (
           allowanceWarning: false,
           allowanceResetsAt: '2026-10-07T18:30:00+00:00',
         });
-      case 'ai_complete_request':
-        return Promise.resolve({ requestId: '33333333-3333-4333-8333-333333333333' });
+      // The rep's connection cannot close: the database grants the close to the service role only.
+      case 'ai_gateway_complete_request':
+        return Promise.reject(Object.assign(new Error('permission denied'), { code: '42501' }));
       default:
         return Promise.reject(new Error(PAST_THE_GATE));
     }
@@ -85,33 +101,30 @@ const runFlow = async (
 ): Promise<Recorded> => {
   const recorded: Recorded = { calls: [], modelRequests: [] };
   const rpc = fakeRpc(recorded, feature, row);
+  const writer = fakeWriter(recorded);
   const provider = recordingProvider(recorded);
   const flows: Record<GatewayFeature, () => Promise<unknown>> = {
     product_qa: () =>
       answerProductQuestion({
         rpc,
+        writer,
         provider,
         question: 'How should it be stored?',
         marketId: null,
         productId: null,
       }),
-    mr_chat: () => answerMrChat({ rpc, provider, message: 'How do I plan a cold call?' }),
+    mr_chat: () => answerMrChat({ rpc, writer, provider, message: 'How do I plan a cold call?' }),
     lms_tutor: () =>
       answerLessonQuestion({
         rpc,
+        writer,
         provider,
         lessonId: '66666666-6666-4666-8666-666666666666',
         question: 'What does this lesson say about storage?',
       }),
     ai_doctor: () =>
-      takeDoctorTurn({
-        rpc,
-        writer: rpc,
-        provider,
-        sessionId: SESSION_ID,
-        repText: 'Good morning.',
-      }),
-    ai_coach: () => analyseSimSession({ rpc, writer: rpc, provider, sessionId: SESSION_ID }),
+      takeDoctorTurn({ rpc, writer, provider, sessionId: SESSION_ID, repText: 'Good morning.' }),
+    ai_coach: () => analyseSimSession({ rpc, writer, provider, sessionId: SESSION_ID }),
   };
   try {
     await flows[feature]();
@@ -123,7 +136,8 @@ const runFlow = async (
 
 const refusedForSchema = (recorded: Recorded): boolean =>
   recorded.calls.some(
-    (c) => c.fn === 'ai_complete_request' && c.args['p_error_code'] === 'prompt_schema_mismatch',
+    (c) =>
+      c.fn === 'ai_gateway_complete_request' && c.args['p_error_code'] === 'prompt_schema_mismatch',
   );
 
 const CONFIG = { temperature: 0.2, maxTokens: 640 };
@@ -144,7 +158,8 @@ describe('a prompt the console writes is one the gateway runs (BE-W164)', () => 
         recorded.calls.findIndex((c) => c.fn === 'ai_begin_request') + 1,
       );
       expect(
-        afterBegin.some((c) => c.fn !== 'ai_complete_request') || recorded.modelRequests.length > 0,
+        afterBegin.some((c) => c.fn !== 'ai_gateway_complete_request') ||
+          recorded.modelRequests.length > 0,
       ).toBe(true);
       // And when the model is reached, the limits the approver saw are the limits it is sent.
       for (const request of recorded.modelRequests) expect(request.modelConfig).toEqual(CONFIG);
@@ -165,6 +180,21 @@ describe('a prompt the console writes is one the gateway runs (BE-W164)', () => 
     const recorded = await runFlow('ai_coach', wrong);
     expect(refusedForSchema(recorded)).toBe(true);
   });
+});
+
+describe('the request is closed by the gateway, never by the rep (W2-E C, BE-W146)', () => {
+  it.each(GATEWAY_FEATURES)(
+    '%s — a failed request closes, as failed, through the writer',
+    async (f) => {
+      const recorded = await runFlow(f, { output_schema_name: null, model_config: {} });
+      const closes = recorded.calls.filter((c) => c.fn === 'ai_gateway_complete_request');
+      expect(closes.map((c) => [c.via, c.args['p_status']])).toEqual([['writer', 'failed']]);
+      // The rep's connection opened the request and was never asked to close it.
+      expect(recorded.calls.filter((c) => c.via === 'rpc').map((c) => c.fn)).not.toContain(
+        'ai_gateway_complete_request',
+      );
+    },
+  );
 });
 
 describe('the limits a prompt carries', () => {

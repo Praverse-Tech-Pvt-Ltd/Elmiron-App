@@ -293,17 +293,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
     });
   }
 
+  // W1-Z A (`BE-C69`) / W2-A (`BE-C70`): the practice paths write turns and scores through the
+  // service-role writer. W2-E C (`BE-W146`, `BE-C74`): EVERY feature now closes its request through
+  // it -- `ai_gateway_complete_request` is granted to the service role alone -- so it is built for
+  // all five, before the flow begins a request it could not close. This file never names the key;
+  // the writer module reads it.
+  const writer = practiceWriterFromEnv(supabaseUrl);
+  if (writer === null) {
+    return json(500, {
+      code: 'misconfigured',
+      message: 'the gateway writer is not configured',
+    });
+  }
+
   try {
     if (feature === 'ai_doctor' || feature === 'ai_coach') {
-      // W1-Z A (`BE-C69`) / W2-A (`BE-C70`): the practice paths write turns and scores through the
-      // service-role writer. This file never names the key; the writer module reads it.
-      const writer = practiceWriterFromEnv(supabaseUrl);
-      if (writer === null) {
-        return json(500, {
-          code: 'misconfigured',
-          message: 'the practice writer is not configured',
-        });
-      }
       if (feature === 'ai_coach') {
         const result = await analyseSimSession({
           rpc,
@@ -328,6 +332,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (feature === 'mr_chat') {
       const result = await answerMrChat({
         rpc,
+        writer,
         provider,
         message: String(body.message),
       });
@@ -336,6 +341,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (feature === 'lms_tutor') {
       const result = await answerLessonQuestion({
         rpc,
+        writer,
         provider,
         lessonId: String(body.lessonId),
         question: String(body.question),
@@ -344,6 +350,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
     const result = await answerProductQuestion({
       rpc,
+      writer,
       provider,
       question,
       marketId: typeof body.marketId === 'string' ? body.marketId : null,

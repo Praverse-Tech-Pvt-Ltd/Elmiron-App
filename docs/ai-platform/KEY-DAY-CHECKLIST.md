@@ -170,6 +170,11 @@ record. **The trigger, whichever comes first:** production AI traffic (the deplo
 with real secrets), or any screen, report or export that reads `ai_requests` model, token or status
 fields. Neither has happened; the local hour above may proceed without it.
 
+**W2-E (7 October): this gate is CLEARED.** `ai_complete_request` is dropped; the gateway closes every
+request as the service role through `ai_gateway_complete_request` (`BE-C74`), bound to the request row.
+What it costs on day one: the gateway's writer key (`practice_writer`, H7 in `DAY-ONE.md`) is now needed
+by all five features — without it every AI request answers 500 `misconfigured`.
+
 ## Before the LEGACY Supabase keys are switched off — a gate with a date (W2-B E, `BE-C72`)
 
 **Supabase says the legacy `service_role` key keeps working "until the end of 2026".** The practice

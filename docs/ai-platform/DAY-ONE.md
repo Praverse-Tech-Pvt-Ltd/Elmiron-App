@@ -41,7 +41,7 @@ and approved by another. `seed-practice-world.mjs`, which the old step 3 named, 
 | H1 | AWS account owner | Enable model access for both India profiles in `ap-south-1` (the gate above) |
 | H2 | engineering | ~~Fix `BE-W164`~~ **FIXED W2-E** — the console now writes the schema name from the feature, offers all five features and requires the two limits; proved by the browser suite crossing into the gateway (#15, #16 below) |
 | H3 | engineering | ~~Fix `BE-W163`~~ **FIXED W2-E** — the coach's contract now spells out the JSON (#14) |
-| H4 | engineering | **Fix `BE-W146`** before production AI traffic (`BE-C71`) |
+| H4 | engineering | ~~Fix `BE-W146`~~ **FIXED W2-E** — the gateway closes every request as the service role (`ai_gateway_complete_request`, `BE-C74`); the rep can no longer write status, model or tokens. **The `practice_writer` key (H7) is now needed by all five features, not only practice** |
 | H5 | operator | Edit and accept the five drafts and the personas/scenarios (`drafts/README.md` lists the decisions only the operator can make) |
 | H6 | admin A, then a DIFFERENT admin B (Q-14) | `/prompts`: five instruction sets; `/practice`: five personas, six scenarios. Submit as A, approve as B |
 | H7 | operator (dashboard) | Edge Function secrets: the three AWS values and `AI_PROVIDER=bedrock`; Settings → API Keys: create `practice_writer` (`BE-C72`) |

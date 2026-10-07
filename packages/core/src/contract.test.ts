@@ -287,7 +287,7 @@ describe('route wiring — W1-A B1', () => {
     // directly, which would put the model call in the client. This assertion is the record of
     // that choice, so removing it is a decision rather than an oversight.
     expect(declared).not.toContain(`/rpc/${AI_RPC.aiBeginRequest}`);
-    expect(declared).not.toContain(`/rpc/${AI_RPC.aiCompleteRequest}`);
+    expect(declared).not.toContain(`/rpc/${AI_RPC.aiGatewayCompleteRequest}`);
   });
 });
 

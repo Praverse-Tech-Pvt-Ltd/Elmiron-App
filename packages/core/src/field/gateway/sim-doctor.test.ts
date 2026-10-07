@@ -67,9 +67,8 @@ const fakeRpc = (recorded: Recorded): ControlPlaneRpc => ({
           },
         ]);
       // W1-Z A (`BE-C69`): NOT here. A score written through the rep's connection is now an error:
-      // the database grants `record_sim_coach_analysis` to the service role only.
-      case 'ai_complete_request':
-        return Promise.resolve({ requestId: REQUEST_ID, status: 'recorded' });
+      // the database grants `record_sim_coach_analysis` to the service role only. W2-E C
+      // (`BE-W146`): and the close, `ai_gateway_complete_request` — it is the writer's, not here.
       default:
         throw new Error(`unexpected rpc ${fn}`);
     }
@@ -83,6 +82,8 @@ const fakeWriter = (
 ): ControlPlaneRpc => ({
   call: (fn, args) => {
     recorded.calls.push({ fn, args: { ...args }, via: 'writer' });
+    // W2-E C (`BE-W146`): the writer closes the request too.
+    if (fn === 'ai_gateway_complete_request') return Promise.resolve({ requestId: REQUEST_ID });
     if (fn !== 'record_sim_coach_analysis') throw new Error(`unexpected writer call ${fn}`);
     if (opts.recordRefuses !== undefined) {
       const refusal = new Error('refused by the database') as Error & { code?: string };
@@ -128,7 +129,7 @@ const run = (body: unknown, recorded: Recorded) =>
 
 const fresh = (): Recorded => ({ calls: [], modelRequests: [] });
 const completionOf = (r: Recorded): Record<string, unknown> =>
-  r.calls.filter((c) => c.fn === 'ai_complete_request').at(-1)?.args ?? {};
+  r.calls.filter((c) => c.fn === 'ai_gateway_complete_request').at(-1)?.args ?? {};
 const stored = (r: Recorded) => r.calls.filter((c) => c.fn === 'record_sim_coach_analysis');
 
 describe('ai_coach — nine items, and a suggestion is only ever a real module (W1-M C)', () => {
@@ -248,11 +249,13 @@ describe('ai_coach — the score is written by the gateway, never as the rep (W1
     const r = fresh();
     await run(analysis([]), r);
     const viaRep = r.calls.filter((c) => c.via === 'rpc').map((c) => c.fn);
-    expect(viaRep).toEqual(
-      expect.arrayContaining(['sim_session_context', 'ai_begin_request', 'ai_complete_request']),
-    );
+    expect(viaRep).toEqual(expect.arrayContaining(['sim_session_context', 'ai_begin_request']));
+    // W2-E C (`BE-W146`): except the CLOSE, which moved to the writer — the rep's connection opens
+    // the request and never closes it.
+    expect(viaRep).not.toContain('ai_gateway_complete_request');
     expect(r.calls.filter((c) => c.via === 'writer').map((c) => c.fn)).toEqual([
       'record_sim_coach_analysis',
+      'ai_gateway_complete_request',
     ]);
   });
 });

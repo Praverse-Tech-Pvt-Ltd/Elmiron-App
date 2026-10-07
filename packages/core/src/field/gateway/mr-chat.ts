@@ -61,7 +61,7 @@ import type { ControlPlaneRpc, LlmProvider, LlmResult } from './providers.js';
  * 3. The catalogue terms, then the question-side product check. Still no provider call.
  * 4. The model.
  * 5. The answer-side product check. Fails closed.
- * 6. `ai_complete_request` — tokens and flags, never the message or the reply.
+ * 6. `ai_gateway_complete_request` (the gateway's writer, W2-E) — tokens and flags, never the message or the reply.
  */
 
 /**
@@ -91,6 +91,11 @@ export type MrChatResult =
 
 export interface MrChatInput {
   readonly rpc: ControlPlaneRpc;
+  /**
+   * W2-E C (`BE-W146`). The gateway's own connection (the service role), which alone may close the
+   * request: `ai_gateway_complete_request` is granted to nobody else. `rpc` is the rep's.
+   */
+  readonly writer: ControlPlaneRpc;
   readonly provider: LlmProvider;
   /**
    * **The rep's message, and nothing else — `mr_chat` is single-turn (W1-S C, `BE-W135` CLOSED).**
@@ -221,7 +226,7 @@ export const answerMrChat = async (input: MrChatInput): Promise<MrChatResult> =>
     flags?: readonly AiRequestFlag[];
     errorCode?: string;
   }): Promise<void> => {
-    await rpc.call('ai_complete_request', {
+    await input.writer.call('ai_gateway_complete_request', {
       p_request_id: requestId,
       p_status: args.status,
       p_model_provider: args.raw?.provider ?? null,

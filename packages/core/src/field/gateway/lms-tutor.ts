@@ -92,6 +92,11 @@ export type LmsTutorResult =
 
 export interface LmsTutorInput {
   readonly rpc: ControlPlaneRpc;
+  /**
+   * W2-E C (`BE-W146`). The gateway's own connection (the service role), which alone may close the
+   * request: `ai_gateway_complete_request` is granted to nobody else. `rpc` is the rep's.
+   */
+  readonly writer: ControlPlaneRpc;
   readonly provider: LlmProvider;
   readonly lessonId: string;
   readonly question: string;
@@ -137,7 +142,7 @@ export const answerLessonQuestion = async (input: LmsTutorInput): Promise<LmsTut
     flags?: readonly AiRequestFlag[];
     errorCode?: string;
   }): Promise<void> => {
-    await rpc.call('ai_complete_request', {
+    await input.writer.call('ai_gateway_complete_request', {
       p_request_id: requestId,
       p_status: args.status,
       p_model_provider: args.raw?.provider ?? null,

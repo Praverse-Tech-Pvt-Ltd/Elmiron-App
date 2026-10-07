@@ -4,9 +4,14 @@ import {
   LMS_TUTOR_FAILED_MESSAGE,
   LMS_TUTOR_NOT_IN_LESSON_MESSAGE,
   LMS_TUTOR_OUTPUT_SCHEMA_NAME,
-  answerLessonQuestion,
+  answerLessonQuestion as answerLessonQuestionWith,
 } from './lms-tutor.js';
+import type { LmsTutorInput } from './lms-tutor.js';
 import type { ControlPlaneRpc, LlmGenerateRequest, LlmProvider } from './providers.js';
+
+/** W2-E C: the close goes to the gateway's writer; one recording fake stands in for both here. */
+const answerLessonQuestion = (input: Omit<LmsTutorInput, 'writer'>) =>
+  answerLessonQuestionWith({ ...input, writer: input.rpc });
 
 /**
  * W1-K Part B — the `lms_tutor` flow against a fake control plane and a scripted model.
@@ -66,7 +71,7 @@ const fakeRpc = (
           lessonBody: LESSON_BODY,
           courseTitle: 'Urology foundations',
         });
-      case 'ai_complete_request':
+      case 'ai_gateway_complete_request':
         return Promise.resolve({ requestId: REQUEST_ID, status: 'recorded' });
       default:
         throw new Error(`unexpected rpc ${fn}`);
@@ -89,7 +94,7 @@ const scripted = (body: unknown, recorded: Recorded): LlmProvider => ({
 const fresh = (): Recorded => ({ calls: [], modelRequests: [] });
 
 const completionOf = (r: Recorded): Record<string, unknown> =>
-  r.calls.filter((c) => c.fn === 'ai_complete_request').at(-1)?.args ?? {};
+  r.calls.filter((c) => c.fn === 'ai_gateway_complete_request').at(-1)?.args ?? {};
 
 // ---------------------------------------------------------------------------
 

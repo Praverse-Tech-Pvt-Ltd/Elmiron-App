@@ -34,7 +34,7 @@ import type { ControlPlaneRpc, LlmProvider, LlmResult } from './providers.js';
  *    rep is told the doctor could not answer — never a half-parsed object.
  * 5. `record_sim_turn` — the rep turn and the doctor turn stored together, atomically, with the
  *    `ai_requests` id so the conversation is traceable to the request that produced it.
- * 6. `ai_complete_request` records counts, timings and flags. **Never the turn text** — §52, and the
+ * 6. `ai_gateway_complete_request` (the gateway's writer, W2-E) records counts, timings and flags. **Never the turn text** — §52, and the
  *    same reason `product_qa` logs none: the request log is not a transcript.
  *
  * **Why the turn text is stored in `sim_turns` but not in `ai_requests`.** They are different
@@ -56,6 +56,9 @@ export interface SimTurnInput {
    * service-role writer, which can call `record_sim_turn` and `record_sim_coach_analysis` and nothing
    * else. Everything else — the session, the request, the allowance — still goes through `rpc`, as the
    * rep. Before W1-Z the rep's own token could write both sides of a turn (`BE-W144`).
+   *
+   * W2-E C (`BE-W146`): and the request's CLOSE, `ai_gateway_complete_request` — for every feature now,
+   * not only practice. Opening the request stays the rep's (`ai_begin_request`).
    */
   readonly writer: ControlPlaneRpc;
   readonly provider: LlmProvider;
@@ -145,7 +148,7 @@ export const takeDoctorTurn = async (input: SimTurnInput): Promise<SimTurnResult
     flags?: readonly AiRequestFlag[];
     errorCode?: string;
   }): Promise<void> => {
-    await rpc.call('ai_complete_request', {
+    await input.writer.call('ai_gateway_complete_request', {
       p_request_id: requestId,
       p_status: args.status,
       p_model_provider: args.raw?.provider ?? null,
@@ -298,7 +301,7 @@ export const analyseSimSession = async (input: {
     flags?: readonly AiRequestFlag[];
     errorCode?: string;
   }): Promise<void> => {
-    await rpc.call('ai_complete_request', {
+    await input.writer.call('ai_gateway_complete_request', {
       p_request_id: requestId,
       p_status: args.status,
       p_model_provider: args.raw?.provider ?? null,
