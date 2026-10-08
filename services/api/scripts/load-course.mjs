@@ -34,7 +34,7 @@
  *   bad_minutes                        minutes that are not a whole number above 0
  *   duplicate_lesson                   two lessons with the same title in one module
  * and, signed in: not_admin, unknown_market, unknown_product, ambiguous_name, draft_already_open (the
- * course already has a draft — finish or discard it in the console first).
+ * course already has a draft WITH content — publish it first; an EMPTY draft, left by a failed load, is reused).
  *
  * **It never publishes.** Publishing is the admin's act, in the console or with the RPC; the loader
  * stops at a draft, and says which version it made.
@@ -243,11 +243,16 @@ export const loadCourse = async (course, { url, apiKey, email, password, fetchIm
   const existing = (await rest.get(`courses?select=id,title`)).find(
     (c) => String(c.title).trim().toLowerCase() === course.title.trim().toLowerCase(),
   );
+  // `BE-W167` — an open draft with NO modules is what a load that failed part-way leaves (its version cannot be
+  // deleted, retired or published), so it is reused. A draft with content is someone's work: refused.
+  let emptyDraft = null;
   if (existing !== undefined) {
     const drafts = await rest.get(
-      `course_versions?select=version_number&course_id=eq.${existing.id}&status=eq.draft`,
+      `course_versions?select=id,version_number,course_modules(id)&course_id=eq.${existing.id}&status=eq.draft`,
     );
-    if (drafts.length > 0) {
+    if (drafts.length > 0 && drafts[0].course_modules.length === 0) {
+      emptyDraft = drafts[0];
+    } else if (drafts.length > 0) {
       problems.push({
         code: 'draft_already_open',
         line: 1,
@@ -266,14 +271,20 @@ export const loadCourse = async (course, { url, apiKey, email, password, fetchIm
     const courseId = existing?.id ?? (await rest.insert('courses', { title: course.title })).id;
     if (existing === undefined) written.push(`courses?id=eq.${courseId}`);
     // organisation_id is derived from the course by the database's trigger; the value sent is ignored.
-    const version = await rest.insert('course_versions', {
-      course_id: courseId,
-      organisation_id: me.organisation_id,
+    const fields = {
       title: course.title,
       summary: course.summary === '' ? null : course.summary,
       market_id: marketId,
       product_id: productId,
-    });
+    };
+    const version =
+      emptyDraft === null
+        ? await rest.insert('course_versions', {
+            course_id: courseId,
+            organisation_id: me.organisation_id,
+            ...fields,
+          })
+        : await rest.update(`course_versions?id=eq.${emptyDraft.id}`, fields);
     for (const [mi, m] of course.modules.entries()) {
       const mod = await rest.insert('course_modules', {
         course_version_id: version.id,
@@ -318,9 +329,9 @@ export const loadCourse = async (course, { url, apiKey, email, password, fetchIm
       }
     }
     // The course and its version cannot be deleted (no grant allows it), so an empty DRAFT version may
-    // remain. It is invisible to reps, and a re-run will say draft_already_open naming it.
+    // remain. It is invisible to reps, and a re-run fills it (W2-H D: it used to lock the course).
     throw new Error(
-      `LOAD FAILED part-way: ${error instanceof Error ? error.message : String(error)}. Its modules and lessons were removed; an empty draft version may remain (reps never see a draft).`,
+      `LOAD FAILED part-way: ${error instanceof Error ? error.message : String(error)}. Its modules and lessons were removed; an empty draft version may remain (reps never see a draft); run the load again and it is reused.`,
     );
   }
 };

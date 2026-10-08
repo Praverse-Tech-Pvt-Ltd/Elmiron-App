@@ -115,6 +115,7 @@ export const restClient = ({ url, apiKey, token, fetchImpl = fetch }) => {
   return {
     get: (path) => call('GET', path),
     insert: async (table, row) => (await call('POST', table, row))[0],
+    update: async (path, patch) => (await call('PATCH', path, patch))[0],
     remove: (path) => call('DELETE', path),
     rpc: (fn, args) => call('POST', `rpc/${fn}`, args),
   };

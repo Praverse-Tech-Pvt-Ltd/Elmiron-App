@@ -344,6 +344,34 @@ describe.skipIf(!reachable)('W2-H A4 — loaded, then read back as the role that
     ]);
   });
 
+  it('a load that FAILS part-way does not lock the course: the re-run fills the empty draft it left', async () => {
+    const text = sample('course-template.md')
+      .replace('course: EXAMPLE — Storage and handling basics', `course: Interrupted ${world.run}`)
+      .replace('market: any', 'market: India');
+    const { course } = checkCourse(text);
+    // The first run dies on its first lesson, as a dropped connection would.
+    const failing: typeof fetch = (input, init) =>
+      init?.method === 'POST' && (input as string).endsWith('/rest/v1/lessons')
+        ? Promise.resolve(new Response('{"message":"connection lost"}', { status: 503 }))
+        : fetch(input, init);
+    await expect(
+      loadCourse(course, { ...target(world.authorAdmin), fetchImpl: failing }),
+    ).rejects.toThrow(/LOAD FAILED part-way/u);
+
+    // The re-run is accepted, and lands in the SAME version — the empty draft, not a second one.
+    const out = await loadCourse(course, target(world.authorAdmin));
+    expect(out).toMatchObject({ versionNumber: 1, modules: 2, lessons: 3 });
+    const admin = await restAs(world.authorAdmin);
+    expect(
+      await admin.call('GET', `course_versions?select=status&course_id=eq.${out.courseId}`),
+    ).toEqual([{ status: 'draft' }]);
+    expect(
+      await admin.call('GET', `lessons?select=id&course_version_id=eq.${out.versionId}`),
+    ).toHaveLength(3);
+    // And it publishes — the stuck state was "a draft with no lessons can never publish".
+    await admin.call('POST', 'rpc/publish_course_version', { p_course_version_id: out.versionId });
+  });
+
   it('REFUSED before anything is written: a rep, an unknown market — no row appears', async () => {
     const admin = await restAs(world.authorAdmin);
     const before = (await admin.call('GET', 'courses?select=id')).length;
