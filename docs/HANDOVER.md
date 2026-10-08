@@ -114,8 +114,14 @@ fresh company by `services/api/tests/catalogue-loader.spec.ts`.
 1. Phone and laptop on the same Wi-Fi; find the laptop's address (`ipconfig`).
 2. `pnpm db:start`, then `pnpm --filter @fieldforce/api run seed:day -- --another`. Sign in with the
    account it prints.
-3. `powershell -ExecutionPolicy Bypass -File apps\field\scripts\build-demo-apk.ps1 -Ip <laptop address>`
-   (5–15 minutes), then install the APK it names on the phone.
+3. **In that PowerShell window, set the four values the script cannot work out** — not secrets; W2-K
+   found this page omitted them, and a fresh clone's build is refused without them:
+   `$env:EXPO_PUBLIC_APP_JWT_AUDIENCE = 'authenticated'`,
+   `$env:EXPO_PUBLIC_APP_SITE_URL = 'http://127.0.0.1:3000'`,
+   `$env:EXPO_PUBLIC_APP_DEEP_LINK_SCHEME = 'com.praversetech.fieldforce'`,
+   `$env:EXPO_PUBLIC_APP_ADDITIONAL_REDIRECT_URLS = 'com.praversetech.fieldforce://auth-callback'`.
+   Then `powershell -ExecutionPolicy Bypass -File apps\field\scripts\build-demo-apk.ps1 -Ip <laptop address>`
+   (5–15 minutes), then install the APK it names on the phone. (`docs/START-HERE.md`, "The app".)
 4. Walk `docs/DEMO-SCRIPT.md`. Then turn the radio off mid-visit, finish the visit, turn it on again.
 
 **What proves it worked:** the finished visit reaches the server after the radio comes back. Its check-in
