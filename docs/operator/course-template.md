@@ -1,7 +1,7 @@
 ---
 # THE COURSE TEMPLATE (W2-H A1). Copy this file, rename it, and replace everything below with your own
 # course. Then check it:      node services/api/scripts/load-course.mjs your-course.md
-# and load it as a DRAFT:     see docs/ai-platform/DAY-ONE.md, "Content".
+# and load it as a DRAFT:     see docs/HANDOVER.md, "Content" (W2-I: DAY-ONE.md has no such section).
 #
 # The loader REFUSES this file as it is: the title below starts with EXAMPLE, so the example can never
 # be loaded by mistake. Lines starting with # inside this block are notes and are ignored.
