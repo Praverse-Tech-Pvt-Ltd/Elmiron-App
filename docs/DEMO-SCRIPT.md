@@ -19,7 +19,7 @@ without that sentence would present a laptop as a deployment.
 
 | # | What | Who | Why it matters |
 | --- | --- | --- | --- |
-| P1 | **Use the laptop that can build the APK.** ⚠ This one cannot: the build pins CMake `3.31.6` and this machine's SDK has only `3.22.1` (`[CXX1300]`, rehearsed). Installing it is a dependency ask. The frontend's laptop built the last demo APK | Dev | No APK, no demo |
+| P1 | **Use a laptop that can build the APK.** ~~This one cannot: the build pins CMake `3.31.6`…~~ **W2-I: no longer true** — since W2-F A3 the script uses an installed CMake 3.31 or newer and refuses clearly if there is none; this laptop has built demo APKs since 7 October | Engineering | No APK, no demo |
 | P2 | ⚠ **On a fresh checkout, build the shared packages BEFORE the APK script:** `pnpm --filter "./packages/*" run build`. Without it the bundle fails: `@fieldforce/ui-tokens` … `dist/index.js` — none of these files exist (rehearsed). The script does not do it and does not check | Dev | The documented build fails from a clean clone |
 | P3 | The APK is built for the laptop's **current** Wi-Fi address and the phone is on that Wi-Fi. ⚠ The last demo APK was built for `192.168.1.15`; this laptop is `192.168.1.6` — an APK cannot follow a laptop to a new address | Dev | The app reaches nothing |
 | P4 | `pnpm db:start`, then **re-seed on the day, after 05:30 IST:** `pnpm --filter @fieldforce/api run seed:day -- --another` (plain `seed:day` refuses once it has run on that database). **Sign in with the account THAT run prints** — every run mints new accounts | Presenter | Visits are dated "today" by the database's date |
