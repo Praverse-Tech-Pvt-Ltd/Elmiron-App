@@ -5607,3 +5607,230 @@ and the rehearsal; the build measured earlier.
 `main`, not merged. The override never fired (last read 11:57 IST, `NOT_AUTHORIZED`). The function server
 and the database are stopped. The local env file remains, git-ignored, for `pnpm ai:live`. Next, if
 engineering has a week: D3's list — the catalogue loader first.
+
+### W2-I — the last day
+
+8 October, 12:05–13:30 IST. **PR #27 (W2-H) confirmed NOT merged** — open, CI green on `5e54562`,
+mergeable. Asked Maanav; **his instruction: stack on W2-H.** Branch `w2-i-backend` from
+`origin/w2-h-backend` at `5e54562`; guard: HEAD = that, clean. PR #28 targets `main` and carries W2-H's
+commits until #27 merges. `review-handoff/` and `review-handoff.zip` deleted at the start.
+
+**The override did not fire.** Model access read at the start (12:05 IST) and between parts (12:24,
+12:40, 12:54, 12:59) and before stopping (13:25): both models `NOT_AUTHORIZED` every time.
+
+**The previous push's CI, recorded:** `w2-h-backend` at `5e54562` (the W2-H log commit) — **CI**
+`37737840418`, success. (`5fe767a`, W2-H's code, was recorded green in W2-H.)
+
+#### A — the catalogue loader (OP-6, OP-7)
+
+* **A2.** `services/api/scripts/load-catalogue.mjs`: a file of markets (`IN | India`) and products
+  (`brand | generic | therapy area | market codes`), the same pattern as the other two loaders — every
+  problem by line, nothing written if any, the sample (`docs/operator/catalogue-template.md`) refused by
+  name. Checked against the company before writing: an existing code under another name, a brand with
+  another generic name, a name already used by a different product (the other loaders find a product by
+  brand OR generic, so a clash would make it ambiguous), a market a product names that exists nowhere,
+  a retired row, a non-admin. **Re-running is the recovery**: rows already held exactly as the file says
+  are left alone, so a load that fails part-way is finished by running it again (catalogue rows cannot
+  be deleted). Five mutants, each caught.
+* **A3 — the dependent proof** (`tests/catalogue-loader.spec.ts`, a company with NO catalogue): the course
+  template is refused `unknown_market` and the knowledge template `unknown_market` + `unknown_product` —
+  the symptom; the catalogue template (renamed) loads; **a rep reads** India and Benchmarol with its
+  therapy area and market; **the same two files then load**; loading the catalogue again writes nothing.
+  Every refusal above leaves the company's counts unchanged.
+* **A4 — writing the content-day list found `BE-W168`.** Nothing in `apps/` calls
+  `publish_course_version` or `submit_knowledge_version`; the console lists knowledge only when
+  `in_review` and has no publish button. So every loaded course and document still needed a hand-written
+  RPC call, and **the W2-H loaders' own messages pointed the admin at screens that do not exist** — my
+  error, from W2-H. Fixed: `content-step.mjs publish-course | submit-knowledge`, as the signed-in admin,
+  never approving. Proved end to end on a fresh company (course published → a rep reads it; material
+  submitted → the console's own `in_review` query lists it → a second admin approves → a rep reads
+  `approved`); four mutants caught. **Also found:** `docs/operator-inputs.md` Q-21 says "the screens
+  built on 7 October already work this way" (one admin publishes) — no screen publishes; it is now a
+  command.
+* **A4 — content day, end to end:** (1) catalogue — `load-catalogue.mjs`, seconds; (2) courses —
+  `load-course.mjs`, seconds a file; (3) publish — `content-step.mjs publish-course`, seconds; (4)
+  assign — console Learning page, a minute; (5) material — `load-knowledge.mjs`, seconds a file; (6)
+  submit — `content-step.mjs submit-knowledge`, seconds; (7) approve — a DIFFERENT admin in `/knowledge`,
+  minutes a document to read. **Plus one build setting found in D2:** reps see courses only in an app
+  built with `EXPO_PUBLIC_LEARNING=true`. **Engineering cost: none left. The cost is writing and
+  reading.**
+
+#### B — the three small ones
+
+* **B1.** `services/api/scripts/ai-switches.mjs status | on <features|all> | off … | limit <n>`, calling
+  `set_organisation_threshold` as the signed-in admin. **Every name is checked first** — the database
+  stores ANY key, so `on mrchat` would have been written and switched nothing on. The five names are
+  pinned equal to `GATEWAY_FEATURES`. `status` reports all three conditions a feature needs (switch,
+  approved instruction set, limit). **Proved by the gateway's own admission** (`ai_begin_request`, as the
+  company's rep): `45011` off, admitted after `on mr_chat`, `product_qa` still refused; `45012` after
+  `limit 1`; a rep's attempt refused `42501`. **One mutant SURVIVED** (status claiming every feature had
+  approved instructions); it became a test (`on product_qa` with no instruction set: status says so and
+  the gateway refuses), and the mutant then failed.
+* **B2 — the brief's premise was not the cause.** The repository's hook already runs the id check (W1-Y
+  D3). **`core.hooksPath` on this machine was the absolute path of the MAIN checkout's `.githooks`**, and
+  that checkout sits on a 24 September `main` whose hook predates the id check — so every commit from
+  this worktree ran a stale hook. W2-H's D1 item 4 ("the hook does not run the id check") diagnosed the
+  wrong thing. Fixed with the repo's own `pnpm hooks:install` (a relative path, so each checkout runs its
+  own hooks; machine config, nothing to commit). **Proved both ways:** an edit to `BE-W166`'s row is now
+  refused at commit (`rule 2`, `COMMIT REFUSED`; restored, nothing committed), and every commit since
+  printed `ids, typecheck, lint and format` and ran four steps.
+* **B3.** The unused `eslint-disable` in `beat-plan-route.test.tsx` removed; lint has no warnings left;
+  that file's 13 tests pass.
+* **B4.** `docs/ai-platform/DAY-ONE.md` H8 said an admin "calls `set_organisation_threshold(key, value,
+  note)`"; it now says `ai-switches.mjs on all`, then `status`. H9 said "nothing but a hand-written insert
+  creates" the catalogue; it now gives the order and the commands. The content row's "about 1 day of
+  loader engineering each" is struck: none left.
+
+#### C — the production build nobody could make (`BE-W169`)
+
+* **Found first:** Expo's template signs the RELEASE build with the **public Android debug key**, so
+  `assembleRelease` made a release-looking APK anyone could replace. The demo relies on it and says
+  "(demo)"; nothing stopped an unlabelled one.
+* **C2 — what is missing.** *The operator supplies:* a release key, kept outside the repository, with
+  its SHA-256 fingerprint recorded; *and* the production deploy (blocked on **Q-19** — the runbook's
+  first step is a backup with nowhere to go), which yields the production address. *Decisions:*
+  `BE-W150` (the app refuses to start without an address nothing uses) and a `versionCode` rule (it is
+  `1`; every update must be higher). *Engineering, after the key AND the address:* the production build
+  script — about ½ day.
+* **C3 — written now, refusing clearly.** `apps/field/plugins/release-signing.cjs`: a non-demo release
+  build reads the key from four Gradle properties set outside the repository, or **Gradle refuses before
+  anything is compiled**; demo builds unchanged. **Proved with a real prebuild and Gradle:** release, no
+  key → `RELEASE BUILD REFUSED: no release key. Not set: …` (all four named); release, a keystore that
+  does not exist → refused; debug → `BUILD SUCCESSFUL`; demo release → `BUILD SUCCESSFUL`. (My first run
+  of that proof was a false red — `cmd` could not find `gradlew.bat`; read before rerunning.) And
+  `apps/field/scripts/verify-release-apk.mjs`: refuses the debug key, two signers, or a signer that is not
+  the operator's fingerprint — **run on today's demo APK: REFUSED, the debug key.** Five and four mutants,
+  all caught. **No key was invented and no unsigned build was made**; the accepting path is shown only on
+  apksigner-shaped text.
+
+#### D — the handover page
+
+* **D1.** `docs/HANDOVER.md`: one section each for model access, the second admin, content, a handset,
+  Q-19, the release key, and a table of every decision — who supplies it, the first hour, the command, the
+  page, and what proves it worked.
+* **D2 — the stranger test, done rather than asserted.** Every path the page names exists (checked by
+  script). The Content section's commands were run from the command line exactly as written, against the
+  local stack: catalogue checked and written, course checked and written, material written, published,
+  submitted, `ai-switches status` read, and the sample refused by name. **It found two things no page
+  said:** reps see courses only in a build with `EXPO_PUBLIC_LEARNING=true` (the row is on Me; off, it
+  does not exist), and the course template pointed at a DAY-ONE section that does not exist. Both
+  corrected. `docs/DEMO-SCRIPT.md` P1, which the Handset section sends people to, still said this laptop
+  cannot build; corrected.
+* **D3 — the dependency map.** Independent of each other: model access, the second admin, content, a
+  handset, Q-19, the release key, every decision. Joined: a production AI feature needs the switch, an
+  approved instruction set (**second admin**) and **model access**; Product Q&A also needs approved
+  material (**content + second admin**); a signed production APK needs the **release key** and the
+  production address (**Q-19 → deploy**). **The second admin alone, with no model access:** approves the
+  five instruction sets, the personas and six scenarios, and all material — so model-access day shrinks to
+  switching on and checking. **A handset alone:** a demo build against the laptop runs the real offline
+  day on a real radio.
+
+#### E — engineering is done
+
+**E1, enumerated once more** — the status table's rows, every `BE-W` row that does not say fixed, the
+code (`TODO`, skipped tests), and what A to D found: the production build script waits on the release key
+and the address; a console button to publish a course waits on Q-21 (the answer changes what it does);
+the `todo` benchmark cases wait on Q-1 and Q-15. **The one engineering-only item left is a console button
+for what a command already does — submitting a knowledge draft, about half a day. It is a convenience,
+not a blocker.**
+
+**Nothing on any critical path is waiting on engineering. Every blocked row below is waiting on a person:
+model access, a second admin, content, a handset, a release key, or an answer. Nothing further without
+an answer.**
+
+#### F — status
+
+| MODULE | STATUS | OWNER | BLOCKER | ETA |
+| --- | --- | --- | --- | --- |
+| Core MR workflow — emulator, local stack [OP-1] | DONE | Maanav | — | — |
+| Core MR workflow — offline day, emulator [OP-1] | DONE | Maanav | — | — |
+| Core MR workflow — offline day on a real handset, DEMO build [OP-1] | BLOCKED | Operator | A handset (nothing else: a demo build against the laptop, `docs/HANDOVER.md`) | about ½ day after it |
+| Core MR workflow — real handset, signed production build [OP-1] | BLOCKED | Operator, then Maanav | A handset, a release key, the production deploy (Q-19) | about 1 day after all three |
+| Day execution — Today and the route on the real server [OP-2] | DONE | Maanav | — | — |
+| Day planning — manager plans [OP-2] | BLOCKED | Operator | Q-16, Q-17, Q-18 | 10–15 working days after the answers |
+| Real backend — every app screen reads and writes the server [OP-3] | DONE | Maanav | — | — |
+| Production deploy [OP-3] | BLOCKED | Operator, then Maanav | Q-19, then `BE-W143`; runbook step 1.3 never rehearsed | about 1 day after the answer |
+| Backup [OP-3] | BLOCKED | Operator, then Maanav | Q-19; red from 16 October | ½ day after the answer |
+| Production APK — release signing enforced, signature verifier (`BE-W169`) [OP-3] | DONE | Maanav | — | — |
+| Production APK — the build itself [OP-3] | BLOCKED | Operator, then Maanav | A release key; the production address (after Q-19); `BE-W150`; a `versionCode` rule | about ½ day after all |
+| Day End — on the real server [OP-4] | DONE | Maanav | — | — |
+| Mileage — on the real server [OP-5] | DONE | Maanav | — | — |
+| LMS — a rep's courses, lessons and finishing them, seen on the emulator (flag off) [OP-6] | DONE | Maanav | — | — |
+| LMS — assigning a course from the console [OP-6] | DONE | Maanav | — | — |
+| LMS — catalogue, course loader, publish by command, proved end to end (W2-H, W2-I) [OP-6] | DONE | Maanav | — | — |
+| LMS — courses for reps to take [OP-6] | BLOCKED | Operator (content owners) | No course content; switching `EXPO_PUBLIC_LEARNING` on in the build | minutes per file after content |
+| LMS — should a course need a second admin's approval (Q-21) [OP-6] | BLOCKED | Operator | Q-21 | ½ day if yes; nothing if no |
+| LMS — the tutor in a lesson [OP-6] | BLOCKED | AWS account owner, then Maanav | Model access; approval (Q-14) | about ½ day after both |
+| Product Q&A — screen [OP-7] | DONE | Maanav | — | — |
+| Product Q&A — material loader, submit by command, approval proved (W2-H, W2-I) [OP-7] | DONE | Maanav | — | — |
+| Product Q&A — real answers [OP-7] | BLOCKED | Operator, then AWS account owner | Approved material (Q-9); approval (Q-14); model access | ½ day after all |
+| Chatbot and practice — wired to the live server, flags off [OP-8] [OP-9] | DONE | Maanav | — | — |
+| AI switches without SQL — `ai-switches.mjs` [OP-7] [OP-8] [OP-9] [OP-10] | DONE | Maanav | — | — |
+| Chatbot — real answers [OP-8] | BLOCKED | AWS account owner, then operator | Model access; approval (Q-14) | about ½ hour after both (a switch and a build) |
+| AI Doctor practice + practice feedback — real answers [OP-9] [OP-10] | BLOCKED | AWS account owner, then operator | Model access; approvals (Q-14) | about ½ hour after both (a switch and a build) |
+| AI Analysis / Coaching of real visits [OP-10] | BLOCKED | Operator | Real recording deferred by decision; the PV/DPDP signatory (`D-15`) | — |
+| Publishing a course and submitting material had no path (`BE-W168`) | DONE | Maanav | — | — |
+| A console button to submit a knowledge draft | POST-4-OCT | Maanav | None — a convenience; `content-step.mjs` does it | about ½ day |
+| Maps [OP-11] | POST-4-OCT | Operator, then Maanav | Nothing started; a Google key (Q-2) and a dependency approval | not estimated |
+| Notifications [OP-12] | POST-4-OCT | Operator, then Maanav | Nothing started; Firebase (Q-3) and a dependency approval | not estimated |
+| Voice [OP-13] | POST-4-OCT | AWS account owner, then Maanav | Nothing started; model access | not estimated |
+| Live tracking [OP-14] | POST-4-OCT | Operator, then Maanav | Nothing started (designed); a purchase, the notice (Q-12), handsets — ordered deferred first | not estimated |
+| First live run of the five features | BLOCKED | AWS account owner, then Maanav | Model access (`NOT_AUTHORIZED`, measured 13:25 IST 8 October) | about 1½–4½ hours after |
+| Named `practice_writer` key on the hosted project | BLOCKED | Operator | Created in the dashboard, once — needed by all five AI features | minutes |
+| Instruction sets, personas and scenarios approved | BLOCKED | Operator | A second admin (Q-14) — needs NO model access | after it |
+| What the coach's `scientific_accuracy` means | BLOCKED | Operator | Discipline, approved material, or no dimension | minutes, once decided |
+| Practice scenario S6 (a doctor reports a reaction) | BLOCKED | Operator | `D-15`, the signatory | — |
+| `BE-W150` — the start-up gate on an unused address | BLOCKED | Operator | Re-rule FE-D2 2 | minutes, once decided |
+| Branch protection on `main` | BLOCKED | Repository admin | Not applied | minutes |
+| Repository visibility | BLOCKED | Operator | Q-20 | minutes, once decided |
+| Demo build script (a demo APK against a local stack) | DONE | Maanav | — | — |
+
+**The hours, re-derived after W2-I.** **Engineering not waiting on anyone: about ½ day, and it is a
+convenience** (D1's number, was ~1 day in W2-H). **After the blockers lift:** the AI path about 1½–4½
+hours after model access (W2-H B4, unchanged); LMS to usable about ½ day after model access for the
+tutor, plus ½ only if Q-21 is "yes" (the catalogue loader, ½ of W2-H's sum, is built); the production
+APK about ½ day after the key and the address. **The critical path is entirely the operator's: model
+access, a second admin, content, Q-19, a release key.**
+
+#### Checks
+
+* Static before tests, every commit, **now through the repository's own hook** (four steps: ids,
+  typecheck, lint, format). Ids: `BE-W168` and `BE-W169` registered in the commits that first cite them;
+  no existing register row changed (the hook now refuses that).
+* **Clean-database check, twice** — `pnpm ci:local --with-db`, and then the pre-push hook ran it again
+  on the push: **All 30 step(s) passed** both times. Database runner **Test Files 93 passed (93)**,
+  **Tests 1216 passed | 11 skipped | 4 todo (1231)** — 16 more than W2-H (catalogue 8, switches 8); the 11
+  skips are the two gated live suites, as before. Field vitest **57 files, 775** (12 more: signing 6,
+  verifier 5, demo config 1); jest **44 suites**; core 14 files, 239 | 4 todo; console **9 files, 80**; ui
+  4 and **32 suites**; ui-tokens 59; mock 43; browser **11 passed, 0 skipped, 0 failed**.
+* **CI on `af3545f`** (HEAD of the code commits, PR #28): workflow **CI**, run `37745675401`,
+  **success**, both jobs; runner lines read, identical to local. This log commit's own CI goes in the next
+  section.
+* The local CI again left an orphaned `functions serve`; killed. No credential in any diff, log line or
+  test: the access check prints status fields only, and the stranger test masked the local key.
+
+#### What I got wrong
+
+* **W2-H's loader messages sent admins to screens that do not exist** ("publish it in the console",
+  "submit it in Knowledge approvals"). I wrote them without checking a screen did either (`BE-W168`).
+* **W2-H's D1 item 4 named the wrong cause** for the hook: I filed "the hook does not run the id check"
+  without reading the hook. It did; the machine was running another checkout's copy.
+* **My Q-19 shorthand was wrong:** W2-H's table and my first `BE-W169` row say "the production address
+  (Q-19)". Q-19 is where a backup may be kept; it blocks the deploy, and the address follows the deploy.
+  The handover says it precisely; the register row stands as written (append-only).
+* My first catalogue checks buried a bad line under `nothing_to_load`, the same noise W2-H fixed in the
+  course loader; fixed in the loader, not the test.
+* My first Gradle proof was a false red (`gradlew.bat` not found); I read the log before rerunning.
+* I piped five of the stranger-test commands through `sed` to mask the local key, so their printed exit
+  codes are `sed`'s; their own output lines show success, and the rest were run unpiped.
+* I did not know reps need an `EXPO_PUBLIC_LEARNING=true` build to see courses until the stranger test.
+
+#### Where I stopped
+
+**All six parts done; the stop is E3's — the CONDITIONAL STOP THE BRIEF DEFINED: engineering has
+nothing left on any path, and the brief said to stop rather than find work.** On `w2-i-backend`, PR #28 to
+`main`, **stacked on PR #27, which is not merged** (Maanav's instruction); merge #27 first. The override
+never fired. The function server and the database are stopped. The local env file remains, git-ignored,
+for `pnpm ai:live`. `core.hooksPath` is now relative on this machine (`pnpm hooks:install`).
+
+**Nothing further without an answer.**

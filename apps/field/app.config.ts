@@ -1,7 +1,9 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 import demoCleartext from './plugins/demo-cleartext.cjs';
+import releaseSigning from './plugins/release-signing.cjs';
 
 const { demoCleartextHosts, withDemoCleartext } = demoCleartext;
+const { withReleaseSigning } = releaseSigning;
 
 /**
  * The display name is configuration, not a constant.
@@ -30,12 +32,20 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const demoHosts = demoCleartextHosts(process.env['DEMO_CLEARTEXT_HOSTS']);
   const name = process.env.EXPO_PUBLIC_APP_DISPLAY_NAME ?? 'Field Force';
 
-  return withDemoCleartext(
-    {
-      ...config,
-      name: demoHosts.length === 0 ? name : `${name} (demo)`,
-      slug: config.slug ?? 'field-force',
-    },
-    demoHosts,
+  /**
+   * W2-I C3 (`BE-W169`) — every NON-demo release build is signed with the company's release key, or
+   * Gradle refuses it. A demo build keeps the template's debug key and its " (demo)" name. See
+   * `plugins/release-signing.cjs`.
+   */
+  return withReleaseSigning(
+    withDemoCleartext(
+      {
+        ...config,
+        name: demoHosts.length === 0 ? name : `${name} (demo)`,
+        slug: config.slug ?? 'field-force',
+      },
+      demoHosts,
+    ),
+    { demo: demoHosts.length > 0 },
   );
 };

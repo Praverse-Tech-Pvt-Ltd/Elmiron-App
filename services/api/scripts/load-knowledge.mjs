@@ -284,7 +284,7 @@ if (
       password,
     });
     console.log(
-      `DRAFT written: "${doc.title}" version ${String(out.versionNumber)}. Submit it, then a DIFFERENT admin approves it, in Knowledge approvals.`,
+      `DRAFT written: "${doc.title}" version ${String(out.versionNumber)}. Submit it for review: content-step.mjs submit-knowledge "${doc.title}" — then a DIFFERENT admin approves it in Knowledge approvals (a draft does not appear there — BE-W168).`,
     );
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
