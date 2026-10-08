@@ -5392,3 +5392,218 @@ the code; the build measured.
 `main`, not merged. The override never fired. The emulator, the function server and the database are
 stopped. The local env file remains, git-ignored, for `pnpm ai:live`; on the day, also set
 `EXPO_PUBLIC_ASSISTANT=true` and `EXPO_PUBLIC_PRACTICE=true` and run the build script.
+
+### W2-H — the loaders, and what is left
+
+8 October, IST. **PR #26 confirmed MERGED** (`d969549`, 04:56 UTC — checked, not assumed). Branch
+`w2-h-backend` from `origin/main` at `d969549`; guard: HEAD = `origin/main`, clean.
+`review-handoff/` and `review-handoff.zip` deleted at the start.
+
+**The override did not fire.** Model access read at the start (10:26 IST) and between parts (10:50,
+11:01, 11:04, 11:11) and before stopping (11:57): both models `NOT_AUTHORIZED`, `agreementAvailability: NOT_AVAILABLE` every time.
+`pnpm ai:live` was not run.
+
+**The previous push's CI, recorded:** the merge of PR #26 to `main` at `d969549` — **CI** `37729894267`,
+**PR mergeability** `37729894411`, **Audio retention watchdog** `37734947408`, all success. (`w2-g-backend`'s
+own CI was recorded green in W2-G.)
+
+#### A — two loaders (OP-6, OP-7)
+
+* **What was built.** `services/api/scripts/load-course.mjs` (a course file → a DRAFT course version, its
+  modules and lessons, in the file's order) and `load-knowledge.mjs` (an approved-material file → a
+  knowledge document version, which the database forces to `draft`; the loader calls no submit or
+  approve function, so it cannot produce approved material). Shared parsing and the signed-in REST calls
+  are in `content-loader.mjs`. Both check the whole file first, every problem by line, and write nothing
+  if anything is wrong; then, signed in as the admin, refuse a non-admin, an unknown or ambiguous market
+  or product, and a course or document with a draft already open — **before writing anything**.
+* **The samples are refused by name.** `docs/operator/course-template.md` and `knowledge-template.md` have
+  `EXAMPLE` titles; the loaders refuse them for that and nothing else (the territory-template precedent),
+  pinned by a test that edits only the title and gets zero problems.
+* **A4 — proved on the local stack, read back as the role that uses it** (`tests/loaders.spec.ts`, its
+  own throwaway company from `seed-practice-world.mjs`):
+  * COURSE: loaded as a draft (read back as the admin: `draft`, market India, lessons in file order);
+    loaded again → `draft_already_open`, still one version; a rep sees no draft; the admin publishes and
+    assigns; **the rep, through the app's own `createLiveLearningBackend` and `outlineSections`,** sees
+    it assigned, starts it, and reads both modules and all three lessons in order.
+  * KNOWLEDGE: loaded; **the approver (a different admin)** reads a `draft` with its source, market and
+    product and no chunks; the existing submit and four-eyes approve then cut it into the three `##`
+    sections.
+  * REFUSED: a rep, an unknown market, an unknown product — **no row appears** (counted before and after).
+* **A5 — when content arrives.** Minutes per file: write it from the template, run the check, run with
+  `--write`. **What is not there:** the market and product named in a file must already exist in the
+  company, and **nothing in the repository creates them** — no screen, no script; the A4 test makes them
+  with hand-written REST calls. On content day, without a fix, an engineer hand-writes those calls. That
+  is D1's item 1.
+
+#### B — day one, rehearsed against the stub
+
+* **B1, each step timed:** step 1 (the key in the env file) 0 s — already there; step 2 under 1 s; step 3
+  about 9 s with the stack warm; step 4 (`pnpm ai:live`) 3 s — the gate SKIPPED, model access not
+  granted (**2 passed | 11 skipped (13)**, both runner lines read); **step 5 impossible against the stub**
+  — it is "read the real failures", and the stub has none; step 6 under 1 s (env file restored byte for
+  byte). The build script's check-only run 5 s; a build 5–15 min (measured 14 min 38 s clean, 4–6 min
+  incremental, W2-F/G).
+* **B2/B3, what the page did not say, now corrected in `docs/ai-platform/DAY-ONE.md`:** build
+  `packages/core` first (the gateway imports its `dist`, which a fresh clone lacks); use an editor, not
+  `echo >>` (the env file has no final newline, so `echo` would silently corrupt `AWS_REGION`); restart
+  the function server after step 2 and after step 6; H8 names `docs/DEPLOY-RUNBOOK.md` step 1.3 (never
+  rehearsed) and the means of switching a feature on (`set_organisation_threshold` — no console screen);
+  the build script makes a **demo APK against a local stack**, its LAN address changed overnight, and
+  **no script or page makes a production APK**.
+* **B4, the number restated: day one is about 1½–4½ hours of engineering, nearly all of it contingent on
+  step 5** (0 if green, 1–3 hours if predictions fire), plus the deploy and switches ½–1 h and the
+  production requests ½–1 h. It **excludes a production APK**. W2-G said "the local path, 2 hours": the
+  mechanics are minutes; the time is in reading failures nobody can see yet.
+
+#### C — `BE-W166`, the stub's default
+
+* **C2 — what the HTTP suites' assertions were actually about.** Read, not assumed: one assertion leaned
+  on the default — `mr-chat.spec.ts`'s W1-I B4 audit test, which needed *some* out-of-scope answer and
+  got it incidentally. The catalogue refusals are decided before the provider is asked; the clinical
+  case uses its own directive. So the suites were about the refusal path, and the default was an
+  accident of convenience.
+* **Changed:** the default `mr_chat` reply is now the practice marker as an **in-scope** answer (the
+  screen reads "not available"); `[STUB:out-of-scope]` keeps the refusal path reachable, and the two
+  tests that need it ask for it.
+* **Two-sided:** `tests/stub-provider.spec.ts` went red on the default before the change and green after;
+  `day-one-states.spec.ts` now asserts the default reads `not_available` and the directive reads a
+  refusal.
+* **C3 — production cannot move:** the same spec pins that with `SUPABASE_URL` a hosted address, empty,
+  or not a URL, the stub **refuses to exist** (`stubProviderRefusal`), with a positive control for the
+  local addresses. A test-only `tests/deno-env.d.ts` declares the one `Deno.env.get` the stub touches, so
+  the api project typechecks it.
+* **Mistake:** I edited `BE-W166`'s row in `docs/ids.md` to say "fixed". Register rows are append-only
+  (rule 2); the pre-commit hook does not run that check, so it reached commit `93ed17b`. Caught by the
+  full check before pushing and restored in `5fe767a`. The fix is recorded here instead.
+
+#### D — what engineering has left
+
+**D1 — every item NOT blocked on a credential, a decision, a handset or content.** Enumerated from the
+W2-G status table and from every `BE-W` register row that does not say fixed; then swept again under a
+different definition — the code itself (`TODO`/`FIXME`, skipped and `todo` tests) and the gaps Parts A
+and B surfaced. Each register candidate was checked against the log, not its row: `BE-W145`, `BE-W146`,
+`BE-W149`, `BE-W152`–`BE-W157`, `BE-W161`, `BE-W165` are DONE in later status tables; `BE-W150` and the
+rest of `BE-W152` wait on decisions; the four `todo` benchmark cases wait on Q-1 or Q-15 (`BE-W134`).
+
+1. **`BE-W167` — a failed course load locked the course. FOUND HERE AND FIXED** (`5fe767a`): the empty
+   draft it left could not be published, retired or deleted, and the loader refused every re-run. Now an
+   empty draft is reused; one with content is still refused. Proved by a load made to fail on its first
+   lesson, then re-run and published; mutated both ways (each mutant failed one test). The knowledge
+   loader has no such gap (its document is reused by title; its version is one insert).
+2. **No way to create a company's markets and products** except hand-written REST or SQL; both loaders
+   refuse until they exist. A third loader in the same pattern: **about ½ day**.
+3. **No tool for day one's switches** (`ai_feature_enabled:<feature>`, `ai_daily_requests_per_user`) —
+   `set_organisation_threshold` is called only by a browser test. A script: **about 1–2 hours**.
+4. **The pre-commit hook does not run the id-register check**, which let my own rule-2 violation into a
+   local commit today (CI would have caught it before merge). **About 15 minutes.**
+5. One lint warning: an unused `eslint-disable` in `apps/field/src/routes/beat-plan-route.test.tsx`.
+   **Two minutes.**
+
+**Not on the list, and why:** rehearsing `DEPLOY-RUNBOOK` step 1.3 and a production APK both need the
+production project and a release key (Q-19, the operator); `BE-W150`, Q-21 and Q-15 are decisions.
+
+**D2 — the list is nearly empty, and that is the finding.** About **one day** of engineering is not
+waiting on someone else. Everything else is waiting on model access, a second admin, content, a handset
+or an answer.
+
+**D3 — a week, ranked by value:**
+
+1. The catalogue loader (item 2) — content day cannot run without it, and it is the only item that
+   stands between content arriving and content loaded.
+2. The switches script (item 3) — removes hand-written SQL from day one.
+3. The hook (item 4) and the lint warning (item 5).
+4. **Then nothing worth doing.** The remaining four days are better not spent: new work without content,
+   a model or a decision is work the critical path does not need, and every line added is a line the
+   day-one rehearsal has to cover. The honest use of that time is the operator's, on the blockers.
+
+#### E — status
+
+| MODULE | STATUS | OWNER | BLOCKER | ETA |
+| --- | --- | --- | --- | --- |
+| Core MR workflow — emulator, local stack [OP-1] | DONE | Maanav | — | — |
+| Core MR workflow — offline day, emulator [OP-1] | DONE | Maanav | — | — |
+| Core MR workflow — real handset, signed [OP-1] | BLOCKED | Operator, then Maanav | A handset, a release key, a reachable server (Q-19); no production APK path exists yet | about 1 day after all three |
+| Core MR workflow — offline day, real radio off, on a handset [OP-1] | BLOCKED | Operator, then Maanav | A handset | about ½ day after it |
+| Day execution — Today and the route on the real server [OP-2] | DONE | Maanav | — | — |
+| Day planning — manager plans [OP-2] | BLOCKED | Operator | Q-16, Q-17, Q-18 | 10–15 working days after the answers |
+| Real backend — every app screen reads and writes the server [OP-3] | DONE | Maanav | — | — |
+| Production deploy [OP-3] | BLOCKED | Operator, then Maanav | Q-19, then `BE-W143`; runbook step 1.3 never rehearsed | about 1 day after the answer |
+| Backup [OP-3] | BLOCKED | Operator, then Maanav | Q-19; red from 16 October | ½ day after the answer |
+| Day End — on the real server [OP-4] | DONE | Maanav | — | — |
+| Mileage — on the real server [OP-5] | DONE | Maanav | — | — |
+| LMS — a rep's courses, lessons and finishing them, seen on the emulator (flag off) [OP-6] | DONE | Maanav | — | — |
+| LMS — assigning a course from the console [OP-6] | DONE | Maanav | — | — |
+| LMS — course loader, file to draft, proved to a rep (W2-H) [OP-6] | DONE | Maanav | — | — |
+| LMS — courses for reps to take [OP-6] | BLOCKED | Operator (content owners), then Maanav | No course content; its markets and products must exist and nothing creates them yet | minutes per file after content, plus ½ day for a catalogue loader (once) |
+| LMS — should a course need a second admin's approval (Q-21) [OP-6] | BLOCKED | Operator | Q-21 | ½ day if yes; nothing if no |
+| LMS — the tutor in a lesson [OP-6] | BLOCKED | AWS account owner, then Maanav | Model access; approval (Q-14) | about ½ day after both |
+| Product Q&A — screen [OP-7] | DONE | Maanav | — | — |
+| Product Q&A — approved-material loader, file to DRAFT only (W2-H) [OP-7] | DONE | Maanav | — | — |
+| Product Q&A — real answers [OP-7] | BLOCKED | Operator, then AWS account owner | Approved material (Q-9); approval (Q-14); model access | ½ day after all |
+| Chatbot and practice — wired to the live server, flags off [OP-8] [OP-9] | DONE | Maanav | — | — |
+| Chatbot — real answers [OP-8] | BLOCKED | AWS account owner, then operator | Model access; approval (Q-14) | about ½ hour after both (a flag and a build) |
+| AI Doctor practice + practice feedback — real answers [OP-9] [OP-10] | BLOCKED | AWS account owner, then operator | Model access; approvals (Q-14) | about ½ hour after both (a flag and a build) |
+| AI Analysis / Coaching of real visits [OP-10] | BLOCKED | Operator | Real recording deferred by decision; the PV/DPDP signatory (`D-15`) | — |
+| A local assistant's stub reply read as a real refusal (`BE-W166`) | DONE | Maanav | — | — |
+| A failed course load locked the course (`BE-W167`) | DONE | Maanav | — | — |
+| Catalogue loader — a company's markets and products | POST-4-OCT | Maanav | None — engineering | about ½ day |
+| Day-one switches script (`set_organisation_threshold`) | POST-4-OCT | Maanav | None — engineering | about 1–2 hours |
+| Maps [OP-11] | POST-4-OCT | Operator, then Maanav | Nothing started; a Google key (Q-2) and a dependency approval | not estimated |
+| Notifications [OP-12] | POST-4-OCT | Operator, then Maanav | Nothing started; Firebase (Q-3) and a dependency approval | not estimated |
+| Voice [OP-13] | POST-4-OCT | AWS account owner, then Maanav | Nothing started; model access | not estimated |
+| Live tracking [OP-14] | POST-4-OCT | Operator, then Maanav | Nothing started (designed); a purchase, the notice (Q-12), handsets — ordered deferred first | not estimated |
+| First live run of the five features | BLOCKED | AWS account owner, then Maanav | Model access (`NOT_AUTHORIZED`, measured 11:11 IST 8 October) | about 1½–4½ hours after (W2-H B4) |
+| Named `practice_writer` key on the hosted project | BLOCKED | Operator | Created in the dashboard, once — needed by all five AI features | minutes |
+| Instruction sets, personas and scenarios approved | BLOCKED | Operator | A second admin (Q-14) | after it |
+| What the coach's `scientific_accuracy` means | BLOCKED | Operator | Discipline, approved material, or no dimension | minutes, once decided |
+| Practice scenario S6 (a doctor reports a reaction) | BLOCKED | Operator | `D-15`, the signatory | — |
+| `BE-W150` — the start-up gate on an unused address | BLOCKED | Operator | Re-rule FE-D2 2 | minutes, once decided |
+| Branch protection on `main` | BLOCKED | Repository admin | Not applied | minutes |
+| Repository visibility | BLOCKED | Operator | Q-20 | minutes, once decided |
+| Demo build script (a demo APK against a local stack) | DONE | Maanav | — | — |
+
+**The hours, re-derived after W2-H.** **The AI path's engineering: about 1½–4½ hours** (B4: was 3½–4½;
+the mechanics are minutes, the rest is step 5). **LMS to usable: still about 1–1½ days, but different days** —
+the course loader (was 1) is built; left are the catalogue loader ½ (once), the tutor ½ (after model
+access), and ½ only if Q-21 is "yes". (W2-G's own sum, 1 + ½ + ½, was 1½–2, not the 1–1½ it printed.) **D1's number beside it: about 1 day of engineering is not blocked on anyone.** **The
+critical path is unchanged: model access, a second admin, content.** Estimates, re-derived from the code
+and the rehearsal; the build measured earlier.
+
+#### Checks
+
+* Static before tests, every commit: typecheck, lint, format clean. Ids: `BE-W167` registered in the
+  commit that first cites it; `BE-W166`'s row restored to its original text (see C).
+* **Clean-database check (`pnpm ci:local --with-db`): All 30 step(s) passed.** Database runner **Test
+  Files 91 passed (91)**, **Tests 1200 passed | 11 skipped | 4 todo (1215)** — 18 more than W2-G (loaders
+  10, stub 7, day-one states 1); the 11 skips are the two gated live suites, as before. Core 14 files,
+  239 | 4 todo; field vitest **55 files, 763**; jest **44 suites**; console **9 files, 80**; ui 4 and **32
+  suites**; ui-tokens 59; mock 43; browser **11 passed, 0 skipped, 0 failed**; the status-table step
+  passed (on W2-G's table — this one is checked by this commit's CI).
+* **CI on `5fe767a`** (HEAD of the code commits, PR #27): workflow **CI**, run `37737094628`, **success**,
+  both jobs; its runner lines read and identical to the local ones above. This log commit's own CI is
+  recorded in the next section.
+* The local CI left an orphaned `functions serve` retrying a removed container after it exited 0; found
+  because the log kept growing, and killed.
+* No credential in any diff, log line or test: the access check prints only status fields.
+
+#### What I got wrong
+
+* I edited a register row (`BE-W166`) instead of recording the fix in the log; the full check caught it,
+  the commit hook did not (D1 item 4).
+* I built the course loader with a failure path that locked the course, and wrote a comment saying a
+  re-run would refuse — describing the defect as if it were the design. Found only when D1 asked what
+  else was left (`BE-W167`).
+* The stub spec first broke typecheck (`Cannot find name 'Deno'`): I imported a Deno file into the Node
+  project without checking what it touches.
+* My first mutation of the loader (via `sed`) did not apply; I caught it by counting the match (0) and
+  redid it in the editor. An earlier `cat > /dev/null` in a shell command hung and had to be stopped.
+* A4's first run had three reds: two in the loaders (an unclosed header also reported every line as bad;
+  a lesson before any module was reported twice) and one in my test (an order assertion that ignored
+  module order).
+
+#### Where I stopped
+
+**All five parts done — the stop is ROOM's natural end, not a blockage.** On `w2-h-backend`, PR #27 to
+`main`, not merged. The override never fired (last read 11:57 IST, `NOT_AUTHORIZED`). The function server
+and the database are stopped. The local env file remains, git-ignored, for `pnpm ai:live`. Next, if
+engineering has a week: D3's list — the catalogue loader first.
