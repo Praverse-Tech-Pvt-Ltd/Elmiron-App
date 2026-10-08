@@ -20,31 +20,31 @@
 export const coachingEnabled: boolean = process.env.EXPO_PUBLIC_COACHING_ENABLED === 'true';
 
 /**
- * FE-D15 — the assistant, on SAMPLE data.
+ * FE-D15 / W2-G A — the assistant, on the REAL transport.
  *
- * **Off by default, and off for the demo.** On, Me gains an "Assistant" row and `app/assistant.tsx`
- * opens, but every reply comes from the sample fixture in `src/assistant/sample.ts`. No request
- * leaves the phone, and the screen and every reply say "sample data". Off, the row does not exist
- * and a deep link goes to Today.
+ * **Off by default, and off until model access and an approved `mr_chat` prompt both exist.** On, Me
+ * gains an "Assistant" row and `app/assistant.tsx` asks the real `ai-gateway` as the signed-in rep.
+ * Off, the row does not exist and a deep link goes to Today.
  *
- * It becomes the real assistant only after FE-CR-7 lands the chat contract in `packages/core`.
- * That is a later change, and it replaces `src/assistant/transport.ts` rather than this flag's
- * meaning.
+ * W2-G A: this was `EXPO_PUBLIC_ASSISTANT_SAMPLE`, and on it showed a sample fixture. The wiring is
+ * now live so that the day model access lands is a flag and a command — but **the flag stays off
+ * while the only model is the stub**: a stubbed reply is a marker sentence no working system
+ * produces (W1-P), and the screen shows "not available yet" for it, never an answer.
  */
-export const assistantSampleEnabled: boolean = process.env.EXPO_PUBLIC_ASSISTANT_SAMPLE === 'true';
+export const assistantEnabled: boolean = process.env.EXPO_PUBLIC_ASSISTANT === 'true';
 
 /**
- * FE-D17 — AI Doctor practice, on SAMPLE data.
+ * FE-D17 / W2-G A — AI Doctor practice, on the REAL backend.
  *
- * **Off by default, and off for the demo.** On, Me gains "AI Doctor practice" and `/practice`
- * opens: pick a scenario, practise with the AI doctor, get feedback. Every reply and score comes
- * from the sample in `src/practice/sample.ts`, nothing leaves the phone, and every screen says
- * "sample data". Off, the row does not exist and every practice route goes to Today.
+ * **Off by default, and off until model access, approved `ai_doctor` and `ai_coach` prompts, and an
+ * approved persona and scenario all exist.** On, Me gains "AI Doctor practice" and `/practice` opens:
+ * pick a scenario, practise, get feedback — all from the server, as the signed-in rep. Off, the row
+ * does not exist and every practice route goes to Today.
  *
- * It becomes real practice when FE-CR-11 lands the practice contract on `main`. That change
- * replaces `src/practice/transport.ts`, not this flag's meaning.
+ * W2-G A: this was `EXPO_PUBLIC_PRACTICE_SAMPLE` over a sample backend. Live now, off for the same
+ * reason as the assistant: the stub's doctor speaks a marker sentence, and the coach scores zeros.
  */
-export const practiceSampleEnabled: boolean = process.env.EXPO_PUBLIC_PRACTICE_SAMPLE === 'true';
+export const practiceEnabled: boolean = process.env.EXPO_PUBLIC_PRACTICE === 'true';
 
 /**
  * W2-C C / `BE-W160` — Product Q&A, on the REAL transport.

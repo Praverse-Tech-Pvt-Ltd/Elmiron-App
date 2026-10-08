@@ -1,8 +1,9 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { BodyText as mockBodyText } from '@fieldforce/ui';
 import { LiveRequestError } from '../live-rest';
 import type { LearningBackend } from '../learning/live';
+import type * as ReactModule from 'react';
 
 /**
  * W2-F B — the three learning routes, with the backend injected (the live one is proved end to end in
@@ -14,11 +15,22 @@ jest.mock('../live-connection', () => ({ appLiveConnection: () => ({}) }));
 jest.mock('../sync/pulled-store', () => ({
   usePulledStore: () => ({ zone: { timeZone: 'Asia/Kolkata', source: 'territory' } }),
 }));
-jest.mock('expo-router', () => ({
-  Redirect: ({ href }: { href: string }) => mockBodyText({ children: `redirect:${href}` }),
-  useRouter: () => ({ push: mockPush }),
-  useLocalSearchParams: () => ({}),
-}));
+/** The latest focus callback, so a test can bring the screen back into view, as Back does. */
+let mockFocused: (() => void) | null = null;
+jest.mock('expo-router', () => {
+  const React = jest.requireActual<typeof ReactModule>('react');
+  return {
+    Redirect: ({ href }: { href: string }) => mockBodyText({ children: `redirect:${href}` }),
+    useRouter: () => ({ push: mockPush }),
+    useLocalSearchParams: () => ({}),
+    useFocusEffect: (callback: React.EffectCallback) => {
+      mockFocused = () => {
+        callback();
+      };
+      React.useEffect(callback, [callback]);
+    },
+  };
+});
 
 import LearningRoute, { LearningList } from '../../app/learning/index';
 import { Course } from '../../app/learning/[courseId]';
@@ -75,6 +87,36 @@ describe('app/learning — W2-F B', () => {
     expect(screen.getByText('Finished 7 Oct')).toBeTruthy();
     await fireEvent.press(screen.getByText('Storage basics'));
     expect(mockPush).toHaveBeenCalledWith('/learning/c1');
+  });
+
+  it('W2-G D (found on the emulator): coming BACK to the list reads the server again', async () => {
+    let finished = false;
+    const myCourses = jest.fn(async () =>
+      Promise.resolve({
+        assignments: [{ id: 'a1', courseId: 'c1', courseTitle: 'Storage basics', dueOn: null }],
+        versions: [V],
+        enrolments: finished
+          ? [
+              {
+                id: 'e1',
+                versionId: 'v1',
+                startedAt: '2026-10-07T09:00:00+00:00',
+                completedAt: '2026-10-07T09:10:00+00:00',
+              },
+            ]
+          : [],
+      }),
+    );
+    await render(<LearningList backend={backendWith({ myCourses })} />);
+    expect(await screen.findByText('Not started')).toBeTruthy();
+    // The rep finishes the course elsewhere, then comes back: the screen is focused again.
+    finished = true;
+    await act(() => {
+      mockFocused?.();
+    });
+    expect(await screen.findByText('Finished 7 Oct')).toBeTruthy();
+    expect(screen.queryByText('Not started')).toBeNull();
+    expect(myCourses).toHaveBeenCalledTimes(2);
   });
 
   it('nothing assigned: said plainly', async () => {

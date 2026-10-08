@@ -1,3 +1,9 @@
+> **RETIRED 7 October 2026 (W2-G C, `BE-C76`) — not a plan any more; do not re-plan against it.**
+> The single list of what the operator asked for is `docs/operator/must-haves.json` — the operator's own
+> 2 October text, fourteen items — and the status table in the latest section of `docs/log/backend.md`
+> is checked against it in CI (`services/api/scripts/check-status-table.mjs`). This file ordered the work after 4 October and never mentioned LMS.
+> Everything below is kept unchanged, as the record of the day it was written.
+
 # 5 October — what to do first, and what each costs
 
 **For the operator. Written 2 October 2026 (W1-T F).** Ordered by how much each one unblocks. The day

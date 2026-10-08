@@ -7,20 +7,21 @@ import type { PracticeBackend } from '../practice/transport';
 import type { TurnRequestBody } from '../practice/contract';
 
 /**
- * FE-D17 — the AI Doctor practice routes, on the sample backend, behind
- * `EXPO_PUBLIC_PRACTICE_SAMPLE` (off by default).
+ * FE-D17 — the AI Doctor practice routes, behind `EXPO_PUBLIC_PRACTICE` (off by default).
  *
- * The backend is the real sample, wrapped so every turn's request can be inspected. The pulled
- * store holds a real doctor, so the payload test proves none of it rides along.
+ * W2-G A: the routes' backend is the LIVE one now (`src/practice/transport.ts`). Here it is replaced
+ * by an injected fake — the sample implementation, wrapped so every turn's request can be inspected —
+ * and the live backend is proved against the local stack (`sim-gateway.spec.ts`, `day-one-states.spec.ts`).
+ * The pulled store holds a real doctor, so the payload test proves none of it rides along.
  */
 
 let mockPracticeEnabled = true;
 jest.mock('../features', () => ({
-  get practiceSampleEnabled() {
+  get practiceEnabled() {
     return mockPracticeEnabled;
   },
   coachingEnabled: false,
-  assistantSampleEnabled: false,
+  assistantEnabled: false,
 }));
 
 const mockPush = jest.fn();
@@ -106,11 +107,12 @@ describe('FE-D17 — the flag', () => {
 });
 
 describe('FE-D17 — home', () => {
-  it('lists the sample scenarios, labelled, and starting one opens its session', async () => {
+  it('lists the backend’s scenarios — no "sample data" banner now — and starting one opens it', async () => {
     await render(<PracticeHome />);
 
     expect(await screen.findByText('Answer a cost objection')).toBeTruthy();
-    expect(screen.getByText('Sample data')).toBeTruthy();
+    // W2-G A: the home screen's backend is live, so a sample banner would be untrue.
+    expect(screen.queryByText('Sample data')).toBeNull();
     const [first] = screen.getAllByText('Start this practice');
     if (first === undefined) throw new Error('no scenario to start');
     await fireEvent.press(first);

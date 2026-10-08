@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useLocalSearchParams } from 'expo-router';
 import { PracticeAnalysisScreen, Screen } from '@fieldforce/ui';
-import { practiceSampleEnabled } from '../../../src/features';
+import { practiceEnabled } from '../../../src/features';
 import {
   DIMENSION_LABELS,
   PRACTICE_DIMENSIONS,
@@ -126,5 +126,5 @@ const PracticeAnalysisView = (): ReactNode => {
 };
 
 export default function PracticeAnalysisRoute(): ReactNode {
-  return practiceSampleEnabled ? <PracticeAnalysisView /> : <Redirect href="/home" />;
+  return practiceEnabled ? <PracticeAnalysisView /> : <Redirect href="/home" />;
 }

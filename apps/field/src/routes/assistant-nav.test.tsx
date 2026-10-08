@@ -10,7 +10,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 
 let mockAssistantEnabled = false;
 jest.mock('../features', () => ({
-  get assistantSampleEnabled() {
+  get assistantEnabled() {
     return mockAssistantEnabled;
   },
   coachingEnabled: false,
@@ -30,12 +30,13 @@ beforeEach(() => {
 });
 
 describe('FE-D15 — Me → Assistant', () => {
-  it('with the flag on, Me lists the assistant, marked as sample data, and opens it', async () => {
+  it('with the flag on, Me lists the assistant — no longer "sample data" — and opens it', async () => {
     mockAssistantEnabled = true;
     await render(<Me />);
 
     expect(screen.getByText('Assistant')).toBeTruthy();
-    expect(screen.getByText(/Sample data/u)).toBeTruthy();
+    expect(screen.getByText('Ask how to do something in this app.')).toBeTruthy();
+    expect(screen.queryByText(/Sample data/u)).toBeNull();
     await fireEvent.press(screen.getByText('Assistant'));
     expect(mockPush).toHaveBeenCalledWith('/assistant');
   });

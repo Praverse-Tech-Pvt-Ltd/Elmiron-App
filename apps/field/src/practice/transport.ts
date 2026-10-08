@@ -1,4 +1,5 @@
-import { createSamplePracticeBackend } from './sample';
+import { appLiveConnection } from '../live-connection';
+import { createLivePracticeBackend } from './live';
 import type {
   CoachRequestBody,
   GatewayResponse,
@@ -40,10 +41,9 @@ export interface PracticeBackend {
 /**
  * One backend for the app process, so a session started on one screen is there on the next.
  *
- * **Still the sample, on purpose (W1-Z B4).** The real backend exists — `createLivePracticeBackend` in
- * `./live.ts`, proved end to end against the local stack (`services/api/tests/sim-gateway.spec.ts`,
- * W1-Z B3) — but every practice screen says "sample data", and the only model reachable today is the
- * stub, whose replies are a marker sentence. Switching this line is a step of the day model access
- * lands, together with the screens' wording (`docs/log/backend.md`, W1-Z B5).
+ * **W2-G A: the REAL backend**, as the signed-in rep — `createLivePracticeBackend`, proved end to end
+ * against the local stack (`services/api/tests/sim-gateway.spec.ts`, W1-Z B3; `day-one-states.spec.ts`).
+ * Switched now rather than on the day model access lands, behind `practiceEnabled`, which stays off
+ * while the only model is the stub: its doctor speaks a marker sentence and the screens say so.
  */
-export const practiceBackend: PracticeBackend = createSamplePracticeBackend();
+export const practiceBackend: PracticeBackend = createLivePracticeBackend(appLiveConnection());

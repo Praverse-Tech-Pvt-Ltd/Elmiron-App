@@ -5190,3 +5190,205 @@ its coherent first stop: list, course, lesson, finish, proved end to end) and C 
 above. On `w2-f-backend`, PR #25 to `main`, not merged. Open: CI on `6608253` and on this commit
 unconfirmed; the LMS screens not seen on a device; the tutor, loader and assignment screen not built.
 The database is stopped; the env file remains, git-ignored, for `pnpm ai:live`.
+
+### W2-G — day one, spent early
+
+7 October, 15:30–18:30 IST. **PR #25 confirmed MERGED** (`6e83f5c`, 09:59 UTC — checked, not assumed).
+Branch `w2-g-backend` from `origin/main` at `6e83f5c`; guard: HEAD = `origin/main`, clean.
+`review-handoff/` and `review-handoff.zip` deleted at the start.
+
+**The override did not fire.** Model access read at the start (15:30), between parts (16:05, 16:37,
+16:45) and before stopping (18:06, 18:26): both models `NOT_AUTHORIZED`, `NOT_AVAILABLE` every time.
+
+**The previous push's CI, recorded:** `w2-f-backend` at `980bbda` — **CI** `37602265827`, success (the
+status-table step's own line in its log). Its merge to `main` at `6e83f5c` — **CI** `37604401275`, **PR
+mergeability** `37604401366`, success.
+
+#### A — the switch, done now
+
+* **A1/A2.** `src/assistant/transport.ts` and `src/practice/transport.ts` are the LIVE transports, as the
+  signed-in rep. Flags renamed `EXPO_PUBLIC_ASSISTANT` / `EXPO_PUBLIC_PRACTICE` (were `*_SAMPLE`); the
+  screens' `sample` props are off (the analysis screen still labels an analysis by its own
+  `modelProvider`); the Me rows no longer say "Sample data". Route tests use injected transports and now
+  assert that NO sample label shows. The assistant's sample fixture, orphaned by the switch, removed with
+  its two tests (field vitest 763 → 761 at that point); the practice sample stays as the route tests' fake.
+  **A survivor found and closed:** the route tests replace the transports, so reverting either back to
+  the sample passed everything — `transport.test.ts` now calls the exported transports and asserts a post
+  to `ai-gateway` as the rep (the practice revert, tried, fails it).
+* **A3. The flags stay off** — `features.ts` says why in each flag's text: the stub's replies are marker
+  sentences.
+* **A4 — the states, read once on the live shape** (`day-one-states.spec.ts`: the real
+  `createLiveAssistantTransport` and `outcomeFromGateway`, as a signed-in rep, against the local gateway,
+  in a throwaway company minted by `seed-practice-world.mjs`):
+
+  | State | What the real gateway sent | What the screen reads |
+  | --- | --- | --- |
+  | Switched off | `403 {code: 45011}` | "not available" |
+  | Refused | `200 {kind: patient_specific}` for a patient detail | a refusal, the server's sentence |
+  | Limit reached | `429 {code: 45012}`, the reset inside `allowance` | "at limit", with that reset |
+  | No model — the stub's in-scope reply | `200 answered`, text starting `[PRACTICE STUB` | "not available", never an answer |
+  | **No model — the stub's DEFAULT** | **`200 out_of_scope`, the real "That looks like a product question…"** | **a refusal — untrue of a how-to question** |
+
+  **Found (`BE-W166`):** the stub's default `mr_chat` reply is `inScope: false`, so a LOCAL assistant
+  answers every question with the genuine product-question redirect — indistinguishable from a real
+  refusal. Production cannot show it (off a local target the stub refuses to exist → `503 no_provider`
+  → "not available", by unit test). Not fixed: the HTTP suites assert that default. One more reason the
+  flags stay off. **Practice's states were NOT read live:** a turn needs a real session before the
+  gateway's switch or limit is reached; its mapper uses the same codes and is unit-tested. Mutations:
+  the stub-marker check removed and the 429 branch removed — each fails exactly its test.
+* **A5 — day one now.** The local `pnpm ai:live` and reading its first failures ≈ 2 h; the app ≈ ½ h
+  (two flags and the build script, 6 m 11 s and 4 m 39 s of Gradle measured today); the deploy and one
+  production request per feature ≈ 1–2 h. **About 2½ hours plus the deploy.** What else is in it is
+  people, not engineering: the second admin to approve prompts (Q-14) and the operator's decisions on
+  the drafts.
+
+#### B — assigning a course (OP-6)
+
+* **B2 — who may, from the function.** `assign_course` is granted to every signed-in user; its body
+  admits **an admin OR a field manager**, each only for people in `visible_user_ids()` (an admin: their
+  company; a manager: their territory subtree and reporting line). Refusals: not admin/manager `42501`;
+  assignee out of scope `42501`; course of another company `42501`; **no published version `22023`**.
+  Idempotent.
+* **Built.** Console `/learning` (nav "Course assignments"): course, person, optional due date, assign
+  through the RPC. RLS decides what is listed; the RPC decides the write. A course with no published
+  version is NAMED so in the picker, and its refusal is said in words; the three `42501` reasons are
+  three sentences (`course-assignment-text.ts`, 4 unit tests).
+* **B4 — in a real browser** (`e2e/learning.spec.ts`, against a world now seeded with a field manager
+  and a published + a draft-only course): **an admin** assigns (read back: assigned by them, due
+  2026-10-20); **the draft course** is refused with "This course has no published version yet…" and
+  nothing stored; **a field manager** assigns to their rep (read back AS the rep: assigned by the
+  manager); **an MR** is offered nobody, the button is disabled, and the MR's own token calling the RPC
+  directly gets `403 42501`. CI's browser floor raised from 7 to 11. Mutations: the 22023 sentence
+  removed (the browser test fails); the picker's label lost (the unit test fails).
+* **B5 — what LMS still needs:** content and a course loader (no screen authors courses; ≈ 1 day once
+  content exists); the tutor in a lesson (after model access); and a **decision for the operator,
+  written as Q-21 in `docs/operator-inputs.md`**: should a course need a second admin's approval, as
+  prompts and knowledge do? Engineering's lean: yes if courses carry product information, no if process
+  training only. Not built.
+
+#### C — one list
+
+* **C2 — retired, not re-derived.** `docs/4-OCTOBER.md` (eighteen items, no LMS) and — found by sweeping
+  for any document people re-plan against — `docs/AFTER-4-OCTOBER.md` (never mentions LMS). Both begin
+  with a RETIRED banner naming `docs/operator/must-haves.json`; their bodies are kept as the record of
+  their day. `COMPLETION-PLAN.md` (September) and `mr-app-plan.md` (architecture) are not module lists.
+* **C3 — enforced (`BE-C76`).** `must-haves.json` lists `retiredPlans`; `check-status-table.mjs` (in CI)
+  now also fails if a retired plan's banner is removed, does not name the single list, or the file is
+  gone — five spec cases; the checker always-passing mutation fails two.
+
+#### D — the screens on the emulator
+
+Pixel 6a emulator, the release APK built with `EXPO_PUBLIC_LEARNING=true` (Gradle directly, so no
+flag-on build lands in `C:\dev\demo-apk`), a rep of a freshly seeded company, the course assigned by its
+admin through `assign_course`. **Getting there:** the first boot stayed `unauthorized` for ten minutes —
+a quick-boot snapshot; a cold boot (`-no-snapshot`) fixed it. And my first `pnpm db:start` brought up
+the database container only and then an empty database — `db:stop`/`db:start` and `db:reset` (101 of
+101 migrations) restored it.
+
+| Screen | What it showed |
+| --- | --- |
+| Me | "Learning — The courses assigned to you." |
+| List | "Storage basics 9fb0b2 — Not started · Due 15 Oct" |
+| Course, not started | the title, "Start this course" |
+| Course, started | "0 of 2 lessons finished", "Keeping stock", "Cold chain — Not finished · about 5 min", "Shelf life — Not finished · about 5 min"; the server's enrolment present |
+| Lesson | title, "About 5 minutes", the body, "I have finished this lesson" |
+| Finished one | "Finished — recorded 11:53 on 7 Oct.", "1 of 2 lessons finished." — the server's stamp 11:53 UTC |
+| **Back to the course** | **"0 of 2 lessons finished", "Cold chain — Not finished" — UNTRUE** |
+| Finished the last | "Finished — recorded 11:54 on 7 Oct.", "That was the last lesson — the course is finished." |
+| **Back to the list** | **"Not started" — UNTRUE: the server had the course finished** |
+| Offline finish (airplane mode) | "No signal, so this was not recorded. Nothing is saved on the phone…" — server: 0 completions; the retry online recorded it |
+
+* **Defect 1, fixed:** the list and the course read once, on mount. They now read on every focus
+  (`useFocusEffect`), the list keeping its rows until the new ones land. Re-verified on a rebuilt APK:
+  back on the course "1 of 2 lessons finished", "Listen first — Finished"; back on the list "Objections —
+  Started 7 Oct", "Storage basics — Finished 7 Oct". The route test for the return fails with the
+  one-time read restored.
+* **Observations, not fixed:** times read in UTC ("11:53") — the fixture company's territory has no
+  timezone, and the app says so in its own banner, so it is true; a finished course still shows its due
+  date; no screen has an on-screen back control — the app hides the stack header everywhere
+  (`app/_layout.tsx:137`), so Android's Back is the only way back, on every pushed screen, not only
+  these; after a failed finish the button's node still reads "busy" in the accessibility tree though it
+  works — **not confirmed with TalkBack**, and it would be the shared `Button`, not these screens.
+* **D3 — one defect and four observations**, against nine and six on earlier first afternoons.
+* **D4 — no handset.** Only the emulator was ever attached (`adb devices`). **Both device gates still
+  wait on a phone and nothing else** — the build script makes the APK now.
+
+#### E — status
+
+| MODULE | STATUS | OWNER | BLOCKER | ETA |
+| --- | --- | --- | --- | --- |
+| Core MR workflow — emulator, local stack [OP-1] | DONE | Maanav | — | — |
+| Core MR workflow — offline day, emulator [OP-1] | DONE | Maanav | — | — |
+| Core MR workflow — real handset, signed [OP-1] | BLOCKED | Operator, then Maanav | A handset, a release key, a reachable server (Q-19) | about 1 day after all three |
+| Core MR workflow — offline day, real radio off, on a handset [OP-1] | BLOCKED | Operator, then Maanav | A handset | about ½ day after it |
+| Day execution — Today and the route on the real server [OP-2] | DONE | Maanav | — | — |
+| Day planning — manager plans [OP-2] | BLOCKED | Operator | Q-16, Q-17, Q-18 | 10–15 working days after the answers |
+| Real backend — every app screen reads and writes the server [OP-3] | DONE | Maanav | — | — |
+| Production deploy [OP-3] | BLOCKED | Operator, then Maanav | Q-19, then `BE-W143` | about 1 day after the answer |
+| Backup [OP-3] | BLOCKED | Operator, then Maanav | Q-19; red from 16 October | ½ day after the answer |
+| Day End — on the real server [OP-4] | DONE | Maanav | — | — |
+| Mileage — on the real server [OP-5] | DONE | Maanav | — | — |
+| LMS — a rep's courses, lessons and finishing them, seen on the emulator (flag off) [OP-6] | DONE | Maanav | — | — |
+| LMS — assigning a course from the console [OP-6] | DONE | Maanav | — | — |
+| LMS — courses for reps to take [OP-6] | BLOCKED | Operator (content owners), then Maanav | No course content; no loader | about 1 day after content |
+| LMS — should a course need a second admin's approval (Q-21) [OP-6] | BLOCKED | Operator | Q-21 | ½ day if yes; nothing if no |
+| LMS — the tutor in a lesson [OP-6] | BLOCKED | AWS account owner, then Maanav | Model access; approval (Q-14) | about ½ day after both |
+| Product Q&A — screen [OP-7] | DONE | Maanav | — | — |
+| Product Q&A — real answers [OP-7] | BLOCKED | Operator, then AWS account owner | Approved material (Q-9) and a loader; approval (Q-14); model access | ½ day after all |
+| Chatbot and practice — wired to the live server, flags off [OP-8] [OP-9] | DONE | Maanav | — | — |
+| Chatbot — real answers [OP-8] | BLOCKED | AWS account owner, then operator | Model access; approval (Q-14) | about ½ hour after both (a flag and a build) |
+| AI Doctor practice + practice feedback — real answers [OP-9] [OP-10] | BLOCKED | AWS account owner, then operator | Model access; approvals (Q-14) | about ½ hour after both (a flag and a build) |
+| AI Analysis / Coaching of real visits [OP-10] | BLOCKED | Operator | Real recording deferred by decision; the PV/DPDP signatory (`D-15`) | — |
+| A local assistant's stub reply reads as a real refusal (`BE-W166`) | POST-4-OCT | Maanav | None — local only; the HTTP suites assert the stub's default | about 1 hour |
+| Maps [OP-11] | POST-4-OCT | Operator, then Maanav | Nothing started; a Google key (Q-2) and a dependency approval | not estimated |
+| Notifications [OP-12] | POST-4-OCT | Operator, then Maanav | Nothing started; Firebase (Q-3) and a dependency approval | not estimated |
+| Voice [OP-13] | POST-4-OCT | AWS account owner, then Maanav | Nothing started; model access | not estimated |
+| Live tracking [OP-14] | POST-4-OCT | Operator, then Maanav | Nothing started (designed); a purchase, the notice (Q-12), handsets — ordered deferred first | not estimated |
+| First live run of the five features | BLOCKED | AWS account owner, then Maanav | Model access (`NOT_AUTHORIZED`, measured 18:26 IST) | about 2 hours after |
+| Named `practice_writer` key on the hosted project | BLOCKED | Operator | Created in the dashboard, once — needed by all five AI features | minutes |
+| Instruction sets, personas and scenarios approved | BLOCKED | Operator | A second admin (Q-14) | after it |
+| What the coach's `scientific_accuracy` means | BLOCKED | Operator | Discipline, approved material, or no dimension | minutes, once decided |
+| Practice scenario S6 (a doctor reports a reaction) | BLOCKED | Operator | `D-15`, the signatory | — |
+| `BE-W150` — the start-up gate on an unused address | BLOCKED | Operator | Re-rule FE-D2 2 | minutes, once decided |
+| Branch protection on `main` | BLOCKED | Repository admin | Not applied | minutes |
+| Repository visibility | BLOCKED | Operator | Q-20 | minutes, once decided |
+| Demo build script | DONE | Maanav | — | — |
+
+**The hours, re-derived after A.** **The AI path's engineering: about 3½–4½ hours** — the local path
+once access lands 2; deploy and one production request per feature 1–2; two flags and a build ½. W2-F
+said 7½–9½: the 4½–5½ of switching is done. **LMS to usable: about 1–1½ days** — a course loader 1
+(once content exists), the tutor in a lesson ½ (after model access), and ½ more only if Q-21 is "yes".
+**The critical path is unchanged: model access, a second admin, content.** Estimates, re-derived from
+the code; the build measured.
+
+#### Checks
+
+* Static before tests, every commit: typecheck, lint, format clean; ids clean (`BE-W166`, `BE-C76`
+  registered in the commits that first cite them).
+* **Clean-database check: All 30 step(s) passed** (one more than W2-F: the status-table step). Database
+  runner **Test Files 89 passed (89)**, **Tests 1182 passed | 11 skipped | 4 todo (1197)** — the 11 skips
+  are the two gated live suites. Core 14 files, 239 | 4 todo; field vitest **55 files, 763 passed**; jest
+  **44 suites, 318 passed**; console **9 files, 80**; ui 4 and **32 suites, 337**; ui-tokens 59; mock 43;
+  browser **11 passed, 0 skipped, 0 failed**; the status table "has a row for every one of the operator's
+  14 items … 2 retired plan documents still say so".
+* **CI on `eb1f1ff`** (the code commits): workflow **CI**, run `37623054362`, **success**. This log
+  commit's own CI is recorded in the next section.
+* No credential in any diff (checked by name against the env file before each commit).
+
+#### What I got wrong
+
+* My route tests replaced the transports, so the switch itself was untested until I noticed and added
+  `transport.test.ts`.
+* My learning screens read once on mount; nine tests and an end-to-end spec passed; a device found it.
+* I wrote the A4 "no provider" test from the code's intent and was wrong about what the stub says by
+  default — which is the finding.
+* My first device boot reused a snapshot and sat `unauthorized`; my first `db:start` left the stack
+  half up, and I briefly ran tests against an empty database.
+* One generated regex had its escapes mangled by a Python string; the CLI's own run caught it.
+
+#### Where I stopped
+
+**All five parts done — the stop is ROOM's natural end, not a blockage.** On `w2-g-backend`, PR #26 to
+`main`, not merged. The override never fired. The emulator, the function server and the database are
+stopped. The local env file remains, git-ignored, for `pnpm ai:live`; on the day, also set
+`EXPO_PUBLIC_ASSISTANT=true` and `EXPO_PUBLIC_PRACTICE=true` and run the build script.

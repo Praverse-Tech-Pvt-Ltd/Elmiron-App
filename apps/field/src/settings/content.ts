@@ -27,11 +27,11 @@ export interface SettingsNavigation {
   readonly onOpenTransparency: () => void;
   readonly onOpenLocation: () => void;
   /**
-   * FE-D15. Present only when `assistantSampleEnabled`. Absent, there is no assistant row, so a
+   * FE-D15. Present only when `assistantEnabled`. Absent, there is no assistant row, so a
    * build with the flag off carries no trace of it.
    */
   readonly onOpenAssistant?: () => void;
-  /** FE-D17. Present only when `practiceSampleEnabled`; absent, there is no practice row. */
+  /** FE-D17. Present only when `practiceEnabled`; absent, there is no practice row. */
   readonly onOpenPractice?: () => void;
   /** W2-C C / `BE-W160`. Present only when `productQaEnabled`; absent, there is no row. */
   readonly onOpenProductQa?: () => void;
@@ -68,7 +68,7 @@ export const settingsGroups = (
             {
               id: 'assistant',
               title: 'Assistant',
-              detail: 'Sample data. Ask how to do something in this app.',
+              detail: 'Ask how to do something in this app.',
               state: 'available' as const,
               onPress: nav.onOpenAssistant,
             },
@@ -79,7 +79,7 @@ export const settingsGroups = (
             {
               id: 'practice',
               title: 'AI Doctor practice',
-              detail: 'Sample data. Practise a visit with an AI doctor and get feedback.',
+              detail: 'Practise a visit with an AI doctor and get feedback.',
               state: 'available' as const,
               onPress: nav.onOpenPractice,
             },

@@ -8,10 +8,10 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 
 let mockPracticeEnabled = false;
 jest.mock('../features', () => ({
-  get practiceSampleEnabled() {
+  get practiceEnabled() {
     return mockPracticeEnabled;
   },
-  assistantSampleEnabled: false,
+  assistantEnabled: false,
   coachingEnabled: false,
 }));
 const mockPush = jest.fn();
@@ -29,12 +29,13 @@ beforeEach(() => {
 });
 
 describe('FE-D17 — Me → AI Doctor practice', () => {
-  it('with the flag on, Me lists it, marked as sample data, and opens it', async () => {
+  it('with the flag on, Me lists it — no longer "sample data" — and opens it', async () => {
     mockPracticeEnabled = true;
     await render(<Me />);
 
     expect(screen.getByText('AI Doctor practice')).toBeTruthy();
-    expect(screen.getByText(/Sample data\. Practise a visit/u)).toBeTruthy();
+    expect(screen.getByText('Practise a visit with an AI doctor and get feedback.')).toBeTruthy();
+    expect(screen.queryByText(/Sample data/u)).toBeNull();
     await fireEvent.press(screen.getByText('AI Doctor practice'));
     expect(mockPush).toHaveBeenCalledWith('/practice');
   });

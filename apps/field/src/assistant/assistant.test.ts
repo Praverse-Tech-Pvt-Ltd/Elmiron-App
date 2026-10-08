@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { chatRequestBody } from './request';
 import { outcomeFromGateway, outcomeFromThrown } from './outcome';
-import { SAMPLE_ANSWER, SAMPLE_SCRIPT, sampleTransport } from './sample';
 
 /**
  * FE-D15 — the assistant's logic, against the `mr_chat` contract on `worktree-ai-platform-phase-a`
@@ -175,27 +174,5 @@ describe('outcomeFromThrown', () => {
 
   it('anything else is an error', () => {
     expect(outcomeFromThrown(new Error('boom')).kind).toBe('error');
-  });
-});
-
-describe('the sample fixture', () => {
-  it('reaches every state through the same mapper', async () => {
-    const kinds: string[] = [];
-    for (const step of SAMPLE_SCRIPT) {
-      try {
-        kinds.push(
-          outcomeFromGateway(await sampleTransport({ feature: 'mr_chat', message: step.ask })).kind,
-        );
-      } catch (error) {
-        kinds.push(outcomeFromThrown(error).kind);
-      }
-    }
-    expect(new Set(kinds)).toEqual(
-      new Set(['answer', 'refusal', 'not_available', 'at_limit', 'offline', 'error']),
-    );
-  });
-
-  it('its answer says it is a sample', () => {
-    expect(SAMPLE_ANSWER).toMatch(/^Sample answer/u);
   });
 });

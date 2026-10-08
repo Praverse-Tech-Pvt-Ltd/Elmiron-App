@@ -13,9 +13,7 @@
     "app_is_active": true,
     "app_metadata": {
       "provider": "email",
-      "providers": [
-        "email"
-      ]
+      "providers": ["email"]
     },
     "app_role": "mr",
     "app_territory_id": "ea5aeb47-8df9-43c0-a9b8-d5470bbcab1a",
@@ -361,10 +359,7 @@
         "serverTime": "2026-10-06T11:56:16.455913+00:00",
         "completeness": {
           "note": "This is a full re-sync and carries no deletions: everything you are entitled to see is in the stream, so anything absent from it is gone. Replace your local state rather than merging into it.",
-          "omits": [
-            "delete",
-            "out_of_scope"
-          ],
+          "omits": ["delete", "out_of_scope"],
           "phase": 2,
           "entities": [
             "visit",
@@ -374,10 +369,7 @@
             "clinic_address",
             "consent_text_version"
           ],
-          "reflects": [
-            "insert",
-            "update"
-          ],
+          "reflects": ["insert", "update"],
           "omittedEntities": [
             "consent_record",
             "analysis",
@@ -401,15 +393,7 @@
         "timezone": "Asia/Kolkata",
         "shiftStart": "04:00:00",
         "graceMinutes": 30,
-        "activeWeekdays": [
-          1,
-          2,
-          3,
-          4,
-          5,
-          6,
-          7
-        ]
+        "activeWeekdays": [1, 2, 3, 4, 5, 6, 7]
       },
       "resolvedFromTerritoryId": "08f26b4b-f86c-40ec-971c-474268cac299"
     },
