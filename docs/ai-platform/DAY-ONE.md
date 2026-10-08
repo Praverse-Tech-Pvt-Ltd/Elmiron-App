@@ -46,7 +46,7 @@ and approved by another. `seed-practice-world.mjs`, which the old step 3 named, 
 | H6 | admin A, then a DIFFERENT admin B (Q-14) | `/prompts`: five instruction sets; `/practice`: five personas, six scenarios. Submit as A, approve as B |
 | H7 | operator (dashboard) | Edge Function secrets: the three AWS values and `AI_PROVIDER=bedrock`; Settings → API Keys: create `practice_writer` (`BE-C72`) |
 | H8 | engineering | Deploy `ai-gateway`; switch each `ai_feature_enabled:<feature>` on for the company |
-| H9 | content owners | Approved product documents (Q-9) for `product_qa`; courses for `lms_tutor` — **no loader exists for either** (W1-Z C) |
+| H9 | content owners, then an admin | Approved product documents (Q-9) for `product_qa`; courses for `lms_tutor`. **W2-H: both have loaders** — copy `docs/operator/course-template.md` / `knowledge-template.md`, then `node services/api/scripts/load-course.mjs <file>` / `load-knowledge.mjs <file>` (check), then `--write` as an admin (`LOADER_PASSWORD` in the environment). Each writes a DRAFT: a course is then published, a document submitted and approved by a second admin. **The market and product a file names must already exist** — nothing but a hand-written insert creates them yet |
 | H10 | engineering | One request per feature against production, read back from `ai_requests`; cross-check one against AWS's own record of the call (D1 §5) |
 
 ## A2 — the predicted first-call failures, each with its remedy
