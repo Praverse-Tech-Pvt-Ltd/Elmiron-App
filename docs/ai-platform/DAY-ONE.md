@@ -18,16 +18,16 @@ of how each step was derived; where the two disagree, this page is the later one
 | `gate: READY` and green | every feature answered by its India profile, every patient detail refused before the model | step 5 |
 | `gate: READY` and red | the first real failures — read the failing assertion against the table below | step 5 |
 
-## The local path — engineering, one person, about 2 hours once access is granted
+## The local path — engineering, one person (W2-H: REHEARSED against the stub — see the notes under the table)
 
 | # | Do | Proves |
 | --- | --- | --- |
 | 1 | The credential in the git-ignored `services/api/supabase/functions/.env`: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION=ap-south-1`. Never in a commit, log or message | `pnpm ai:live` gets past "no credential" |
-| 2 | Add `AI_PROVIDER=bedrock` to the same file (a setting, not a secret) | past the stub gate |
-| 3 | `pnpm db:start`, then `pnpm functions:serve` from the repository root, **started after step 2** — a server started earlier keeps the stub, and the suite will go red saying `model_provider: 'stub'` | the gateway builds Bedrock |
+| 2 | Add `AI_PROVIDER=bedrock` to the same file (a setting, not a secret). **Use an editor, not `echo >>`:** the file on this machine has no final newline, so `echo` would glue the setting onto `AWS_REGION` and break both, silently (W2-H) | past the stub gate |
+| 3 | **`pnpm --filter @fieldforce/core build` first** — the gateway imports `packages/core/dist`, and a fresh clone has none (W2-H: the page did not say this). Then `pnpm db:start` (seconds if already up; minutes cold — check `docker ps` shows ten containers, not just the database), then `pnpm functions:serve` from the repository root, **started after step 2**. (The server logs "File change detected" when the `.env` changes, so it may pick the setting up live — but restart it anyway; it costs seconds and removes the doubt.) | the gateway builds Bedrock |
 | 4 | `pnpm ai:live` | 13 tests: two profiles; five features answered (`completed`, `bedrock`, the feature's India profile, real tokens, the approved prompt); four patient details `blocked` with `model_provider` null |
 | 5 | Read every red against the predictions below; record which fired | the first failures, named |
-| 6 | Remove `AI_PROVIDER=bedrock` before running the ordinary suites (prediction #12), and delete the `.env` when the AI work is finished | no credential left on the machine |
+| 6 | Remove `AI_PROVIDER=bedrock` before running the ordinary suites (prediction #12) **and restart `pnpm functions:serve`**, or the suites may still meet Bedrock; delete the `.env` when the AI work is finished | no credential left on the machine |
 
 **What step 4 does for you that the old step 3 left to a person:** it seeds the product, market and
 approved knowledge, a published lesson with the rep enrolled, a persona and scenario approved by four eyes,
@@ -45,7 +45,7 @@ and approved by another. `seed-practice-world.mjs`, which the old step 3 named, 
 | H5 | operator | Edit and accept the five drafts and the personas/scenarios (`drafts/README.md` lists the decisions only the operator can make) |
 | H6 | admin A, then a DIFFERENT admin B (Q-14) | `/prompts`: five instruction sets; `/practice`: five personas, six scenarios. Submit as A, approve as B |
 | H7 | operator (dashboard) | Edge Function secrets: the three AWS values and `AI_PROVIDER=bedrock`; Settings → API Keys: create `practice_writer` (`BE-C72`) |
-| H8 | engineering | Deploy `ai-gateway`; switch each `ai_feature_enabled:<feature>` on for the company |
+| H8 | engineering | Deploy `ai-gateway` — **`docs/DEPLOY-RUNBOOK.md` step 1.3**, which is NOT yet rehearsed — then switch each `ai_feature_enabled:<feature>` on for the company and set `ai_daily_requests_per_user`: **no console screen does this**; an admin of that company calls `set_organisation_threshold(key, value, note)` (as `e2e/practice.spec.ts` does) — W2-H: the page named the switch but not the means |
 | H9 | content owners, then an admin | Approved product documents (Q-9) for `product_qa`; courses for `lms_tutor`. **W2-H: both have loaders** — copy `docs/operator/course-template.md` / `knowledge-template.md`, then `node services/api/scripts/load-course.mjs <file>` / `load-knowledge.mjs <file>` (check), then `--write` as an admin (`LOADER_PASSWORD` in the environment). Each writes a DRAFT: a course is then published, a document submitted and approved by a second admin. **The market and product a file names must already exist** — nothing but a hand-written insert creates them yet |
 | H10 | engineering | One request per feature against production, read back from `ai_requests`; cross-check one against AWS's own record of the call (D1 §5) |
 
@@ -88,7 +88,7 @@ the first thing day one saw. **W2-E (7 October): #11 fully overtaken; #14, #15 a
 | `BE-W164` (console: schema name, two features, model config, tests) | 3–4 |
 | `BE-W146` (the forgeable request log, before production traffic) | 8 |
 | Deploy, flags, one production request per feature (H8, H10) | 1–2 |
-| ~~The app: assistant and practice transports, wording, a new build (W1-Z B5 3–5)~~ **done W2-G**: both transports are live behind `EXPO_PUBLIC_ASSISTANT` / `EXPO_PUBLIC_PRACTICE` (off); on the day, set both to `true` and run the build script | ½ |
+| ~~The app: assistant and practice transports, wording, a new build (W1-Z B5 3–5)~~ **done W2-G**: both transports are live behind `EXPO_PUBLIC_ASSISTANT` / `EXPO_PUBLIC_PRACTICE` (off); on the day, set both to `true` and run the build script. **W2-H: that script makes a DEMO APK against a LOCAL stack** (it bakes `http://<LAN IP>:54321` and allows cleartext only to it; check the IP each day — it changed overnight). **A production APK is not covered by any script or page** — it needs a release key and the production address (Q-19), the "real handset, signed" row | ½ for a demo build |
 | **Engineering total** | **about 23–25 hours — three working days** |
 
 | Waiting on a person | Who | Effort once they act | When |
@@ -99,5 +99,13 @@ the first thing day one saw. **W2-E (7 October): #11 fully overtaken; #14, #15 a
 | Secrets and key (H7) | operator | 15 minutes | unknown |
 | Product documents and courses (H9) | content owners, plus about 1 day of loader engineering each | days | unknown |
 
-**The honest summary: about three days of engineering, none of which is the critical path.** The critical
+**W2-H — the day, rehearsed against the stub and re-stated.** Measured: step 1 0 s (already done), step 2
+under 1 s, step 3 9 s warm, step 4 3 s, step 6 under 1 s, the build check 5 s and a build 5–15 min. **The
+mechanics are minutes, not two hours.** What the stub could not show is step 5 — reading real failures —
+and that is where the day's time actually is: 0 if green, 1–3 hours if predictions fire. Then H8's deploy
+(runbook 1.3, never rehearsed) and five switches ≈ ½–1 h, and H10's production requests ≈ ½–1 h. **Day one
+is about 1½–4½ hours of engineering, nearly all of it contingent on step 5** — not "2½ plus the deploy",
+and it does not include a production APK, which nothing covers yet.
+
+**The honest summary (W2-D, superseded above): about three days of engineering, none of which is the critical path.** The critical
 path is four people's actions, none of which has a date.
