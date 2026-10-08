@@ -5834,3 +5834,159 @@ never fired. The function server and the database are stopped. The local env fil
 for `pnpm ai:live`. `core.hooksPath` is now relative on this machine (`pnpm hooks:install`).
 
 **Nothing further without an answer.**
+
+### W2-K — the handover
+
+8 October, 14:16–16:35 IST. **`main` confirmed current** at `d231c86` (PR #28's merge; PR #27 merged
+just before it as `8de85e2`). Branch `w2-k-backend` from `origin/main`; guard: clean.
+`review-handoff/` and `review-handoff.zip` deleted at the start. Paused once by Maanav while the APK
+built; resumed on his instruction ("W2-K, continued. Finish what is open. Nothing new.").
+
+**The override did not fire.** Model access read at the start (14:16 IST), between parts (14:35) and
+before stopping (16:30): both models `NOT_AUTHORIZED` every time.
+
+**The previous push's CI, recorded:** `w2-i-backend` at `198c6db` (the W2-I log commit) — **CI**
+`37748909262`, success. Its merge to `main` at `d231c86` — **CI** `37751324575`, **PR mergeability**
+`37751324584`, **Audio retention** `37761045862`, all success.
+
+#### What was built
+
+`docs/START-HERE.md`, the page a new developer reads first: running it from nothing, what the product is
+and its four parts, the four decisions not to undo, the rules with the incident behind each, the checks
+that run automatically, every document classified, where the work is and where the ice is thin, and what
+it does not cover. A new root **`README.md`** (there was none) and a pointer at the top of `CLAUDE.md`
+send both a person and a session there. **Every step on it is marked [ran] or [not run].**
+
+#### A — the cold start, done rather than described
+
+A fresh clone from GitHub into `C:\cs\ea`, with an **empty package store** (`--store-dir C:\cs\store`),
+following only what is written down. **Measured** on this machine: clone **2 s**; `pnpm install` **1 min**
+(1,089 packages downloaded); `pnpm ci:local` (the static job) **6 min**, 17/17; `pnpm db:start` **59 s**,
+ten containers, every migration from an empty database; `pnpm ci:local --with-db` **4 min 18 s**, 30/30
+(**93 files, 1216 passed | 11 skipped | 4 todo**, browser 11 passed — the same counts as `main`); the
+console's sign-in page **15 s** after `dev`; the demo APK **1,068 s (about 18 min)**, `DEMO APK READY`, the
+file present at 102,261,623 bytes, debug-signed (the release verifier refuses it, as designed). **About
+15 minutes from a clone to a green full run, plus 18 for the APK.** These are **lower bounds**: the tools,
+the Docker images and Gradle's caches were already on this machine. The page's "about an hour more" for a
+bare machine is an estimate, and says so.
+
+**A2 — what no current document said, or said wrongly:**
+
+* **There is no README** at the repository root.
+* **`docs/backend-setup.md` (6 August) fails if followed:** it says develop in WSL (the project is
+  native Windows), `pnpm add -D supabase` and `pnpm supabase init` (the CLI is already a dependency;
+  `init` would collide with `services/api/supabase`), `pnpm supabase start` from the root (the stack is
+  at `--workdir services/api`), and `pnpm@latest` (the version is pinned).
+* **A fresh clone runs no hooks** until `pnpm hooks:install`; nothing on a first-read path said so.
+* **`pnpm ci:local --with-db` stops the stack when it finishes** — the next command that needs it fails.
+  Found because a key comparison read an empty value; the key itself matched.
+* **A fresh clone's demo build is REFUSED**: three `EXPO_PUBLIC_APP_*` values (four set in all) must be in
+  the shell. They are in the root `.env.example`, but the script reads the shell, not the file, and the
+  only page that said to set them was a dated one (`docs/demo-path-2026-10-01.md`). **My own
+  `docs/HANDOVER.md` handset section (W2-I) omitted them** — corrected. With the four set, every check
+  passed and the APK built.
+* **Long paths** (`docs/gotchas.md`) were already enabled here, so that prerequisite is asserted, not
+  proven, on the page.
+
+#### D — documents found retired or stale
+
+**Retired, and say so:** `docs/4-OCTOBER.md`, `docs/AFTER-4-OCTOBER.md`. **Stale, and do not say so:**
+`docs/backend-setup.md` (above); **`PROJECT-OVERVIEW.md`'s "Current state"** — the one section it says
+describes now — reads "week 7" and "seventeen migrations" (there are 101); `docs/operator-inputs.md`
+Q-21 (one admin publishes "on the screens built on 7 October" — no screen does, W2-I).
+**Superseded, and say so:** `docs/ai-platform/KEY-DAY-CHECKLIST.md` (by `DAY-ONE.md`),
+`docs/blocked-on-you.md`'s first item (resolved). The rest are classified on the page; none was edited.
+
+#### F2 — proven versus asserted
+
+**[ran]:** every step of "Then, in the repository", the console's sign-in page, the demo build's refusal
+without the four values and its success with them, the APK, the Supabase CLI version, and the console's
+example key matching the local stack's. **Checked by script:** every file path the page names exists.
+**Corrected after checking:** the retry incident is "3 in 8 after", not "3 after"; W2-B found six untrue
+screens, not five; three short paths made full. **[not run]:** installing the tools on a bare machine and
+the first Docker image download; `seed:day` (used in earlier sessions, not in W2-K); installing the APK
+on a phone (there is none); the production paths, which wait on the operator.
+
+#### Status
+
+| MODULE | STATUS | OWNER | BLOCKER | ETA |
+| --- | --- | --- | --- | --- |
+| Core MR workflow — emulator, local stack [OP-1] | DONE | Maanav | — | — |
+| Core MR workflow — offline day, emulator [OP-1] | DONE | Maanav | — | — |
+| Core MR workflow — offline day on a real handset, DEMO build [OP-1] | BLOCKED | Operator | A handset (nothing else: a demo build against the laptop, `docs/HANDOVER.md`) | about ½ day after it |
+| Core MR workflow — real handset, signed production build [OP-1] | BLOCKED | Operator, then Maanav | A handset, a release key, the production deploy (Q-19) | about 1 day after all three |
+| Day execution — Today and the route on the real server [OP-2] | DONE | Maanav | — | — |
+| Day planning — manager plans [OP-2] | BLOCKED | Operator | Q-16, Q-17, Q-18 | 10–15 working days after the answers |
+| Real backend — every app screen reads and writes the server [OP-3] | DONE | Maanav | — | — |
+| Production deploy [OP-3] | BLOCKED | Operator, then Maanav | Q-19, then `BE-W143`; runbook step 1.3 never rehearsed | about 1 day after the answer |
+| Backup [OP-3] | BLOCKED | Operator, then Maanav | Q-19; red from 16 October | ½ day after the answer |
+| Production APK — release signing enforced, signature verifier (`BE-W169`) [OP-3] | DONE | Maanav | — | — |
+| Production APK — the build itself [OP-3] | BLOCKED | Operator, then Maanav | A release key; the production address (after Q-19); `BE-W150`; a `versionCode` rule | about ½ day after all |
+| Day End — on the real server [OP-4] | DONE | Maanav | — | — |
+| Mileage — on the real server [OP-5] | DONE | Maanav | — | — |
+| LMS — a rep's courses, lessons and finishing them, seen on the emulator (flag off) [OP-6] | DONE | Maanav | — | — |
+| LMS — assigning a course from the console [OP-6] | DONE | Maanav | — | — |
+| LMS — catalogue, course loader, publish by command, proved end to end (W2-H, W2-I) [OP-6] | DONE | Maanav | — | — |
+| LMS — courses for reps to take [OP-6] | BLOCKED | Operator (content owners) | No course content; switching `EXPO_PUBLIC_LEARNING` on in the build | minutes per file after content |
+| LMS — should a course need a second admin's approval (Q-21) [OP-6] | BLOCKED | Operator | Q-21 | ½ day if yes; nothing if no |
+| LMS — the tutor in a lesson [OP-6] | BLOCKED | AWS account owner, then Maanav | Model access; approval (Q-14) | about ½ day after both |
+| Product Q&A — screen [OP-7] | DONE | Maanav | — | — |
+| Product Q&A — material loader, submit by command, approval proved (W2-H, W2-I) [OP-7] | DONE | Maanav | — | — |
+| Product Q&A — real answers [OP-7] | BLOCKED | Operator, then AWS account owner | Approved material (Q-9); approval (Q-14); model access | ½ day after all |
+| Chatbot and practice — wired to the live server, flags off [OP-8] [OP-9] | DONE | Maanav | — | — |
+| AI switches without SQL — `ai-switches.mjs` [OP-7] [OP-8] [OP-9] [OP-10] | DONE | Maanav | — | — |
+| Chatbot — real answers [OP-8] | BLOCKED | AWS account owner, then operator | Model access; approval (Q-14) | about ½ hour after both (a switch and a build) |
+| AI Doctor practice + practice feedback — real answers [OP-9] [OP-10] | BLOCKED | AWS account owner, then operator | Model access; approvals (Q-14) | about ½ hour after both (a switch and a build) |
+| AI Analysis / Coaching of real visits [OP-10] | BLOCKED | Operator | Real recording deferred by decision; the PV/DPDP signatory (`D-15`) | — |
+| Publishing a course and submitting material had no path (`BE-W168`) | DONE | Maanav | — | — |
+| A console button to submit a knowledge draft | POST-4-OCT | Maanav | None — a convenience; `content-step.mjs` does it | about ½ day |
+| Maps [OP-11] | POST-4-OCT | Operator, then Maanav | Nothing started; a Google key (Q-2) and a dependency approval | not estimated |
+| Notifications [OP-12] | POST-4-OCT | Operator, then Maanav | Nothing started; Firebase (Q-3) and a dependency approval | not estimated |
+| Voice [OP-13] | POST-4-OCT | AWS account owner, then Maanav | Nothing started; model access | not estimated |
+| Live tracking [OP-14] | POST-4-OCT | Operator, then Maanav | Nothing started (designed); a purchase, the notice (Q-12), handsets — ordered deferred first | not estimated |
+| First live run of the five features | BLOCKED | AWS account owner, then Maanav | Model access (`NOT_AUTHORIZED`, measured 16:30 IST 8 October) | about 1½–4½ hours after |
+| Named `practice_writer` key on the hosted project | BLOCKED | Operator | Created in the dashboard, once — needed by all five AI features | minutes |
+| Instruction sets, personas and scenarios approved | BLOCKED | Operator | A second admin (Q-14) — needs NO model access | after it |
+| What the coach's `scientific_accuracy` means | BLOCKED | Operator | Discipline, approved material, or no dimension | minutes, once decided |
+| Practice scenario S6 (a doctor reports a reaction) | BLOCKED | Operator | `D-15`, the signatory | — |
+| `BE-W150` — the start-up gate on an unused address | BLOCKED | Operator | Re-rule FE-D2 2 | minutes, once decided |
+| Branch protection on `main` | BLOCKED | Repository admin | Not applied | minutes |
+| Repository visibility | BLOCKED | Operator | Q-20 | minutes, once decided |
+| Demo build script (a demo APK against a local stack) | DONE | Maanav | — | — |
+
+**The hours, unchanged from W2-I.** Engineering not waiting on anyone: about ½ day, a convenience. After
+the blockers lift: the AI path about 1½–4½ hours after model access; LMS about ½ day after it (+½ if
+Q-21 is "yes"); the production APK about ½ day after the key and the address. The critical path is the
+operator's.
+
+#### Checks
+
+* Static before tests, through the repository's own hook (ids, typecheck, lint, format).
+* **Clean-database check** — the pre-push hook ran it on the push: **All 30 step(s) passed**; database
+  runner **Test Files 93 passed (93)**, **Tests 1216 passed | 11 skipped | 4 todo (1231)** — no test was
+  added or removed; the 11 skips are the two gated live suites.
+* **CI on `f8fdc4f`** (HEAD of the page commit, PR #29): workflow **CI**, run `37763247730`, **success**,
+  both jobs; runner lines read, identical to local (field **57 files, 775**; jest **44 suites**; core 14
+  files, 239 | 4 todo; console **9 files, 80**; ui 4 and **32 suites**; ui-tokens 59; mock 43; browser
+  **11 passed, 0 skipped, 0 failed**). This log commit's CI goes in the next section.
+* The cold start's orphaned function server and console dev server were stopped; its stack was stopped
+  before this checkout's was started for the push.
+
+#### What I got wrong
+
+* **My W2-I handover page omitted the four demo-build values** — its stranger test ran the content
+  section, not the handset section. A page walked in parts is walked in parts.
+* My first reading of the cold start's key comparison said "KEY DIFFERS"; the stack was down and the
+  value was empty. Read before filing — it was not a finding.
+* My first draft of the page put two wrong numbers in the rules table (above); a check against the log
+  caught both.
+* The page's first timing line said "about an hour from a bare machine" as if measured; it is an
+  estimate, now labelled.
+
+#### Where I stopped
+
+**Done; the stop is an OPERATOR INSTRUCTION ("Finish what is open. Nothing new.").** On `w2-k-backend`,
+PR #29 to `main`. The override never fired. The cold-start clone `C:\cs\ea` and its package store
+`C:\cs\store` are deleted after this commit; the database and every server are stopped. **Left to
+Maanav:** whether `docs/backend-setup.md` is marked superseded by `docs/START-HERE.md` or corrected —
+not done here, because it decides which document survives.

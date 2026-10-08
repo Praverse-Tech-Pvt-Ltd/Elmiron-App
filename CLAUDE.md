@@ -1,5 +1,8 @@
 # Working in this repository
 
+**Start at `docs/START-HERE.md`** — how to run the project, how it is put together, the rules it works
+by, which documents to trust, and where the work is. When a blocker clears, `docs/HANDOVER.md`.
+
 > **What belongs in this file — MR-33 A3.**
 >
 > `CLAUDE.md` is loaded into every session's context **before any code is read**, so a stale
