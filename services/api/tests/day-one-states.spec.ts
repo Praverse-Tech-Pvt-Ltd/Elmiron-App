@@ -137,24 +137,26 @@ describe.skipIf(!live)('W2-G A4 — the assistant’s first states, on the live 
     expect(outcome(response)).toEqual({ kind: 'not_available' });
   });
 
-  it('NO MODEL, the stub’s DEFAULT: every question gets the product-question redirect, read as a refusal (BE-W166)', async () => {
+  it('NO MODEL, the stub’s DEFAULT: "not available" — no longer a false product-question refusal (BE-W166, fixed W2-H)', async () => {
     const { send, outcome } = await field();
     await withClient(async (db) => {
       await setCompanySetting(db, 'ai_feature_enabled:mr_chat', true);
       await setCompanySetting(db, 'ai_daily_requests_per_user', 20);
     });
-    // FOUND by this test, W2-G A4: the stub's default `mr_chat` reply is `inScope: false`, so the
-    // gateway answers a HOW-TO question with the real out-of-scope sentence — untrue of the question,
-    // and indistinguishable from a real refusal on the screen. Only on a LOCAL target: elsewhere the
-    // stub refuses to exist and the answer is 503 `no_provider` ("not available"). One more reason
-    // the flag stays off while the stub is the only model.
+    // W2-G A4 found the stub's default `mr_chat` reply was `inScope: false`, so a local assistant
+    // answered every how-to question with the REAL out-of-scope sentence. W2-H changed the default to
+    // the marker as an in-scope answer, which the screen reads as "not available".
     const response = await send('How do I end my day?');
     expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ kind: 'answered' });
+    expect(outcome(response)).toEqual({ kind: 'not_available' });
+  });
+
+  it('the model’s own "out of scope" still reads as a refusal — asked for by directive', async () => {
+    const { send, outcome } = await field();
+    const response = await send('How do I end my day? [STUB:out-of-scope]');
     expect(response.body).toMatchObject({ kind: 'out_of_scope' });
-    expect(outcome(response)).toMatchObject({
-      kind: 'refusal',
-      text: expect.stringMatching(/^That looks like a product question/u) as unknown,
-    });
+    expect(outcome(response)).toMatchObject({ kind: 'refusal' });
   });
 
   it('NO MODEL, the stub’s in-scope reply: its marker reads "not available" — never an answer', async () => {

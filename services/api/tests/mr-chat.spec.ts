@@ -256,11 +256,11 @@ const auditRow = async (requestId: string) =>
 
 describe.skipIf(!live)('W1-I B4 — mr_chat end to end through the Edge Function', () => {
   it('an MR reaches the function, the database picks the prompt, and the call is audited', async () => {
-    const { status, body } = await chat('how do I file a call report');
+    // W2-H C (`BE-W166`): the stub's DEFAULT is now an in-scope marker answer; this test asks for
+    // `inScope: false` by directive, so it keeps covering the model's own redirect -- and the audit
+    // is what it is about.
+    const { status, body } = await chat('how do I file a call report [STUB:out-of-scope]');
     expect(status).toBe(200);
-
-    // The stub answers `inScope: false`, so the flow returns the redirect rather than an answer.
-    // That is the stub being honest, not a failure -- and the audit is what this test is about.
     expect(body['kind']).toBe('out_of_scope');
     expect(typeof body['requestId']).toBe('string');
 
