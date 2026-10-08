@@ -36,7 +36,7 @@
  * and, signed in: not_admin, unknown_market, unknown_product, ambiguous_name, draft_already_open (the
  * course already has a draft WITH content — publish it first; an EMPTY draft, left by a failed load, is reused).
  *
- * **It never publishes.** Publishing is the admin's act, in the console or with the RPC; the loader
+ * **It never publishes.** Publishing is the admin's act — `content-step.mjs publish-course` (no screen does it, `BE-W168`); the loader
  * stops at a draft, and says which version it made.
  *
  *   node services/api/scripts/load-course.mjs <file.md>                    check only, offline
@@ -379,7 +379,7 @@ if (
       password,
     });
     console.log(
-      `DRAFT written: "${course.title}" version ${String(out.versionNumber)}, ${String(out.modules)} module(s), ${String(out.lessons)} lesson(s). Publish it in the console when it has been read.`,
+      `DRAFT written: "${course.title}" version ${String(out.versionNumber)}, ${String(out.modules)} module(s), ${String(out.lessons)} lesson(s). When it has been read, publish it: content-step.mjs publish-course "${course.title}" (no screen does this — BE-W168).`,
     );
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));

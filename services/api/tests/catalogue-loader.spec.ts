@@ -7,6 +7,7 @@ import { ANON_KEY, API_URL, signIn } from './auth.js';
 import { checkCatalogue, loadCatalogue } from '../scripts/load-catalogue.mjs';
 import { checkCourse, loadCourse } from '../scripts/load-course.mjs';
 import { checkKnowledge, loadKnowledge } from '../scripts/load-knowledge.mjs';
+import { contentStep } from '../scripts/content-step.mjs';
 
 /**
  * W2-I A — the catalogue loader. The checks run anywhere; the loads run against the local stack, as a
@@ -232,3 +233,94 @@ describe.skipIf(!reachable)('W2-I A3 — the catalogue, then what depends on it'
     });
   });
 });
+
+describe.skipIf(!reachable)(
+  'W2-I A4 (`BE-W168`) — content day, end to end, with no hand-written call',
+  () => {
+    it('catalogue → course → PUBLISHED → a rep sees it; material → IN REVIEW → the console lists it → a second admin approves', async () => {
+      const { catalogue } = checkCatalogue(
+        sample('catalogue-template.md').replace('catalogue: EXAMPLE — ', 'catalogue: '),
+      );
+      await loadCatalogue(catalogue, target(world.authorAdmin));
+
+      const courseTitle = `Content day ${world.run}`;
+      const { course } = checkCourse(
+        sample('course-template.md')
+          .replace('course: EXAMPLE — Storage and handling basics', `course: ${courseTitle}`)
+          .replace('market: any', 'market: India'),
+      );
+      const loaded = await loadCourse(course, target(world.authorAdmin));
+      // A DRAFT is invisible to a rep…
+      expect(
+        await readAs(world.rep, `course_versions?select=id&id=eq.${loaded.versionId}`),
+      ).toEqual([]);
+      const published = await contentStep('publish-course', courseTitle, target(world.authorAdmin));
+      expect(published).toEqual({
+        versionId: loaded.versionId,
+        versionNumber: 1,
+        status: 'published',
+      });
+      // …and once published, the rep reads it.
+      expect(
+        await readAs(world.rep, `course_versions?select=status&id=eq.${loaded.versionId}`),
+      ).toEqual([{ status: 'published' }]);
+
+      const docTitle = `Benchmarol handling ${world.run}`;
+      const { doc } = checkKnowledge(
+        sample('knowledge-template.md')
+          .replace(
+            'title: EXAMPLE — Storage and handling (standard operating procedure)',
+            `title: ${docTitle}`,
+          )
+          .replace('type: sop', 'type: product_label')
+          .replace('product:\n', 'product: Benchmarol\n')
+          .replace('market: any', 'market: India'),
+      );
+      const draft = await loadKnowledge(doc, target(world.authorAdmin));
+      // The console's Knowledge approvals reads exactly this: in_review, nothing else.
+      const consoleQuery = `knowledge_document_versions?select=id&status=eq.in_review&id=eq.${draft.versionId}`;
+      expect(await readAs(world.approverAdmin, consoleQuery)).toEqual([]);
+      expect(await contentStep('submit-knowledge', docTitle, target(world.authorAdmin))).toEqual({
+        versionId: draft.versionId,
+        versionNumber: 1,
+        status: 'in_review',
+      });
+      expect(await readAs(world.approverAdmin, consoleQuery)).toEqual([{ id: draft.versionId }]);
+
+      // The approval stays four eyes, in the console — here, the same RPC the console calls.
+      const { accessToken } = await signIn(world.approverAdmin.email, world.password);
+      const approve = await fetch(`${API_URL}/rest/v1/rpc/approve_knowledge_version`, {
+        method: 'POST',
+        headers: {
+          apikey: ANON_KEY,
+          authorization: `Bearer ${accessToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          p_version_id: draft.versionId,
+          p_attestation: 'W2-I A4: local test.',
+        }),
+      });
+      expect(approve.status).toBe(200);
+      expect(
+        await readAs(
+          world.rep,
+          `knowledge_document_versions?select=status&id=eq.${draft.versionId}`,
+        ),
+      ).toEqual([{ status: 'approved' }]);
+    });
+
+    it('REFUSED, and nothing moves: no such title, no draft, not an admin', async () => {
+      await expect(
+        contentStep('publish-course', `Nothing ${world.run}`, target(world.authorAdmin)),
+      ).rejects.toMatchObject({ code: 'not_found' });
+      // The course above is published; it has no draft left to publish.
+      await expect(
+        contentStep('publish-course', `Content day ${world.run}`, target(world.authorAdmin)),
+      ).rejects.toMatchObject({ code: 'no_draft' });
+      await expect(
+        contentStep('submit-knowledge', `Benchmarol handling ${world.run}`, target(world.rep)),
+      ).rejects.toMatchObject({ code: 'not_admin' });
+    });
+  },
+);
