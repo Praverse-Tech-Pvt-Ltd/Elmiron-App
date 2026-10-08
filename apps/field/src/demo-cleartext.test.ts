@@ -99,9 +99,16 @@ describe('app.config.ts — the demo build says it is one', () => {
     expect(run().name).toBe('Elmiron Field (demo)');
   });
 
-  it('POSITIVE CONTROL: without hosts, the name and config are exactly as before', () => {
-    const out = run() as ExpoConfig & { mods?: unknown };
+  it('POSITIVE CONTROL: without hosts, the name is as before and no demo mod is registered', () => {
+    const out = run() as ExpoConfig & { mods?: { android?: Record<string, unknown> } };
     expect(out.name).toBe('Field Force');
-    expect(out.mods).toBeUndefined();
+    // W2-I C3 (`BE-W169`): the ONE mod a non-demo build gets is release signing.
+    expect(Object.keys(out.mods?.android ?? {})).toEqual(['appBuildGradle']);
+  });
+
+  it('W2-I C3: a DEMO build is not given release signing — it stays debug-signed and says "(demo)"', () => {
+    process.env['DEMO_CLEARTEXT_HOSTS'] = '192.168.43.20';
+    const out = run() as ExpoConfig & { mods?: { android?: Record<string, unknown> } };
+    expect(Object.keys(out.mods?.android ?? {}).sort()).toEqual(['dangerous', 'manifest']);
   });
 });
