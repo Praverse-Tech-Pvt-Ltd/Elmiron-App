@@ -19,7 +19,6 @@ jest.mock('../sync/pulled-store', () => ({ usePulledStore: () => mockStore() }))
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 
-// eslint-disable-next-line import/first
 import BeatPlanRoute from '../../app/beat-plan';
 import { asyncStorageQueueStore, setQueueOwner } from '../sync/async-storage-store';
 import { checkInQueueItem, checkOutQueueItem } from '../sync/outbox';
