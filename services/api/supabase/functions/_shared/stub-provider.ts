@@ -162,14 +162,17 @@ const stubBody = (shape: StubShape, request: LlmGenerateRequest): string => {
       return JSON.stringify({ supported: false, answer: '', citedChunkIds: [] });
     }
     case 'mr_chat':
-      if (directive === 'in-scope') return JSON.stringify({ inScope: true, answer: STUB_MARKER });
       if (directive === 'in-scope-clinical') {
         return JSON.stringify({ inScope: true, answer: STUB_CLINICAL });
       }
-      // `inScope: false` is the same choice `product_qa` makes with `supported: false`: the one
-      // reply that cannot be mistaken for an answer. `answerMrChat` maps it to the out-of-scope
-      // redirect, so a stubbed chat sends the rep to Product Q&A rather than saying something.
-      return JSON.stringify({ inScope: false, answer: '' });
+      // The model's own "this is out of scope", kept reachable for the tests of that path.
+      if (directive === 'out-of-scope') return JSON.stringify({ inScope: false, answer: '' });
+      // W2-H C (`BE-W166`). The default WAS `inScope: false`, and `answerMrChat` maps that to the REAL
+      // redirect sentence ("That looks like a product question…") — so a local assistant told every
+      // rep that every how-to question was a product question, indistinguishable from a true refusal.
+      // The default is now the marker as an in-scope answer, which the app reads as "not available
+      // yet" (`outcomeFromGateway`). Off a local target nothing changes: the stub refuses to exist.
+      return JSON.stringify({ inScope: true, answer: STUB_MARKER });
     case 'lms_tutor':
       if (directive === 'grounded') {
         return JSON.stringify({ groundedInLesson: true, explanation: STUB_MARKER });
