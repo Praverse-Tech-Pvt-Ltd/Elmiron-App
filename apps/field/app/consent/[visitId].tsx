@@ -30,6 +30,7 @@ import {
 import { consentQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { recordWitnessedConsent } from '../../src/consent/witnessed';
 import { SESSION_EXPIRED, refusalTextFor, sessionExpired } from '../../src/sync/explanation';
+import { NOT_PERMITTED_DETAIL } from '../../src/errors/plain';
 
 /**
  * Phase 3 — the handoff, as a route.
@@ -352,7 +353,7 @@ export default function ConsentRoute(): ReactNode {
                 pullFailure.refusal.code === 'not_permitted'
               ? {
                   title: 'You do not have access to this visit',
-                  detail: 'The server refused this request for your account.',
+                  detail: NOT_PERMITTED_DETAIL,
                 }
               : // Only when the VISIT itself is missing. Keyed on the notices instead, this
                 // said "Could not load this visit" while holding the visit -- the caught-by-test

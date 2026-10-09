@@ -16,6 +16,7 @@ import { isWorkedWell, orderedFindings, statusNote, timestampFrom } from '../../
 import { listConsentForVisit, readMyAnalysis } from '../../src/coaching/server';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { dayMonthIn } from '../../src/today/territory-day';
+import { failureDetail, refusedDetail } from '../../src/errors/plain';
 
 /**
  * Phase 4 D2 — one analysis and its evidence.
@@ -75,14 +76,14 @@ function Analysis(): ReactNode {
             outcome.kind === 'refused' && outcome.refusal.code === 'not_permitted'
               ? {
                   title: 'You do not have access to this analysis',
-                  detail: `The server refused this request (${outcome.refusal.sqlState}).`,
+                  detail: refusedDetail(outcome.refusal.sqlState),
                 }
               : {
                   title: 'Could not load this analysis',
                   detail:
                     outcome.kind === 'mismatch'
                       ? outcome.detail
-                      : `The server refused this request (${outcome.refusal.sqlState}).`,
+                      : refusedDetail(outcome.refusal.sqlState),
                 },
           );
           return;
@@ -114,7 +115,7 @@ function Analysis(): ReactNode {
         if (stopped()) return;
         setFailure({
           title: 'Could not load this analysis',
-          detail: error instanceof Error ? error.message : 'Unknown failure',
+          detail: failureDetail(error),
         });
       })
       .finally(() => {

@@ -25,6 +25,7 @@ import type { SendOutcome } from '../../src/sync/outbox';
 import { createPushClient } from '../../src/sync/push-client';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
+import { failureDetail } from '../../src/errors/plain';
 
 /**
  * Phase 3 D7 — the voice note, with a real microphone behind it.
@@ -158,7 +159,7 @@ export default function VoiceNoteRoute(): ReactNode {
       if (stopped()) return;
       setFailure({
         title: 'Could not open the microphone',
-        detail: error instanceof Error ? error.message : 'Unknown failure',
+        detail: failureDetail(error),
       });
     });
 
@@ -192,7 +193,7 @@ export default function VoiceNoteRoute(): ReactNode {
     })().catch((error: unknown) => {
       setActionFailure({
         title: 'Recording did not start',
-        detail: error instanceof Error ? error.message : 'Unknown failure',
+        detail: failureDetail(error),
       });
     });
   };
@@ -217,7 +218,7 @@ export default function VoiceNoteRoute(): ReactNode {
       .catch((error: unknown) => {
         setActionFailure({
           title: 'Recording did not save',
-          detail: error instanceof Error ? error.message : 'Unknown failure',
+          detail: failureDetail(error),
         });
       });
   };
@@ -253,7 +254,7 @@ export default function VoiceNoteRoute(): ReactNode {
       .catch((error: unknown) => {
         setActionFailure({
           title: 'Your note was not saved',
-          detail: error instanceof Error ? error.message : 'Unknown failure',
+          detail: failureDetail(error),
         });
       })
       .finally(() => {

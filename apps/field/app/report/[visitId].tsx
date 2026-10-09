@@ -16,6 +16,7 @@ import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { dayMonthIn, dayMonthOfDate } from '../../src/today/territory-day';
 import { loadProductChoices, toggleProduct } from '../../src/catalogue/products';
 import type { ProductList } from '../../src/catalogue/products';
+import { failureDetail } from '../../src/errors/plain';
 
 /**
  * C6 — the call report binding, for one visit.
@@ -147,7 +148,7 @@ export default function CallReport(): ReactNode {
           title: 'Not saved',
           detail:
             error instanceof Error
-              ? `${error.message} Keep this screen open — the note is not saved yet.`
+              ? `${failureDetail(error)} Keep this screen open — the note is not saved yet.`
               : 'Keep this screen open — the note is not saved yet.',
         });
       })

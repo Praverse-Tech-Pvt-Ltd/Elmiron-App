@@ -122,4 +122,32 @@ describe('Screen safe-area inset', () => {
     }
     expect(wrapperTop).toBe(METRICS.insets.top);
   });
+
+  /**
+   * UX polish: the footer is PINNED -- outside the ScrollView, so the primary action is never
+   * scrolled to -- and it, not the content, sits on the gesture bar.
+   */
+  it('pins the footer outside the scrolling content and gives it the bottom inset', async () => {
+    await renderInSafeArea(
+      <Screen scrollable footer={<BodyText>the action</BodyText>}>
+        <BodyText>scrolling content</BodyText>
+      </Screen>,
+    );
+
+    let node = screen.getByText('the action').parent;
+    while (node !== null) {
+      expect(node.props['contentContainerStyle']).toBeUndefined();
+      const style = Object.assign(
+        {},
+        ...([] as unknown[]).concat(node.props['style'] as unknown[]).filter(Boolean),
+      ) as Record<string, unknown>;
+      if (style['paddingBottom'] !== undefined) {
+        expect(style['paddingBottom']).toBe(tokens.space.md + METRICS.insets.bottom);
+        break;
+      }
+      node = node.parent;
+    }
+    expect(node).not.toBeNull();
+    expect(paddingAroundText('scrolling content')['paddingBottom']).toBe(tokens.space.md);
+  });
 });

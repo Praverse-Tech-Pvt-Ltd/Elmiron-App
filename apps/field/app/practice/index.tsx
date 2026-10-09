@@ -5,6 +5,7 @@ import { PracticeHomeScreen, Screen } from '@fieldforce/ui';
 import type { PracticeScenarioRow, PracticeSessionRow } from '@fieldforce/ui';
 import { practiceEnabled } from '../../src/features';
 import { practiceBackend } from '../../src/practice/transport';
+import { failureDetail } from '../../src/errors/plain';
 
 /**
  * FE-D17 — AI Doctor practice home: approved scenarios to start, and the rep's own sessions.
@@ -67,7 +68,7 @@ const PracticeHome = (): ReactNode => {
         if (!cancelled) {
           setFailure({
             title: 'Could not load practice',
-            detail: error instanceof Error ? error.message : 'Unknown failure',
+            detail: failureDetail(error),
           });
         }
       })
@@ -101,7 +102,7 @@ const PracticeHome = (): ReactNode => {
             .catch((error: unknown) => {
               setFailure({
                 title: 'Could not start the practice',
-                detail: error instanceof Error ? error.message : 'Unknown failure',
+                detail: failureDetail(error),
               });
             })
             .finally(() => {

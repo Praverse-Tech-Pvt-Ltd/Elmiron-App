@@ -21,6 +21,7 @@ import {
 } from '../../src/capture/samples';
 import { sampleQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { SESSION_EXPIRED, refusalTextFor, sessionExpired } from '../../src/sync/explanation';
+import { NOT_PERMITTED_DETAIL } from '../../src/errors/plain';
 
 /**
  * C5 — the samples binding.
@@ -130,7 +131,7 @@ export default function SamplesRoute(): ReactNode {
         : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
           ? {
               title: 'You do not have access to this visit',
-              detail: 'The server refused this request for your account.',
+              detail: NOT_PERMITTED_DETAIL,
             }
           : lacksWhatItNeeds
             ? {

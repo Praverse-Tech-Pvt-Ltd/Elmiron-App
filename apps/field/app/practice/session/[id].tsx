@@ -13,6 +13,7 @@ import {
   turnRequestBody,
 } from '../../../src/practice/flow';
 import { practiceBackend } from '../../../src/practice/transport';
+import { failureDetail } from '../../../src/errors/plain';
 
 /**
  * FE-D17 — one AI Doctor practice conversation.
@@ -55,7 +56,7 @@ const PracticeSessionView = (): ReactNode => {
       .catch((error: unknown) => {
         setFailure({
           title: 'Could not open the practice session',
-          detail: error instanceof Error ? error.message : 'Unknown failure',
+          detail: failureDetail(error),
         });
       })
       .finally(() => {

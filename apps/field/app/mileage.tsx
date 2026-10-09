@@ -6,6 +6,7 @@ import { totalDistanceMetres, travelDateLabel } from '../src/capture/mileage';
 import { listMileage } from '../src/capture/visits';
 import { usePulledStore } from '../src/sync/pulled-store';
 import { NO_SERVER_CLOCK, monthWindowIn } from '../src/today/server-window';
+import { failureDetail, refusedDetail } from '../src/errors/plain';
 
 /**
  * C2 — the mileage binding.
@@ -66,11 +67,11 @@ export default function Mileage(): ReactNode {
           outcome.refusal.code === 'not_permitted'
             ? {
                 title: 'You do not have access to this mileage',
-                detail: `The server refused this request (${outcome.refusal.sqlState}).`,
+                detail: refusedDetail(outcome.refusal.sqlState),
               }
             : {
                 title: 'Could not load your mileage',
-                detail: `The server refused this request (${outcome.refusal.sqlState}).`,
+                detail: refusedDetail(outcome.refusal.sqlState),
               },
         );
       })
@@ -78,7 +79,7 @@ export default function Mileage(): ReactNode {
         if (cancelled) return;
         setFailure({
           title: 'Could not load your mileage',
-          detail: error instanceof Error ? error.message : 'Unknown failure',
+          detail: failureDetail(error),
         });
       })
       .finally(() => {

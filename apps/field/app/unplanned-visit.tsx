@@ -57,7 +57,7 @@ export default function UnplannedVisit(): ReactNode {
         after.kind === 'loaded' ? after.state.items.find((item) => item.id === body.id) : undefined;
       if (mine?.status === 'failed') {
         setFailure({
-          title: 'The server refused this visit',
+          title: 'This visit was not accepted',
           detail: mine.lastError ?? 'It is on the queue screen with the reason.',
         });
         setBusy(false);

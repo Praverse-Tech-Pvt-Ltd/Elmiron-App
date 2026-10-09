@@ -64,6 +64,7 @@ import { clockIn } from '../../src/today/territory-day';
 import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
 import { RECORD_AUDIO, microphoneRationaleDue } from '../../src/onboarding/microphone-gate';
 import { hasAnsweredMicrophoneRationale } from '../../src/onboarding/progress';
+import { NOT_PERMITTED_DETAIL, failureDetail } from '../../src/errors/plain';
 
 /**
  * B4 / B5 / B6 — one visit, from arriving to leaving.
@@ -325,7 +326,7 @@ export default function VisitRoute(): ReactNode {
     })().catch((error: unknown) => {
       setActionFailure({
         title: 'Recording did not start',
-        detail: error instanceof Error ? error.message : 'Unknown failure',
+        detail: failureDetail(error),
       });
     });
   };
@@ -412,7 +413,7 @@ export default function VisitRoute(): ReactNode {
       .catch((error: unknown) => {
         setActionFailure({
           title: keep ? 'The recording was not filed' : 'Recording did not stop cleanly',
-          detail: error instanceof Error ? error.message : 'Unknown failure',
+          detail: failureDetail(error),
         });
       });
   };
@@ -518,7 +519,7 @@ export default function VisitRoute(): ReactNode {
         }
         setBlocked(
           error instanceof Error
-            ? `${error.message} It has not been sent yet.`
+            ? `${failureDetail(error)} It has not been sent yet.`
             : 'It has not been sent yet.',
         );
       } finally {
@@ -579,7 +580,7 @@ export default function VisitRoute(): ReactNode {
               : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
                 ? {
                     title: 'You do not have access to this visit',
-                    detail: 'The server refused this request for your account.',
+                    detail: NOT_PERMITTED_DETAIL,
                   }
                 : // MR-49 / `FE-W62`. A failed background refresh is not "this screen has no
                   // data". This branch was unconditional, and `VisitScreen` renders ONLY the

@@ -164,7 +164,7 @@ describe('BE-W176 — Add an unplanned visit', () => {
     await choose('Doctor called me in');
     await fireEvent.press(screen.getByText('Start this visit'));
 
-    expect(await screen.findByText('The server refused this visit')).toBeTruthy();
+    expect(await screen.findByText('This visit was not accepted')).toBeTruthy();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 });

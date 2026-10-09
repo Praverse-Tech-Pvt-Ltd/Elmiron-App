@@ -22,6 +22,7 @@ import { clockIn, dayMonthIn } from '../../src/today/territory-day';
 import type { TerritoryZone } from '../../src/today/territory-day';
 import type { DayOrigin, PullFailure } from '../../src/sync/pulled-store';
 import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
+import { NOT_PERMITTED_DETAIL, refusedDetail } from '../../src/errors/plain';
 
 /**
  * **`FE-W40` B5. Why there is no day — and an EXPIRED anchor gets its own sentence.**
@@ -40,7 +41,7 @@ const dayDetail = (origin: DayOrigin, zone: TerritoryZone, failure: PullFailure)
     return `Your last sync was ${dayMonthIn(origin.asOf, zone)} at ${clockIn(origin.asOf, zone)}, which was a different day. This app shows a day only once the server has confirmed it.`;
   }
   return failure.kind === 'refused'
-    ? `The server refused this sync (${failure.refusal.sqlState}).`
+    ? refusedDetail(failure.refusal.sqlState)
     : 'The app could not reach the server. It will try again when you come back to it.';
 };
 
@@ -194,7 +195,7 @@ const MrToday = (): ReactNode => {
         : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
           ? {
               title: 'You do not have access to this plan',
-              detail: 'The server refused this request for your account.',
+              detail: NOT_PERMITTED_DETAIL,
             }
           : nothingToShow
             ? {
