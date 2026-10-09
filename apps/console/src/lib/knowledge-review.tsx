@@ -63,8 +63,8 @@ export const PRODUCT_CLAIM_CAUTION =
   'wording only if the underlying claim came from an approved label or prescribing information.';
 
 export const SUBMIT_AUTHOR_ONLY_NOTE =
-  'Only the admin who drafted this version submits it. Whoever submits a version cannot approve ' +
-  'it, so with two admins a draft submitted by the second one could never be approved.';
+  'Only the admin who drafted this version submits it. A different admin then approves or ' +
+  'rejects it. The server refuses a submit from anyone else.';
 
 /**
  * The single decision this component makes, extracted so it is testable without a renderer.
@@ -95,12 +95,10 @@ export type SubmitAffordance =
 /**
  * `BE-W168` — the console's half of submitting a draft, which only `content-step.mjs` did.
  *
- * `submit_knowledge_version` accepts ANY admin of the organisation, and
- * `approve_knowledge_version` refuses both the author and the submitter. So a draft submitted by
- * the admin who did not write it leaves a two-admin organisation with nobody who may approve it.
- * The server allows that submission; this screen does not draw the control for it. As with
- * `approvalAffordance`, that is legibility, never enforcement. The prompt and simulation screens
- * still draw Submit for every admin, and whether the database should refuse it is open: `BE-W170`.
+ * `BE-C77`: the author submits and a different admin decides. Every `submit_*` refuses a
+ * non-author `42501` and each table holds the same rule as a CHECK (`20261009000100`), so this
+ * function only decides whether to DRAW the control — legibility, never enforcement, exactly as
+ * `approvalAffordance`. Imported by the prompt and practice-content screens, not reimplemented.
  */
 export const submitAffordance = (
   version: Pick<KnowledgeDocumentVersion, 'status' | 'createdByUserId'>,

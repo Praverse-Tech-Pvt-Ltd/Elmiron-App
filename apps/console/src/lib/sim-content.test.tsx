@@ -2,7 +2,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { SimPersona, SimScenario } from '@fieldforce/core';
-import { FOUR_EYES_AUTHOR_NOTE, NOT_IN_REVIEW_NOTE } from './knowledge-review';
+import {
+  FOUR_EYES_AUTHOR_NOTE,
+  NOT_IN_REVIEW_NOTE,
+  SUBMIT_AUTHOR_ONLY_NOTE,
+} from './knowledge-review';
 import {
   AI_DRAFT_CAUTION,
   PERSONA_NAME_CAUTION,
@@ -236,13 +240,19 @@ describe('B3 — the review card applies the SAME four-eyes rule as knowledge', 
     expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
   });
 
-  it('offers Submit, not Approve, while it is still a draft', () => {
-    draw(simPersonaRow(persona({ status: 'draft' })), REVIEWER);
+  it('offers its AUTHOR Submit, not Approve, while it is still a draft (BE-C77)', () => {
+    draw(simPersonaRow(persona({ status: 'draft' })), AUTHOR);
     expect(screen.getByRole('button', { name: 'Submit for review' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
     // And NOT knowledge's "submit the draft first" note: the Submit button already says that, and
     // a refusal note beside the control that fixes it reads as though the control is broken.
     expect(screen.queryByText(NOT_IN_REVIEW_NOTE)).toBeNull();
+  });
+
+  it('offers another admin no Submit on a draft they did not write, and says why (BE-C77)', () => {
+    draw(simPersonaRow(persona({ status: 'draft' })), REVIEWER);
+    expect(screen.queryByRole('button', { name: 'Submit for review' })).toBeNull();
+    expect(screen.getByText(SUBMIT_AUTHOR_ONLY_NOTE)).toBeTruthy();
   });
 
   it('cannot approve with an empty attestation — the control is disabled', () => {

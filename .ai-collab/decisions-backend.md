@@ -713,3 +713,21 @@ disagreement could be checked, because the operator's text was not provided.**
   fails closed ("the practice writer is not configured"). **Before the legacy keys are switched off**,
   move the writer to a NAMED secret key read from `SUPABASE_SECRET_KEYS`, and move rule 1 of the check
   with it — the check will say so, because rule 6 forbids that name today.
+
+## `BE-C77` — **the author submits; a different admin decides — `BE-W170` closed in the database** (Pratham, 9 October)
+
+- **The rule, on operator instruction (9 October 2026):** AUTHOR drafts → AUTHOR submits for review →
+  a DIFFERENT admin approves or rejects. **The author may not decide their own content.** This is the
+  controlling four-eyes rule for knowledge, AI instruction sets (prompts) and practice content
+  (personas, scenarios).
+- **Why it changed.** Every `submit_*` accepted any admin, and every approve/reject refuses the author
+  AND the submitter. A draft submitted by the non-author therefore had nobody left to decide it in a
+  two-admin organisation — the size Q-14 is about to supply (`BE-W170`).
+- **How it is held — two mechanisms.** `20261009000100_author_submits`: each submit function refuses a
+  non-author `42501`, and a `*_author_submits` CHECK on all four tables (`submitted_by_user_id` null or
+  equal to `created_by_user_id`) holds it for every writer, BYPASSRLS roles included.
+- **What was deliberately NOT changed.** The approve/reject refusals and the existing `*_four_eyes`
+  CHECKs still name author and submitter. With submitter = author they reduce exactly to the rule; the
+  submitter clause is now redundant, not wrong, and removing it would loosen a working control for no
+  gain.
+- **Courses are out of this rule** until Q-21 is answered: `publish_course_version` is one step by design.
