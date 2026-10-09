@@ -17,7 +17,7 @@ import {
   useAudioRecorderState,
 } from 'expo-audio';
 import { ApiRequestError } from '@fieldforce/core';
-import { Screen, VisitScreen } from '@fieldforce/ui';
+import { VisitScreen } from '@fieldforce/ui';
 import { createPushClient } from '../../src/sync/push-client';
 import { takeFix } from '../../src/capture/location';
 import {
@@ -539,155 +539,151 @@ export default function VisitRoute(): ReactNode {
   );
 
   return (
-    <Screen scrollable>
-      <VisitScreen
-        actionLabel={actionLabelFor(stage)}
-        blocked={
-          // W2-C A2. The queued-work sentence lasts only while the work is still waiting.
-          blocked === SAVED_ON_PHONE &&
-          !queue.items.some(
-            (item) =>
-              item.entityId === visit?.id &&
-              (item.status === 'queued' || item.status === 'in_flight'),
-          )
-            ? null
-            : blocked
-        }
-        blockedWrite={blockedWrite}
-        busy={busy}
-        clinic={clinic === undefined ? null : `${clinic.label}, ${clinic.city}`}
-        doctorName={doctor?.fullName ?? 'This visit'}
-        {...(directions === null
-          ? {}
-          : {
-              onOpenDirections: () => {
-                void Linking.openURL(directions);
-              },
-            })}
-        unplanned={visit?.origin === 'unplanned' ? { reason: visit.unplannedReason ?? '' } : null}
-        actionFailure={actionFailure}
-        failure={
-          pullFailure === null
-            ? // MR-50 E2 / `FE-W64`. The pull has SETTLED and this visit is not in it -- reached
-              // by a direct link to a visit this phone does not hold (MR-49 opened rep A's visit
-              // as rep B). The screen drew "This visit · Not started · I am here" with nothing
-              // behind it. Say so instead. Only once settled: while loading, nothing is claimed.
-              status === 'ready' && visit === null
-              ? VISIT_NOT_ON_PHONE
-              : null
-            : sessionExpired(pullFailure)
-              ? SESSION_EXPIRED
-              : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
+    <VisitScreen
+      actionLabel={actionLabelFor(stage)}
+      blocked={
+        // W2-C A2. The queued-work sentence lasts only while the work is still waiting.
+        blocked === SAVED_ON_PHONE &&
+        !queue.items.some(
+          (item) =>
+            item.entityId === visit?.id &&
+            (item.status === 'queued' || item.status === 'in_flight'),
+        )
+          ? null
+          : blocked
+      }
+      blockedWrite={blockedWrite}
+      busy={busy}
+      clinic={clinic === undefined ? null : `${clinic.label}, ${clinic.city}`}
+      doctorName={doctor?.fullName ?? 'This visit'}
+      {...(directions === null
+        ? {}
+        : {
+            onOpenDirections: () => {
+              void Linking.openURL(directions);
+            },
+          })}
+      unplanned={visit?.origin === 'unplanned' ? { reason: visit.unplannedReason ?? '' } : null}
+      actionFailure={actionFailure}
+      failure={
+        pullFailure === null
+          ? // MR-50 E2 / `FE-W64`. The pull has SETTLED and this visit is not in it -- reached
+            // by a direct link to a visit this phone does not hold (MR-49 opened rep A's visit
+            // as rep B). The screen drew "This visit · Not started · I am here" with nothing
+            // behind it. Say so instead. Only once settled: while loading, nothing is claimed.
+            status === 'ready' && visit === null
+            ? VISIT_NOT_ON_PHONE
+            : null
+          : sessionExpired(pullFailure)
+            ? SESSION_EXPIRED
+            : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
+              ? {
+                  title: 'You do not have access to this visit',
+                  detail: NOT_PERMITTED_DETAIL,
+                }
+              : // MR-49 / `FE-W62`. A failed background refresh is not "this screen has no
+                // data". This branch was unconditional, and `VisitScreen` renders ONLY the
+                // banner when given a failure -- so offline, with the visit in the store, the
+                // MR saw "Could not load this visit" and no check-in: the offline queue was
+                // unreachable in exactly the case it exists for. Measured on the Pixel 10.
+                // The consent screen has had this rule since MR-26 B1; the two server
+                // DECISIONS above stay unconditional.
+                visit === null || doctor === null
                 ? {
-                    title: 'You do not have access to this visit',
-                    detail: NOT_PERMITTED_DETAIL,
+                    title: 'Could not load this visit',
+                    detail: 'The app could not reach the server. It will try again.',
                   }
-                : // MR-49 / `FE-W62`. A failed background refresh is not "this screen has no
-                  // data". This branch was unconditional, and `VisitScreen` renders ONLY the
-                  // banner when given a failure -- so offline, with the visit in the store, the
-                  // MR saw "Could not load this visit" and no check-in: the offline queue was
-                  // unreachable in exactly the case it exists for. Measured on the Pixel 10.
-                  // The consent screen has had this rule since MR-26 B1; the two server
-                  // DECISIONS above stay unconditional.
-                  visit === null || doctor === null
-                  ? {
-                      title: 'Could not load this visit',
-                      detail: 'The app could not reach the server. It will try again.',
-                    }
-                  : null
-        }
-        loading={loading}
-        onAction={advance}
-        consent={
-          /*
+                : null
+      }
+      loading={loading}
+      onAction={advance}
+      consent={
+        /*
             W2-B B1. **What THIS PHONE witnessed, when it witnessed one** -- MR-49's rule, which
             `7403c25` had left reachable only with recording switched on. The server's ledger is
             still not in the pull (MR-21 B6); this is the device's own record of the answer it
             captured, labelled "on this phone", and it decides nothing.
           */
-          witnessedCard(witnessed, queue.items, (iso) => clockIn(iso, zone)) ?? {
-            /*
+        witnessedCard(witnessed, queue.items, (iso) => clockIn(iso, zone)) ?? {
+          /*
               MR-21 B6. `unasked` because the client HOLDS no consent record, not because it
               knows the doctor was never asked -- `sync_pull` omits `consent_record` by its
               own declaration.
             */
-            outcome: 'unasked',
-            answeredLabel: null,
-            onAsk: () => {
-              router.push(`/consent/${visit?.id ?? id}`);
+          outcome: 'unasked',
+          answeredLabel: null,
+          onAsk: () => {
+            router.push(`/consent/${visit?.id ?? id}`);
+          },
+        }
+      }
+      {...(recorderState.isRecording && authorising !== null
+        ? {
+            recording: {
+              elapsed: elapsedLabel(recorderState.durationMillis / 1000),
+              label: recordingLabel(clockIn(authorising.consentCapturedAt, zone)),
+              onStop: () => {
+                stopRecording(true);
+              },
+              onStopAndDelete: () => {
+                stopRecording(false);
+              },
             },
           }
-        }
-        {...(recorderState.isRecording && authorising !== null
-          ? {
-              recording: {
-                elapsed: elapsedLabel(recorderState.durationMillis / 1000),
-                label: recordingLabel(clockIn(authorising.consentCapturedAt, zone)),
-                onStop: () => {
-                  stopRecording(true);
-                },
-                onStopAndDelete: () => {
-                  stopRecording(false);
-                },
-              },
-            }
-          : {})}
-        onRecordVoiceNote={() => {
-          router.push(`/voice-note/${visit?.id ?? id}`);
-        }}
-        onFlagAdverseEvent={() => {
-          router.push(`/adverse-event/${visit?.id ?? id}`);
-        }}
-        {...(availability.kind === 'allowed' && block === null && !recorderState.isRecording
-          ? { onStartRecording: startRecording }
-          : {})}
-        recordingNotice={recordingOutcome}
-        recordingBlockedReason={
-          // `off` and `unknown` say NOTHING: the feature being unbuilt for this build, or a server
-          // that could not be asked, are not facts about the doctor and must not be dressed as one.
-          block !== null
-            ? blockReason(block)
-            : availability.kind !== 'blocked'
-              ? null
-              : availability.why === 'never_asked'
-                ? // The phone knows something the server cannot: an answer captured here and still
-                  // queued. MR-49 wrote this sentence for exactly that, and the server saying
-                  // "never asked" is true of the SERVER, not of this phone.
-                  describeWitnessed(witnessed, queue.items, (iso) => clockIn(iso, zone))
-                : availability.sentence
-        }
-        onRecordSamples={() => {
-          router.push(`/samples/${visit?.id ?? id}`);
-        }}
-        onWriteReport={() => {
-          router.push(`/report/${visit?.id ?? id}`);
-        }}
-        stage={stage}
-        stagePending={stagePending}
-        checkInCaveat={caveat}
-        startedLabel={
-          // MR-24 B. `clockFrom` is a CHARACTER SLICE of the ISO string, correct only
-          // while the server sends the territory's own offset -- which the mock at :4010
-          // does and Supabase does not. This screen was converted to the pulled store in
-          // MR-21 and this call was not replaced, so a check-in stamped 11:15:34 IST
-          // rendered as "Checked in 05:45" on the emulator: the MR-14 five-and-a-half-hour
-          // defect, in a screen converted after it was found and documented.
-          //
-          // `clockFrom`'s own doc names this trap -- "converting a screen to real data
-          // means replacing this call" -- and lists the screens still entitled to it.
-          // This screen was not on that list. The warning existed and the conversion
-          // walked past it.
-          // W2-B B3. A finished visit showed when it started and never when it ended; the
-          // server's `completed_at` was in the store the whole time.
-          visit?.startedAt == null
+        : {})}
+      onRecordVoiceNote={() => {
+        router.push(`/voice-note/${visit?.id ?? id}`);
+      }}
+      onFlagAdverseEvent={() => {
+        router.push(`/adverse-event/${visit?.id ?? id}`);
+      }}
+      {...(availability.kind === 'allowed' && block === null && !recorderState.isRecording
+        ? { onStartRecording: startRecording }
+        : {})}
+      recordingNotice={recordingOutcome}
+      recordingBlockedReason={
+        // `off` and `unknown` say NOTHING: the feature being unbuilt for this build, or a server
+        // that could not be asked, are not facts about the doctor and must not be dressed as one.
+        block !== null
+          ? blockReason(block)
+          : availability.kind !== 'blocked'
             ? null
-            : `Checked in ${clockIn(visit.startedAt, zone)}${
-                visit.completedAt == null
-                  ? ''
-                  : ` · checked out ${clockIn(visit.completedAt, zone)}`
-              }`
-        }
-      />
-    </Screen>
+            : availability.why === 'never_asked'
+              ? // The phone knows something the server cannot: an answer captured here and still
+                // queued. MR-49 wrote this sentence for exactly that, and the server saying
+                // "never asked" is true of the SERVER, not of this phone.
+                describeWitnessed(witnessed, queue.items, (iso) => clockIn(iso, zone))
+              : availability.sentence
+      }
+      onRecordSamples={() => {
+        router.push(`/samples/${visit?.id ?? id}`);
+      }}
+      onWriteReport={() => {
+        router.push(`/report/${visit?.id ?? id}`);
+      }}
+      stage={stage}
+      stagePending={stagePending}
+      checkInCaveat={caveat}
+      startedLabel={
+        // MR-24 B. `clockFrom` is a CHARACTER SLICE of the ISO string, correct only
+        // while the server sends the territory's own offset -- which the mock at :4010
+        // does and Supabase does not. This screen was converted to the pulled store in
+        // MR-21 and this call was not replaced, so a check-in stamped 11:15:34 IST
+        // rendered as "Checked in 05:45" on the emulator: the MR-14 five-and-a-half-hour
+        // defect, in a screen converted after it was found and documented.
+        //
+        // `clockFrom`'s own doc names this trap -- "converting a screen to real data
+        // means replacing this call" -- and lists the screens still entitled to it.
+        // This screen was not on that list. The warning existed and the conversion
+        // walked past it.
+        // W2-B B3. A finished visit showed when it started and never when it ended; the
+        // server's `completed_at` was in the store the whole time.
+        visit?.startedAt == null
+          ? null
+          : `Checked in ${clockIn(visit.startedAt, zone)}${
+              visit.completedAt == null ? '' : ` · checked out ${clockIn(visit.completedAt, zone)}`
+            }`
+      }
+    />
   );
 }

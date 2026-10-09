@@ -241,6 +241,33 @@ const styles = StyleSheet.create({
   grow: { flex: 1 },
 });
 
+/**
+ * UX polish. What each kind of saved work is CALLED, in the rep's words. The rows and the stuck
+ * summary printed the outbox's own names -- `call_report`, `sample_and_input`, `consent_record` --
+ * which told a rep that something technical was stuck rather than which piece of their day.
+ * An entity this map does not know is still shown, de-underscored, rather than hidden.
+ */
+const ENTITY_WORDS: Readonly<Record<string, string>> = {
+  visit: 'Unplanned visit',
+  check_in: 'Check-in',
+  check_out: 'Check-out',
+  consent_record: 'Doctor’s recording answer',
+  call_report: 'Call report',
+  sample_and_input: 'Samples left',
+  voice_note: 'Voice note',
+  recording: 'Visit recording',
+  adverse_event: 'Side-effect flag',
+};
+
+export const entityWords = (entity: string): string =>
+  ENTITY_WORDS[entity] ?? `${entity.charAt(0).toUpperCase()}${entity.slice(1).replace(/_/gu, ' ')}`;
+
+/** The same words inside a sentence: "Stuck: call report and samples left." */
+const inSentence = (entity: string): string => {
+  const words = entityWords(entity);
+  return words === 'Doctor’s recording answer' ? words : words.toLowerCase();
+};
+
 const list = (values: readonly string[]): string =>
   values.length <= 1
     ? (values[0] ?? '')
@@ -267,11 +294,15 @@ const StuckBlock = ({
     <BodyText>
       {summary.count === 1 ? '1 thing won’t go' : `${String(summary.count)} things won’t go`}
     </BodyText>
-    <Label muted>{`Stuck: ${list(summary.stuckEntities)}. It is still safe on your phone.`}</Label>
+    <Label
+      muted
+    >{`Stuck: ${list(summary.stuckEntities.map(inSentence))}. It is still safe on your phone.`}</Label>
 
     <View style={styles.reassurance}>
       {summary.sentEntities.length === 0 ? null : (
-        <Label muted>{`Everything else went through — ${list(summary.sentEntities)}.`}</Label>
+        <Label
+          muted
+        >{`Everything else went through — ${list(summary.sentEntities.map(inSentence))}.`}</Label>
       )}
       {/*
         Said out loud, because the MR is the person most likely to assume otherwise.
@@ -318,7 +349,7 @@ const QueueRow = ({
         </Text>
         <BodyText>{LABEL[state]}</BodyText>
       </View>
-      <Label muted>{item.entity}</Label>
+      <Label muted>{entityWords(item.entity)}</Label>
       {rejection === undefined ? null : (
         <>
           {/* Backend's sentence, verbatim. Never reworded, truncated or wrapped. */}
@@ -340,6 +371,11 @@ const QueueRow = ({
           {rejection.deadLettered ? (
             <Label muted>This can be sent again once someone reviews it.</Label>
           ) : null}
+          {/*
+            The reference support asks for. The fallback sentence has always said "Report the
+            code below to support" -- and nothing below it showed one.
+          */}
+          {rejection.code === null ? null : <Label muted>{`Reference: ${rejection.code}`}</Label>}
         </>
       )}
     </View>
@@ -360,7 +396,7 @@ export const QueueScreen = ({
 
   return (
     <Screen scrollable>
-      <Title>Your upload queue</Title>
+      <Title>Saved on this phone</Title>
 
       {retryFailure === undefined ? null : (
         <Banner detail={retryFailure} title="Nothing could be sent" tone="critical" />

@@ -285,6 +285,8 @@ describe('directions and the unplanned marker', () => {
 
   it('an unplanned visit says so, with its reason', async () => {
     await render(<VisitScreen {...props({ unplanned: { reason: 'Doctor called me in' } })} />);
-    expect(screen.getByText('UNPLANNED · Doctor called me in')).toBeTruthy();
+    // UX polish: a badge, and the reason as its own line.
+    expect(screen.getByText('Unplanned')).toBeTruthy();
+    expect(screen.getByText('Doctor called me in')).toBeTruthy();
   });
 });

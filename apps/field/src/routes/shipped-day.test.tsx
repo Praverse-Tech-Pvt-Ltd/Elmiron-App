@@ -319,6 +319,10 @@ const REBUILT = [
   'Your list has been rebuilt',
   'This was a full refresh, so anything that was removed since you last synced has simply gone rather than being marked as removed. Everything below is what the server has for you right now.',
 ];
+// UX polish: the visit's progress row, one badge per step, a tick on each one done.
+const STEPS_BEFORE = ['Check in', 'With the doctor', 'Check out', 'Report'];
+const STEPS_DURING = ['✓ Check in', 'With the doctor', 'Check out', 'Report'];
+const STEPS_AFTER = ['✓ Check in', '✓ With the doctor', '✓ Check out', 'Report'];
 const RECORDING_ON_RECORD = [
   'The doctor agreed to a recording.',
   // 17:26 IST: +5 minutes on a capture at 11:51Z. In UTC this line would read 11:56.
@@ -343,18 +347,19 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       'Main clinic, Pune',
       'Scheduled 13:00',
       'Today',
+      // UX polish: the progress card IS the way to the route; the footer keeps two actions.
+      'See today’s route ›',
       '2 of 3',
       'visits attended',
       '✓',
       'Everything sent',
       'What this app records about me',
-      "See today's route",
-      // `BE-W176`: always offered, never the primary action.
+      // Pinned footer. `BE-W176`: always offered, never the primary action.
       'Add an unplanned visit',
       `Start the visit to ${ASHA}`,
     ]);
 
-    await fireEvent.press(screen.getByText("See today's route"));
+    await fireEvent.press(screen.getByText('See today’s route ›'));
     expect(await lines('ROUTE', /planned/u)).toEqual([
       "Today's route",
       '3 planned · 2 done',
@@ -379,6 +384,7 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       'Main clinic, Pune',
       // The clinic has coordinates: keyless directions in the phone's own maps app.
       'Directions',
+      ...STEPS_BEFORE,
       'Not started',
       'I am here — check in',
     ]);
@@ -389,14 +395,17 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       ASHA,
       'Main clinic, Pune',
       'Directions',
+      ...STEPS_DURING,
       'Checked in — waiting to send',
       '!',
       'This check-in cannot be sent yet',
       'Saved on this phone. It will send by itself when you have signal — nothing is lost.',
+      // UX polish: the in-visit actions are a labelled section; only check-out is pinned.
+      'During this visit',
       'Ask about recording',
+      'Record what you left',
       'Record a voice note',
       'Flag a possible side effect',
-      'Record what you left',
       'Leaving — check out',
     ]);
 
@@ -427,11 +436,13 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       ASHA,
       'Main clinic, Pune',
       'Directions',
+      ...STEPS_DURING,
       'Checked in — waiting to send',
       ...RECORDING_ON_RECORD,
+      'During this visit',
+      'Record what you left',
       'Record a voice note',
       'Flag a possible side effect',
-      'Record what you left',
       'Leaving — check out',
     ]);
 
@@ -441,11 +452,13 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       ASHA,
       'Main clinic, Pune',
       'Directions',
+      ...STEPS_AFTER,
       'Visit finished — waiting to send',
       ...RECORDING_ON_RECORD,
       '!',
       'This check-out cannot be sent yet',
       'Saved on this phone. It will send by itself when you have signal — nothing is lost.',
+      'After this visit',
       'Record a voice note',
       'Flag a possible side effect',
       'Write your report',

@@ -2,10 +2,12 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Display, Figure, Label } from './Text';
+import { Badge } from './Badge';
+import { BodyText, Display, Figure, Heading, Label, Secondary } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { RecordingIndicator } from './RecordingIndicator';
+import { Screen } from './Screen';
 import { Spinner } from './Spinner';
 
 /**
@@ -165,9 +167,10 @@ export interface VisitScreenProps {
 }
 
 const styles = StyleSheet.create({
-  head: { gap: 2 },
-  spacer: { flex: 1, minHeight: tokens.space.md },
+  head: { gap: tokens.space.xs },
   foot: { gap: tokens.space.sm },
+  steps: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.space.xs },
+  directions: { alignSelf: 'flex-start' },
   figureRow: { flexDirection: 'row', alignItems: 'baseline', gap: tokens.space.sm },
 });
 
@@ -223,11 +226,53 @@ export const VisitScreen = ({
   actionFailure = null,
 }: VisitScreenProps): ReactNode => {
   if (failure !== null) {
-    return <Banner detail={failure.detail} title={failure.title} tone="critical" />;
+    return (
+      <Screen>
+        <Banner detail={failure.detail} title={failure.title} tone="critical" />
+      </Screen>
+    );
   }
 
+  // UX polish. Where the rep is in the visit, as four steps they can see at once. Derived only
+  // from the stage this screen already has -- the report step reads "next" after check-out and
+  // claims nothing about whether one was filed, which this screen is not told.
+  const steps: readonly { readonly label: string; readonly state: 'done' | 'now' | 'later' }[] = [
+    { label: 'Check in', state: stage === 'before' ? 'now' : 'done' },
+    {
+      label: 'With the doctor',
+      state: stage === 'during' ? 'now' : stage === 'after' ? 'done' : 'later',
+    },
+    { label: 'Check out', state: stage === 'after' ? 'done' : 'later' },
+    { label: 'Report', state: stage === 'after' ? 'now' : 'later' },
+  ];
+
+  // Only the action the rep is here for is pinned: the stage's own step, or the report after it.
+  const footer =
+    actionLabel === null && !(stage === 'after' && onWriteReport !== undefined) ? null : (
+      <>
+        {stage === 'after' && onWriteReport !== undefined ? (
+          <Button label="Write your report" onPress={onWriteReport} />
+        ) : null}
+        {actionLabel === null ? null : (
+          <Button
+            label={busy ? 'Finding your position…' : actionLabel}
+            loading={busy}
+            onPress={onAction}
+          />
+        )}
+      </>
+    );
+
+  const duringActions = [
+    stage === 'during' && consent?.outcome === 'unasked' && consent.onAsk !== undefined,
+    stage === 'during' && recording === undefined && onStartRecording !== undefined,
+    stage !== 'before' && onRecordVoiceNote !== undefined,
+    stage !== 'before' && onFlagAdverseEvent !== undefined,
+    stage === 'during' && onRecordSamples !== undefined,
+  ].some(Boolean);
+
   return (
-    <>
+    <Screen scrollable footer={footer}>
       {recording === undefined ? null : (
         <>
           {/*
@@ -254,11 +299,28 @@ export const VisitScreen = ({
 
       <View style={styles.head}>
         <Display>{doctorName}</Display>
-        {clinic === null ? null : <Label muted>{clinic}</Label>}
-        {unplanned === null ? null : <Label>{`UNPLANNED · ${unplanned.reason}`}</Label>}
-        {onOpenDirections === undefined ? null : (
-          <Button label="Directions" onPress={onOpenDirections} variant="secondary" />
+        {clinic === null ? null : <Secondary>{clinic}</Secondary>}
+        {unplanned === null ? null : (
+          <>
+            <Badge label="Unplanned" tone="info" />
+            <Secondary>{unplanned.reason}</Secondary>
+          </>
         )}
+        {onOpenDirections === undefined ? null : (
+          <View style={styles.directions}>
+            <Button label="Directions" onPress={onOpenDirections} variant="quiet" />
+          </View>
+        )}
+      </View>
+
+      <View accessibilityLabel="Visit progress" accessible style={styles.steps}>
+        {steps.map((step) => (
+          <Badge
+            key={step.label}
+            label={step.state === 'done' ? `✓ ${step.label}` : step.label}
+            tone={step.state === 'done' ? 'success' : step.state === 'now' ? 'info' : 'neutral'}
+          />
+        ))}
       </View>
 
       {actionFailure === null ? null : (
@@ -335,51 +397,39 @@ export const VisitScreen = ({
         />
       )}
 
-      <View style={styles.spacer} />
+      {recordingNotice === null ? null : (
+        <Banner detail={recordingNotice} title="The recording" tone="info" />
+      )}
+      {stage === 'during' && recording === undefined && recordingBlockedReason !== null ? (
+        // The reason instead of the control. §02 keeps `attention` for a
+        // condition with a remedy — a doctor who said no is not a failure.
+        <Banner detail={recordingBlockedReason} title="No recording can be made" tone="attention" />
+      ) : null}
 
-      <View style={styles.foot}>
-        {stage === 'during' && consent?.outcome === 'unasked' && consent.onAsk !== undefined ? (
-          <Button label="Ask about recording" onPress={consent.onAsk} variant="secondary" />
-        ) : null}
-        {stage === 'during' && recording === undefined && onStartRecording !== undefined ? (
-          <Button label="Record this visit" onPress={onStartRecording} variant="secondary" />
-        ) : null}
-        {recordingNotice === null ? null : (
-          <Banner detail={recordingNotice} title="The recording" tone="info" />
-        )}
-        {stage === 'during' && recording === undefined && recordingBlockedReason !== null ? (
-          // The reason instead of the control. §02 keeps `attention` for a
-          // condition with a remedy — a doctor who said no is not a failure.
-          <Banner
-            detail={recordingBlockedReason}
-            title="No recording can be made"
-            tone="attention"
-          />
-        ) : null}
-        {stage !== 'before' && onRecordVoiceNote !== undefined ? (
-          <Button label="Record a voice note" onPress={onRecordVoiceNote} variant="secondary" />
-        ) : null}
-        {stage !== 'before' && onFlagAdverseEvent !== undefined ? (
-          <Button
-            label="Flag a possible side effect"
-            onPress={onFlagAdverseEvent}
-            variant="secondary"
-          />
-        ) : null}
-        {stage === 'during' && onRecordSamples !== undefined ? (
-          <Button label="Record what you left" onPress={onRecordSamples} variant="secondary" />
-        ) : null}
-        {stage === 'after' && onWriteReport !== undefined ? (
-          <Button label="Write your report" onPress={onWriteReport} />
-        ) : null}
-        {actionLabel === null ? null : (
-          <Button
-            label={busy ? 'Finding your position…' : actionLabel}
-            loading={busy}
-            onPress={onAction}
-          />
-        )}
-      </View>
-    </>
+      {duringActions ? (
+        <View style={styles.foot}>
+          <Heading>{stage === 'during' ? 'During this visit' : 'After this visit'}</Heading>
+          {stage === 'during' && consent?.outcome === 'unasked' && consent.onAsk !== undefined ? (
+            <Button label="Ask about recording" onPress={consent.onAsk} variant="secondary" />
+          ) : null}
+          {stage === 'during' && recording === undefined && onStartRecording !== undefined ? (
+            <Button label="Record this visit" onPress={onStartRecording} variant="secondary" />
+          ) : null}
+          {stage === 'during' && onRecordSamples !== undefined ? (
+            <Button label="Record what you left" onPress={onRecordSamples} variant="secondary" />
+          ) : null}
+          {stage !== 'before' && onRecordVoiceNote !== undefined ? (
+            <Button label="Record a voice note" onPress={onRecordVoiceNote} variant="secondary" />
+          ) : null}
+          {stage !== 'before' && onFlagAdverseEvent !== undefined ? (
+            <Button
+              label="Flag a possible side effect"
+              onPress={onFlagAdverseEvent}
+              variant="secondary"
+            />
+          ) : null}
+        </View>
+      ) : null}
+    </Screen>
   );
 };

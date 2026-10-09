@@ -88,6 +88,7 @@ const MrToday = (): ReactNode => {
     zone,
     today,
     dayOrigin,
+    refresh,
   } = usePulledStore();
 
   useEffect(() => {
@@ -228,76 +229,77 @@ const MrToday = (): ReactNode => {
   });
 
   return (
-    <>
-      <TodayScreen
-        dayLabel="Today"
-        startedLabel={startedAt === null ? null : `Started ${clockIn(startedAt, zone)}`}
-        dayAsOfLabel={
-          dayOrigin.kind === 'anchored'
-            ? `Your day as of ${clockIn(dayOrigin.asOf, zone)} — not confirmed since`
-            : null
-        }
-        planned={summary?.planned ?? 0}
-        done={summary?.done ?? 0}
-        notMet={summary?.notMet ?? 0}
-        stillOnPlan={summary?.stillOnPlan ?? 0}
-        next={
-          next === null
-            ? null
-            : {
-                doctorName: next.doctorName,
-                clinic: next.clinic,
-                // B4. "Not arrived yet" is not the same as "there is none".
-                clinicPending: next.clinicPending,
-                // MR-49 D2 / `FE-W59`. A visit the MR is inside says when they checked in; the
-                // schedule of another day read as "Scheduled 13:00" for a visit under way.
-                scheduledLabel: next.inProgress
-                  ? next.startedAt === null
-                    ? null
-                    : `Checked in ${clockIn(next.startedAt, zone)}`
-                  : next.scheduledFor === null
-                    ? null
-                    : `Scheduled ${clockIn(next.scheduledFor, zone)}`,
-                inProgress: next.inProgress,
-              }
-        }
-        sync={queue === null ? null : indicatorStateFor(queue, zone)}
-        onOpenQueue={() => {
-          router.push('/queue');
-        }}
-        onOpenTransparency={() => {
-          router.push('/transparency');
-        }}
-        onFindDoctor={() => {
-          router.push('/doctors');
-        }}
-        onOpenRoute={() => {
-          router.push('/beat-plan');
-        }}
-        onOpenDayEnd={() => {
-          router.push('/day-end');
-        }}
-        onAddUnplannedVisit={() => {
-          router.push('/unplanned-visit');
-        }}
-        {...(next === null
-          ? {}
+    <TodayScreen
+      dayLabel="Today"
+      startedLabel={startedAt === null ? null : `Started ${clockIn(startedAt, zone)}`}
+      dayAsOfLabel={
+        dayOrigin.kind === 'anchored'
+          ? `Your day as of ${clockIn(dayOrigin.asOf, zone)} — not confirmed since`
+          : null
+      }
+      planned={summary?.planned ?? 0}
+      done={summary?.done ?? 0}
+      notMet={summary?.notMet ?? 0}
+      stillOnPlan={summary?.stillOnPlan ?? 0}
+      next={
+        next === null
+          ? null
           : {
-              onStartNextVisit: () => {
-                router.push(`/visit/${next.visitId}`);
-              },
-            })}
-        loading={status === 'loading' || today === null}
-        failure={failure}
-        notices={notices}
-      />
-      <PendingSyncSection
-        items={pending}
-        onOpen={(item) => {
-          router.push(item.state === 'refused' ? '/queue' : `/visit/${item.id}`);
-        }}
-      />
-    </>
+              doctorName: next.doctorName,
+              clinic: next.clinic,
+              // B4. "Not arrived yet" is not the same as "there is none".
+              clinicPending: next.clinicPending,
+              // MR-49 D2 / `FE-W59`. A visit the MR is inside says when they checked in; the
+              // schedule of another day read as "Scheduled 13:00" for a visit under way.
+              scheduledLabel: next.inProgress
+                ? next.startedAt === null
+                  ? null
+                  : `Checked in ${clockIn(next.startedAt, zone)}`
+                : next.scheduledFor === null
+                  ? null
+                  : `Scheduled ${clockIn(next.scheduledFor, zone)}`,
+              inProgress: next.inProgress,
+            }
+      }
+      sync={queue === null ? null : indicatorStateFor(queue, zone)}
+      onOpenQueue={() => {
+        router.push('/queue');
+      }}
+      onOpenTransparency={() => {
+        router.push('/transparency');
+      }}
+      onFindDoctor={() => {
+        router.push('/doctors');
+      }}
+      onOpenRoute={() => {
+        router.push('/beat-plan');
+      }}
+      onOpenDayEnd={() => {
+        router.push('/day-end');
+      }}
+      onAddUnplannedVisit={() => {
+        router.push('/unplanned-visit');
+      }}
+      {...(next === null
+        ? {}
+        : {
+            onStartNextVisit: () => {
+              router.push(`/visit/${next.visitId}`);
+            },
+          })}
+      loading={status === 'loading' || today === null}
+      failure={failure}
+      notices={notices}
+      onRetry={refresh}
+      after={
+        <PendingSyncSection
+          items={pending}
+          onOpen={(item) => {
+            router.push(item.state === 'refused' ? '/queue' : `/visit/${item.id}`);
+          }}
+        />
+      }
+    />
   );
 };
 
@@ -306,23 +308,16 @@ export default function Home(): ReactNode {
 
   if (status === 'signed-out') return <Redirect href="/sign-in" />;
 
+  // An MR's Today owns its Screen, so its actions can be pinned (`TodayScreen`'s footer).
+  if (role === 'mr') return <MrToday />;
+
   return (
     <Screen scrollable>
-      {role === 'mr' ? (
-        <MrToday />
-      ) : (
-        <>
-          <Heading>Today</Heading>
-          <BodyText muted>Signed in as {role ?? 'unknown role'}</BodyText>
-          {destinationsFor(role ?? 'mr').map((destination) => (
-            <ListRow
-              key={destination.title}
-              title={destination.title}
-              detail={destination.detail}
-            />
-          ))}
-        </>
-      )}
+      <Heading>Today</Heading>
+      <BodyText muted>Signed in as {role ?? 'unknown role'}</BodyText>
+      {destinationsFor(role ?? 'mr').map((destination) => (
+        <ListRow key={destination.title} title={destination.title} detail={destination.detail} />
+      ))}
     </Screen>
   );
 }

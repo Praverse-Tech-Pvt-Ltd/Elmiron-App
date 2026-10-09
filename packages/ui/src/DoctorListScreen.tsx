@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Pressable } from 'react-native';
 import { Banner } from './Banner';
-import { Heading, Label } from './Text';
+import { Label, Title } from './Text';
 import { ListItem } from './ListItem';
 import { Spinner } from './Spinner';
 import { SurfaceContext } from './surface';
@@ -105,7 +105,7 @@ export const DoctorListScreen = ({
   if (failure !== null) {
     return (
       <>
-        <Heading>Doctors</Heading>
+        <Title>Doctors</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </>
     );
@@ -113,7 +113,7 @@ export const DoctorListScreen = ({
 
   return (
     <>
-      <Heading>Doctors</Heading>
+      <Title>Doctors</Title>
 
       <TextField
         autoCapitalize="none"
