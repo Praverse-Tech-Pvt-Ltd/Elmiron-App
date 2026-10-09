@@ -121,7 +121,80 @@ per person:
 | 4.1 | Supabase Dashboard → Authentication → **Add user** (email, password, auto-confirm) | The user appears; copy its id |
 | 4.2 | SQL: `insert into public.user_profiles (id, full_name, role, territory_id, organisation_id) select '<user id>', '<name>', 'mr', t.id, t.organisation_id from public.territories t where t.code = '<CODE>';` | `INSERT 0 1`. A field role without a territory is refused by `user_profiles_field_roles_require_territory` |
 
-**The second admin (Q-14) is created the same way with `role = 'admin'` and no territory.**
+**The second admin (Q-14) — guarded, tested against the local database on 10 October.** An admin
+has no territory, so its company cannot be derived and 4.2's insert does not fit it. Instead:
+
+| # | Action | Proves it worked |
+| --- | --- | --- |
+| 4.A1 | Dashboard → Authentication → **Add user**: the second person's own email, **Auto-confirm ticked**. Copy the user id | The user appears |
+| 4.A2 | SQL editor: the block below, with the three values filled. **Pre-checks, insert and post-checks are ONE statement:** any failed check raises an error and nothing is inserted | `Success. No rows returned`. Any `PRE-CHECK:` / `POST-CHECK:` error names the problem; nothing was written |
+| 4.A3 | Read back: `select u.email, p.full_name, p.role, p.territory_id, p.is_active from public.user_profiles p join auth.users u on u.id = p.id where p.role = 'admin' order by u.email;` | Two rows, two different people, `territory_id` empty, `is_active` true |
+| 4.A4 | The second admin signs in to the console **after** 4.A2 — the role claim is added at sign-in | The admin screens open |
+| 4.A5 | Admin 1 submits a draft; **admin 2** approves it | Q-14 / `BE-C57` closes on that first approval |
+
+```sql
+-- Second production admin (Q-14, BE-C57) -- pre-check, insert and post-check in ONE statement.
+-- Fill the three values. Any failed check raises an error and the insert does not happen.
+do $$
+declare
+  p_user_id constant uuid := '<AUTH USER ID>';
+  p_name    constant text := '<FULL NAME>';
+  p_company constant text := '<COMPANY NAME, exactly as loaded>';
+  v_org     uuid;
+  v_orgs    integer;
+  v_before  integer;
+  v_after   integer;
+begin
+  -- PRE-CHECKS
+  select count(*) into v_orgs from public.organisations where name = p_company;
+  if v_orgs <> 1 then
+    raise exception 'PRE-CHECK: % organisation(s) named "%" -- expected exactly 1', v_orgs, p_company;
+  end if;
+  select id into v_org from public.organisations where name = p_company;
+
+  if not exists (select 1 from auth.users where id = p_user_id) then
+    raise exception 'PRE-CHECK: no auth user % -- create it first (Authentication -> Add user)', p_user_id;
+  end if;
+  if not exists (select 1 from auth.users where id = p_user_id and email_confirmed_at is not null) then
+    raise exception 'PRE-CHECK: auth user % is not confirmed -- recreate it with Auto-confirm ticked', p_user_id;
+  end if;
+  if exists (select 1 from public.user_profiles where id = p_user_id) then
+    raise exception 'PRE-CHECK: user % already has a profile -- nothing to do, or a wrong id', p_user_id;
+  end if;
+  select count(*) into v_before
+    from public.user_profiles where role = 'admin' and organisation_id = v_org and is_active;
+  if v_before < 1 then
+    raise exception 'PRE-CHECK: "%" has no active admin yet -- this procedure adds the SECOND', p_company;
+  end if;
+
+  -- INSERT
+  insert into public.user_profiles (id, full_name, role, organisation_id)
+  values (p_user_id, p_name, 'admin', v_org);
+
+  -- POST-CHECKS (an exception here undoes the insert above)
+  select count(*) into v_after
+    from public.user_profiles where role = 'admin' and organisation_id = v_org and is_active;
+  if v_after <> v_before + 1 then
+    raise exception 'POST-CHECK: % active admin(s), expected %', v_after, v_before + 1;
+  end if;
+  if not exists (
+    select 1 from public.user_profiles
+     where id = p_user_id and role = 'admin' and territory_id is null
+       and organisation_id = v_org and is_active
+  ) then
+    raise exception 'POST-CHECK: the new profile is not an active, territory-less admin of "%"', p_company;
+  end if;
+end
+$$;
+```
+
+**Rollback — DEACTIVATE, never delete.** A `user_profiles` row cannot be deleted: the delete cascades
+into append-only `app_thresholds` and is refused (measured 10 October). Deleting the auth user fails
+the same way. To undo a wrong admin:
+`update public.user_profiles set is_active = false where id = '<AUTH USER ID>' and role = 'admin' and is_active;`
+— `UPDATE 1`; every policy authorises through `effective_role()`, which is null for an inactive
+profile (measured), so the account can sign in but reads and approves nothing. Also send it a
+password reset from Dashboard → Authentication, so its old password stops working. The same rule holds for an MR made wrongly in 4.2.
 
 ### Why by hand, and what by hand gets wrong (W1-T D)
 
