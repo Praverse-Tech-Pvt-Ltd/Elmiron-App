@@ -6175,3 +6175,14 @@ answered) is where a second engineer doubles throughput.
 stopped. **Left for Maanav:** `BE-W170` (should the database refuse a non-author submit, and should the
 prompt and simulation screens draw Submit only for the author); whether `docs/backend-setup.md` is
 retired or corrected; and that I have taken the knowledge-draft row — it is on this branch, not `main`.
+
+**Correction to "The push hook runs the same check again" above — it did not.** Two pushes were
+refused by the pre-push hook, and **no test ran in either**: both times a `pnpm install` inside the
+hook (once pnpm's dependency check before `turbo run`, once the hook's own install) hung after
+registry retries — `error (23)` on non-Windows tarballs — and I stopped it after 4–9 minutes of
+silence. This is the same hang as Part A's `pnpm install`, so it **reproduces** on this machine's
+network. **Pushed with `--no-verify` on the operator's instruction**, resting on the 14:51–14:55
+`--with-db` run above, made on the same tree minus this log. **The pull request's CI is the check of
+record; do not merge it without CI having run** (`docs/START-HERE.md`, the rules). Also seen: the
+14:51 run left its `supabase functions serve` running after it finished — the orphan W2-K stopped by
+hand. Stopped here too.
