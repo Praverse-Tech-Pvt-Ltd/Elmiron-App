@@ -1,5 +1,23 @@
 name: Database backup
 
+# ## 10 October 2026 (`BE-C80`): NOT THE PRODUCTION BACKUP ROUTE. Read this first.
+#
+# **Q-19 is answered: production's backup is Supabase's own managed (scheduled) backup**, on the
+# paid plan. Deploy step 0.1 (`docs/DEPLOY-RUNBOOK.md`) checks that a completed Supabase backup
+# dated today exists; it does not run this workflow, and the GitHub artefact this job would make is
+# NOT required for the pilot deployment.
+#
+# So the weekly schedule is REMOVED and the dated deferral below with it. The deferral existed to
+# keep an unanswered decision visible (the three-state design described next); the decision has
+# been answered, so a reminder would be a red build about nothing -- exactly the noise this header
+# warns against. Extending the date instead would have kept a false alarm on a timer.
+#
+# What is KEPT, and why: `workflow_dispatch`, with the destination check first. It is still the
+# only route to an off-platform copy (`backup-database.mjs` + `verify-backup.mjs`, which also
+# prove a dump restores), and it still refuses to produce anything until a destination exists and
+# a step stores the copy there (`BE-W143`). Run by hand it now ends green with a notice saying
+# that, never red. The history below is kept as it was written.
+#
 # `BE-W11`. MR-32 executed docs/restore-runbook.md for the first time and found its step 2 was
 # the single word "Restore." — no PITR (declined), no dump, no schedule, no off-machine copy.
 # MR-33 built the producer and the verifier. This is the schedule.
@@ -46,19 +64,17 @@ name: Database backup
 # and verify a dump that the runner then discards. The options and their costs are in
 # `docs/operator-inputs.md` section 8 and `docs/blocked-on-you.md` → 6.3.
 #
-# ## The deferral, dated
+# ## The deferral, dated -- RETIRED 10 October (`BE-C80`), kept as history
 #
-# `DEFERRAL_EXPIRES` below is **2026-10-15**, thirty days from the MR-34 session that set it.
+# `DEFERRAL_EXPIRES` was **2026-10-15**, thirty days from the MR-34 session that set it.
 # When it passes, this workflow goes red every week until somebody either configures a
 # destination or files a new deferral **with a reason**, in this file, in a commit with an
 # author and a date. That is deliberately the same escape hatch as the UCPMP deadline: possible,
 # and impossible to do silently.
 
 on:
-  schedule:
-    # WEEKLY, not daily. MR-33 ran this daily while it could not possibly succeed. A weekly
-    # notice is a reminder; a daily one is noise, and noise is what gets switched off.
-    - cron: '25 2 * * 1'
+  # BE-C80 (10 October): no schedule. It was `25 2 * * 1` (weekly), as a reminder of an unanswered
+  # decision; Q-19 is answered (Supabase-managed backups), so there is nothing left to remind.
   workflow_dispatch:
 
 # MR-41 B1 -- `set -o pipefail`, as a mechanism rather than a reminder.
@@ -82,10 +98,6 @@ concurrency:
   group: database-backup
   cancel-in-progress: false
 
-env:
-  # Change this ONLY in a commit that says why. See the header.
-  DEFERRAL_EXPIRES: '2026-10-15'
-
 jobs:
   backup:
     name: produce a restorable artefact, and prove it restores
@@ -93,7 +105,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # FIRST, before anything is produced, and three-state rather than two.
+      # FIRST, before anything is produced. Since BE-C80 there is no expiry state: no destination is a
+      # green notice, never red.
       - name: Is there a destination for this artefact?
         id: destination
         env:
@@ -105,31 +118,18 @@ jobs:
             exit 0
           fi
 
-          TODAY=$(date -u +%Y-%m-%d)
-          if [ "$TODAY" \> "$DEFERRAL_EXPIRES" ]; then
-            echo "::error title=BE-W11 deferral expired::The backup destination decision was deferred until $DEFERRAL_EXPIRES and that date has passed."
-            echo "::error::This is NOT a broken backup. Nothing was produced, because there is still"
-            echo "::error::nowhere lawful to put it. A dump of this database contains the consent ledger,"
-            echo "::error::doctors' names, adverse-event report text and every auth identity."
-            echo "::error::TO FIX: the operator answers Q-19 (docs/operator-inputs.md section 8), then a step stores the copy (BE-W143). Options and costs are also in"
-            echo "::error::docs/blocked-on-you.md section 6.3. To defer again, change DEFERRAL_EXPIRES"
-            echo "::error::in .github/workflows/backup.yml in a commit that says why."
-            exit 1
-          fi
-
-          echo "::notice title=BE-W11 deliberately disabled::Waiting on the backup destination decision. Deferred until $DEFERRAL_EXPIRES. Needs the operator's answer to Q-19 AND a step that stores the copy (BE-W143) -- the secret alone stores nothing."
+          echo "::notice title=Not the production backup route (BE-C80)::Production is backed up by Supabase's managed backups (Q-19, 10 October); deploy step 0.1 checks for a completed one from today. This job makes an off-platform copy only when a destination exists AND a step stores it there (BE-W143). Nothing was produced."
           echo "proceed=false" >> "$GITHUB_OUTPUT"
           {
-            echo "## Database backup — deliberately disabled"
+            echo "## Database backup — not the production backup route"
             echo ""
             echo "This run did nothing **on purpose**, and it is not a failure."
             echo ""
             echo "| | |"
             echo "| --- | --- |"
-            echo "| Waiting on | a destination for the backup artefact — a data-processing decision |"
-            echo "| Recorded in | \`docs/blocked-on-you.md\` section 6.3 |"
-            echo "| Re-enable trigger | **the operator's answer to Q-19, then a step that stores the copy** (BE-W143) — the secret alone stores nothing |"
-            echo "| Deferred until | **$DEFERRAL_EXPIRES** — this job goes red after that date |"
+            echo "| Production backup | **Supabase managed (scheduled) backups** — Q-19, \`BE-C80\` |"
+            echo "| Deploy step 0.1 | a completed Supabase backup dated today — \`docs/DEPLOY-RUNBOOK.md\` |"
+            echo "| This job | an optional off-platform copy; needs a destination AND a step that stores it (BE-W143) |"
             echo ""
             echo "Nothing was produced. The destination check runs before the dump precisely so"
             echo "that a run with nowhere to put the data leaves no copy of it anywhere."
