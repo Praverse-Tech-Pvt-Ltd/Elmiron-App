@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import uuid from 'expo-modules-core/src/uuid';
@@ -14,15 +14,17 @@ import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 // MR-25 C1 asked for this on conversion: the day in the TERRITORY's zone, not a character slice of
 // the ISO string (which was right only for the mock's own offset). The lint exception is gone.
 import { dayMonthIn, dayMonthOfDate } from '../../src/today/territory-day';
+import { loadProductChoices, toggleProduct } from '../../src/catalogue/products';
+import type { ProductList } from '../../src/catalogue/products';
 
 /**
  * C6 — the call report binding, for one visit.
  *
- * **`productIdsDiscussed` is sent empty and that is deliberate.** The contract wants
- * product UUIDs; this app has no product catalogue, no endpoint that lists one, and
- * no way for an MR to pick from something that does not exist. Sending invented ids
- * would attach a report to the wrong medicine. What the MR discussed goes in their
- * own words in the summary until a catalogue exists.
+ * **`productIdsDiscussed` — `BE-W175`.** Until the catalogue existed this was sent empty on
+ * purpose: inventing ids would attach a report to the wrong medicine. Now the rep marks products
+ * from their company's ACTIVE catalogue (`src/catalogue/products.ts`, kept on the phone for
+ * offline), and only their ids are sent; the server checks each one. The rep's own words stay
+ * in the summary, separate from the list. None marked is still a valid report.
  */
 export default function CallReport(): ReactNode {
   const { visitId } = useLocalSearchParams<{ visitId: string }>();
@@ -41,6 +43,25 @@ export default function CallReport(): ReactNode {
       : visit?.visitDay != null
         ? (dayMonthOfDate(visit.visitDay) ?? '')
         : '';
+  const [productList, setProductList] = useState<ProductList | null>(null);
+  const [chosenProducts, setChosenProducts] = useState<readonly string[]>([]);
+  useEffect(() => {
+    let live = true;
+    void loadProductChoices().then((list) => {
+      if (live) setProductList(list);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  const productsNote =
+    productList === null
+      ? 'Loading your company’s products…'
+      : productList.kind === 'cached'
+        ? 'No signal: this is the list this phone saved earlier.'
+        : productList.kind === 'none'
+          ? 'This phone has not loaded your company’s products yet. Send the report without them, or connect and open it again.'
+          : null;
   const [summary, setSummary] = useState('');
   const [objections, setObjections] = useState('');
   const [nextStep, setNextStep] = useState('');
@@ -59,8 +80,8 @@ export default function CallReport(): ReactNode {
       id: uuid.v4(),
       visitId,
       summary,
-      // See the note above: no catalogue, so no ids rather than invented ones.
-      productIdsDiscussed: [],
+      // `BE-W175`: the ids the rep marked, nothing else. The server checks each one.
+      productIdsDiscussed: [...chosenProducts],
       objectionsRaised: objections.trim() === '' ? null : objections,
       nextStep: nextStep.trim() === '' ? null : nextStep,
     };
@@ -146,6 +167,12 @@ export default function CallReport(): ReactNode {
         onObjectionsChange={setObjections}
         onSend={send}
         onSummaryChange={setSummary}
+        chosenProductIds={chosenProducts}
+        onToggleProduct={(id) => {
+          setChosenProducts((current) => toggleProduct(current, id));
+        }}
+        products={productList !== null && productList.kind !== 'none' ? productList.products : []}
+        productsNote={productsNote}
         nextStep={nextStep}
         sending={sending}
         sentNote={sentNote}
