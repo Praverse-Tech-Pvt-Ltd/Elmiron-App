@@ -5,6 +5,7 @@ import { inRolledBackTransaction, requireDatabase, withClient } from './db.js';
 import { asOwner, asUser, withIdentityLock } from './auth.js';
 import type { ProfileLike } from './auth.js';
 import { seedFixtures } from './fixtures.js';
+import { localClock, workingDay } from './working-day.js';
 import type { FixtureUser, FixtureWorld } from './fixtures.js';
 import {
   DayReviewSchema,
@@ -775,62 +776,106 @@ describe.skipIf(!reachable)(
       });
     });
 
-    it('the manager sees it afterwards, kept apart from planned and unclassified visits, and reviews it', async () => {
-      await inRolledBackTransaction(async (client) => {
-        await asUser(client, world.users.puneMr);
-        const visitId = randomUUID();
-        await push(client, [
-          visitItem(visitId, {
+    /**
+     * 10 October. The visit was started `Date.now() - 1 hour` and reviewed on "today" in the rep's
+     * zone — yesterday from 00:00 to 01:00 local, so this failed every night for an hour. The visit
+     * is now placed at LOCAL times of an explicit working day (`working-day.ts`), in the zone the
+     * server dates it by (`day_zone_for`), and the test runs under two frozen clocks: 00:30 and
+     * 12:00 local.
+     */
+    const repDay = async (client: Client, clock: string) => {
+      const zone = await client.query<{ z: string }>(
+        'select time_zone as z from public.day_zone_for($1)',
+        [world.users.puneMr.id],
+      );
+      const z = zone.rows[0]?.z ?? 'UTC';
+      return workingDay(client, z, await localClock(client, z, clock));
+    };
+    const unplannedAt = (visitId: string, startedAt: string, completedAt: string) =>
+      visitItem(visitId, {
+        origin: 'unplanned',
+        unplannedReason: 'Doctor called me in',
+        status: 'completed',
+        startedAt,
+        completedAt,
+      });
+    const reviewOn = async (client: Client, date: string) => {
+      const review = await client.query<{
+        r: {
+          visits: {
+            visitId: string;
+            origin: string;
+            unplannedReason: string | null;
+            reviewedByMe: boolean;
+          }[];
+        };
+      }>('select public.manager_day_review($1, $2::date, $2::date) as r', [
+        world.users.puneMr.id,
+        date,
+      ]);
+      return review.rows[0]?.r.visits ?? [];
+    };
+
+    describe.each(['00:30', '12:00'])('with the clock frozen at %s local', (clock) => {
+      it('the manager sees it afterwards, kept apart from planned and unclassified visits, and reviews it', async () => {
+        await inRolledBackTransaction(async (client) => {
+          await asUser(client, world.users.puneMr);
+          const day = await repDay(client, clock);
+          const visitId = randomUUID();
+          await push(client, [unplannedAt(visitId, await day.at('11:00'), await day.at('11:30'))]);
+
+          await asUser(client, world.users.westManager);
+          const seen = (await reviewOn(client, day.date)).find((v) => v.visitId === visitId);
+          expect(seen).toMatchObject({
             origin: 'unplanned',
             unplannedReason: 'Doctor called me in',
-            status: 'completed',
-            startedAt: new Date(Date.now() - 3_600_000).toISOString(),
-            completedAt: new Date(Date.now() - 1_800_000).toISOString(),
-          }),
-        ]);
+            reviewedByMe: false,
+          });
 
-        await asUser(client, world.users.westManager);
-        const today = await client.query<{ d: string }>(
-          `select (now() at time zone z.time_zone)::date::text as d
-           from public.day_zone_for($1) z`,
-          [world.users.puneMr.id],
-        );
-        const day = today.rows[0]?.d ?? '';
-        const review = await client.query<{
-          r: {
-            visits: {
-              visitId: string;
-              origin: string;
-              unplannedReason: string | null;
-              reviewedByMe: boolean;
-            }[];
-          };
-        }>('select public.manager_day_review($1, $2::date, $2::date) as r', [
-          world.users.puneMr.id,
-          day,
-        ]);
-        const seen = review.rows[0]?.r.visits.find((v) => v.visitId === visitId);
-        expect(seen).toMatchObject({
-          origin: 'unplanned',
-          unplannedReason: 'Doctor called me in',
-          reviewedByMe: false,
+          const first = await client.query<{ id: string }>(
+            'select (public.review_unplanned_visit($1, $2)).id as id',
+            [visitId, 'fine — a call-in'],
+          );
+          const again = await client.query<{ id: string }>(
+            'select (public.review_unplanned_visit($1, null)).id as id',
+            [visitId],
+          );
+          expect(again.rows[0]?.id).toBe(first.rows[0]?.id);
+
+          await asUser(client, world.users.southManager);
+          const outsider = await failure(client, 'select public.review_unplanned_visit($1, null)', [
+            visitId,
+          ]);
+          expect(outsider.code).toBe('42501');
         });
+      });
 
-        const first = await client.query<{ id: string }>(
-          'select (public.review_unplanned_visit($1, $2)).id as id',
-          [visitId, 'fine — a call-in'],
-        );
-        const again = await client.query<{ id: string }>(
-          'select (public.review_unplanned_visit($1, null)).id as id',
-          [visitId],
-        );
-        expect(again.rows[0]?.id).toBe(first.rows[0]?.id);
+      it('a visit belongs to its LOCAL day: 00:00-00:30 and 23:30-23:59 are in it; 23:59 the night before is not', async () => {
+        await inRolledBackTransaction(async (client) => {
+          await asUser(client, world.users.puneMr);
+          const day = await repDay(client, clock);
+          const earliest = randomUUID();
+          const latest = randomUUID();
+          const nightBefore = randomUUID();
+          await push(client, [
+            unplannedAt(earliest, await day.at('00:00'), await day.at('00:30')),
+            unplannedAt(latest, await day.at('23:30'), await day.at('23:59')),
+            unplannedAt(nightBefore, await day.at('23:30', -1), await day.at('23:59', -1)),
+          ]);
 
-        await asUser(client, world.users.southManager);
-        const outsider = await failure(client, 'select public.review_unplanned_visit($1, null)', [
-          visitId,
-        ]);
-        expect(outsider.code).toBe('42501');
+          await asUser(client, world.users.westManager);
+          const onDay = (await reviewOn(client, day.date)).map((v) => v.visitId);
+          expect(onDay).toEqual(expect.arrayContaining([earliest, latest]));
+          expect(onDay).not.toContain(nightBefore);
+          const dayBefore = await client.query<{ d: string }>(`select ($1::date - 1)::text as d`, [
+            day.date,
+          ]);
+          const onDayBefore = (await reviewOn(client, dayBefore.rows[0]?.d ?? '')).map(
+            (v) => v.visitId,
+          );
+          expect(onDayBefore).toContain(nightBefore);
+          expect(onDayBefore).not.toContain(earliest);
+        });
       });
     });
 
