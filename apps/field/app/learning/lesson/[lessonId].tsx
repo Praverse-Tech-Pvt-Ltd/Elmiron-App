@@ -4,7 +4,8 @@ import { Redirect, useLocalSearchParams } from 'expo-router';
 import type { CompleteLessonResponse } from '@fieldforce/core';
 import { LessonScreen, Screen } from '@fieldforce/ui';
 import type { LessonView } from '@fieldforce/ui';
-import { learningEnabled } from '../../../src/features';
+import { learningEnabled, lessonTutorEnabled } from '../../../src/features';
+import { LessonTutor } from '../../../src/learning/lesson-tutor';
 import { appLearningBackend } from '../../../src/learning/backend';
 import type { LearningBackend, LessonRow } from '../../../src/learning/live';
 import { failureKind, finishNotice } from '../../../src/learning/view';
@@ -24,10 +25,13 @@ export const Lesson = ({
   lessonId,
   enrolmentId,
   backend = appLearningBackend(),
+  tutorEnabled = lessonTutorEnabled,
 }: {
   readonly lessonId: string;
   readonly enrolmentId: string;
   readonly backend?: LearningBackend;
+  /** The lesson tutor's switch (`EXPO_PUBLIC_LESSON_TUTOR`); injectable for tests. */
+  readonly tutorEnabled?: boolean;
 }): ReactNode => {
   const { zone } = usePulledStore();
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
@@ -105,6 +109,9 @@ export const Lesson = ({
   return (
     <Screen scrollable>
       <LessonScreen view={view} />
+      {tutorEnabled && loaded.kind === 'loaded' && loaded.lesson !== null ? (
+        <LessonTutor lessonId={lessonId} zone={zone} />
+      ) : null}
     </Screen>
   );
 };

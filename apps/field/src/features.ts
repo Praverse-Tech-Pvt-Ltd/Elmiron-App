@@ -66,3 +66,11 @@ export const productQaEnabled: boolean = process.env.EXPO_PUBLIC_PRODUCT_QA === 
  * tutor (`lms_tutor`) is a separate AI feature and is not behind this flag.
  */
 export const learningEnabled: boolean = process.env.EXPO_PUBLIC_LEARNING === 'true';
+
+/**
+ * The lesson tutor (`lms_tutor`): a question about the lesson on screen, answered only from that
+ * lesson's own text by the gateway (a stub until a model is connected). Its own switch, off by
+ * default like every AI feature, and only meaningful where Learning itself is on.
+ */
+export const lessonTutorEnabled: boolean =
+  learningEnabled && process.env.EXPO_PUBLIC_LESSON_TUTOR === 'true';

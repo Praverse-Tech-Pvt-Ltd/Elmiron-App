@@ -60,6 +60,8 @@ export type { BottomSheetProps } from './BottomSheet';
 export { Button } from './Button';
 export type { ButtonProps, ButtonVariant } from './Button';
 export { PendingSyncSection } from './PendingSyncSection';
+export { TutorPanel } from './TutorPanel';
+export type { TutorPanelProps, TutorView } from './TutorPanel';
 export type { PendingSyncItem, PendingSyncSectionProps } from './PendingSyncSection';
 export { ProductQaScreen } from './ProductQaScreen';
 export type { ProductQaScreenProps, ProductQaView } from './ProductQaScreen';
