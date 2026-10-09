@@ -23,6 +23,8 @@ const ITEMS: readonly { readonly label: string; readonly href?: string }[] = [
   // not be started at all — `start_sim_session` refuses a scenario that is not approved, and
   // nothing but a test could approve one.
   { label: 'Practice doctors', href: '/practice' },
+  // The AI coach's analysis of practice sessions. Admins only (RLS); never a manager's.
+  { label: 'Practice feedback', href: '/practice-feedback' },
   // W1-G E1 / BE-W122. Before this route existed, the only way to create the prompt a
   // practice session needs was a script writing SQL.
   { label: 'AI prompts', href: '/prompts' },
