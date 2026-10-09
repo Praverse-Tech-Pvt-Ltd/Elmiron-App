@@ -16,8 +16,6 @@ import { AuthGate } from '../src/auth-gate';
 import { OutboxFlusher } from '../src/sync/flusher';
 import { PulledStoreProvider } from '../src/sync/pulled-store';
 import { ZoneCaveatBanner } from '../src/today/ZoneCaveatBanner';
-import { apiTarget } from '../src/config';
-import { ConfigurationError } from '../src/config-error';
 import { useReduceMotion } from '../src/reduce-motion';
 
 /**
@@ -52,17 +50,15 @@ const FACES = {
 const FONT_DEADLINE_MS = 3_000;
 
 /**
- * FE-D2 2. A release build with no real API address stops HERE, before the session, the pull, the
- * outbox or any screen mounts: each of those would start talking to an address that does not
- * exist. A wrapper rather than an early return inside `App`, so `App`'s hooks never run
- * conditionally.
+ * `BE-W150` (closed 9 October). There is no start-up gate here any more. FE-D2 2 stopped a release
+ * build that had no `EXPO_PUBLIC_API_BASE_URL` -- the address of the `services/mock` API, which no
+ * screen calls since every read and write moved to Supabase -- so a correct production build would
+ * have refused to start for want of an address nothing uses. The values the app does need,
+ * `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_KEY`, are still required: `src/config.ts`
+ * (`loadAppConfig`) throws at import on a missing or malformed one, before anything mounts.
  */
 export default function RootLayout(): ReactNode {
-  return apiTarget.kind === 'misconfigured' ? (
-    <ConfigurationError reason={apiTarget.reason} />
-  ) : (
-    <App />
-  );
+  return <App />;
 }
 
 function App(): ReactNode {
