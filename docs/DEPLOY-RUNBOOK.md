@@ -101,11 +101,12 @@ The operator fills `docs/operator/territory-template.xlsx` and exports its two s
 | # | Command | Proves it worked | If it did not |
 | --- | --- | --- | --- |
 | 2.1 | `node services/api/scripts/check-territory-sheet.mjs --territories Territories.csv --mrs MRs.csv --out reference.json` | *"OK: N company(ies), M territory row(s). Wrote reference.json."* | One line per problem, by sheet and row, with the reason; **nothing is written**. Rehearsed: the shipped template is refused (`example_row`, three lines) — **delete the example rows** |
+| 2.1a | **Doctors and clinics (Q-7), when the sheet exists:** `node services/api/scripts/check-doctor-sheet.mjs --reference reference.json --doctors doctors-clinics.csv --out reference-full.json` — the template is `docs/operator/doctors-clinics-template.csv`. **Then use `reference-full.json` in place of `reference.json` in 2.2–2.4** | *"OK: N doctor(s), M clinic(s). Wrote reference-full.json."* | One line per problem, by row, with the reason; **nothing is written**. The shipped template is refused (`example_row`) — delete the example rows. Coordinates are never invented: a clinic without them loads without them |
 | 2.2 | `pnpm --filter @fieldforce/api seed:reference -- --data reference.json` | *"DRY RUN: N organisation(s), M territory(ies) … would be attempted. Nothing was changed."* | Read the error; nothing was changed |
 | 2.3 | `pnpm --filter @fieldforce/api seed:reference -- --data reference.json --apply --db-url "$PROD_DB_URL"` | *"APPLIED: N organisation(s), M territory(ies) … inserted"* | It runs in one transaction: a failure inserts nothing. Read it, fix the sheet, start at 2.1 |
 | 2.4 | Run 2.3 again | *"APPLIED: 0 organisation(s), 0 territory(ies) …"* — rehearsed exactly | Non-zero means the sheet changed between runs: a **renamed key makes a NEW row**, it never renames |
 
-**The loader carries no consent notice and no doctors** (`consentTextVersions: []`). See "Before the
+**The loader carries no consent notice** (`consentTextVersions: []`), **and doctors only through 2.1a** (`BE-W179`). A reload with a CHANGED doctor or clinic under an existing key **fails, naming it, and loads nothing** — `seed:reference` never updates a loaded row. See "Before the
 first real MR day" below.
 
 ### Operator step 4, continued — accounts, BY HAND (`BE-W137`) — users are a master (item 11)
