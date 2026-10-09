@@ -118,3 +118,56 @@ export const visitFor = (
   mrId: string | null,
 ): Visit | null =>
   pulled.find((candidate) => candidate.id === id) ?? phoneMadeVisit(id, items, mrId);
+
+/**
+ * Where a phone-made visit stands while the server has not yet given it a day.
+ *
+ * - `waiting`: on this phone, not yet sent (queued, or a send under way).
+ * - `sent`: the server accepted it; the pull that brings its day has not arrived yet.
+ * - `refused`: the server said no. `problem` is the outbox's own sentence; nothing moves it to a day.
+ */
+export type PendingVisitState = 'waiting' | 'sent' | 'refused';
+
+export interface PendingVisit {
+  readonly visit: Visit;
+  readonly state: PendingVisitState;
+  readonly problem: string | null;
+}
+
+/**
+ * `BE-W176` — the "Pending sync" list: unplanned visits this phone made that the PULL does not hold.
+ *
+ * **MR-47 stands: only the server puts a visit on a day.** So this takes no date, no timezone and no
+ * clock of any kind -- there is nothing here it could classify by. A visit leaves this list the
+ * moment the pull returns the server's copy (by the same id), and from then on it is shown only
+ * where the server's day puts it. A signed-out phone shows nothing.
+ */
+export const pendingVisits = (
+  queue: {
+    readonly items: readonly SyncQueueItem[];
+    readonly rejections: Readonly<Record<string, { readonly explanation: string | null }>>;
+  },
+  pulled: readonly Visit[],
+  mrId: string | null,
+): readonly PendingVisit[] => {
+  if (mrId === null) return [];
+  const onServerDay = new Set(pulled.map((visit) => visit.id));
+  return queue.items
+    .filter((item) => item.entity === 'visit' && !onServerDay.has(item.entityId))
+    .flatMap((item): PendingVisit[] => {
+      const visit = phoneMadeVisit(item.entityId, queue.items, mrId);
+      if (visit === null) return [];
+      const state: PendingVisitState =
+        item.status === 'synced'
+          ? 'sent'
+          : item.status === 'failed' || item.status === 'conflict'
+            ? 'refused'
+            : 'waiting';
+      const problem =
+        state === 'refused'
+          ? (queue.rejections[item.id]?.explanation ??
+            'The server refused this visit. Open the queue screen to see why and what to do.')
+          : null;
+      return [{ visit, state, problem }];
+    });
+};

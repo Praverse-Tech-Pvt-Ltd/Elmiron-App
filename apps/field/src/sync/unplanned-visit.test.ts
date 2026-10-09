@@ -18,7 +18,7 @@ import { SyncPushRefusal, createPushClient } from './push-client';
 import type { OutboxWriteClient } from './push-client';
 import { emptyQueue } from './reducer';
 import type { SyncQueueState } from './reducer';
-import { phoneMadeVisit, visitFor } from './selectors';
+import { pendingVisits, phoneMadeVisit, visitFor } from './selectors';
 import {
   PROBLEM_WORDS,
   REASON_MAX,
@@ -452,5 +452,108 @@ describe('BE-W176 — the visit is on the phone at once, and once', () => {
       status: 'completed',
       visitDay: '2026-10-09',
     });
+  });
+});
+
+// =============================================================================
+// 5. Pending sync -- MR-47 kept: no day until the server gives one
+// =============================================================================
+
+describe('BE-W176 — Pending sync: no day until the server gives one', () => {
+  const serverCopy = (status: 'planned' | 'completed') =>
+    VisitSchema.parse({
+      id: VISIT,
+      mrId: REP,
+      doctorId: DOCTOR,
+      beatPlanId: null,
+      origin: 'unplanned',
+      plannedDate: null,
+      unplannedReason: 'Doctor called me in',
+      clinicAddressId: CLINIC,
+      status,
+      notMetReason: null,
+      scheduledFor: MADE_AT,
+      startedAt: null,
+      completedAt: null,
+      visitDay: '2026-10-09',
+      receivedAt: '2026-10-09T11:00:00Z',
+      createdAt: '2026-10-09T11:00:00Z',
+      updatedAt: '2026-10-09T11:00:00Z',
+    });
+
+  it('offline: the visit is Pending sync, waiting, with no day', async () => {
+    const store = await aDayOffline();
+    const pending = pendingVisits(store.current(), [], REP);
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({ state: 'waiting', problem: null });
+    expect(pending[0]?.visit).toMatchObject({ id: VISIT, origin: 'unplanned', visitDay: null });
+  });
+
+  it('no signed-in rep: nothing pending is shown', async () => {
+    const store = await aDayOffline();
+    expect(pendingVisits(store.current(), [], null)).toEqual([]);
+  });
+
+  it('sent but not yet pulled: still pending ("sent"); once the pull has it, gone from Pending sync', async () => {
+    const store = await aDayOffline();
+    await flushOutbox(recording(() => Promise.resolve({})).client, store, ME);
+    expect(pendingVisits(store.current(), [], REP).map((p) => p.state)).toEqual(['sent']);
+
+    const pulled = [serverCopy('completed')];
+    expect(pendingVisits(store.current(), pulled, REP)).toEqual([]);
+    // ...and the one copy shown is the server's, under the server's day.
+    expect(visitFor(VISIT, pulled, store.current().items, REP)).toMatchObject({
+      visitDay: '2026-10-09',
+    });
+  });
+
+  it('refused: pending with the server’s explanation -- never moved to a day', async () => {
+    const store = await aDayOffline();
+    await flushOutbox(
+      recording(() =>
+        Promise.reject(
+          new SyncPushRefusal({
+            message: 'unplanned_visit_needs_reason',
+            sqlState: '22023',
+            rejectionCode: 'validation_failed',
+            deadLettered: false,
+            detail: null,
+            hint: null,
+          }),
+        ),
+      ).client,
+      store,
+      ME,
+    );
+    const [entry] = pendingVisits(store.current(), [], REP);
+    expect(entry?.state).toBe('refused');
+    expect(entry?.problem).toBeTruthy();
+    expect(entry?.visit.visitDay).toBeNull();
+  });
+
+  it('a refusal the server did not explain still says where to act', () => {
+    const item = { ...unplannedVisitQueueItem(visitBody), status: 'failed' as const };
+    const [entry] = pendingVisits({ items: [item], rejections: {} }, [], REP);
+    expect(entry?.problem).toMatch(/queue screen/u);
+  });
+
+  it('midnight and a device timezone change reclassify nothing: the list takes no clock at all', async () => {
+    const store = await aDayOffline();
+    const zone = process.env['TZ'];
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-10-09T18:29:59Z')); // 23:59:59 in India
+      process.env['TZ'] = 'Asia/Kolkata';
+      const before = pendingVisits(store.current(), [], REP);
+      vi.setSystemTime(new Date('2026-10-09T18:30:01Z')); // 00:00:01 the next day in India
+      process.env['TZ'] = 'America/New_York';
+      const after = pendingVisits(store.current(), [], REP);
+      expect(after).toEqual(before);
+      expect(after[0]?.visit.visitDay, 'no day is ever claimed').toBeNull();
+    } finally {
+      vi.useRealTimers();
+      if (zone === undefined) delete process.env['TZ'];
+      else process.env['TZ'] = zone;
+    }
   });
 });

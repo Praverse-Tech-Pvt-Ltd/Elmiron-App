@@ -59,6 +59,8 @@ export { BottomSheet } from './BottomSheet';
 export type { BottomSheetProps } from './BottomSheet';
 export { Button } from './Button';
 export type { ButtonProps, ButtonVariant } from './Button';
+export { PendingSyncSection } from './PendingSyncSection';
+export type { PendingSyncItem, PendingSyncSectionProps } from './PendingSyncSection';
 export { ProductQaScreen } from './ProductQaScreen';
 export type { ProductQaScreenProps, ProductQaView } from './ProductQaScreen';
 export { CourseScreen, LearningListScreen, LessonScreen } from './LearningScreens';

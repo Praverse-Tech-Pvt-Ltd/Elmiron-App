@@ -1,12 +1,19 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useRouter } from 'expo-router';
-import { BodyText, Heading, ListRow, Screen, TodayScreen } from '@fieldforce/ui';
+import {
+  BodyText,
+  Heading,
+  ListRow,
+  PendingSyncSection,
+  Screen,
+  TodayScreen,
+} from '@fieldforce/ui';
 import { useSession } from '../../src/session';
-import { loadQueueState, onQueueChanged } from '../../src/sync/async-storage-store';
+import { loadQueueState, onQueueChanged, queueOwner } from '../../src/sync/async-storage-store';
 import { indicatorStateFor } from '../../src/sync/indicator';
 import { usePulledStore } from '../../src/sync/pulled-store';
-import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
+import { doctorsFromStore, pendingVisits, visitsFromStore } from '../../src/sync/selectors';
 import type { QueueLoad } from '../../src/sync/async-storage-store';
 import { summariseDay } from '../../src/today/plan';
 import { visitsAsWitnessed } from '../../src/capture/visit';
@@ -196,69 +203,100 @@ const MrToday = (): ReactNode => {
               }
             : null;
 
+  /**
+   * `BE-W176` — unplanned visits this phone made that the server has not put on a day yet. NOT part of
+   * Today: MR-47 keeps the day the server's, so they are listed apart, with no day, and leave this list
+   * when the pull returns the server's copy. A refused one opens the queue screen, where the refusal
+   * and the outbox's own recovery are.
+   */
+  const pending = pendingVisits(
+    queue?.kind === 'loaded' ? queue.state : { items: [], rejections: {} },
+    visitsFromStore(store),
+    queueOwner(),
+  ).map((entry) => {
+    const doctor = doctorsFromStore(store).find((d) => d.id === entry.visit.doctorId);
+    const clinic = doctor?.clinicAddresses.find((c) => c.id === entry.visit.clinicAddressId);
+    return {
+      id: entry.visit.id,
+      doctorName: doctor?.fullName ?? 'A doctor not on this phone',
+      clinic: clinic === undefined ? null : `${clinic.label}, ${clinic.city}`,
+      reason: entry.visit.unplannedReason ?? '',
+      state: entry.state,
+      problem: entry.problem,
+    };
+  });
+
   return (
-    <TodayScreen
-      dayLabel="Today"
-      startedLabel={startedAt === null ? null : `Started ${clockIn(startedAt, zone)}`}
-      dayAsOfLabel={
-        dayOrigin.kind === 'anchored'
-          ? `Your day as of ${clockIn(dayOrigin.asOf, zone)} — not confirmed since`
-          : null
-      }
-      planned={summary?.planned ?? 0}
-      done={summary?.done ?? 0}
-      notMet={summary?.notMet ?? 0}
-      stillOnPlan={summary?.stillOnPlan ?? 0}
-      next={
-        next === null
-          ? null
+    <>
+      <TodayScreen
+        dayLabel="Today"
+        startedLabel={startedAt === null ? null : `Started ${clockIn(startedAt, zone)}`}
+        dayAsOfLabel={
+          dayOrigin.kind === 'anchored'
+            ? `Your day as of ${clockIn(dayOrigin.asOf, zone)} — not confirmed since`
+            : null
+        }
+        planned={summary?.planned ?? 0}
+        done={summary?.done ?? 0}
+        notMet={summary?.notMet ?? 0}
+        stillOnPlan={summary?.stillOnPlan ?? 0}
+        next={
+          next === null
+            ? null
+            : {
+                doctorName: next.doctorName,
+                clinic: next.clinic,
+                // B4. "Not arrived yet" is not the same as "there is none".
+                clinicPending: next.clinicPending,
+                // MR-49 D2 / `FE-W59`. A visit the MR is inside says when they checked in; the
+                // schedule of another day read as "Scheduled 13:00" for a visit under way.
+                scheduledLabel: next.inProgress
+                  ? next.startedAt === null
+                    ? null
+                    : `Checked in ${clockIn(next.startedAt, zone)}`
+                  : next.scheduledFor === null
+                    ? null
+                    : `Scheduled ${clockIn(next.scheduledFor, zone)}`,
+                inProgress: next.inProgress,
+              }
+        }
+        sync={queue === null ? null : indicatorStateFor(queue, zone)}
+        onOpenQueue={() => {
+          router.push('/queue');
+        }}
+        onOpenTransparency={() => {
+          router.push('/transparency');
+        }}
+        onFindDoctor={() => {
+          router.push('/doctors');
+        }}
+        onOpenRoute={() => {
+          router.push('/beat-plan');
+        }}
+        onOpenDayEnd={() => {
+          router.push('/day-end');
+        }}
+        onAddUnplannedVisit={() => {
+          router.push('/unplanned-visit');
+        }}
+        {...(next === null
+          ? {}
           : {
-              doctorName: next.doctorName,
-              clinic: next.clinic,
-              // B4. "Not arrived yet" is not the same as "there is none".
-              clinicPending: next.clinicPending,
-              // MR-49 D2 / `FE-W59`. A visit the MR is inside says when they checked in; the
-              // schedule of another day read as "Scheduled 13:00" for a visit under way.
-              scheduledLabel: next.inProgress
-                ? next.startedAt === null
-                  ? null
-                  : `Checked in ${clockIn(next.startedAt, zone)}`
-                : next.scheduledFor === null
-                  ? null
-                  : `Scheduled ${clockIn(next.scheduledFor, zone)}`,
-              inProgress: next.inProgress,
-            }
-      }
-      sync={queue === null ? null : indicatorStateFor(queue, zone)}
-      onOpenQueue={() => {
-        router.push('/queue');
-      }}
-      onOpenTransparency={() => {
-        router.push('/transparency');
-      }}
-      onFindDoctor={() => {
-        router.push('/doctors');
-      }}
-      onOpenRoute={() => {
-        router.push('/beat-plan');
-      }}
-      onOpenDayEnd={() => {
-        router.push('/day-end');
-      }}
-      onAddUnplannedVisit={() => {
-        router.push('/unplanned-visit');
-      }}
-      {...(next === null
-        ? {}
-        : {
-            onStartNextVisit: () => {
-              router.push(`/visit/${next.visitId}`);
-            },
-          })}
-      loading={status === 'loading' || today === null}
-      failure={failure}
-      notices={notices}
-    />
+              onStartNextVisit: () => {
+                router.push(`/visit/${next.visitId}`);
+              },
+            })}
+        loading={status === 'loading' || today === null}
+        failure={failure}
+        notices={notices}
+      />
+      <PendingSyncSection
+        items={pending}
+        onOpen={(item) => {
+          router.push(item.state === 'refused' ? '/queue' : `/visit/${item.id}`);
+        }}
+      />
+    </>
   );
 };
 
