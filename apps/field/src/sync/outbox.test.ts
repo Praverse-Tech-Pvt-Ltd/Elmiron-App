@@ -511,7 +511,7 @@ describe('MR-09 B: the misroute class, not just the one instance', () => {
     expect(store.current().items[0]?.status).toBe('queued');
   });
 
-  it('B4: an entity with no endpoint is returned to the queue, not STRANDED in flight', async () => {
+  it('B4: a row nothing can send is returned to the queue, not STRANDED in flight', async () => {
     // The second defect in the same dispatch. `batch_started` marks every selected row
     // `in_flight`; the old code then did `if (send === null) continue`, recording no
     // verdict at all — and every later flush selects only `queued`. The row was stranded:
@@ -522,8 +522,9 @@ describe('MR-09 B: the misroute class, not just the one instance', () => {
       () => Promise.reject(new Error('Network request failed')),
       {
         ...checkInQueueItem(body),
-        // MR-53 C1: `recording` used to be the example here and now HAS an endpoint. `visit` is
-        // the remaining deliberate gap -- written straight to the table, no RPC in the way.
+        // MR-53 C1: `recording` used to be the example here and now HAS an endpoint; `BE-W176`
+        // gave `visit` one too, so no entity is left without one. The guarantee is the same for a
+        // row that cannot be READ as its entity -- a `visit` row carrying a check-in's payload.
         entity: 'visit',
         payload: { ...body, __queueEntity: 'visit' },
       },
@@ -536,7 +537,7 @@ describe('MR-09 B: the misroute class, not just the one instance', () => {
     expect(createCheckIn).not.toHaveBeenCalled();
     const item = store.current().items[0];
     expect(item?.status, 'a row nothing can send must not sit in_flight forever').toBe('queued');
-    expect(item?.lastError).toMatch(/cannot send this kind of item yet/i);
+    expect(item?.lastError).toMatch(/different version of the app and cannot be read/i);
     expect(item?.attemptCount).toBeGreaterThan(1);
   });
 

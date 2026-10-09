@@ -142,6 +142,11 @@ export interface TodayScreenProps {
    * honestly until check-in does.
    */
   readonly onOpenRoute?: () => void;
+  /**
+   * `BE-W176`. A visit nobody planned -- a doctor who called the rep in. Always offered: it needs
+   * no approval (`BE-C78`), and it is never the primary action, which is the plan's next stop.
+   */
+  readonly onAddUnplannedVisit?: () => void;
   /** A denial or a failure the MR needs to see instead of the day. */
   readonly failure?: { readonly title: string; readonly detail: string } | null;
   /**
@@ -185,6 +190,7 @@ export const TodayScreen = ({
   onFindDoctor,
   onOpenRoute,
   onOpenDayEnd,
+  onAddUnplannedVisit,
   loading = false,
   failure = null,
   notices = [],
@@ -304,6 +310,13 @@ export const TodayScreen = ({
         {next === null && planned > 0 && stillOnPlan === 0 && onOpenDayEnd !== undefined ? (
           <Button label="How today ended" onPress={onOpenDayEnd} variant="secondary" />
         ) : null}
+        {onAddUnplannedVisit === undefined ? null : (
+          <Button
+            label="Add an unplanned visit"
+            onPress={onAddUnplannedVisit}
+            variant="secondary"
+          />
+        )}
         {next === null || onStartNextVisit === undefined ? null : (
           <Button
             label={

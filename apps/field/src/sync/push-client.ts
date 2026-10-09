@@ -8,6 +8,7 @@ import type {
   CreateCheckOutRequest,
   CreateConsentRecordRequest,
   CreateSampleAndInputRequest,
+  CreateVisitRequest,
   SyncEntity,
   SyncRejectionCode,
 } from '@fieldforce/core';
@@ -155,6 +156,11 @@ export interface OutboxWriteClient {
   createConsentRecord: (body: CreateConsentRecordRequest) => Promise<PushAccepted>;
   createSampleAndInput: (body: CreateSampleAndInputRequest) => Promise<PushAccepted>;
   createCallReport: (body: CreateCallReportRequest) => Promise<PushAccepted>;
+  /**
+   * `BE-W176` / `BE-C78`. A visit the rep makes without a plan. Always UNPLANNED, always with the
+   * reason: the server refuses a phone visit that is anything else, each with its own code.
+   */
+  createUnplannedVisit: (body: CreateVisitRequest) => Promise<PushAccepted>;
   /** W2-C B / `BE-W159`. The rep FLAGS a possible adverse event (`BE-C36`). Nothing is assessed. */
   createAdverseEventFlag: (body: CreateAdverseEventFlagRequest) => Promise<PushAccepted>;
   /** MR-51 D1 / `FE-W29`. Upload, then finalise through `sync_push`, then forget the phone's copy. */
@@ -375,6 +381,16 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
     createConsentRecord: (body) => push('consent_record', body),
     createSampleAndInput: (body) => push('sample_and_input', body),
     createCallReport: (body) => push('call_report', body),
+    // The visit's own id is both the item id and the entity id: one create per visit, and the
+    // server writes the row under `entityId` (`apply_sync_item`, visit branch).
+    createUnplannedVisit: (body) =>
+      pushItem('visit', body.id, body.id, {
+        doctorId: body.doctorId,
+        clinicAddressId: body.clinicAddressId ?? null,
+        scheduledFor: body.scheduledFor ?? null,
+        origin: 'unplanned',
+        unplannedReason: body.unplannedReason.trim(),
+      }),
     createAdverseEventFlag: (body) => push('adverse_event', body),
     uploadVoiceNote: (body) => uploadAudio('voice_note', body),
     uploadRecording: (body) => uploadAudio('recording', body, { bitrateKbps: body.bitrateKbps }),

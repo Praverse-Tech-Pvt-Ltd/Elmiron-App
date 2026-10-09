@@ -349,6 +349,8 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       'Everything sent',
       'What this app records about me',
       "See today's route",
+      // `BE-W176`: always offered, never the primary action.
+      'Add an unplanned visit',
       `Start the visit to ${ASHA}`,
     ]);
 
@@ -460,6 +462,7 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       '3 waiting · no signal',
       'What this app records about me',
       'How today ended',
+      'Add an unplanned visit',
     ]);
 
     await goTo('route');
@@ -506,6 +509,7 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       '17:51',
       'What this app records about me',
       'How today ended',
+      'Add an unplanned visit',
     ]);
     await goTo('route');
     // Unchanged after the flush: this fake server does not apply pushes to later pulls (limit 2).

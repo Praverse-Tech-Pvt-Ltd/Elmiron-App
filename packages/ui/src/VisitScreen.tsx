@@ -30,6 +30,11 @@ import { Spinner } from './Spinner';
 export interface VisitScreenProps {
   readonly doctorName: string;
   readonly clinic: string | null;
+  /**
+   * `BE-W176` / `BE-C78`. Set for a visit the rep made without a plan: "Unplanned" and the reason.
+   * Read from the visit's own `origin`, never inferred from a missing plan.
+   */
+  readonly unplanned?: { readonly reason: string } | null;
   readonly stage: 'before' | 'during' | 'after';
   /**
    * True when the stage rests on a write this device has QUEUED and the server has not yet
@@ -190,6 +195,7 @@ const STAGE_WORDS_PENDING = {
 export const VisitScreen = ({
   doctorName,
   clinic,
+  unplanned = null,
   stage,
   stagePending = false,
   actionLabel,
@@ -246,6 +252,7 @@ export const VisitScreen = ({
       <View style={styles.head}>
         <Display>{doctorName}</Display>
         {clinic === null ? null : <Label muted>{clinic}</Label>}
+        {unplanned === null ? null : <Label>{`UNPLANNED · ${unplanned.reason}`}</Label>}
       </View>
 
       {actionFailure === null ? null : (

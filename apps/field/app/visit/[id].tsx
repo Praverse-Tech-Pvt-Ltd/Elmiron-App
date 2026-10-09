@@ -58,7 +58,7 @@ import type { QueueLoad } from '../../src/sync/async-storage-store';
 import { emptyQueue } from '../../src/sync/reducer';
 import { unavailableReason } from '../../src/capture/preconditions';
 import { usePulledStore } from '../../src/sync/pulled-store';
-import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
+import { doctorsFromStore, visitFor, visitsFromStore } from '../../src/sync/selectors';
 import { clockIn } from '../../src/today/territory-day';
 import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
 import { RECORD_AUDIO, microphoneRationaleDue } from '../../src/onboarding/microphone-gate';
@@ -136,7 +136,17 @@ export default function VisitRoute(): ReactNode {
    * the app rather than the module.
    */
   const { store, status, zone, failure: pullFailure, refresh: refreshPulled } = usePulledStore();
-  const visit = visitsFromStore(store).find((candidate) => candidate.id === id) ?? null;
+  // The queue is re-read whenever this screen is entered AND after every write, because a
+  // check-in that has just been queued must change the stage immediately -- an MR who presses
+  // "I am here" with no signal and sees "Not started" will press it again.
+  // `FE-W44`. The load, not the state: feeding `witnessedStage` an empty queue because the
+  // store could not be READ is defect 12 by another route -- a queued check-in becomes
+  // invisible and the MR presses the button again.
+  // (Declared here, above `visit`, since `BE-W176`: an unplanned visit made on this phone is read
+  // back from the queue until the pull returns the server's copy.)
+  const [queueLoad, setQueueLoad] = useState<QueueLoad>({ kind: 'loaded', state: emptyQueue });
+  const queue = queueLoad.kind === 'loaded' ? queueLoad.state : emptyQueue;
+  const visit = visitFor(id, visitsFromStore(store), queue.items, queueOwner());
   const doctor =
     visit === null
       ? null
@@ -219,14 +229,6 @@ export default function VisitRoute(): ReactNode {
     };
   }, []);
 
-  // The queue is re-read whenever this screen is entered AND after every write, because a
-  // check-in that has just been queued must change the stage immediately -- an MR who presses
-  // "I am here" with no signal and sees "Not started" will press it again.
-  // `FE-W44`. The load, not the state: feeding `witnessedStage` an empty queue because the
-  // store could not be READ is defect 12 by another route -- a queued check-in becomes
-  // invisible and the MR presses the button again.
-  const [queueLoad, setQueueLoad] = useState<QueueLoad>({ kind: 'loaded', state: emptyQueue });
-  const queue = queueLoad.kind === 'loaded' ? queueLoad.state : emptyQueue;
   /**
    * MR-49 C / `FE-W55`. The doctor's answer as THIS PHONE witnessed it, for this MR and this visit
    * only. Not the server's ledger (MR-12 Q4 keeps that out of the pull, and the audited read is not
@@ -547,6 +549,7 @@ export default function VisitRoute(): ReactNode {
         busy={busy}
         clinic={clinic === undefined ? null : `${clinic.label}, ${clinic.city}`}
         doctorName={doctor?.fullName ?? 'This visit'}
+        unplanned={visit?.origin === 'unplanned' ? { reason: visit.unplannedReason ?? '' } : null}
         actionFailure={actionFailure}
         failure={
           pullFailure === null

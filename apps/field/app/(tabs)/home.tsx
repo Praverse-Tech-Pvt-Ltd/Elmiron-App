@@ -245,6 +245,9 @@ const MrToday = (): ReactNode => {
       onOpenDayEnd={() => {
         router.push('/day-end');
       }}
+      onAddUnplannedVisit={() => {
+        router.push('/unplanned-visit');
+      }}
       {...(next === null
         ? {}
         : {
