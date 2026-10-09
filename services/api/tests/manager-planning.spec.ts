@@ -11,7 +11,10 @@ import {
   PLANNING_RPC,
   PlannableDoctorSchema,
   PlannableRepSchema,
+  PlanningGrantRevocationSchema,
+  PlanningGrantSchema,
   PlanSummarySchema,
+  UnplannedVisitReviewSchema,
 } from '@fieldforce/core';
 
 /**
@@ -379,6 +382,36 @@ describe.skipIf(!reachable)(
           [world.users.puneMr.id, NEXT_DAY],
         );
         expect(closed.code).toBe('42501');
+      });
+    });
+
+    it('grant, revoke and review rows parse with the shared schemas', async () => {
+      await inRolledBackTransaction(async (client) => {
+        await asUser(client, world.users.admin);
+        const granted = await client.query<{ g: unknown }>(
+          'select to_jsonb(public.grant_planning_access($1, $2, $3::date, null, $4)) as g',
+          [world.users.southManager.id, world.territories.pune, DAY, 'covering for a colleague'],
+        );
+        const grantRow = PlanningGrantSchema.parse(granted.rows[0]?.g);
+        const revoked = await client.query<{ r: unknown }>(
+          'select to_jsonb(public.revoke_planning_access($1, $2)) as r',
+          [grantRow.id, 'colleague is back'],
+        );
+        expect(PlanningGrantRevocationSchema.parse(revoked.rows[0]?.r).grant_id).toBe(grantRow.id);
+
+        await asUser(client, world.users.puneMr);
+        const visitId = randomUUID();
+        await client.query(
+          `insert into public.visits (id, mr_id, doctor_id, origin, unplanned_reason)
+         values ($1, $2, $3, 'unplanned', 'Doctor called me in')`,
+          [visitId, world.users.puneMr.id, world.doctors.pune],
+        );
+        await asUser(client, world.users.westManager);
+        const review = await client.query<{ r: unknown }>(
+          'select to_jsonb(public.review_unplanned_visit($1, null)) as r',
+          [visitId],
+        );
+        expect(UnplannedVisitReviewSchema.parse(review.rows[0]?.r).visit_id).toBe(visitId);
       });
     });
 
@@ -825,8 +858,9 @@ describe.skipIf(!reachable)(
 describe.skipIf(!reachable)('BE-C78 — the planned day reaches the rep and is worked', () => {
   /**
    * COMMITTED, because `sync_pull` cannot see its own transaction's rows (`fixtures.ts`). A fresh
-   * rep of its own, so no other suite's pull sees these rows. They are left in place: a planned
-   * visit is append-only history, and nothing else reads this rep.
+   * rep of its own, so no other suite's pull sees these rows. Its day is collapsed back to ONE plan
+   * version at the end: two versions of one rep's day cannot survive `20260813000100`'s rollback,
+   * which restores one plan per rep per day, and `verify-rollbacks` runs on what the suite leaves.
    */
   it('plan → pull; a repeated pull, a re-save and an edit never duplicate a visit', async () => {
     // Straight into `auth.users`, as `makeRep` does: the pull reads claims, not a GoTrue session,
@@ -861,47 +895,6 @@ describe.skipIf(!reachable)('BE-C78 — the planned day reaches the rep and is w
         }
       });
 
-    const summary = await committed(world.users.westManager, (client) =>
-      plan(client, rep.id, DAY, [world.doctors.pune]),
-    );
-    expect(summary.visitsCreated).toBe(1);
-
-    type Change = { entity: string; entityId: string; payload: Record<string, unknown> | null };
-    const pullAll = () =>
-      committed(rep, async (client) => {
-        const r = await client.query<{ p: { changes: Change[] } }>(
-          `select public.sync_pull(null, array['visit', 'beat_plan', 'beat_plan_entry'], 500) as p`,
-        );
-        return r.rows[0]?.p.changes ?? [];
-      });
-    const plannedVisits = (changes: Change[]) =>
-      changes.filter((c) => c.entity === 'visit' && c.payload?.['planned_date'] === DAY);
-
-    const first = await pullAll();
-    const visits = plannedVisits(first);
-    expect(visits).toHaveLength(1);
-    expect(visits[0]?.payload).toMatchObject({
-      origin: 'planned',
-      status: 'planned',
-      beat_plan_id: summary.beatPlanId,
-      visit_day: DAY,
-    });
-    expect(first.some((c) => c.entity === 'beat_plan' && c.entityId === summary.beatPlanId)).toBe(
-      true,
-    );
-    expect(
-      first.some(
-        (c) => c.entity === 'beat_plan_entry' && c.payload?.['beat_plan_id'] === summary.beatPlanId,
-      ),
-    ).toBe(true);
-
-    // A repeated pull, and the manager re-saving the same plan, change nothing on the phone.
-    await committed(world.users.westManager, (client) =>
-      plan(client, rep.id, DAY, [world.doctors.pune]),
-    );
-    expect(plannedVisits(await pullAll())).toHaveLength(1);
-
-    // An edit reaches the phone as the SAME visit, now on the new version -- never a second visit.
     const doctor = await withClient(async (client) => {
       const id = randomUUID();
       await client.query(
@@ -910,16 +903,95 @@ describe.skipIf(!reachable)('BE-C78 — the planned day reaches the rep and is w
       );
       return id;
     });
-    const v2 = await committed(world.users.westManager, (client) =>
-      plan(client, rep.id, DAY, [doctor, world.doctors.pune]),
-    );
-    const afterEdit = plannedVisits(await pullAll());
-    expect(afterEdit).toHaveLength(2);
-    expect(afterEdit.find((c) => c.entityId === visits[0]?.entityId)?.payload).toMatchObject({
-      beat_plan_id: v2.beatPlanId,
-      status: 'planned',
-    });
-    // Working the day -- check-ins, call reports, check-out against these planned visits, sent
-    // twice with no duplicate -- is Gate 1 (`gate1.spec.ts`), on a fixed day inside the window.
+    try {
+      const summary = await committed(world.users.westManager, (client) =>
+        plan(client, rep.id, DAY, [world.doctors.pune]),
+      );
+      expect(summary.visitsCreated).toBe(1);
+
+      type Change = { entity: string; entityId: string; payload: Record<string, unknown> | null };
+      const pullAll = () =>
+        committed(rep, async (client) => {
+          const r = await client.query<{ p: { changes: Change[] } }>(
+            `select public.sync_pull(null, array['visit', 'beat_plan', 'beat_plan_entry'], 500) as p`,
+          );
+          return r.rows[0]?.p.changes ?? [];
+        });
+      const plannedVisits = (changes: Change[]) =>
+        changes.filter((c) => c.entity === 'visit' && c.payload?.['planned_date'] === DAY);
+
+      const first = await pullAll();
+      const visits = plannedVisits(first);
+      expect(visits).toHaveLength(1);
+      expect(visits[0]?.payload).toMatchObject({
+        origin: 'planned',
+        status: 'planned',
+        beat_plan_id: summary.beatPlanId,
+        visit_day: DAY,
+      });
+      expect(first.some((c) => c.entity === 'beat_plan' && c.entityId === summary.beatPlanId)).toBe(
+        true,
+      );
+      expect(
+        first.some(
+          (c) =>
+            c.entity === 'beat_plan_entry' && c.payload?.['beat_plan_id'] === summary.beatPlanId,
+        ),
+      ).toBe(true);
+
+      // A repeated pull, and the manager re-saving the same plan, change nothing on the phone.
+      await committed(world.users.westManager, (client) =>
+        plan(client, rep.id, DAY, [world.doctors.pune]),
+      );
+      expect(plannedVisits(await pullAll())).toHaveLength(1);
+
+      // An edit reaches the phone as the SAME visit, now on the new version -- never a second visit.
+      const v2 = await committed(world.users.westManager, (client) =>
+        plan(client, rep.id, DAY, [doctor, world.doctors.pune]),
+      );
+      const afterEdit = plannedVisits(await pullAll());
+      expect(afterEdit).toHaveLength(2);
+      expect(afterEdit.find((c) => c.entityId === visits[0]?.entityId)?.payload).toMatchObject({
+        beat_plan_id: v2.beatPlanId,
+        status: 'planned',
+      });
+      // Working the day -- check-ins, call reports, check-out against these planned visits, sent
+      // twice with no duplicate -- is Gate 1 (`gate1.spec.ts`), on a fixed day inside the window.
+    } finally {
+      // Visits are history and cannot be deleted (removing one cascades into the append-only
+      // `call_reports`), so they stay. What `verify-rollbacks` cannot survive is two versions of one
+      // rep's day, so the day is collapsed back to version 1: the visits are re-pointed to it and
+      // the newer versions removed, newest first (each references the one it supersedes).
+      await withClient(async (client) => {
+        const versions = await client.query<{ id: string; version: number }>(
+          'select id, version from public.beat_plans where mr_id = $1 order by version desc',
+          [rep.id],
+        );
+        const first = versions.rows.find((v) => v.version === 1);
+        if (first === undefined) return;
+        await client.query('update public.visits set beat_plan_id = $2 where mr_id = $1', [
+          rep.id,
+          first.id,
+        ]);
+        for (const version of versions.rows.filter((v) => v.version > 1)) {
+          // Entries first, while their plan still exists: the entries' sync trigger scopes its
+          // deletion event by the plan's rep, which a cascade from the plan could no longer read.
+          const entries = await client.query<{ id: string }>(
+            'delete from public.beat_plan_entries where beat_plan_id = $1 returning id',
+            [version.id],
+          );
+          await client.query('delete from public.beat_plans where id = $1', [version.id]);
+          // And the deletion events those two deletes emitted: they describe test rows, and an
+          // older rollback (`20260917000300`) restores an entity check that has no
+          // `beat_plan_entry`, so a left-over event of that kind fails `verify-rollbacks`.
+          await client.query(
+            `delete from public.sync_events
+              where (entity = 'beat_plan_entry' and entity_id = any($1::uuid[]))
+                 or (entity = 'beat_plan' and entity_id = $2)`,
+            [entries.rows.map((e) => e.id), version.id],
+          );
+        }
+      });
+    }
   });
 });

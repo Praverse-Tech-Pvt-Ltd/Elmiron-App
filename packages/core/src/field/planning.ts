@@ -122,3 +122,49 @@ export const DayReviewSchema = z.object({
   visits: z.array(ReviewVisitSchema),
 });
 export type DayReview = z.infer<typeof DayReviewSchema>;
+
+/** A `planning_territory_grants` row: what `grant_planning_access` returns and what an admin reads. */
+export const PlanningGrantSchema = z.object({
+  id: UuidSchema,
+  organisation_id: UuidSchema,
+  manager_id: UuidSchema,
+  territory_id: UuidSchema,
+  valid_from: IsoDateSchema,
+  valid_until: IsoDateSchema.nullable(),
+  reason: z.string(),
+  granted_by_user_id: UuidSchema,
+  created_at: IsoDateTimeSchema,
+});
+export type PlanningGrant = z.infer<typeof PlanningGrantSchema>;
+
+/** A `planning_territory_grant_revocations` row: what `revoke_planning_access` returns. */
+export const PlanningGrantRevocationSchema = z.object({
+  id: UuidSchema,
+  grant_id: UuidSchema,
+  revoked_by_user_id: UuidSchema,
+  reason: z.string(),
+  created_at: IsoDateTimeSchema,
+});
+export type PlanningGrantRevocation = z.infer<typeof PlanningGrantRevocationSchema>;
+
+/** Where a grant stands on a given day. Revoked wins over dates: a revocation is permanent. */
+export const grantState = (
+  grant: Pick<PlanningGrant, 'valid_from' | 'valid_until'>,
+  revoked: boolean,
+  today: string,
+): 'revoked' | 'ended' | 'not_started' | 'active' => {
+  if (revoked) return 'revoked';
+  if (grant.valid_until !== null && grant.valid_until < today) return 'ended';
+  if (grant.valid_from > today) return 'not_started';
+  return 'active';
+};
+
+/** An `unplanned_visit_reviews` row: what `review_unplanned_visit` returns. */
+export const UnplannedVisitReviewSchema = z.object({
+  id: UuidSchema,
+  visit_id: UuidSchema,
+  reviewer_id: UuidSchema,
+  note: z.string().nullable(),
+  created_at: IsoDateTimeSchema,
+});
+export type UnplannedVisitReview = z.infer<typeof UnplannedVisitReviewSchema>;
