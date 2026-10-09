@@ -67,7 +67,11 @@ test('a prompt can be written and approved without anybody touching SQL', async 
   ]);
   await featureBox.selectOption('ai_doctor');
   await author.getByLabel('The instructions the model is given').fill(promptText);
-  await expect(author.getByText('Answered by Claude Sonnet 5, India profile')).toBeVisible();
+  // BE-C79: OpenAI answers in the pilot, and the screen names no other vendor's model.
+  await expect(
+    author.getByText('Answered by OpenAI gpt-4.1 — fixed for this feature'),
+  ).toBeVisible();
+  await expect(author.getByText(/Claude|Sonnet|Haiku|Bedrock/u)).toHaveCount(0);
 
   // A5, the screen's side: a version the gateway would refuse, or run on defaults, cannot be
   // saved. No limits, an empty one, or one out of range — the button stays disabled.

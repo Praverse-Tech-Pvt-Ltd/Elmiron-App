@@ -67,4 +67,7 @@ export { ProviderError } from '../../../../../packages/core/dist/field/gateway/p
 
 // W2-E A3 (`BE-W164`) -- which model answers each feature, read from the same map the console's
 // `/prompts` screen displays, so the screen cannot name a model the gateway does not call.
-export { GATEWAY_MODEL } from '../../../../../packages/core/dist/field/gateway/prompt-contract.js';
+export {
+  GATEWAY_MODEL,
+  OPENAI_MODEL,
+} from '../../../../../packages/core/dist/field/gateway/prompt-contract.js';

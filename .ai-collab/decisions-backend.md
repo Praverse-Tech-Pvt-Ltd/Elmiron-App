@@ -763,3 +763,21 @@ disagreement could be checked, because the operator's text was not provided.**
   `validate_visit` rule 2 forbids; it is an open question, not built.
 - **A rep changing territory moves nothing.** Their planned visits stay theirs until a manager
   reassigns them.
+
+## `BE-C79` — **OpenAI answers the pilot's AI features; the abstraction and Bedrock stay** (Pratham, 9 October)
+
+- **The decision, from the operator's release instruction of 9 October 2026:** OpenAI is the pilot's
+  provider. Keep the provider abstraction; do not delete Bedrock; do not use Bedrock.
+- **What it overrides, said plainly:** `BE-C26` chose Claude on Bedrock **India** so that processing
+  stays in India. **OpenAI's API gives no such guarantee.** That property does not hold for the pilot,
+  and that is the operator's accepted trade, not something the code hides. Re-selecting Bedrock is one
+  secret (`AI_PROVIDER=bedrock`); its adapter still refuses any region or profile that is not India.
+- **What does not change:** every rule that matters lives in the flows in `@fieldforce/core` —
+  approved prompt and approved knowledge only, guardrails BEFORE the model (patient data is never
+  sent), practice-only simulation from the stored session, four-eyes on content, the audit row. The
+  adapter carries messages and reads replies; it adds nothing to the approved prompt.
+- **The key:** `OPENAI_API_KEY` is an Edge Function secret. It is never in the phone, the console,
+  an `EXPO_PUBLIC_*`/`NEXT_PUBLIC_*` value, the repository or a log line.
+- **Models:** `OPENAI_MODEL` in `prompt-contract.ts` (`gpt-4.1` for the larger tier, `gpt-4.1-mini`
+  for `mr_chat`/`lms_tutor`), shared with the console's label. That these are enabled on the
+  operator's account is **not verified** — `BE-W178` is IMPLEMENTED, NOT LIVE VERIFIED.

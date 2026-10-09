@@ -44,6 +44,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
   GATEWAY_MODEL,
+  OPENAI_MODEL,
   PRODUCT_QA_FAILED_MESSAGE,
   analyseSimSession,
   answerLessonQuestion,
@@ -56,6 +57,7 @@ import { createStubProvider, stubProviderRefusal } from '../_shared/stub-provide
 import { INDIA_PROFILES, createBedrockProvider } from '../_shared/bedrock-provider.ts';
 import type { IndiaProfileId } from '../_shared/bedrock-provider.ts';
 import { bedrockConverse } from '../_shared/bedrock-client.ts';
+import { createOpenAiProvider } from '../_shared/openai-provider.ts';
 import { practiceWriterFromEnv } from '../_shared/practice-writer.ts';
 import type { StubShape } from '../_shared/stub-provider.ts';
 
@@ -267,23 +269,31 @@ Deno.serve(async (req: Request): Promise<Response> => {
     },
   };
 
-  // THE construction line (`KEY-DAY-CHECKLIST.md` D1 §1). Bedrock only when the deployment says so
-  // EXPLICITLY (`AI_PROVIDER=bedrock`, an Edge Function secret); otherwise the stub, which refuses
-  // any non-local target. Local runs and CI therefore keep the stub even where a key file exists —
-  // the HTTP suites drive stub behaviour, and a real model would turn them red for no defect.
+  // THE construction line (`KEY-DAY-CHECKLIST.md` D1 §1). A real vendor only when the deployment
+  // says so EXPLICITLY (`AI_PROVIDER`, an Edge Function secret): `openai` (`BE-C79`, the pilot's
+  // provider; `OPENAI_API_KEY` is a secret too, read here and handed to the adapter, never logged)
+  // or `bedrock` (`BE-C26`, kept). Otherwise the stub, which refuses any non-local target. Local runs
+  // and CI therefore keep the stub even where a key file exists — the HTTP suites drive stub
+  // behaviour, and a real model would turn them red for no defect.
+  const aiProvider = Deno.env.get('AI_PROVIDER');
   let provider: LlmProvider;
   try {
     provider =
-      Deno.env.get('AI_PROVIDER') === 'bedrock'
-        ? createBedrockProvider({
-            region: Deno.env.get('AWS_REGION'),
-            profileId: BEDROCK_PROFILE[feature],
-            converse: bedrockConverse({
-              accessKeyId: Deno.env.get('AWS_ACCESS_KEY_ID'),
-              secretAccessKey: Deno.env.get('AWS_SECRET_ACCESS_KEY'),
-            }),
+      aiProvider === 'openai'
+        ? createOpenAiProvider({
+            apiKey: Deno.env.get('OPENAI_API_KEY'),
+            model: OPENAI_MODEL[GATEWAY_MODEL[feature]],
           })
-        : createStubProvider(STUB_SHAPE[feature]);
+        : aiProvider === 'bedrock'
+          ? createBedrockProvider({
+              region: Deno.env.get('AWS_REGION'),
+              profileId: BEDROCK_PROFILE[feature],
+              converse: bedrockConverse({
+                accessKeyId: Deno.env.get('AWS_ACCESS_KEY_ID'),
+                secretAccessKey: Deno.env.get('AWS_SECRET_ACCESS_KEY'),
+              }),
+            })
+          : createStubProvider(STUB_SHAPE[feature]);
   } catch (error) {
     // The stub refuses to exist outside a local target (`C2`). That is a deployment-shaped
     // refusal, not a user-shaped one, and it must not read as "the assistant is busy".
