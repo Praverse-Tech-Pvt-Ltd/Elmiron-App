@@ -160,10 +160,11 @@ compiled (`apps/field/plugins/release-signing.cjs`). And
 `node apps/field/scripts/verify-release-apk.mjs <apk> --expect-sha256 <fingerprint>` refuses any APK not
 signed by exactly that key.
 
-**What engineering still writes, once the key AND the production address exist (about half a day):** the
-production build script. It takes the production values, prebuilds with no demo hosts, builds, runs
-`apps/field/scripts/verify-release-apk.mjs`, and deletes the APK on refusal. It also needs the `BE-W150` ruling (below) and a
-rule for `versionCode`, which is `1` today, while an update must always carry a higher one.
+**The production build script exists (`BE-W177`):** `apps/field/scripts/build-release-apk.ps1 -ExpectSha256 <fingerprint>`.
+**It reads the four values from the ENVIRONMENT of the shell it runs in** (`FIELDFORCE_UPLOAD_STORE_FILE`,
+`_STORE_PASSWORD`, `_KEY_ALIAS`, `_KEY_PASSWORD`) and refuses before Gradle if any is missing — values kept
+only in `gradle.properties` are not seen by its checks. It also needs `FIELD_ANDROID_VERSION_CODE` (higher
+for every APK handed out) and the production `EXPO_PUBLIC_*` values. `BE-W150` is closed.
 
 **What proves it worked:** `verify-release-apk.mjs` prints `OK`, and the APK installs and signs in against
 production.

@@ -52,7 +52,7 @@ in the operator's order, and this maps them:
 
 | # | Command | Proves it worked | If it did not |
 | --- | --- | --- | --- |
-| 0.1 | GitHub → Actions → **Database backup** → *Run workflow* on `main`; wait for green | A green run today; its artefact listed on the run | **Stop.** No deploy without a backup from today |
+| 0.1 | **Q-19 = Supabase-managed backups** (expected answer, 10 October; the GitHub artefact route is not used — `BE-W143`). (a) Supabase Dashboard → Organization → **Billing**: the project's organisation is on a **paid plan, status active**. (b) Dashboard → Project → **Database → Backups → Scheduled backups** — or `pnpm exec supabase backups list --project-ref <ref>` after `supabase login` — and read the newest entry | (a) the paid plan is shown active — **read it, do not infer it from the approval**; (b) a backup **dated today (UTC)** with status completed. Write both down, with the backup's timestamp, in the deploy record | **Stop.** No deploy without a completed backup from today. If today's scheduled backup has not run yet, wait for it — do not accept yesterday's. A free plan has no scheduled backups at all: that is a stop, not a warning |
 | 0.2 | GitHub → Actions → **Migration drift** → *Run workflow* on `main` | Notice: *"Production has applied the first 19 of 96 migrations, in order, with nothing applied that has no file here"* | Any other shape — an out-of-band version, a gap — **stop**: someone changed production by hand; read the job's own message |
 | 0.3 | The three counts below, in the Supabase SQL editor (read-only) | You know which branch two migrations will take | See the table under it |
 | 0.4 | `pnpm exec supabase --workdir services/api db push --db-url "$PROD_DB_URL" --dry-run` | *"Would push these migrations:"* followed by **77** names, first `20260907000100`, last `20261002000400` (W1-W, 5 October: `main` now holds 96; was 74 / `20261002000100`). Nothing changes | A different count — **stop**; production is not where 0.2 said |
@@ -252,14 +252,12 @@ still open Today to nothing.
 
 **What resumes it — one operator answer, THEN engineering.**
 
-1. **The operator answers Q-19** (`docs/operator-inputs.md` section 8): GitHub, a bucket, or Supabase's
-   own backups.
-2. **Engineering makes the backup land there** — about half a day, about an hour for "Supabase".
-   **Setting `BACKUP_DESTINATION` alone is NOT enough** (`BE-W143`): the job would then make a copy,
-   verify it, and store it nowhere — no step uploads it — so 0.1's "its artefact listed on the run" still
-   could not pass. For "Supabase", 0.1 itself changes to "a Supabase backup from today exists".
-3. Re-run 0.1 and require **both** a green run **and** a stored copy from today; then continue at 0.2,
-   in order.
+1. **The operator answers Q-19** (`docs/operator-inputs.md` section 8). **Expected answer (10 October):
+   Supabase-managed backups.** If the answer is GitHub or a bucket instead, 0.1 reverts to the workflow
+   route and `BE-W143` (a step that stores the copy) must be built first.
+2. **Done for "Supabase" (10 October):** 0.1 above now reads "the paid plan is active, and a completed
+   Supabase backup dated today exists". The *Database backup* workflow is no longer part of 0.1.
+3. The operator confirms both halves of 0.1, then continue at 0.2, in order.
 
 **Updated on 5 October because `main` moved:** 0.2, 0.4, 1.1, 1.2 and S1 now expect **96** migrations
 (77 pending: first `20260907000100`, last `20261002000400`). **Three of the 77 were never part of the
