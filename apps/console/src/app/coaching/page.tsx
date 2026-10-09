@@ -200,9 +200,14 @@ export default async function CoachingQueue(): Promise<ReactNode> {
         <div style={{ flex: 1, display: 'flex' }}>
           <Card>
             <Label>Your overrides</Label>
-            <MissingNote>
-              Not built. There is a POST that records an override and no path that lists them back,
-              so this console can write one and cannot count them.
+            {/*
+              UX polish: the same fact, in a manager's words. It read "Not built. There is a POST
+              that records an override and no path that lists them back" -- an engineer's note on
+              the landing page of the product.
+            */}
+            <MissingNote tone="info">
+              A list of the overrides you have logged will appear here in a later version. Each one
+              you log is already recorded.
             </MissingNote>
             <Body muted>
               {`Every override is logged and feeds the weekly rubric accuracy report. Signed in as ${session?.email ?? 'nobody — this page is not signed in'}.`}

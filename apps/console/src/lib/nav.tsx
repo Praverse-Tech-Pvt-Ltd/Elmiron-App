@@ -145,7 +145,7 @@ export const Nav = ({
             ))}
           </div>
         ))}
-        <div>
+        <div className="ff-nav-later">
           <div style={groupTitle}>Coming later</div>
           {COMING_LATER.map((label) => (
             <span

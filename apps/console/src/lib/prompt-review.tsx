@@ -50,7 +50,7 @@ import { btn } from './theme-css';
 const field = (): CSSProperties => ({
   width: '100%',
   padding: tokens.space.sm,
-  border: `1px solid ${tokens.color.textPrimary}`,
+  border: `1px solid ${tokens.color.border}`,
   borderRadius: tokens.radius.control,
   fontSize: compactTypography.body.size,
   fontFamily: 'inherit',

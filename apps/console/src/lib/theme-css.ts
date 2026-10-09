@@ -30,6 +30,8 @@ export const themeCss = `
   background: ${c.surface}; color: ${c.textPrimary};
   font: inherit; font-size: ${px(t.body.size)}; font-weight: 600; line-height: 1.2;
   cursor: pointer; white-space: nowrap;
+  /* A button is as wide as its words: in a column it no longer stretches to the card's width. */
+  align-self: flex-start;
   transition: background-color 120ms ease, border-color 120ms ease, opacity 120ms ease;
 }
 .ff-btn:hover:not(:disabled) { background: ${c.wash}; }
@@ -61,5 +63,6 @@ textarea:focus-visible, summary:focus-visible {
   .ff-nav { width: auto !important; }
   .ff-nav-items { flex-direction: row !important; flex-wrap: wrap; }
   .ff-main { padding: ${px(tokens.space.md)} !important; }
+  .ff-nav-later { display: none; }
 }
 `;
