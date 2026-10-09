@@ -7,7 +7,8 @@ import { Banner } from './Banner';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Spinner } from './Spinner';
-import { BodyText, Heading, Label } from './Text';
+import { Badge } from './Badge';
+import { BodyText, Heading, Label, Title } from './Text';
 import { TextField } from './TextField';
 import { SAMPLE_PRACTICE_NOTE } from './PracticeHomeScreen';
 
@@ -29,7 +30,19 @@ export type PracticeNotice =
   | { readonly kind: 'refused'; readonly message: string }
   | { readonly kind: 'not_available' }
   | { readonly kind: 'offline'; readonly onRetry: () => void }
-  | { readonly kind: 'error'; readonly onRetry: () => void };
+  | { readonly kind: 'error'; readonly onRetry: () => void }
+  /**
+   * UX polish (a real defect): ending the session or asking for feedback failed. It used to reuse
+   * `offline`/`error`, whose words are about a TURN ("Your turn was not sent") and whose retry
+   * resends the unsent turn -- of which there was none, so the button did nothing and the rep was
+   * stuck at the end of a practice. This one names the action and retries that action.
+   */
+  | {
+      readonly kind: 'action_failed';
+      readonly action: 'end' | 'feedback';
+      readonly offline: boolean;
+      readonly onRetry: () => void;
+    };
 
 export interface PracticeSessionScreenProps {
   readonly sample: boolean;
@@ -99,6 +112,25 @@ const NoticeBanner = ({ notice }: { notice: PracticeNotice }): ReactNode => {
           tone="critical"
         />
       );
+    case 'action_failed':
+      return (
+        <Banner
+          action={{ label: 'Try again', onPress: notice.onRetry }}
+          detail={
+            notice.offline
+              ? 'No signal. Nothing is lost — try again when you have signal.'
+              : notice.action === 'end'
+                ? 'Something went wrong on our side. The session is still open — try again.'
+                : 'Something went wrong on our side. Your practice is saved — try again.'
+          }
+          title={
+            notice.action === 'end'
+              ? 'The practice was not ended'
+              : 'Your feedback could not be fetched'
+          }
+          tone={notice.offline ? 'offline' : 'critical'}
+        />
+      );
   }
 };
 
@@ -139,6 +171,12 @@ export const PracticeSessionScreen = ({
 
   return (
     <View style={styles.stack}>
+      {/*
+        UX polish. Framed as what it is before anything else: a simulation, with an AI. The
+        persona's name was the only title, which read like a real doctor's.
+      */}
+      <Title>Practice simulation</Title>
+      <Badge label="AI practice" tone="info" />
       <Heading>{personaName}</Heading>
       <Label muted>{personaLine}</Label>
       {sample ? <Banner detail={SAMPLE_PRACTICE_NOTE} title="Sample data" tone="info" /> : null}
@@ -156,7 +194,7 @@ export const PracticeSessionScreen = ({
 
       {turns.map((turn) => (
         <View key={turn.turnIndex} style={turn.role === 'rep' ? styles.rep : null}>
-          <Card tone={turn.role === 'doctor' ? 'hero' : 'default'}>
+          <Card tone={turn.role === 'doctor' ? 'default' : 'quiet'}>
             <View style={styles.turn}>
               <Label muted>
                 {turn.role === 'rep'

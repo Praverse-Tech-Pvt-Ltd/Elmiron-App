@@ -69,7 +69,7 @@ describe('app/product-qa.tsx — W2-C C', () => {
       },
     });
     expect(await screen.findByText('Take 10 mg daily.')).toBeTruthy();
-    expect(screen.getByText('From: Benchmarol SmPC, version 3 — Dosage (SmPC §4.2)')).toBeTruthy();
+    expect(screen.getByText('Benchmarol SmPC, version 3 — Dosage (SmPC §4.2)')).toBeTruthy();
     expect(screen.queryByText('No approved answer for this yet.')).toBeNull();
   });
 

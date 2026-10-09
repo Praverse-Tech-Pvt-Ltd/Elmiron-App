@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Heading, Label } from './Text';
+import { BodyText, Label, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { TextField } from './TextField';
@@ -74,7 +74,7 @@ export const AnalysisReplyScreen = ({
   if (failure !== null) {
     return (
       <>
-        <Heading>Your reply</Heading>
+        <Title>Your reply</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </>
     );
@@ -85,7 +85,7 @@ export const AnalysisReplyScreen = ({
   return (
     <>
       <View style={styles.head}>
-        <Heading>Your reply</Heading>
+        <Title>Your reply</Title>
         <Label muted>Goes with the finding, wherever it appears</Label>
       </View>
 
@@ -111,7 +111,7 @@ export const AnalysisReplyScreen = ({
         Not a warning tone. Disagreeing is the ordinary use of this screen, and a
         cautionary colour here would be the app hinting that arguing is a risk.
       */}
-      <Card tone="offline">
+      <Card tone="quiet">
         <BodyText>{replyNote}</BodyText>
       </Card>
 

@@ -38,6 +38,11 @@ const PracticeSessionView = (): ReactNode => {
   const [allowance, setAllowance] = useState<AiAllowanceState>({ kind: 'not_reported' });
   /** The turn that got no answer, so a retry sends exactly it again. */
   const [unsent, setUnsent] = useState<TurnRequestBody | null>(null);
+  // Ending the session or asking for feedback failed: which, and whether it was signal.
+  const [actionFailure, setActionFailure] = useState<{
+    readonly action: 'end' | 'feedback';
+    readonly offline: boolean;
+  } | null>(null);
 
   const reload = useCallback(async (): Promise<void> => {
     const found = await practiceBackend.readSession(id);
@@ -101,17 +106,63 @@ const PracticeSessionView = (): ReactNode => {
       });
   };
 
+  const endSession = (): void => {
+    if (session === null || busy) return;
+    setBusy(true);
+    setActionFailure(null);
+    void practiceBackend
+      .end(session.sessionId)
+      .then(reload)
+      .catch((error: unknown) => {
+        setActionFailure({ action: 'end', offline: outcomeFromThrown(error).kind === 'offline' });
+      })
+      .finally(() => {
+        setBusy(false);
+      });
+  };
+
+  const getFeedback = (): void => {
+    if (session === null || busy) return;
+    setBusy(true);
+    setNotice('none');
+    setActionFailure(null);
+    void practiceBackend
+      .analyse(coachRequestBody(session))
+      .then(coachOutcome, outcomeFromThrown)
+      .then((outcome) => {
+        if (outcome.kind === 'analysed') {
+          router.replace(`/practice/analysis/${outcome.analysisId}`);
+        } else if (outcome.kind === 'at_limit') {
+          setAllowance({ kind: 'at_limit', resetLabel: null });
+        } else if (outcome.kind === 'offline' || outcome.kind === 'error') {
+          setActionFailure({ action: 'feedback', offline: outcome.kind === 'offline' });
+        } else {
+          setNotice(outcome.kind);
+        }
+      })
+      .finally(() => {
+        setBusy(false);
+      });
+  };
+
   const screenNotice: PracticeNotice =
     refusal !== null
       ? { kind: 'refused', message: refusal }
-      : notice === 'offline' || notice === 'error'
+      : actionFailure !== null
         ? {
-            kind: notice,
-            onRetry: () => {
-              if (unsent !== null && !sending) sendTurn(unsent);
-            },
+            kind: 'action_failed',
+            action: actionFailure.action,
+            offline: actionFailure.offline,
+            onRetry: actionFailure.action === 'end' ? endSession : getFeedback,
           }
-        : { kind: notice };
+        : notice === 'offline' || notice === 'error'
+          ? {
+              kind: notice,
+              onRetry: () => {
+                if (unsent !== null && !sending) sendTurn(unsent);
+              },
+            }
+          : { kind: notice };
 
   return (
     <Screen scrollable>
@@ -125,39 +176,8 @@ const PracticeSessionView = (): ReactNode => {
         objection={session?.objection ?? ''}
         objective={session?.objective ?? ''}
         onChangeDraft={setDraft}
-        onEnd={() => {
-          if (session === null || busy) return;
-          setBusy(true);
-          void practiceBackend
-            .end(session.sessionId)
-            .then(reload)
-            .catch(() => {
-              setNotice('error');
-            })
-            .finally(() => {
-              setBusy(false);
-            });
-        }}
-        onGetFeedback={() => {
-          if (session === null || busy) return;
-          setBusy(true);
-          setNotice('none');
-          void practiceBackend
-            .analyse(coachRequestBody(session))
-            .then(coachOutcome, outcomeFromThrown)
-            .then((outcome) => {
-              if (outcome.kind === 'analysed') {
-                router.replace(`/practice/analysis/${outcome.analysisId}`);
-              } else if (outcome.kind === 'at_limit') {
-                setAllowance({ kind: 'at_limit', resetLabel: null });
-              } else {
-                setNotice(outcome.kind);
-              }
-            })
-            .finally(() => {
-              setBusy(false);
-            });
-        }}
+        onEnd={endSession}
+        onGetFeedback={getFeedback}
         onSend={() => {
           if (session === null || sending || allowance.kind === 'at_limit') return;
           const body = turnRequestBody(session, draft);

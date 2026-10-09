@@ -39,6 +39,8 @@ jest.mock('expo-router', () => ({
 
 const mockTurns: TurnRequestBody[] = [];
 let mockStubAnalysis = false;
+// How many of the next `end` calls fail -- as a server error, not a lost connection.
+let mockEndFailures = 0;
 jest.mock('../practice/transport', () => {
   const { createSamplePracticeBackend } =
     jest.requireActual<typeof SampleModule>('../practice/sample');
@@ -48,6 +50,13 @@ jest.mock('../practice/transport', () => {
     turn: (body) => {
       mockTurns.push(body);
       return sample.turn(body);
+    },
+    end: (sessionId) => {
+      if (mockEndFailures > 0) {
+        mockEndFailures -= 1;
+        return Promise.reject(new Error('the server failed'));
+      }
+      return sample.end(sessionId);
     },
     readAnalysis: async (id) => {
       const found = await sample.readAnalysis(id);
@@ -166,6 +175,27 @@ describe('FE-D17 — the conversation', () => {
     expect(mockReplace).toHaveBeenCalledWith(
       expect.stringMatching(/^\/practice\/analysis\/[0-9a-f-]+$/u),
     );
+  });
+});
+
+describe('UX polish — a failed end is named, and its retry ends the session', () => {
+  it('says the practice was not ended (not "your turn was not sent"), and Try again ends it', async () => {
+    mockParams = { id: await startSession() };
+    await render(<PracticeSession />);
+    await screen.findByText('Dr Sample Rao');
+    await fireEvent.changeText(screen.getByLabelText('What you say'), 'Good morning, Doctor.');
+    await fireEvent.press(screen.getByText('Send'));
+    await screen.findByText(/^Sample reply/u);
+
+    mockEndFailures = 1;
+    await fireEvent.press(screen.getByText('End the practice'));
+    expect(await screen.findByText('The practice was not ended')).toBeTruthy();
+    expect(screen.queryByText(/Your turn was not sent/u)).toBeNull();
+
+    // The defect: this button re-sent an unsent TURN, of which there was none, so it did nothing.
+    await fireEvent.press(screen.getByText('Try again'));
+    expect(await screen.findByText('Get my feedback')).toBeTruthy();
+    expect(screen.queryByText('The practice was not ended')).toBeNull();
   });
 });
 

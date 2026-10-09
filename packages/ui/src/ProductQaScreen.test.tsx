@@ -49,14 +49,15 @@ describe('ProductQaScreen — product picker and source drawer', () => {
 
   it('an answer names its sources, and the drawer opens each to its document, version, section and reference', async () => {
     await render(<ProductQaScreen {...base} view={answer} />);
-    expect(screen.getByText('From: Activex leaflet, version 2 — Dosing (p. 4)')).toBeTruthy();
+    expect(screen.getByText('Activex leaflet, version 2 — Dosing (p. 4)')).toBeTruthy();
+    expect(screen.getByText('Approved sources')).toBeTruthy();
     expect(screen.queryByText('Reference: p. 4')).toBeNull();
 
-    await fireEvent.press(screen.getByText('Show sources (1)'));
+    await fireEvent.press(screen.getByText('Show source details (1)'));
     expect(screen.getByText('Document: Activex leaflet')).toBeTruthy();
     expect(screen.getByText('Reference: p. 4')).toBeTruthy();
 
-    await fireEvent.press(screen.getByText('Hide sources'));
+    await fireEvent.press(screen.getByText('Hide source details'));
     expect(screen.queryByText('Reference: p. 4')).toBeNull();
   });
 
@@ -64,6 +65,6 @@ describe('ProductQaScreen — product picker and source drawer', () => {
     await render(
       <ProductQaScreen {...base} view={{ kind: 'no_approved_information', text: 'x' }} />,
     );
-    expect(screen.queryByText(/Show sources/u)).toBeNull();
+    expect(screen.queryByText(/Show source details/u)).toBeNull();
   });
 });

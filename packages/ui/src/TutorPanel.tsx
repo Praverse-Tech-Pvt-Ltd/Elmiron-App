@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Button } from './Button';
+import { Badge } from './Badge';
+import { Banner } from './Banner';
 import { Card } from './Card';
 import { BodyText, Heading, Label } from './Text';
 import { TextField } from './TextField';
@@ -42,17 +44,17 @@ const Result = ({ view }: { readonly view: TutorView }): ReactNode => {
     case 'explained':
       return (
         <Card>
+          {/* UX polish: said up front that an AI explained this, and from what. */}
+          <Badge label="AI tutor · from this lesson" tone="info" />
           <BodyText>{view.text}</BodyText>
           <Label muted>Explained from this lesson only.</Label>
         </Card>
       );
     case 'not_in_lesson':
+      // UX polish: a deliberate "not answered", never drawn like an explanation.
+      return <Banner detail={view.text} title="Not covered in this lesson" tone="info" />;
     case 'refusal':
-      return (
-        <Card>
-          <BodyText>{view.text}</BodyText>
-        </Card>
-      );
+      return <Banner detail={view.text} title="Not answered" tone="info" />;
     case 'switched_off':
       return (
         <Card>
