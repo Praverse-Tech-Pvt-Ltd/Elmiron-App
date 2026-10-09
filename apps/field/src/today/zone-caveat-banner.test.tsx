@@ -23,6 +23,8 @@ import type { TerritoryZone } from './territory-day';
  */
 const mockZone = jest.fn<() => TerritoryZone>();
 jest.mock('../sync/pulled-store', () => ({ usePulledStore: () => ({ zone: mockZone() }) }));
+const mockStatus = jest.fn<() => 'loading' | 'signed-in' | 'signed-out'>(() => 'signed-in');
+jest.mock('../session', () => ({ useSession: () => ({ status: mockStatus() }) }));
 
 import { ZoneCaveatBanner } from './ZoneCaveatBanner';
 
@@ -44,6 +46,15 @@ describe('ZoneCaveatBanner', () => {
     // Assert the content, not the container: a banner that warns without naming the
     // consequence is one an MR learns to swipe past.
     expect(screen.getByText(/5 hours 30 minutes/u)).toBeTruthy();
+  });
+
+  it('says nothing before sign-in, when no zone has been read and no date is shown', async () => {
+    mockZone.mockReturnValue({ timeZone: 'UTC', source: 'fallback_utc' });
+    mockStatus.mockReturnValueOnce('signed-out');
+
+    await render(<ZoneCaveatBanner />);
+
+    expect(screen.queryByText(/Times may be wrong/u)).toBeNull();
   });
 
   it('does not warn a territory whose timezone genuinely IS UTC', async () => {
