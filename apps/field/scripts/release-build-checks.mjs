@@ -20,7 +20,6 @@
  */
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { basename } from 'node:path';
 import { isLocalTarget, loadAppConfig } from '@fieldforce/core';
 
 const require = createRequire(import.meta.url);
@@ -110,7 +109,10 @@ export const releaseBuildProblems = (env, { exists = existsSync } = {}) => {
   if (missing.length > 0) problems.push(`release signing not set: ${missing.join(', ')}`);
   const store = (env['FIELDFORCE_UPLOAD_STORE_FILE'] ?? '').trim();
   if (store !== '') {
-    if (basename(store).toLowerCase() === 'debug.keystore')
+    // The file's name, split on BOTH separators: `node:path`'s basename is the host's, and on Linux
+    // it does not split a Windows path -- CI found `C:\...\debug.keystore` passing as a release key.
+    const fileName = store.split(/[\\/]/u).pop() ?? '';
+    if (fileName.toLowerCase() === 'debug.keystore')
       problems.push('FIELDFORCE_UPLOAD_STORE_FILE is the Android DEBUG keystore');
     else if (!exists(store))
       problems.push('FIELDFORCE_UPLOAD_STORE_FILE names a file that does not exist');

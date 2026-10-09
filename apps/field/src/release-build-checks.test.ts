@@ -74,6 +74,12 @@ describe('BE-W177 — a production APK build is refused before Gradle unless', (
       FIELDFORCE_UPLOAD_KEY_PASSWORD: 'android',
     }).join('\n');
     expect(debug).toMatch(/DEBUG keystore/u);
+    // Whichever separator the path uses, on whichever host runs the check (CI is Linux).
+    for (const path of ['/home/me/app/android/app/debug.keystore', 'C:\\keys\\DEBUG.KEYSTORE']) {
+      expect(problems({ FIELDFORCE_UPLOAD_STORE_FILE: path }).join('\n')).toMatch(
+        /DEBUG keystore/u,
+      );
+    }
     expect(debug).toMatch(/DEBUG key alias/u);
     expect(debug).toMatch(/FIELDFORCE_UPLOAD_STORE_PASSWORD is the Android DEBUG/u);
     expect(debug).toMatch(/FIELDFORCE_UPLOAD_KEY_PASSWORD is the Android DEBUG/u);
