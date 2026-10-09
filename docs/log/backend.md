@@ -5990,3 +5990,188 @@ PR #29 to `main`. The override never fired. The cold-start clone `C:\cs\ea` and 
 `C:\cs\store` are deleted after this commit; the database and every server are stopped. **Left to
 Maanav:** whether `docs/backend-setup.md` is marked superseded by `docs/START-HERE.md` or corrected —
 not done here, because it decides which document survives.
+
+### Pratham — joining
+
+9 October, 14:20–15:10 IST. A developer new to the project, on a second Windows 11 machine, walking
+`docs/START-HERE.md` as its first reader who did not write it. Branch **`pratham/joining`** from
+`origin/main` at `23de5f3` (PR #29's merge); the working tree was clean.
+
+**Before anything: the branches.** The checkout's `main` was **415 commits behind** `origin/main`;
+fast-forwarded. Of the 28 remote branches besides `main`, 26 have no commit `main` lacks, and
+`fe-d14-screens` has one merge commit whose diff against `main` is empty. The one that matters is
+**`mr-46/fe-w52-notice-pending-approval`** — four commits rewriting the reps' transparency notice,
+held back on purpose until `blocked-on-you` 2.6 is approved, and now **conflicting** with `main` in
+`apps/field/src/transparency/content.ts` and its test. Left parked and untouched on the operator's
+instruction; no branch was deleted. `main` is the one branch to work from.
+
+#### A — the page, walked
+
+| Stage | Page says | Measured 9 Oct | Note |
+| --- | --- | --- | --- |
+| pnpm | pinned 11.21.0 via corepack | **9.15.9** until fixed | a global `npm i -g pnpm` shadowed corepack; `corepack enable` → `EPERM`; the page's fallback fixed it and replaced the global pnpm machine-wide |
+| `pnpm install` | 1 min | `Done in 2m 13.2s` | registry retries (`error (23)`); **then the process did not exit** for 10 min; stopped, `pnpm install --offline` → `Already up to date` |
+| `pnpm hooks:install` | seconds | seconds | `core.hooksPath` had been **empty** on this checkout |
+| `pnpm ci:local` | 6 min | **1 min 26 s** | `All 17 step(s) passed`; 9 turbo cache hits from the old checkout |
+| `pnpm db:start` | 1 min, ten containers | **2 s, nine, nothing applied** | Docker Desktop had restarted this checkout's old stack: **47 of 101** migrations. `log_lock_waits=on` printed anyway |
+| `pnpm db:reset` | — (not on the page) | 37 s | 101 of 101 |
+| `pnpm db:start` from stopped | 1 min, ten | 28 s, ten | the page is right for this case |
+| `pnpm ci:local --with-db` | 4 min | **4 min 0 s** | `All 30 step(s) passed` |
+| console, `.env.example` copied | 15 s | not timed alone | worked unchanged — the browser suite signed in with it |
+| demo APK | 18 min | **not run** | not needed for this session |
+
+**The two runner lines, `main` at `23de5f3`, before any change:** `Test Files  93 passed (93)` and
+`Tests  1216 passed | 11 skipped | 4 todo (1231)`; browser `11 passed, 0 skipped, 0 failed`; field 57
+files / 775 and 44 jest suites; core 239 | 4 todo; console 9 files / 80; ui-tokens 59; mock 43. **The
+same counts as W2-K.**
+
+**A4 — every correction made to `docs/START-HERE.md`, each marked `[9 Oct]` on the page:**
+
+1. **New block, "Already have a checkout?"** — `pnpm db:stop` keeps the volume (`"backup":true`) and
+   Docker Desktop restarts an old stack, so `pnpm db:start` after a pull applies nothing and exits 0.
+   The two-command migration count and `pnpm db:reset` are on the page. **The most expensive gap: the
+   page's own proof line (`log_lock_waits=on`) prints on the stale database.**
+2. Step 5 now says migrations apply **only to an empty database**, and that `log_lock_waits=on` alone
+   proves nothing.
+3. pnpm row: an earlier global pnpm shadows corepack and **does not refuse** — it runs; the fallback
+   replaces it for every project.
+4. `pnpm install` can print `Done` and not exit; how to tell the tree is complete.
+5. Long paths: **not** set on this machine, and steps 2–7 passed without it; untested for the APK.
+6. Docker Desktop was not running, and starting it restarted the old stack.
+7. Trap 1: how to watch the commit hook refuse. **Proven:** a commit of a scratch file citing an
+   unminted backend work-item id printed `rule 3: … has no row` and `COMMIT REFUSED`; HEAD did not move.
+   (My first wording of this on the page wrote the probe id itself, and `check-ids.mjs` refused the
+   page — caught before commit.)
+8. Section 2: the service-role credential is read as **`SUPABASE_SECRET_KEYS`**
+   (`practice-writer.ts:53`); a search of the functions for `SERVICE_ROLE_KEY` finds only a comment.
+9. The step timings above, beside the page's.
+
+#### B — what the code says
+
+**B1 — the four parts**, read from `apps/field/app.json`, `apps/console/src/middleware.ts`,
+`apps/console/src/app/knowledge/page.tsx`, `services/api/supabase/migrations/20260924000600_knowledge.sql`,
+`services/api/supabase/functions/ai-gateway/index.ts`, `services/api/supabase/functions/_shared/core.ts`,
+`services/mock/src/server.ts`. **The phone app** (`apps/field`, Expo, Android only) is what a rep works
+in, offline-first with a queue that syncs. **The console** (`apps/console`, Next.js on port 3100) is
+the admin and manager web app; its middleware only checks that someone is signed in — it decides
+nothing about role — and every write is an RPC or an insert as that user. **The database**
+(`services/api/supabase/migrations`, 101 files) holds every rule: row-level security, `SECURITY
+DEFINER` functions that check the caller, and triggers. **The AI gateway**
+(`services/api/supabase/functions/ai-gateway`, a Deno Edge Function) is the only path to a model.
+`packages/core` is the shared contract; `services/mock` is a Node mock server the app was built against
+before the backend existed — it is **not** an application server.
+
+**B2 — the four decisions, found in the code:**
+
+* **No application server.** `apps/` holds `console` and `field`; `services/` holds `api` (Supabase)
+  and `mock`. The only `createServer` in the product tree is `services/mock/src/server.ts`.
+* **Contract imported, not copied.** `services/api/supabase/functions/_shared/core.ts` re-exports from
+  `../../../../../packages/core/dist/…` — no flow is re-implemented in the function.
+* **Authorisation in the database.** Across the 101 migrations: 60 `force row level security` and 59
+  `enable row level security` statements. The knowledge path is the example I followed:
+  `knowledge_admin_version()` refuses a non-admin `42501`; `knowledge_versions_select_readable` shows a
+  non-admin only `approved` rows.
+* **The one service-role read.** `services/api/supabase/functions/_shared/practice-writer.ts:53`,
+  `Deno.env.get('SUPABASE_SECRET_KEYS')`; enforced by `services/api/scripts/check-service-role-reads.mjs`
+  (CI step 10, passed). The other `Deno.env.get` calls in the functions read the URL, the publishable
+  anon key, the provider choice and the AWS values (`ai-gateway/index.ts:170-283`).
+
+**B3 — the table, read and not rewritten** (W2-K's, the last in this log). **DONE (Maanav):** the core
+rep workflow on the emulator and the offline day; day execution; every app screen on the real server;
+release signing enforced; day end; mileage; LMS on the emulator, course assignment, the catalogue and
+loaders; product Q&A screen and its loader; chatbot and practice wired with flags off; the AI switches
+script; `BE-W168`'s command; the demo build script. **BLOCKED on the operator:** a handset; manager
+planning (Q-16, Q-17, Q-18); the production deploy and backup (Q-19); the release key; course content
+and Q-21; approved material (Q-9); the second admin (Q-14); `practice_writer` on the hosted project;
+`scientific_accuracy`; scenario S6 and the real-visit coaching (`D-15`, the signatory); `BE-W150`'s
+re-rule; repository visibility (Q-20). **On the AWS account owner:** model access — every AI feature.
+**On the repository admin:** branch protection on `main`. **POST-4-OCT:** maps, notifications, voice,
+live tracking, and the knowledge-draft button (Part C below).
+
+**B4 — what this is.** A field-force product for a pharmaceutical company's medical representatives in
+India. A rep works their day on an Android phone — route, geofenced check-in and out of clinics
+offline, call reports, samples within the legal cap, consent, day end, mileage — and learns: courses,
+product questions answered only from approved material, an assistant, a practice doctor. Admins run
+content and controls in a web console where nothing a rep can be answered from goes live without a
+second admin's approval; managers review coaching. Commercial data only: no patient data. Checked
+against `docs/START-HERE.md` §2, `apps/console/src/lib/knowledge-review.tsx` and the knowledge
+migration; **not** checked with the operator, which is the one source that could say I have it wrong.
+
+#### C — a console button to submit a knowledge draft (`BE-W168`)
+
+**Built, unit-tested, proven in a browser, mutated both ways. On `pratham/joining`, not merged.**
+
+* `apps/console/src/app/knowledge/page.tsx` reads `draft` as well as `in_review` and lists drafts in
+  their own section. `apps/console/src/lib/knowledge-review-list.tsx` wires `onSubmit` to
+  `submit_knowledge_version` the way `prompt-review-list.tsx` wires `submit_ai_prompt_version`, then
+  refreshes. `apps/console/src/lib/knowledge-review.tsx` adds `submitAffordance()` and draws Submit.
+  No fourth approval component was written; the card gained one control.
+* **One deliberate difference from the prompt pattern, and the finding behind it — `BE-W170`.**
+  `submit_knowledge_version` accepts **any** admin; `approve_knowledge_version` refuses the author and
+  the submitter. So if the second admin submits the first admin's draft, a two-admin organisation has
+  **nobody who may approve it** — and two admins is exactly what Q-14 is about to supply. The knowledge
+  card draws Submit **only for the draft's author** and tells anyone else why. The prompt and
+  simulation screens draw it for every admin, and all three functions accept it. **Not changed here**:
+  the brief said not to start consolidating the three paths, and whether the database should refuse it
+  is a decision.
+* **`content-step.mjs`'s header claimed the database refuses "submitting someone else's draft". It
+  does not** (`20260924000600_knowledge.sql:417`, any admin of the organisation). Corrected, with the
+  instruction to run `submit-knowledge` as the author.
+* **Unit:** `knowledge-review.test.tsx`, 15 → 23. **Browser:** new `apps/console/e2e/knowledge.spec.ts`,
+  4 tests — the author submits and is then shown the four-eyes note; a second admin is not offered
+  Submit and is told why; **a manager and a rep see no draft and the server answers their submit
+  `42501`**; a refusal reaching the author's click (submitted from elsewhere first) is shown. The role
+  refusals have a positive control: the same `submitAs` call succeeds for the author in test 4.
+* **The browser found what the unit tests did not.** My first version said "Submitted. A second admin
+  must now approve it." after the click. The refresh redraws the version in the review list as a new
+  card, so the line was on screen for one render. Unit tests passed; the browser test failed on it. The
+  line is gone; the refreshed card's four-eyes note says what happens next.
+* **C4, two-sided mutation**, each against the final tests: (1) draw Submit for an admin who did not
+  write the draft → exactly one red, *"draws no Submit for an admin who did not write the draft, and
+  says why"* (`1 failed | 22 passed`); (2) swallow the server's refusal to submit → exactly one red,
+  *"shows the server's refusal to submit rather than swallowing it"* (`1 failed | 22 passed`). Both
+  restored; `23 passed`.
+
+#### D — what I could not do, and could not establish
+
+**D1 — blocked, from the table above, not from anyone's word:** everything AI on model access (the AWS
+account owner); every approval on the second admin (Q-14); content on its owners (Q-9, courses);
+production, backup and the production APK on Q-19 and a release key; a handset; manager planning on
+Q-16/17/18 — the operator in each case, then engineering.
+
+**D2 — if one cleared tomorrow:** follow its section of `docs/HANDOVER.md` ("What unblocks what").
+The second admin is the one I could act on at once: it makes Part C's four-eyes path real, and it is
+the moment `BE-W170` stops being hypothetical. Manager planning (10–15 days once Q-16/17/18 are
+answered) is where a second engineer doubles throughput.
+
+**D3 — gaps:**
+
+* **Bare-machine install and the first Docker image download** — the tools and images were already on
+  this machine. The page's "about an hour more" is still an estimate.
+* **The demo APK, and whether long paths matter for it** — not run.
+* **`seed:day`** — not run; the browser suites used `seed-practice-world.mjs`.
+* **Whether the `pnpm install` hang reproduces** — seen once, after registry retries.
+* **Whether listing drafts is what the operator wants on a page titled "Knowledge awaiting your
+  approval"** — a product judgement I made, not one I was given.
+* **What the database should do about a non-author submit (`BE-W170`)** — needs Maanav or the operator.
+* **Why `docs/backend-setup.md` survives** — Maanav's open question from W2-K; I did not touch it.
+
+#### Checks
+
+* Static before tests, every time: `check-ids.mjs`, typecheck, lint, format, then the tests.
+* **One rule I broke:** a confirmation run of the unit file after the mutations was piped through
+  `grep`. The full runs before and after each mutation were not piped, and their output is above.
+* **The clean-database check on the finished code, before writing this section:**
+  `pnpm ci:local --with-db`, 14:51:56–14:55:04, **`All 30 step(s) passed`**. Database runner:
+  **`Test Files  93 passed (93)`**, **`Tests  1216 passed | 11 skipped | 4 todo (1231)`** — unchanged,
+  no database test was added or removed; the 11 skips are the two gated live suites. Console **9 files,
+  88** (was 80: the eight new unit tests). Browser **`15 passed, 0 skipped, 0 failed`** (was 11: the four
+  new). The push hook runs the same check again.
+
+#### Where I stopped
+
+**Done; the stop is the brief's: commit on a branch of my own, push, do not merge.** On
+`pratham/joining`, pushed; the pull request is to be opened by me. Nothing merged. The local stack is
+stopped. **Left for Maanav:** `BE-W170` (should the database refuse a non-author submit, and should the
+prompt and simulation screens draw Submit only for the author); whether `docs/backend-setup.md` is
+retired or corrected; and that I have taken the knowledge-draft row — it is on this branch, not `main`.
