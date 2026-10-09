@@ -72,6 +72,11 @@ export const BeatPlanSchema = z.object({
   approvedAt: IsoDateTimeSchema.nullable(),
   version: z.number().int().positive(),
   supersedesBeatPlanId: UuidSchema.nullable(),
+  /**
+   * `BE-C78`. The manager who wrote this version; `null` on a version written before manager
+   * planning existed (`20261009000200`), which no manager wrote.
+   */
+  plannedByUserId: UuidSchema.nullable().default(null),
   entries: z.array(BeatPlanEntrySchema),
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,
@@ -98,12 +103,29 @@ export const VisitStatusSchema = z.enum([
 ]);
 export type VisitStatus = z.infer<typeof VisitStatusSchema>;
 
+/**
+ * `BE-C78` (`20261009000200`). **What a visit IS, said by the server -- never inferred from a null.**
+ *
+ * - `planned`: the manager's plan created it. It has a plan and a planned date.
+ * - `unplanned`: the rep made it without a plan. It has no plan and a reason. Legitimate, and
+ *   needs no approval; the manager reviews it afterwards.
+ * - `unclassified`: written before the classification existed, or by the owner. **Never shown as
+ *   a legitimate unplanned visit** -- a missing `beatPlanId` is not evidence of anything.
+ */
+export const VisitOriginSchema = z.enum(['planned', 'unplanned', 'unclassified']);
+export type VisitOrigin = z.infer<typeof VisitOriginSchema>;
+
 export const VisitSchema = z.object({
   id: UuidSchema,
   mrId: UuidSchema,
   doctorId: UuidSchema,
-  /** `null` for an unplanned visit. Unplanned visits are legitimate. */
+  /** Set exactly when `origin` is `planned`. Do not read a `null` here as "unplanned"; read `origin`. */
   beatPlanId: UuidSchema.nullable(),
+  origin: VisitOriginSchema.default('unclassified'),
+  /** The day the plan put this visit on. Set exactly when `origin` is `planned`. */
+  plannedDate: IsoDateSchema.nullable().default(null),
+  /** Why the rep made this visit. Set exactly when `origin` is `unplanned`. */
+  unplannedReason: z.string().nullable().default(null),
   clinicAddressId: UuidSchema.nullable(),
   status: VisitStatusSchema,
   /**

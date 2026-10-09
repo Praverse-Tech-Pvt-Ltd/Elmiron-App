@@ -1,42 +1,44 @@
 {
   "note": "CAPTURED by services/api/scripts/capture-day-pull.mjs from the local server. Regenerate; never hand-edit.",
-  "capturedAt": "2026-10-06T11:56:16.455913+00:00",
-  "repUserId": "80412f8f-c785-450e-8082-ab8aec053c9a",
+  "capturedAt": "2026-10-09T11:51:00.372932+00:00",
+  "repUserId": "16af5816-ff91-4efb-90aa-a4c8c672062a",
   "claims": {
     "aal": "aal1",
     "amr": [
       {
         "method": "password",
-        "timestamp": 1791287776
+        "timestamp": 1791546660
       }
     ],
     "app_is_active": true,
     "app_metadata": {
       "provider": "email",
-      "providers": ["email"]
+      "providers": [
+        "email"
+      ]
     },
     "app_role": "mr",
-    "app_territory_id": "ea5aeb47-8df9-43c0-a9b8-d5470bbcab1a",
+    "app_territory_id": "313c4e5f-50a7-4d07-acd4-5abc865cff45",
     "aud": "authenticated",
-    "email": "demo-4249ddc9-mr@example.test",
-    "exp": 1791291376,
-    "iat": 1791287776,
+    "email": "demo-99a1dbfe-mr@example.test",
+    "exp": 1791550260,
+    "iat": 1791546660,
     "is_anonymous": false,
     "iss": "http://127.0.0.1:54321/auth/v1",
     "phone": "",
     "role": "authenticated",
-    "session_id": "ac366c62-8330-469a-9db6-c0c02efb299c",
-    "sub": "80412f8f-c785-450e-8082-ab8aec053c9a",
+    "session_id": "839abf26-de9c-4814-b186-0aa0370cf45b",
+    "sub": "16af5816-ff91-4efb-90aa-a4c8c672062a",
     "user_metadata": {
       "email_verified": true
     }
   },
   "visitIds": [
-    "6bf2988b-c2ad-4c46-bf33-ae04c615482e",
-    "d03accc7-29dc-4c34-be28-070e2e7d2efb",
-    "b1696527-0976-49b9-b16d-f0878903f5ef",
-    "08a36a6a-c4da-4ea7-9e1b-9935a2ccedb4",
-    "edef50a0-58cd-4b0f-8abc-8832bcba0740"
+    "2a77d3e1-4226-4aed-a3b4-035af0605f01",
+    "f882766a-0726-463d-9900-c6fc05c42a20",
+    "b6a10cd5-d67c-4f98-ab93-180f7952aacf",
+    "c5121546-3f3b-46c6-89ee-e427f1fa85df",
+    "1a8e0859-7dac-4927-834f-5a1fe11f4e0c"
   ],
   "pages": [
     {
@@ -44,322 +46,377 @@
       "response": {
         "changes": [
           {
+            "entity": "consent_text_version",
+            "reason": "upserted",
+            "payload": {
+              "id": "10aa587e-ee66-43fb-9402-f20f0772047d",
+              "hash": "09ce2467f9eddb98c5dc29583eb26522e4a3ccfbc599794b0bf74edc73d9975c",
+              "language": "en-IN",
+              "full_text": "I agree to this conversation being recorded so that the representative’s team can review how they presented. The recording is kept for 90 days and then deleted. I may withdraw at any time by telling the representative.",
+              "created_at": "2026-10-09T11:51:00.244579+00:00",
+              "precedence": 1,
+              "updated_at": "2026-10-09T11:51:00.244579+00:00",
+              "version_label": "DEMO v1 99a1dbfe",
+              "effective_from": "2026-09-09T11:51:00.244579+00:00",
+              "effective_until": null,
+              "organisation_id": "9d16005b-5f71-4f6c-8947-9ad9e7cec77c"
+            },
+            "entityId": "10aa587e-ee66-43fb-9402-f20f0772047d",
+            "updatedAt": "2026-10-09T11:51:00.244579+00:00"
+          },
+          {
             "entity": "visit",
             "reason": "upserted",
             "payload": {
-              "id": "08a36a6a-c4da-4ea7-9e1b-9935a2ccedb4",
-              "mr_id": "80412f8f-c785-450e-8082-ab8aec053c9a",
+              "id": "1a8e0859-7dac-4927-834f-5a1fe11f4e0c",
+              "mr_id": "16af5816-ff91-4efb-90aa-a4c8c672062a",
+              "origin": "planned",
               "status": "planned",
-              "doctor_id": "2fd6ad07-ee2a-4da2-9c7c-bdbf4bf78a57",
-              "visit_day": "2026-10-06",
-              "created_at": "2026-10-06T11:56:16.3125+00:00",
+              "doctor_id": "bb33d75f-ff9e-4e1b-bf05-395ad9b58f87",
+              "visit_day": "2026-10-10",
+              "created_at": "2026-10-09T11:51:00.244579+00:00",
               "started_at": null,
-              "updated_at": "2026-10-06T11:56:16.3125+00:00",
-              "received_at": "2026-10-06T11:56:16.345058+00:00",
-              "beat_plan_id": "a7ef6006-2d7f-4424-ab9b-86910460a4ce",
+              "updated_at": "2026-10-09T11:51:00.244579+00:00",
+              "received_at": "2026-10-09T11:51:00.278965+00:00",
+              "beat_plan_id": "4a7c76b6-fe3e-45cb-8379-c2575db73b35",
               "completed_at": null,
-              "scheduled_for": "2026-10-06T07:30:00+00:00",
+              "planned_date": "2026-10-10",
+              "scheduled_for": "2026-10-10T04:30:00+00:00",
               "not_met_reason": null,
-              "clinic_address_id": "ac873d98-1400-451e-b71e-b59fe3330a4e"
+              "unplanned_reason": null,
+              "clinic_address_id": "ff8b8fa1-4765-4a81-b258-cf32a2b5db24"
             },
-            "entityId": "08a36a6a-c4da-4ea7-9e1b-9935a2ccedb4",
-            "updatedAt": "2026-10-06T11:56:16.3125+00:00"
+            "entityId": "1a8e0859-7dac-4927-834f-5a1fe11f4e0c",
+            "updatedAt": "2026-10-09T11:51:00.244579+00:00"
+          },
+          {
+            "entity": "doctor",
+            "reason": "upserted",
+            "payload": {
+              "id": "25acfd21-c05c-495b-896f-341fd6ed78e0",
+              "full_name": "Dr Meera Iyer (DEMO)",
+              "is_active": true,
+              "specialty": "Urology",
+              "created_at": "2026-10-09T11:51:00.244579+00:00",
+              "updated_at": "2026-10-09T11:51:00.244579+00:00",
+              "territory_id": "313c4e5f-50a7-4d07-acd4-5abc865cff45",
+              "qualification": "MBBS, MS",
+              "assigned_mr_id": "16af5816-ff91-4efb-90aa-a4c8c672062a",
+              "organisation_id": "9d16005b-5f71-4f6c-8947-9ad9e7cec77c",
+              "registration_number": "DEMO-99a1dbfe-003"
+            },
+            "entityId": "25acfd21-c05c-495b-896f-341fd6ed78e0",
+            "updatedAt": "2026-10-09T11:51:00.244579+00:00"
+          },
+          {
+            "entity": "visit",
+            "reason": "upserted",
+            "payload": {
+              "id": "2a77d3e1-4226-4aed-a3b4-035af0605f01",
+              "mr_id": "16af5816-ff91-4efb-90aa-a4c8c672062a",
+              "origin": "unplanned",
+              "status": "completed",
+              "doctor_id": "6766ce7f-aafe-4652-a0e9-aa8ea80c6bfe",
+              "visit_day": "2026-10-08",
+              "created_at": "2026-10-09T11:51:00.244579+00:00",
+              "started_at": "2026-10-08T09:21:00.26+00:00",
+              "updated_at": "2026-10-09T11:51:00.244579+00:00",
+              "received_at": "2026-10-09T11:51:00.264152+00:00",
+              "beat_plan_id": null,
+              "completed_at": "2026-10-08T10:06:00.26+00:00",
+              "planned_date": null,
+              "scheduled_for": "2026-10-08T05:30:00+00:00",
+              "not_met_reason": null,
+              "unplanned_reason": "Doctor asked for a follow-up",
+              "clinic_address_id": "ef656efb-e6e3-4f1c-86f2-98007126e0fd"
+            },
+            "entityId": "2a77d3e1-4226-4aed-a3b4-035af0605f01",
+            "updatedAt": "2026-10-09T11:51:00.244579+00:00"
           },
           {
             "entity": "beat_plan_entry",
             "reason": "upserted",
             "payload": {
-              "id": "1cbe9857-c9b2-4197-b8b0-b4f677c1856c",
-              "doctor_id": "81a3a420-7eca-4926-870d-798150ba6905",
-              "updated_at": "2026-10-06T11:56:16.3125+00:00",
-              "beat_plan_id": "a7ef6006-2d7f-4424-ab9b-86910460a4ce",
-              "planned_sequence": 3,
-              "clinic_address_id": "3aeaadf5-553b-415e-813e-3fa6aef19280"
+              "id": "2f454d1d-4a35-4546-9933-cbf1dbcfbbd4",
+              "doctor_id": "bb33d75f-ff9e-4e1b-bf05-395ad9b58f87",
+              "updated_at": "2026-10-09T11:51:00.244579+00:00",
+              "beat_plan_id": "4a7c76b6-fe3e-45cb-8379-c2575db73b35",
+              "planned_sequence": 0,
+              "clinic_address_id": "ff8b8fa1-4765-4a81-b258-cf32a2b5db24"
             },
-            "entityId": "1cbe9857-c9b2-4197-b8b0-b4f677c1856c",
-            "updatedAt": "2026-10-06T11:56:16.3125+00:00"
+            "entityId": "2f454d1d-4a35-4546-9933-cbf1dbcfbbd4",
+            "updatedAt": "2026-10-09T11:51:00.244579+00:00"
           },
           {
-            "entity": "doctor",
+            "entity": "beat_plan_entry",
             "reason": "upserted",
             "payload": {
-              "id": "2e55951c-87a1-4df8-9ec2-702747cf4dd4",
-              "full_name": "Dr Vikram Rao (DEMO)",
-              "is_active": true,
-              "specialty": "Nephrology",
-              "created_at": "2026-10-06T11:56:16.3125+00:00",
-              "updated_at": "2026-10-06T11:56:16.3125+00:00",
-              "territory_id": "ea5aeb47-8df9-43c0-a9b8-d5470bbcab1a",
-              "qualification": "MBBS, MS",
-              "assigned_mr_id": "80412f8f-c785-450e-8082-ab8aec053c9a",
-              "organisation_id": "cde59dd2-7806-4793-b938-f7a93b97f439",
-              "registration_number": "DEMO-4249ddc9-002"
+              "id": "3a9ac9fa-0fcf-411b-8814-935da09f3a67",
+              "doctor_id": "25acfd21-c05c-495b-896f-341fd6ed78e0",
+              "updated_at": "2026-10-09T11:51:00.244579+00:00",
+              "beat_plan_id": "d94bc31a-507e-4289-9755-1b382fbd5211",
+              "planned_sequence": 2,
+              "clinic_address_id": "66684f0e-483b-4bec-b085-14a62253e840"
             },
-            "entityId": "2e55951c-87a1-4df8-9ec2-702747cf4dd4",
-            "updatedAt": "2026-10-06T11:56:16.3125+00:00"
+            "entityId": "3a9ac9fa-0fcf-411b-8814-935da09f3a67",
+            "updatedAt": "2026-10-09T11:51:00.244579+00:00"
           },
           {
-            "entity": "doctor",
+            "entity": "beat_plan",
             "reason": "upserted",
             "payload": {
-              "id": "2fd6ad07-ee2a-4da2-9c7c-bdbf4bf78a57",
-              "full_name": "Dr Asha Deshpande (DEMO)",
-              "is_active": true,
-              "specialty": "Urology",
-              "created_at": "2026-10-06T11:56:16.3125+00:00",
-              "updated_at": "2026-10-06T11:56:16.3125+00:00",
-              "territory_id": "ea5aeb47-8df9-43c0-a9b8-d5470bbcab1a",
-              "qualification": "MBBS, MS",
-              "assigned_mr_id": "80412f8f-c785-450e-8082-ab8aec053c9a",
-              "organisation_id": "cde59dd2-7806-4793-b938-f7a93b97f439",
-              "registration_number": "DEMO-4249ddc9-001"
+              "id": "4a7c76b6-fe3e-45cb-8379-c2575db73b35",
+              "mr_id": "16af5816-ff91-4efb-90aa-a4c8c672062a",
+              "status": "approved",
+              "version": 1,
+              "plan_date": "2026-10-10",
+              "created_at": "2026-10-09T11:51:00.244579+00:00",
+              "request_id": null,
+              "updated_at": "2026-10-09T11:51:00.244579+00:00",
+              "approved_at": "2026-10-09T11:51:00.244579+00:00",
+              "territory_id": "313c4e5f-50a7-4d07-acd4-5abc865cff45",
+              "planned_by_user_id": "4552e9ab-aed0-4849-8ec2-40d5367ab7a0",
+              "approved_by_user_id": "4552e9ab-aed0-4849-8ec2-40d5367ab7a0",
+              "supersedes_beat_plan_id": null
             },
-            "entityId": "2fd6ad07-ee2a-4da2-9c7c-bdbf4bf78a57",
-            "updatedAt": "2026-10-06T11:56:16.3125+00:00"
+            "entityId": "4a7c76b6-fe3e-45cb-8379-c2575db73b35",
+            "updatedAt": "2026-10-09T11:51:00.244579+00:00"
           },
           {
             "entity": "clinic_address",
             "reason": "upserted",
             "payload": {
-              "id": "3aeaadf5-553b-415e-813e-3fa6aef19280",
+              "id": "66684f0e-483b-4bec-b085-14a62253e840",
               "city": "Pune",
               "label": "Main clinic",
               "line1": "3 Baner Road",
               "line2": null,
               "state": "Maharashtra",
               "latitude": 18.5204,
-              "doctor_id": "81a3a420-7eca-4926-870d-798150ba6905",
+              "doctor_id": "25acfd21-c05c-495b-896f-341fd6ed78e0",
               "longitude": 73.8567,
-              "created_at": "2026-10-06T11:56:16.3125+00:00",
-              "updated_at": "2026-10-06T11:56:16.3125+00:00",
+              "created_at": "2026-10-09T11:51:00.244579+00:00",
+              "updated_at": "2026-10-09T11:51:00.244579+00:00",
               "postal_code": "411045",
               "geofence_radius_metres": 150
             },
-            "entityId": "3aeaadf5-553b-415e-813e-3fa6aef19280",
-            "updatedAt": "2026-10-06T11:56:16.3125+00:00"
-          },
-          {
-            "entity": "beat_plan_entry",
-            "reason": "upserted",
-            "payload": {
-              "id": "45a7f610-d6b4-48a7-9cf7-9beae42ae7e3",
-              "doctor_id": "2e55951c-87a1-4df8-9ec2-702747cf4dd4",
-              "updated_at": "2026-10-06T11:56:16.3125+00:00",
-              "beat_plan_id": "a7ef6006-2d7f-4424-ab9b-86910460a4ce",
-              "planned_sequence": 2,
-              "clinic_address_id": "9b6fe622-cf0b-46ed-a2b9-fdc90313f9dd"
-            },
-            "entityId": "45a7f610-d6b4-48a7-9cf7-9beae42ae7e3",
-            "updatedAt": "2026-10-06T11:56:16.3125+00:00"
-          },
-          {
-            "entity": "consent_text_version",
-            "reason": "upserted",
-            "payload": {
-              "id": "5120fd73-defc-4121-a46f-57f7a0e64018",
-              "hash": "09ce2467f9eddb98c5dc29583eb26522e4a3ccfbc599794b0bf74edc73d9975c",
-              "language": "en-IN",
-              "full_text": "I agree to this conversation being recorded so that the representative’s team can review how they presented. The recording is kept for 90 days and then deleted. I may withdraw at any time by telling the representative.",
-              "created_at": "2026-10-06T11:56:16.3125+00:00",
-              "precedence": 1,
-              "updated_at": "2026-10-06T11:56:16.3125+00:00",
-              "version_label": "DEMO v1 4249ddc9",
-              "effective_from": "2026-09-06T11:56:16.3125+00:00",
-              "effective_until": null,
-              "organisation_id": "cde59dd2-7806-4793-b938-f7a93b97f439"
-            },
-            "entityId": "5120fd73-defc-4121-a46f-57f7a0e64018",
-            "updatedAt": "2026-10-06T11:56:16.3125+00:00"
-          },
-          {
-            "entity": "visit",
-            "reason": "upserted",
-            "payload": {
-              "id": "6bf2988b-c2ad-4c46-bf33-ae04c615482e",
-              "mr_id": "80412f8f-c785-450e-8082-ab8aec053c9a",
-              "status": "completed",
-              "doctor_id": "2fd6ad07-ee2a-4da2-9c7c-bdbf4bf78a57",
-              "visit_day": "2026-10-05",
-              "created_at": "2026-10-06T11:56:16.3125+00:00",
-              "started_at": "2026-10-05T09:26:16.337+00:00",
-              "updated_at": "2026-10-06T11:56:16.3125+00:00",
-              "received_at": "2026-10-06T11:56:16.339715+00:00",
-              "beat_plan_id": null,
-              "completed_at": "2026-10-05T10:11:16.337+00:00",
-              "scheduled_for": "2026-10-05T05:30:00+00:00",
-              "not_met_reason": null,
-              "clinic_address_id": "ac873d98-1400-451e-b71e-b59fe3330a4e"
-            },
-            "entityId": "6bf2988b-c2ad-4c46-bf33-ae04c615482e",
-            "updatedAt": "2026-10-06T11:56:16.3125+00:00"
-          },
-          {
-            "entity": "beat_plan_entry",
-            "reason": "upserted",
-            "payload": {
-              "id": "7e7e3e3c-aa12-4775-bf50-2edbdcc50c98",
-              "doctor_id": "2fd6ad07-ee2a-4da2-9c7c-bdbf4bf78a57",
-              "updated_at": "2026-10-06T11:56:16.3125+00:00",
-              "beat_plan_id": "a7ef6006-2d7f-4424-ab9b-86910460a4ce",
-              "planned_sequence": 1,
-              "clinic_address_id": "ac873d98-1400-451e-b71e-b59fe3330a4e"
-            },
-            "entityId": "7e7e3e3c-aa12-4775-bf50-2edbdcc50c98",
-            "updatedAt": "2026-10-06T11:56:16.3125+00:00"
+            "entityId": "66684f0e-483b-4bec-b085-14a62253e840",
+            "updatedAt": "2026-10-09T11:51:00.244579+00:00"
           },
           {
             "entity": "doctor",
             "reason": "upserted",
             "payload": {
-              "id": "81a3a420-7eca-4926-870d-798150ba6905",
-              "full_name": "Dr Meera Iyer (DEMO)",
+              "id": "6766ce7f-aafe-4652-a0e9-aa8ea80c6bfe",
+              "full_name": "Dr Asha Deshpande (DEMO)",
               "is_active": true,
               "specialty": "Urology",
-              "created_at": "2026-10-06T11:56:16.3125+00:00",
-              "updated_at": "2026-10-06T11:56:16.3125+00:00",
-              "territory_id": "ea5aeb47-8df9-43c0-a9b8-d5470bbcab1a",
+              "created_at": "2026-10-09T11:51:00.244579+00:00",
+              "updated_at": "2026-10-09T11:51:00.244579+00:00",
+              "territory_id": "313c4e5f-50a7-4d07-acd4-5abc865cff45",
               "qualification": "MBBS, MS",
-              "assigned_mr_id": "80412f8f-c785-450e-8082-ab8aec053c9a",
-              "organisation_id": "cde59dd2-7806-4793-b938-f7a93b97f439",
-              "registration_number": "DEMO-4249ddc9-003"
+              "assigned_mr_id": "16af5816-ff91-4efb-90aa-a4c8c672062a",
+              "organisation_id": "9d16005b-5f71-4f6c-8947-9ad9e7cec77c",
+              "registration_number": "DEMO-99a1dbfe-001"
             },
-            "entityId": "81a3a420-7eca-4926-870d-798150ba6905",
-            "updatedAt": "2026-10-06T11:56:16.3125+00:00"
+            "entityId": "6766ce7f-aafe-4652-a0e9-aa8ea80c6bfe",
+            "updatedAt": "2026-10-09T11:51:00.244579+00:00"
           },
           {
-            "entity": "clinic_address",
+            "entity": "visit",
             "reason": "upserted",
             "payload": {
-              "id": "9b6fe622-cf0b-46ed-a2b9-fdc90313f9dd",
-              "city": "Pune",
-              "label": "Main clinic",
-              "line1": "48 JM Road",
-              "line2": null,
-              "state": "Maharashtra",
-              "latitude": 18.5204,
-              "doctor_id": "2e55951c-87a1-4df8-9ec2-702747cf4dd4",
-              "longitude": 73.8567,
-              "created_at": "2026-10-06T11:56:16.3125+00:00",
-              "updated_at": "2026-10-06T11:56:16.3125+00:00",
-              "postal_code": "411005",
-              "geofence_radius_metres": 150
+              "id": "b6a10cd5-d67c-4f98-ab93-180f7952aacf",
+              "mr_id": "16af5816-ff91-4efb-90aa-a4c8c672062a",
+              "origin": "planned",
+              "status": "completed",
+              "doctor_id": "25acfd21-c05c-495b-896f-341fd6ed78e0",
+              "visit_day": "2026-10-09",
+              "created_at": "2026-10-09T11:51:00.244579+00:00",
+              "started_at": "2026-10-09T10:21:00.269+00:00",
+              "updated_at": "2026-10-09T11:51:00.244579+00:00",
+              "received_at": "2026-10-09T11:51:00.270954+00:00",
+              "beat_plan_id": "d94bc31a-507e-4289-9755-1b382fbd5211",
+              "completed_at": "2026-10-09T11:01:00.269+00:00",
+              "planned_date": "2026-10-09",
+              "scheduled_for": "2026-10-09T05:30:00+00:00",
+              "not_met_reason": null,
+              "unplanned_reason": null,
+              "clinic_address_id": "66684f0e-483b-4bec-b085-14a62253e840"
             },
-            "entityId": "9b6fe622-cf0b-46ed-a2b9-fdc90313f9dd",
-            "updatedAt": "2026-10-06T11:56:16.3125+00:00"
+            "entityId": "b6a10cd5-d67c-4f98-ab93-180f7952aacf",
+            "updatedAt": "2026-10-09T11:51:00.244579+00:00"
+          },
+          {
+            "entity": "doctor",
+            "reason": "upserted",
+            "payload": {
+              "id": "bb33d75f-ff9e-4e1b-bf05-395ad9b58f87",
+              "full_name": "Dr Vikram Rao (DEMO)",
+              "is_active": true,
+              "specialty": "Nephrology",
+              "created_at": "2026-10-09T11:51:00.244579+00:00",
+              "updated_at": "2026-10-09T11:51:00.244579+00:00",
+              "territory_id": "313c4e5f-50a7-4d07-acd4-5abc865cff45",
+              "qualification": "MBBS, MS",
+              "assigned_mr_id": "16af5816-ff91-4efb-90aa-a4c8c672062a",
+              "organisation_id": "9d16005b-5f71-4f6c-8947-9ad9e7cec77c",
+              "registration_number": "DEMO-99a1dbfe-002"
+            },
+            "entityId": "bb33d75f-ff9e-4e1b-bf05-395ad9b58f87",
+            "updatedAt": "2026-10-09T11:51:00.244579+00:00"
+          },
+          {
+            "entity": "visit",
+            "reason": "upserted",
+            "payload": {
+              "id": "c5121546-3f3b-46c6-89ee-e427f1fa85df",
+              "mr_id": "16af5816-ff91-4efb-90aa-a4c8c672062a",
+              "origin": "planned",
+              "status": "planned",
+              "doctor_id": "6766ce7f-aafe-4652-a0e9-aa8ea80c6bfe",
+              "visit_day": "2026-10-09",
+              "created_at": "2026-10-09T11:51:00.244579+00:00",
+              "started_at": null,
+              "updated_at": "2026-10-09T11:51:00.244579+00:00",
+              "received_at": "2026-10-09T11:51:00.269635+00:00",
+              "beat_plan_id": "d94bc31a-507e-4289-9755-1b382fbd5211",
+              "completed_at": null,
+              "planned_date": "2026-10-09",
+              "scheduled_for": "2026-10-09T07:30:00+00:00",
+              "not_met_reason": null,
+              "unplanned_reason": null,
+              "clinic_address_id": "ef656efb-e6e3-4f1c-86f2-98007126e0fd"
+            },
+            "entityId": "c5121546-3f3b-46c6-89ee-e427f1fa85df",
+            "updatedAt": "2026-10-09T11:51:00.244579+00:00"
+          },
+          {
+            "entity": "beat_plan_entry",
+            "reason": "upserted",
+            "payload": {
+              "id": "d12a7590-68ba-4d54-a3a0-03b1e4bb8d1b",
+              "doctor_id": "6766ce7f-aafe-4652-a0e9-aa8ea80c6bfe",
+              "updated_at": "2026-10-09T11:51:00.244579+00:00",
+              "beat_plan_id": "d94bc31a-507e-4289-9755-1b382fbd5211",
+              "planned_sequence": 0,
+              "clinic_address_id": "ef656efb-e6e3-4f1c-86f2-98007126e0fd"
+            },
+            "entityId": "d12a7590-68ba-4d54-a3a0-03b1e4bb8d1b",
+            "updatedAt": "2026-10-09T11:51:00.244579+00:00"
           },
           {
             "entity": "beat_plan",
             "reason": "upserted",
             "payload": {
-              "id": "a7ef6006-2d7f-4424-ab9b-86910460a4ce",
-              "mr_id": "80412f8f-c785-450e-8082-ab8aec053c9a",
-              "status": "submitted",
+              "id": "d94bc31a-507e-4289-9755-1b382fbd5211",
+              "mr_id": "16af5816-ff91-4efb-90aa-a4c8c672062a",
+              "status": "approved",
               "version": 1,
-              "plan_date": "2026-10-06",
-              "created_at": "2026-10-06T11:56:16.3125+00:00",
-              "updated_at": "2026-10-06T11:56:16.3125+00:00",
-              "approved_at": null,
-              "territory_id": "ea5aeb47-8df9-43c0-a9b8-d5470bbcab1a",
-              "approved_by_user_id": null,
+              "plan_date": "2026-10-09",
+              "created_at": "2026-10-09T11:51:00.244579+00:00",
+              "request_id": null,
+              "updated_at": "2026-10-09T11:51:00.244579+00:00",
+              "approved_at": "2026-10-09T11:51:00.244579+00:00",
+              "territory_id": "313c4e5f-50a7-4d07-acd4-5abc865cff45",
+              "planned_by_user_id": "4552e9ab-aed0-4849-8ec2-40d5367ab7a0",
+              "approved_by_user_id": "4552e9ab-aed0-4849-8ec2-40d5367ab7a0",
               "supersedes_beat_plan_id": null
             },
-            "entityId": "a7ef6006-2d7f-4424-ab9b-86910460a4ce",
-            "updatedAt": "2026-10-06T11:56:16.3125+00:00"
+            "entityId": "d94bc31a-507e-4289-9755-1b382fbd5211",
+            "updatedAt": "2026-10-09T11:51:00.244579+00:00"
+          },
+          {
+            "entity": "beat_plan_entry",
+            "reason": "upserted",
+            "payload": {
+              "id": "e5e2f56f-f1b3-4ae2-8be8-62de21018a39",
+              "doctor_id": "bb33d75f-ff9e-4e1b-bf05-395ad9b58f87",
+              "updated_at": "2026-10-09T11:51:00.244579+00:00",
+              "beat_plan_id": "d94bc31a-507e-4289-9755-1b382fbd5211",
+              "planned_sequence": 1,
+              "clinic_address_id": "ff8b8fa1-4765-4a81-b258-cf32a2b5db24"
+            },
+            "entityId": "e5e2f56f-f1b3-4ae2-8be8-62de21018a39",
+            "updatedAt": "2026-10-09T11:51:00.244579+00:00"
           },
           {
             "entity": "clinic_address",
             "reason": "upserted",
             "payload": {
-              "id": "ac873d98-1400-451e-b71e-b59fe3330a4e",
+              "id": "ef656efb-e6e3-4f1c-86f2-98007126e0fd",
               "city": "Pune",
               "label": "Main clinic",
               "line1": "12 FC Road",
               "line2": null,
               "state": "Maharashtra",
               "latitude": 18.5204,
-              "doctor_id": "2fd6ad07-ee2a-4da2-9c7c-bdbf4bf78a57",
+              "doctor_id": "6766ce7f-aafe-4652-a0e9-aa8ea80c6bfe",
               "longitude": 73.8567,
-              "created_at": "2026-10-06T11:56:16.3125+00:00",
-              "updated_at": "2026-10-06T11:56:16.3125+00:00",
+              "created_at": "2026-10-09T11:51:00.244579+00:00",
+              "updated_at": "2026-10-09T11:51:00.244579+00:00",
               "postal_code": "411004",
               "geofence_radius_metres": 150
             },
-            "entityId": "ac873d98-1400-451e-b71e-b59fe3330a4e",
-            "updatedAt": "2026-10-06T11:56:16.3125+00:00"
+            "entityId": "ef656efb-e6e3-4f1c-86f2-98007126e0fd",
+            "updatedAt": "2026-10-09T11:51:00.244579+00:00"
           },
           {
             "entity": "visit",
             "reason": "upserted",
             "payload": {
-              "id": "b1696527-0976-49b9-b16d-f0878903f5ef",
-              "mr_id": "80412f8f-c785-450e-8082-ab8aec053c9a",
+              "id": "f882766a-0726-463d-9900-c6fc05c42a20",
+              "mr_id": "16af5816-ff91-4efb-90aa-a4c8c672062a",
+              "origin": "planned",
               "status": "completed",
-              "doctor_id": "81a3a420-7eca-4926-870d-798150ba6905",
-              "visit_day": "2026-10-06",
-              "created_at": "2026-10-06T11:56:16.3125+00:00",
-              "started_at": "2026-10-06T10:26:16.337+00:00",
-              "updated_at": "2026-10-06T11:56:16.3125+00:00",
-              "received_at": "2026-10-06T11:56:16.343698+00:00",
-              "beat_plan_id": "a7ef6006-2d7f-4424-ab9b-86910460a4ce",
-              "completed_at": "2026-10-06T11:06:16.337+00:00",
-              "scheduled_for": "2026-10-06T05:30:00+00:00",
+              "doctor_id": "bb33d75f-ff9e-4e1b-bf05-395ad9b58f87",
+              "visit_day": "2026-10-09",
+              "created_at": "2026-10-09T11:51:00.244579+00:00",
+              "started_at": "2026-10-09T09:21:00.269+00:00",
+              "updated_at": "2026-10-09T11:51:00.244579+00:00",
+              "received_at": "2026-10-09T11:51:00.270402+00:00",
+              "beat_plan_id": "d94bc31a-507e-4289-9755-1b382fbd5211",
+              "completed_at": "2026-10-09T10:06:00.269+00:00",
+              "planned_date": "2026-10-09",
+              "scheduled_for": "2026-10-09T03:30:00+00:00",
               "not_met_reason": null,
-              "clinic_address_id": "3aeaadf5-553b-415e-813e-3fa6aef19280"
+              "unplanned_reason": null,
+              "clinic_address_id": "ff8b8fa1-4765-4a81-b258-cf32a2b5db24"
             },
-            "entityId": "b1696527-0976-49b9-b16d-f0878903f5ef",
-            "updatedAt": "2026-10-06T11:56:16.3125+00:00"
+            "entityId": "f882766a-0726-463d-9900-c6fc05c42a20",
+            "updatedAt": "2026-10-09T11:51:00.244579+00:00"
           },
           {
-            "entity": "visit",
+            "entity": "clinic_address",
             "reason": "upserted",
             "payload": {
-              "id": "d03accc7-29dc-4c34-be28-070e2e7d2efb",
-              "mr_id": "80412f8f-c785-450e-8082-ab8aec053c9a",
-              "status": "completed",
-              "doctor_id": "2e55951c-87a1-4df8-9ec2-702747cf4dd4",
-              "visit_day": "2026-10-06",
-              "created_at": "2026-10-06T11:56:16.3125+00:00",
-              "started_at": "2026-10-06T09:26:16.337+00:00",
-              "updated_at": "2026-10-06T11:56:16.3125+00:00",
-              "received_at": "2026-10-06T11:56:16.342329+00:00",
-              "beat_plan_id": "a7ef6006-2d7f-4424-ab9b-86910460a4ce",
-              "completed_at": "2026-10-06T10:11:16.337+00:00",
-              "scheduled_for": "2026-10-06T03:30:00+00:00",
-              "not_met_reason": null,
-              "clinic_address_id": "9b6fe622-cf0b-46ed-a2b9-fdc90313f9dd"
+              "id": "ff8b8fa1-4765-4a81-b258-cf32a2b5db24",
+              "city": "Pune",
+              "label": "Main clinic",
+              "line1": "48 JM Road",
+              "line2": null,
+              "state": "Maharashtra",
+              "latitude": 18.5204,
+              "doctor_id": "bb33d75f-ff9e-4e1b-bf05-395ad9b58f87",
+              "longitude": 73.8567,
+              "created_at": "2026-10-09T11:51:00.244579+00:00",
+              "updated_at": "2026-10-09T11:51:00.244579+00:00",
+              "postal_code": "411005",
+              "geofence_radius_metres": 150
             },
-            "entityId": "d03accc7-29dc-4c34-be28-070e2e7d2efb",
-            "updatedAt": "2026-10-06T11:56:16.3125+00:00"
-          },
-          {
-            "entity": "visit",
-            "reason": "upserted",
-            "payload": {
-              "id": "edef50a0-58cd-4b0f-8abc-8832bcba0740",
-              "mr_id": "80412f8f-c785-450e-8082-ab8aec053c9a",
-              "status": "planned",
-              "doctor_id": "2e55951c-87a1-4df8-9ec2-702747cf4dd4",
-              "visit_day": "2026-10-07",
-              "created_at": "2026-10-06T11:56:16.3125+00:00",
-              "started_at": null,
-              "updated_at": "2026-10-06T11:56:16.3125+00:00",
-              "received_at": "2026-10-06T11:56:16.346434+00:00",
-              "beat_plan_id": null,
-              "completed_at": null,
-              "scheduled_for": "2026-10-07T04:30:00+00:00",
-              "not_met_reason": null,
-              "clinic_address_id": "9b6fe622-cf0b-46ed-a2b9-fdc90313f9dd"
-            },
-            "entityId": "edef50a0-58cd-4b0f-8abc-8832bcba0740",
-            "updatedAt": "2026-10-06T11:56:16.3125+00:00"
+            "entityId": "ff8b8fa1-4765-4a81-b258-cf32a2b5db24",
+            "updatedAt": "2026-10-09T11:51:00.244579+00:00"
           }
         ],
         "hasMore": false,
-        "nextCursor": "{\"v\": 1, \"upto\": null, \"after\": null, \"since\": \"1627:1627:\"}",
-        "serverTime": "2026-10-06T11:56:16.455913+00:00",
+        "nextCursor": "{\"v\": 1, \"upto\": null, \"after\": null, \"since\": \"7470:7470:\"}",
+        "serverTime": "2026-10-09T11:51:00.372932+00:00",
         "completeness": {
           "note": "This is a full re-sync and carries no deletions: everything you are entitled to see is in the stream, so anything absent from it is gone. Replace your local state rather than merging into it.",
-          "omits": ["delete", "out_of_scope"],
+          "omits": [
+            "delete",
+            "out_of_scope"
+          ],
           "phase": 2,
           "entities": [
             "visit",
@@ -369,7 +426,10 @@
             "clinic_address",
             "consent_text_version"
           ],
-          "reflects": ["insert", "update"],
+          "reflects": [
+            "insert",
+            "update"
+          ],
           "omittedEntities": [
             "consent_record",
             "analysis",
@@ -393,40 +453,48 @@
         "timezone": "Asia/Kolkata",
         "shiftStart": "04:00:00",
         "graceMinutes": 30,
-        "activeWeekdays": [1, 2, 3, 4, 5, 6, 7]
+        "activeWeekdays": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
       },
-      "resolvedFromTerritoryId": "08f26b4b-f86c-40ec-971c-474268cac299"
+      "resolvedFromTerritoryId": "97c0a0bc-2134-4744-9bae-4f3bfb1fdac4"
     },
     "recording_permission": {
-      "6bf2988b-c2ad-4c46-bf33-ae04c615482e": {
+      "2a77d3e1-4226-4aed-a3b4-035af0605f01": {
         "reason": "feature_off",
         "allowed": false,
         "featureEnabled": false,
         "consentRecordId": null,
         "consentCapturedAt": null
       },
-      "d03accc7-29dc-4c34-be28-070e2e7d2efb": {
+      "f882766a-0726-463d-9900-c6fc05c42a20": {
         "reason": "feature_off",
         "allowed": false,
         "featureEnabled": false,
         "consentRecordId": null,
         "consentCapturedAt": null
       },
-      "b1696527-0976-49b9-b16d-f0878903f5ef": {
+      "b6a10cd5-d67c-4f98-ab93-180f7952aacf": {
         "reason": "feature_off",
         "allowed": false,
         "featureEnabled": false,
         "consentRecordId": null,
         "consentCapturedAt": null
       },
-      "08a36a6a-c4da-4ea7-9e1b-9935a2ccedb4": {
+      "c5121546-3f3b-46c6-89ee-e427f1fa85df": {
         "reason": "feature_off",
         "allowed": false,
         "featureEnabled": false,
         "consentRecordId": null,
         "consentCapturedAt": null
       },
-      "edef50a0-58cd-4b0f-8abc-8832bcba0740": {
+      "1a8e0859-7dac-4927-834f-5a1fe11f4e0c": {
         "reason": "feature_off",
         "allowed": false,
         "featureEnabled": false,

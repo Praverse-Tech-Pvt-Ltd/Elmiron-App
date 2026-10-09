@@ -53,7 +53,7 @@ const uploadAsService = async (storageKey: string): Promise<void> => {
 const consentedVisit = async (client: Client): Promise<string> => {
   const visitId = randomUUID();
   await client.query(
-    `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
+    `insert into public.visits (id, mr_id, doctor_id, status, origin, unplanned_reason) values ($1, $2, $3, 'completed', 'unplanned', 'test visit (BE-C78)')`,
     [visitId, world.users.puneMr.id, world.doctors.pune],
   );
   await asOwner(client, () =>

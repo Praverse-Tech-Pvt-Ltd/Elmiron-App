@@ -243,11 +243,11 @@ export const seedDay = async (options = {}) => {
     organisation: randomUUID(),
     regionTerritory: randomUUID(),
     areaTerritory: randomUUID(),
-    beatPlan: randomUUID(),
     consentTextVersion: randomUUID(),
     doctors: DOCTORS.map(() => randomUUID()),
     clinics: DOCTORS.map(() => randomUUID()),
-    visits: Array.from({ length: 5 }, () => randomUUID()),
+    // [0] is yesterday's unplanned visit, made here; [1..4] are filled from the plans' visits.
+    visits: [randomUUID(), null, null, null, null],
   };
 
   const client = new Client({ connectionString: dbUrl });
@@ -345,20 +345,11 @@ export const seedDay = async (options = {}) => {
       );
     }
 
-    await client.query(
-      `insert into public.beat_plans (id, mr_id, territory_id, plan_date, status)
-       values ($1, $2, $3, current_date, 'submitted')`,
-      [ids.beatPlan, mrId, ids.areaTerritory],
-    );
-    for (const [i] of DOCTORS.entries()) {
-      await client.query(
-        `insert into public.beat_plan_entries
-           (id, beat_plan_id, doctor_id, clinic_address_id, planned_sequence)
-         values ($1, $2, $3, $4, $5)`,
-        [randomUUID(), ids.beatPlan, ids.doctors[i], ids.clinics[i], i + 1],
-      );
-    }
-
+    // `BE-C78` (`20261009000200`). Today's and tomorrow's work comes from the MANAGER's plan --
+    // `write_plan_version`, the one path `plan_mr_day` uses and the only one that may create a
+    // planned visit. Written as the owner, because a seed is not a signed-in manager; the plan is
+    // still the manager's (`planned_by_user_id`) and approved, as `plan_mr_day` writes it.
+    //
     // THREE DAYS, NOT ONE -- MR-15 B3.
     //
     // Today is still what the screen is about: two visits behind the MR, one still to do.
@@ -378,57 +369,101 @@ export const seedDay = async (options = {}) => {
     // server clock -- the defect that failed CI run 34326262244. `scheduled_for` is the
     // only column that carries the calendar day, and it is deliberately unbounded: "a beat
     // plan schedules visits ahead of time, so a future value there is the feature".
-    //
-    // Only today's visits carry the beat plan. Yesterday's and tomorrow's take null,
-    // because today's approved plan is not a claim about either.
-    const MINUTES_PER_DAY = 24 * 60;
-    const visitRows = [
+    const planDay = async (dayOffset, doctorIndexes) => {
+      await client.query(
+        `select public.write_plan_version(m, r, public.rep_today(r.id) + $3::int, $4::jsonb, null)
+           from public.user_profiles m, public.user_profiles r
+          where m.id = $1 and r.id = $2`,
+        [
+          managerId,
+          mrId,
+          dayOffset,
+          JSON.stringify(
+            doctorIndexes.map((i) => ({
+              doctorId: ids.doctors[i],
+              clinicAddressId: ids.clinics[i],
+            })),
+          ),
+        ],
+      );
+    };
+    const plannedVisit = async (dayOffset, doctorIndex) => {
+      const result = await client.query(
+        `select id from public.visits
+          where mr_id = $1 and doctor_id = $2 and origin = 'planned' and status <> 'cancelled'
+            and planned_date = public.rep_today($1) + $3::int`,
+        [mrId, ids.doctors[doctorIndex], dayOffset],
+      );
+      return result.rows[0].id;
+    };
+    /** The plan made the visit; the day happened to it. Owner writes, as a finished day's sync would. */
+    const happened = async (visitId, row) => {
+      await client.query(
+        `update public.visits
+            set scheduled_for = $2, status = $3, started_at = $4, completed_at = $5
+          where id = $1`,
+        [visitId, dayAt(row.day, row.hour), row.status, row.started, row.completed],
+      );
+    };
+
+    // Yesterday: a visit the MR made without a plan -- UNPLANNED, with its reason.
+    await client.query(
+      `insert into public.visits
+         (id, mr_id, doctor_id, clinic_address_id, status, scheduled_for, started_at, completed_at,
+          origin, unplanned_reason)
+       values ($1, $2, $3, $4, 'completed', $5, $6, $7, 'unplanned', 'Doctor asked for a follow-up')`,
+      [
+        ids.visits[0],
+        mrId,
+        ids.doctors[0],
+        ids.clinics[0],
+        dayAt(-1, 11),
+        minutesAgo(24 * 60 + 150),
+        minutesAgo(24 * 60 + 105),
+      ],
+    );
+
+    // Today: the plan of all three doctors, in route order; two done, one still to do.
+    await planDay(
+      0,
+      DOCTORS.map((_, i) => i),
+    );
+    const today = [
       {
-        day: -1,
-        hour: 11,
-        onPlan: false,
-        status: 'completed',
-        started: minutesAgo(MINUTES_PER_DAY + 150),
-        completed: minutesAgo(MINUTES_PER_DAY + 105),
-      },
-      {
+        doctor: 1,
         day: 0,
         hour: 9,
-        onPlan: true,
         status: 'completed',
         started: minutesAgo(150),
         completed: minutesAgo(105),
       },
       {
+        doctor: 2,
         day: 0,
         hour: 11,
-        onPlan: true,
         status: 'completed',
         started: minutesAgo(90),
         completed: minutesAgo(50),
       },
-      { day: 0, hour: 13, onPlan: true, status: 'planned', started: null, completed: null },
-      { day: 1, hour: 10, onPlan: false, status: 'planned', started: null, completed: null },
+      { doctor: 0, day: 0, hour: 13, status: 'planned', started: null, completed: null },
     ];
-    for (const [i, row] of visitRows.entries()) {
-      await client.query(
-        `insert into public.visits
-           (id, mr_id, doctor_id, beat_plan_id, clinic_address_id, status, scheduled_for,
-            started_at, completed_at)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [
-          ids.visits[i],
-          mrId,
-          ids.doctors[i % DOCTORS.length],
-          row.onPlan ? ids.beatPlan : null,
-          ids.clinics[i % DOCTORS.length],
-          row.status,
-          dayAt(row.day, row.hour),
-          row.started,
-          row.completed,
-        ],
-      );
+    for (const row of today) {
+      const visitId = await plannedVisit(0, row.doctor);
+      await happened(visitId, row);
+      ids.visits[ids.visits.indexOf(null)] = visitId;
     }
+
+    // Tomorrow: its own plan, so the visit a day early is a REAL planned visit.
+    await planDay(1, [1]);
+    const tomorrow = await plannedVisit(1, 1);
+    await happened(tomorrow, {
+      day: 1,
+      hour: 10,
+      status: 'planned',
+      started: null,
+      completed: null,
+    });
+    ids.visits[ids.visits.indexOf(null)] = tomorrow;
 
     await client.query('commit');
   } catch (error) {

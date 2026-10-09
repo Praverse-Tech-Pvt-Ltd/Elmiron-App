@@ -731,3 +731,35 @@ disagreement could be checked, because the operator's text was not provided.**
   submitter clause is now redundant, not wrong, and removing it would loosen a working control for no
   gain.
 - **Courses are out of this rule** until Q-21 is answered: `publish_course_version` is one step by design.
+
+## `BE-C78` — **the manager plans a rep's day; a rep's own visit is explicitly unplanned** (Pratham, 9 October)
+
+- **The rules, from the development instruction of 9 October 2026,** which answers Q-16, Q-17 and
+  Q-18 (`docs/operator-inputs.md` §7). Q-16: a manager plans for every rep in their **territory
+  subtree**, and outside it only under an admin's grant. Q-17: on the **web console**. Q-18: an
+  unplanned visit needs **no** approval; the manager **reviews it afterwards**. Recorded as that
+  instruction's answer; if the operator rules differently, this entry is what changes.
+- **Who does what.** A field manager plans (`plan_mr_day`) and reassigns (`reassign_planned_visits`).
+  An admin grants and revokes extra planning scope (`grant_planning_access` /
+  `revoke_planning_access`: dated, reasoned, append-only, revoked by a second row) and **never plans
+  and never writes a visit**. A rep plans nothing; their direct write grants on `beat_plans` and
+  `beat_plan_entries` are withdrawn. `validate_visit` refuses any visit whose `mr_id` is not a rep, on
+  every path, the owner's included.
+- **What a visit is, said by the schema.** `visits.origin`: `planned` (has a plan and a planned date;
+  only the plan path may create one), `unplanned` (no plan, a 3-500 character reason), `unclassified`
+  (every row before `20261009000200`, and owner-written fixtures). **No signed-in caller may create an
+  unclassified visit**, so a null `beat_plan_id` never again makes a malformed visit look legitimate.
+  Origin, planned date, reason and rep are fixed once the row exists.
+- **Versions.** Every save is version N+1 superseding N; versions are never edited. A visit not yet
+  started follows the new version (same row, same id); one whose doctor left the plan is `cancelled`;
+  a started, completed or not-met visit is never touched and keeps pointing at the version it was
+  worked against. A late check-in against a cancelled visit is accepted with `stale_beat_plan` and the
+  visit stays cancelled (`record_check_in` does not move a status backwards).
+- **Idempotency.** A `request_id` per save (unique on `beat_plans`) and per reassignment; a save equal
+  to the current version writes nothing; a per-rep-per-day advisory lock serialises saves; and a
+  partial unique index allows one live planned visit per rep, doctor and day.
+- **Reassignment is option A only: per visit, explicit.** "Move future plans with a reassigned rep"
+  (option B) would put doctors on a rep's plan that are outside their new territory, which
+  `validate_visit` rule 2 forbids; it is an open question, not built.
+- **A rep changing territory moves nothing.** Their planned visits stay theirs until a manager
+  reassigns them.

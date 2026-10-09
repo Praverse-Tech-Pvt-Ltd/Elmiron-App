@@ -403,7 +403,7 @@ describe.skipIf(!reachable)('team exceptions', () => {
 
     const nagpurVisit = randomUUID();
     await client.query(
-      `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
+      `insert into public.visits (id, mr_id, doctor_id, status, origin, unplanned_reason) values ($1, $2, $3, 'completed', 'unplanned', 'test visit (BE-C78)')`,
       [nagpurVisit, world.users.nagpurMr.id, nagpurDoctor],
     );
     await seed(world.users.nagpurMr.id, nagpurVisit, nagpurDoctor, 'consented');
@@ -535,25 +535,22 @@ describe.skipIf(!reachable)('approval workflow', () => {
     });
   });
 
-  it('never offers a manager their own report', async () => {
+  it('never offers a manager their own report -- because a manager cannot have a visit', async () => {
+    // This test used to GIVE the manager a visit and a report, and check the report was not
+    // offered back. `BE-C78` (`20261009000200`) makes that visit impossible: a visit is a rep's,
+    // on every path, the owner's included. So the premise is now the assertion.
     await inRolledBackTransaction(async (client) => {
-      // Give the manager a report of their own by making them the author.
-      const visitId = randomUUID();
-      const reportId = randomUUID();
-      await client.query(
-        `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
-        [visitId, world.users.westManager.id, world.doctors.pune],
-      );
-      await client.query(
-        `insert into public.call_reports (id, visit_id, mr_id, summary, status)
-         values ($1, $2, $3, 'mine', 'submitted')`,
-        [reportId, visitId, world.users.westManager.id],
-      );
-      await asUser(client, world.users.westManager);
-      const rows = await client.query<{ id: string }>(
-        'select id from public.approvable_call_reports()',
-      );
-      expect(rows.rows.map((r) => r.id)).not.toContain(reportId);
+      const refused = await client
+        .query(
+          `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
+          [randomUUID(), world.users.westManager.id, world.doctors.pune],
+        )
+        .then(
+          () => null,
+          (error: unknown) => error as { code?: string; message?: string },
+        );
+      expect(refused?.code).toBe('42501');
+      expect(refused?.message).toContain('visits belong to reps');
     });
   });
 
@@ -571,7 +568,7 @@ describe.skipIf(!reachable)('approval workflow', () => {
         const visitId = randomUUID();
         const reportId = randomUUID();
         await client.query(
-          `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
+          `insert into public.visits (id, mr_id, doctor_id, status, origin, unplanned_reason) values ($1, $2, $3, 'completed', 'unplanned', 'test visit (BE-C78)')`,
           [visitId, world.users.puneMr.id, world.doctors.pune],
         );
         await client.query(

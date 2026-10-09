@@ -110,7 +110,11 @@ describe.skipIf(!reachable)('sync_push returns per-item verdicts', () => {
           id: good,
           entity: 'visit',
           entityId: good,
-          payload: { doctorId: world.doctors.pune },
+          payload: {
+            doctorId: world.doctors.pune,
+            origin: 'unplanned',
+            unplannedReason: 'doctor asked to see me',
+          },
         },
         { id: randomUUID(), entity: 'visit', entityId: 'not-a-uuid', payload: {} },
       ]);
@@ -190,7 +194,16 @@ describe.skipIf(!reachable)('what the verdict loses on the way out', () => {
       await asUser(client, world.users.puneMr);
       const id = randomUUID();
       const results = await push(client, [
-        { id, entity: 'visit', entityId: id, payload: { doctorId: world.doctors.pune } },
+        {
+          id,
+          entity: 'visit',
+          entityId: id,
+          payload: {
+            doctorId: world.doctors.pune,
+            origin: 'unplanned',
+            unplannedReason: 'doctor asked to see me',
+          },
+        },
       ]);
       expect(results[0]?.status).toBe('accepted');
       expect(results[0]?.sqlState).toBeNull();

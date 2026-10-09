@@ -40,6 +40,10 @@ const REAL_VISIT_ROW = {
   not_met_reason: null,
   scheduled_for: null,
   clinic_address_id: null,
+  // `BE-C78` (`20261009000200`). A visit from before the classification is `unclassified`.
+  origin: 'unclassified',
+  planned_date: null,
+  unplanned_reason: null,
   // MR-47 / BE-W107. Added by sync_pull, not a column. 19:02Z is 00:32 IST on the 8th.
   visit_day: '2026-09-08',
 };
@@ -70,6 +74,9 @@ const REAL_BEAT_PLAN_ROW = {
   territory_id: '08e509b4-49bb-4445-a771-c4a6cb356d6f',
   approved_by_user_id: null,
   supersedes_beat_plan_id: null,
+  // `BE-C78`: written before manager planning, so no manager and no save key.
+  planned_by_user_id: null,
+  request_id: null,
 };
 
 const INCREMENTAL_COMPLETENESS = {

@@ -42,8 +42,8 @@ const asUserTx = async <T>(user: FixtureUser, fn: (client: Client) => Promise<T>
 const aVisit = async (client: Client): Promise<string> => {
   const visitId = randomUUID();
   await client.query(
-    `insert into public.visits (id, mr_id, doctor_id, clinic_address_id, status)
-     values ($1, $2, $3, $4, 'in_progress')`,
+    `insert into public.visits (id, mr_id, doctor_id, clinic_address_id, status, origin, unplanned_reason)
+     values ($1, $2, $3, $4, 'in_progress', 'unplanned', 'test visit (BE-C78)')`,
     [visitId, world.users.puneMr.id, world.doctors.pune, world.clinicAddresses.pune],
   );
   return visitId;
@@ -84,8 +84,8 @@ describe.skipIf(!reachable)('D1: not_met requires a reason, and only not_met may
     await asUserTx(world.users.puneMr, async (client) => {
       await expect(
         client.query(
-          `insert into public.visits (id, mr_id, doctor_id, clinic_address_id, status)
-           values ($1, $2, $3, $4, 'not_met')`,
+          `insert into public.visits (id, mr_id, doctor_id, clinic_address_id, status, origin, unplanned_reason)
+           values ($1, $2, $3, $4, 'not_met', 'unplanned', 'test visit (BE-C78)')`,
           [randomUUID(), world.users.puneMr.id, world.doctors.pune, world.clinicAddresses.pune],
         ),
       ).rejects.toMatchObject({ constraint: 'visits_not_met_has_reason' });
@@ -97,8 +97,8 @@ describe.skipIf(!reachable)('D1: not_met requires a reason, and only not_met may
     await asUserTx(world.users.puneMr, async (client) => {
       const id = randomUUID();
       await client.query(
-        `insert into public.visits (id, mr_id, doctor_id, clinic_address_id, status, not_met_reason)
-         values ($1, $2, $3, $4, 'not_met', 'Doctor called into theatre')`,
+        `insert into public.visits (id, mr_id, doctor_id, clinic_address_id, status, not_met_reason, origin, unplanned_reason)
+         values ($1, $2, $3, $4, 'not_met', 'Doctor called into theatre', 'unplanned', 'test visit (BE-C78)')`,
         [id, world.users.puneMr.id, world.doctors.pune, world.clinicAddresses.pune],
       );
       expect((await visitRow(client, id)).not_met_reason).toBe('Doctor called into theatre');
@@ -116,8 +116,8 @@ describe.skipIf(!reachable)('D1: not_met requires a reason, and only not_met may
       await expect(
         client.query(
           `insert into public.visits
-             (id, mr_id, doctor_id, clinic_address_id, status, not_met_reason)
-           values ($1, $2, $3, $4, 'completed', 'Doctor called into theatre')`,
+             (id, mr_id, doctor_id, clinic_address_id, status, not_met_reason, origin, unplanned_reason)
+           values ($1, $2, $3, $4, 'completed', 'Doctor called into theatre', 'unplanned', 'test visit (BE-C78)')`,
           [randomUUID(), world.users.puneMr.id, world.doctors.pune, world.clinicAddresses.pune],
         ),
       ).rejects.toMatchObject({ constraint: 'visits_reason_only_when_not_met' });
@@ -128,8 +128,8 @@ describe.skipIf(!reachable)('D1: not_met requires a reason, and only not_met may
     await asUserTx(world.users.puneMr, async (client) => {
       const id = randomUUID();
       await client.query(
-        `insert into public.visits (id, mr_id, doctor_id, clinic_address_id, status, not_met_reason)
-         values ($1, $2, $3, $4, 'not_met', 'Doctor called into theatre')`,
+        `insert into public.visits (id, mr_id, doctor_id, clinic_address_id, status, not_met_reason, origin, unplanned_reason)
+         values ($1, $2, $3, $4, 'not_met', 'Doctor called into theatre', 'unplanned', 'test visit (BE-C78)')`,
         [id, world.users.puneMr.id, world.doctors.pune, world.clinicAddresses.pune],
       );
       // Moving the status without clearing the reason must fail, not silently keep it.

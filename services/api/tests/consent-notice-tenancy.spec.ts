@@ -71,8 +71,8 @@ const freshVisitForPuneMr = async (client: Client): Promise<string> => {
   const visitId = randomUUID();
   await asOwner(client, () =>
     client.query(
-      `insert into public.visits (id, mr_id, doctor_id, clinic_address_id, status, started_at)
-       values ($1, $2, $3, $4, 'in_progress', now())`,
+      `insert into public.visits (id, mr_id, doctor_id, clinic_address_id, status, started_at, origin, unplanned_reason)
+       values ($1, $2, $3, $4, 'in_progress', now(), 'unplanned', 'test visit (BE-C78)')`,
       [visitId, world.users.puneMr.id, world.doctors.pune, world.clinicAddresses.pune],
     ),
   );

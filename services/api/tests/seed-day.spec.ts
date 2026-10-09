@@ -94,13 +94,25 @@ describe.skipIf(!reachable)('seed:day produces a day the server will actually se
       // MR-15 B3. FIVE visits across THREE days, not three on one. See the dimension
       // assertion below for why the count alone is not the point.
       expect(Number(row?.visits)).toBe(5);
+      // `BE-C78`: every demo visit says what it is -- four from the manager's plans, one the rep
+      // made, and none left to be read off a null plan id.
+      const origins = await client.query<{ origin: string; n: string }>(
+        `select v.origin::text as origin, count(*) as n
+           from public.visits v join public.doctors d on d.id = v.doctor_id
+          where d.organisation_id = $1 group by 1 order by 1`,
+        [seeded.organisationId],
+      );
+      expect(origins.rows.map((r) => [r.origin, Number(r.n)])).toEqual([
+        ['planned', 4],
+        ['unplanned', 1],
+      ]);
       // `Doctor.clinicAddresses` is required by the contract and the doctors list renders
       // `clinicAddresses[0].city`. A doctor without one renders a blank card.
       expect(Number(row?.clinics)).toBe(3);
-      // `BeatPlan` requires `entries`; a plan without them fails to parse. Still three:
-      // yesterday's and tomorrow's visits carry no beat plan, because today's approved
-      // plan is not a claim about either.
-      expect(Number(row?.entries)).toBe(3);
+      // `BeatPlan` requires `entries`; a plan without them fails to parse. FOUR since `BE-C78`:
+      // today's plan of three, and tomorrow's plan of one -- tomorrow's visit is a planned visit,
+      // and only a plan may create one. Yesterday's visit is UNPLANNED and on no plan.
+      expect(Number(row?.entries)).toBe(4);
       // Without a window covering now, `record_check_in` refuses 45003 before anything
       // else behind it can be tested.
       expect(Number(row?.windows)).toBe(1);
@@ -256,7 +268,8 @@ describe.skipIf(!reachable)('seed:day produces a day the server will actually se
 
         expect(byEntity['doctor'], 'sync_pull returned no doctors').toBe(3);
         expect(byEntity['visit'], 'sync_pull returned no visits').toBe(5);
-        expect(byEntity['beat_plan']).toBe(1);
+        // Today's and tomorrow's (`BE-C78`).
+        expect(byEntity['beat_plan']).toBe(2);
       } finally {
         await client.query('rollback');
       }

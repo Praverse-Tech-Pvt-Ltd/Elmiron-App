@@ -72,7 +72,8 @@ const freshVisit = async (client: Client): Promise<string> => {
   const id = randomUUID();
   await client.query('set local role postgres');
   await client.query(
-    'insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, $4)',
+    `insert into public.visits (id, mr_id, doctor_id, status, origin, unplanned_reason)
+     values ($1, $2, $3, $4, 'unplanned', 'test visit (BE-C78)')`,
     [id, world.users.puneMr.id, world.doctors.pune, 'in_progress'],
   );
   await asUser(client, world.users.puneMr);

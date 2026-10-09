@@ -196,7 +196,12 @@ import Consent from '../../app/consent/[visitId]';
 import Doctors from '../../app/(tabs)/doctors';
 
 const changes = DAY.pages.flatMap((p) => p.response.changes);
-const today = changes.find((c) => c.entity === 'beat_plan')?.payload['plan_date'] as string;
+// `BE-C78`: tomorrow has a plan of its own now (the seed's day-early visit is a real planned visit),
+// so the pull carries TWO plans and "the first plan" is not today's. Today is the earlier date.
+const today = changes
+  .filter((c) => c.entity === 'beat_plan')
+  .map((c) => c.payload['plan_date'] as string)
+  .sort()[0] as string;
 const PLANNED = changes.find(
   (c) =>
     c.entity === 'visit' && c.payload['status'] === 'planned' && c.payload['visit_day'] === today,
@@ -316,8 +321,8 @@ const REBUILT = [
 ];
 const RECORDING_ON_RECORD = [
   'The doctor agreed to a recording.',
-  // 17:31 IST: +5 minutes on a capture at 11:56Z. In UTC this line would read 12:01.
-  'On this phone at 17:31 · waiting to send',
+  // 17:26 IST: +5 minutes on a capture at 11:51Z. In UTC this line would read 11:56.
+  'On this phone at 17:26 · waiting to send',
   'Recording is not in this build, so nothing is being captured. The doctor’s answer is on the record either way.',
 ];
 
@@ -325,13 +330,13 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
   it('Today, check in offline, consent, back, check out, flush, Today and the route, Doctors offline', async () => {
     mockGo.to = follow;
 
-    // 17:26 IST. Signal. The app opens on Today, fed by the captured pull.
+    // 17:21 IST. Signal. The app opens on Today, fed by the captured pull.
     at(0);
     await launch('home');
     expect(await lines('HOME', 'Next visit')).toEqual([
       'Today',
-      // Dr Vikram Rao's check-in, 09:26Z — 14:56 in the territory's zone, from `my_shift_window`.
-      'Started 14:56',
+      // Dr Vikram Rao's check-in, 09:21Z — 14:51 in the territory's zone, from `my_shift_window`.
+      'Started 14:51',
       ...REBUILT,
       'Next visit',
       ASHA,
@@ -351,16 +356,17 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
     expect(await lines('ROUTE', /planned/u)).toEqual([
       "Today's route",
       '3 planned · 2 done',
-      'Submitted — not yet approved',
+      // `BE-C78`: the day is the MANAGER's plan, which `plan_mr_day` writes approved.
+      'Approved by your manager',
       'Next stop',
       ASHA,
       'Main clinic, Pune',
       'Dr Vikram Rao (DEMO)',
       '✓',
-      '14:56 · 45 min',
+      '14:51 · 45 min',
       'Dr Meera Iyer (DEMO)',
       '✓',
-      '15:56 · 40 min',
+      '15:51 · 40 min',
     ]);
 
     // No signal from here until the flush.
@@ -441,7 +447,7 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
     await goTo('home');
     const finishedToday = [
       'Today',
-      'Started 14:56',
+      'Started 14:51',
       ...REBUILT,
       "That's everyone on the plan",
       'You went to every visit on the plan.',
@@ -460,24 +466,24 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
     const routeFinished = [
       "Today's route",
       '3 planned · 3 done',
-      'Submitted — not yet approved',
+      'Approved by your manager',
       ASHA,
       '✓',
       // `BE-W165`, FIXED W2-E D. This line read "Not started" (marked UNTRUE) for a visit checked in
-      // at 17:28 and out at 17:46 on this phone. Now the phone's own times, SAID to be the phone's —
+      // at 17:23 and out at 17:41 on this phone. Now the phone's own times, SAID to be the phone's —
       // the server's row still has no start until a pull returns one.
-      '17:28 on this phone · 18 min',
+      '17:23 on this phone · 18 min',
       'Dr Vikram Rao (DEMO)',
       '✓',
-      '14:56 · 45 min',
+      '14:51 · 45 min',
       'Dr Meera Iyer (DEMO)',
       '✓',
-      '15:56 · 40 min',
+      '15:51 · 40 min',
     ];
     expect(await lines('ROUTE OFFLINE', /planned/u)).toEqual(routeFinished);
     expect(mockPushed).toEqual([]);
 
-    // 17:56. Signal again; the app comes back and the outbox flushes — in the order the work was done.
+    // 17:51. Signal again; the app comes back and the outbox flushes — in the order the work was done.
     at(30);
     mockNet.up = true;
     await launch('home');
@@ -497,7 +503,7 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       ...finishedToday,
       '✓',
       'Everything sent',
-      '17:56',
+      '17:51',
       'What this app records about me',
       'How today ended',
     ]);
@@ -505,7 +511,7 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
     // Unchanged after the flush: this fake server does not apply pushes to later pulls (limit 2).
     expect(await lines('ROUTE FLUSHED', /planned/u)).toEqual(routeFinished);
 
-    // 18:06. No signal; the Doctors tab opens from what the phone holds.
+    // 18:01. No signal; the Doctors tab opens from what the phone holds.
     at(40);
     mockNet.up = false;
     await launch('doctors');
@@ -522,7 +528,7 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       '✓',
       'Nephrology · Pune · today',
       // `BE-W165`, FIXED W2-E D. Read "yesterday" (marked UNTRUE), and so was FIRST — the list puts
-      // the longest-unseen doctor first. Seen today at 17:46 on this phone, the most recent of the
+      // the longest-unseen doctor first. Seen today at 17:41 on this phone, the most recent of the
       // three, so now last, and said so.
       ASHA,
       '✓',
@@ -554,8 +560,8 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
  *    relaunch, not a foreground event (`OutboxFlusher` also flushes on `AppState` → active).
  * 6. **The fixture is one day's shape**: one tenant, three doctors, a plan already in progress, a
  *    single page, `Asia/Kolkata`. A zone with a different offset, a multi-page pull or a deletion
- *    are not in it. Yesterday's visit started at the same 14:56 as today's first one (the seed
- *    uses the same hours), so "Started 14:56" alone cannot tell them apart; the route's two
+ *    are not in it. Yesterday's visit started at the same 14:51 as today's first one (the seed
+ *    uses the same hours), so "Started 14:51" alone cannot tell them apart; the route's two
  *    ticked times can.
  * 7. **It is not a device.** Rendering is react-test-renderer: layout, clipping, fonts and the
  *    keyboard are not seen. W2-B's emulator findings of that kind would not be caught here.

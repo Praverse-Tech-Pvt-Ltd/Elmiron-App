@@ -14,6 +14,9 @@ const VISIT_ROW = {
   beat_plan_id: null,
   clinic_address_id: null,
   status: 'planned',
+  origin: 'unplanned',
+  planned_date: null,
+  unplanned_reason: 'doctor asked to see me',
   not_met_reason: null,
   scheduled_for: null,
   started_at: null,
@@ -52,14 +55,35 @@ describe('createVisit', () => {
     // client that sent the field could send someone else's; one that cannot send it
     // cannot express the wrong answer at all.
     const { client, sent } = writer({ data: VISIT_ROW, error: null });
-    await createVisit({ id: VISIT_ROW.id, doctorId: VISIT_ROW.doctor_id }, client);
+    await createVisit(
+      {
+        id: VISIT_ROW.id,
+        doctorId: VISIT_ROW.doctor_id,
+        unplannedReason: 'doctor asked to see me',
+      },
+      client,
+    );
     expect(Object.keys(sent[0] ?? {})).not.toContain('mr_id');
-    expect(sent[0]).toMatchObject({ id: VISIT_ROW.id, doctor_id: VISIT_ROW.doctor_id });
+    // `BE-C78`: a visit the phone makes is unplanned, says why, and carries no plan.
+    expect(sent[0]).toMatchObject({
+      id: VISIT_ROW.id,
+      doctor_id: VISIT_ROW.doctor_id,
+      origin: 'unplanned',
+      unplanned_reason: 'doctor asked to see me',
+    });
+    expect(Object.keys(sent[0] ?? {})).not.toContain('beat_plan_id');
   });
 
   it('maps the returned row into the contract entity', async () => {
     const { client } = writer({ data: VISIT_ROW, error: null });
-    const outcome = await createVisit({ id: VISIT_ROW.id, doctorId: VISIT_ROW.doctor_id }, client);
+    const outcome = await createVisit(
+      {
+        id: VISIT_ROW.id,
+        doctorId: VISIT_ROW.doctor_id,
+        unplannedReason: 'doctor asked to see me',
+      },
+      client,
+    );
     if (outcome.kind !== 'saved') throw new Error('expected a saved visit');
     expect(outcome.visit.mrId).toBe(VISIT_ROW.mr_id);
     expect(outcome.visit.beatPlanId).toBeNull();
@@ -68,7 +92,14 @@ describe('createVisit', () => {
 
   it('reports a refusal as a refusal', async () => {
     const { client } = writer({ data: null, error: { code: '42501', message: 'denied' } });
-    const outcome = await createVisit({ id: VISIT_ROW.id, doctorId: VISIT_ROW.doctor_id }, client);
+    const outcome = await createVisit(
+      {
+        id: VISIT_ROW.id,
+        doctorId: VISIT_ROW.doctor_id,
+        unplannedReason: 'doctor asked to see me',
+      },
+      client,
+    );
     if (outcome.kind !== 'refused') throw new Error('expected a refusal');
     expect(outcome.refusal.code).toBe('not_permitted');
   });
@@ -77,7 +108,14 @@ describe('createVisit', () => {
     const broken = Object.fromEntries(Object.entries(VISIT_ROW).filter(([k]) => k !== 'status'));
     const { client } = writer({ data: broken, error: null });
     await expect(
-      createVisit({ id: VISIT_ROW.id, doctorId: VISIT_ROW.doctor_id }, client),
+      createVisit(
+        {
+          id: VISIT_ROW.id,
+          doctorId: VISIT_ROW.doctor_id,
+          unplannedReason: 'doctor asked to see me',
+        },
+        client,
+      ),
     ).rejects.toThrow();
   });
 });

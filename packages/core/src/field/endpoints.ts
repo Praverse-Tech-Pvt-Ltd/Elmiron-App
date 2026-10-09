@@ -26,6 +26,7 @@ import {
   GeofenceStatusSchema,
   MileageDaySchema,
   VisitStatusSchema,
+  VisitOriginSchema,
   SampleAndInputSchema,
   SampleOrInputKindSchema,
   TerritoryShiftWindowSchema,
@@ -118,13 +119,19 @@ export type ListVisitsRequest = z.infer<typeof ListVisitsRequestSchema>;
 export const ListVisitsResponseSchema = pageResponseSchema(VisitSchema);
 export type ListVisitsResponse = z.infer<typeof ListVisitsResponseSchema>;
 
+/**
+ * A visit the PHONE creates. `BE-C78`: that is always an UNPLANNED visit, so it carries a reason
+ * and no plan -- a planned visit is created by the manager's plan, and the database refuses one
+ * from anywhere else (`planned_visit_from_plan_only`). There is no `beatPlanId` here on purpose.
+ */
 export const CreateVisitRequestSchema = z.object({
   /** Device-generated so the offline queue is idempotent. */
   id: UuidSchema,
   doctorId: UuidSchema,
-  beatPlanId: UuidSchema.nullish(),
   clinicAddressId: UuidSchema.nullish(),
   scheduledFor: IsoDateTimeSchema.nullish(),
+  /** Why the rep made a visit nobody planned. 3-500 characters, as the database checks. */
+  unplannedReason: z.string().trim().min(3).max(500),
 });
 export type CreateVisitRequest = z.infer<typeof CreateVisitRequestSchema>;
 
@@ -921,6 +928,10 @@ export const VisitRowSchema = z.object({
   beat_plan_id: UuidSchema.nullable(),
   clinic_address_id: UuidSchema.nullable(),
   status: VisitStatusSchema,
+  /** `BE-C78` (`20261009000200`). Declared for the same reason as `not_met_reason` below. */
+  origin: VisitOriginSchema,
+  planned_date: IsoDateSchema.nullable(),
+  unplanned_reason: z.string().nullable(),
   /**
    * `to_jsonb(row)` is an implicit `select *`, so this column reached every handset the
    * day the migration created it. Declared here rather than left to be dropped silently
@@ -1149,6 +1160,13 @@ export const BeatPlanRowSchema = z.object({
   approved_at: IsoDateTimeSchema.nullable(),
   version: z.number().int().positive(),
   supersedes_beat_plan_id: UuidSchema.nullable(),
+  /** `BE-C78`. The manager who wrote this version; null before `20261009000200`. */
+  planned_by_user_id: UuidSchema.nullable(),
+  /**
+   * The manager's idempotency key for the save that wrote this version. Parsed and DROPPED, like
+   * `organisation_id` on a doctor: it reaches the handset only because the pull is `select *`.
+   */
+  request_id: UuidSchema.nullable(),
   created_at: IsoDateTimeSchema,
   updated_at: IsoDateTimeSchema,
 });
@@ -1203,6 +1221,7 @@ export const fromBeatPlanRow = (row: unknown): BeatPlanRecord => {
     approvedAt: parsed.approved_at,
     version: parsed.version,
     supersedesBeatPlanId: parsed.supersedes_beat_plan_id,
+    plannedByUserId: parsed.planned_by_user_id,
     createdAt: parsed.created_at,
     updatedAt: parsed.updated_at,
   });
@@ -1216,17 +1235,19 @@ export const fromBeatPlanRow = (row: unknown): BeatPlanRecord => {
 export type CreateVisitBody = {
   id: string;
   doctor_id: string;
-  beat_plan_id: string | null;
   clinic_address_id: string | null;
   scheduled_for: string | null;
+  origin: 'unplanned';
+  unplanned_reason: string;
 };
 
 export const toCreateVisitBody = (input: CreateVisitRequest): CreateVisitBody => ({
   id: input.id,
   doctor_id: input.doctorId,
-  beat_plan_id: input.beatPlanId ?? null,
   clinic_address_id: input.clinicAddressId ?? null,
   scheduled_for: input.scheduledFor ?? null,
+  origin: 'unplanned',
+  unplanned_reason: input.unplannedReason.trim(),
 });
 
 export const fromVisitRow = (row: unknown): Visit => {
@@ -1236,6 +1257,9 @@ export const fromVisitRow = (row: unknown): Visit => {
     mrId: parsed.mr_id,
     doctorId: parsed.doctor_id,
     beatPlanId: parsed.beat_plan_id,
+    origin: parsed.origin,
+    plannedDate: parsed.planned_date,
+    unplannedReason: parsed.unplanned_reason,
     clinicAddressId: parsed.clinic_address_id,
     status: parsed.status,
     notMetReason: parsed.not_met_reason,
