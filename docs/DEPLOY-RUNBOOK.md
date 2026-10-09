@@ -207,7 +207,8 @@ still open Today to nothing.
 | A3 | **Blocked permissions** in every build: background location, external storage read/write, drawing over other apps (libraries merged them in; none is used) | Done — re-check the merged manifest after each prebuild (A8) |
 | A4 | A release build is signed with the company key or Gradle refuses it; `verify-release-apk.mjs <apk> --expect-sha256 <fingerprint>` refuses the debug key or a second signer | Done — waits on the **release key** |
 | A5 | No secret in the app: only `EXPO_PUBLIC_SUPABASE_URL` and the PUBLISHABLE key; the service-role key lives only in the Edge Function (`_shared/practice-writer.ts`, CI-checked) | Done |
-| A6 | No localhost in a release: `src/api-target.ts` refuses an empty address in a release; `127.0.0.1` fallbacks are development-only; plain http only for a demo build's listed hosts | Done — `BE-W150` (the unused `EXPO_PUBLIC_API_BASE_URL` gate) still needs a ruling |
+| A6 | No localhost in a release: `src/api-target.ts` refuses an empty address in a release; `127.0.0.1` fallbacks are development-only; plain http only for a demo build's listed hosts | Done — `BE-W150` closed 9 October: the unused `EXPO_PUBLIC_API_BASE_URL` gate is removed; the Supabase URL and publishable key are still required (`src/config-required.test.ts`) |
+| A7a | **The production build command**: `apps/field/scripts/build-release-apk.ps1 -ExpectSha256 <fingerprint>` wraps prebuild + Gradle `assembleRelease` and refuses, before Gradle, a dirty tree, an `apps/field/.env*` file, a non-https/local Supabase URL, a secret key, a missing/malformed version code, a missing signing value or keystore, the debug key, demo/recording/coaching switches; after the build it runs `verify-release-apk.mjs`. `-CheckOnly` runs the refusals alone (`BE-W177`) | Done — waits on the **release key** |
 | A7 | Every AI feature, Learning and the tutor are separate `EXPO_PUBLIC_*` switches, OFF unless set | Done |
 
 **Not possible without the operator** — each is one input:
@@ -215,7 +216,7 @@ still open Today to nothing.
 | # | Item | Waits on |
 | --- | --- | --- |
 | A8 | Prebuild and audit the merged manifest (`android/app/src/main/AndroidManifest.xml`): only INTERNET, location (fine/coarse), RECORD_AUDIO, MODIFY_AUDIO_SETTINGS, VIBRATE, POST_NOTIFICATIONS and expo-audio's FOREGROUND_SERVICE pair. The pair is left unblocked on purpose: expo-audio declares a service that uses it, and removing it is only safe once proved on a device | A build machine run (no credential), then a handset |
-| A9 | The production address in `apps/field/.env` (`EXPO_PUBLIC_SUPABASE_URL`, publishable key) | **Q-19** |
+| A9 | The production address (`EXPO_PUBLIC_SUPABASE_URL`, publishable key, `EXPO_PUBLIC_APP_*`) in the build shell's environment — not in `apps/field/.env`, which the build script refuses | **Q-19** |
 | A10 | Physical-device pass: install over the previous build (versionCode higher), sign in, permission prompts in order (location while using, microphone only at recording, notifications), a full offline day, check-in/out, report, Pending sync, reconnect | A **handset** |
 | A11 | The release keystore, its four Gradle properties, and its SHA-256 fingerprint | The **release key** |
 
