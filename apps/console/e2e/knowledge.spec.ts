@@ -131,12 +131,12 @@ test('the author submits a draft from the screen, and then cannot approve it', a
   await signIn(page, world.authorAdmin);
   await page.goto('/knowledge');
   const card = cardFor(page, title);
-  await expect(card.getByText('draft', { exact: true })).toBeVisible();
+  await expect(card.getByText('Draft', { exact: true })).toBeVisible();
   await card.getByRole('button', { name: 'Submit for review' }).click();
 
   // The refreshed page draws this version in the review list; its four-eyes note is what tells the
   // author what happens next.
-  await expect(card.getByText('in_review', { exact: true })).toBeVisible();
+  await expect(card.getByText('In review', { exact: true })).toBeVisible();
   await expect(
     card.getByText('You drafted this version, so you cannot approve it', { exact: false }),
   ).toBeVisible();
@@ -157,7 +157,7 @@ test('an admin who did not write the draft is not offered Submit, and is told wh
   await signIn(page, world.approverAdmin);
   await page.goto('/knowledge');
   const card = cardFor(page, title);
-  await expect(card.getByText('draft', { exact: true })).toBeVisible();
+  await expect(card.getByText('Draft', { exact: true })).toBeVisible();
   await expect(
     card.getByText('Only the admin who drafted this version submits it.', { exact: false }),
   ).toBeVisible();

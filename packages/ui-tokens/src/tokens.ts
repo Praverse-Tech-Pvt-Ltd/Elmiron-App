@@ -376,6 +376,20 @@ export const requiredContrastPairs: readonly ContrastPair[] = [
     background: tokens.color.background,
     usage: 'text',
   },
+  // UX polish: the console's danger button is critical text on the card surface, and a primary
+  // button's label sits on the pressed accent while hovered.
+  {
+    name: 'critical text on surface',
+    foreground: tokens.color.critical,
+    background: tokens.color.surface,
+    usage: 'text',
+  },
+  {
+    name: 'primary button label on the pressed fill',
+    foreground: tokens.color.onAccent,
+    background: tokens.color.accentPressed,
+    usage: 'text',
+  },
   {
     name: 'critical text on its own tint',
     foreground: tokens.color.critical,

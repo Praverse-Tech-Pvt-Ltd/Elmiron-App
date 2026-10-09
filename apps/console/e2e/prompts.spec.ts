@@ -94,7 +94,7 @@ test('a prompt can be written and approved without anybody touching SQL', async 
   // computed by the database and never by this form.
   const card = cardFor(author, 'ai_doctor — version 1');
   await expect(card).toBeVisible();
-  await expect(card.getByText('draft', { exact: true })).toBeVisible();
+  await expect(card.getByText('Draft', { exact: true })).toBeVisible();
   // What the approver will sign besides the words, read back from the stored row.
   await expect(
     card.getByText(
@@ -103,7 +103,7 @@ test('a prompt can be written and approved without anybody touching SQL', async 
   ).toBeVisible();
 
   await card.getByRole('button', { name: 'Submit for review' }).click();
-  await expect(card.getByText('in_review', { exact: true })).toBeVisible();
+  await expect(card.getByText('In review', { exact: true })).toBeVisible();
 
   // Four eyes, the same imported rule for the third time.
   await expect(
@@ -124,7 +124,7 @@ test('a prompt can be written and approved without anybody touching SQL', async 
     .fill('Read in full. No product claim, no indication, no prescribing information.');
   await approve.click();
 
-  await expect(approverCard.getByText('approved', { exact: true })).toBeVisible();
+  await expect(approverCard.getByText('Approved', { exact: true })).toBeVisible();
 
   await authorContext.close();
   await approverContext.close();

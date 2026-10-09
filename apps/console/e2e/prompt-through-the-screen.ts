@@ -37,12 +37,12 @@ export const approvePromptThroughTheScreen = async (
 
   await expect(card(author)).toBeVisible();
   await card(author).getByRole('button', { name: 'Submit for review' }).click();
-  await expect(card(author).getByText('in_review', { exact: true })).toBeVisible();
+  await expect(card(author).getByText('In review', { exact: true })).toBeVisible();
 
   await approver.goto('/prompts');
   await card(approver)
     .getByLabel('Your attestation')
     .fill('Placeholder prompt for a local test. No product claim.');
   await card(approver).getByRole('button', { name: 'Approve' }).click();
-  await expect(card(approver).getByText('approved', { exact: true })).toBeVisible();
+  await expect(card(approver).getByText('Approved', { exact: true })).toBeVisible();
 };

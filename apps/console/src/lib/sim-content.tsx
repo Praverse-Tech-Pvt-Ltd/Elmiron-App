@@ -5,9 +5,10 @@ import type { CSSProperties, ReactNode } from 'react';
 import type { SimPersonaStance } from '@fieldforce/core';
 import { SIM_PERSONA_STANCES } from '@fieldforce/core';
 import { compactTypography, tokens } from '@fieldforce/ui-tokens';
-import { Body, Card, Heading, Label, MissingNote, Pill } from './ui';
+import { Body, Card, Heading, Label, MissingNote, Pill, StatusPill } from './ui';
 import { approvalAffordance, submitAffordance } from './knowledge-review';
 import type { SimContentRow } from './sim-content-row';
+import { btn } from './theme-css';
 
 /**
  * W1-F B1/B2/B3/B4 — authoring and approving a practice persona and scenario.
@@ -36,18 +37,6 @@ import type { SimContentRow } from './sim-content-row';
 // ---------------------------------------------------------------------------
 // Shared bits
 // ---------------------------------------------------------------------------
-
-const button = (): CSSProperties => ({
-  flex: 1,
-  minHeight: 52,
-  background: tokens.color.surface,
-  border: `2px solid ${tokens.color.textPrimary}`,
-  borderRadius: tokens.radius.control,
-  color: tokens.color.textPrimary,
-  fontSize: compactTypography.control.size,
-  fontWeight: Number(compactTypography.control.weight),
-  cursor: 'pointer',
-});
 
 const field = (): CSSProperties => ({
   width: '100%',
@@ -176,11 +165,11 @@ export const PersonaDraftForm = ({ onCreate }: PersonaDraftProps): ReactNode => 
       />
 
       {state.kind === 'done' ? <Body>{state.message}</Body> : null}
-      {state.kind === 'failed' ? <MissingNote>{state.message}</MissingNote> : null}
+      {state.kind === 'failed' ? <MissingNote tone="critical">{state.message}</MissingNote> : null}
 
       <button
         type="button"
-        style={button()}
+        className={btn('primary')}
         disabled={!ready || state.kind === 'busy'}
         onClick={() => {
           runAction(
@@ -344,11 +333,11 @@ export const ScenarioDraftForm = ({
       {productWithoutMarket ? <MissingNote>{SCENARIO_MARKET_CAUTION}</MissingNote> : null}
 
       {state.kind === 'done' ? <Body>{state.message}</Body> : null}
-      {state.kind === 'failed' ? <MissingNote>{state.message}</MissingNote> : null}
+      {state.kind === 'failed' ? <MissingNote tone="critical">{state.message}</MissingNote> : null}
 
       <button
         type="button"
-        style={button()}
+        className={btn('primary')}
         disabled={!ready || state.kind === 'busy'}
         onClick={() => {
           runAction(
@@ -410,7 +399,7 @@ export const SimContentReview = ({
       <Heading>{row.title}</Heading>
       <div style={{ display: 'flex', gap: tokens.space.xs, flexWrap: 'wrap' }}>
         <Pill tone="neutral">{row.kind}</Pill>
-        <Pill tone={row.status === 'approved' ? 'success' : 'neutral'}>{row.status}</Pill>
+        <StatusPill status={row.status} />
       </div>
 
       {row.detail.map(([label, value]) => (
@@ -431,14 +420,14 @@ export const SimContentReview = ({
       {row.authorship === 'ai_generated' ? <MissingNote>{AI_DRAFT_CAUTION}</MissingNote> : null}
 
       {state.kind === 'done' ? <Body>{state.message}</Body> : null}
-      {state.kind === 'failed' ? <MissingNote>{state.message}</MissingNote> : null}
+      {state.kind === 'failed' ? <MissingNote tone="critical">{state.message}</MissingNote> : null}
 
       {/* BE-C77: Submit is drawn for the draft's author only; anyone else is told why. */}
       {submit.kind === 'hidden' ? <MissingNote>{submit.reason}</MissingNote> : null}
       {submit.kind === 'may_submit' ? (
         <button
           type="button"
-          style={button()}
+          className={btn('primary')}
           disabled={busy}
           onClick={() => {
             runAction(onSubmit, 'Submitted. A second admin must now approve it.', setState);
@@ -478,7 +467,7 @@ export const SimContentReview = ({
           <div style={{ display: 'flex', gap: tokens.space.sm }}>
             <button
               type="button"
-              style={button()}
+              className={btn('secondary')}
               disabled={busy || attestation.trim() === ''}
               onClick={() => {
                 runAction(
@@ -492,7 +481,7 @@ export const SimContentReview = ({
             </button>
             <button
               type="button"
-              style={button()}
+              className={btn('secondary')}
               disabled={busy || reason.trim() === ''}
               onClick={() => {
                 runAction(() => onReject(reason.trim()), 'Rejected. This is final.', setState);

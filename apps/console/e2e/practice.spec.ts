@@ -146,12 +146,12 @@ test('a practice session becomes startable only after a second admin approves it
   const personaCard = cardFor(author, personaName);
   await expect(personaCard).toBeVisible();
   // Born a draft. The form never offered a status, and the database would have refused one.
-  await expect(personaCard.getByText('draft', { exact: true })).toBeVisible();
+  await expect(personaCard.getByText('Draft', { exact: true })).toBeVisible();
 
   // --- four eyes, seen rather than asserted about ---------------------------
 
   await personaCard.getByRole('button', { name: 'Submit for review' }).click();
-  await expect(personaCard.getByText('in_review', { exact: true })).toBeVisible();
+  await expect(personaCard.getByText('In review', { exact: true })).toBeVisible();
 
   await expect(
     personaCard.getByText('You drafted this version, so you cannot approve it', { exact: false }),
@@ -172,7 +172,7 @@ test('a practice session becomes startable only after a second admin approves it
     .getByLabel('Your attestation')
     .fill('Read in full. Names no real doctor and makes no product claim.');
   await approveButton.click();
-  await expect(approverPersonaCard.getByText('approved', { exact: true })).toBeVisible();
+  await expect(approverPersonaCard.getByText('Approved', { exact: true })).toBeVisible();
 
   // --- the author drafts a scenario against the approved persona ------------
 
@@ -190,7 +190,7 @@ test('a practice session becomes startable only after a second admin approves it
   const scenarioCard = cardFor(author, scenarioTitle);
   await expect(scenarioCard).toBeVisible();
   await scenarioCard.getByRole('button', { name: 'Submit for review' }).click();
-  await expect(scenarioCard.getByText('in_review', { exact: true })).toBeVisible();
+  await expect(scenarioCard.getByText('In review', { exact: true })).toBeVisible();
 
   // --- BEFORE: the rep cannot start it --------------------------------------
 
@@ -232,7 +232,7 @@ test('a practice session becomes startable only after a second admin approves it
     .getByLabel('Your attestation')
     .fill('Objective and objection are training content. No product claim.');
   await approverScenarioCard.getByRole('button', { name: 'Approve' }).click();
-  await expect(approverScenarioCard.getByText('approved', { exact: true })).toBeVisible();
+  await expect(approverScenarioCard.getByText('Approved', { exact: true })).toBeVisible();
 
   // --- AFTER: the same scenario id, the opposite answer ---------------------
 

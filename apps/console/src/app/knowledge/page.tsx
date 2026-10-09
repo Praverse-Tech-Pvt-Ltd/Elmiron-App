@@ -127,7 +127,7 @@ export default async function KnowledgeReviewQueue(): Promise<ReactNode> {
       </div>
 
       {rows === null ? (
-        <MissingNote>
+        <MissingNote tone="critical">
           Nothing loaded. Either no session reached the server, or the read was refused. Signing in
           again is the first thing to try.
         </MissingNote>

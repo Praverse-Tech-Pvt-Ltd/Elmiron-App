@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { Body, Card, MissingNote, Title } from '../../lib/ui';
 import { browserClient } from '../../lib/supabase';
+import { btn } from '../../lib/theme-css';
 
 /**
  * MR-52 A1 — the console's sign-in. `FE-W66`.
@@ -62,7 +63,18 @@ export default function SignIn(): ReactNode {
   };
 
   return (
-    <div style={{ maxWidth: 420, display: 'flex', flexDirection: 'column', gap: tokens.space.md }}>
+    // UX polish: a centred card on its own page (the layout draws no sidebar before sign-in), and
+    // the error inside the card it is about, as an alert.
+    <div
+      style={{
+        width: '100%',
+        maxWidth: 420,
+        marginTop: tokens.space.xl * 2,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: tokens.space.md,
+      }}
+    >
       <Title>Sign in</Title>
       <Body muted>Use the account your organisation set up for you — the same one as the app.</Body>
       <Card>
@@ -71,9 +83,9 @@ export default function SignIn(): ReactNode {
             event.preventDefault();
             submit();
           }}
-          style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
+          style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.md }}
         >
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
             <span style={{ fontSize: compactTypography.label.size }}>Email</span>
             <input
               aria-label="Email"
@@ -86,7 +98,7 @@ export default function SignIn(): ReactNode {
               value={email}
             />
           </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
             <span style={{ fontSize: compactTypography.label.size }}>Password</span>
             <input
               aria-label="Password"
@@ -99,25 +111,12 @@ export default function SignIn(): ReactNode {
               value={password}
             />
           </label>
-          <button
-            disabled={busy}
-            style={{
-              padding: tokens.space.sm,
-              borderRadius: tokens.radius.control,
-              border: 'none',
-              background: tokens.color.accent,
-              color: tokens.color.onAccent,
-              fontSize: compactTypography.control.size,
-              fontWeight: Number(compactTypography.control.weight),
-              cursor: busy ? 'default' : 'pointer',
-            }}
-            type="submit"
-          >
+          {failure === null ? null : <MissingNote tone="critical">{failure}</MissingNote>}
+          <button className={btn('primary')} disabled={busy} type="submit">
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
       </Card>
-      {failure === null ? null : <MissingNote>{failure}</MissingNote>}
     </div>
   );
 }

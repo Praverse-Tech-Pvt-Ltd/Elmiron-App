@@ -6,6 +6,7 @@ import { createApiClient } from '@fieldforce/core';
 import { browserClient } from './supabase';
 import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { Body, Card, Heading, Label, MissingNote } from './ui';
+import { btn } from './theme-css';
 
 /**
  * E2's decision, and the only interactive thing in the console.
@@ -133,7 +134,7 @@ export const OverrideForm = ({ analysisId, findingId }: OverrideFormProps): Reac
               onClick={() => {
                 setState({ kind: 'agreed' });
               }}
-              style={button()}
+              className={btn('secondary')}
               type="button"
             >
               Agree
@@ -142,7 +143,7 @@ export const OverrideForm = ({ analysisId, findingId }: OverrideFormProps): Reac
               onClick={() => {
                 setState({ kind: 'disagreeing' });
               }}
-              style={button()}
+              className={btn('secondary')}
               type="button"
             >
               Disagree
@@ -169,7 +170,9 @@ export const OverrideForm = ({ analysisId, findingId }: OverrideFormProps): Reac
                 }}
                 value={reason}
               />
-              {state.kind === 'failed' ? <MissingNote>{state.message}</MissingNote> : null}
+              {state.kind === 'failed' ? (
+                <MissingNote tone="critical">{state.message}</MissingNote>
+              ) : null}
               <button
                 disabled={busy || reason.trim() === ''}
                 onClick={log}

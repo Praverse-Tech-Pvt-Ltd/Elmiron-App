@@ -61,6 +61,18 @@ export default async function CoachingQueue(): Promise<ReactNode> {
   ]);
 
   const rows = analyses === null ? [] : queueRows(analyses.data);
+
+  // UX polish. The MR column showed the first eight characters of a UUID, so a manager could not
+  // tell which rep a row was about. Names are read as the signed-in manager, under the same RLS;
+  // a name that cannot be read falls back to the short id rather than hiding the row.
+  const mrIds = [...new Set(rows.map((row) => row.mrId))];
+  const names = new Map<string, string>();
+  if (session !== null && mrIds.length > 0) {
+    const { data } = await session.db.from('user_profiles').select('id, full_name').in('id', mrIds);
+    for (const profile of (data ?? []) as { id: string; full_name: string }[]) {
+      names.set(profile.id, profile.full_name);
+    }
+  }
   const consent = consents === null ? null : consentSignal(consents.data);
 
   return (
@@ -80,7 +92,7 @@ export default async function CoachingQueue(): Promise<ReactNode> {
       </MissingNote>
 
       {analyses === null ? (
-        <MissingNote>
+        <MissingNote tone="critical">
           The analyses could not be read. This queue is empty because the request failed, not
           because nothing recurred.
         </MissingNote>
@@ -100,8 +112,12 @@ export default async function CoachingQueue(): Promise<ReactNode> {
           <tbody>
             {rows.map((row) => (
               <tr key={`${row.mrId}-${row.category}`}>
-                <td style={{ ...cell, fontFamily: 'ui-monospace, monospace' }}>
-                  {row.mrId.slice(0, 8)}
+                <td style={cell}>
+                  {names.get(row.mrId) ?? (
+                    <span style={{ fontFamily: 'ui-monospace, monospace' }}>
+                      {row.mrId.slice(0, 8)}
+                    </span>
+                  )}
                 </td>
                 <td style={cell}>
                   <div>{row.pattern}</div>
@@ -156,7 +172,7 @@ export default async function CoachingQueue(): Promise<ReactNode> {
           <Card>
             <Label>Consent rate — a data-quality signal, not a performance one</Label>
             {consent === null ? (
-              <MissingNote>The consent ledger could not be reached.</MissingNote>
+              <MissingNote tone="critical">The consent ledger could not be reached.</MissingNote>
             ) : (
               <>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: tokens.space.sm }}>

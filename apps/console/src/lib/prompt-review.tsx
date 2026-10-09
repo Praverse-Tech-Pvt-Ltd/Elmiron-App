@@ -11,8 +11,9 @@ import {
 } from '@fieldforce/core';
 import type { AiPromptVersion, GatewayFeature, PromptModelConfig } from '@fieldforce/core';
 import { compactTypography, tokens } from '@fieldforce/ui-tokens';
-import { Body, Card, Heading, Label, MissingNote, Pill } from './ui';
+import { Body, Card, Heading, Label, MissingNote, StatusPill } from './ui';
 import { approvalAffordance, submitAffordance } from './knowledge-review';
+import { btn } from './theme-css';
 
 /**
  * W1-G E1 / `BE-W122` — drafting and approving the text a model is given.
@@ -45,18 +46,6 @@ import { approvalAffordance, submitAffordance } from './knowledge-review';
  *   → W1-F Part C names who should write each of the two texts. A form that coached the author
  *   would be the engineering track making that judgement by the back door.
  */
-
-const button = (): CSSProperties => ({
-  flex: 1,
-  minHeight: 52,
-  background: tokens.color.surface,
-  border: `2px solid ${tokens.color.textPrimary}`,
-  borderRadius: tokens.radius.control,
-  color: tokens.color.textPrimary,
-  fontSize: compactTypography.control.size,
-  fontWeight: Number(compactTypography.control.weight),
-  cursor: 'pointer',
-});
 
 const field = (): CSSProperties => ({
   width: '100%',
@@ -241,11 +230,11 @@ export const PromptDraftForm = ({ features, onCreate }: PromptDraftProps): React
           be a control that does nothing — the shape this repository keeps finding. */}
 
       {state.kind === 'done' ? <Body>{state.message}</Body> : null}
-      {state.kind === 'failed' ? <MissingNote>{state.message}</MissingNote> : null}
+      {state.kind === 'failed' ? <MissingNote tone="critical">{state.message}</MissingNote> : null}
 
       <button
         type="button"
-        style={button()}
+        className={btn('primary')}
         disabled={!ready || state.kind === 'busy'}
         onClick={() => {
           if (feature === '' || limits === null) return;
@@ -292,7 +281,7 @@ export const PromptReview = ({
         {version.feature} — version {version.versionNumber}
       </Heading>
       <div style={{ display: 'flex', gap: tokens.space.xs, flexWrap: 'wrap' }}>
-        <Pill tone={version.status === 'approved' ? 'success' : 'neutral'}>{version.status}</Pill>
+        <StatusPill status={version.status} />
       </div>
 
       <Label>The instructions the model is given</Label>
@@ -310,14 +299,14 @@ export const PromptReview = ({
       {version.status === 'approved' ? <Body muted>{PROMPT_ONE_APPROVED_NOTE}</Body> : null}
 
       {state.kind === 'done' ? <Body>{state.message}</Body> : null}
-      {state.kind === 'failed' ? <MissingNote>{state.message}</MissingNote> : null}
+      {state.kind === 'failed' ? <MissingNote tone="critical">{state.message}</MissingNote> : null}
 
       {/* BE-C77: Submit is drawn for the draft's author only; anyone else is told why. */}
       {submit.kind === 'hidden' ? <MissingNote>{submit.reason}</MissingNote> : null}
       {submit.kind === 'may_submit' ? (
         <button
           type="button"
-          style={button()}
+          className={btn('primary')}
           disabled={busy}
           onClick={() => {
             runAction(onSubmit, 'Submitted. A second admin must now approve it.', setState);
@@ -354,7 +343,7 @@ export const PromptReview = ({
           <div style={{ display: 'flex', gap: tokens.space.sm }}>
             <button
               type="button"
-              style={button()}
+              className={btn('secondary')}
               disabled={busy || attestation.trim() === ''}
               onClick={() => {
                 runAction(
@@ -368,7 +357,7 @@ export const PromptReview = ({
             </button>
             <button
               type="button"
-              style={button()}
+              className={btn('secondary')}
               disabled={busy || reason.trim() === ''}
               onClick={() => {
                 runAction(() => onReject(reason.trim()), 'Rejected. This is final.', setState);
