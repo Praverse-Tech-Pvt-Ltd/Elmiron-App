@@ -16,8 +16,10 @@ import { KnowledgeReviewList } from '../../lib/knowledge-review-list';
  * calls the knowledge layer.
  *
  * **What it reads.** A table read, not an RPC: `knowledge_document_versions` where the status is
- * `in_review`. RLS decides what comes back — an admin sees their own organisation's versions at
- * every status, and this page asks for one status. **Nothing is filtered here to hide a row.** If a
+ * `in_review` or `draft`. RLS decides what comes back — an admin sees their own organisation's
+ * versions at every status, anyone else sees only `approved`, and this page asks for two statuses.
+ * Drafts are listed so their author can submit them (`BE-W168`); before that, only
+ * `content-step.mjs` could. **Nothing is filtered here to hide a row.** If a
  * row arrives that should not have, that is a backend defect to report, not something the client
  * corrects (`api-contracts.md` §1).
  *
@@ -59,8 +61,9 @@ export default async function KnowledgeReviewQueue(): Promise<ReactNode> {
           'retired_by_user_id, created_at, updated_at, ' +
           'knowledge_documents(title, products(brand_name)), markets(name)',
       )
-      .eq('status', 'in_review')
-      .order('submitted_at', { ascending: true });
+      .in('status', ['in_review', 'draft'])
+      .order('submitted_at', { ascending: true })
+      .order('created_at', { ascending: true });
 
     if (error === null) {
       rows = data.flatMap((raw): Row[] => {
@@ -110,6 +113,9 @@ export default async function KnowledgeReviewQueue(): Promise<ReactNode> {
     }
   }
 
+  const inReview = rows?.filter((row) => row.version.status === 'in_review') ?? [];
+  const drafts = rows?.filter((row) => row.version.status === 'draft') ?? [];
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1000 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
@@ -132,7 +138,23 @@ export default async function KnowledgeReviewQueue(): Promise<ReactNode> {
           #4 and #5). An empty queue here is not a fault.
         </MissingNote>
       ) : (
-        <KnowledgeReviewList rows={rows} viewerUserId={session?.userId ?? ''} />
+        <>
+          {inReview.length === 0 ? (
+            <Body muted>No versions are in review.</Body>
+          ) : (
+            <KnowledgeReviewList rows={inReview} viewerUserId={session?.userId ?? ''} />
+          )}
+          {drafts.length === 0 ? null : (
+            <>
+              <Title>Drafts not yet submitted</Title>
+              <Body muted>
+                A draft is not reviewed until its author submits it. Submitting freezes the text:
+                what the second admin reads is what reps will be answered from.
+              </Body>
+              <KnowledgeReviewList rows={drafts} viewerUserId={session?.userId ?? ''} />
+            </>
+          )}
+        </>
       )}
     </div>
   );

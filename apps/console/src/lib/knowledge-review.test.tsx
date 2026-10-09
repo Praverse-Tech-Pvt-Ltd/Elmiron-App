@@ -9,7 +9,9 @@ import {
   KnowledgeReview,
   NOT_IN_REVIEW_NOTE,
   PRODUCT_CLAIM_CAUTION,
+  SUBMIT_AUTHOR_ONLY_NOTE,
   approvalAffordance,
+  submitAffordance,
 } from './knowledge-review';
 
 /**
@@ -66,6 +68,7 @@ const draw = (over: Partial<KnowledgeDocumentVersion> = {}, viewer = REVIEWER) =
       marketName={over.marketId === undefined ? null : 'India'}
       productBrandName={null}
       viewerUserId={viewer}
+      onSubmit={vi.fn(() => Promise.resolve())}
       onApprove={vi.fn(() => Promise.resolve())}
       onReject={vi.fn(() => Promise.resolve())}
     />,
@@ -156,6 +159,7 @@ describe('the rendered screen', () => {
         marketName="India"
         productBrandName="Probexa"
         viewerUserId={REVIEWER}
+        onSubmit={vi.fn(() => Promise.resolve())}
         onApprove={vi.fn(() => Promise.resolve())}
         onReject={vi.fn(() => Promise.resolve())}
       />,
@@ -176,6 +180,7 @@ describe('the rendered screen', () => {
         marketName={null}
         productBrandName={null}
         viewerUserId={REVIEWER}
+        onSubmit={vi.fn(() => Promise.resolve())}
         onApprove={onApprove}
         onReject={vi.fn(() => Promise.resolve())}
       />,
@@ -197,6 +202,7 @@ describe('the rendered screen', () => {
         marketName={null}
         productBrandName={null}
         viewerUserId={REVIEWER}
+        onSubmit={vi.fn(() => Promise.resolve())}
         onApprove={onApprove}
         onReject={vi.fn(() => Promise.resolve())}
       />,
@@ -207,5 +213,88 @@ describe('the rendered screen', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
     expect(onApprove).toHaveBeenCalledWith('I have checked this against the approved label.');
+  });
+});
+
+/**
+ * `BE-W168` — submitting a draft from the console, which only `content-step.mjs` could do.
+ *
+ * A draft carries no submitter, so `submittedAt` and `submittedByUserId` are null in every case
+ * here; the table's check constraint refuses a draft that has them.
+ */
+describe('submitting a draft', () => {
+  const draft = { status: 'draft', submittedAt: null, submittedByUserId: null } as const;
+
+  const drawDraft = (viewer: string, onSubmit = vi.fn(() => Promise.resolve())) =>
+    render(
+      <KnowledgeReview
+        version={version(draft)}
+        documentTitle="Probexa storage guidance"
+        marketName={null}
+        productBrandName={null}
+        viewerUserId={viewer}
+        onSubmit={onSubmit}
+        onApprove={vi.fn(() => Promise.resolve())}
+        onReject={vi.fn(() => Promise.resolve())}
+      />,
+    );
+
+  it('submitAffordance: the author of a draft may submit it', () => {
+    expect(submitAffordance(version(draft), AUTHOR)).toEqual({ kind: 'may_submit' });
+  });
+
+  it('submitAffordance: another admin is told why not — the server would let them', () => {
+    expect(submitAffordance(version(draft), REVIEWER)).toEqual({
+      kind: 'hidden',
+      reason: SUBMIT_AUTHOR_ONLY_NOTE,
+    });
+  });
+
+  it('submitAffordance: nothing to submit once a version has left draft', () => {
+    for (const status of ['in_review', 'approved', 'rejected', 'retired'] as const) {
+      expect(submitAffordance(version({ status }), AUTHOR), status).toEqual({
+        kind: 'not_a_draft',
+      });
+    }
+  });
+
+  it('draws Submit for the author, and no decision controls', () => {
+    drawDraft(AUTHOR);
+    expect(screen.getByRole('button', { name: 'Submit for review' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+    // The old "submit the draft first" note told the reader to do something the screen could not.
+    expect(screen.queryByText(NOT_IN_REVIEW_NOTE)).toBeNull();
+  });
+
+  it('draws no Submit for an admin who did not write the draft, and says why', () => {
+    drawDraft(REVIEWER);
+    expect(screen.queryByRole('button', { name: 'Submit for review' })).toBeNull();
+    expect(screen.getByText(SUBMIT_AUTHOR_ONLY_NOTE)).toBeTruthy();
+  });
+
+  it('draws no Submit on a version already in review', () => {
+    draw({}, AUTHOR);
+    expect(screen.queryByRole('button', { name: 'Submit for review' })).toBeNull();
+  });
+
+  it('calls the submit write once, and draws no second Submit while the page refreshes', async () => {
+    const onSubmit = vi.fn(() => Promise.resolve());
+    drawDraft(AUTHOR, onSubmit);
+    const { fireEvent, waitFor } = await import('@testing-library/react');
+    fireEvent.click(screen.getByRole('button', { name: 'Submit for review' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Submit for review' })).toBeNull();
+    });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the server’s refusal to submit rather than swallowing it', async () => {
+    drawDraft(
+      AUTHOR,
+      vi.fn(() => Promise.reject(new Error('knowledge version 0d0d0d0d is already in_review'))),
+    );
+    const { fireEvent } = await import('@testing-library/react');
+    fireEvent.click(screen.getByRole('button', { name: 'Submit for review' }));
+    expect(await screen.findByText(/is already in_review/)).toBeTruthy();
   });
 });
