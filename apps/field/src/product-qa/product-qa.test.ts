@@ -115,4 +115,14 @@ describe('productQaRequestBody — a string in, so nothing else can ride along',
   it('sends nothing for an empty question', () => {
     expect(productQaRequestBody('   ')).toBeNull();
   });
+
+  it('with a product chosen, sends its id -- and with "Any product", no productId at all', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    expect(productQaRequestBody('What is the dose?', id)).toEqual({
+      feature: 'product_qa',
+      question: 'What is the dose?',
+      productId: id,
+    });
+    expect(productQaRequestBody('What is the dose?', null)).not.toHaveProperty('productId');
+  });
 });

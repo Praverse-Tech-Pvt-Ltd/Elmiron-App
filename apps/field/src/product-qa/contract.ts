@@ -8,10 +8,15 @@
  */
 export const PRODUCT_QA_FEATURE = 'product_qa';
 
-/** What the screen sends: the feature and the rep's own question. Nothing else. */
+/**
+ * What the screen sends: the feature, the rep's own question, and -- optionally -- the product it
+ * is about. The gateway already narrows the approved-knowledge search by `productId`
+ * (`p_product_id`); the id comes from the company catalogue the phone holds, and the server checks it.
+ */
 export interface ProductQaRequestBody {
   readonly feature: typeof PRODUCT_QA_FEATURE;
   readonly question: string;
+  readonly productId?: string;
 }
 
 /** A source the answer was drawn from, as the gateway returns it. */
@@ -23,7 +28,13 @@ export interface ProductQaSource {
 }
 
 /** Built from what the rep typed and nothing else: a string in, so no context can ride along. */
-export const productQaRequestBody = (typed: string): ProductQaRequestBody | null => {
+export const productQaRequestBody = (
+  typed: string,
+  productId: string | null = null,
+): ProductQaRequestBody | null => {
   const question = typed.trim();
-  return question.length === 0 ? null : { feature: PRODUCT_QA_FEATURE, question };
+  if (question.length === 0) return null;
+  return productId === null
+    ? { feature: PRODUCT_QA_FEATURE, question }
+    : { feature: PRODUCT_QA_FEATURE, question, productId };
 };

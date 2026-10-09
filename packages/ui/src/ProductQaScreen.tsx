@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
@@ -5,6 +6,7 @@ import { Banner } from './Banner';
 import { BodyText, Label, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
+import { Select } from './Select';
 import { TextField } from './TextField';
 
 /**
@@ -20,7 +22,8 @@ export type ProductQaView =
   | {
       readonly kind: 'answer';
       readonly text: string;
-      readonly sources: readonly { readonly label: string }[];
+      /** `label` names the source; `detail` is what the source drawer shows when it is opened. */
+      readonly sources: readonly { readonly label: string; readonly detail?: readonly string[] }[];
     }
   | { readonly kind: 'no_approved_information'; readonly text: string }
   | { readonly kind: 'refusal'; readonly text: string }
@@ -35,6 +38,10 @@ export interface ProductQaScreenProps {
   readonly onAsk: () => void;
   readonly asking?: boolean;
   readonly view: ProductQaView;
+  /** The company's products, to narrow the question to one. Absent: no picker is drawn. */
+  readonly products?: readonly { readonly id: string; readonly label: string }[];
+  readonly productId?: string | null;
+  readonly onChangeProduct?: (id: string | null) => void;
 }
 
 const styles = StyleSheet.create({
@@ -42,19 +49,54 @@ const styles = StyleSheet.create({
   foot: { gap: tokens.space.sm, paddingTop: tokens.space.sm },
 });
 
+/**
+ * An approved answer and the sources it was drawn from. Every answer names its sources (an answer
+ * without one is never shown -- `outcome.ts`); the drawer opens each to its document, version,
+ * section and reference, so the rep can find the passage in the approved material itself.
+ */
+const Answer = ({
+  text,
+  sources,
+}: {
+  readonly text: string;
+  readonly sources: readonly { readonly label: string; readonly detail?: readonly string[] }[];
+}): ReactNode => {
+  const [open, setOpen] = useState(false);
+  return (
+    <Card>
+      <BodyText>{text}</BodyText>
+      {sources.map((source) => (
+        <Label key={source.label} muted>{`From: ${source.label}`}</Label>
+      ))}
+      <Button
+        label={open ? 'Hide sources' : `Show sources (${String(sources.length)})`}
+        onPress={() => {
+          setOpen((value) => !value);
+        }}
+        variant="secondary"
+      />
+      {open
+        ? sources.map((source) => (
+            <Card key={`detail-${source.label}`}>
+              <BodyText>{source.label}</BodyText>
+              {(source.detail ?? []).map((line) => (
+                <Label key={line} muted>
+                  {line}
+                </Label>
+              ))}
+            </Card>
+          ))
+        : null}
+    </Card>
+  );
+};
+
 const Result = ({ view }: { readonly view: ProductQaView }): ReactNode => {
   switch (view.kind) {
     case 'idle':
       return null;
     case 'answer':
-      return (
-        <Card>
-          <BodyText>{view.text}</BodyText>
-          {view.sources.map((source) => (
-            <Label key={source.label} muted>{`From: ${source.label}`}</Label>
-          ))}
-        </Card>
-      );
+      return <Answer sources={view.sources} text={view.text} />;
     case 'no_approved_information':
       return (
         <Card>
@@ -109,8 +151,14 @@ const Result = ({ view }: { readonly view: ProductQaView }): ReactNode => {
   }
 };
 
+/** The picker's "no product" choice: the question is searched across all approved material. */
+const ANY_PRODUCT = '';
+
 export const ProductQaScreen = ({
   question,
+  products,
+  productId = null,
+  onChangeProduct,
   onChangeQuestion,
   onAsk,
   asking = false,
@@ -124,6 +172,19 @@ export const ProductQaScreen = ({
       </Label>
     </View>
 
+    {products === undefined || onChangeProduct === undefined ? null : (
+      <Select
+        label="Product (optional)"
+        onChange={(value) => {
+          onChangeProduct(value === ANY_PRODUCT ? null : value);
+        }}
+        options={[
+          { value: ANY_PRODUCT, label: 'Any product' },
+          ...products.map((product) => ({ value: product.id, label: product.label })),
+        ]}
+        value={productId ?? ANY_PRODUCT}
+      />
+    )}
     <TextField
       help="About a product — not about a patient."
       label="Your question"

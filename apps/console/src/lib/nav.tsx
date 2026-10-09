@@ -27,6 +27,8 @@ const ITEMS: readonly { readonly label: string; readonly href?: string }[] = [
   // practice session needs was a script writing SQL.
   { label: 'AI prompts', href: '/prompts' },
   // W2-G B (OP-6). The screen `assign_course` waited for: a rep's Learning shows only assigned courses.
+  // Publishing a loaded course version, which only `content-step.mjs` could do.
+  { label: 'Courses', href: '/courses' },
   { label: 'Course assignments', href: '/learning' },
   { label: 'Consent versions', href: '/admin' },
   // `BE-W171` / `BE-C78`. The manager plans a rep's day; the admin grants a manager planning scope

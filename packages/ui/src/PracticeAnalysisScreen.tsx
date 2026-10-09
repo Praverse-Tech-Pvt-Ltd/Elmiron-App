@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
+import { Button } from './Button';
 import { Banner } from './Banner';
 import { Card } from './Card';
 import { Spinner } from './Spinner';
@@ -9,7 +10,7 @@ import { BodyText, Figure, Heading, Label } from './Text';
 /**
  * FE-D17 — the feedback on one AI Doctor practice session.
  *
- * The seven dimension scores, strengths and improvements that each cite the turn they are about,
+ * The nine dimension scores (`20261001000100_coach_nine_dimensions`), strengths and improvements that each cite the turn they are about,
  * and up to three suggested modules. Every figure and sentence arrives as a prop, already the
  * server's (or the sample's, and then labelled).
  *
@@ -47,6 +48,11 @@ export interface PracticeAnalysisScreenProps {
   readonly strengths: readonly PracticeFindingRow[];
   readonly improvements: readonly PracticeFindingRow[];
   readonly modules: readonly PracticeModuleRow[];
+  /**
+   * Opens Learning, where the rep's assigned courses are. A list link rather than a deep link: the
+   * suggestion names a module, and Learning shows only courses assigned to the rep.
+   */
+  readonly onOpenLearning?: () => void;
   readonly summary: string;
   /** No model is connected: the analysis is the stub's, and its zeros are not shown as scores. */
   readonly notAvailable?: boolean;
@@ -104,6 +110,7 @@ export const PracticeAnalysisScreen = ({
   strengths,
   improvements,
   modules,
+  onOpenLearning,
   summary,
   notAvailable = false,
   loading = false,
@@ -169,6 +176,9 @@ export const PracticeAnalysisScreen = ({
                   </View>
                 </Card>
               ))}
+              {onOpenLearning === undefined ? null : (
+                <Button label="Open Learning" onPress={onOpenLearning} variant="secondary" />
+              )}
             </View>
           )}
         </>

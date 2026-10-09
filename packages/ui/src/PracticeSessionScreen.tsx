@@ -102,6 +102,13 @@ const NoticeBanner = ({ notice }: { notice: PracticeNotice }): ReactNode => {
   }
 };
 
+/**
+ * Standing, beside the box the rep types into: this is a rehearsal with an AI, so nothing real
+ * belongs in it. Shown on every session, sample or live -- not only when something is wrong.
+ */
+export const PRACTICE_ONLY_NOTE =
+  'Practice only — an AI plays the doctor. Do not type any real patient or doctor details.';
+
 export const PracticeSessionScreen = ({
   sample,
   personaName,
@@ -169,6 +176,7 @@ export const PracticeSessionScreen = ({
         <>
           <TextField
             editable={!sending && !atLimit}
+            help={PRACTICE_ONLY_NOTE}
             label="What you say"
             onChangeText={onChangeDraft}
             value={draft}

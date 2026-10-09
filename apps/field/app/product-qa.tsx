@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect } from 'expo-router';
 import { ProductQaScreen, Screen } from '@fieldforce/ui';
@@ -10,6 +10,8 @@ import { createLiveProductQaTransport } from '../src/product-qa/live';
 import { productQaOutcome, productQaOutcomeFromThrown } from '../src/product-qa/outcome';
 import type { ProductQaOutcome } from '../src/product-qa/outcome';
 import { appLiveConnection } from '../src/live-connection';
+import { loadProductChoices } from '../src/catalogue/products';
+import type { ProductChoice } from '../src/catalogue/products';
 import { usePulledStore } from '../src/sync/pulled-store';
 import { clockIn, dayMonthIn } from '../src/today/territory-day';
 
@@ -28,6 +30,19 @@ export const ProductQa = ({
 }): ReactNode => {
   const { zone } = usePulledStore();
   const [question, setQuestion] = useState('');
+  // `BE-W175`'s catalogue: the company's active products, kept for offline. The picker is drawn only
+  // once a list exists; "Any product" is the default and asks across all approved material.
+  const [products, setProducts] = useState<readonly ProductChoice[] | undefined>(undefined);
+  const [productId, setProductId] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    void loadProductChoices().then((list) => {
+      if (live && list.kind !== 'none') setProducts(list.products);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
   const [asking, setAsking] = useState(false);
   const [view, setView] = useState<ProductQaView>({ kind: 'idle' });
 
@@ -57,6 +72,12 @@ export const ProductQa = ({
             label: `${source.documentTitle}, version ${String(source.versionNumber)}${
               source.heading === null ? '' : ` — ${source.heading}`
             } (${source.sourceReference})`,
+            detail: [
+              `Document: ${source.documentTitle}`,
+              `Approved version ${String(source.versionNumber)}`,
+              ...(source.heading === null ? [] : [`Section: ${source.heading}`]),
+              `Reference: ${source.sourceReference}`,
+            ],
           })),
         };
       case 'no_approved_information':
@@ -83,10 +104,13 @@ export const ProductQa = ({
       <ProductQaScreen
         asking={asking}
         onAsk={() => {
-          const body = productQaRequestBody(question);
+          const body = productQaRequestBody(question, productId);
           if (body !== null && !asking) ask(body);
         }}
+        onChangeProduct={setProductId}
         onChangeQuestion={setQuestion}
+        productId={productId}
+        {...(products === undefined ? {} : { products })}
         question={question}
         view={view}
       />
