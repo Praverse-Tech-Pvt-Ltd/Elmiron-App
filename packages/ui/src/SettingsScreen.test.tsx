@@ -36,16 +36,12 @@ describe('a setting that governs nothing says so', () => {
     // The failure this prevents: an MR flips "WiFi only", believes their recordings
     // will wait for WiFi, and spends their own data plan on that belief.
     await render(<SettingsScreen groups={groups()} />);
-    expect(
-      screen.getByText('Not yet — this setting does not control anything in this build.'),
-    ).toBeTruthy();
+    expect(screen.getByText('This setting does nothing yet.')).toBeTruthy();
   });
 
   it('does not attach that line to a control that works', async () => {
     await render(<SettingsScreen groups={groups()} />);
-    expect(
-      screen.getAllByText('Not yet — this setting does not control anything in this build.').length,
-    ).toBe(1);
+    expect(screen.getAllByText('This setting does nothing yet.').length).toBe(1);
   });
 
   it('leaves an unbuilt control unpressable', async () => {
