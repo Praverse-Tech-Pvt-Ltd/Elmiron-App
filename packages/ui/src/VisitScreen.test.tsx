@@ -269,3 +269,22 @@ describe('MR-26 B4: the blocked banner names the write the MR actually attempted
     expect(screen.queryByText('This check-out cannot be sent yet')).toBeNull();
   });
 });
+
+describe('directions and the unplanned marker', () => {
+  it('offers Directions only when the route gives one, and opens it', async () => {
+    const onOpenDirections = jest.fn();
+    await render(<VisitScreen {...props({ onOpenDirections })} />);
+    await fireEvent.press(screen.getByText('Directions'));
+    expect(onOpenDirections).toHaveBeenCalledTimes(1);
+  });
+
+  it('no coordinates: no Directions button', async () => {
+    await render(<VisitScreen {...props()} />);
+    expect(screen.queryByText('Directions')).toBeNull();
+  });
+
+  it('an unplanned visit says so, with its reason', async () => {
+    await render(<VisitScreen {...props({ unplanned: { reason: 'Doctor called me in' } })} />);
+    expect(screen.getByText('UNPLANNED · Doctor called me in')).toBeTruthy();
+  });
+});

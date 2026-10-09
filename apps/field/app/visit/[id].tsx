@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { PermissionsAndroid, Platform } from 'react-native';
+import { Linking, PermissionsAndroid, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 // The idempotency key for the request, generated on the device because the
 // contract says so: `id` "doubles as the server-side idempotency key", so a
@@ -8,6 +8,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 // expo-modules-core, which is already a dependency of expo-router — adding a
 // crypto package would mean another native rebuild for one function.
 import uuid from 'expo-modules-core/src/uuid';
+import { noKeyMaps } from '../../src/integrations/maps';
 import {
   AudioModule,
   RecordingPresets,
@@ -529,6 +530,12 @@ export default function VisitRoute(): ReactNode {
   const clinic =
     doctor?.clinicAddresses.find((address) => address.id === visit?.clinicAddressId) ??
     doctor?.clinicAddresses[0];
+  // Keyless directions: the phone's own maps app at the clinic (`src/integrations/maps.ts`).
+  const directions = noKeyMaps.directionsLink(
+    clinic?.coordinates == null
+      ? null
+      : { ...clinic.coordinates, label: `${clinic.label}, ${clinic.city}` },
+  );
 
   return (
     <Screen scrollable>
@@ -549,6 +556,13 @@ export default function VisitRoute(): ReactNode {
         busy={busy}
         clinic={clinic === undefined ? null : `${clinic.label}, ${clinic.city}`}
         doctorName={doctor?.fullName ?? 'This visit'}
+        {...(directions === null
+          ? {}
+          : {
+              onOpenDirections: () => {
+                void Linking.openURL(directions);
+              },
+            })}
         unplanned={visit?.origin === 'unplanned' ? { reason: visit.unplannedReason ?? '' } : null}
         actionFailure={actionFailure}
         failure={

@@ -377,6 +377,8 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
     expect(await lines('VISIT', 'I am here — check in')).toEqual([
       ASHA,
       'Main clinic, Pune',
+      // The clinic has coordinates: keyless directions in the phone's own maps app.
+      'Directions',
       'Not started',
       'I am here — check in',
     ]);
@@ -386,6 +388,7 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
     expect(await lines('CHECKED IN', /Saved on this phone/u)).toEqual([
       ASHA,
       'Main clinic, Pune',
+      'Directions',
       'Checked in — waiting to send',
       '!',
       'This check-in cannot be sent yet',
@@ -423,6 +426,7 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
     expect(await lines('BACK', 'Leaving — check out')).toEqual([
       ASHA,
       'Main clinic, Pune',
+      'Directions',
       'Checked in — waiting to send',
       ...RECORDING_ON_RECORD,
       'Record a voice note',
@@ -436,6 +440,7 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
     expect(await lines('CHECKED OUT', 'Visit finished — waiting to send')).toEqual([
       ASHA,
       'Main clinic, Pune',
+      'Directions',
       'Visit finished — waiting to send',
       ...RECORDING_ON_RECORD,
       '!',

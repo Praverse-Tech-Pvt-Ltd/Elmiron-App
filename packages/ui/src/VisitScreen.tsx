@@ -35,6 +35,8 @@ export interface VisitScreenProps {
    * Read from the visit's own `origin`, never inferred from a missing plan.
    */
   readonly unplanned?: { readonly reason: string } | null;
+  /** Opens the phone's own maps app at the clinic. Absent when the clinic has no coordinates. */
+  readonly onOpenDirections?: () => void;
   readonly stage: 'before' | 'during' | 'after';
   /**
    * True when the stage rests on a write this device has QUEUED and the server has not yet
@@ -196,6 +198,7 @@ export const VisitScreen = ({
   doctorName,
   clinic,
   unplanned = null,
+  onOpenDirections,
   stage,
   stagePending = false,
   actionLabel,
@@ -253,6 +256,9 @@ export const VisitScreen = ({
         <Display>{doctorName}</Display>
         {clinic === null ? null : <Label muted>{clinic}</Label>}
         {unplanned === null ? null : <Label>{`UNPLANNED · ${unplanned.reason}`}</Label>}
+        {onOpenDirections === undefined ? null : (
+          <Button label="Directions" onPress={onOpenDirections} variant="secondary" />
+        )}
       </View>
 
       {actionFailure === null ? null : (
