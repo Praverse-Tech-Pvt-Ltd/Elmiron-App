@@ -71,6 +71,12 @@ const REMEDIES: Partial<Readonly<Record<RefusalCode, string>>> = {
   // might. The recording stays on the phone; what changes is only that it cannot be filed.
   recording_too_old_to_accept:
     'This recording was made too long ago to be accepted now, and waiting will not change that. Connect and sync sooner after a visit — your manager can tell you the limit for your territory.',
+  // `BE-W173`, 45013. The same phone-clock remedy, about a check-in or check-out -- never "consent".
+  field_event_in_future:
+    "This phone's clock is ahead of the server, so the check-in or check-out looks like it happened in the future. Turn on automatic date and time in Settings, then send again — the visit itself is fine.",
+  // `BE-W173`, 45014. The times are out of order; the remedy is the same clock.
+  check_out_before_check_in:
+    "The check-out is timed before the check-in, so the phone's clock changed during the visit. Turn on automatic date and time in Settings, then send again.",
   // 45004. Not actionable by the MR: the remedy is to stop and speak to a manager, which is
   // somebody else's decision rather than a next step the app can offer.
   ucpmp_sample_cap_exceeded:
