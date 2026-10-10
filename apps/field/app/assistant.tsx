@@ -114,7 +114,7 @@ const Assistant = (): ReactNode => {
       : { kind: notice };
 
   return (
-    <Screen scrollable>
+    <Screen followLatest scrollable>
       <AssistantScreen
         allowance={allowance}
         draft={draft}

@@ -165,7 +165,7 @@ const PracticeSessionView = (): ReactNode => {
           : { kind: notice };
 
   return (
-    <Screen scrollable>
+    <Screen followLatest scrollable>
       <PracticeSessionScreen
         allowance={allowance}
         busy={busy}

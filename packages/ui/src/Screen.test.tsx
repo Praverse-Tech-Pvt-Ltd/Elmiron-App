@@ -5,7 +5,7 @@ import type { Metrics } from 'react-native-safe-area-context';
 import type { ReactElement } from 'react';
 import { tokens } from '@fieldforce/ui-tokens';
 import { BodyText } from './Text';
-import { Screen } from './Screen';
+import { FOLLOW_SLACK, Screen, isAtBottom } from './Screen';
 
 /**
  * The safe-area inset, asserted as arithmetic rather than as "a safe-area component
@@ -149,5 +149,34 @@ describe('Screen safe-area inset', () => {
     }
     expect(node).not.toBeNull();
     expect(paddingAroundText('scrolling content')['paddingBottom']).toBe(tokens.space.md);
+  });
+});
+
+describe('Screen followLatest — a conversation follows its newest message, not a reader', () => {
+  const at = (y: number) => ({
+    contentOffset: { x: 0, y },
+    contentSize: { width: 390, height: 2000 },
+    layoutMeasurement: { width: 390, height: 800 },
+  });
+
+  it('at the bottom, or within the slack, it follows', () => {
+    expect(isAtBottom(at(1200))).toBe(true);
+    expect(isAtBottom(at(1200 - FOLLOW_SLACK))).toBe(true);
+  });
+
+  it('scrolled up to read history, it does not', () => {
+    expect(isAtBottom(at(1200 - FOLLOW_SLACK - 1))).toBe(false);
+    expect(isAtBottom(at(0))).toBe(false);
+  });
+
+  it('is wired only when asked for', async () => {
+    await renderInSafeArea(
+      <Screen followLatest scrollable>
+        <BodyText>a conversation</BodyText>
+      </Screen>,
+    );
+    let node = screen.getByText('a conversation').parent;
+    while (node !== null && node.props['onContentSizeChange'] === undefined) node = node.parent;
+    expect(node).not.toBeNull();
   });
 });

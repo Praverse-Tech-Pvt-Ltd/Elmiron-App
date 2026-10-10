@@ -543,17 +543,15 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       'All',
       'Not seen 30d',
       'On plan',
+      // Final UX pass: a doctor who is not overdue carries a neutral ring, not a green tick.
       'Dr Meera Iyer (DEMO)',
-      '✓',
       'Urology · Pune · today',
       'Dr Vikram Rao (DEMO)',
-      '✓',
       'Nephrology · Pune · today',
       // `BE-W165`, FIXED W2-E D. Read "yesterday" (marked UNTRUE), and so was FIRST — the list puts
       // the longest-unseen doctor first. Seen today at 17:41 on this phone, the most recent of the
       // three, so now last, and said so.
       ASHA,
-      '✓',
       'Urology · Pune · today',
       '3 doctors in your territory.',
     ]);

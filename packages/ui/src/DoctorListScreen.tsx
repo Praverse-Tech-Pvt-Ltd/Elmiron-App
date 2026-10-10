@@ -181,7 +181,9 @@ export const DoctorListScreen = ({
           <ListItem
             detail={`${row.detail} · ${row.lastSeenLabel}`}
             key={row.id}
-            status={row.overdue ? 'attention' : 'success'}
+            // Final UX pass: not overdue is NEUTRAL. A green tick read as "visited / done"; the row's
+            // own words (last seen, "Overdue") carry the meaning, unchanged.
+            status={row.overdue ? 'attention' : 'neutral'}
             title={row.name}
             // Spread rather than `meta={... : undefined}`: `exactOptionalPropertyTypes`
             // treats an explicit undefined as a value, not as an absent prop.

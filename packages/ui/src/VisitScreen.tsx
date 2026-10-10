@@ -170,7 +170,9 @@ const styles = StyleSheet.create({
   head: { gap: tokens.space.xs },
   foot: { gap: tokens.space.sm },
   steps: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.space.xs },
-  directions: { alignSelf: 'flex-start' },
+  // The quiet button's own horizontal padding is taken back, so its label starts on the same
+  // edge as the doctor's name and clinic above it.
+  directions: { alignSelf: 'flex-start', marginLeft: -tokens.space.lg },
   figureRow: { flexDirection: 'row', alignItems: 'baseline', gap: tokens.space.sm },
 });
 

@@ -1,5 +1,7 @@
+import { useRef } from 'react';
 import type { ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import type { NativeScrollEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { tokens } from '@fieldforce/ui-tokens';
 
@@ -20,7 +22,22 @@ export interface ScreenProps {
    * gesture bar, and rides up with the keyboard.
    */
   readonly footer?: ReactNode;
+  /**
+   * For a conversation. When content is added, scroll to it -- but only if the reader was already
+   * at (or near) the bottom. Someone who has scrolled up to read history is left where they are;
+   * scrolling back down resumes following.
+   */
+  readonly followLatest?: boolean;
 }
+
+/** How close to the bottom (pt) still counts as "at the bottom". */
+export const FOLLOW_SLACK = 80;
+
+/** Pure, so the rule is tested without a native scroll view: is the reader at the bottom? */
+export const isAtBottom = (
+  event: Pick<NativeScrollEvent, 'contentOffset' | 'contentSize' | 'layoutMeasurement'>,
+): boolean =>
+  event.contentOffset.y + event.layoutMeasurement.height >= event.contentSize.height - FOLLOW_SLACK;
 
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: tokens.color.background },
@@ -54,8 +71,16 @@ const styles = StyleSheet.create({
  * With a `footer`, the bottom inset moves from the content to the footer: the footer is what
  * sits on the gesture bar.
  */
-export const Screen = ({ children, scrollable = false, footer }: ScreenProps): ReactNode => {
+export const Screen = ({
+  children,
+  scrollable = false,
+  footer,
+  followLatest = false,
+}: ScreenProps): ReactNode => {
   const insets = useSafeAreaInsets();
+  const scroller = useRef<ScrollView>(null);
+  // Starts true: a conversation opens at its newest message.
+  const atBottom = useRef(true);
   const hasFooter = footer !== undefined && footer !== null;
   const inset = {
     paddingTop: tokens.space.md + insets.top,
@@ -74,6 +99,18 @@ export const Screen = ({ children, scrollable = false, footer }: ScreenProps): R
       // A tap on a button while the keyboard is up presses the button, rather than only closing
       // the keyboard and making the rep tap again.
       keyboardShouldPersistTaps="handled"
+      ref={scroller}
+      {...(followLatest
+        ? {
+            scrollEventThrottle: 100,
+            onScroll: ({ nativeEvent }: { nativeEvent: NativeScrollEvent }) => {
+              atBottom.current = isAtBottom(nativeEvent);
+            },
+            onContentSizeChange: () => {
+              if (atBottom.current) scroller.current?.scrollToEnd({ animated: true });
+            },
+          }
+        : {})}
     >
       {children}
     </ScrollView>
