@@ -213,7 +213,11 @@ describe.skipIf(!reachable)('a visit is written to the table, not through an RPC
     // requires mr_id = auth.uid(). Migration 20260907000600 makes that satisfiable by
     // defaulting the column, so the caller cannot assert an identity at all.
     const id = randomUUID();
-    const body = toCreateVisitBody({ id, doctorId: world.doctors.pune });
+    const body = toCreateVisitBody({
+      id,
+      doctorId: world.doctors.pune,
+      unplannedReason: 'doctor asked to see me',
+    });
     expect(Object.keys(body)).not.toContain('mr_id');
 
     const response = await rest('/visits', {
@@ -236,7 +240,11 @@ describe.skipIf(!reachable)('a visit is written to the table, not through an RPC
     const response = await rest('/visits', {
       method: 'POST',
       token: mintAccessToken(world.users.puneMr),
-      body: toCreateVisitBody({ id, doctorId: world.doctors.pune }),
+      body: toCreateVisitBody({
+        id,
+        doctorId: world.doctors.pune,
+        unplannedReason: 'doctor asked to see me',
+      }),
       headers: { Prefer: 'return=representation' },
     });
     // PostgREST answers a table insert with an ARRAY even for one row; supabase-js
@@ -246,6 +254,10 @@ describe.skipIf(!reachable)('a visit is written to the table, not through an RPC
     expect(visit.id).toBe(id);
     expect(visit.mrId).toBe(world.users.puneMr.id);
     expect(visit.status).toBe('planned');
+    // `BE-C78`: what the visit IS travels with it, rather than being read off a null plan id.
+    expect(visit.origin).toBe('unplanned');
+    expect(visit.unplannedReason).toBe('doctor asked to see me');
+    expect(visit.beatPlanId).toBeNull();
   });
 
   it('updates a visit the MR owns', async () => {
@@ -253,7 +265,11 @@ describe.skipIf(!reachable)('a visit is written to the table, not through an RPC
     await rest('/visits', {
       method: 'POST',
       token: mintAccessToken(world.users.puneMr),
-      body: toCreateVisitBody({ id, doctorId: world.doctors.pune }),
+      body: toCreateVisitBody({
+        id,
+        doctorId: world.doctors.pune,
+        unplannedReason: 'doctor asked to see me',
+      }),
       headers: { Prefer: 'return=representation' },
     });
 
@@ -275,7 +291,11 @@ describe.skipIf(!reachable)('a visit is written to the table, not through an RPC
     const response = await rest('/visits', {
       method: 'POST',
       token: mintAccessToken(world.users.puneMr),
-      body: toCreateVisitBody({ id, doctorId: world.doctors.south }),
+      body: toCreateVisitBody({
+        id,
+        doctorId: world.doctors.south,
+        unplannedReason: 'doctor asked to see me',
+      }),
       headers: { Prefer: 'return=representation' },
     });
 

@@ -71,7 +71,13 @@ const visitItem = (overrides: Item = {}): Item => ({
   operation: 'create',
   entityId: randomUUID(),
   clientCreatedAt: WED_1000_IST,
-  payload: { doctorId: world.doctors.pune, status: 'completed' },
+  // `BE-C78`: a visit the phone creates is unplanned, and says why.
+  payload: {
+    doctorId: world.doctors.pune,
+    status: 'completed',
+    origin: 'unplanned',
+    unplannedReason: 'doctor asked to see me',
+  },
   ...overrides,
 });
 
@@ -480,38 +486,81 @@ describe.skipIf(!reachable)('a stale beat plan warns, never discards', () => {
     return newerId;
   };
 
-  it('accepts work filed against a superseded plan, with a warning', async () => {
+  /**
+   * `BE-C78`. The manager's plan for 12 August, written as the owner through the one path
+   * `plan_mr_day` uses (the day is past, which `plan_mr_day` refuses). Returns the planned visit
+   * for the Pune doctor, or null when the plan does not include them.
+   */
+  const planPuneDay = async (client: Client, withDoctor: boolean): Promise<string | null> => {
+    await client.query(
+      `select public.write_plan_version(m, r, '2026-08-12', $3::jsonb, null)
+         from public.user_profiles m, public.user_profiles r
+        where m.id = $1 and r.id = $2`,
+      [
+        world.users.westManager.id,
+        world.users.puneMr.id,
+        JSON.stringify(withDoctor ? [{ doctorId: world.doctors.pune }] : []),
+      ],
+    );
+    const visit = await client.query<{ id: string }>(
+      `select id from public.visits
+        where mr_id = $1 and doctor_id = $2 and planned_date = '2026-08-12' and origin = 'planned'
+        order by created_at desc limit 1`,
+      [world.users.puneMr.id, world.doctors.pune],
+    );
+    return visit.rows[0]?.id ?? null;
+  };
+
+  // Until `BE-C78` the phone filed the VISIT against a plan, and this warned on that visit. The
+  // plan now creates the visit, so the stale case is the one that can still happen: the manager
+  // revises the plan while the rep is offline, and the rep's queued check-in arrives afterwards.
+  it('accepts a check-in against a visit a later revision cancelled, with a warning', async () => {
     await inRolledBackTransaction(async (client) => {
-      // The manager revised the plan while the MR was offline.
-      await supersedeBeatPlan(client);
+      const visitId = await planPuneDay(client, true);
+      if (visitId === null) throw new Error('the plan created no visit');
+      // The manager takes the doctor off the plan while the MR is offline.
+      await planPuneDay(client, false);
       await asUser(client, world.users.puneMr);
 
-      const item = visitItem({
-        payload: {
-          doctorId: world.doctors.pune,
-          status: 'completed',
-          beatPlanId: world.beatPlans.pune,
-        },
-      });
-      const response = await push(client, [item]);
+      const response = await push(client, [checkInItem(visitId)]);
 
       // The MR's work is valid. The plan is stale. Neither is discarded.
       expect(response.results[0]?.status).toBe('accepted');
       expect(response.results[0]?.warnings).toContain('stale_beat_plan');
+      const visit = await client.query<{ status: string }>(
+        'select status from public.visits where id = $1',
+        [visitId],
+      );
+      // The check-in is kept; the visit is NOT moved back from cancelled (`record_check_in`).
+      expect(visit.rows[0]?.status).toBe('cancelled');
     });
   });
 
   it('does not warn when the plan is still current', async () => {
+    await inRolledBackTransaction(async (client) => {
+      const visitId = await planPuneDay(client, true);
+      if (visitId === null) throw new Error('the plan created no visit');
+      await asUser(client, world.users.puneMr);
+      const response = await push(client, [checkInItem(visitId)]);
+      expect(response.results[0]?.status).toBe('accepted');
+      expect(response.results[0]?.warnings).not.toContain('stale_beat_plan');
+    });
+  });
+
+  it('refuses a visit the phone files ON a plan, with its own reason', async () => {
     await asUserTx(world.users.puneMr, async (client) => {
       const item = visitItem({
         payload: {
           doctorId: world.doctors.pune,
           status: 'completed',
           beatPlanId: world.beatPlans.pune,
+          origin: 'unplanned',
+          unplannedReason: 'trying to file a planned visit',
         },
       });
       const response = await push(client, [item]);
-      expect(response.results[0]?.warnings).toEqual([]);
+      expect(response.results[0]?.status).toBe('rejected');
+      expect(response.results[0]?.rejectionDetail).toContain('planned_visit_from_plan_only');
     });
   });
 
@@ -584,7 +633,12 @@ describe.skipIf(!reachable)('sync observability', () => {
           operation: 'create',
           entityId: randomUUID(),
           clientCreatedAt: WED_1000_IST,
-          payload: { doctorId: world.doctors.south, status: 'completed' },
+          payload: {
+            doctorId: world.doctors.south,
+            status: 'completed',
+            origin: 'unplanned',
+            unplannedReason: 'doctor asked to see me',
+          },
         },
       ]);
       await client.query('reset role');

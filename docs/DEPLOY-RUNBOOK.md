@@ -181,7 +181,7 @@ no placeholder built.
 | # | On day one in production a rep cannot… | Because (measured) | Waits on |
 | --- | --- | --- | --- |
 | 1 | **sign in** | No tool creates the sheet's accounts on production (`BE-W137`) | **Q-5** — the territory and MR sheet; then step 4 by hand |
-| 2 | **see a single visit** | **Nothing in production creates a beat plan or a visit.** The app cannot create one (`outbox.ts`: `case 'visit': return blocked('not_convertible')`; unplanned visits are `FE-W28`, a product question); no console screen, no RPC, no loader writes `beat_plans` — only the demo and synthetic seeds, which refuse remote targets. The register's cut list says beat plans are **"manual assignment for the pilot"** (`BE-W23`) — but no tool, no runbook step and no input does that assignment (`BE-W139`) | **Nobody — it is not on the list.** A decision on who plans a rep's day, and a way to enter it. Also doctors (**Q-7**): a visit needs one |
+| 2 | **see a single visit** | **Updated 9 October (`BE-W171`, `BE-W176`).** A field manager now plans a rep's day in the console (`/planning`, `plan_mr_day`), which creates the planned visits; a rep can also add an unplanned visit on the phone. Before that, nothing in production created a visit (`BE-W139`). What still has to exist: a field manager account above the rep's territory, and doctors in it (**Q-7**) | **Q-7** — doctors; and a manager account (step 4) |
 | 3 | **check in** | `is_within_shift` refuses: *"no shift window configured for territory % or any ancestor, and no organisation default"* | **Q-8** — the approved hours (or the operator's test value, `BE-C50`, set as an expiring fallback: step 3.2) |
 | 4 | **record a doctor's consent** | `capture_consent` refuses: *"no active consent text for language % at %"*; the app blocks with "there is no consent notice for this language yet" | **Q-11** — the registered legal name the notice must carry |
 | 5 | **record a voice note** | `begin_upload` refuses: *"visit % has no standing consent; there is no upload path"* | **Q-11** — via 4 |
@@ -194,6 +194,31 @@ accepted and uncounted, and the screen says so (until **Q-10**; CI fails on 6 No
 
 **The finding the register could not show:** row 2. Every listed input could arrive and a rep would
 still open Today to nothing.
+
+## The Android release build — checklist (everything that does not need a credential is done)
+
+**In the repository, tested** (`apps/field/plugins/android-release.cjs`, `src/android-release.test.ts`,
+`plugins/release-signing.cjs`, `scripts/verify-release-apk.mjs`):
+
+| # | Item | State |
+| --- | --- | --- |
+| A1 | Application id `com.praversetech.fieldforce` (`app.json`) | Done |
+| A2 | **versionCode** from `FIELD_ANDROID_VERSION_CODE`, a whole number 1–2,100,000,000; a malformed value stops the build; unset is 1 (development and demo only). **Every APK given to reps needs a higher number than the last** — use the CI run number or increment by hand | Done; the release owner supplies the number |
+| A3 | **Blocked permissions** in every build: background location, external storage read/write, drawing over other apps (libraries merged them in; none is used) | Done — re-check the merged manifest after each prebuild (A8) |
+| A4 | A release build is signed with the company key or Gradle refuses it; `verify-release-apk.mjs <apk> --expect-sha256 <fingerprint>` refuses the debug key or a second signer | Done — waits on the **release key** |
+| A5 | No secret in the app: only `EXPO_PUBLIC_SUPABASE_URL` and the PUBLISHABLE key; the service-role key lives only in the Edge Function (`_shared/practice-writer.ts`, CI-checked) | Done |
+| A6 | No localhost in a release: `src/api-target.ts` refuses an empty address in a release; `127.0.0.1` fallbacks are development-only; plain http only for a demo build's listed hosts | Done — `BE-W150` closed 9 October: the unused `EXPO_PUBLIC_API_BASE_URL` gate is removed; the Supabase URL and publishable key are still required (`src/config-required.test.ts`) |
+| A7a | **The production build command**: `apps/field/scripts/build-release-apk.ps1 -ExpectSha256 <fingerprint>` wraps prebuild + Gradle `assembleRelease` and refuses, before Gradle, a dirty tree, an `apps/field/.env*` file, a non-https/local Supabase URL, a secret key, a missing/malformed version code, a missing signing value or keystore, the debug key, demo/recording/coaching switches; after the build it runs `verify-release-apk.mjs`. `-CheckOnly` runs the refusals alone (`BE-W177`) | Done — waits on the **release key** |
+| A7 | Every AI feature, Learning and the tutor are separate `EXPO_PUBLIC_*` switches, OFF unless set | Done |
+
+**Not possible without the operator** — each is one input:
+
+| # | Item | Waits on |
+| --- | --- | --- |
+| A8 | Prebuild and audit the merged manifest (`android/app/src/main/AndroidManifest.xml`): only INTERNET, location (fine/coarse), RECORD_AUDIO, MODIFY_AUDIO_SETTINGS, VIBRATE, POST_NOTIFICATIONS and expo-audio's FOREGROUND_SERVICE pair. The pair is left unblocked on purpose: expo-audio declares a service that uses it, and removing it is only safe once proved on a device | A build machine run (no credential), then a handset |
+| A9 | The production address (`EXPO_PUBLIC_SUPABASE_URL`, publishable key, `EXPO_PUBLIC_APP_*`) in the build shell's environment — not in `apps/field/.env`, which the build script refuses | **Q-19** |
+| A10 | Physical-device pass: install over the previous build (versionCode higher), sign in, permission prompts in order (location while using, microphone only at recording, notifications), a full offline day, check-in/out, report, Pending sync, reconnect | A **handset** |
+| A11 | The release keystore, its four Gradle properties, and its SHA-256 fingerprint | The **release key** |
 
 ## What the rehearsal could NOT establish
 

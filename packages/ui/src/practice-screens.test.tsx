@@ -2,7 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { PracticeAnalysisScreen } from './PracticeAnalysisScreen';
 import { PracticeHomeScreen } from './PracticeHomeScreen';
-import { PracticeSessionScreen } from './PracticeSessionScreen';
+import { PRACTICE_ONLY_NOTE, PracticeSessionScreen } from './PracticeSessionScreen';
 
 /**
  * FE-D17 — AI Doctor practice: the home (pick a scenario, see past sessions), the conversation,
@@ -117,6 +117,11 @@ describe('PracticeSessionScreen', () => {
     allowance: { kind: 'not_reported' } as const,
   };
 
+  it('always says, beside the box, that this is practice and no real patient or doctor details go in', async () => {
+    await render(<PracticeSessionScreen {...base} />);
+    expect(screen.getByText(PRACTICE_ONLY_NOTE)).toBeTruthy();
+  });
+
   it('shows the conversation, numbered, with the doctor marked as an AI practice doctor', async () => {
     await render(<PracticeSessionScreen {...base} />);
 
@@ -212,7 +217,14 @@ describe('PracticeAnalysisScreen', () => {
     summary: 'A solid start.',
   };
 
-  it('shows the seven-dimension shape: overall, each dimension, findings citing turns, modules', async () => {
+  it('suggested training offers a way into Learning when the route gives one', async () => {
+    const onOpenLearning = jest.fn();
+    await render(<PracticeAnalysisScreen {...base} onOpenLearning={onOpenLearning} />);
+    await fireEvent.press(screen.getByText('Open Learning'));
+    expect(onOpenLearning).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the dimension shape: overall, each dimension, findings citing turns, modules', async () => {
     await render(<PracticeAnalysisScreen {...base} />);
 
     expect(screen.getByText('58 / 100')).toBeTruthy();

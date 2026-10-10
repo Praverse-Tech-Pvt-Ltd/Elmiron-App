@@ -16,7 +16,8 @@ import { ListRow } from './ListRow';
  * - **A finish that did not reach the server is not saved anywhere.** `complete_lesson` is not in the
  *   outbox, so with no signal the screen says the lesson was NOT recorded and offers to try again —
  *   never a tick it cannot stand behind.
- * - **No tutor here.** The lesson tutor is a separate AI feature behind its own flag.
+ * - **No tutor in these screens.** The lesson tutor is its own component (`TutorPanel`), drawn under
+ *   a lesson by the route when its own flag (`EXPO_PUBLIC_LESSON_TUTOR`) is on.
  */
 
 const styles = StyleSheet.create({

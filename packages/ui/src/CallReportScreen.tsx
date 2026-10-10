@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
 import { BodyText, Label, Title } from './Text';
@@ -55,12 +55,43 @@ export interface CallReportScreenProps {
    */
   readonly sentNote?: { readonly title: string; readonly detail: string } | null;
   readonly failure?: { readonly title: string; readonly detail: string } | null;
+  /**
+   * `BE-W175` — the company's products, to mark which were discussed. Ids only leave the screen;
+   * the server checks each one. Absent (`undefined`) on a caller that has no catalogue, which keeps
+   * the screen exactly as it was.
+   */
+  readonly products?: readonly { readonly id: string; readonly label: string }[];
+  readonly chosenProductIds?: readonly string[];
+  readonly onToggleProduct?: (id: string) => void;
+  /** Says where the list came from when it is not fresh -- or that there is none on this phone. */
+  readonly productsNote?: string | null;
 }
 
 const styles = StyleSheet.create({
   head: { gap: 2 },
   fields: { gap: tokens.space.md },
   foot: { gap: tokens.space.sm, paddingTop: tokens.space.sm },
+  products: { gap: tokens.space.xs },
+  product: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.space.sm,
+    minHeight: 48,
+    paddingHorizontal: tokens.space.sm,
+    borderRadius: tokens.radius.control,
+    borderWidth: 1,
+    borderColor: tokens.color.hairline,
+  },
+  productChosen: { borderColor: tokens.color.textPrimary, borderWidth: 2 },
+  box: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: tokens.color.textPrimary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
 
 export const CallReportScreen = ({
@@ -76,6 +107,10 @@ export const CallReportScreen = ({
   sending = false,
   sentNote = null,
   failure = null,
+  products,
+  chosenProductIds = [],
+  onToggleProduct,
+  productsNote = null,
 }: CallReportScreenProps): ReactNode => (
   <>
     <View style={styles.head}>
@@ -116,6 +151,32 @@ export const CallReportScreen = ({
         value={nextStep}
       />
     </View>
+
+    {products === undefined ? null : (
+      <View style={styles.products}>
+        <Label>Products discussed</Label>
+        <Label muted>Mark each one you talked about. None is fine if none came up.</Label>
+        {productsNote === null ? null : <Label muted>{productsNote}</Label>}
+        {products.map((product) => {
+          const chosen = chosenProductIds.includes(product.id);
+          return (
+            <Pressable
+              accessibilityLabel={product.label}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: chosen }}
+              key={product.id}
+              onPress={() => {
+                onToggleProduct?.(product.id);
+              }}
+              style={[styles.product, chosen ? styles.productChosen : null]}
+            >
+              <View style={styles.box}>{chosen ? <BodyText>✓</BodyText> : null}</View>
+              <BodyText>{product.label}</BodyText>
+            </Pressable>
+          );
+        })}
+      </View>
+    )}
 
     <View style={styles.foot}>
       {/*

@@ -70,7 +70,12 @@ const createVisitWithHeaders = async (
     method: 'POST',
     token: tokenForMr(),
     headers,
-    body: { id, doctor_id: world.doctors.pune },
+    body: {
+      id,
+      doctor_id: world.doctors.pune,
+      origin: 'unplanned',
+      unplanned_reason: 'doctor asked to see me',
+    },
   });
   return { status: response.status, id };
 };

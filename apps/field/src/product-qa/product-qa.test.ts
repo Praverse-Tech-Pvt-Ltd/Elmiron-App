@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { productQaRequestBody } from './contract';
+import { createLiveProductQaTransport } from './live';
 import { productQaOutcome, productQaOutcomeFromThrown } from './outcome';
 
 /**
@@ -114,5 +115,49 @@ describe('productQaRequestBody — a string in, so nothing else can ride along',
 
   it('sends nothing for an empty question', () => {
     expect(productQaRequestBody('   ')).toBeNull();
+  });
+
+  it('with a product chosen, sends its id -- and with "Any product", no productId at all', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    expect(productQaRequestBody('What is the dose?', id)).toEqual({
+      feature: 'product_qa',
+      question: 'What is the dose?',
+      productId: id,
+    });
+    expect(productQaRequestBody('What is the dose?', null)).not.toHaveProperty('productId');
+  });
+});
+
+describe('createLiveProductQaTransport — what actually leaves the phone', () => {
+  const sent = async (body: Parameters<ReturnType<typeof createLiveProductQaTransport>>[0]) => {
+    const calls: string[] = [];
+    const fake = ((_url: string, init: { body: string }) => {
+      calls.push(init.body);
+      return Promise.resolve(new Response(JSON.stringify({ kind: 'not_available', message: 'x' })));
+    }) as unknown as typeof fetch;
+    await createLiveProductQaTransport({
+      baseUrl: 'http://server.test',
+      apiKey: 'key',
+      accessToken: () => Promise.resolve('token'),
+      fetch: fake,
+    })(body);
+    return JSON.parse(calls[0] ?? '{}') as Record<string, unknown>;
+  };
+
+  it('sends the chosen productId to the gateway (it was dropped here once)', async () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    const body = productQaRequestBody('What is the dose?', id);
+    if (body === null) throw new Error('no body');
+    expect(await sent(body)).toEqual({
+      feature: 'product_qa',
+      question: 'What is the dose?',
+      productId: id,
+    });
+  });
+
+  it('and nothing else when no product is chosen', async () => {
+    const body = productQaRequestBody('What is the dose?');
+    if (body === null) throw new Error('no body');
+    expect(await sent(body)).toEqual({ feature: 'product_qa', question: 'What is the dose?' });
   });
 });

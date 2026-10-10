@@ -1,9 +1,11 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 import demoCleartext from './plugins/demo-cleartext.cjs';
 import releaseSigning from './plugins/release-signing.cjs';
+import androidRelease from './plugins/android-release.cjs';
 
 const { demoCleartextHosts, withDemoCleartext } = demoCleartext;
 const { withReleaseSigning } = releaseSigning;
+const { withAndroidRelease } = androidRelease;
 
 /**
  * The display name is configuration, not a constant.
@@ -37,13 +39,18 @@ export default ({ config }: ConfigContext): ExpoConfig => {
    * Gradle refuses it. A demo build keeps the template's debug key and its " (demo)" name. See
    * `plugins/release-signing.cjs`.
    */
+  // The version code (`FIELD_ANDROID_VERSION_CODE`, refused when malformed) and the permissions no
+  // build may ship. See `plugins/android-release.cjs`.
   return withReleaseSigning(
     withDemoCleartext(
-      {
-        ...config,
-        name: demoHosts.length === 0 ? name : `${name} (demo)`,
-        slug: config.slug ?? 'field-force',
-      },
+      withAndroidRelease(
+        {
+          ...config,
+          name: demoHosts.length === 0 ? name : `${name} (demo)`,
+          slug: config.slug ?? 'field-force',
+        },
+        process.env,
+      ),
       demoHosts,
     ),
     { demo: demoHosts.length > 0 },

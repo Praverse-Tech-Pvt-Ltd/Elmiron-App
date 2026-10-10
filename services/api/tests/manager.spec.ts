@@ -4,6 +4,7 @@ import type { Client } from 'pg';
 import { inRolledBackTransaction, requireDatabase } from './db.js';
 import { asUser } from './auth.js';
 import { seedFixtures } from './fixtures.js';
+import { localClock, workingDay } from './working-day.js';
 import { checkInItem } from './sync-bodies.js';
 import type { FixtureUser, FixtureWorld } from './fixtures.js';
 
@@ -270,10 +271,12 @@ describe.skipIf(!reachable)('team activity and coverage', () => {
         planned_visit_count: number;
         missed_visit_count: number;
       }>(
-        `select mr_id, planned_visit_count, missed_visit_count
-           from public.coverage(current_date, current_date)
-          where mr_id = $1`,
-        [world.users.puneMr.id],
+        // 10 October: the world plan's own day, not `current_date` (the UTC date), which from 19:30
+        // to 24:00 UTC is a different day from the IST one its visits are dated by.
+        `select c.mr_id, c.planned_visit_count, c.missed_visit_count
+           from public.beat_plans bp, public.coverage(bp.plan_date, bp.plan_date) c
+          where bp.id = $2 and c.mr_id = $1`,
+        [world.users.puneMr.id, world.beatPlans.pune],
       );
       // MR-44. This assertion USED TO BE VACUOUS and said so: *"the fixture beat plan has
       // no entries, so nothing is missed"*. `coverage` counts planned doctors from
@@ -355,25 +358,32 @@ describe.skipIf(!reachable)('team exceptions', () => {
    * in the same zone rather than a literal that had to agree with another literal. The
    * sync-rejection test above keeps its date: it is seeded from `sync_items`, not from
    * here, and nothing about it changed.
+   *
+   * **10 October: and relative to a DAY, not to the clock.** It was `now() - interval '1 hour'`,
+   * asked about "today" -- which between 00:00 and 01:00 IST is yesterday, so this suite failed
+   * every night for an hour. The captures are now local times of an explicit working day
+   * (`working-day.ts`); `at` says which, and defaults to that day's noon.
    */
-  const seedDivergentConsents = async (client: Client): Promise<void> => {
+  const seedDivergentConsents = async (client: Client, at: { pune: string; nagpur: string }) => {
     const seed = async (
       mrId: string,
       visitId: string,
       doctorId: string,
       outcome: 'consented' | 'declined',
+      capturedAt: string,
+      count = 4,
     ): Promise<void> => {
-      for (let i = 0; i < 4; i += 1) {
+      for (let i = 0; i < count; i += 1) {
         await client.query(
           `insert into public.consent_records
              (id, visit_id, doctor_id, captured_by_mr_id, outcome, consent_text_version_id,
               displayed_language, captured_at)
-           values (gen_random_uuid(), $1, $2, $3, $4, $5, 'en-IN', now() - interval '1 hour')`,
-          [visitId, doctorId, mrId, outcome, world.consentTextVersionId],
+           values (gen_random_uuid(), $1, $2, $3, $4, $5, 'en-IN', $6::timestamptz)`,
+          [visitId, doctorId, mrId, outcome, world.consentTextVersionId, capturedAt],
         );
       }
     };
-    await seed(world.users.puneMr.id, world.visits.pune, world.doctors.pune, 'declined');
+    await seed(world.users.puneMr.id, world.visits.pune, world.doctors.pune, 'declined', at.pune);
 
     // **MR-08 B4: nagpurMr's visit used to be booked against the PUNE doctor.**
     //
@@ -403,50 +413,144 @@ describe.skipIf(!reachable)('team exceptions', () => {
 
     const nagpurVisit = randomUUID();
     await client.query(
-      `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
+      `insert into public.visits (id, mr_id, doctor_id, status, origin, unplanned_reason) values ($1, $2, $3, 'completed', 'unplanned', 'test visit (BE-C78)')`,
       [nagpurVisit, world.users.nagpurMr.id, nagpurDoctor],
     );
-    await seed(world.users.nagpurMr.id, nagpurVisit, nagpurDoctor, 'consented');
+    await seed(world.users.nagpurMr.id, nagpurVisit, nagpurDoctor, 'consented', at.nagpur);
+    return { nagpurVisit, nagpurDoctor, seed };
   };
 
-  it('emits nothing at all below the team-size floor', async () => {
-    // The fixture manager oversees two MRs. A median over two people is one
-    // person's number, so the anomaly is suppressed entirely — not emitted with a
-    // low-confidence marker, which somebody would act on anyway.
-    await inRolledBackTransaction(async (client) => {
-      await seedDivergentConsents(client);
-      await asUser(client, world.users.westManager);
-      const rows = await client.query(
-        `select mr_id from public.team_exceptions((now() at time zone 'Asia/Kolkata')::date)
-          where exception_kind = 'consent_rate_anomaly'`,
-      );
-      expect(rows.rows).toEqual([]);
+  /**
+   * 10 October -- each consent-rate test runs under TWO FROZEN CLOCKS: 00:30 IST, the hour in which
+   * the old `now() - 1 hour` fixture landed on yesterday, and 12:00 IST. The clock only chooses the
+   * working day; every capture is a local time OF that day, so both must give the same answers.
+   */
+  const IST = 'Asia/Kolkata';
+  const lowerTeamFloor = (client: Client) =>
+    client.query(
+      `insert into public.app_thresholds (key, value, unit, note)
+       values ('consent_min_team_size', '2'::jsonb, 'count', 'test override')`,
+    );
+  /**
+   * Consents the shared WORLD already holds for an MR on a day. The world stamps its own at
+   * `now() - 2 hours`, so between 00:00 and 02:00 IST they fall on the working day these tests use;
+   * the expectations add them rather than assume the day is empty.
+   */
+  const worldConsents = async (client: Client, mrId: string, date: string) => {
+    const r = await client.query<{ n: number }>(
+      `select count(*)::int as n from public.consent_records
+        where captured_by_mr_id = $1 and (captured_at at time zone 'Asia/Kolkata')::date = $2::date`,
+      [mrId, date],
+    );
+    return r.rows[0]?.n ?? 0;
+  };
+  const anomalies = async (client: Client, date: string) =>
+    client.query<{ mr_id: string; detail: Record<string, unknown> }>(
+      `select mr_id, detail from public.team_exceptions($1::date)
+        where exception_kind = 'consent_rate_anomaly'`,
+      [date],
+    );
+
+  describe.each(['00:30', '12:00'])('with the clock frozen at %s IST', (clock) => {
+    it('emits nothing at all below the team-size floor -- with the day really holding the data', async () => {
+      // The fixture manager oversees two MRs. A median over two people is one
+      // person's number, so the anomaly is suppressed entirely — not emitted with a
+      // low-confidence marker, which somebody would act on anyway.
+      await inRolledBackTransaction(async (client) => {
+        const day = await workingDay(client, IST, await localClock(client, IST, clock));
+        const noon = await day.at('12:00');
+        const already =
+          (await worldConsents(client, world.users.puneMr.id, day.date)) +
+          (await worldConsents(client, world.users.nagpurMr.id, day.date));
+        await seedDivergentConsents(client, { pune: noon, nagpur: noon });
+        // Not vacuous: the eight captures ARE in the day asked about. The old fixture passed this
+        // test from 00:00 to 01:00 IST by looking at a day with nothing in it.
+        const inDay = await client.query<{ n: number }>(
+          `select count(*)::int as n from public.consent_records
+            where captured_by_mr_id = any($1) and (captured_at at time zone 'Asia/Kolkata')::date = $2::date`,
+          [[world.users.puneMr.id, world.users.nagpurMr.id], day.date],
+        );
+        expect(inDay.rows[0]?.n).toBe(already + 8);
+        await asUser(client, world.users.westManager);
+        expect((await anomalies(client, day.date)).rows).toEqual([]);
+      });
     });
-  });
 
-  it('flags a consent-rate anomaly as data quality once the team is large enough', async () => {
-    await inRolledBackTransaction(async (client) => {
-      await seedDivergentConsents(client);
-      // Lower the floor through the config table rather than the code — which also
-      // proves the threshold is read at query time.
-      await client.query(
-        `insert into public.app_thresholds (key, value, unit, note)
-         values ('consent_min_team_size', '2'::jsonb, 'count', 'test override')`,
-      );
-      await asUser(client, world.users.westManager);
-      const rows = await client.query<{ mr_id: string; detail: Record<string, unknown> }>(
-        `select mr_id, detail from public.team_exceptions((now() at time zone 'Asia/Kolkata')::date)
-          where exception_kind = 'consent_rate_anomaly'`,
-      );
+    it('flags a consent-rate anomaly as data quality once the team is large enough', async () => {
+      await inRolledBackTransaction(async (client) => {
+        const day = await workingDay(client, IST, await localClock(client, IST, clock));
+        const noon = await day.at('12:00');
+        await seedDivergentConsents(client, { pune: noon, nagpur: noon });
+        // Lower the floor through the config table rather than the code — which also
+        // proves the threshold is read at query time.
+        await lowerTeamFloor(client);
+        await asUser(client, world.users.westManager);
+        const rows = await anomalies(client, day.date);
 
-      expect(rows.rows.length).toBeGreaterThan(0);
-      for (const row of rows.rows) {
-        // Never a performance measure. The label is part of the contract.
-        expect(row.detail['signal']).toBe('data_quality');
-        expect(row.detail).toHaveProperty('teamMedian');
-        expect(row.detail).toHaveProperty('sampleSize');
-        expect(row.detail).toHaveProperty('teamSize');
-      }
+        expect(rows.rows.length).toBeGreaterThan(0);
+        for (const row of rows.rows) {
+          // Never a performance measure. The label is part of the contract.
+          expect(row.detail['signal']).toBe('data_quality');
+          expect(row.detail).toHaveProperty('teamMedian');
+          expect(row.detail).toHaveProperty('sampleSize');
+          expect(row.detail).toHaveProperty('teamSize');
+        }
+      });
+    });
+
+    it('buckets by the IST date: 00:00, 00:30 and 23:59 count; 23:59 the day before and 00:00 the day after do not', async () => {
+      await inRolledBackTransaction(async (client) => {
+        const day = await workingDay(client, IST, await localClock(client, IST, clock));
+        const worldPune = await worldConsents(client, world.users.puneMr.id, day.date);
+        const worldNagpur = await worldConsents(client, world.users.nagpurMr.id, day.date);
+        // Inside the day, at both of its edges and in the hour that broke the old fixture.
+        const { seed } = await seedDivergentConsents(client, {
+          pune: await day.at('00:30'),
+          nagpur: await day.at('23:59'),
+        });
+        await seed(
+          world.users.puneMr.id,
+          world.visits.pune,
+          world.doctors.pune,
+          'declined',
+          await day.at('00:00'),
+          1,
+        );
+        // Outside it, one minute either side of midnight. Both are consents a naive "minus one
+        // hour" or a UTC date would have counted into the wrong day.
+        await seed(
+          world.users.puneMr.id,
+          world.visits.pune,
+          world.doctors.pune,
+          'consented',
+          await day.at('23:59', -1),
+          3,
+        );
+        await seed(
+          world.users.puneMr.id,
+          world.visits.pune,
+          world.doctors.pune,
+          'consented',
+          await day.at('00:00', 1),
+          3,
+        );
+        await lowerTeamFloor(client);
+        await asUser(client, world.users.westManager);
+        const byMr = new Map(
+          (await anomalies(client, day.date)).rows.map((r) => [r.mr_id, r.detail]),
+        );
+        // puneMr: the four at 00:30 and the one at 00:00, all declined -- none of the six outside.
+        // The world's own consents on that day (all `consented`) are added, never assumed absent.
+        expect(byMr.get(world.users.puneMr.id)).toMatchObject({ sampleSize: 5 + worldPune });
+        expect(Number(byMr.get(world.users.puneMr.id)?.['rate'])).toBeCloseTo(
+          worldPune / (5 + worldPune),
+          3,
+        );
+        expect(byMr.get(world.users.nagpurMr.id)).toMatchObject({
+          sampleSize: 4 + worldNagpur,
+          rate: 1,
+        });
+      });
     });
   });
 
@@ -535,25 +639,22 @@ describe.skipIf(!reachable)('approval workflow', () => {
     });
   });
 
-  it('never offers a manager their own report', async () => {
+  it('never offers a manager their own report -- because a manager cannot have a visit', async () => {
+    // This test used to GIVE the manager a visit and a report, and check the report was not
+    // offered back. `BE-C78` (`20261009000200`) makes that visit impossible: a visit is a rep's,
+    // on every path, the owner's included. So the premise is now the assertion.
     await inRolledBackTransaction(async (client) => {
-      // Give the manager a report of their own by making them the author.
-      const visitId = randomUUID();
-      const reportId = randomUUID();
-      await client.query(
-        `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
-        [visitId, world.users.westManager.id, world.doctors.pune],
-      );
-      await client.query(
-        `insert into public.call_reports (id, visit_id, mr_id, summary, status)
-         values ($1, $2, $3, 'mine', 'submitted')`,
-        [reportId, visitId, world.users.westManager.id],
-      );
-      await asUser(client, world.users.westManager);
-      const rows = await client.query<{ id: string }>(
-        'select id from public.approvable_call_reports()',
-      );
-      expect(rows.rows.map((r) => r.id)).not.toContain(reportId);
+      const refused = await client
+        .query(
+          `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
+          [randomUUID(), world.users.westManager.id, world.doctors.pune],
+        )
+        .then(
+          () => null,
+          (error: unknown) => error as { code?: string; message?: string },
+        );
+      expect(refused?.code).toBe('42501');
+      expect(refused?.message).toContain('visits belong to reps');
     });
   });
 
@@ -571,7 +672,7 @@ describe.skipIf(!reachable)('approval workflow', () => {
         const visitId = randomUUID();
         const reportId = randomUUID();
         await client.query(
-          `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
+          `insert into public.visits (id, mr_id, doctor_id, status, origin, unplanned_reason) values ($1, $2, $3, 'completed', 'unplanned', 'test visit (BE-C78)')`,
           [visitId, world.users.puneMr.id, world.doctors.pune],
         );
         await client.query(

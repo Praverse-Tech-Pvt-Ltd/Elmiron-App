@@ -12,7 +12,7 @@ import {
 import type { AiPromptVersion, GatewayFeature, PromptModelConfig } from '@fieldforce/core';
 import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { Body, Card, Heading, Label, MissingNote, Pill } from './ui';
-import { approvalAffordance } from './knowledge-review';
+import { approvalAffordance, submitAffordance } from './knowledge-review';
 
 /**
  * W1-G E1 / `BE-W122` — drafting and approving the text a model is given.
@@ -283,6 +283,7 @@ export const PromptReview = ({
 
   // The same rule, the same sentences, one implementation. Third caller.
   const affordance = approvalAffordance(version, viewerUserId);
+  const submit = submitAffordance(version, viewerUserId);
   const busy = state.kind === 'busy';
 
   return (
@@ -311,7 +312,9 @@ export const PromptReview = ({
       {state.kind === 'done' ? <Body>{state.message}</Body> : null}
       {state.kind === 'failed' ? <MissingNote>{state.message}</MissingNote> : null}
 
-      {version.status === 'draft' ? (
+      {/* BE-C77: Submit is drawn for the draft's author only; anyone else is told why. */}
+      {submit.kind === 'hidden' ? <MissingNote>{submit.reason}</MissingNote> : null}
+      {submit.kind === 'may_submit' ? (
         <button
           type="button"
           style={button()}

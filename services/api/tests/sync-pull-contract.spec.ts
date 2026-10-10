@@ -229,10 +229,14 @@ describe.skipIf(!reachable)('C4 — what the payload actually contains', () => {
       'id',
       'mr_id',
       'not_met_reason',
+      // `BE-C78` (`20261009000200`): what the visit is, said by the server.
+      'origin',
+      'planned_date',
       'received_at',
       'scheduled_for',
       'started_at',
       'status',
+      'unplanned_reason',
       'updated_at',
       // MR-47 / BE-W107. Not a column -- sync_pull adds the server's day for the visit.
       'visit_day',
@@ -257,6 +261,9 @@ describe.skipIf(!reachable)('C4 — what the payload actually contains', () => {
       'id',
       'mr_id',
       'plan_date',
+      // `BE-C78`: who planned this version, and the save's idempotency key (parsed and dropped).
+      'planned_by_user_id',
+      'request_id',
       'status',
       'supersedes_beat_plan_id',
       'territory_id',

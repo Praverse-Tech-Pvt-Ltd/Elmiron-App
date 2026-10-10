@@ -121,6 +121,21 @@ describe('MR-17 B2 — a SQLSTATE carries its own remedy', () => {
     expect(shown.remedy).not.toMatch(/consent/i);
   });
 
+  it('45013 — a check-in or check-out ahead of the server clock: the phone, not consent or recording', () => {
+    // `BE-W173`. The same remedy as 45007 and 45009, about a different record.
+    const shown = presentRejection(refused('45013'));
+    expect(shown.refusalCode).toBe('field_event_in_future');
+    expect(shown.remedy).toMatch(/clock/i);
+    expect(shown.remedy).toMatch(/check-in or check-out/i);
+    expect(shown.remedy).not.toMatch(/consent|recording/i);
+  });
+
+  it('45014 — a check-out before its check-in names the order, not a bare refusal', () => {
+    const shown = presentRejection(refused('45014'));
+    expect(shown.refusalCode).toBe('check_out_before_check_in');
+    expect(shown.remedy).toMatch(/before the check-in/i);
+  });
+
   it('45010 — sync sooner, and it does not pretend waiting helps', () => {
     const shown = presentRejection(refused('45010'));
     expect(shown.refusalCode).toBe('recording_too_old_to_accept');

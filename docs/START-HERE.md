@@ -6,6 +6,12 @@ bringing it up from nothing, following only what is written down. Where a step b
 **[ran]**, it was run that way on that day and the result is recorded. **[not run]** means it was
 not, and the step is only as good as the document it cites.
 
+**Walked a second time on 9 October 2026 by a developer new to the project** (Pratham — "joining" in
+`docs/log/backend.md`), on a different Windows 11 machine, from an **existing checkout that was 415
+commits behind**, not a fresh clone. What that walk found is marked **[9 Oct]**. The biggest
+correction: if you already have a checkout, read **"Already have a checkout?"** below before step 5 —
+`pnpm db:start` will not bring an old database up to date, and says nothing.
+
 Numbers that change — test counts, migration counts, what is blocked — are deliberately **not** copied
 onto this page. Each is given as the command or the file that tells you today's value.
 
@@ -21,10 +27,10 @@ existed (6 August), and several of its commands no longer apply — see "Traps".
 
 | # | Tool | Version | How you know | |
 | --- | --- | --- | --- | --- |
-| 1 | Git | any recent; long paths ON (`git config --global core.longpaths true`) and the Windows `LongPathsEnabled` registry value set, then reboot — `docs/gotchas.md`, "Long paths" | `git config --global core.longpaths` prints `true` | **[not run]** — already set on the machine used |
-| 2 | Node | **24.x** — `package.json` `engines` is `>=24 <25`; `.nvmrc` says `24` | `node -v` | [ran] 24.18.0 |
-| 3 | pnpm | **exactly the version in `package.json` `packageManager`**, through corepack: `corepack enable` (if it fails with `EPERM`: `corepack enable --install-directory "$env:APPDATA\npm"`, `docs/gotchas.md`) | `pnpm -v` in the repository | [ran] 11.21.0 |
-| 4 | Docker Desktop | recent; running | `docker ps` answers | [ran] 29.5.3 |
+| 1 | Git | any recent; long paths ON (`git config --global core.longpaths true`) and the Windows `LongPathsEnabled` registry value set, then reboot — `docs/gotchas.md`, "Long paths" | `git config --global core.longpaths` prints `true` | **[not run]** — already set on the machine used. **[9 Oct]** NOT set on the second machine (prints nothing), and steps 2–7 all passed without it from `C:\Users\Admin\StudioProjects\Elmiron-App`. Untested for the APK build, which is where deep paths are |
+| 2 | Node | **24.x** — `package.json` `engines` is `>=24 <25`; `.nvmrc` says `24` | `node -v` | [ran] 24.18.0. **[9 Oct]** 24.14.1 |
+| 3 | pnpm | **exactly the version in `package.json` `packageManager`**, through corepack: `corepack enable` (if it fails with `EPERM`: `corepack enable --install-directory "$env:APPDATA\npm"`, `docs/gotchas.md`) | `pnpm -v` **in the repository** prints the pinned version — check it; a wrong one does not refuse, it runs | [ran] 11.21.0. **[9 Oct]** A pnpm installed earlier with `npm i -g pnpm` **shadows corepack**: `pnpm -v` printed **9.15.9** in the repository. `corepack enable` failed `EPERM`; the fallback fixed it (11.21.0) by **replacing that global pnpm for every project on the machine** — know that before you run it |
+| 4 | Docker Desktop | recent; running | `docker ps` answers | [ran] 29.5.3. **[9 Oct]** 29.3.1. Docker Desktop was not running; started, it **also restarted this checkout's old Supabase stack by itself** — see "Already have a checkout?" |
 | 5 | *Only to build the Android app:* JDK 17, Android SDK (build-tools, NDK), and a CMake **3.31 or newer with its own ninja** (Visual Studio's bundled CMake works; the SDK's 3.22.1 does not) | the demo build script's `-CheckOnly` names what is missing | [ran] JDK 17.0.12, NDK 27.1, VS 18's CMake 4.3.1 |
 
 The Supabase CLI is **not** installed separately: it is a dependency and runs as
@@ -35,12 +41,12 @@ The Supabase CLI is **not** installed separately: it is a dependency and runs as
 | # | Run | What it does | What proves it worked | Time measured [ran] |
 | --- | --- | --- | --- | --- |
 | 1 | `git clone https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App.git` into a **short** path (e.g. `C:\dev\ea`) | | | 2 s |
-| 2 | `pnpm install` | | ends `Done … using pnpm v<the pinned version>` | **1 min** with an empty package store |
+| 2 | `pnpm install` | | ends `Done … using pnpm v<the pinned version>` | **1 min** with an empty package store. **[9 Oct]** `Done in 2m 13.2s` after registry retries — and then **the process did not exit**; still running 10 minutes later with nothing to do. If `Done` has printed and the prompt has not come back, stop it; `pnpm install --offline` then says `Already up to date` (305 ms), which proves the tree is complete |
 | 3 | **`pnpm hooks:install`** | turns on the commit and push checks **for this clone** | `git config core.hooksPath` prints `.githooks` | seconds |
-| 4 | `pnpm ci:local` | CI's static job, exactly: builds the shared packages, typecheck, lint, format, the repository checks, every unit-test suite | the last line: `All N step(s) passed` | **6 min** |
-| 5 | `pnpm db:start` | the local Supabase stack in Docker; applies every migration from empty | **ten** containers in `docker ps`; the last migration line, then `log_lock_waits=on` | **1 min** with the Docker images already present — **not measured** for a first image download, which is several GB |
-| 6 | `pnpm ci:local --with-db` | CI's static AND database jobs: the database suites, the Edge Function, the console in a real browser, every rollback | `All N step(s) passed`; read the two test-runner lines (`Test Files …`, `Tests …`) — a skipped suite also exits 0 | **4 min** after step 4 (its static half was cached) |
-| 7 | the console: copy `apps/console/.env.example` to `apps/console/.env.local`, then `pnpm --filter @fieldforce/console dev` | the admin web app on port 3100 | `http://localhost:3100/sign-in` shows "Sign in" | 15 s |
+| 4 | `pnpm ci:local` | CI's static job, exactly: builds the shared packages, typecheck, lint, format, the repository checks, every unit-test suite | the last line: `All N step(s) passed` | **6 min**. **[9 Oct]** 1 min 26 s, `All 17 step(s) passed` (an existing checkout; 9 turbo tasks were cache hits) |
+| 5 | `pnpm db:start` | the local Supabase stack in Docker; applies every migration **only to an empty database** — see "Already have a checkout?" | **ten** containers in `docker ps`; the last migration line, then `log_lock_waits=on`. **`log_lock_waits=on` alone proves nothing** — it prints on a stale database too | **1 min** with the Docker images already present — **not measured** for a first image download, which is several GB. **[9 Oct]** 28 s from stopped, ten containers; **2 s** on the stack Docker had restarted, nine containers, nothing applied |
+| 6 | `pnpm ci:local --with-db` | CI's static AND database jobs: the database suites, the Edge Function, the console in a real browser, every rollback | `All N step(s) passed`; read the two test-runner lines (`Test Files …`, `Tests …`) — a skipped suite also exits 0 | **4 min** after step 4 (its static half was cached). **[9 Oct]** 4 min 0 s, `All 30 step(s) passed`, the same runner counts as 8 October |
+| 7 | the console: copy `apps/console/.env.example` to `apps/console/.env.local`, then `pnpm --filter @fieldforce/console dev` | the admin web app on port 3100 | `http://localhost:3100/sign-in` shows "Sign in" | 15 s. **[9 Oct]** the example file worked unchanged: the browser suite signed in with it |
 | 8 | the app, as a demo APK: see "The app" below | builds a debug-signed APK against the stack on this laptop | the script prints `DEMO APK READY` with a path, and the file is there | **18 min** (1,068 s) |
 
 **Measured on 8 October [ran]: about 15 minutes from a clone to a green full run** (2 s + 1 min + 6 min
@@ -50,6 +56,31 @@ an estimate, not a measurement, about an hour more for installing the tools and 
 of images.
 
 **Step 6 stops the stack when it finishes.** Run `pnpm db:start` again before anything that needs it.
+
+### Already have a checkout? [9 Oct]
+
+**The table above is a fresh clone.** An existing checkout has three things a fresh clone does not,
+and each one fails silently:
+
+1. **An old database.** `pnpm db:stop` keeps the data volume (it prints `"backup":true`), and Docker
+   Desktop restarts a stack it was running when it last closed. `pnpm db:start` on either **applies no
+   new migration and exits 0**. Measured on 9 October after pulling 415 commits: it took 2 s, printed
+   `log_lock_waits=on`, and the database held **47 of 101** migrations. Check, then fix:
+
+   ```bash
+   ls services/api/supabase/migrations/*.sql | wc -l          # on disk
+   docker exec supabase_db_Elmiron-App psql -U postgres -tAc \
+     'select count(*) from supabase_migrations.schema_migrations'  # applied
+   pnpm db:reset    # if they differ: applies every migration from empty (37 s); local data is lost
+   ```
+
+2. **Hooks that may be off or stale.** `git config core.hooksPath` printed **nothing** on this
+   checkout, so every commit made in it had run no check. Run `pnpm hooks:install` and confirm it prints
+   `.githooks` (Trap 1).
+3. **A pnpm that may not be the pinned one** — see the install table, row 3.
+
+The order for an existing checkout: `git pull` → `pnpm -v` (pinned?) → `pnpm install` →
+`pnpm hooks:install` → `pnpm db:start` → **the migration count above** → step 4 onwards.
 
 ### Accounts to sign in with
 
@@ -99,7 +130,10 @@ release key".
 1. **The hooks are per clone.** A fresh clone runs no checks on commit or push until
    `pnpm hooks:install`. On this project's own machine, `core.hooksPath` once pointed at ANOTHER
    checkout's stale hooks, so every commit ran an out-of-date check (W2-I B2). The value must be the
-   relative `.githooks`.
+   relative `.githooks`. **[9 Oct]** To see it fire: commit a scratch file citing a backend work-item id
+   with a number nobody has minted (not written here — this page would then fail the same check).
+   The hook prints `rule 3: <id> is cited at <file> and has no row` and `COMMIT REFUSED`, and HEAD
+   does not move. Then unstage and delete the file.
 2. **The push hook resets your local database** and runs the whole database job (minutes). It needs the
    stack up (`pnpm db:start`) and refuses the push if it is not.
 3. **Build `packages/core` before serving the gateway** (above). The failure is a module-not-found at
@@ -166,6 +200,9 @@ server the app was built against before the backend existed.
 * **The service-role key is read in exactly one place** — `services/api/supabase/functions/_shared/practice-writer.ts`, which exposes
   three named database calls and nothing else. `services/api/scripts/check-service-role-reads.mjs` fails
   the build otherwise, and also forbids naming the other platform credentials in function code.
+  **[9 Oct] Grep for the right name:** it is read as `SUPABASE_SECRET_KEYS` (`practice-writer.ts:53`).
+  A search of `services/api/supabase/functions` for `SERVICE_ROLE_KEY` finds only a comment in
+  `ai-gateway/index.ts`, which looks like "read nowhere".
 
 ---
 

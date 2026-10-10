@@ -177,7 +177,16 @@ describe.skipIf(!reachable)('BE-W97 — the verdict carries DETAIL and HINT', ()
       await asUser(client, world.users.puneMr);
       const id = randomUUID();
       const results = await push(client, [
-        { id, entity: 'visit', entityId: id, payload: { doctorId: world.doctors.pune } },
+        {
+          id,
+          entity: 'visit',
+          entityId: id,
+          payload: {
+            doctorId: world.doctors.pune,
+            origin: 'unplanned',
+            unplannedReason: 'doctor asked to see me',
+          },
+        },
       ]);
       expect(results[0]?.status).toBe('accepted');
       expect(results[0]?.sqlDetail).toBeNull();
@@ -228,7 +237,16 @@ describe.skipIf(!reachable)('BE-W97 — the verdict carries DETAIL and HINT', ()
             occurredAt: new Date(Date.now() - 60_000).toISOString(),
           }),
         },
-        { id: fine, entity: 'visit', entityId: fine, payload: { doctorId: world.doctors.pune } },
+        {
+          id: fine,
+          entity: 'visit',
+          entityId: fine,
+          payload: {
+            doctorId: world.doctors.pune,
+            origin: 'unplanned',
+            unplannedReason: 'doctor asked to see me',
+          },
+        },
       ]);
 
       const refused = results.find((r) => r.id === overCap);

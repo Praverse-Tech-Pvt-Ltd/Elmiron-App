@@ -35,6 +35,7 @@ interface World {
   readonly authorAdmin: Person;
   readonly approverAdmin: Person;
   readonly rep: Person;
+  readonly manager: Person;
   readonly otherOrgAdmin: Person;
 }
 
@@ -317,6 +318,25 @@ test('a practice session becomes startable only after a second admin approves it
     output_schema_name: 'SimCoachOutputSchema',
     model_config: { temperature: 0, maxTokens: 2000 },
   });
+
+  // The analysis just written, as the console shows it: an ADMIN reads it on /practice-feedback;
+  // a field MANAGER is told it is not theirs to see (RLS returns them nothing).
+  await approver.goto('/practice-feedback');
+  await expect(
+    approver.getByRole('heading', { name: new RegExp(scenarioTitle, 'u') }),
+  ).toBeVisible();
+  await approver.getByText('Open the feedback').first().click();
+  await expect(approver.getByText('What went well').first()).toBeVisible();
+  await expect(approver.getByText('What to work on').first()).toBeVisible();
+
+  const managerContext = await browser.newContext();
+  const manager = await managerContext.newPage();
+  await signIn(manager, world.manager);
+  await manager.goto('/practice-feedback');
+  await expect(
+    manager.getByText('Practice feedback is visible to the rep who practised and to admins only.'),
+  ).toBeVisible();
+  await managerContext.close();
 
   await authorContext.close();
   await approverContext.close();

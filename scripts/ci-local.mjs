@@ -39,7 +39,8 @@
  * checks. That is the same control the derivation above already carries for the whole job.
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -367,10 +368,10 @@ const main = () => {
     const heading = '[' + index + '/' + total + '] ' + entry.job + ' · ' + entry.label;
     console.log('\n' + '='.repeat(Math.min(heading.length, 78)) + '\n' + heading + '\n');
 
-    const result = spawnSync(shell, ['-c', entry.body], {
+    const result = spawnSync(shell, ['-c', recordingBackgroundPids(entry.body)], {
       cwd: ROOT,
       stdio: 'inherit',
-      env: { ...process.env, ...entry.env },
+      env: { ...process.env, ...entry.env, CI_LOCAL_BACKGROUND_PIDS: BACKGROUND_PIDS_FILE },
     });
 
     if (result.status !== 0) {
@@ -419,4 +420,69 @@ const main = () => {
   return 0;
 };
 
-process.exit(main());
+/**
+ * `BE-W172` — whatever a step started in the background is stopped when the run ends.
+ *
+ * **The defect.** The step that serves the AI gateway starts `supabase functions serve` with `&`.
+ * A GitHub runner kills it when the job ends; nothing here did. So every `--with-db` run -- every
+ * push through `.githooks/pre-push` -- left a tree running: `sh` → `pnpm.js exec supabase …
+ * functions serve` (corepack) → `node supabase.js` → `supabase.exe`. Measured 9 October 2026:
+ * alive 25+ minutes after its run, parent gone, holding the stdout/stderr it inherited.
+ *
+ * **How it is owned: by its own PID, never by a name.** For every step line that ends in a lone
+ * `&`, the local runner appends one line recording `$!` -- the PID of exactly that background
+ * process (on Windows its Windows PID, from `/proc/$!/winpid`) -- to a file this run owns. When the
+ * run ends, each recorded PID is stopped with its whole tree, and nothing else is. `ci.yml` is not
+ * changed: only the copy of the body this runner executes carries the extra line.
+ *
+ * Tracing by ancestry was tried first and FAILED: Git's `bin\bash.exe` is a launcher, so the PID
+ * `spawnSync` reports is not the shell that started the server, and that shell is gone by the end.
+ * A match on the command line (`functions serve`, `services/api`) was rejected because those paths
+ * are relative: it would stop another checkout's or another developer's server.
+ *
+ * Runs after the last step, whether the run passed, failed or threw.
+ */
+const BACKGROUND_PIDS_FILE = join(tmpdir(), `ci-local-background-${String(process.pid)}.pids`);
+
+const recordingBackgroundPids = (body) =>
+  body
+    .split('\n')
+    .map((line) =>
+      /(^|[^&])&\s*$/u.test(line)
+        ? line +
+          '\necho "$(cat /proc/$!/winpid 2>/dev/null || echo $!)" >> "$CI_LOCAL_BACKGROUND_PIDS"'
+        : line,
+    )
+    .join('\n');
+
+const stopWhatStepsStartedInTheBackground = () => {
+  let pids = [];
+  try {
+    pids = readFileSync(BACKGROUND_PIDS_FILE, 'utf8')
+      .split(/\s+/u)
+      .filter((pid) => /^\d+$/u.test(pid));
+    rmSync(BACKGROUND_PIDS_FILE, { force: true });
+  } catch {
+    return; // No step backgrounded anything.
+  }
+  for (const pid of pids) {
+    const stop =
+      process.platform === 'win32'
+        ? spawnSync('taskkill', ['/T', '/F', '/PID', pid], { encoding: 'utf8' })
+        : spawnSync('sh', ['-c', `pkill -TERM -P ${pid}; kill -TERM ${pid}`], { encoding: 'utf8' });
+    console.log(
+      '\nci-local: stopped background process ' +
+        pid +
+        ' (and its children), started by a step: ' +
+        (stop.status === 0 ? 'stopped' : 'already gone'),
+    );
+  }
+};
+
+let code = 1;
+try {
+  code = main();
+} finally {
+  stopWhatStepsStartedInTheBackground();
+}
+process.exit(code);

@@ -2,6 +2,7 @@ import {
   ApiRequestError,
   CreateAdverseEventFlagRequestSchema,
   CreateCallReportRequestSchema,
+  CreateVisitRequestSchema,
   CreateConsentRecordRequestSchema,
   CreateSampleAndInputRequestSchema,
   SyncQueueItemSchema,
@@ -12,6 +13,7 @@ import type {
   CreateAdverseEventFlagRequest,
   SyncWarning,
   CreateCallReportRequest,
+  CreateVisitRequest,
   SyncRejectionCode,
   CreateCheckInRequest,
   CreateCheckOutRequest,
@@ -302,6 +304,25 @@ export const consentQueueItem = (
  * `entityId` is the visit, matching the other four, so everything waiting on one visit
  * groups together on the queue screen.
  */
+/**
+ * `BE-W176`. An unplanned visit, queued. Its id is the visit's own: the check-in, call report and
+ * check-out that follow it are queued against the same id, and `flushOutbox` holds them back until
+ * this one is accepted -- a check-in for a visit the server does not have yet would be refused.
+ */
+export const unplannedVisitQueueItem = (body: CreateVisitRequest): SyncQueueItem =>
+  SyncQueueItemSchema.parse({
+    id: body.id,
+    entity: 'visit',
+    operation: 'create',
+    entityId: body.id,
+    payload: { ...body, __queueEntity: 'visit' },
+    status: 'queued',
+    attemptCount: 1,
+    lastError: null,
+    clientCreatedAt: nowIso(),
+    syncedAt: null,
+  });
+
 export const callReportQueueItem = (
   body: CreateCallReportRequest,
   operation: 'create' = 'create',
@@ -398,6 +419,24 @@ export const sendOrQueue = async (
     await store.write(syncQueueReducer(load.state, { type: 'enqueued', item }));
     return { kind: 'queued' };
   }
+};
+
+/**
+ * `BE-W176`. Put an item on the phone's queue FIRST, before any send.
+ *
+ * For a write the phone must be able to read back at once: an unplanned visit has to be openable
+ * the moment it is made -- online, before the next pull brings the server's copy, and offline. The
+ * caller then flushes (`flushOutbox`), which sends it if there is signal. Same guard as
+ * `sendOrQueue`: a queue that cannot be read is never overwritten.
+ */
+export const enqueueFirst = async (
+  item: SyncQueueItem,
+  store: QueuePersistence = devicePersistence,
+): Promise<{ readonly kind: 'queued' } | { readonly kind: 'queue_unreadable' }> => {
+  const load = await store.read();
+  if (load.kind === 'unreadable') return { kind: 'queue_unreadable' };
+  await store.write(syncQueueReducer(load.state, { type: 'enqueued', item }));
+  return { kind: 'queued' };
 };
 
 /**
@@ -521,11 +560,37 @@ export const flushOutbox = async (
   });
 
   let sent = 0;
+  // `BE-W176`. The dependency, explicit and from the WHOLE queue -- not only this run's items: every
+  // visit the phone made that the server has not yet accepted (queued, in flight, or refused). Its
+  // check-in, report and check-out share its id as `entityId`, and none of them is sent until the
+  // visit itself is accepted -- sent earlier, each would be refused for a visit the server lacks.
+  const visitsNotYetAccepted = new Set(
+    state.items
+      .filter((item) => item.entity === 'visit' && item.status !== 'synced')
+      .map((item) => item.entityId),
+  );
+  const refusedVisits = new Set(
+    state.items
+      .filter((item) => item.entity === 'visit' && item.status === 'failed')
+      .map((item) => item.entityId),
+  );
   for (const item of queued) {
     // MR-49 / `FE-W61`. The client sends under whoever is signed in NOW. If that is no longer
     // the user whose queue this is, stop before sending another of their items as someone else.
     if (owner() !== startedFor) {
       return { attempted: sent, sent, stillQueued: queued.length - sent, ownerChanged: true };
+    }
+    if (item.entity !== 'visit' && visitsNotYetAccepted.has(item.entityId)) {
+      // Held, with nothing sent. A refused visit is said to be the reason, so the rep acts on the
+      // VISIT (the queue screen shows its refusal) instead of watching this wait.
+      state = syncQueueReducer(state, {
+        type: 'attempt_failed',
+        ids: [item.id],
+        error: refusedVisits.has(item.entityId)
+          ? 'Not sent: the server refused the visit this belongs to. See that visit on this screen.'
+          : 'Waiting for its visit to be sent first.',
+      });
+      continue;
     }
     try {
       const plan = sendFor(client, item);
@@ -549,6 +614,8 @@ export const flushOutbox = async (
         continue;
       }
       const response = await plan.send();
+      // Accepted (or already the server's): what waits on this visit may go.
+      if (item.entity === 'visit') visitsNotYetAccepted.delete(item.entityId);
       state = syncQueueReducer(state, {
         type: 'verdict_received',
         verdict: {
@@ -734,12 +801,10 @@ const sendFor = (client: OutboxWriteClient, item: SyncQueueItem): SendPlan => {
     case 'recording':
       return plan(recordingUploadFrom(item.payload), (body) => client.uploadRecording(body));
 
-    // Still a deliberate gap rather than an oversight:
-    //   `visit` -- written straight to the table, no RPC in the way (FIX-07).
-    // Listed rather than defaulted, so that converting it is a change to this line and
-    // not a change to nothing.
+    // `BE-W176`. A visit the PHONE makes is an unplanned one (`BE-C78`), and it replays as one.
+    // Until then this was `blocked('not_convertible')`: visits were written straight to the table.
     case 'visit':
-      return blocked('not_convertible');
+      return plan(CreateVisitRequestFrom(item), (body) => client.createUnplannedVisit(body));
   }
 
   // Unreachable while every member is handled above. If a member is added to
@@ -856,6 +921,13 @@ const CreateSampleAndInputRequestFrom = (
 const CreateCallReportRequestFrom = (item: SyncQueueItem): CreateCallReportRequest | null => {
   if (!payloadIs(item, 'call_report')) return null;
   const parsed = CreateCallReportRequestSchema.safeParse(item.payload);
+  return parsed.success ? parsed.data : null;
+};
+
+/** The same, for an unplanned visit: parsed by the contract, so it carries its reason or stays queued. */
+const CreateVisitRequestFrom = (item: SyncQueueItem): CreateVisitRequest | null => {
+  if (!payloadIs(item, 'visit')) return null;
+  const parsed = CreateVisitRequestSchema.safeParse(item.payload);
   return parsed.success ? parsed.data : null;
 };
 

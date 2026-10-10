@@ -62,6 +62,10 @@ export const PRODUCT_CLAIM_CAUTION =
   'regulated promotional content and must come from the client, not from a model. Approve the ' +
   'wording only if the underlying claim came from an approved label or prescribing information.';
 
+export const SUBMIT_AUTHOR_ONLY_NOTE =
+  'Only the admin who drafted this version submits it. A different admin then approves or ' +
+  'rejects it. The server refuses a submit from anyone else.';
+
 /**
  * The single decision this component makes, extracted so it is testable without a renderer.
  *
@@ -82,6 +86,31 @@ export const approvalAffordance = (
   return { kind: 'may_decide' };
 };
 
+/** Whether to draw Submit, and why not when it is a draft the viewer did not write. */
+export type SubmitAffordance =
+  | { readonly kind: 'not_a_draft' }
+  | { readonly kind: 'may_submit' }
+  | { readonly kind: 'hidden'; readonly reason: string };
+
+/**
+ * `BE-W168` — the console's half of submitting a draft, which only `content-step.mjs` did.
+ *
+ * `BE-C77`: the author submits and a different admin decides. Every `submit_*` refuses a
+ * non-author `42501` and each table holds the same rule as a CHECK (`20261009000100`), so this
+ * function only decides whether to DRAW the control — legibility, never enforcement, exactly as
+ * `approvalAffordance`. Imported by the prompt and practice-content screens, not reimplemented.
+ */
+export const submitAffordance = (
+  version: Pick<KnowledgeDocumentVersion, 'status' | 'createdByUserId'>,
+  viewerUserId: string,
+): SubmitAffordance => {
+  if (version.status !== 'draft') return { kind: 'not_a_draft' };
+  if (version.createdByUserId !== viewerUserId) {
+    return { kind: 'hidden', reason: SUBMIT_AUTHOR_ONLY_NOTE };
+  }
+  return { kind: 'may_submit' };
+};
+
 export interface KnowledgeReviewProps {
   readonly version: KnowledgeDocumentVersion;
   /** The document's title and the product it is about — read alongside the version. */
@@ -91,6 +120,7 @@ export interface KnowledgeReviewProps {
   readonly productBrandName: string | null;
   readonly viewerUserId: string;
   /** Injected so the component is testable and so the write stays in one place. */
+  readonly onSubmit: () => Promise<void>;
   readonly onApprove: (attestation: string) => Promise<void>;
   readonly onReject: (reason: string) => Promise<void>;
 }
@@ -98,6 +128,7 @@ export interface KnowledgeReviewProps {
 type State =
   | { readonly kind: 'idle' }
   | { readonly kind: 'busy' }
+  | { readonly kind: 'submitted' }
   | { readonly kind: 'approved' }
   | { readonly kind: 'rejected' }
   | { readonly kind: 'failed'; readonly message: string };
@@ -130,6 +161,7 @@ export const KnowledgeReview = ({
   marketName,
   productBrandName,
   viewerUserId,
+  onSubmit,
   onApprove,
   onReject,
 }: KnowledgeReviewProps): ReactNode => {
@@ -138,6 +170,7 @@ export const KnowledgeReview = ({
   const [reason, setReason] = useState('');
 
   const affordance = approvalAffordance(version, viewerUserId);
+  const submit = submitAffordance(version, viewerUserId);
   const busy = state.kind === 'busy';
 
   const run = (action: () => Promise<void>, done: State): void => {
@@ -155,6 +188,30 @@ export const KnowledgeReview = ({
           message: error instanceof Error ? error.message : 'The server refused this.',
         });
       });
+  };
+
+  // On a draft: Submit for its author, the reason for anyone else. One click, no confirm — the same
+  // as Submit on the prompt screen. Submitting freezes the text; it approves nothing.
+  //
+  // `submitted` only hides the button until the refresh lands. It says nothing: the refreshed page
+  // draws this version in the review list as a NEW card, which drops this card's state, and its
+  // four-eyes note is what says what happens next. A "Submitted" line here was on screen for one
+  // render and then gone — the browser test found that, the unit tests did not.
+  const submitControl = (): ReactNode => {
+    if (submit.kind === 'not_a_draft' || state.kind === 'submitted') return null;
+    if (submit.kind === 'hidden') return <MissingNote>{submit.reason}</MissingNote>;
+    return (
+      <button
+        type="button"
+        style={button()}
+        disabled={busy}
+        onClick={() => {
+          run(onSubmit, { kind: 'submitted' });
+        }}
+      >
+        Submit for review
+      </button>
+    );
   };
 
   return (
@@ -204,7 +261,9 @@ export const KnowledgeReview = ({
       ) : null}
       {state.kind === 'failed' ? <MissingNote>{state.message}</MissingNote> : null}
 
-      {affordance.kind === 'hidden' ? (
+      {submitControl()}
+
+      {submit.kind !== 'not_a_draft' ? null : affordance.kind === 'hidden' ? (
         <MissingNote>{affordance.reason}</MissingNote>
       ) : state.kind === 'approved' || state.kind === 'rejected' ? null : (
         <>

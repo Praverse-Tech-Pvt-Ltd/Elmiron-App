@@ -187,6 +187,8 @@ export const beatPlans: BeatPlan[] = [
     approvedAt: T(8, 45),
     version: 1,
     supersedesBeatPlanId: null,
+    // `BE-C78`: the manager's plan.
+    plannedByUserId: IDS.manager,
     entries: [
       {
         id: '55555555-5555-4555-8555-555555555511',
@@ -214,6 +216,9 @@ export const visits: Visit[] = [
     mrId: IDS.mr,
     doctorId: IDS.doctorA,
     beatPlanId: IDS.beatPlan,
+    origin: 'planned',
+    plannedDate: '2026-08-10',
+    unplannedReason: null,
     clinicAddressId: IDS.clinicA,
     status: 'completed',
     notMetReason: null,
@@ -232,6 +237,9 @@ export const visits: Visit[] = [
     mrId: IDS.mr,
     doctorId: IDS.doctorB,
     beatPlanId: IDS.beatPlan,
+    origin: 'planned',
+    plannedDate: '2026-08-10',
+    unplannedReason: null,
     clinicAddressId: IDS.clinicB,
     status: 'completed',
     notMetReason: null,
@@ -249,6 +257,10 @@ export const visits: Visit[] = [
     mrId: IDS.mr,
     doctorId: IDS.doctorA,
     beatPlanId: null,
+    // `BE-C78`: a visit nobody planned is UNPLANNED, with the rep's reason -- not a null plan id.
+    origin: 'unplanned',
+    plannedDate: null,
+    unplannedReason: 'Doctor asked for a follow-up',
     clinicAddressId: IDS.clinicA,
     status: 'in_progress',
     notMetReason: null,

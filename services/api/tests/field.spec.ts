@@ -208,7 +208,7 @@ describe.skipIf(!reachable)('geofence is computed server-side', () => {
     await asUserTx(world.users.puneMr, async (client) => {
       const visitId = randomUUID();
       await client.query(
-        `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'in_progress')`,
+        `insert into public.visits (id, mr_id, doctor_id, status, origin, unplanned_reason) values ($1, $2, $3, 'in_progress', 'unplanned', 'test visit (BE-C78)')`,
         [visitId, world.users.puneMr.id, world.doctors.pune],
       );
       const row = await checkIn(client, {
@@ -411,8 +411,8 @@ describe.skipIf(!reachable)('check-out', () => {
     await asUserTx(world.users.puneMr, async (client) => {
       const visitId = randomUUID();
       await client.query(
-        `insert into public.visits (id, mr_id, doctor_id, clinic_address_id, status)
-         values ($1, $2, $3, $4, 'in_progress')`,
+        `insert into public.visits (id, mr_id, doctor_id, clinic_address_id, status, origin, unplanned_reason)
+         values ($1, $2, $3, $4, 'in_progress', 'unplanned', 'test visit (BE-C78)')`,
         [visitId, world.users.puneMr.id, world.doctors.pune, world.clinicAddresses.pune],
       );
       await checkIn(client, {
@@ -434,8 +434,8 @@ describe.skipIf(!reachable)('check-out', () => {
     await asUserTx(world.users.puneMr, async (client) => {
       const visitId = randomUUID();
       await client.query(
-        `insert into public.visits (id, mr_id, doctor_id, clinic_address_id, status)
-         values ($1, $2, $3, $4, 'in_progress')`,
+        `insert into public.visits (id, mr_id, doctor_id, clinic_address_id, status, origin, unplanned_reason)
+         values ($1, $2, $3, $4, 'in_progress', 'unplanned', 'test visit (BE-C78)')`,
         [visitId, world.users.puneMr.id, world.doctors.pune, world.clinicAddresses.pune],
       );
       const result = await client.query<{ duration_seconds: number | null }>(
@@ -471,8 +471,8 @@ const seedDay = async (client: Client, order: number[]): Promise<void> => {
     if (point === undefined) continue;
     const visitId = randomUUID();
     await client.query(
-      `insert into public.visits (id, mr_id, doctor_id, clinic_address_id, status)
-       values ($1, $2, $3, $4, 'completed')`,
+      `insert into public.visits (id, mr_id, doctor_id, clinic_address_id, status, origin, unplanned_reason)
+       values ($1, $2, $3, $4, 'completed', 'unplanned', 'test visit (BE-C78)')`,
       [visitId, world.users.puneMr.id, world.doctors.pune, world.clinicAddresses.pune],
     );
     await checkIn(client, {

@@ -246,6 +246,10 @@ describe.skipIf(!reachable)('D2 — a restrictive tenant boundary cannot be wide
         'lessons',
         'markets',
         'organisations',
+        // `BE-W171` (`20261009000200`): an admin's planning grant and a manager's reassignment
+        // each carry the organisation they were made in.
+        'plan_reassignments',
+        'planning_territory_grants',
         'product_markets',
         'products',
         'recordings',

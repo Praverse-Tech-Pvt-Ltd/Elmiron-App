@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Redirect, useLocalSearchParams } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { PracticeAnalysisScreen, Screen } from '@fieldforce/ui';
 import { practiceEnabled } from '../../../src/features';
 import {
@@ -43,6 +43,7 @@ const finding =
   });
 
 const PracticeAnalysisView = (): ReactNode => {
+  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [analysis, setAnalysis] = useState<PracticeAnalysis | null>(null);
   const [session, setSession] = useState<PracticeSession | null>(null);
@@ -114,6 +115,9 @@ const PracticeAnalysisView = (): ReactNode => {
           return title === undefined ? [] : [{ id: module.moduleId, title, reason: module.reason }];
         })}
         notAvailable={stub}
+        onOpenLearning={() => {
+          router.push('/learning');
+        }}
         overallLabel={analysis === null ? '' : score(analysis.overallScore)}
         personaName={session?.personaDisplayName ?? 'the AI doctor'}
         sample={analysis?.modelProvider === 'sample'}

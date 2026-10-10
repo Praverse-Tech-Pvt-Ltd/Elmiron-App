@@ -6,7 +6,7 @@ import type { SimPersonaStance } from '@fieldforce/core';
 import { SIM_PERSONA_STANCES } from '@fieldforce/core';
 import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { Body, Card, Heading, Label, MissingNote, Pill } from './ui';
-import { approvalAffordance } from './knowledge-review';
+import { approvalAffordance, submitAffordance } from './knowledge-review';
 import type { SimContentRow } from './sim-content-row';
 
 /**
@@ -402,6 +402,7 @@ export const SimContentReview = ({
   // REUSED from the knowledge screen. A persona and a scenario carry the same three fields because
   // they carry the same lifecycle; a second copy of this rule is a second place for it to drift.
   const affordance = approvalAffordance(row, viewerUserId);
+  const submit = submitAffordance(row, viewerUserId);
   const busy = state.kind === 'busy';
 
   return (
@@ -432,7 +433,9 @@ export const SimContentReview = ({
       {state.kind === 'done' ? <Body>{state.message}</Body> : null}
       {state.kind === 'failed' ? <MissingNote>{state.message}</MissingNote> : null}
 
-      {row.status === 'draft' ? (
+      {/* BE-C77: Submit is drawn for the draft's author only; anyone else is told why. */}
+      {submit.kind === 'hidden' ? <MissingNote>{submit.reason}</MissingNote> : null}
+      {submit.kind === 'may_submit' ? (
         <button
           type="button"
           style={button()}

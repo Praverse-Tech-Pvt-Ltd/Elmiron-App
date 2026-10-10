@@ -7,13 +7,18 @@
  *   submit-knowledge "<document title>"  the document's DRAFT version → in review (it then appears in
  *                                        the console's Knowledge approvals, for a DIFFERENT admin)
  *
- * **Found, not planned.** The console lists knowledge only when it is `in_review` and has no publish
- * button for a course; nothing in `apps/` calls `publish_course_version` or `submit_knowledge_version`.
- * The loaders' own messages pointed the admin at screens that do not exist.
+ * **Found, not planned.** The console listed knowledge only when it was `in_review` and had no publish
+ * button for a course; nothing in `apps/` called `publish_course_version` or `submit_knowledge_version`.
+ * The loaders' own messages pointed the admin at screens that did not exist. Since the "Pratham —
+ * joining" section of `docs/log/backend.md`, the console's Knowledge page draws Submit for a draft's
+ * AUTHOR; publishing a course still has no screen.
  *
  * **It calls the same function a button would, as the signed-in admin**, so every refusal is the
- * database's: publishing a version with no lessons, submitting someone else's draft, and so on. It
- * never approves anything — approval is four eyes, in the console.
+ * database's: publishing a version with no lessons, submitting a version that is not a draft, and so
+ * on. **The database does NOT refuse an admin submitting a draft someone else wrote** — and the
+ * submitter may not approve, so in a two-admin organisation that draft can then never be approved.
+ * Run `submit-knowledge` as the draft's author. It never approves anything — approval is four eyes,
+ * in the console.
  *
  *   LOADER_PASSWORD=… node services/api/scripts/content-step.mjs publish-course "Storage basics" \
  *     --url http://127.0.0.1:54321 --key <publishable key> --email admin@company

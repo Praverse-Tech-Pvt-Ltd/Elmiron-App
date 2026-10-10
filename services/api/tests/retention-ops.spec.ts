@@ -246,7 +246,7 @@ describe.skipIf(!reachable)('the watchdog against the real database', () => {
       const consentId = randomUUID();
       await client.query('reset role');
       await client.query(
-        `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
+        `insert into public.visits (id, mr_id, doctor_id, status, origin, unplanned_reason) values ($1, $2, $3, 'completed', 'unplanned', 'test visit (BE-C78)')`,
         [visitId, world.users.puneMr.id, world.doctors.pune],
       );
       await client.query(
@@ -339,7 +339,7 @@ describe.skipIf(!reachable)('the watchdog against the real database', () => {
           const consentId = randomUUID();
           const recordingId = randomUUID();
           await client.query(
-            `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
+            `insert into public.visits (id, mr_id, doctor_id, status, origin, unplanned_reason) values ($1, $2, $3, 'completed', 'unplanned', 'test visit (BE-C78)')`,
             [visitId, world.users.puneMr.id, world.doctors.pune],
           );
           await client.query(
@@ -393,7 +393,7 @@ describe.skipIf(!reachable)('the watchdog against the real database', () => {
         const visitId = randomUUID();
         const consentId = randomUUID();
         await client.query(
-          `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
+          `insert into public.visits (id, mr_id, doctor_id, status, origin, unplanned_reason) values ($1, $2, $3, 'completed', 'unplanned', 'test visit (BE-C78)')`,
           [visitId, world.users.puneMr.id, world.doctors.pune],
         );
         await client.query(
@@ -616,7 +616,7 @@ describe.skipIf(!reachable)('post-restore reconciliation', () => {
       const consentId = randomUUID();
       const recordingId = randomUUID();
       await client.query(
-        `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
+        `insert into public.visits (id, mr_id, doctor_id, status, origin, unplanned_reason) values ($1, $2, $3, 'completed', 'unplanned', 'test visit (BE-C78)')`,
         [visitId, world.users.puneMr.id, world.doctors.pune],
       );
       await client.query(
@@ -832,7 +832,7 @@ describe.skipIf(!reachable)('post-restore reconciliation', () => {
       const id = randomUUID();
       const consentId = randomUUID();
       await client.query(
-        `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
+        `insert into public.visits (id, mr_id, doctor_id, status, origin, unplanned_reason) values ($1, $2, $3, 'completed', 'unplanned', 'test visit (BE-C78)')`,
         [id, world.users.puneMr.id, world.doctors.pune],
       );
       await client.query(

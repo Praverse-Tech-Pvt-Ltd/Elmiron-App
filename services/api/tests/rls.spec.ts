@@ -727,7 +727,7 @@ describe.skipIf(!reachable)('audit_log is append-only', () => {
 
       expect(await auditedRows()).toBe(0);
       await client.query(
-        `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'planned')`,
+        `insert into public.visits (id, mr_id, doctor_id, status, origin, unplanned_reason) values ($1, $2, $3, 'planned', 'unplanned', 'test visit (BE-C78)')`,
         [visitId, world.users.puneMr.id, world.doctors.pune],
       );
       expect(await auditedRows()).toBe(1);

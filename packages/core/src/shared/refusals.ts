@@ -79,6 +79,13 @@ export const RefusalCodeSchema = z.enum([
   'ai_feature_disabled',
   /** AI-D0, 45012. The caller's daily AI allowance is used up. It resets at midnight, India time. */
   'ai_rate_limited',
+  /**
+   * `BE-W173`, 45013. A check-in or check-out timed more than the device-clock tolerance after the
+   * server clock. Its own code for the same reason 45009 is: the sentence names what was refused.
+   */
+  'field_event_in_future',
+  /** `BE-W173`, 45014. A check-out timed before the visit's first check-in. */
+  'check_out_before_check_in',
   'append_only',
   'invalid_for_this_record',
   'references_missing_record',
@@ -153,6 +160,9 @@ export const BY_SQLSTATE: Readonly<Record<string, { code: RefusalCode; actionabl
   '45011': { code: 'ai_feature_disabled', actionable: false },
   // Actionable, by waiting: the allowance resets at midnight, India time.
   '45012': { code: 'ai_rate_limited', actionable: true },
+  // `BE-W173`. Both actionable, and both by the phone's clock -- the visit itself is fine.
+  '45013': { code: 'field_event_in_future', actionable: true },
+  '45014': { code: 'check_out_before_check_in', actionable: true },
   '23001': { code: 'append_only', actionable: false },
   '23514': { code: 'invalid_for_this_record', actionable: false },
   '23503': { code: 'references_missing_record', actionable: false },

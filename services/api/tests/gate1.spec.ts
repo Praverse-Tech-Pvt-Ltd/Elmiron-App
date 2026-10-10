@@ -86,9 +86,12 @@ interface Day {
 }
 
 /**
- * One MR's working day, expressed as the queue a device would be holding at 6pm:
- * a beat plan of four doctors, four visits, four check-ins, four call reports and a
- * check-out. Nothing here touches a table directly — it all goes through sync.
+ * One MR's working day, expressed as the queue a device would be holding at 6pm.
+ *
+ * `BE-C78`: the manager's plan of four doctors arrives first and creates the four planned visits.
+ * The queue then holds what the rep DID -- four check-ins, four call reports and a check-out,
+ * against those planned visits. Nothing the rep does touches a table directly; it all goes
+ * through sync.
  */
 const buildDay = async (client: Client): Promise<Day> => {
   const doctorIds: string[] = [];
@@ -105,40 +108,45 @@ const buildDay = async (client: Client): Promise<Day> => {
         world.users.puneMr.id,
       ],
     );
-    await client.query(
-      `insert into public.beat_plan_entries (beat_plan_id, doctor_id, planned_sequence)
-       values ($1, $2, $3)`,
-      [world.beatPlans.pune, doctorId, i],
-    );
     doctorIds.push(doctorId);
   }
 
-  const visitIds = doctorIds.map(() => randomUUID());
+  // `BE-C78`. The day starts with the MANAGER's plan, which creates the four planned visits; the
+  // phone never creates a planned visit. Written through `write_plan_version` -- the one path
+  // `plan_mr_day` uses -- as the owner, because 2026-08-12 is in the past and `plan_mr_day`
+  // rightly refuses a day that has ended.
+  await client.query(
+    `select public.write_plan_version(m, r, $3::date, $4::jsonb, null)
+       from public.user_profiles m, public.user_profiles r
+      where m.id = $1 and r.id = $2`,
+    [
+      world.users.westManager.id,
+      world.users.puneMr.id,
+      DAY,
+      JSON.stringify(doctorIds.map((doctorId) => ({ doctorId }))),
+    ],
+  );
+  const planned = await client.query<{ id: string; doctor_id: string }>(
+    `select id, doctor_id from public.visits
+      where mr_id = $1 and planned_date = $2 and origin = 'planned' and status <> 'cancelled'`,
+    [world.users.puneMr.id, DAY],
+  );
+  const visitByDoctor = new Map(planned.rows.map((row) => [row.doctor_id, row.id]));
+  const visitIds = doctorIds.map((doctorId) => {
+    const id = visitByDoctor.get(doctorId);
+    if (id === undefined) throw new Error(`the plan created no visit for ${doctorId}`);
+    return id;
+  });
   const checkInIds = doctorIds.map(() => randomUUID());
   const callReportIds = doctorIds.map(() => randomUUID());
   const checkOutId = randomUUID();
 
   const items: Item[] = [];
 
-  doctorIds.forEach((doctorId, i) => {
+  visitIds.forEach((_visitId, i) => {
     const stop = STOPS[i];
     if (stop === undefined) return;
     const visitStart = at(10 + i, 0);
-
-    items.push({
-      id: randomUUID(),
-      entity: 'visit',
-      operation: 'create',
-      entityId: visitIds[i],
-      clientCreatedAt: visitStart,
-      payload: {
-        doctorId,
-        status: 'completed',
-        beatPlanId: world.beatPlans.pune,
-        startedAt: visitStart,
-        completedAt: at(10 + i, 30),
-      },
-    });
 
     // MR-25 B3. Built by `checkInItem`, which annotates the body with `CreateCheckInRequest`
     // and parses it through the schema. A change to the contract now fails this file at

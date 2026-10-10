@@ -12,4 +12,9 @@ import type { ProductQaRequestBody } from './contract';
 export const createLiveProductQaTransport =
   (connection: LiveConnection) =>
   (body: ProductQaRequestBody): Promise<GatewayResponse> =>
-    postGateway(connection, { feature: body.feature, question: body.question });
+    postGateway(
+      connection,
+      body.productId === undefined
+        ? { feature: body.feature, question: body.question }
+        : { feature: body.feature, question: body.question, productId: body.productId },
+    );

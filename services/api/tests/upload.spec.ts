@@ -124,7 +124,7 @@ const committedConsentedVisit = async (): Promise<{ visitId: string; consentId: 
     const visitId = randomUUID();
     const consentId = randomUUID();
     await client.query(
-      `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
+      `insert into public.visits (id, mr_id, doctor_id, status, origin, unplanned_reason) values ($1, $2, $3, 'completed', 'unplanned', 'test visit (BE-C78)')`,
       [visitId, world.users.puneMr.id, world.doctors.pune],
     );
     await asOwner(client, () =>
@@ -144,7 +144,7 @@ const consentedVisit = async (client: Client): Promise<{ visitId: string; consen
   const visitId = randomUUID();
   const consentId = randomUUID();
   await client.query(
-    `insert into public.visits (id, mr_id, doctor_id, status) values ($1, $2, $3, 'completed')`,
+    `insert into public.visits (id, mr_id, doctor_id, status, origin, unplanned_reason) values ($1, $2, $3, 'completed', 'unplanned', 'test visit (BE-C78)')`,
     [visitId, world.users.puneMr.id, world.doctors.pune],
   );
   await asOwner(client, () =>

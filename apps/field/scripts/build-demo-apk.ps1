@@ -12,8 +12,8 @@
     - `supabase status` gives no publishable key;
     - a required EXPO_PUBLIC_* value is missing, empty or malformed;
     - EXPO_PUBLIC_COACHING_ENABLED or EXPO_PUBLIC_RECORDING_ENABLED is set (both stay off in a demo).
-  Does not check the mock at :4010: nothing in the app calls it (W2-B B3). EXPO_PUBLIC_API_BASE_URL
-  is still set, only because app/_layout.tsx refuses to start a release build without it.
+  Does not check the mock at :4010, and does not set EXPO_PUBLIC_API_BASE_URL: nothing in the app
+  calls it (W2-B B3), and the start-up gate that required it is gone (BE-W150).
 
   Also refuses if no usable CMake is installed (W2-F A3, see Resolve-Cmake).
 
@@ -79,8 +79,6 @@ $Cmake = $null
     deepLinkScheme   <- EXPO_PUBLIC_APP_DEEP_LINK_SCHEME     min(1), /^[a-z][a-z0-9+.-]*$/
   and accepts as optional:
     additionalRedirectUrls <- EXPO_PUBLIC_APP_ADDITIONAL_REDIRECT_URLS  (empty is valid; each entry z.url())
-  apps/field/src/api-target.ts additionally makes a release build with no real
-  EXPO_PUBLIC_API_BASE_URL show the "not set up" screen (set here, from -Ip).
 
   A value missing from that schema is not a warning in a release build: the app throws
   "Invalid application configuration" on launch and closes (FE-D7 5). So it is refused here.
@@ -96,7 +94,7 @@ $MustBeUnset = @('EXPO_PUBLIC_COACHING_ENABLED', 'EXPO_PUBLIC_RECORDING_ENABLED'
 
 # Everything this script sets in the environment, so it can be put back exactly.
 $Touched = @(
-  'EXPO_PUBLIC_SUPABASE_URL', 'EXPO_PUBLIC_API_BASE_URL', 'EXPO_PUBLIC_SUPABASE_KEY',
+  'EXPO_PUBLIC_SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_KEY',
   'DEMO_CLEARTEXT_HOSTS', 'ANDROID_HOME', 'JAVA_TOOL_OPTIONS', 'Path'
 )
 $Saved = @{}
@@ -203,10 +201,7 @@ function Invoke-Checks {
 
   Write-Step 'Checking the required EXPO_PUBLIC_* values (list: packages/core/src/shared/config.ts)'
   $env:EXPO_PUBLIC_SUPABASE_URL = "http://${Ip}:54321"
-  # Still required: app/_layout.tsx shows "not set up" without it, though nothing calls it (W2-B B3).
-  $env:EXPO_PUBLIC_API_BASE_URL = "http://${Ip}:4010"
   Write-Ok "EXPO_PUBLIC_SUPABASE_URL = $env:EXPO_PUBLIC_SUPABASE_URL (from -Ip)"
-  Write-Ok "EXPO_PUBLIC_API_BASE_URL = $env:EXPO_PUBLIC_API_BASE_URL (from -Ip)"
   foreach ($value in $OperatorValues) {
     $current = [Environment]::GetEnvironmentVariable($value.Name, 'Process')
     if ([string]::IsNullOrWhiteSpace($current)) {

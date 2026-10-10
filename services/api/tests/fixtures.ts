@@ -335,9 +335,42 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
       ],
     );
 
+    // 10 October: BEFORE the plan, so the plan below is dated in the zone these windows give
+    // the rep (`day_zone_for`); after it, the plan was dated by the UTC fallback.
+    // BE-W3. One window on the root, inherited by every territory beneath it, and
+    // one override on Nagpur so the inheritance walk has something to stop at.
+    await client.query(
+      `insert into public.territory_shift_windows
+         (territory_id, shift_start, shift_end, timezone, grace_minutes, active_weekdays) values
+         ($1, '09:00', '19:00', 'Asia/Kolkata', 15, '{1,2,3,4,5,6}'),
+         ($2, '06:00', '10:00', 'Asia/Kolkata', 0,  '{1,2,3,4,5}'),
+         -- MR-25 C2. A window whose END PLUS GRACE CROSSES MIDNIGHT: 23:59 + 30 minutes.
+         --
+         -- The dimension is_within_shift actually turns on, which no fixture held. The two
+         -- windows above end at 19:00 and 10:00 and neither wraps, so the wrapping branch did
+         -- not exist as far as any test could tell -- while seed-day.mjs seeded exactly
+         -- 23:59/30, putting the DEMO data in the failing configuration and leaving the suite
+         -- green. MR-24 found it on an emulator: time '23:59' + 30 minutes is 00:29, so
+         -- the predicate became ">= 03:30 AND <= 00:29" and no time of day satisfied it.
+         -- Every check-in and check-out was refused, all day.
+         --
+         -- On rival, deliberately: it belongs to the second organisation and no capture test
+         -- runs against it, so adding this cannot change what any existing case asserts. It is
+         -- here so the VALUE EXISTS in the fixtures and dimension-coverage.spec.ts can hold
+         -- it, which is what stops the dimension quietly collapsing back to one value.
+         ($3, '04:00', '23:59', 'Asia/Kolkata', 30, '{1,2,3,4,5,6,7}')`,
+      [territories.national, territories.nagpur, territories.rival],
+    );
+
+    // 10 October. The plan's day is the day its own visits fall on, by the rule `visit_day()` uses:
+    // the completion instant (`now() - 1 hour`, below), in the rep's zone. It was `current_date` --
+    // the database's UTC date -- while every visit is dated in IST, so from 19:30 to 24:00 UTC each
+    // day the world's "seen" visit sat on the day after its own plan and `coverage` counted it
+    // missed. One clock, one zone, for both halves of the same day.
     await client.query(
       `insert into public.beat_plans (id, mr_id, territory_id, plan_date, status)
-       values ($1, $2, $3, current_date, 'submitted')`,
+       select $1, $2, $3, ((now() - interval '1 hour') at time zone z.time_zone)::date, 'submitted'
+         from public.day_zone_for($2) z`,
       [world.beatPlans.pune, puneMr.id, territories.pune],
     );
 
@@ -368,31 +401,6 @@ export const seedFixtures = async (): Promise<FixtureWorld> => {
         world.clinicAddresses.pune,
         world.clinicAddresses.south,
       ],
-    );
-
-    // BE-W3. One window on the root, inherited by every territory beneath it, and
-    // one override on Nagpur so the inheritance walk has something to stop at.
-    await client.query(
-      `insert into public.territory_shift_windows
-         (territory_id, shift_start, shift_end, timezone, grace_minutes, active_weekdays) values
-         ($1, '09:00', '19:00', 'Asia/Kolkata', 15, '{1,2,3,4,5,6}'),
-         ($2, '06:00', '10:00', 'Asia/Kolkata', 0,  '{1,2,3,4,5}'),
-         -- MR-25 C2. A window whose END PLUS GRACE CROSSES MIDNIGHT: 23:59 + 30 minutes.
-         --
-         -- The dimension is_within_shift actually turns on, which no fixture held. The two
-         -- windows above end at 19:00 and 10:00 and neither wraps, so the wrapping branch did
-         -- not exist as far as any test could tell -- while seed-day.mjs seeded exactly
-         -- 23:59/30, putting the DEMO data in the failing configuration and leaving the suite
-         -- green. MR-24 found it on an emulator: time '23:59' + 30 minutes is 00:29, so
-         -- the predicate became ">= 03:30 AND <= 00:29" and no time of day satisfied it.
-         -- Every check-in and check-out was refused, all day.
-         --
-         -- On rival, deliberately: it belongs to the second organisation and no capture test
-         -- runs against it, so adding this cannot change what any existing case asserts. It is
-         -- here so the VALUE EXISTS in the fixtures and dimension-coverage.spec.ts can hold
-         -- it, which is what stops the dimension quietly collapsing back to one value.
-         ($3, '04:00', '23:59', 'Asia/Kolkata', 30, '{1,2,3,4,5,6,7}')`,
-      [territories.national, territories.nagpur, territories.rival],
     );
 
     await client.query(
