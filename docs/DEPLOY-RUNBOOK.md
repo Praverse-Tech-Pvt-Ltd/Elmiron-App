@@ -52,10 +52,10 @@ in the operator's order, and this maps them:
 
 | # | Command | Proves it worked | If it did not |
 | --- | --- | --- | --- |
-| 0.1 | GitHub → Actions → **Database backup** → *Run workflow* on `main`; wait for green | A green run today; its artefact listed on the run | **Stop.** No deploy without a backup from today |
-| 0.2 | GitHub → Actions → **Migration drift** → *Run workflow* on `main` | Notice: *"Production has applied the first 19 of 96 migrations, in order, with nothing applied that has no file here"* | Any other shape — an out-of-band version, a gap — **stop**: someone changed production by hand; read the job's own message |
+| 0.1 | **Q-19 = Supabase-managed backups** (answered 10 October, `BE-C80`). **The GitHub *Database backup* workflow and its artefact are NOT part of this step and not required for the pilot deployment.** (a) Supabase Dashboard → Organization → **Billing**: the project's organisation is on a **paid plan, status active**. (b) Dashboard → Project → **Database → Backups → Scheduled backups** — or `pnpm exec supabase backups list --project-ref <ref>` after `supabase login` — and read the newest entry | (a) the paid plan is shown active — **read it, do not infer it from the approval**; (b) a backup **dated today (UTC)** with status completed. Write both down, with the backup's timestamp, in the deploy record | **Stop.** No deploy without a completed backup from today. If today's scheduled backup has not run yet, wait for it — do not accept yesterday's. A free plan has no scheduled backups at all: that is a stop, not a warning |
+| 0.2 | GitHub → Actions → **Migration drift** → *Run workflow* on `main` | Notice: *"Production has applied the first 19 of 106 migrations, in order, with nothing applied that has no file here"* | Any other shape — an out-of-band version, a gap — **stop**: someone changed production by hand; read the job's own message |
 | 0.3 | The three counts below, in the Supabase SQL editor (read-only) | You know which branch two migrations will take | See the table under it |
-| 0.4 | `pnpm exec supabase --workdir services/api db push --db-url "$PROD_DB_URL" --dry-run` | *"Would push these migrations:"* followed by **77** names, first `20260907000100`, last `20261002000400` (W1-W, 5 October: `main` now holds 96; was 74 / `20261002000100`). Nothing changes | A different count — **stop**; production is not where 0.2 said |
+| 0.4 | `pnpm exec supabase --workdir services/api db push --db-url "$PROD_DB_URL" --dry-run` | *"Would push these migrations:"* followed by **87** names, first `20260907000100`, last `20261009000500` (10 October, measured on `main` after #30; W1-W, 5 October: `main` now holds 96; was 74 / `20261002000100`). Nothing changes | A different count — **stop**; production is not where 0.2 said |
 
 **0.3 — the counts two pending migrations depend on:**
 
@@ -89,8 +89,8 @@ own. Renewing is one more row like 3.2; replacing it is 3.1 below. "Local territ
 
 | # | Command | Proves it worked | If it did not |
 | --- | --- | --- | --- |
-| 1.1 | `pnpm exec supabase --workdir services/api db push --db-url "$PROD_DB_URL" --yes` | Ends *"Finished supabase db push."*, exit 0; **77** "Applying migration" lines (W1-W; was 74). Rehearsal: **8 seconds** on an empty copy | It stops at ONE migration, exits 1 and names the file, statement and SQLSTATE. **Everything before that file stays applied; that file is rolled back whole** (rehearsed: nothing of it was left behind). **Fix the cause, then run 1.1 again — it resumes at that file** (rehearsed: 18 remaining applied). **Re-running without fixing the cause fails on the same file** |
-| 1.2 | Actions → **Migration drift** → *Run workflow* on `main` | **Green with no notice**: *"No drift. 96 migration(s), all applied."* (rehearsed locally with `check:migration-drift`) | A shortfall means 1.1 did not finish — back to 1.1 |
+| 1.1 | `pnpm exec supabase --workdir services/api db push --db-url "$PROD_DB_URL" --yes` | Ends *"Finished supabase db push."*, exit 0; **87** "Applying migration" lines (10 October; was 77, and 74 before that). Rehearsal: **8 seconds** on an empty copy | It stops at ONE migration, exits 1 and names the file, statement and SQLSTATE. **Everything before that file stays applied; that file is rolled back whole** (rehearsed: nothing of it was left behind). **Fix the cause, then run 1.1 again — it resumes at that file** (rehearsed: 18 remaining applied). **Re-running without fixing the cause fails on the same file** |
+| 1.2 | Actions → **Migration drift** → *Run workflow* on `main` | **Green with no notice**: *"No drift. 106 migration(s), all applied."* (rehearsed locally with `check:migration-drift`) | A shortfall means 1.1 did not finish — back to 1.1 |
 | 1.3 | `pnpm --filter @fieldforce/core build` then `pnpm exec supabase --workdir services/api functions deploy ai-gateway --project-ref <production ref>` | The CLI lists `ai-gateway` as deployed | **Not rehearsed** — see the limits. Read the CLI's error; the most likely is a stale `packages/core/dist` |
 | 1.4 | Pushing again: `…db push --db-url "$PROD_DB_URL" --yes` | *"Remote database is up to date"*, nothing applied (rehearsed: "up to date") | — this is the safe re-run check, not a step that changes anything |
 
@@ -101,11 +101,12 @@ The operator fills `docs/operator/territory-template.xlsx` and exports its two s
 | # | Command | Proves it worked | If it did not |
 | --- | --- | --- | --- |
 | 2.1 | `node services/api/scripts/check-territory-sheet.mjs --territories Territories.csv --mrs MRs.csv --out reference.json` | *"OK: N company(ies), M territory row(s). Wrote reference.json."* | One line per problem, by sheet and row, with the reason; **nothing is written**. Rehearsed: the shipped template is refused (`example_row`, three lines) — **delete the example rows** |
+| 2.1a | **Doctors and clinics (Q-7), when the sheet exists:** `node services/api/scripts/check-doctor-sheet.mjs --reference reference.json --doctors doctors-clinics.csv --out reference-full.json` — the template is `docs/operator/doctors-clinics-template.csv`. **Then use `reference-full.json` in place of `reference.json` in 2.2–2.4** | *"OK: N doctor(s), M clinic(s). Wrote reference-full.json."* | One line per problem, by row, with the reason; **nothing is written**. The shipped template is refused (`example_row`) — delete the example rows. Coordinates are never invented: a clinic without them loads without them |
 | 2.2 | `pnpm --filter @fieldforce/api seed:reference -- --data reference.json` | *"DRY RUN: N organisation(s), M territory(ies) … would be attempted. Nothing was changed."* | Read the error; nothing was changed |
 | 2.3 | `pnpm --filter @fieldforce/api seed:reference -- --data reference.json --apply --db-url "$PROD_DB_URL"` | *"APPLIED: N organisation(s), M territory(ies) … inserted"* | It runs in one transaction: a failure inserts nothing. Read it, fix the sheet, start at 2.1 |
 | 2.4 | Run 2.3 again | *"APPLIED: 0 organisation(s), 0 territory(ies) …"* — rehearsed exactly | Non-zero means the sheet changed between runs: a **renamed key makes a NEW row**, it never renames |
 
-**The loader carries no consent notice and no doctors** (`consentTextVersions: []`). See "Before the
+**The loader carries no consent notice** (`consentTextVersions: []`), **and doctors only through 2.1a** (`BE-W179`). A reload with a CHANGED doctor or clinic under an existing key **fails, naming it, and loads nothing** — `seed:reference` never updates a loaded row. See "Before the
 first real MR day" below.
 
 ### Operator step 4, continued — accounts, BY HAND (`BE-W137`) — users are a master (item 11)
@@ -120,7 +121,80 @@ per person:
 | 4.1 | Supabase Dashboard → Authentication → **Add user** (email, password, auto-confirm) | The user appears; copy its id |
 | 4.2 | SQL: `insert into public.user_profiles (id, full_name, role, territory_id, organisation_id) select '<user id>', '<name>', 'mr', t.id, t.organisation_id from public.territories t where t.code = '<CODE>';` | `INSERT 0 1`. A field role without a territory is refused by `user_profiles_field_roles_require_territory` |
 
-**The second admin (Q-14) is created the same way with `role = 'admin'` and no territory.**
+**The second admin (Q-14) — guarded, tested against the local database on 10 October.** An admin
+has no territory, so its company cannot be derived and 4.2's insert does not fit it. Instead:
+
+| # | Action | Proves it worked |
+| --- | --- | --- |
+| 4.A1 | Dashboard → Authentication → **Add user**: the second person's own email, **Auto-confirm ticked**. Copy the user id | The user appears |
+| 4.A2 | SQL editor: the block below, with the three values filled. **Pre-checks, insert and post-checks are ONE statement:** any failed check raises an error and nothing is inserted | `Success. No rows returned`. Any `PRE-CHECK:` / `POST-CHECK:` error names the problem; nothing was written |
+| 4.A3 | Read back: `select u.email, p.full_name, p.role, p.territory_id, p.is_active from public.user_profiles p join auth.users u on u.id = p.id where p.role = 'admin' order by u.email;` | Two rows, two different people, `territory_id` empty, `is_active` true |
+| 4.A4 | The second admin signs in to the console **after** 4.A2 — the role claim is added at sign-in | The admin screens open |
+| 4.A5 | Admin 1 submits a draft; **admin 2** approves it | Q-14 / `BE-C57` closes on that first approval |
+
+```sql
+-- Second production admin (Q-14, BE-C57) -- pre-check, insert and post-check in ONE statement.
+-- Fill the three values. Any failed check raises an error and the insert does not happen.
+do $$
+declare
+  p_user_id constant uuid := '<AUTH USER ID>';
+  p_name    constant text := '<FULL NAME>';
+  p_company constant text := '<COMPANY NAME, exactly as loaded>';
+  v_org     uuid;
+  v_orgs    integer;
+  v_before  integer;
+  v_after   integer;
+begin
+  -- PRE-CHECKS
+  select count(*) into v_orgs from public.organisations where name = p_company;
+  if v_orgs <> 1 then
+    raise exception 'PRE-CHECK: % organisation(s) named "%" -- expected exactly 1', v_orgs, p_company;
+  end if;
+  select id into v_org from public.organisations where name = p_company;
+
+  if not exists (select 1 from auth.users where id = p_user_id) then
+    raise exception 'PRE-CHECK: no auth user % -- create it first (Authentication -> Add user)', p_user_id;
+  end if;
+  if not exists (select 1 from auth.users where id = p_user_id and email_confirmed_at is not null) then
+    raise exception 'PRE-CHECK: auth user % is not confirmed -- recreate it with Auto-confirm ticked', p_user_id;
+  end if;
+  if exists (select 1 from public.user_profiles where id = p_user_id) then
+    raise exception 'PRE-CHECK: user % already has a profile -- nothing to do, or a wrong id', p_user_id;
+  end if;
+  select count(*) into v_before
+    from public.user_profiles where role = 'admin' and organisation_id = v_org and is_active;
+  if v_before < 1 then
+    raise exception 'PRE-CHECK: "%" has no active admin yet -- this procedure adds the SECOND', p_company;
+  end if;
+
+  -- INSERT
+  insert into public.user_profiles (id, full_name, role, organisation_id)
+  values (p_user_id, p_name, 'admin', v_org);
+
+  -- POST-CHECKS (an exception here undoes the insert above)
+  select count(*) into v_after
+    from public.user_profiles where role = 'admin' and organisation_id = v_org and is_active;
+  if v_after <> v_before + 1 then
+    raise exception 'POST-CHECK: % active admin(s), expected %', v_after, v_before + 1;
+  end if;
+  if not exists (
+    select 1 from public.user_profiles
+     where id = p_user_id and role = 'admin' and territory_id is null
+       and organisation_id = v_org and is_active
+  ) then
+    raise exception 'POST-CHECK: the new profile is not an active, territory-less admin of "%"', p_company;
+  end if;
+end
+$$;
+```
+
+**Rollback — DEACTIVATE, never delete.** A `user_profiles` row cannot be deleted: the delete cascades
+into append-only `app_thresholds` and is refused (measured 10 October). Deleting the auth user fails
+the same way. To undo a wrong admin:
+`update public.user_profiles set is_active = false where id = '<AUTH USER ID>' and role = 'admin' and is_active;`
+— `UPDATE 1`; every policy authorises through `effective_role()`, which is null for an inactive
+profile (measured), so the account can sign in but reads and approves nothing. Also send it a
+password reset from Dashboard → Authentication, so its old password stops working. The same rule holds for an MR made wrongly in 4.2.
 
 ### Why by hand, and what by hand gets wrong (W1-T D)
 
@@ -164,7 +238,7 @@ TOKEN=$(curl -s -X POST "$API/auth/v1/token?grant_type=password" -H "apikey: $AN
 
 | # | Command | Expected answer | If not |
 | --- | --- | --- | --- |
-| S1 | Migration drift workflow (as 1.2) | *"No drift. 96 migration(s), all applied."* | Schema incomplete — step 1 |
+| S1 | Migration drift workflow (as 1.2) | *"No drift. 106 migration(s), all applied."* | Schema incomplete — step 1 |
 | S2 | `echo ${#TOKEN}` | A number in the hundreds (rehearsal: 907). **0 = sign-in failed** | Wrong password, or 4.1 not confirmed |
 | S3 | `curl -s -X POST "$API/rest/v1/rpc/my_shift_window" -H "apikey: $ANON" -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{}'` | With item 9's value (row 3.2): `{"source": "org_default", "window": {"shiftStart": "09:00:00", "shiftEnd": "18:00:00", "activeWeekdays": [1, 2, 3, 4, 5, 6], …}}`. Once per-territory hours exist (row 3.1): `"source": "territory"` | Nothing = no hours at all — the fallback is missing or has **expired**, and **check-in will refuse**; back to row 3.2 |
 | S4 | `curl -s -X POST "$API/rest/v1/rpc/sync_pull" -H "apikey: $ANON" -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{}'` | JSON with keys `changes, hasMore, nextCursor, serverTime, completeness` | An error code here means the app cannot load the rep's day |
@@ -252,14 +326,17 @@ still open Today to nothing.
 
 **What resumes it — one operator answer, THEN engineering.**
 
-1. **The operator answers Q-19** (`docs/operator-inputs.md` section 8): GitHub, a bucket, or Supabase's
-   own backups.
-2. **Engineering makes the backup land there** — about half a day, about an hour for "Supabase".
-   **Setting `BACKUP_DESTINATION` alone is NOT enough** (`BE-W143`): the job would then make a copy,
-   verify it, and store it nowhere — no step uploads it — so 0.1's "its artefact listed on the run" still
-   could not pass. For "Supabase", 0.1 itself changes to "a Supabase backup from today exists".
-3. Re-run 0.1 and require **both** a green run **and** a stored copy from today; then continue at 0.2,
-   in order.
+1. **Q-19 answered 10 October: Supabase-managed backups (`BE-C80`).** If the answer is GitHub or a bucket instead, 0.1 reverts to the workflow
+   route and `BE-W143` (a step that stores the copy) must be built first.
+2. **Done for "Supabase" (10 October):** 0.1 above now reads "the paid plan is active, and a completed
+   Supabase backup dated today exists". The *Database backup* workflow is no longer part of 0.1.
+3. The operator confirms both halves of 0.1, then continue at 0.2, in order.
+
+**Updated again on 10 October, after PR #30 merged (measured, not assumed):** `main` holds **106**
+migrations, the last `20261009000500_call_report_products`. Production last read 19 applied
+(5 October drift run; nothing deployed since), so **87 are pending**, first `20260907000100`, last
+`20261009000500`. Steps 0.2, 0.4, 1.1, 1.2 and S1 above carry these numbers. Re-measure if `main`
+moves again before the deploy: `ls services/api/supabase/migrations/*.sql | wc -l`.
 
 **Updated on 5 October because `main` moved:** 0.2, 0.4, 1.1, 1.2 and S1 now expect **96** migrations
 (77 pending: first `20260907000100`, last `20261002000400`). **Three of the 77 were never part of the

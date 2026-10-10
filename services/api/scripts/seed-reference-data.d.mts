@@ -23,6 +23,22 @@ export interface ReferenceDoctor {
   qualification?: string | null;
 }
 
+/** BE-W179: one clinic of one doctor in the same file. Coordinates are never invented. */
+export interface ReferenceClinicAddress {
+  key: string;
+  doctorKey: string;
+  label: string;
+  line1: string;
+  line2?: string | null;
+  city: string;
+  state: string;
+  postalCode: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  /** Default 150. */
+  geofenceRadiusMetres?: number;
+}
+
 export interface ReferenceConsentTextVersion {
   key: string;
   /** MR-07 / BE-W79: a consent notice belongs to a tenant, like a doctor or a territory. */
@@ -36,6 +52,8 @@ export interface ReferenceData {
   organisations: ReferenceOrganisation[];
   territories: ReferenceTerritory[];
   doctors: ReferenceDoctor[];
+  /** BE-W179. Optional: files written before it have none. */
+  clinicAddresses?: ReferenceClinicAddress[];
   consentTextVersions: ReferenceConsentTextVersion[];
 }
 
@@ -45,6 +63,7 @@ export interface SeedResult {
     organisations: number;
     territories: number;
     doctors: number;
+    clinicAddresses: number;
     consentTextVersions: number;
   };
 }

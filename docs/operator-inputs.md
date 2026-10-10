@@ -14,7 +14,7 @@ genuinely need credentials, legal text or master data."* Every decision you have
 | **Q-4** | Your answers | **The sixteen lost subjects** — section 4 | Whatever they decide | Unknown |
 | **Q-5** | Master data | **Territories and MRs** — `docs/operator/territory-template.xlsx`, section 5 | Every user; everything else is loaded after it | Yes, for a real deployment |
 | **Q-6** | Master data | **Products** — brand, generic, market, status | `mr_chat` scoping, product pickers | No — structure works empty |
-| **Q-7** | Master data | **Doctors and clinics** | Real visits only. **AI Doctor does not need them** (`BE-C53`) | No |
+| **Q-7** | Master data | **Doctors and clinics** — `docs/operator/doctors-clinics-template.csv`: one row per clinic of a doctor (`doctor_key, full_name, registration_number, specialty, qualification, territory_code, clinic_label, address_line1, address_line2, city, state, postal_code, latitude, longitude, geofence_radius_metres`); save as CSV UTF-8, delete the `EXAMPLE-` rows; coordinates only if you have them — none are looked up (`BE-W179`) | Real visits only. **AI Doctor does not need them** (`BE-C53`) | No |
 | **Q-8** | Master data | **Approved working hours** per territory and a company default | Check-in validity. 09:00–18:00 Mon–Sat is test data (`BE-C50`) | No — test value in place |
 | **Q-9** | Master data | **Approved product content** (labels, PI, approved claims) and **who signs it** | Product Q&A has nothing to answer from until then — it refuses rather than guesses (`BE-C52`) | No, but Q&A is empty without it |
 | **Q-10** | Master data | **The UCPMP sample cap number and its basis** — arrives separately, never invented (`BE-C42`) | Cap enforcement. **CI warns from 16 October and fails on 6 November** while unset | No |
@@ -26,7 +26,7 @@ genuinely need credentials, legal text or master data."* Every decision you have
 | **Q-16** | Your answer | **May a manager plan for their direct reports only, or for everyone beneath them?** — section 7 | Manager planning (item 10) | No — but nothing of manager planning is built until Q-16–Q-18 are answered |
 | **Q-17** | Your answer | **Does the manager plan on the web console or on the phone?** — section 7 | Manager planning screens | Same |
 | **Q-18** | Your answer | **Does an MR's unplanned visit need the manager's approval before, after, or never?** — section 7 | Unplanned visits (`FE-W28`) | Same |
-| **Q-19** | Your answer | **Where may a full copy of the production database be kept: GitHub, a storage bucket you provide, or Supabase's own backups?** — section 8 | **The production deploy you approved** — its first step is a backup from today. And the backup job, which goes red from 16 October | **Yes — the deploy cannot start without it** |
+| **Q-19** | Your answer | **Where may a full copy of the production database be kept: GitHub, a storage bucket you provide, or Supabase's own backups?** — section 8. **ANSWERED 10 October: Supabase-managed backups (`BE-C80`).** Runbook step 0.1 checks the paid plan is active and a completed Supabase backup dated today exists | **The production deploy you approved** — its first step is that backup. The GitHub backup job is no longer the route and no longer goes red (`BE-C80`) | **Yes — until you confirm the two checks of step 0.1** |
 | **Q-20** | Your answer | **Should the code repository stay public?** — section 9. Anyone can read your messages, the runbook and every finding; no credential was found in it | Nothing technical — a decision about who may read the documents | No |
 
 **Why Q-3 and Q-12 are here when the reviewer's brief asked for four items:** your rule covers anything
@@ -332,6 +332,11 @@ answers every unplanned visit.
 `docs/design/MANAGER-PLANS-THE-DAY.md`, "What the estimate assumes".
 
 ## 8. Q-19 — where may a backup of the production database be kept?
+
+> **ANSWERED 10 October 2026: Supabase-managed backups (`BE-C80`).** Deploy step 0.1 now checks that
+> the paid plan is active and that a completed Supabase backup dated today exists. The GitHub backup
+> workflow's weekly schedule and its 15 October deferral are removed, so nothing turns red on
+> 16 October. The text below is the question as it was asked.
 
 **5 October 2026, W1-W E.** One question, one word: **GitHub**, **Bucket**, or **Supabase**.
 

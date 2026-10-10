@@ -1,0 +1,4 @@
+doctor_key,full_name,registration_number,specialty,qualification,territory_code,clinic_label,address_line1,address_line2,city,state,postal_code,latitude,longitude,geofence_radius_metres
+EXAMPLE-D001,Dr Example One,EXAMPLE-REG-001,Urology,MBBS MS,EXAMPLE-IN-W-PUN,Main clinic,1 Example Road,Example Nagar,Pune,Maharashtra,411001,18.5204,73.8567,
+EXAMPLE-D001,Dr Example One,EXAMPLE-REG-001,Urology,MBBS MS,EXAMPLE-IN-W-PUN,Evening clinic,2 Example Lane,,Pune,Maharashtra,411004,,,200
+EXAMPLE-D002,Dr Example Two,,General Medicine,MBBS,EXAMPLE-IN-W-PUN,,,,,,,,,

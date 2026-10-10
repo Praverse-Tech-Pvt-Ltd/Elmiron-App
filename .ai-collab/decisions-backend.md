@@ -781,3 +781,22 @@ disagreement could be checked, because the operator's text was not provided.**
 - **Models:** `OPENAI_MODEL` in `prompt-contract.ts` (`gpt-4.1` for the larger tier, `gpt-4.1-mini`
   for `mr_chat`/`lms_tutor`), shared with the console's label. That these are enabled on the
   operator's account is **not verified** — `BE-W178` is IMPLEMENTED, NOT LIVE VERIFIED.
+
+## `BE-C80` — **production's backup is Supabase's managed backup** (Q-19, operator, 10 October)
+
+- **The answer:** Q-19 = Supabase. Production is backed up by Supabase's own scheduled backups on
+  the paid plan — the operator's recommended option in `docs/operator-inputs.md` §8.
+- **Deploy step 0.1** (`docs/DEPLOY-RUNBOOK.md`) now passes on two readings the operator takes and
+  records: the paid plan is **active** (Billing, not inferred), and a **completed backup dated today
+  (UTC)** exists (Database → Backups, or `supabase backups list`). Yesterday's, or none, is a stop.
+- **The GitHub *Database backup* workflow is not the production route** and its artefact is not
+  required for the pilot. Its weekly schedule and its `DEFERRAL_EXPIRES: 2026-10-15` are removed:
+  that deferral existed to keep an UNANSWERED decision visible, and a red build after the answer
+  would be noise of the kind `backup.yml`'s own header warns about. Extending the date was rejected
+  for the same reason.
+- **Kept:** the workflow's manual run, still refusing to produce anything without a destination —
+  the only route to an off-platform copy, should one ever be wanted. `BE-W143` (a step that stores
+  the copy) still applies to that route and is not built.
+- **Not verified by engineering:** where Supabase stores its backups, their retention on the plan
+  bought, and a restore from one. A restore drill from a Supabase backup is a sensible first
+  follow-up after go-live; it is not a deploy blocker under this decision.

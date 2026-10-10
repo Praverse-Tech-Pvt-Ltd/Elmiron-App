@@ -3,8 +3,8 @@ import { createHash } from 'node:crypto';
 import { Client } from 'pg';
 
 /**
- * Seeds organisations, territories, doctors and consent-text versions from a JSON
- * file. Nothing about the actual reference data lives in this repo — no
+ * Seeds organisations, territories, doctors, clinic addresses (`BE-W179`, optional
+ * `clinicAddresses[]`) and consent-text versions from a JSON file. Nothing about the actual reference data lives in this repo — no
  * organisation name, no territory list, no doctor, no legal consent-text copy — and
  * that is deliberate. `handover.md` is explicit: do not create org/territory/doctor
  * rows on production just to test. This script is infrastructure; the data file is
@@ -64,6 +64,10 @@ const readReferenceData = async (path) => {
       throw new Error(`reference data file is missing a "${field}" array`);
     }
   }
+  // BE-W179: optional, so every file written before it still loads.
+  if (data.clinicAddresses !== undefined && !Array.isArray(data.clinicAddresses)) {
+    throw new Error('reference data file has a "clinicAddresses" that is not an array');
+  }
   return data;
 };
 
@@ -72,7 +76,37 @@ export const seedReferenceData = async (data, overrides = {}) => {
   const client = new Client({ connectionString: overrides.dbUrl });
   await client.connect();
 
-  const counts = { organisations: 0, territories: 0, doctors: 0, consentTextVersions: 0 };
+  const counts = {
+    organisations: 0,
+    territories: 0,
+    doctors: 0,
+    clinicAddresses: 0,
+    consentTextVersions: 0,
+  };
+
+  /**
+   * BE-W179. A row whose key already exists is skipped (ON CONFLICT) -- and if what is stored
+   * DIFFERS from what the file says, that is a correction this script does not make, so it FAILS,
+   * naming the row and the fields, and the whole load rolls back. A silent skip would leave the old
+   * coordinates in place while the operator believed the new ones had loaded.
+   */
+  const refuseIfDifferent = async (table, label, id, expected) => {
+    const columns = Object.keys(expected);
+    const { rows } = await client.query(
+      `select ${columns.join(', ')} from public.${table} where id = $1`,
+      [id],
+    );
+    const stored = rows[0];
+    if (stored === undefined) return;
+    const differ = columns.filter((c) => String(stored[c] ?? '') !== String(expected[c] ?? ''));
+    if (differ.length > 0) {
+      throw new Error(
+        `${label} already exists with different ${differ.join(', ')}. seed:reference never ` +
+          'updates a loaded row; correct it by hand, as a decision, or give it a new key. ' +
+          'Nothing was changed.',
+      );
+    }
+  };
 
   try {
     // Always runs inside a transaction, applied or not -- a dry run that skips the
@@ -130,7 +164,46 @@ export const seedReferenceData = async (data, overrides = {}) => {
           territoryId,
         ],
       );
+      if ((result.rowCount ?? 0) === 0) {
+        await refuseIfDifferent('doctors', `doctor ${doctor.key}`, id, {
+          full_name: doctor.fullName,
+          registration_number: doctor.registrationNumber ?? null,
+          specialty: doctor.specialty ?? null,
+          qualification: doctor.qualification ?? null,
+          territory_id: territoryId,
+        });
+      }
       counts.doctors += result.rowCount ?? 0;
+    }
+
+    // BE-W179. Each clinic belongs to a doctor of THIS file; its company is the doctor's.
+    for (const clinic of data.clinicAddresses ?? []) {
+      const id = deterministicId('clinicAddresses', clinic.key);
+      const doctorId = deterministicId('doctors', clinic.doctorKey);
+      const row = {
+        doctor_id: doctorId,
+        label: clinic.label,
+        line1: clinic.line1,
+        line2: clinic.line2 ?? null,
+        city: clinic.city,
+        state: clinic.state,
+        postal_code: clinic.postalCode,
+        latitude: clinic.latitude ?? null,
+        longitude: clinic.longitude ?? null,
+        geofence_radius_metres: clinic.geofenceRadiusMetres ?? 150,
+      };
+      const result = await client.query(
+        `insert into public.clinic_addresses
+           (id, doctor_id, label, line1, line2, city, state, postal_code, latitude, longitude,
+            geofence_radius_metres)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         on conflict (id) do nothing`,
+        [id, ...Object.values(row)],
+      );
+      if ((result.rowCount ?? 0) === 0) {
+        await refuseIfDifferent('clinic_addresses', `clinic ${clinic.key}`, id, row);
+      }
+      counts.clinicAddresses += result.rowCount ?? 0;
     }
 
     for (const version of data.consentTextVersions) {
@@ -212,6 +285,7 @@ if (
       `${String(result.counts.organisations)} organisation(s), ` +
       `${String(result.counts.territories)} territory(ies), ` +
       `${String(result.counts.doctors)} doctor(s), ` +
+      `${String(result.counts.clinicAddresses)} clinic(s), ` +
       `${String(result.counts.consentTextVersions)} consent-text version(s) ` +
       `${result.applied ? 'inserted (new rows only; existing keys were skipped)' : 'would be attempted'}.`,
   );
