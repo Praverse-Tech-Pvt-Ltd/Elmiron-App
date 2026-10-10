@@ -61,7 +61,7 @@ export default async function Planning({
         style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1000 }}
       >
         {header}
-        <MissingNote>{planRefusal(repsResult.error)}</MissingNote>
+        <MissingNote tone="critical">{planRefusal(repsResult.error)}</MissingNote>
       </div>
     );
   }

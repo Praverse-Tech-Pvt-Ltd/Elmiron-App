@@ -5,7 +5,7 @@ import { Button } from './Button';
 import { Banner } from './Banner';
 import { Card } from './Card';
 import { Spinner } from './Spinner';
-import { BodyText, Figure, Heading, Label } from './Text';
+import { BodyText, Figure, Heading, Label, Secondary, Title } from './Text';
 
 /**
  * FE-D17 — the feedback on one AI Doctor practice session.
@@ -94,7 +94,8 @@ const Findings = ({
           <View style={styles.group}>
             <BodyText>{row.title}</BodyText>
             <Label muted>{`${row.dimensionLabel} · ${row.turnLabel}`}</Label>
-            <Label muted>{row.detail}</Label>
+            {/* The explanation is the useful part: prose size, not the 13.5 label step. */}
+            <Secondary muted={false}>{row.detail}</Secondary>
           </View>
         </Card>
       ))}
@@ -123,7 +124,7 @@ export const PracticeAnalysisScreen = ({
 
   return (
     <View style={styles.stack}>
-      <Heading>{title}</Heading>
+      <Title>{title}</Title>
       <Label muted>{`Practice with ${personaName}`}</Label>
 
       {notAvailable ? (
@@ -152,16 +153,6 @@ export const PracticeAnalysisScreen = ({
             </View>
           </Card>
 
-          <View style={styles.group}>
-            <Heading>By area</Heading>
-            {dimensions.map((row) => (
-              <View key={row.key} style={styles.dimension}>
-                <BodyText>{row.label}</BodyText>
-                <BodyText>{row.scoreLabel}</BodyText>
-              </View>
-            ))}
-          </View>
-
           <Findings heading="What went well" rows={strengths} />
           <Findings heading="What to work on" rows={improvements} />
 
@@ -181,10 +172,21 @@ export const PracticeAnalysisScreen = ({
               )}
             </View>
           )}
+
+          {/* UX polish: what worked and what to try lead; the numbers follow them. */}
+          <View style={styles.group}>
+            <Heading>Scores by area</Heading>
+            {dimensions.map((row) => (
+              <View key={row.key} style={styles.dimension}>
+                <BodyText>{row.label}</BodyText>
+                <BodyText>{row.scoreLabel}</BodyText>
+              </View>
+            ))}
+          </View>
         </>
       )}
 
-      <Card tone="offline">
+      <Card tone="quiet">
         <View style={styles.group}>
           <Label muted>{PRACTICE_AI_NOTE}</Label>
           <Label muted>{PRACTICE_VISIBILITY_NOTE}</Label>

@@ -103,7 +103,7 @@ export default async function Admin(): Promise<ReactNode> {
       </div>
 
       {versions === null ? (
-        <MissingNote>
+        <MissingNote tone="critical">
           The consent ledger could not be reached. Nothing below is being shown from cache — this
           table is empty because the request failed, not because there are no versions.
         </MissingNote>
@@ -165,7 +165,7 @@ export default async function Admin(): Promise<ReactNode> {
             */}
             <Body muted>{AUDIT_CAVEAT}</Body>
 
-            {audit === null ? <MissingNote>{refusedNote()}</MissingNote> : null}
+            {audit === null ? <MissingNote tone="critical">{refusedNote()}</MissingNote> : null}
 
             {audit !== null && trail.length === 0 ? <Body muted>{emptyTrailNote()}</Body> : null}
 
@@ -206,7 +206,7 @@ export default async function Admin(): Promise<ReactNode> {
             <Body muted>{retentionSentence(retention)}</Body>
 
             {retention === null ? (
-              <MissingNote>{refusedNote()}</MissingNote>
+              <MissingNote tone="critical">{refusedNote()}</MissingNote>
             ) : (
               <>
                 <div style={{ display: 'flex', gap: tokens.space.md, flexWrap: 'wrap' }}>

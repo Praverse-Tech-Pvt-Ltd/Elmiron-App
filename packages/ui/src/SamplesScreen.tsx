@@ -6,6 +6,7 @@ import { BodyText, Figure, Label, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Select } from './Select';
+import { Screen } from './Screen';
 import { Spinner } from './Spinner';
 import { Stepper } from './Stepper';
 import { TextField } from './TextField';
@@ -103,6 +104,8 @@ export interface SamplesScreenProps {
    * it; the caller clears it on the next press.
    */
   readonly actionFailure?: { readonly title: string; readonly detail: string } | null;
+  /** UX polish. Back to the visit once the lines are recorded -- the outcome was a dead end. */
+  readonly onDone?: () => void;
 }
 
 const KIND_OPTIONS = [
@@ -121,7 +124,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   fill: { height: '100%', backgroundColor: tokens.color.accent },
-  spacer: { flex: 1, minHeight: tokens.space.md },
   foot: { gap: tokens.space.sm },
 });
 
@@ -146,20 +148,47 @@ export const SamplesScreen = ({
   loading = false,
   failure = null,
   actionFailure = null,
+  onDone,
 }: SamplesScreenProps): ReactNode => {
   if (failure !== null) {
     return (
-      <>
+      <Screen>
         <Title>Leave samples</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
-      </>
+      </Screen>
     );
   }
 
   const removable = lines.length > 1;
 
   return (
-    <>
+    <Screen
+      scrollable
+      footer={
+        <View style={styles.foot}>
+          {saved === null ? null : (
+            // Not a banner with a warning tone: the work landed. §02 keeps the
+            // coloured tones for conditions the MR still has to do something about.
+            //
+            // FE-D12 item 4. Here, beside the button just pressed. At the top of the form it was
+            // off-screen by the time the rep pressed Record, and all they saw was the form clearing.
+            <>
+              <Banner detail={saved} title="Recorded" tone="info" />
+              {onDone === undefined ? null : (
+                <Button label="Back to the visit" onPress={onDone} variant="secondary" />
+              )}
+            </>
+          )}
+          <Button
+            label="Record what I left"
+            loading={busy}
+            loadingLabel="Recording…"
+            note="Signed for on delivery. Saves on this phone if you have no signal."
+            onPress={onRecord}
+          />
+        </View>
+      }
+    >
       <View style={styles.head}>
         <Title>Leave samples</Title>
         <Label muted>{`${doctorName} · ${dateLabel}`}</Label>
@@ -231,7 +260,8 @@ export const SamplesScreen = ({
       <Button label="Add another item" onPress={onAddLine} variant="secondary" />
 
       <Card>
-        <Label muted>Against the UCPMP cap</Label>
+        {/* Plain words first; the regulation's name stays, for whoever is asked about it. */}
+        <Label muted>Against your company’s sample limit (UCPMP)</Label>
         {cap === null ? null : (
           <>
             <View style={styles.meter}>
@@ -245,26 +275,6 @@ export const SamplesScreen = ({
         )}
         <BodyText>{capNote}</BodyText>
       </Card>
-
-      <View style={styles.spacer} />
-
-      <View style={styles.foot}>
-        {saved === null ? null : (
-          // Not a banner with a warning tone: the work landed. §02 keeps the
-          // coloured tones for conditions the MR still has to do something about.
-          //
-          // FE-D12 item 4. Here, beside the button just pressed. At the top of the form it was
-          // off-screen by the time the rep pressed Record, and all they saw was the form clearing.
-          <Banner detail={saved} title="Recorded" tone="info" />
-        )}
-        <Button
-          label="Record what I left"
-          loading={busy}
-          loadingLabel="Recording…"
-          note="Signed for on delivery. Saves on this phone if you have no signal."
-          onPress={onRecord}
-        />
-      </View>
-    </>
+    </Screen>
   );
 };

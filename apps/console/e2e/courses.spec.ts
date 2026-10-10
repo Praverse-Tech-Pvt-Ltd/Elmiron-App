@@ -41,9 +41,9 @@ test('an admin publishes a loaded draft, and it reads as published', async ({ pa
   await signIn(page, world.authorAdmin);
   await page.goto('/courses');
   const row = page.getByRole('row', { name: new RegExp(world.draftCourse.title, 'u') });
-  await expect(row.getByText('draft', { exact: true })).toBeVisible();
+  await expect(row.getByText('Draft', { exact: true })).toBeVisible();
   await row.getByRole('button', { name: 'Publish' }).click();
-  await expect(row.getByText('published', { exact: true })).toBeVisible();
+  await expect(row.getByText('Published', { exact: true })).toBeVisible();
   await expect(row.getByRole('button', { name: 'Retire' })).toBeVisible();
 });
 
@@ -55,5 +55,5 @@ test('a manager is refused, in words, and nothing changes', async ({ page }) => 
   await expect(
     row.getByText('Only an admin publishes or retires a course. Nothing changed.'),
   ).toBeVisible();
-  await expect(row.getByText('published', { exact: true })).toBeVisible();
+  await expect(row.getByText('Published', { exact: true })).toBeVisible();
 });

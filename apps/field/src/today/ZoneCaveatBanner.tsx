@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Banner, TopInset } from '@fieldforce/ui';
+import { useSession } from '../session';
 import { usePulledStore } from '../sync/pulled-store';
 import { zoneCaveat } from './territory-day';
 
@@ -37,8 +38,12 @@ import { zoneCaveat } from './territory-day';
  */
 export const ZoneCaveatBanner = (): ReactNode => {
   const { zone } = usePulledStore();
+  const { status } = useSession();
   const caveat = zoneCaveat(zone);
-  if (caveat === null) return null;
+  // UX polish (seen on the Pixel 10): before sign-in no zone has been read, so the fallback is
+  // always in force -- and the sign-in screen, which shows no date at all, opened under a
+  // warning about dates. The caveat is for someone looking at their day.
+  if (caveat === null || status !== 'signed-in') return null;
 
   // `attention` rather than `critical`: the dates shown are not confirmed wrong, they are
   // unconfirmed. Overstating it would train the MR to dismiss the banner that means "your

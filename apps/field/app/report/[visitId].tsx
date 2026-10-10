@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import uuid from 'expo-modules-core/src/uuid';
-import { CallReportScreen, Screen } from '@fieldforce/ui';
+import { CallReportScreen } from '@fieldforce/ui';
 // FE-D4 2. The READS are converted too now: the visit and the doctor come from the pulled store,
 // like every other visit screen, instead of `createClientForScenario().listVisits()/listDoctors()`
 // from the mock at :4010. The WRITE was converted in MR-18.
@@ -16,6 +16,7 @@ import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { dayMonthIn, dayMonthOfDate } from '../../src/today/territory-day';
 import { loadProductChoices, toggleProduct } from '../../src/catalogue/products';
 import type { ProductList } from '../../src/catalogue/products';
+import { failureDetail } from '../../src/errors/plain';
 
 /**
  * C6 — the call report binding, for one visit.
@@ -147,7 +148,7 @@ export default function CallReport(): ReactNode {
           title: 'Not saved',
           detail:
             error instanceof Error
-              ? `${error.message} Keep this screen open — the note is not saved yet.`
+              ? `${failureDetail(error)} Keep this screen open — the note is not saved yet.`
               : 'Keep this screen open — the note is not saved yet.',
         });
       })
@@ -157,27 +158,28 @@ export default function CallReport(): ReactNode {
   };
 
   return (
-    <Screen scrollable>
-      <CallReportScreen
-        dateLabel={dateLabel}
-        doctorName={doctorName}
-        failure={failure}
-        objections={objections}
-        onNextStepChange={setNextStep}
-        onObjectionsChange={setObjections}
-        onSend={send}
-        onSummaryChange={setSummary}
-        chosenProductIds={chosenProducts}
-        onToggleProduct={(id) => {
-          setChosenProducts((current) => toggleProduct(current, id));
-        }}
-        products={productList !== null && productList.kind !== 'none' ? productList.products : []}
-        productsNote={productsNote}
-        nextStep={nextStep}
-        sending={sending}
-        sentNote={sentNote}
-        summary={summary}
-      />
-    </Screen>
+    <CallReportScreen
+      onDone={() => {
+        router.back();
+      }}
+      dateLabel={dateLabel}
+      doctorName={doctorName}
+      failure={failure}
+      objections={objections}
+      onNextStepChange={setNextStep}
+      onObjectionsChange={setObjections}
+      onSend={send}
+      onSummaryChange={setSummary}
+      chosenProductIds={chosenProducts}
+      onToggleProduct={(id) => {
+        setChosenProducts((current) => toggleProduct(current, id));
+      }}
+      products={productList !== null && productList.kind !== 'none' ? productList.products : []}
+      productsNote={productsNote}
+      nextStep={nextStep}
+      sending={sending}
+      sentNote={sentNote}
+      summary={summary}
+    />
   );
 }

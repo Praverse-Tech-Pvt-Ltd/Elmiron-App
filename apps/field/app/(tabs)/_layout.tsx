@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Tabs } from 'expo-router';
-import { tokens } from '@fieldforce/ui-tokens';
+import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
 import { TabIcon } from '@fieldforce/ui';
 import { coachingEnabled } from '../../src/features';
 
@@ -40,6 +40,9 @@ export default function TabsLayout(): ReactNode {
         tabBarLabelStyle: {
           fontSize: tokens.typography.label.size,
           fontWeight: tokens.typography.label.weight,
+          // UX polish: the family carries the weight on Android (`fontFamilyFor`); without it the
+          // tab labels were the one text in the app in the system font.
+          fontFamily: fontFamilyFor(tokens.typography.label.weight),
         },
         // Explicitly set, exactly as it was when it returned null: leaving it
         // unset renders the platform's placeholder glyph, which arrives as tofu on

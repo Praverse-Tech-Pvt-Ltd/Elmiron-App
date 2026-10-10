@@ -5,7 +5,7 @@ import type { Metrics } from 'react-native-safe-area-context';
 import type { ReactElement } from 'react';
 import { tokens } from '@fieldforce/ui-tokens';
 import { BodyText } from './Text';
-import { Screen } from './Screen';
+import { FOLLOW_SLACK, Screen, isAtBottom } from './Screen';
 
 /**
  * The safe-area inset, asserted as arithmetic rather than as "a safe-area component
@@ -121,5 +121,62 @@ describe('Screen safe-area inset', () => {
       wrapper = wrapper.parent;
     }
     expect(wrapperTop).toBe(METRICS.insets.top);
+  });
+
+  /**
+   * UX polish: the footer is PINNED -- outside the ScrollView, so the primary action is never
+   * scrolled to -- and it, not the content, sits on the gesture bar.
+   */
+  it('pins the footer outside the scrolling content and gives it the bottom inset', async () => {
+    await renderInSafeArea(
+      <Screen scrollable footer={<BodyText>the action</BodyText>}>
+        <BodyText>scrolling content</BodyText>
+      </Screen>,
+    );
+
+    let node = screen.getByText('the action').parent;
+    while (node !== null) {
+      expect(node.props['contentContainerStyle']).toBeUndefined();
+      const style = Object.assign(
+        {},
+        ...([] as unknown[]).concat(node.props['style'] as unknown[]).filter(Boolean),
+      ) as Record<string, unknown>;
+      if (style['paddingBottom'] !== undefined) {
+        expect(style['paddingBottom']).toBe(tokens.space.md + METRICS.insets.bottom);
+        break;
+      }
+      node = node.parent;
+    }
+    expect(node).not.toBeNull();
+    expect(paddingAroundText('scrolling content')['paddingBottom']).toBe(tokens.space.md);
+  });
+});
+
+describe('Screen followLatest — a conversation follows its newest message, not a reader', () => {
+  const at = (y: number) => ({
+    contentOffset: { x: 0, y },
+    contentSize: { width: 390, height: 2000 },
+    layoutMeasurement: { width: 390, height: 800 },
+  });
+
+  it('at the bottom, or within the slack, it follows', () => {
+    expect(isAtBottom(at(1200))).toBe(true);
+    expect(isAtBottom(at(1200 - FOLLOW_SLACK))).toBe(true);
+  });
+
+  it('scrolled up to read history, it does not', () => {
+    expect(isAtBottom(at(1200 - FOLLOW_SLACK - 1))).toBe(false);
+    expect(isAtBottom(at(0))).toBe(false);
+  });
+
+  it('is wired only when asked for', async () => {
+    await renderInSafeArea(
+      <Screen followLatest scrollable>
+        <BodyText>a conversation</BodyText>
+      </Screen>,
+    );
+    let node = screen.getByText('a conversation').parent;
+    while (node !== null && node.props['onContentSizeChange'] === undefined) node = node.parent;
+    expect(node).not.toBeNull();
   });
 });

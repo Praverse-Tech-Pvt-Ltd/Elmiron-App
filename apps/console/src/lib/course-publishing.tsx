@@ -2,13 +2,13 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { LMS_RPC } from '@fieldforce/core';
-import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { browserClient } from './supabase';
-import { MissingNote, Pill, cell, headerCell } from './ui';
+import { MissingNote, cell, headerCell, StatusPill } from './ui';
 import { publishRefusal, versionAction } from './course-publishing-text';
 import type { CourseVersionStatus } from './course-publishing-text';
+import { btn } from './theme-css';
 
 /**
  * The client half of `/courses`: publish a draft course version, retire a published one. Each is
@@ -23,17 +23,6 @@ export interface CourseVersionRow {
   readonly status: CourseVersionStatus;
   readonly lessons: number;
 }
-
-const button = (): CSSProperties => ({
-  minHeight: 36,
-  padding: `0 ${String(tokens.space.md)}px`,
-  background: tokens.color.surface,
-  border: `1px solid ${tokens.color.textPrimary}`,
-  borderRadius: tokens.radius.control,
-  color: tokens.color.textPrimary,
-  fontSize: compactTypography.control.size,
-  cursor: 'pointer',
-});
 
 const label = (action: 'publish' | 'retire', busy: boolean): string => {
   if (action === 'publish') return busy ? 'Publishing…' : 'Publish';
@@ -70,15 +59,20 @@ const VersionLine = ({ row }: { readonly row: CourseVersionRow }): ReactNode => 
       <td style={cell}>{`v${String(row.version)} — ${row.title}`}</td>
       <td style={cell}>{String(row.lessons)}</td>
       <td style={cell}>
-        <Pill tone={row.status === 'published' ? 'success' : 'neutral'}>{row.status}</Pill>
+        <StatusPill status={row.status} />
       </td>
       <td style={cell}>
         {action === null ? null : (
-          <button disabled={busy} onClick={act} style={button()} type="button">
+          <button
+            disabled={busy}
+            onClick={act}
+            className={btn(action === 'retire' ? 'danger' : 'primary')}
+            type="button"
+          >
             {label(action, busy)}
           </button>
         )}
-        {refused === null ? null : <MissingNote>{refused}</MissingNote>}
+        {refused === null ? null : <MissingNote tone="critical">{refused}</MissingNote>}
       </td>
     </tr>
   );

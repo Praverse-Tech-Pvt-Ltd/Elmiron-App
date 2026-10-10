@@ -2,9 +2,10 @@ import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Label, Title } from './Text';
+import { BodyText, Label, Secondary, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
+import { Screen } from './Screen';
 import { TextField } from './TextField';
 
 /**
@@ -65,28 +66,34 @@ export interface CallReportScreenProps {
   readonly onToggleProduct?: (id: string) => void;
   /** Says where the list came from when it is not fresh -- or that there is none on this phone. */
   readonly productsNote?: string | null;
+  /**
+   * UX polish. Where the rep goes once the report is sent or saved -- back to the visit. Without it
+   * the outcome banner was a dead end at the bottom of the form.
+   */
+  readonly onDone?: () => void;
 }
 
 const styles = StyleSheet.create({
   head: { gap: 2 },
   fields: { gap: tokens.space.md },
-  foot: { gap: tokens.space.sm, paddingTop: tokens.space.sm },
+  foot: { gap: tokens.space.sm },
   products: { gap: tokens.space.xs },
   product: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: tokens.space.sm,
-    minHeight: 48,
-    paddingHorizontal: tokens.space.sm,
+    // The secondary touch target (52), not a 48 literal below it.
+    minHeight: tokens.target.secondary,
+    paddingHorizontal: tokens.space.md,
     borderRadius: tokens.radius.control,
     borderWidth: 1,
     borderColor: tokens.color.hairline,
   },
   productChosen: { borderColor: tokens.color.textPrimary, borderWidth: 2 },
   box: {
-    width: 22,
-    height: 22,
-    borderRadius: 4,
+    width: tokens.space.lg,
+    height: tokens.space.lg,
+    borderRadius: tokens.radius.sm,
     borderWidth: 2,
     borderColor: tokens.color.textPrimary,
     alignItems: 'center',
@@ -111,12 +118,49 @@ export const CallReportScreen = ({
   chosenProductIds = [],
   onToggleProduct,
   productsNote = null,
+  onDone,
 }: CallReportScreenProps): ReactNode => (
-  <>
+  <Screen
+    scrollable
+    footer={
+      <View style={styles.foot}>
+        {/*
+          One button, in one of two states. `Button`'s disabled variant requires a
+          reason line — §05 — so the branch exists to supply it; rendering both would
+          put two Send buttons on the screen.
+
+          FE-D12 item 3. A third state: once the report is sent (or saved to send by itself), the
+          button gives way to that outcome, where the rep's thumb is. It stayed enabled before, and a
+          second press made a second report of the same visit. UX polish: with a way back to the visit.
+        */}
+        {sentNote !== null ? (
+          <>
+            <Banner detail={sentNote.detail} title={sentNote.title} tone="info" />
+            {onDone === undefined ? null : (
+              <Button label="Back to the visit" onPress={onDone} variant="secondary" />
+            )}
+          </>
+        ) : summary.trim() === '' ? (
+          <Button
+            disabled
+            label="Send the report"
+            note="Write what happened first. The other two are optional."
+            onPress={onSend}
+          />
+        ) : (
+          <Button
+            label={sending ? 'Sending…' : 'Send the report'}
+            loading={sending}
+            onPress={onSend}
+          />
+        )}
+      </View>
+    }
+  >
     <View style={styles.head}>
       <Title>Your report</Title>
       {/* W2-C A3 / `BE-W156`: no dangling "·" when there is no date to put after it. */}
-      <Label muted>{dateLabel === '' ? doctorName : `${doctorName} · ${dateLabel}`}</Label>
+      <Secondary>{dateLabel === '' ? doctorName : `${doctorName} · ${dateLabel}`}</Secondary>
     </View>
 
     {failure === null ? null : (
@@ -125,22 +169,24 @@ export const CallReportScreen = ({
 
     <Card>
       <BodyText>Every word here is yours.</BodyText>
-      <Label muted>
+      <Secondary>
         Nothing is written for you and nothing is filed until you press Send. Your manager sees what
         you wrote.
-      </Label>
+      </Secondary>
     </Card>
 
     <View style={styles.fields}>
       <TextField
         help="What happened, in your words."
         label="What happened"
+        multiline
         onChangeText={onSummaryChange}
         value={summary}
       />
       <TextField
         help="Anything they pushed back on. Leave it empty if there was nothing."
         label="What they raised"
+        multiline
         onChangeText={onObjectionsChange}
         value={objections}
       />
@@ -155,8 +201,8 @@ export const CallReportScreen = ({
     {products === undefined ? null : (
       <View style={styles.products}>
         <Label>Products discussed</Label>
-        <Label muted>Mark each one you talked about. None is fine if none came up.</Label>
-        {productsNote === null ? null : <Label muted>{productsNote}</Label>}
+        <Secondary>Mark each one you talked about. None is fine if none came up.</Secondary>
+        {productsNote === null ? null : <Secondary>{productsNote}</Secondary>}
         {products.map((product) => {
           const chosen = chosenProductIds.includes(product.id);
           return (
@@ -177,33 +223,5 @@ export const CallReportScreen = ({
         })}
       </View>
     )}
-
-    <View style={styles.foot}>
-      {/*
-        One button, in one of two states. `Button`'s disabled variant requires a
-        reason line — §05 — so the branch exists to supply it; rendering both would
-        put two Send buttons on the screen.
-
-        FE-D12 item 3. A third state: once the report is sent (or saved to send by itself), the
-        button gives way to that outcome, where the rep's thumb is. It stayed enabled before, and a
-        second press made a second report of the same visit.
-      */}
-      {sentNote !== null ? (
-        <Banner detail={sentNote.detail} title={sentNote.title} tone="info" />
-      ) : summary.trim() === '' ? (
-        <Button
-          disabled
-          label="Send the report"
-          note="Write what happened first. The other two are optional."
-          onPress={onSend}
-        />
-      ) : (
-        <Button
-          label={sending ? 'Sending…' : 'Send the report'}
-          loading={sending}
-          onPress={onSend}
-        />
-      )}
-    </View>
-  </>
+  </Screen>
 );

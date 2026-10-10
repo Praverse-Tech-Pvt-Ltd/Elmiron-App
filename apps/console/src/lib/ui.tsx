@@ -98,12 +98,14 @@ export const Pill = ({
   tone,
 }: {
   readonly children: ReactNode;
-  readonly tone: 'success' | 'neutral' | 'attention';
+  readonly tone: 'success' | 'neutral' | 'attention' | 'info' | 'critical';
 }): ReactNode => {
   const palette = {
     success: { background: tokens.color.successFill, color: tokens.color.success },
     neutral: { background: tokens.color.wash, color: tokens.color.textSecondary },
     attention: { background: tokens.color.attentionFill, color: tokens.color.attention },
+    info: { background: tokens.color.infoFill, color: tokens.color.info },
+    critical: { background: tokens.color.criticalFill, color: tokens.color.critical },
   }[tone];
 
   return (
@@ -128,19 +130,39 @@ export const Pill = ({
  * visible, explained gap rather than a plausible-looking number, which is the same
  * rule the field app follows for the mileage rupee figure and the UCPMP cap.
  */
-export const MissingNote = ({ children }: { readonly children: ReactNode }): ReactNode => (
-  <div
-    style={{
-      background: tokens.color.attentionFill,
-      borderRadius: tokens.radius.well,
-      padding: tokens.space.md,
-      ...type(compactTypography.secondary),
-      color: tokens.color.attention,
-    }}
-  >
-    {children}
-  </div>
-);
+export const MissingNote = ({
+  children,
+  tone = 'attention',
+}: {
+  readonly children: ReactNode;
+  /**
+   * UX polish. One amber box carried everything -- the permanent advisory, four-eyes explanations,
+   * empty states AND request failures -- so a real failure looked exactly like a disclaimer and
+   * nobody read either. `critical` is a failure or a refusal, announced to screen readers
+   * (`role="alert"`); `info` is an explanation that needs nothing done; `attention` stays the
+   * default for everything else.
+   */
+  readonly tone?: 'attention' | 'critical' | 'info';
+}): ReactNode => {
+  const palette = {
+    attention: { background: tokens.color.attentionFill, color: tokens.color.attention },
+    critical: { background: tokens.color.criticalFill, color: tokens.color.critical },
+    info: { background: tokens.color.infoFill, color: tokens.color.info },
+  }[tone];
+  return (
+    <div
+      role={tone === 'critical' ? 'alert' : 'note'}
+      style={{
+        ...palette,
+        borderRadius: tokens.radius.well,
+        padding: tokens.space.md,
+        ...type(compactTypography.secondary),
+      }}
+    >
+      {children}
+    </div>
+  );
+};
 
 export const cell: CSSProperties = {
   ...type(compactTypography.body),
@@ -155,4 +177,37 @@ export const headerCell: CSSProperties = {
   ...type(compactTypography.label),
   color: tokens.color.textSecondary,
   background: tokens.color.background,
+};
+
+/**
+ * UX polish. A content version's status in words, with the tone that says whether anything is
+ * waiting: "In review" is the one that needs a person, so it is the one in the attention tone.
+ * The raw enum (`in_review`) stays on the element as `data-status` for anything that needs the
+ * machine value; people read the words.
+ */
+const STATUS_WORDS: Readonly<
+  Record<
+    string,
+    {
+      readonly label: string;
+      readonly tone: 'success' | 'neutral' | 'attention' | 'info' | 'critical';
+    }
+  >
+> = {
+  draft: { label: 'Draft', tone: 'neutral' },
+  in_review: { label: 'In review', tone: 'attention' },
+  approved: { label: 'Approved', tone: 'success' },
+  published: { label: 'Published', tone: 'success' },
+  rejected: { label: 'Rejected', tone: 'neutral' },
+  retired: { label: 'Retired', tone: 'neutral' },
+  superseded: { label: 'Superseded', tone: 'neutral' },
+};
+
+export const StatusPill = ({ status }: { readonly status: string }): ReactNode => {
+  const known = STATUS_WORDS[status];
+  return (
+    <span data-status={status} style={{ display: 'inline-flex' }}>
+      <Pill tone={known?.tone ?? 'neutral'}>{known?.label ?? status.replace(/_/gu, ' ')}</Pill>
+    </span>
+  );
 };

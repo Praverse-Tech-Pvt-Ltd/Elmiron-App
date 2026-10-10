@@ -8,6 +8,7 @@ import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { browserClient } from './supabase';
 import { Body, Card, Heading, Label, MissingNote, cell, headerCell } from './ui';
 import { assignRefusal, courseOptionLabel } from './course-assignment-text';
+import { btn } from './theme-css';
 
 /**
  * W2-G B — the client half of `/learning`: pick a course and a person, assign. The write is the
@@ -33,21 +34,10 @@ export interface AssignedRow {
 const field = (): CSSProperties => ({
   width: '100%',
   padding: tokens.space.sm,
-  border: `1px solid ${tokens.color.textPrimary}`,
+  border: `1px solid ${tokens.color.border}`,
   borderRadius: tokens.radius.control,
   fontSize: compactTypography.body.size,
   fontFamily: 'inherit',
-});
-
-const button = (): CSSProperties => ({
-  minHeight: 52,
-  background: tokens.color.surface,
-  border: `2px solid ${tokens.color.textPrimary}`,
-  borderRadius: tokens.radius.control,
-  color: tokens.color.textPrimary,
-  fontSize: compactTypography.control.size,
-  fontWeight: Number(compactTypography.control.weight),
-  cursor: 'pointer',
 });
 
 type State =
@@ -151,9 +141,11 @@ export const CourseAssignment = ({
         )}
 
         {state.kind === 'done' ? <Body>{state.message}</Body> : null}
-        {state.kind === 'refused' ? <MissingNote>{state.message}</MissingNote> : null}
+        {state.kind === 'refused' ? (
+          <MissingNote tone="critical">{state.message}</MissingNote>
+        ) : null}
 
-        <button type="button" style={button()} disabled={!ready} onClick={assign}>
+        <button type="button" className={btn('primary')} disabled={!ready} onClick={assign}>
           {state.kind === 'busy' ? 'Assigning…' : 'Assign'}
         </button>
       </Card>

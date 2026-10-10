@@ -4,7 +4,8 @@ import { useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import type { KnowledgeDocumentVersion } from '@fieldforce/core';
 import { compactTypography, tokens } from '@fieldforce/ui-tokens';
-import { Body, Card, Heading, Label, MissingNote, Pill } from './ui';
+import { Body, Card, Heading, Label, MissingNote, Pill, StatusPill } from './ui';
+import { btn } from './theme-css';
 
 /**
  * W1-A E3 — the screen the operator actually uses to review and approve a draft.
@@ -133,23 +134,11 @@ type State =
   | { readonly kind: 'rejected' }
   | { readonly kind: 'failed'; readonly message: string };
 
-const button = (): CSSProperties => ({
-  flex: 1,
-  minHeight: 52,
-  background: tokens.color.surface,
-  border: `2px solid ${tokens.color.textPrimary}`,
-  borderRadius: tokens.radius.control,
-  color: tokens.color.textPrimary,
-  fontSize: compactTypography.control.size,
-  fontWeight: Number(compactTypography.control.weight),
-  cursor: 'pointer',
-});
-
 const box = (): CSSProperties => ({
   width: '100%',
   minHeight: 96,
   padding: tokens.space.sm,
-  border: `1px solid ${tokens.color.textPrimary}`,
+  border: `1px solid ${tokens.color.border}`,
   borderRadius: tokens.radius.control,
   fontSize: compactTypography.body.size,
   fontFamily: 'inherit',
@@ -203,7 +192,7 @@ export const KnowledgeReview = ({
     return (
       <button
         type="button"
-        style={button()}
+        className={btn('primary')}
         disabled={busy}
         onClick={() => {
           run(onSubmit, { kind: 'submitted' });
@@ -220,7 +209,7 @@ export const KnowledgeReview = ({
 
       <div style={{ display: 'flex', gap: tokens.space.xs, flexWrap: 'wrap' }}>
         <Pill tone="neutral">{`version ${String(version.versionNumber)}`}</Pill>
-        <Pill tone="neutral">{version.status}</Pill>
+        <StatusPill status={version.status} />
         {/* E4. Market and product are shown for EVERY draft, not only AI ones: a human author can
             walk into regulated content just as easily, and a caution that only appears sometimes
             teaches the reviewer to stop reading it. */}
@@ -259,7 +248,7 @@ export const KnowledgeReview = ({
       {state.kind === 'rejected' ? (
         <Body>Rejected. This version is final and cannot be reopened.</Body>
       ) : null}
-      {state.kind === 'failed' ? <MissingNote>{state.message}</MissingNote> : null}
+      {state.kind === 'failed' ? <MissingNote tone="critical">{state.message}</MissingNote> : null}
 
       {submitControl()}
 
@@ -291,7 +280,7 @@ export const KnowledgeReview = ({
           <div style={{ display: 'flex', gap: tokens.space.sm }}>
             <button
               type="button"
-              style={button()}
+              className={btn('secondary')}
               disabled={busy || attestation.trim() === ''}
               onClick={() => {
                 run(() => onApprove(attestation.trim()), { kind: 'approved' });
@@ -301,7 +290,7 @@ export const KnowledgeReview = ({
             </button>
             <button
               type="button"
-              style={button()}
+              className={btn('secondary')}
               disabled={busy || reason.trim() === ''}
               onClick={() => {
                 run(() => onReject(reason.trim()), { kind: 'rejected' });

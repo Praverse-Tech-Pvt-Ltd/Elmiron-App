@@ -17,7 +17,12 @@ import { SurfaceContext } from './surface';
  * "one per screen" rule stays the caller's discipline — a component cannot count
  * its siblings.
  */
-export type CardTone = 'default' | 'hero' | 'offline';
+/**
+ * `quiet` — a note ABOUT the screen rather than content on it: who can see this, where it came
+ * from, what the AI may and may not do. Flat on the page ground with a hairline edge. Those notes
+ * used to borrow `offline`'s dashed card, which tells the rep something is waiting on this phone.
+ */
+export type CardTone = 'default' | 'hero' | 'offline' | 'quiet';
 
 export interface CardProps {
   readonly children: ReactNode;
@@ -49,16 +54,29 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
     elevation: 0,
   },
+  quiet: {
+    backgroundColor: tokens.color.background,
+    borderWidth: 1,
+    borderColor: tokens.color.hairline,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   pressedDefault: { backgroundColor: tokens.color.wash },
   pressedHero: { backgroundColor: tokens.color.accentPressed },
   pressedOffline: { backgroundColor: tokens.color.washPressed },
 });
 
-const FILL = { default: null, hero: styles.hero, offline: styles.offline } as const;
+const FILL = {
+  default: null,
+  hero: styles.hero,
+  offline: styles.offline,
+  quiet: styles.quiet,
+} as const;
 const PRESSED = {
   default: styles.pressedDefault,
   hero: styles.pressedHero,
   offline: styles.pressedOffline,
+  quiet: styles.pressedOffline,
 } as const;
 
 export const Card = ({ children, tone = 'default', onPress }: CardProps): ReactNode => {

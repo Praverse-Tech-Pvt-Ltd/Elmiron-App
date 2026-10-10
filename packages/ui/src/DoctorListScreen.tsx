@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Pressable } from 'react-native';
 import { Banner } from './Banner';
-import { Heading, Label } from './Text';
+import { Label, Title } from './Text';
 import { ListItem } from './ListItem';
 import { Spinner } from './Spinner';
 import { SurfaceContext } from './surface';
@@ -105,7 +105,7 @@ export const DoctorListScreen = ({
   if (failure !== null) {
     return (
       <>
-        <Heading>Doctors</Heading>
+        <Title>Doctors</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </>
     );
@@ -113,7 +113,7 @@ export const DoctorListScreen = ({
 
   return (
     <>
-      <Heading>Doctors</Heading>
+      <Title>Doctors</Title>
 
       <TextField
         autoCapitalize="none"
@@ -181,7 +181,9 @@ export const DoctorListScreen = ({
           <ListItem
             detail={`${row.detail} · ${row.lastSeenLabel}`}
             key={row.id}
-            status={row.overdue ? 'attention' : 'success'}
+            // Final UX pass: not overdue is NEUTRAL. A green tick read as "visited / done"; the row's
+            // own words (last seen, "Overdue") carry the meaning, unchanged.
+            status={row.overdue ? 'attention' : 'neutral'}
             title={row.name}
             // Spread rather than `meta={... : undefined}`: `exactOptionalPropertyTypes`
             // treats an explicit undefined as a value, not as an absent prop.

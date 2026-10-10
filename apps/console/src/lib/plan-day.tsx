@@ -20,6 +20,7 @@ import {
   reassignRefusal,
   statusLabel,
 } from './planning-text';
+import { btn } from './theme-css';
 
 /**
  * `BE-W171` — the client half of `/planning`. Every write is an RPC; this file holds only the
@@ -37,22 +38,10 @@ interface Stop {
 
 const field = (): CSSProperties => ({
   padding: tokens.space.sm,
-  border: `1px solid ${tokens.color.textPrimary}`,
+  border: `1px solid ${tokens.color.border}`,
   borderRadius: tokens.radius.control,
   fontSize: compactTypography.body.size,
   fontFamily: 'inherit',
-});
-
-const button = (primary = false): CSSProperties => ({
-  minHeight: primary ? 52 : 36,
-  padding: `0 ${String(tokens.space.md)}px`,
-  background: tokens.color.surface,
-  border: `${primary ? '2' : '1'}px solid ${tokens.color.textPrimary}`,
-  borderRadius: tokens.radius.control,
-  color: tokens.color.textPrimary,
-  fontSize: compactTypography.control.size,
-  fontWeight: Number(compactTypography.control.weight),
-  cursor: 'pointer',
 });
 
 type Outcome =
@@ -167,7 +156,7 @@ export const PlanDay = ({
             <Label>Day</Label>
             <input aria-label="Day" name="date" type="date" defaultValue={day} style={field()} />
           </div>
-          <button type="submit" style={button()}>
+          <button type="submit" className={btn('secondary')}>
             Show
           </button>
         </form>
@@ -237,7 +226,7 @@ export const PlanDay = ({
                   </select>
                   <button
                     type="button"
-                    style={button()}
+                    className={btn('secondary')}
                     disabled={ended || index === 0}
                     onClick={() => {
                       move(index, -1);
@@ -247,7 +236,7 @@ export const PlanDay = ({
                   </button>
                   <button
                     type="button"
-                    style={button()}
+                    className={btn('secondary')}
                     disabled={ended || index === stops.length - 1}
                     onClick={() => {
                       move(index, 1);
@@ -257,7 +246,7 @@ export const PlanDay = ({
                   </button>
                   <button
                     type="button"
-                    style={button()}
+                    className={btn('danger')}
                     disabled={ended}
                     onClick={() => {
                       edit(stops.filter((_, i) => i !== index));
@@ -295,7 +284,7 @@ export const PlanDay = ({
           </select>
           <button
             type="button"
-            style={button()}
+            className={btn('secondary')}
             disabled={ended || adding === ''}
             onClick={() => {
               const doctor = doctorById.get(adding);
@@ -313,7 +302,7 @@ export const PlanDay = ({
         {say(saved)}
         <button
           type="button"
-          style={button(true)}
+          className={btn('primary')}
           disabled={ended || saved.kind === 'busy'}
           onClick={save}
         >
@@ -432,7 +421,7 @@ const VisitRow = ({
           ) : (
             <button
               type="button"
-              style={button()}
+              className={btn('secondary')}
               disabled={outcome.kind === 'busy'}
               onClick={markReviewed}
             >
@@ -468,7 +457,7 @@ const VisitRow = ({
             />
             <button
               type="button"
-              style={button()}
+              className={btn('secondary')}
               disabled={target === '' || outcome.kind === 'busy'}
               onClick={reassign}
             >

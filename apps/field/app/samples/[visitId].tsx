@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 // Device-generated, for the reason the visit route gives: the contract calls `id`
 // the server-side idempotency key, so a handover sent twice from a doorway with
 // one bar is one handover.
 import uuid from 'expo-modules-core/src/uuid';
-import { SamplesScreen, Screen } from '@fieldforce/ui';
+import { SamplesScreen } from '@fieldforce/ui';
 import type { SampleLine, SampleLinePatch } from '@fieldforce/ui';
 import { createPushClient } from '../../src/sync/push-client';
 import { QUEUE_UNREADABLE } from '../../src/sync/async-storage-store';
@@ -21,6 +21,7 @@ import {
 } from '../../src/capture/samples';
 import { sampleQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { SESSION_EXPIRED, refusalTextFor, sessionExpired } from '../../src/sync/explanation';
+import { NOT_PERMITTED_DETAIL } from '../../src/errors/plain';
 
 /**
  * C5 — the samples binding.
@@ -130,7 +131,7 @@ export default function SamplesRoute(): ReactNode {
         : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
           ? {
               title: 'You do not have access to this visit',
-              detail: 'The server refused this request for your account.',
+              detail: NOT_PERMITTED_DETAIL,
             }
           : lacksWhatItNeeds
             ? {
@@ -233,41 +234,42 @@ export default function SamplesRoute(): ReactNode {
   };
 
   return (
-    <Screen scrollable>
-      <SamplesScreen
-        busy={busy}
-        capNote={CAP_NOTE}
-        dateLabel={
-          // MR-24 DEFECT 6, fixed. TWO bugs in one expression. `visits.received_at` is
-          // server bookkeeping -- when the ROW ARRIVED -- not when the visit is; it headed a
-          // visit scheduled 11 September as "10 Sep", because that is when `seed:day`
-          // inserted it. And `dayMonthFrom` sliced the UTC day out of the ISO string.
-          //
-          // `scheduledFor` is the visit's own date, and `dayMonthIn` reads it in the
-          // territory's zone. An MR confirming what they handed over at THIS visit, on a
-          // record that is UCPMP-relevant, gets the visit's date.
-          //
-          // MR-49 B -- CORRECTED. The schedule is not the day the samples are handed over: a
-          // visit scheduled 30 September and happening on 1 October read "30 Sep". The label
-          // is now the server's day for the visit (`visitDay`, `visit_day()`). See
-          // `samplesDateLabel`.
-          samplesDateLabel(visit)
-        }
-        doctorName={doctor?.fullName ?? 'This visit'}
-        failure={shownFailure}
-        actionFailure={actionFailure}
-        lines={lines}
-        loading={loading}
-        onAddLine={() => {
-          setLines((current) => [...current, blankLine(uuid.v4())]);
-        }}
-        onChangeLine={changeLine}
-        onRecord={record}
-        onRemoveLine={(id) => {
-          setLines((current) => current.filter((line) => line.id !== id));
-        }}
-        saved={saved}
-      />
-    </Screen>
+    <SamplesScreen
+      onDone={() => {
+        router.back();
+      }}
+      busy={busy}
+      capNote={CAP_NOTE}
+      dateLabel={
+        // MR-24 DEFECT 6, fixed. TWO bugs in one expression. `visits.received_at` is
+        // server bookkeeping -- when the ROW ARRIVED -- not when the visit is; it headed a
+        // visit scheduled 11 September as "10 Sep", because that is when `seed:day`
+        // inserted it. And `dayMonthFrom` sliced the UTC day out of the ISO string.
+        //
+        // `scheduledFor` is the visit's own date, and `dayMonthIn` reads it in the
+        // territory's zone. An MR confirming what they handed over at THIS visit, on a
+        // record that is UCPMP-relevant, gets the visit's date.
+        //
+        // MR-49 B -- CORRECTED. The schedule is not the day the samples are handed over: a
+        // visit scheduled 30 September and happening on 1 October read "30 Sep". The label
+        // is now the server's day for the visit (`visitDay`, `visit_day()`). See
+        // `samplesDateLabel`.
+        samplesDateLabel(visit)
+      }
+      doctorName={doctor?.fullName ?? 'This visit'}
+      failure={shownFailure}
+      actionFailure={actionFailure}
+      lines={lines}
+      loading={loading}
+      onAddLine={() => {
+        setLines((current) => [...current, blankLine(uuid.v4())]);
+      }}
+      onChangeLine={changeLine}
+      onRecord={record}
+      onRemoveLine={(id) => {
+        setLines((current) => current.filter((line) => line.id !== id));
+      }}
+      saved={saved}
+    />
   );
 }

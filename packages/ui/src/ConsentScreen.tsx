@@ -1,8 +1,9 @@
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Display, Heading, Label, Statement } from './Text';
+import { BodyText, Display, Heading, Label, Secondary, Statement } from './Text';
 import { Button } from './Button';
 import { Select } from './Select';
 import { Spinner } from './Spinner';
@@ -190,29 +191,39 @@ const Answers = ({
   onAnswer,
   onHandBack,
   busy,
-}: Pick<ConsentScreenProps, 'onAnswer' | 'onHandBack'> & { readonly busy: boolean }): ReactNode => (
-  <View style={styles.answers}>
-    <Button
-      label="No, don't record"
-      loading={busy}
-      onPress={() => {
-        onAnswer('declined');
-      }}
-      variant="secondary"
-    />
-    <Button
-      label="Yes, that's fine"
-      loading={busy}
-      onPress={() => {
-        onAnswer('consented');
-      }}
-      variant="secondary"
-    />
-    <Pressable accessibilityRole="button" onPress={onHandBack} style={styles.handBack}>
-      {({ pressed }) => <Label muted={handBackMuted(pressed)}>Give the phone back</Label>}
-    </Pressable>
-  </View>
-);
+}: Pick<ConsentScreenProps, 'onAnswer' | 'onHandBack'> & { readonly busy: boolean }): ReactNode => {
+  // UX polish. Only the answer the doctor pressed shows that it is working. Both used to spin, so
+  // neither the doctor nor the rep could see which answer the phone had taken. The two buttons stay
+  // equal in every other respect -- that equality is the point of this screen.
+  const [pressed, setPressed] = useState<'declined' | 'consented' | null>(null);
+  return (
+    <View style={styles.answers}>
+      <Button
+        label="No, don't record"
+        loading={busy && pressed === 'declined'}
+        onPress={() => {
+          setPressed('declined');
+          onAnswer('declined');
+        }}
+        variant="secondary"
+      />
+      <Button
+        label="Yes, that's fine"
+        loading={busy && pressed === 'consented'}
+        onPress={() => {
+          setPressed('consented');
+          onAnswer('consented');
+        }}
+        variant="secondary"
+      />
+      <Pressable accessibilityRole="button" onPress={onHandBack} style={styles.handBack}>
+        {({ pressed: down }) => (
+          <Secondary muted={handBackMuted(down)}>Give the phone back</Secondary>
+        )}
+      </Pressable>
+    </View>
+  );
+};
 
 /** The notice itself, plus the way into the legal layer. Present in all variants. */
 const Notice = ({

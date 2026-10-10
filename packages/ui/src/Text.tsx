@@ -74,6 +74,12 @@ const styles = StyleSheet.create({
     fontWeight: tokens.typography.body.weight,
     fontFamily: fontFamilyFor(tokens.typography.body.weight),
   },
+  secondary: {
+    fontSize: tokens.typography.secondary.size,
+    lineHeight: tokens.typography.secondary.lineHeight,
+    fontWeight: tokens.typography.secondary.weight,
+    fontFamily: fontFamilyFor(tokens.typography.secondary.weight),
+  },
   label: {
     fontSize: tokens.typography.label.size,
     lineHeight: tokens.typography.label.lineHeight,
@@ -128,6 +134,17 @@ export const Heading = ({ children }: TextProps): ReactNode => {
 export const BodyText = ({ children, muted = false }: TextProps): ReactNode => {
   const color = useSurfaceInk(muted);
   return <RnText style={[styles.body, { color }]}>{children}</RnText>;
+};
+
+/**
+ * §03's 14.5/400 — supporting PROSE: a help paragraph, a card's detail line, "31.7 km · on this
+ * month's claim". The step existed in the scale and no component rendered it, so every
+ * explanation fell to `Label` at 13.5 — the size for a field's name, too small to read a sentence
+ * outdoors. `Label` stays for labels.
+ */
+export const Secondary = ({ children, muted = true }: TextProps): ReactNode => {
+  const color = useSurfaceInk(muted);
+  return <RnText style={[styles.secondary, { color }]}>{children}</RnText>;
 };
 
 export const Label = ({ children, muted = false }: TextProps): ReactNode => {

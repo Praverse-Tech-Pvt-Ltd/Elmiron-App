@@ -239,7 +239,8 @@ describe('S3 — when something will not go', () => {
       />,
     );
     expect(screen.getByText(/Everything else went through/u)).toBeTruthy();
-    expect(screen.getByText(/Stuck: recording/u)).toBeTruthy();
+    // In the rep's words, not the outbox's entity name.
+    expect(screen.getByText(/Stuck: visit recording/u)).toBeTruthy();
   });
 
   it('states that the failure is not counted against the MR', async () => {

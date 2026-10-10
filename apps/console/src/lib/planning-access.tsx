@@ -8,6 +8,7 @@ import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { browserClient } from './supabase';
 import { Body, Card, Heading, Label, MissingNote, Pill, cell, headerCell } from './ui';
 import { grantRefusal, grantStateLabel } from './planning-text';
+import { btn } from './theme-css';
 
 /**
  * `BE-W171` — the client half of `/planning/access`. The browser sends ids only; the names in the
@@ -31,22 +32,10 @@ export interface GrantRow {
 const field = (): CSSProperties => ({
   width: '100%',
   padding: tokens.space.sm,
-  border: `1px solid ${tokens.color.textPrimary}`,
+  border: `1px solid ${tokens.color.border}`,
   borderRadius: tokens.radius.control,
   fontSize: compactTypography.body.size,
   fontFamily: 'inherit',
-});
-
-const button = (): CSSProperties => ({
-  minHeight: 44,
-  padding: `0 ${String(tokens.space.md)}px`,
-  background: tokens.color.surface,
-  border: `2px solid ${tokens.color.textPrimary}`,
-  borderRadius: tokens.radius.control,
-  color: tokens.color.textPrimary,
-  fontSize: compactTypography.control.size,
-  fontWeight: Number(compactTypography.control.weight),
-  cursor: 'pointer',
 });
 
 type Outcome =
@@ -176,8 +165,10 @@ export const PlanningAccess = ({
             }}
           />
           {outcome.kind === 'done' ? <Body>{outcome.message}</Body> : null}
-          {outcome.kind === 'refused' ? <MissingNote>{outcome.message}</MissingNote> : null}
-          <button type="button" style={button()} disabled={!ready} onClick={grant}>
+          {outcome.kind === 'refused' ? (
+            <MissingNote tone="critical">{outcome.message}</MissingNote>
+          ) : null}
+          <button type="button" className={btn('primary')} disabled={!ready} onClick={grant}>
             {outcome.kind === 'busy' ? 'Granting…' : 'Grant'}
           </button>
         </Card>
@@ -261,7 +252,7 @@ const GrantLine = ({
             />
             <button
               type="button"
-              style={button()}
+              className={btn('danger')}
               disabled={reason.trim().length < 3 || outcome.kind === 'busy'}
               onClick={revoke}
             >
@@ -269,7 +260,9 @@ const GrantLine = ({
             </button>
           </div>
         ) : null}
-        {outcome.kind === 'refused' ? <MissingNote>{outcome.message}</MissingNote> : null}
+        {outcome.kind === 'refused' ? (
+          <MissingNote tone="critical">{outcome.message}</MissingNote>
+        ) : null}
       </td>
     </tr>
   );

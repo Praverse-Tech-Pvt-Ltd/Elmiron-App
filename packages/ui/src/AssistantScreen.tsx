@@ -64,12 +64,15 @@ const styles = StyleSheet.create({
 const Turn = ({ turn, sample }: { turn: AssistantTurn; sample: boolean }): ReactNode => {
   if (turn.kind === 'question') {
     return (
-      <View style={styles.question} testID="assistant-question">
-        <Card>
-          <View style={styles.turn}>
-            <Label muted>You asked</Label>
-            <BodyText>{turn.text}</BodyText>
-          </View>
+      // UX polish. The rep's own words: a flat bubble on their side. "You asked" was printed above
+      // every one; alignment and shape already say who spoke, so it is for screen readers only.
+      <View
+        accessibilityLabel={`You asked: ${turn.text}`}
+        style={styles.question}
+        testID="assistant-question"
+      >
+        <Card tone="quiet">
+          <BodyText>{turn.text}</BodyText>
         </Card>
       </View>
     );
@@ -88,8 +91,10 @@ const Turn = ({ turn, sample }: { turn: AssistantTurn; sample: boolean }): React
     );
   }
   return (
+    // A raised card, not a dark hero: a long conversation was a stack of black blocks, and the
+    // design keeps one hero per screen.
     <View testID="assistant-answer">
-      <Card tone="hero">
+      <Card>
         <View style={styles.turn}>
           <Label muted>{sample ? SAMPLE_REPLY_LABEL : 'Assistant'}</Label>
           <BodyText>{turn.text}</BodyText>

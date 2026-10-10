@@ -1,6 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { CourseScreen, LessonScreen } from './LearningScreens';
+import { CourseScreen, LessonBody, LessonScreen } from './LearningScreens';
 
 const noop = (): void => undefined;
 
@@ -79,5 +79,25 @@ describe('LearningScreens — W2-F B', () => {
     await rerender(<LessonScreen view={{ ...reading, finished: '14:40 on 7 Oct' }} />);
     expect(screen.getByText('Finished — recorded 14:40 on 7 Oct.')).toBeTruthy();
     expect(screen.queryByText('I have finished this lesson')).toBeNull();
+  });
+});
+
+describe('UX polish — a lesson reads as the author wrote it', () => {
+  it('splits paragraphs, renders a heading and bullets, and drops nothing', async () => {
+    await render(
+      <LessonBody
+        body={'Opening paragraph.\n\n# Dosing\n\n- Take with food\n- Once daily\n\nClosing.'}
+      />,
+    );
+    expect(screen.getByText('Opening paragraph.')).toBeTruthy();
+    expect(screen.getByText('Dosing')).toBeTruthy();
+    expect(screen.getByText('•  Take with food')).toBeTruthy();
+    expect(screen.getByText('•  Once daily')).toBeTruthy();
+    expect(screen.getByText('Closing.')).toBeTruthy();
+  });
+
+  it('a body with no blank lines is one paragraph, exactly as before', async () => {
+    await render(<LessonBody body={'One line.\nAnother line.'} />);
+    expect(screen.getByText('One line.\nAnother line.')).toBeTruthy();
   });
 });

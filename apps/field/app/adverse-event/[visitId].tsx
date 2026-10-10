@@ -13,6 +13,7 @@ import { QUEUE_UNREADABLE } from '../../src/sync/async-storage-store';
 import { adverseEventQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
+import { failureDetail } from '../../src/errors/plain';
 
 /**
  * W2-C B / `BE-W159` — the rep flags a possible side effect, from the visit (`BE-C36`).
@@ -81,7 +82,7 @@ export default function AdverseEventFlag(): ReactNode {
           title: 'Not saved',
           detail:
             error instanceof Error
-              ? `${error.message} Keep this screen open — the flag is not saved yet.`
+              ? `${failureDetail(error)} Keep this screen open — the flag is not saved yet.`
               : 'Keep this screen open — the flag is not saved yet.',
         });
       })

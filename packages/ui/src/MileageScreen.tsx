@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Figure, Heading, Label } from './Text';
+import { BodyText, Figure, Label, Title } from './Text';
 import { Card } from './Card';
 import { ListItem } from './ListItem';
 import { Spinner } from './Spinner';
@@ -64,7 +64,7 @@ export const MileageScreen = ({
   if (failure !== null) {
     return (
       <>
-        <Heading>Mileage</Heading>
+        <Title>Mileage</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </>
     );
@@ -72,7 +72,7 @@ export const MileageScreen = ({
 
   return (
     <>
-      <Heading>Mileage</Heading>
+      <Title>Mileage</Title>
 
       {loading ? <Spinner label="Getting your mileage" /> : null}
 
@@ -89,7 +89,7 @@ export const MileageScreen = ({
         </Label>
       </Card>
 
-      <Card tone="offline">
+      <Card tone="quiet">
         <BodyText>{rateNote}</BodyText>
       </Card>
 

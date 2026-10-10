@@ -14,6 +14,7 @@ import type {
   PracticeSession,
 } from '../../../src/practice/contract';
 import { practiceBackend } from '../../../src/practice/transport';
+import { failureDetail } from '../../../src/errors/plain';
 
 /**
  * FE-D17 — the feedback on one AI Doctor practice session.
@@ -80,7 +81,7 @@ const PracticeAnalysisView = (): ReactNode => {
         if (!stopped()) {
           setFailure({
             title: 'Could not load the feedback',
-            detail: error instanceof Error ? error.message : 'Unknown failure',
+            detail: failureDetail(error),
           });
         }
       })

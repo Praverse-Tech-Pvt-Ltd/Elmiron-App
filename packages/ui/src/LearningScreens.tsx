@@ -6,6 +6,7 @@ import { BodyText, Heading, Label, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { ListRow } from './ListRow';
+import { Spinner } from './Spinner';
 
 /**
  * W2-F B — a rep's learning: the courses assigned to them, one course's lessons, a lesson, and
@@ -21,6 +22,8 @@ import { ListRow } from './ListRow';
  */
 
 const styles = StyleSheet.create({
+  lessonBody: { gap: tokens.space.md },
+  bullets: { gap: tokens.space.xs },
   head: { gap: 2 },
   list: { gap: tokens.space.sm },
   section: { gap: tokens.space.xs, paddingTop: tokens.space.sm },
@@ -70,7 +73,7 @@ export const LearningListScreen = ({ view }: { readonly view: LearningListView }
       <Title>Learning</Title>
       <Label muted>The courses assigned to you.</Label>
     </View>
-    {view.kind === 'loading' ? <Label muted>Loading your courses…</Label> : null}
+    {view.kind === 'loading' ? <Spinner label="Loading your courses" /> : null}
     {view.kind === 'offline' || view.kind === 'error' ? (
       <FailureCard failure={view} what="your courses" />
     ) : null}
@@ -130,7 +133,7 @@ export type CourseView =
 export const CourseScreen = ({ view }: { readonly view: CourseView }): ReactNode => {
   switch (view.kind) {
     case 'loading':
-      return <Label muted>Loading the course…</Label>;
+      return <Spinner label="Loading the course" />;
     case 'offline':
     case 'error':
       return <FailureCard failure={view} what="this course" />;
@@ -223,10 +226,40 @@ export type LessonView =
     }
   | Failure;
 
+/**
+ * UX polish. A lesson's text, read as the author wrote it: paragraphs split on a blank line, a line
+ * opening with `# ` as a section heading, `- ` or `• ` as a bullet. It was one `BodyText` -- a long
+ * clinical lesson arrived as a single wall of text. Nothing is reworded, dropped or reordered;
+ * a body with no blank lines renders exactly as before.
+ */
+export const LessonBody = ({ body }: { readonly body: string }): ReactNode => (
+  <View style={styles.lessonBody}>
+    {body
+      .split(/\n\s*\n/u)
+      .map((block) => block.trim())
+      .filter((block) => block !== '')
+      .map((block, index) => {
+        const key = `${String(index)}:${block.slice(0, 24)}`;
+        if (block.startsWith('# ')) return <Heading key={key}>{block.slice(2)}</Heading>;
+        const lines = block.split('\n');
+        if (lines.every((line) => /^\s*[-•]\s+/u.test(line))) {
+          return (
+            <View key={key} style={styles.bullets}>
+              {lines.map((line) => (
+                <BodyText key={line}>{`•  ${line.replace(/^\s*[-•]\s+/u, '')}`}</BodyText>
+              ))}
+            </View>
+          );
+        }
+        return <BodyText key={key}>{block}</BodyText>;
+      })}
+  </View>
+);
+
 export const LessonScreen = ({ view }: { readonly view: LessonView }): ReactNode => {
   switch (view.kind) {
     case 'loading':
-      return <Label muted>Loading the lesson…</Label>;
+      return <Spinner label="Loading the lesson" />;
     case 'offline':
     case 'error':
       return <FailureCard failure={view} what="this lesson" />;
@@ -245,11 +278,12 @@ export const LessonScreen = ({ view }: { readonly view: LessonView }): ReactNode
             <Title>{view.title}</Title>
             {view.minutes === null ? null : <Label muted>{view.minutes}</Label>}
           </View>
-          <BodyText>{view.body}</BodyText>
+          <LessonBody body={view.body} />
           <View style={styles.foot}>
             {view.finished === null ? (
               <Button
-                label={view.recording ? 'Recording…' : 'I have finished this lesson'}
+                // "Saving", not "Recording": in this app "recording" means audio of a doctor.
+                label={view.recording ? 'Saving…' : 'I have finished this lesson'}
                 loading={view.recording}
                 onPress={view.onFinish}
               />

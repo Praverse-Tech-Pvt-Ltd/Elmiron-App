@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Heading, Label } from './Text';
+import { BodyText, Heading, Label, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Spinner } from './Spinner';
@@ -125,7 +125,7 @@ export const CoachingFeedScreen = ({
   if (failure !== null) {
     return (
       <>
-        <Heading>Coaching</Heading>
+        <Title>Coaching</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </>
     );

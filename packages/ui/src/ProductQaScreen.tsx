@@ -3,7 +3,8 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Label, Title } from './Text';
+import { Badge } from './Badge';
+import { BodyText, Label, Secondary, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Select } from './Select';
@@ -46,6 +47,14 @@ export interface ProductQaScreenProps {
 
 const styles = StyleSheet.create({
   head: { gap: 2 },
+  sources: {
+    gap: tokens.space.xs,
+    marginTop: tokens.space.sm,
+    paddingTop: tokens.space.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: tokens.color.hairline,
+  },
+  sourceToggle: { alignSelf: 'flex-start' },
   foot: { gap: tokens.space.sm, paddingTop: tokens.space.sm },
 });
 
@@ -64,17 +73,27 @@ const Answer = ({
   const [open, setOpen] = useState(false);
   return (
     <Card>
+      {/*
+        UX polish. The answer, then -- below a rule -- where it came from, under a badge that says
+        the source is APPROVED material. Each source is named once; the details open on request.
+        It used to list every source twice, in one undifferentiated card.
+      */}
       <BodyText>{text}</BodyText>
-      {sources.map((source) => (
-        <Label key={source.label} muted>{`From: ${source.label}`}</Label>
-      ))}
-      <Button
-        label={open ? 'Hide sources' : `Show sources (${String(sources.length)})`}
-        onPress={() => {
-          setOpen((value) => !value);
-        }}
-        variant="secondary"
-      />
+      <View style={styles.sources}>
+        <Badge label="Approved sources" tone="success" />
+        {sources.map((source) => (
+          <Secondary key={source.label}>{source.label}</Secondary>
+        ))}
+        <View style={styles.sourceToggle}>
+          <Button
+            label={open ? 'Hide source details' : `Show source details (${String(sources.length)})`}
+            onPress={() => {
+              setOpen((value) => !value);
+            }}
+            variant="quiet"
+          />
+        </View>
+      </View>
       {open
         ? sources.map((source) => (
             <Card key={`detail-${source.label}`}>
@@ -101,19 +120,18 @@ const Result = ({ view }: { readonly view: ProductQaView }): ReactNode => {
       return (
         <Card>
           <BodyText>No approved answer for this yet.</BodyText>
-          <Label muted>{view.text}</Label>
-          <Label muted>
+          <Secondary>{view.text}</Secondary>
+          <Secondary>
             This app answers only from material your company has approved. Until that material is
             loaded, take the question to your manager or the Medical team.
-          </Label>
+          </Secondary>
         </Card>
       );
     case 'refusal':
-      return (
-        <Card>
-          <BodyText>{view.text}</BodyText>
-        </Card>
-      );
+      // UX polish (compliance). A refusal was drawn in the answer's own card, with the answer's
+      // own type -- a deliberate "not answered" that could be read AS an answer. It is a notice
+      // now, titled so that it cannot be.
+      return <Banner detail={view.text} title="Not answered" tone="info" />;
     case 'switched_off':
       return (
         <Banner

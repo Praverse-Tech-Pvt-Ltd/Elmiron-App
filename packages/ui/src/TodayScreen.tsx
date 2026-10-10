@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Figure, Heading, Label, Title } from './Text';
+import { BodyText, Figure, Heading, Label, Secondary, Title } from './Text';
 import { Banner } from './Banner';
 import { Button } from './Button';
 import { Card } from './Card';
+import { Screen } from './Screen';
 import { Spinner } from './Spinner';
 import { SyncQueueIndicator } from './SyncQueueIndicator';
 import type { SyncQueueState } from './SyncQueueIndicator';
@@ -162,6 +163,17 @@ export interface TodayScreenProps {
    * this renders that as an absence rather than as an empty container.
    */
   readonly notices?: readonly { readonly title: string; readonly body: string }[];
+  /**
+   * UX polish. Asks for the day again. When given, a failure that replaced the day offers
+   * "Try again" -- a whole-screen banner with no action was a dead end on the first screen of
+   * the day.
+   */
+  readonly onRetry?: () => void;
+  /**
+   * Content that belongs on this screen below the day and ABOVE the pinned actions -- the route
+   * passes its "Not sent yet" section here, which used to render below the primary button.
+   */
+  readonly after?: ReactNode;
 }
 
 const styles = StyleSheet.create({
@@ -170,8 +182,7 @@ const styles = StyleSheet.create({
   heroLines: { gap: 2 },
   // The single primary action is pinned rather than scrolled to: §04 puts it inside
   // the bottom reach zone, where a thumb already is.
-  spacer: { flex: 1, minHeight: tokens.space.md },
-  foot: { gap: tokens.space.sm },
+  progressLink: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
 });
 
 export const TodayScreen = ({
@@ -194,13 +205,57 @@ export const TodayScreen = ({
   loading = false,
   failure = null,
   notices = [],
+  onRetry,
+  after = null,
 }: TodayScreenProps): ReactNode => {
   if (failure !== null) {
-    return <Banner detail={failure.detail} title={failure.title} tone="critical" />;
+    return (
+      <Screen>
+        <Banner
+          detail={failure.detail}
+          title={failure.title}
+          tone="critical"
+          {...(onRetry === undefined ? {} : { action: { label: 'Try again', onPress: onRetry } })}
+        />
+      </Screen>
+    );
   }
 
-  return (
+  // UX polish (§04's reach zone, finally honoured). At most TWO actions are pinned: the one the
+  // rep came here for -- start or continue the next visit -- and adding a visit the plan did not
+  // have. Everything else is reachable from the content: the next-visit card itself starts the
+  // visit, the progress card opens the route, and "what this app records" sits at the end.
+  const startLabel =
+    next === null
+      ? null
+      : next.inProgress === true
+        ? `Continue the visit to ${next.doctorName}`
+        : `Start the visit to ${next.doctorName}`;
+  const footer = (
     <>
+      {next === null && planned === 0 && onFindDoctor !== undefined ? (
+        <Button label="Find a doctor" onPress={onFindDoctor} variant="secondary" />
+      ) : null}
+      {next === null && planned > 0 && stillOnPlan === 0 && onOpenDayEnd !== undefined ? (
+        <Button label="How today ended" onPress={onOpenDayEnd} variant="secondary" />
+      ) : null}
+      {onAddUnplannedVisit === undefined ? null : (
+        <Button
+          label="Add an unplanned visit"
+          onPress={onAddUnplannedVisit}
+          variant={next === null ? 'secondary' : 'quiet'}
+        />
+      )}
+      {startLabel === null || onStartNextVisit === undefined ? null : (
+        <Button label={startLabel} onPress={onStartNextVisit} variant="primary" />
+      )}
+    </>
+  );
+  const routePress = next !== null || stillOnPlan > 0 ? onOpenRoute : undefined;
+  const routeOpen = routePress !== undefined;
+
+  return (
+    <Screen scrollable footer={footer}>
       <View style={styles.head}>
         <Title>{dayLabel}</Title>
         {dayAsOfLabel === null ? null : <Label muted>{dayAsOfLabel}</Label>}
@@ -261,8 +316,11 @@ export const TodayScreen = ({
           </Card>
         )
       ) : (
-        <Card tone="hero">
-          <Label>Next visit</Label>
+        <Card
+          tone="hero"
+          {...(onStartNextVisit === undefined ? {} : { onPress: onStartNextVisit })}
+        >
+          <Label>{next.inProgress === true ? 'In progress' : 'Next visit'}</Label>
           <View style={styles.heroLines}>
             <Heading>{next.doctorName}</Heading>
             {next.clinic !== null ? (
@@ -280,55 +338,29 @@ export const TodayScreen = ({
       )}
 
       {loading && planned === 0 ? null : (
-        <Card>
-          <Label muted>Today</Label>
+        <Card {...(routePress === undefined ? {} : { onPress: routePress })}>
+          <View style={styles.progressLink}>
+            <Label muted>Today</Label>
+            {routeOpen ? <Label muted>See today’s route ›</Label> : null}
+          </View>
           <View style={styles.progress}>
             <Figure>{`${String(done + notMet)} of ${String(planned)}`}</Figure>
-            <Label muted>visits attended</Label>
+            <Secondary>visits attended</Secondary>
           </View>
         </Card>
       )}
 
       {sync === null ? null : <SyncQueueIndicator onPress={onOpenQueue} state={sync} />}
 
-      <View style={styles.spacer} />
+      {after}
 
-      <View style={styles.foot}>
-        {onOpenTransparency === undefined ? null : (
-          <Button
-            label="What this app records about me"
-            onPress={onOpenTransparency}
-            variant="quiet"
-          />
-        )}
-        {(next !== null || stillOnPlan > 0) && onOpenRoute !== undefined ? (
-          <Button label="See today's route" onPress={onOpenRoute} variant="secondary" />
-        ) : null}
-        {next === null && planned === 0 && onFindDoctor !== undefined ? (
-          <Button label="Find a doctor" onPress={onFindDoctor} variant="secondary" />
-        ) : null}
-        {next === null && planned > 0 && stillOnPlan === 0 && onOpenDayEnd !== undefined ? (
-          <Button label="How today ended" onPress={onOpenDayEnd} variant="secondary" />
-        ) : null}
-        {onAddUnplannedVisit === undefined ? null : (
-          <Button
-            label="Add an unplanned visit"
-            onPress={onAddUnplannedVisit}
-            variant="secondary"
-          />
-        )}
-        {next === null || onStartNextVisit === undefined ? null : (
-          <Button
-            label={
-              next.inProgress === true
-                ? `Continue the visit to ${next.doctorName}`
-                : `Start the visit to ${next.doctorName}`
-            }
-            onPress={onStartNextVisit}
-            variant="primary"
-          />
-        )}
-      </View>
-    </>
+      {onOpenTransparency === undefined ? null : (
+        <Button
+          label="What this app records about me"
+          onPress={onOpenTransparency}
+          variant="quiet"
+        />
+      )}
+    </Screen>
   );
 };

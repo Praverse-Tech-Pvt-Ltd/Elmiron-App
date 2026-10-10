@@ -33,6 +33,11 @@ export interface TextFieldProps {
   readonly help?: string;
   /** Adds a clear affordance inside the field. Omit and none is shown. */
   readonly onClear?: () => void;
+  /**
+   * A field for a few sentences — a call report's notes. It opens about four lines tall and grows,
+   * because a 60pt single line hides everything but the last few words of a real note.
+   */
+  readonly multiline?: boolean;
 }
 
 const styles = StyleSheet.create({
@@ -48,8 +53,15 @@ const styles = StyleSheet.create({
     minHeight: tokens.target.primary,
   },
   // Focus thickens the same edge rather than adding a ring outside it, so the
-  // field does not shift the layout of a form when the keyboard opens.
-  focused: { borderColor: tokens.color.accent, borderWidth: 3 },
+  // field does not shift the layout of a form when the keyboard opens. The two extra points of
+  // edge are taken back out of the padding, or the value would jump sideways on focus.
+  focused: {
+    borderColor: tokens.color.accent,
+    borderWidth: 3,
+    paddingHorizontal: tokens.space.md - 2,
+  },
+  multiline: { alignItems: 'flex-start', minHeight: tokens.target.primary * 2 },
+  multilineInput: { textAlignVertical: 'top', minHeight: tokens.target.primary * 2 - 2 },
   errored: { borderColor: tokens.color.critical },
   disabled: { backgroundColor: tokens.color.wash, opacity: 0.7 },
   input: {
@@ -89,6 +101,7 @@ export const TextField = ({
   error,
   help,
   onClear,
+  multiline = false,
 }: TextFieldProps): ReactNode => {
   const [focused, setFocused] = useState(false);
 
@@ -108,6 +121,7 @@ export const TextField = ({
         collapsable={false}
         style={[
           styles.field,
+          multiline ? styles.multiline : null,
           focused ? styles.focused : null,
           error === undefined ? null : styles.errored,
           editable ? null : styles.disabled,
@@ -125,8 +139,9 @@ export const TextField = ({
           onFocus={() => {
             setFocused(true);
           }}
+          multiline={multiline}
           secureTextEntry={secure}
-          style={styles.input}
+          style={[styles.input, multiline ? styles.multilineInput : null]}
           value={value}
         />
         {onClear === undefined || value === '' ? null : (

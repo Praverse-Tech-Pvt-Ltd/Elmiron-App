@@ -1,4 +1,7 @@
+'use client';
+
 import type { ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { SignOut } from './sign-out';
 
@@ -13,36 +16,86 @@ import { SignOut } from './sign-out';
  * The coaching queue arrived with the second §3.6 reversal on 3 September 2026 and
  * is the landing surface, as Phase 4 asks: "exception-first — not a team
  * scoreboard, because there isn't one."
+ *
+ * **UX polish.** Three changes:
+ * - Only the CURRENT page looks current (`aria-current="page"`). Every link used to carry the
+ *   active treatment — accent text, a tint and an inset bar — so ten bars in a column said
+ *   nothing about where you were.
+ * - Grouped by what the work is: the team's daily work first, then content waiting for a second
+ *   admin, then governance. Daily operational links no longer sit in one list with configuration.
+ * - Unbuilt entries are named under "Coming later" in full-contrast muted text. They were drawn
+ *   at 60% opacity — below the contrast the token tests guarantee — with the explanation only in
+ *   a hover tooltip no keyboard or touch could reach.
  */
-const ITEMS: readonly { readonly label: string; readonly href?: string }[] = [
-  { label: 'Coaching queue', href: '/coaching' },
-  // W1-A E3. A link, not plain text, because the screen behind it exists — the rule this list
-  // already keeps. It is the operator's own destination under `C26`.
-  { label: 'Knowledge approvals', href: '/knowledge' },
-  // W1-F B. A link for the same reason: the screen exists. Until it did, a practice session could
-  // not be started at all — `start_sim_session` refuses a scenario that is not approved, and
-  // nothing but a test could approve one.
-  { label: 'Practice doctors', href: '/practice' },
-  // The AI coach's analysis of practice sessions. Admins only (RLS); never a manager's.
-  { label: 'Practice feedback', href: '/practice-feedback' },
-  // W1-G E1 / BE-W122. Before this route existed, the only way to create the prompt a
-  // practice session needs was a script writing SQL.
-  { label: 'AI prompts', href: '/prompts' },
-  // W2-G B (OP-6). The screen `assign_course` waited for: a rep's Learning shows only assigned courses.
-  // Publishing a loaded course version, which only `content-step.mjs` could do.
-  { label: 'Courses', href: '/courses' },
-  { label: 'Course assignments', href: '/learning' },
-  { label: 'Consent versions', href: '/admin' },
-  // `BE-W171` / `BE-C78`. The manager plans a rep's day; the admin grants a manager planning scope
-  // beyond their own territory. Two links because each has a screen behind it -- and each screen
-  // refuses, in words, the role it is not for.
-  { label: 'Plan a rep’s day', href: '/planning' },
-  { label: 'Planning access', href: '/planning/access' },
-  { label: 'Users & roles' },
-  { label: 'Audit log' },
-  { label: 'Territories' },
-  { label: 'Retention & purge' },
+interface NavItem {
+  readonly label: string;
+  readonly href: string;
+}
+
+const GROUPS: readonly { readonly title: string; readonly items: readonly NavItem[] }[] = [
+  {
+    title: 'Team',
+    items: [
+      { label: 'Coaching queue', href: '/coaching' },
+      // `BE-W171` / `BE-C78`. The manager plans a rep's day; the screen refuses, in words, the role
+      // it is not for.
+      { label: 'Plan a rep’s day', href: '/planning' },
+      // W2-G B (OP-6). The screen `assign_course` waited for: a rep's Learning shows only assigned courses.
+      { label: 'Course assignments', href: '/learning' },
+    ],
+  },
+  {
+    title: 'Content approvals',
+    items: [
+      // W1-A E3. The operator's own destination under `C26`.
+      { label: 'Knowledge', href: '/knowledge' },
+      // W1-F B. Until this existed a practice session could not be started at all.
+      { label: 'Practice doctors', href: '/practice' },
+      // The AI coach's analysis of practice sessions. Admins only (RLS); never a manager's.
+      { label: 'Practice feedback', href: '/practice-feedback' },
+      // W1-G E1 / BE-W122. Before this route, the only way to create a prompt was SQL.
+      { label: 'AI prompts', href: '/prompts' },
+      // Publishing a loaded course version, which only `content-step.mjs` could do.
+      { label: 'Courses', href: '/courses' },
+    ],
+  },
+  {
+    title: 'Governance',
+    items: [
+      { label: 'Consent versions', href: '/admin' },
+      { label: 'Planning access', href: '/planning/access' },
+    ],
+  },
 ];
+
+const COMING_LATER: readonly string[] = [
+  'Users & roles',
+  'Audit log',
+  'Territories',
+  'Retention & purge',
+];
+
+/** The most specific link that contains the current path is the current one. */
+const currentHref = (pathname: string): string | null => {
+  const all = GROUPS.flatMap((group) => group.items.map((item) => item.href));
+  const matches = all.filter((href) => pathname === href || pathname.startsWith(`${href}/`));
+  return matches.sort((a, b) => b.length - a.length)[0] ?? null;
+};
+
+const groupTitle = {
+  fontSize: compactTypography.label.size,
+  fontWeight: 600,
+  color: tokens.color.textSecondary,
+  textTransform: 'uppercase' as const,
+  letterSpacing: 0.4,
+  padding: `${String(tokens.space.md)}px ${String(tokens.space.sm)}px ${String(tokens.space.xs)}px`,
+};
+
+const linkStyle = {
+  display: 'block',
+  padding: `${String(tokens.space.sm)}px ${String(tokens.space.sm)}px`,
+  fontSize: compactTypography.body.size,
+};
 
 /**
  * MR-52 A1: `signedInEmail` is whoever the request's cookie belongs to, or null before sign-in.
@@ -50,63 +103,70 @@ const ITEMS: readonly { readonly label: string; readonly href?: string }[] = [
  */
 export const Nav = ({
   signedInEmail = null,
-}: { readonly signedInEmail?: string | null } = {}): ReactNode => (
-  <nav
-    style={{
-      width: 224,
-      flex: 'none',
-      background: tokens.color.wash,
-      padding: `${String(tokens.space.lg)}px 0`,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: tokens.space.xs,
-    }}
-  >
-    <div
+}: { readonly signedInEmail?: string | null } = {}): ReactNode => {
+  const current = currentHref(usePathname());
+  return (
+    <nav
+      aria-label="Console"
+      className="ff-nav"
       style={{
-        padding: `0 ${String(tokens.space.lg)}px ${String(tokens.space.lg)}px`,
-        fontSize: compactTypography.heading.size,
-        fontWeight: Number(compactTypography.heading.weight),
+        width: 232,
+        flex: 'none',
+        background: tokens.color.wash,
+        padding: `${String(tokens.space.lg)}px ${String(tokens.space.sm)}px`,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: tokens.space.xs,
       }}
     >
-      Admin
-    </div>
-    {ITEMS.map((item) =>
-      item.href === undefined ? (
-        <span
-          key={item.label}
-          style={{
-            padding: `${String(tokens.space.sm)}px ${String(tokens.space.lg)}px`,
-            fontSize: compactTypography.body.size,
-            color: tokens.color.textSecondary,
-            opacity: 0.6,
-          }}
-          title="Not built yet"
-        >
-          {item.label}
-        </span>
-      ) : (
-        <a
-          href={item.href}
-          key={item.label}
-          style={{
-            padding: `${String(tokens.space.sm)}px ${String(tokens.space.lg)}px`,
-            fontSize: compactTypography.body.size,
-            fontWeight: Number(compactTypography.heading.weight),
-            color: tokens.color.accent,
-            background: tokens.color.successFill,
-            boxShadow: `inset 3px 0 0 ${tokens.color.accent}`,
-            textDecoration: 'none',
-          }}
-        >
-          {item.label}
-        </a>
-      ),
-    )}
-    {signedInEmail === null ? null : (
-      <div style={{ marginTop: 'auto', padding: `0 ${String(tokens.space.lg)}px` }}>
-        <SignOut email={signedInEmail} />
+      <div
+        style={{
+          padding: `0 ${String(tokens.space.sm)}px ${String(tokens.space.sm)}px`,
+          fontSize: compactTypography.heading.size,
+          fontWeight: Number(compactTypography.heading.weight),
+        }}
+      >
+        Admin
       </div>
-    )}
-  </nav>
-);
+      <div className="ff-nav-items" style={{ display: 'flex', flexDirection: 'column' }}>
+        {GROUPS.map((group) => (
+          <div key={group.title}>
+            <div style={groupTitle}>{group.title}</div>
+            {group.items.map((item) => (
+              <a
+                aria-current={item.href === current ? 'page' : undefined}
+                className="ff-nav-link"
+                href={item.href}
+                key={item.href}
+                style={linkStyle}
+              >
+                {item.label}
+              </a>
+            ))}
+          </div>
+        ))}
+        <div className="ff-nav-later">
+          <div style={groupTitle}>Coming later</div>
+          {COMING_LATER.map((label) => (
+            <span
+              key={label}
+              style={{ ...linkStyle, color: tokens.color.textSecondary, cursor: 'default' }}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+      </div>
+      {signedInEmail === null ? null : (
+        <div
+          style={{
+            marginTop: 'auto',
+            padding: `${String(tokens.space.md)}px ${String(tokens.space.sm)}px 0`,
+          }}
+        >
+          <SignOut email={signedInEmail} />
+        </div>
+      )}
+    </nav>
+  );
+};

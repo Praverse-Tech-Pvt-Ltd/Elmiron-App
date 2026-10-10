@@ -40,7 +40,7 @@ const when = (iso: string): string => {
 export const OverridesPanel = ({ result }: { readonly result: OverridesResult }): ReactNode => {
   if (result === null) {
     return (
-      <MissingNote>
+      <MissingNote tone="critical">
         The override history for this analysis could not be loaded. It is not shown as empty,
         because that would say nobody has overridden it.
       </MissingNote>

@@ -10,6 +10,7 @@ import {
   TextField,
 } from '@fieldforce/ui';
 import { useSession } from '../src/session';
+import { failureDetail } from '../src/errors/plain';
 
 /**
  * The brand line, §03's one Cormorant moment.
@@ -37,7 +38,13 @@ export default function SignIn(): ReactNode {
         // The server's wording, not ours. Inventing a friendlier message here is
         // how "invalid credentials" becomes "something went wrong" and a support
         // call becomes unanswerable.
-        setFailure(error instanceof Error ? error.message : 'Sign-in failed.');
+        // A network failure is the one exception: "Network request failed" is not the server's
+        // wording at all, and it reads as a broken app on a doorstep with one bar of signal.
+        setFailure(
+          error instanceof Error && !/network|fetch/iu.test(error.message)
+            ? error.message
+            : failureDetail(error),
+        );
       })
       .finally(() => {
         setBusy(false);

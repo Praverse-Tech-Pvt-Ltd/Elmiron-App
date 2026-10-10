@@ -7,6 +7,7 @@ import { coachingEnabled } from '../../src/features';
 import { readMyAnalysis, respondToMyAnalysis } from '../../src/coaching/server';
 import { NO_AUDIO_NOTE, REPLY_NOTE } from '../../src/coaching/content';
 import { orderedFindings } from '../../src/coaching/feed';
+import { failureDetail, refusedDetail } from '../../src/errors/plain';
 
 /**
  * Phase 4 D3 — the reply binding.
@@ -78,14 +79,14 @@ function Reply(): ReactNode {
             : outcome.kind === 'refused' && outcome.refusal.code === 'not_permitted'
               ? {
                   title: 'You do not have access to this analysis',
-                  detail: `The server refused this request (${outcome.refusal.sqlState}).`,
+                  detail: refusedDetail(outcome.refusal.sqlState),
                 }
               : {
                   title: 'Could not load the finding',
                   detail:
                     outcome.kind === 'mismatch'
                       ? outcome.detail
-                      : `The server refused this request (${outcome.refusal.sqlState}).`,
+                      : refusedDetail(outcome.refusal.sqlState),
                 },
         );
       })
@@ -93,7 +94,7 @@ function Reply(): ReactNode {
         if (cancelled) return;
         setFailure({
           title: 'Could not load the finding',
-          detail: error instanceof Error ? error.message : 'Unknown failure',
+          detail: failureDetail(error),
         });
       });
 
@@ -133,7 +134,7 @@ function Reply(): ReactNode {
         }
         setSendFailure({
           title: 'Your reply was not sent',
-          detail: `The server refused it (${outcome.refusal.sqlState}). What you wrote is still on the screen.`,
+          detail: `${refusedDetail(outcome.refusal.sqlState)} What you wrote is still on the screen.`,
         });
       })
       .catch(() => {

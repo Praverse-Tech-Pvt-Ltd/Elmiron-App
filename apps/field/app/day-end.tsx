@@ -14,6 +14,7 @@ import type { QueueLoad } from '../src/sync/async-storage-store';
 import { CAPTURE_NOTE, summariseDayEnd } from '../src/today/day-end';
 import { onDay } from '../src/today/plan';
 import { clockIn } from '../src/today/territory-day';
+import { refusedDetail } from '../src/errors/plain';
 
 /**
  * B7 — the day-end binding.
@@ -118,7 +119,7 @@ export default function DayEnd(): ReactNode {
     (pullFailure?.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
       ? {
           title: 'You do not have access to this day',
-          detail: `The server refused this request (${pullFailure.refusal.sqlState}).`,
+          detail: refusedDetail(pullFailure.refusal.sqlState),
         }
       : null);
 

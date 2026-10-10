@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Nav } from '../lib/nav';
+import { themeCss } from '../lib/theme-css';
 import { signedIn } from '../lib/session';
 
 export const metadata = {
@@ -31,7 +32,12 @@ export default async function RootLayout({
   const session = await signedIn();
   return (
     <html lang="en">
+      <head>
+        {/* UX polish: hover, focus, disabled and the narrow layout -- generated from the tokens. */}
+        <style>{themeCss}</style>
+      </head>
       <body
+        className="ff-shell"
         style={{
           margin: 0,
           background: tokens.color.background,
@@ -41,8 +47,23 @@ export default async function RootLayout({
           minHeight: '100vh',
         }}
       >
-        <Nav signedInEmail={session?.email ?? null} />
-        <main style={{ flex: 1, padding: tokens.space.xl, overflow: 'auto' }}>{children}</main>
+        {/*
+          UX polish. No sidebar before sign-in: a signed-out visitor saw every admin destination,
+          which read as reachable. The middleware still decides what is; this only stops the shell
+          suggesting otherwise.
+        */}
+        {session === null ? null : <Nav signedInEmail={session.email} />}
+        <main
+          className="ff-main"
+          style={{
+            flex: 1,
+            padding: tokens.space.xl,
+            overflow: 'auto',
+            ...(session === null ? { display: 'flex', justifyContent: 'center' } : {}),
+          }}
+        >
+          {children}
+        </main>
       </body>
     </html>
   );

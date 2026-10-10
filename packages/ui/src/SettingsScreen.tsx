@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Label, Title } from './Text';
+import { Badge } from './Badge';
+import { BodyText, Label, Secondary, Title } from './Text';
 import { Card } from './Card';
-import { StatusGlyph } from './StatusGlyph';
 
 /**
  * C4 — settings.
@@ -36,11 +36,16 @@ export interface SettingsScreenProps {
 
 const styles = StyleSheet.create({
   group: { gap: tokens.space.sm },
-  row: { flexDirection: 'row', gap: tokens.space.sm, alignItems: 'flex-start' },
-  rowText: { flex: 1, gap: 2 },
+  row: { flexDirection: 'row', gap: tokens.space.sm, alignItems: 'center' },
+  rowText: { flex: 1, gap: tokens.space.xs / 2 },
 });
 
-const NOT_YET = 'Not yet — this setting does not control anything in this build.';
+/**
+ * UX polish: the same promise, in plain words. It read "Not yet — this setting does not control
+ * anything in this build", an engineer's sentence, under a dashed "offline" glyph. The rule it
+ * keeps is unchanged: an unbuilt setting says it does nothing, and cannot be pressed.
+ */
+const NOT_YET = 'This setting does nothing yet.';
 
 export const SettingsScreen = ({ groups }: SettingsScreenProps): ReactNode => (
   <>
@@ -51,23 +56,32 @@ export const SettingsScreen = ({ groups }: SettingsScreenProps): ReactNode => (
       <View key={group.heading} style={styles.group}>
         <Label muted>{group.heading}</Label>
         {group.rows.map((row) => {
+          const press = row.state === 'available' ? row.onPress : undefined;
+          // A destination is a row with a way in (›), not a green tick: a tick read as "done".
           const body = (
             <View style={styles.row}>
-              <StatusGlyph kind={row.state === 'available' ? 'success' : 'offline'} large />
               <View style={styles.rowText}>
                 <BodyText>{row.title}</BodyText>
-                <Label muted>{row.detail}</Label>
-                {row.state === 'not-yet' ? <Label muted>{NOT_YET}</Label> : null}
+                <Secondary>{row.detail}</Secondary>
+                {row.state === 'not-yet' ? (
+                  <>
+                    <Badge label="Coming later" tone="neutral" />
+                    <Label muted>{NOT_YET}</Label>
+                  </>
+                ) : null}
               </View>
+              {press === undefined ? null : <BodyText muted>›</BodyText>}
             </View>
           );
 
-          return row.state === 'available' && row.onPress !== undefined ? (
-            <Card key={row.id} onPress={row.onPress}>
+          return press !== undefined ? (
+            <Card key={row.id} onPress={press}>
               {body}
             </Card>
           ) : (
-            <Card key={row.id}>{body}</Card>
+            <Card key={row.id} tone="quiet">
+              {body}
+            </Card>
           );
         })}
       </View>

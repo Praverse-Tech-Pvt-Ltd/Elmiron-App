@@ -136,8 +136,12 @@ describe('BE-W176 — Pending sync on Home', () => {
         }
       };
       walk(screen.toJSON());
+      // The section sits ABOVE the pinned actions (UX polish), so Today is everything around it:
+      // up to its heading, and again from the first line after it that is not one of its own.
       const cut = lines.indexOf('Pending sync');
-      return cut === -1 ? lines : lines.slice(0, cut);
+      if (cut === -1) return lines;
+      const resume = lines.indexOf('What this app records about me', cut);
+      return [...lines.slice(0, cut), ...(resume === -1 ? [] : lines.slice(resume))];
     };
 
     mockStore.mockReturnValue(pulled());

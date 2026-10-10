@@ -24,6 +24,7 @@ import {
 } from '../../src/coaching/feed';
 import { loadRecordingEnabled } from '../../src/coaching/recording-flag';
 import { listMyAnalyses } from '../../src/coaching/server';
+import { failureDetail, refusedDetail } from '../../src/errors/plain';
 
 /**
  * Phase 4 D1 — the Coaching tab.
@@ -82,14 +83,14 @@ function CoachingFeed(): ReactNode {
           outcome.kind === 'refused' && outcome.refusal.code === 'not_permitted'
             ? {
                 title: 'You do not have access to this coaching',
-                detail: `The server refused this request (${outcome.refusal.sqlState}).`,
+                detail: refusedDetail(outcome.refusal.sqlState),
               }
             : {
                 title: 'Could not load your coaching',
                 detail:
                   outcome.kind === 'mismatch'
                     ? outcome.detail
-                    : `The server refused this request (${outcome.refusal.sqlState}).`,
+                    : refusedDetail(outcome.refusal.sqlState),
               },
         );
       })
@@ -97,7 +98,7 @@ function CoachingFeed(): ReactNode {
         if (cancelled) return;
         setFailure({
           title: 'Could not load your coaching',
-          detail: error instanceof Error ? error.message : 'Unknown failure',
+          detail: failureDetail(error),
         });
       })
       .finally(() => {

@@ -60,7 +60,7 @@ export default async function Review({
     return (
       <div style={{ maxWidth: 900 }}>
         <Title>Review</Title>
-        <MissingNote>
+        <MissingNote tone="critical">
           This analysis could not be loaded. Nothing is shown rather than a partial view — a
           decision about somebody made from half a record is worse than no decision.
         </MissingNote>

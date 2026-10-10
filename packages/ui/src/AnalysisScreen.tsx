@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Heading, Label } from './Text';
+import { BodyText, Label, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { CitationSpan } from './CitationSpan';
@@ -122,7 +122,7 @@ export const AnalysisScreen = ({
   if (failure !== null) {
     return (
       <>
-        <Heading>{doctorName}</Heading>
+        <Title>{doctorName}</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </>
     );
@@ -134,7 +134,7 @@ export const AnalysisScreen = ({
   return (
     <>
       <View style={styles.head}>
-        <Heading>{doctorName}</Heading>
+        <Title>{doctorName}</Title>
         <Label muted>{consentLabel === null ? whenLabel : `${whenLabel} · ${consentLabel}`}</Label>
       </View>
 
@@ -168,7 +168,7 @@ export const AnalysisScreen = ({
 
       <View style={styles.spacer} />
 
-      <Card tone="offline">
+      <Card tone="quiet">
         <Label muted>{provenanceNote}</Label>
       </Card>
 
