@@ -53,9 +53,9 @@ in the operator's order, and this maps them:
 | # | Command | Proves it worked | If it did not |
 | --- | --- | --- | --- |
 | 0.1 | **Q-19 = Supabase-managed backups** (answered 10 October, `BE-C80`). **The GitHub *Database backup* workflow and its artefact are NOT part of this step and not required for the pilot deployment.** (a) Supabase Dashboard → Organization → **Billing**: the project's organisation is on a **paid plan, status active**. (b) Dashboard → Project → **Database → Backups → Scheduled backups** — or `pnpm exec supabase backups list --project-ref <ref>` after `supabase login` — and read the newest entry | (a) the paid plan is shown active — **read it, do not infer it from the approval**; (b) a backup **dated today (UTC)** with status completed. Write both down, with the backup's timestamp, in the deploy record | **Stop.** No deploy without a completed backup from today. If today's scheduled backup has not run yet, wait for it — do not accept yesterday's. A free plan has no scheduled backups at all: that is a stop, not a warning |
-| 0.2 | GitHub → Actions → **Migration drift** → *Run workflow* on `main` | Notice: *"Production has applied the first 19 of 96 migrations, in order, with nothing applied that has no file here"* | Any other shape — an out-of-band version, a gap — **stop**: someone changed production by hand; read the job's own message |
+| 0.2 | GitHub → Actions → **Migration drift** → *Run workflow* on `main` | Notice: *"Production has applied the first 19 of 106 migrations, in order, with nothing applied that has no file here"* | Any other shape — an out-of-band version, a gap — **stop**: someone changed production by hand; read the job's own message |
 | 0.3 | The three counts below, in the Supabase SQL editor (read-only) | You know which branch two migrations will take | See the table under it |
-| 0.4 | `pnpm exec supabase --workdir services/api db push --db-url "$PROD_DB_URL" --dry-run` | *"Would push these migrations:"* followed by **77** names, first `20260907000100`, last `20261002000400` (W1-W, 5 October: `main` now holds 96; was 74 / `20261002000100`). Nothing changes | A different count — **stop**; production is not where 0.2 said |
+| 0.4 | `pnpm exec supabase --workdir services/api db push --db-url "$PROD_DB_URL" --dry-run` | *"Would push these migrations:"* followed by **87** names, first `20260907000100`, last `20261009000500` (10 October, measured on `main` after #30; W1-W, 5 October: `main` now holds 96; was 74 / `20261002000100`). Nothing changes | A different count — **stop**; production is not where 0.2 said |
 
 **0.3 — the counts two pending migrations depend on:**
 
@@ -89,8 +89,8 @@ own. Renewing is one more row like 3.2; replacing it is 3.1 below. "Local territ
 
 | # | Command | Proves it worked | If it did not |
 | --- | --- | --- | --- |
-| 1.1 | `pnpm exec supabase --workdir services/api db push --db-url "$PROD_DB_URL" --yes` | Ends *"Finished supabase db push."*, exit 0; **77** "Applying migration" lines (W1-W; was 74). Rehearsal: **8 seconds** on an empty copy | It stops at ONE migration, exits 1 and names the file, statement and SQLSTATE. **Everything before that file stays applied; that file is rolled back whole** (rehearsed: nothing of it was left behind). **Fix the cause, then run 1.1 again — it resumes at that file** (rehearsed: 18 remaining applied). **Re-running without fixing the cause fails on the same file** |
-| 1.2 | Actions → **Migration drift** → *Run workflow* on `main` | **Green with no notice**: *"No drift. 96 migration(s), all applied."* (rehearsed locally with `check:migration-drift`) | A shortfall means 1.1 did not finish — back to 1.1 |
+| 1.1 | `pnpm exec supabase --workdir services/api db push --db-url "$PROD_DB_URL" --yes` | Ends *"Finished supabase db push."*, exit 0; **87** "Applying migration" lines (10 October; was 77, and 74 before that). Rehearsal: **8 seconds** on an empty copy | It stops at ONE migration, exits 1 and names the file, statement and SQLSTATE. **Everything before that file stays applied; that file is rolled back whole** (rehearsed: nothing of it was left behind). **Fix the cause, then run 1.1 again — it resumes at that file** (rehearsed: 18 remaining applied). **Re-running without fixing the cause fails on the same file** |
+| 1.2 | Actions → **Migration drift** → *Run workflow* on `main` | **Green with no notice**: *"No drift. 106 migration(s), all applied."* (rehearsed locally with `check:migration-drift`) | A shortfall means 1.1 did not finish — back to 1.1 |
 | 1.3 | `pnpm --filter @fieldforce/core build` then `pnpm exec supabase --workdir services/api functions deploy ai-gateway --project-ref <production ref>` | The CLI lists `ai-gateway` as deployed | **Not rehearsed** — see the limits. Read the CLI's error; the most likely is a stale `packages/core/dist` |
 | 1.4 | Pushing again: `…db push --db-url "$PROD_DB_URL" --yes` | *"Remote database is up to date"*, nothing applied (rehearsed: "up to date") | — this is the safe re-run check, not a step that changes anything |
 
@@ -238,7 +238,7 @@ TOKEN=$(curl -s -X POST "$API/auth/v1/token?grant_type=password" -H "apikey: $AN
 
 | # | Command | Expected answer | If not |
 | --- | --- | --- | --- |
-| S1 | Migration drift workflow (as 1.2) | *"No drift. 96 migration(s), all applied."* | Schema incomplete — step 1 |
+| S1 | Migration drift workflow (as 1.2) | *"No drift. 106 migration(s), all applied."* | Schema incomplete — step 1 |
 | S2 | `echo ${#TOKEN}` | A number in the hundreds (rehearsal: 907). **0 = sign-in failed** | Wrong password, or 4.1 not confirmed |
 | S3 | `curl -s -X POST "$API/rest/v1/rpc/my_shift_window" -H "apikey: $ANON" -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{}'` | With item 9's value (row 3.2): `{"source": "org_default", "window": {"shiftStart": "09:00:00", "shiftEnd": "18:00:00", "activeWeekdays": [1, 2, 3, 4, 5, 6], …}}`. Once per-territory hours exist (row 3.1): `"source": "territory"` | Nothing = no hours at all — the fallback is missing or has **expired**, and **check-in will refuse**; back to row 3.2 |
 | S4 | `curl -s -X POST "$API/rest/v1/rpc/sync_pull" -H "apikey: $ANON" -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{}'` | JSON with keys `changes, hasMore, nextCursor, serverTime, completeness` | An error code here means the app cannot load the rep's day |
@@ -331,6 +331,12 @@ still open Today to nothing.
 2. **Done for "Supabase" (10 October):** 0.1 above now reads "the paid plan is active, and a completed
    Supabase backup dated today exists". The *Database backup* workflow is no longer part of 0.1.
 3. The operator confirms both halves of 0.1, then continue at 0.2, in order.
+
+**Updated again on 10 October, after PR #30 merged (measured, not assumed):** `main` holds **106**
+migrations, the last `20261009000500_call_report_products`. Production last read 19 applied
+(5 October drift run; nothing deployed since), so **87 are pending**, first `20260907000100`, last
+`20261009000500`. Steps 0.2, 0.4, 1.1, 1.2 and S1 above carry these numbers. Re-measure if `main`
+moves again before the deploy: `ls services/api/supabase/migrations/*.sql | wc -l`.
 
 **Updated on 5 October because `main` moved:** 0.2, 0.4, 1.1, 1.2 and S1 now expect **96** migrations
 (77 pending: first `20260907000100`, last `20261002000400`). **Three of the 77 were never part of the
