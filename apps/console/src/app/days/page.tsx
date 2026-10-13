@@ -6,6 +6,7 @@ import { Body, MissingNote, Title } from '../../lib/ui';
 import { TeamDays } from '../../lib/team-days';
 import { teamDaysRefusal } from '../../lib/team-days-text';
 import { btn } from '../../lib/theme-css';
+import { indiaToday } from '../../lib/india-date';
 
 /**
  * `BE-W191` — the team's working days on one date: who started, who ended, what each day held.
@@ -36,9 +37,9 @@ export default async function TeamDaysPage({
   }
 
   const params = await searchParams;
-  // The default is the server's date, as `/planning`'s is. A rep's day is reckoned in their own
-  // territory's zone, and each row's times are shown in that zone.
-  const day = isDate(params.date) ? params.date : new Date().toISOString().slice(0, 10);
+  // The default is India's date (`FE-W125`), as `/planning`'s is. A rep's day is reckoned in their
+  // own territory's zone, and each row's times are shown in that zone.
+  const day = isDate(params.date) ? params.date : indiaToday();
 
   const result = await session.db.rpc(WORK_DAY_RPC.teamWorkDays, { p_on: day });
   const header = (

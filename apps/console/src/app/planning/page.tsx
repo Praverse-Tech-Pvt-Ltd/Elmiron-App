@@ -9,6 +9,7 @@ import { signedIn } from '../../lib/session';
 import { Body, MissingNote, Title } from '../../lib/ui';
 import { PlanDay } from '../../lib/plan-day';
 import { planRefusal } from '../../lib/planning-text';
+import { indiaToday } from '../../lib/india-date';
 
 /**
  * `BE-W171` / `BE-C78` — the manager plans a rep's day (Q-17: on the web console).
@@ -40,7 +41,7 @@ export default async function Planning({
   const params = await searchParams;
   // The default day is the server's date; the rep's own today, in their territory's zone, is shown
   // beside it once a rep is chosen, and it is the day the database refuses to plan before.
-  const day = isDate(params.date) ? params.date : new Date().toISOString().slice(0, 10);
+  const day = isDate(params.date) ? params.date : indiaToday();
 
   const repsResult = await session.db.rpc(PLANNING_RPC.plannableReps, { p_on: day });
   const header = (

@@ -4,6 +4,7 @@ import { signedIn } from '../../../lib/session';
 import { Body, MissingNote, Title } from '../../../lib/ui';
 import { PlanningAccess } from '../../../lib/planning-access';
 import type { GrantRow, Option } from '../../../lib/planning-access';
+import { indiaToday } from '../../../lib/india-date';
 
 /**
  * `BE-W171` / `BE-C78` — an ADMIN grants a field manager planning scope over a territory beyond
@@ -39,7 +40,7 @@ export default async function PlanningAccessPage(): Promise<ReactNode> {
   ]);
 
   const isAdmin = me.data?.role === 'admin';
-  const today = new Date().toISOString().slice(0, 10);
+  const today = indiaToday();
   const revoked = new Set((revocations.data ?? []).map((r) => String(r.grant_id)));
   const nameOf = new Map((people.data ?? []).map((p) => [String(p.id), String(p.full_name)]));
   const territoryOf = new Map((territories.data ?? []).map((t) => [String(t.id), String(t.name)]));
