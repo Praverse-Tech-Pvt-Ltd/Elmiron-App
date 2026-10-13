@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  LiveTrackingNoticesSchema,
   LiveTrackingStatusSchema,
   PingVerdictSchema,
   TrackingOverviewSchema,
@@ -95,5 +96,40 @@ describe('live tracking contract', () => {
   it('builds a Google Maps link from the coordinates alone', () => {
     expect(googleMapsUrl(18.5204, 73.8567)).toBe('https://www.google.com/maps?q=18.5204,73.8567');
     expect(googleMapsUrl(-33.9, 151.2)).toBe('https://www.google.com/maps?q=-33.9,151.2');
+  });
+
+  it('parses what live_tracking_notices answers (BE-W201), copied from the function in a rolled-back transaction', () => {
+    const notices = LiveTrackingNoticesSchema.parse({
+      current: {
+        id: 'dd9ca1e9-c2c4-42f6-bf6a-4d24895a36e9',
+        body: 'The company notice text.',
+        isDraft: false,
+        approvedAt: '2026-10-13T07:10:15.707524+00:00',
+        versionLabel: 'probe v1',
+      },
+      versions: [
+        {
+          id: 'dd9ca1e9-c2c4-42f6-bf6a-4d24895a36e9',
+          body: 'The company notice text.',
+          status: 'in_force',
+          createdAt: '2026-10-13T07:10:15.70199+00:00',
+          approvedAt: '2026-10-13T07:10:15.707524+00:00',
+          authorName: 'DEMO Admin',
+          attestation: 'read it',
+          approverName: 'Local Reviewer Admin',
+          versionLabel: 'probe v1',
+          authoredByYou: false,
+        },
+      ],
+      serverTime: '2026-10-13T07:10:15.70199+00:00',
+    });
+    expect(notices.versions[0]?.status).toBe('in_force');
+    // A status the server does not send is not from this server.
+    expect(() =>
+      LiveTrackingNoticesSchema.parse({
+        ...notices,
+        versions: [{ ...notices.versions[0], status: 'approved' }],
+      }),
+    ).toThrow();
   });
 });

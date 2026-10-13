@@ -29,6 +29,8 @@ export const LIVE_TRACKING_RPC = {
   proposeNotice: 'propose_live_tracking_notice',
   /** Admin, not the author. Approves a loaded notice; the company's reps must then accept it again. */
   approveNotice: 'approve_live_tracking_notice',
+  /** Admin. The notice in force and every version the company loaded, with status (`BE-W201`). */
+  notices: 'live_tracking_notices',
 } as const;
 
 /**
@@ -140,6 +142,36 @@ export const TrackingSwitchResultSchema = z.object({
   setAt: IsoDateTimeSchema,
 });
 export type TrackingSwitchResult = z.infer<typeof TrackingSwitchResultSchema>;
+
+/**
+ * `BE-W201` — one version the company loaded. `waiting`: loaded, not yet approved by a second admin;
+ * `in_force`: the notice reps accept now; `superseded`: approved, then replaced by a later approval.
+ * `authoredByYou` is the server's comparison: the trigger refuses an author's own approval.
+ */
+export const NoticeVersionStatusSchema = z.enum(['waiting', 'in_force', 'superseded']);
+export type NoticeVersionStatus = z.infer<typeof NoticeVersionStatusSchema>;
+
+export const CompanyNoticeVersionSchema = z.object({
+  id: UuidSchema,
+  versionLabel: z.string(),
+  body: z.string(),
+  createdAt: IsoDateTimeSchema,
+  authorName: z.string().nullable(),
+  authoredByYou: z.boolean(),
+  status: NoticeVersionStatusSchema,
+  approvedAt: IsoDateTimeSchema.nullable(),
+  approverName: z.string().nullable(),
+  attestation: z.string().nullable(),
+});
+export type CompanyNoticeVersion = z.infer<typeof CompanyNoticeVersionSchema>;
+
+/** What `live_tracking_notices` answers. `current` is the engineering draft when `isDraft`. */
+export const LiveTrackingNoticesSchema = z.object({
+  current: LiveTrackingNoticeSchema.extend({ approvedAt: IsoDateTimeSchema.nullable() }).nullable(),
+  versions: z.array(CompanyNoticeVersionSchema),
+  serverTime: IsoDateTimeSchema,
+});
+export type LiveTrackingNotices = z.infer<typeof LiveTrackingNoticesSchema>;
 
 /** A position on Google Maps. Needs no key; the coordinates are the only thing in the URL. */
 export const googleMapsUrl = (latitude: number, longitude: number): string =>
