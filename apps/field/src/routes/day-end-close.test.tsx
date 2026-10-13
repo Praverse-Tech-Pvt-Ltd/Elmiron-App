@@ -22,6 +22,11 @@ jest.mock('../sync/push-client', () => ({
   createPushClient: () => ({ sendWorkDay: mockSendWorkDay }),
 }));
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
+// FE-W90: ending the day stops the live tracker on this phone at once.
+const mockCloseTrackingDay = jest.fn(() => Promise.resolve());
+jest.mock('../tracking/tracker', () => ({
+  useLiveTracker: () => ({ closeDay: mockCloseTrackingDay }),
+}));
 jest.mock('expo-modules-core/src/uuid', () => ({
   __esModule: true,
   default: { v4: () => '66666666-6666-4666-8666-666666666601' },
@@ -136,6 +141,7 @@ describe('FE-W80 — End my day', () => {
     ).toBeTruthy();
     await fireEvent.press(screen.getByText('End my day'));
     expect(mockSendWorkDay).not.toHaveBeenCalled();
+    expect(mockCloseTrackingDay).not.toHaveBeenCalled();
   });
 
   it('with signal: queued, sent as a CLOSE of the server’s day with the note, and the pull asked for', async () => {
@@ -147,6 +153,7 @@ describe('FE-W80 — End my day', () => {
     await waitFor(() => {
       expect(mockRefresh).toHaveBeenCalled();
     });
+    expect(mockCloseTrackingDay).toHaveBeenCalledTimes(1);
     expect(mockSendWorkDay).toHaveBeenCalledWith({
       id: '66666666-6666-4666-8666-666666666601',
       action: 'close',

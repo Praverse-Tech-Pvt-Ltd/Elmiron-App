@@ -25,6 +25,8 @@ const mockMockClient = jest.fn(() => {
 });
 jest.mock('../api', () => ({ createClientForScenario: () => mockMockClient() }));
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
+// The live tracker is not mounted here (no provider), as on a build without `EXPO_PUBLIC_LIVE_TRACKING`.
+jest.mock('../tracking/tracker', () => ({ useLiveTracker: () => null }));
 
 const mockStore = jest.fn();
 jest.mock('../sync/pulled-store', () => ({ usePulledStore: () => mockStore() }));
