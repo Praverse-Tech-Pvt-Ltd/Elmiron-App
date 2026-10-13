@@ -71,6 +71,8 @@ const GROUPS: readonly { readonly title: string; readonly items: readonly NavIte
     items: [
       { label: 'Consent versions', href: '/admin' },
       { label: 'Planning access', href: '/planning/access' },
+      // `FE-W91` / `BE-W201`. The company's own live location notice, loaded and approved by two admins.
+      { label: 'Live location notice', href: '/tracking/notice' },
     ],
   },
   {

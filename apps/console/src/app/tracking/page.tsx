@@ -150,6 +150,15 @@ export default async function Tracking({
         </MissingNote>
       ) : null}
 
+      {/* `FE-W91`: where an admin loads and approves the company's own notice. */}
+      {overview.canChangeSwitch ? (
+        <Body>
+          <a href="/tracking/notice">
+            The notice reps accept — load and approve your company’s own
+          </a>
+        </Body>
+      ) : null}
+
       <Card>
         <Heading>Your reps</Heading>
         <Body muted>
