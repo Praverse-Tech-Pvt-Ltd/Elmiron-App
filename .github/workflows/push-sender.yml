@@ -1,0 +1,74 @@
+name: Push notifications
+
+# `BE-W196` -- calls the `push-sender` Edge Function, which drains `notification_outbox` through
+# Firebase Cloud Messaging. Every ten minutes, and by hand (`workflow_dispatch`).
+#
+# WHY A WORKFLOW AND NOT pg_cron: the reasons `retention.yml` gives hold here too -- no migration in
+# this repository uses pg_cron or pg_net, and pg_net's asynchronous answer would leave the database
+# unable to tell a run that worked from one that did not. A workflow's failed run mails whoever
+# watches the repository.
+#
+# OFF UNTIL SWITCHED ON. Push notifications are an optional, key-gated feature (operator item Q-3):
+# with no Firebase project there is nothing to send. So, unlike `retention.yml`, this job runs only
+# when the repository VARIABLE `PUSH_ENABLED` is exactly `true`. Once it is, a missing secret FAILS the
+# run -- it never skips quietly -- and so does a function that answers "not configured".
+#
+# What the owner sets (Settings -> Secrets and variables -> Actions):
+#   variable  PUSH_ENABLED              = true
+#   secret    PUSH_SENDER_URL           = https://<project-ref>.supabase.co/functions/v1/push-sender
+#   secret    PUSH_SENDER_CRON_SECRET   = the same 32+ character value set as the function secret
+# An admin can also run the sender from a shell with their own session token (`docs/DEPLOY-RUNBOOK.md`).
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+# MR-41 B1 -- `set -o pipefail`, as a mechanism rather than a reminder (see `retention.yml`).
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: push-sender
+  cancel-in-progress: false
+
+jobs:
+  send:
+    name: send due notifications
+    if: vars.PUSH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check the sender is configured
+        env:
+          PUSH_SENDER_URL: ${{ secrets.PUSH_SENDER_URL }}
+          PUSH_SENDER_CRON_SECRET: ${{ secrets.PUSH_SENDER_CRON_SECRET }}
+        run: |
+          missing=""
+          if [ -z "$PUSH_SENDER_URL" ]; then missing="$missing PUSH_SENDER_URL"; fi
+          if [ -z "$PUSH_SENDER_CRON_SECRET" ]; then missing="$missing PUSH_SENDER_CRON_SECRET"; fi
+          if [ -n "$missing" ]; then
+            echo "::error::PUSH_ENABLED is true but these repository secrets are missing:$missing"
+            exit 1
+          fi
+
+      - name: Call push-sender
+        env:
+          PUSH_SENDER_URL: ${{ secrets.PUSH_SENDER_URL }}
+          PUSH_SENDER_CRON_SECRET: ${{ secrets.PUSH_SENDER_CRON_SECRET }}
+        # The answer carries counts and a message, never a token or a key, so it is printed.
+        run: |
+          status=$(curl -sS -o response.json -w '%{http_code}' -X POST \
+            -H "x-push-sender-secret: $PUSH_SENDER_CRON_SECRET" \
+            -H 'content-type: application/json' --data '{}' "$PUSH_SENDER_URL")
+          cat response.json
+          echo
+          if [ "$status" != "200" ]; then
+            echo "::error::push-sender answered HTTP $status"
+            exit 1
+          fi
+          if grep -q '"configured":false' response.json; then
+            echo "::error::push-sender is not configured (see the message above)"
+            exit 1
+          fi

@@ -25,10 +25,15 @@
  * **`BE-W186`: a second export, still one read.** `accountAdminFromEnv` (at the end) is the console's
  * account writer — two GoTrue operations, nothing else. The check now allows exactly these two
  * exports and exactly those two `auth.admin` operations, so the module stays the one door.
+ *
+ * **`BE-W196`: a third export, still one read.** `pushOutboxFromEnv` (at the end) is the `push-sender`
+ * function's way into the notification outbox -- `push_claim_batch` and `push_record_results`, which
+ * the database grants to `service_role` alone, and nothing else. The check pins that list too.
  */
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import type { ControlPlaneRpc } from './core.ts';
 import type { AccountAdmin } from './account-requests.ts';
+import type { PushOutbox } from './push-sender.ts';
 
 /**
  * W2-E C (`BE-W146`, `BE-C74`): a third name, `ai_gateway_complete_request` — the close of EVERY AI
@@ -60,6 +65,14 @@ const PRACTICE_WRITER_KEY_NAME = 'practice_writer';
  * other. Both fall back to `default`. Still ONE read of the variable, here.
  */
 const ACCOUNT_ADMIN_KEY_NAME = 'account_admin';
+
+/**
+ * `BE-W196` — the push sender's own named key, `push_sender`, else `default`; and the ONLY two
+ * database functions it may call. Both drain or settle `notification_outbox`; neither reads anything a
+ * notification does not already carry.
+ */
+const PUSH_SENDER_KEY_NAME = 'push_sender';
+const PUSH_SENDER_CALLS: ReadonlySet<string> = new Set(['push_claim_batch', 'push_record_results']);
 
 const secretKey = (name: string): string | null => {
   const raw = Deno.env.get('SUPABASE_SECRET_KEYS');
@@ -135,5 +148,42 @@ export const accountAdminFromEnv = (supabaseUrl: string): AccountAdmin | null =>
       const { error } = await client.auth.admin.updateUserById(userId, { password });
       if (error !== null) throw new Error(error.message);
     },
+  };
+};
+
+/**
+ * `BE-W196` — the `push-sender` function's outbox: claim a batch, record what happened. Nothing else.
+ *
+ * **Why here.** Draining the outbox reads every company's pending notifications and their recipients'
+ * tokens, which no signed-in person may do; the database grants the two functions to `service_role`
+ * alone. So, as with the account writer, the key is read once, here, and a narrow object is handed
+ * out. Who may RUN the sender (an admin, or the scheduled caller holding `PUSH_SENDER_CRON_SECRET`) is
+ * decided in `push-sender/index.ts` before this is reached; what a notification says was fixed by the
+ * database when it was raised.
+ */
+export const pushOutboxFromEnv = (supabaseUrl: string): PushOutbox | null => {
+  const key = secretKey(PUSH_SENDER_KEY_NAME);
+  if (key === null) return null;
+  const client = createClient(supabaseUrl, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const call = async (fn: string, args: Readonly<Record<string, unknown>>): Promise<unknown> => {
+    if (!PUSH_SENDER_CALLS.has(fn)) {
+      throw new Error(
+        `the push outbox calls only ${[...PUSH_SENDER_CALLS].join(', ')}; refused ${fn}`,
+      );
+    }
+    // deno-lint-ignore no-explicit-any
+    const { data, error } = await client.rpc(fn, args as any);
+    if (error !== null) {
+      const wrapped = new Error(error.message) as Error & { code?: string };
+      wrapped.code = (error as { code?: string }).code;
+      throw wrapped;
+    }
+    return data;
+  };
+  return {
+    claim: (limit: number) => call('push_claim_batch', { p_limit: limit }),
+    record: (results: readonly unknown[]) => call('push_record_results', { p_results: results }),
   };
 };

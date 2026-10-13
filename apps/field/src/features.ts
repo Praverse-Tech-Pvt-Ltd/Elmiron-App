@@ -87,3 +87,26 @@ export const lessonTutorEnabled: boolean =
  * nothing. Foreground only: background location stays blocked in the manifest.
  */
 export const liveTrackingEnabled: boolean = process.env.EXPO_PUBLIC_LIVE_TRACKING === 'true';
+
+/**
+ * `FE-W85` — maps: the doctors' clinics and today's stops on a map, from the doctors list and the beat
+ * plan.
+ *
+ * **Off by default, and off without a key.** On, the build must also carry
+ * `GOOGLE_MAPS_ANDROID_API_KEY` (a client key restricted to this package and its signing SHA-1,
+ * supplied at BUILD time and never committed), which `plugins/maps-push.cjs` writes into the
+ * manifest; a build with this flag and no key is refused (`scripts/release-build-checks.mjs`, and the
+ * plugin itself). Off, no map code path renders: no "Map" button, and `/map` goes to Today. The
+ * keyless "Directions" (`src/integrations/maps.ts`) works either way.
+ */
+export const mapsEnabled: boolean = process.env.EXPO_PUBLIC_MAPS === 'true';
+
+/**
+ * `FE-W86` — push notifications through Firebase Cloud Messaging.
+ *
+ * **Off by default, and off without Firebase.** On, the build must also carry `GOOGLE_SERVICES_JSON`,
+ * the PATH to the Firebase app's `google-services.json`, supplied at BUILD time and never committed;
+ * a build with this flag and no file is refused. Off, nothing registers a token and nothing is
+ * asked: `src/push/push-provider.tsx` is a passthrough.
+ */
+export const pushEnabled: boolean = process.env.EXPO_PUBLIC_PUSH === 'true';

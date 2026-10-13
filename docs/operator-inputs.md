@@ -184,9 +184,11 @@ allowances change; please read the current Maps pricing page for the two APIs ab
   map key is compiled into the app, which is a property of Android, not of our code). No code change.
 * **Console:** **`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`** in the console's environment. Changing it = a
   redeploy. No code change.
-* **No code anywhere names a Google project.** **Not built yet** — this is the design the build will
-  follow, and maps also needs a map library added to the app, which is a dependency we will ask you
-  to approve separately.
+* **No code anywhere names a Google project.** **Built 13 October 2026 (`FE-W85`, `FE-W87`)**, behind
+  `EXPO_PUBLIC_MAPS=true` with `react-native-maps` (approved). **One change from the design above:** the
+  console's optional map is a **Maps Embed API** frame read from **`NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY`**
+  (no map library in the console), so that web key is API-restricted to the *Maps Embed API*, not the
+  Maps JavaScript API. `docs/DEPLOY-RUNBOOK.md`, "Maps and push notifications".
 
 ---
 
@@ -202,7 +204,10 @@ project *is* a Google Cloud project):
 4. **Create one service account for sending**, with **only** the role **Firebase Cloud Messaging API
    Admin**, and create a JSON key for it. **Give it to us as a secret**, never as a file attachment.
 
-**Not built yet.** It also needs a notifications library added to the app — a dependency ask.
+**Built 13 October 2026 (`BE-W195`, `BE-W196`, `FE-W86`)**, with `expo-notifications` (approved): the
+service-account JSON becomes the Edge Function secret `FCM_SERVICE_ACCOUNT`, and `google-services.json`
+is given to the APK build as a file path (`GOOGLE_SERVICES_JSON`), never committed.
+`docs/DEPLOY-RUNBOOK.md`, "Maps and push notifications".
 
 ---
 

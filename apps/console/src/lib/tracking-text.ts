@@ -51,3 +51,22 @@ export const trackingRefusal = ({ code, message }: Refusal): string => {
   if (code === '28000') return 'Your session has ended. Sign in again.';
   return `The server refused this: ${message}`;
 };
+
+/**
+ * `FE-W87` — the Google Maps Embed URL for one position, or null when no embed key is configured.
+ *
+ * `NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY` is a browser key (Maps Embed API only, restricted by HTTP
+ * referrer to the console's domain), so it is public by design -- it is in the page either way. Unset,
+ * there is no map and the page is exactly as before: the "Open in Google Maps" links need no key.
+ * Only the coordinates go to Google; never a name.
+ */
+export const embedMapUrl = (
+  key: string | undefined,
+  latitude: number,
+  longitude: number,
+): string | null => {
+  const trimmed = (key ?? '').trim();
+  if (trimmed === '' || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  const q = `${String(latitude)},${String(longitude)}`;
+  return `https://www.google.com/maps/embed/v1/place?key=${encodeURIComponent(trimmed)}&q=${encodeURIComponent(q)}&zoom=15`;
+};

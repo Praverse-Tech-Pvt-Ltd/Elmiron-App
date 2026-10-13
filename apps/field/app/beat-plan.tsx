@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
-import { BeatPlanScreen, Screen } from '@fieldforce/ui';
+import { BeatPlanScreen, Button, Screen } from '@fieldforce/ui';
 import type { SyncQueueItem } from '@fieldforce/core';
 import { visitsAsWitnessed, withPhoneTimes } from '../src/capture/visit';
+import { mapsEnabled } from '../src/features';
 import { loadQueueState, onQueueChanged } from '../src/sync/async-storage-store';
 import { usePulledStore } from '../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../src/sync/selectors';
@@ -176,6 +177,16 @@ export default function BeatPlanRoute(): ReactNode {
           ),
         }))}
       />
+      {/* `FE-W85`. Only in a maps build, and only when there is a route to show. */}
+      {mapsEnabled && route !== null ? (
+        <Button
+          label="See today on a map"
+          variant="secondary"
+          onPress={() => {
+            router.push('/map?show=today');
+          }}
+        />
+      ) : null}
     </Screen>
   );
 }

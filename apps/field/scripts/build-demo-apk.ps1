@@ -11,7 +11,9 @@
     - local Supabase does not answer at http://<Ip>:54321/auth/v1/health;
     - `supabase status` gives no publishable key;
     - a required EXPO_PUBLIC_* value is missing, empty or malformed;
-    - EXPO_PUBLIC_COACHING_ENABLED or EXPO_PUBLIC_RECORDING_ENABLED is set (both stay off in a demo).
+    - EXPO_PUBLIC_COACHING_ENABLED or EXPO_PUBLIC_RECORDING_ENABLED is set (both stay off in a demo);
+    - EXPO_PUBLIC_MAPS is 'true' with no GOOGLE_MAPS_ANDROID_API_KEY, or EXPO_PUBLIC_PUSH is 'true' with
+      no GOOGLE_SERVICES_JSON file (BE-W197, release-build-checks.mjs --integrations-only).
   Does not check the mock at :4010, and does not set EXPO_PUBLIC_API_BASE_URL: nothing in the app
   calls it (W2-B B3), and the start-up gate that required it is gone (BE-W150).
 
@@ -248,6 +250,18 @@ function Invoke-Checks {
       Write-Refusal "$name is set ('$current'). Coaching stays hidden and recording off in a demo build: unset it."
       $failures++
     }
+  }
+
+  # BE-W197. Maps and push are OFF unless EXPO_PUBLIC_MAPS / EXPO_PUBLIC_PUSH are exactly 'true'; a
+  # flag that is on needs GOOGLE_MAPS_ANDROID_API_KEY / GOOGLE_SERVICES_JSON in this shell. The same
+  # check the production build runs (release-build-checks.mjs), and it prints no value.
+  Write-Step 'Checking maps and push (EXPO_PUBLIC_MAPS, EXPO_PUBLIC_PUSH)'
+  $integrations = & cmd.exe /d /c "node `"$PSScriptRoot\release-build-checks.mjs`" --integrations-only 2>&1"
+  if ($LASTEXITCODE -ne 0) {
+    $integrations | Where-Object { $_ -match '^\s+- ' } | ForEach-Object { Write-Refusal ($_.Trim() -replace '^- ', '') }
+    $failures++
+  } else {
+    Write-Ok ($integrations | Select-Object -Last 1)
   }
 
   # W2-B B3. The mock check that stood here ("only Day end needs it") is gone: Day end left the

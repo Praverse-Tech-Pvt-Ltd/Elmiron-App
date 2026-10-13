@@ -14,7 +14,14 @@
  *   - FIELD_ANDROID_VERSION_CODE is set, and is a whole number in range (`android-release.cjs`);
  *   - the four release-signing values are set, the keystore exists, and none of them is the public
  *     Android debug key's (`debug.keystore`, `androiddebugkey`, password `android`);
- *   - DEMO_CLEARTEXT_HOSTS, recording and coaching are unset (a demo build is debug-signed on purpose).
+ *   - DEMO_CLEARTEXT_HOSTS, recording and coaching are unset (a demo build is debug-signed on purpose);
+ *   - (`BE-W197`) EXPO_PUBLIC_MAPS on has GOOGLE_MAPS_ANDROID_API_KEY, and EXPO_PUBLIC_PUSH on has
+ *     GOOGLE_SERVICES_JSON naming a file that exists (`plugins/maps-push.cjs`, `integrationProblems`).
+ *
+ *   node apps/field/scripts/release-build-checks.mjs --integrations-only
+ *
+ * runs ONLY that last check -- the demo build (`build-demo-apk.ps1`) runs it, because a demo build is
+ * not a release build but a map with no key is broken in either.
  *
  * It never prints a value of a key or a password -- only the NAME of what is wrong.
  */
@@ -27,6 +34,8 @@ const require = createRequire(import.meta.url);
 const { androidVersionCode } = require('../plugins/android-release.cjs');
 /** @type {{ PROPERTIES: string[] }} */
 const { PROPERTIES: SIGNING } = require('../plugins/release-signing.cjs');
+/** @type {{ integrationProblems: (env: Record<string, string | undefined>, exists?: (path: string) => boolean) => string[] }} */
+const { integrationProblems } = require('../plugins/maps-push.cjs');
 
 const MUST_BE_UNSET = [
   'DEMO_CLEARTEXT_HOSTS',
@@ -126,20 +135,38 @@ export const releaseBuildProblems = (env, { exists = existsSync } = {}) => {
   for (const name of MUST_BE_UNSET) {
     if (set(name)) problems.push(`${name} is set; a production build leaves it unset`);
   }
+  problems.push(...integrationProblems(env, exists));
   return problems;
 };
+
+/**
+ * `BE-W197` — only the key-gated integrations: a flag that is on has what it needs. Used by the demo
+ * build, and by `releaseBuildProblems` above.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @param {{ exists?: (path: string) => boolean }} [io]
+ * @returns {string[]}
+ */
+export const integrationBuildProblems = (env, { exists = existsSync } = {}) =>
+  integrationProblems(env, exists);
 
 // CLI entry. Importing this module does not run anything.
 if (
   process.argv[1] !== undefined &&
   import.meta.url.endsWith(process.argv[1].replace(/\\/gu, '/'))
 ) {
-  const problems = releaseBuildProblems(process.env);
+  const only = process.argv.includes('--integrations-only');
+  const problems = only ? integrationBuildProblems(process.env) : releaseBuildProblems(process.env);
   if (problems.length > 0) {
     console.error(
-      `RELEASE BUILD REFUSED -- ${String(problems.length)} problem(s):\n${problems.map((p) => `  - ${p}`).join('\n')}`,
+      `${only ? 'BUILD' : 'RELEASE BUILD'} REFUSED -- ${String(problems.length)} problem(s):\n${problems.map((p) => `  - ${p}`).join('\n')}`,
     );
     process.exit(1);
   }
-  console.log('release configuration: ok (no value printed)');
+  const state = (/** @type {string} */ name) => (process.env[name] === 'true' ? 'ON' : 'off');
+  console.log(
+    only
+      ? `maps ${state('EXPO_PUBLIC_MAPS')}, push ${state('EXPO_PUBLIC_PUSH')}: ok (no value printed)`
+      : 'release configuration: ok (no value printed)',
+  );
 }

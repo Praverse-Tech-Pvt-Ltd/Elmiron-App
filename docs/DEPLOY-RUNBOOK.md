@@ -293,12 +293,13 @@ still open Today to nothing.
 | A6 | No localhost in a release: `src/api-target.ts` refuses an empty address in a release; `127.0.0.1` fallbacks are development-only; plain http only for a demo build's listed hosts | Done — `BE-W150` closed 9 October: the unused `EXPO_PUBLIC_API_BASE_URL` gate is removed; the Supabase URL and publishable key are still required (`src/config-required.test.ts`) |
 | A7a | **The production build command**: `apps/field/scripts/build-release-apk.ps1 -ExpectSha256 <fingerprint>` wraps prebuild + Gradle `assembleRelease` and refuses, before Gradle, a dirty tree, an `apps/field/.env*` file, a non-https/local Supabase URL, a secret key, a missing/malformed version code, a missing signing value or keystore, the debug key, demo/recording/coaching switches; after the build it runs `verify-release-apk.mjs`. `-CheckOnly` runs the refusals alone (`BE-W177`) | Done — waits on the **release key** |
 | A7 | Every AI feature, Learning and the tutor are separate `EXPO_PUBLIC_*` switches, OFF unless set | Done |
+| A7b | **Maps and push are switches too, each needing a build-time input** (`BE-W197`, `plugins/maps-push.cjs`): `EXPO_PUBLIC_MAPS=true` needs `GOOGLE_MAPS_ANDROID_API_KEY` (Q-2's Android key, restricted to the package and the signing SHA-1 — set in the build shell, never committed; written into the manifest only when the flag is on); `EXPO_PUBLIC_PUSH=true` needs `GOOGLE_SERVICES_JSON`, the PATH to Q-3's `google-services.json` (never committed). A flag on without its input is refused by `release-build-checks.mjs` (release, and the demo build's `--integrations-only`) and by the config plugin itself. `RECEIVE_BOOT_COMPLETED` (from `expo-notifications`) is blocked: the app schedules no local notification | Done — the inputs wait on **Q-2 / Q-3** |
 
 **Not possible without the operator** — each is one input:
 
 | # | Item | Waits on |
 | --- | --- | --- |
-| A8 | Prebuild and audit the merged manifest (`android/app/src/main/AndroidManifest.xml`): only INTERNET, location (fine/coarse), RECORD_AUDIO, MODIFY_AUDIO_SETTINGS, VIBRATE, POST_NOTIFICATIONS and expo-audio's FOREGROUND_SERVICE pair. The pair is left unblocked on purpose: expo-audio declares a service that uses it, and removing it is only safe once proved on a device | A build machine run (no credential), then a handset |
+| A8 | Prebuild and audit the merged manifest (`android/app/src/main/AndroidManifest.xml`): only INTERNET, location (fine/coarse), RECORD_AUDIO, MODIFY_AUDIO_SETTINGS, VIBRATE, POST_NOTIFICATIONS and expo-audio's FOREGROUND_SERVICE pair. The pair is left unblocked on purpose: expo-audio declares a service that uses it, and removing it is only safe once proved on a device. **Since `FE-W85`/`FE-W86` (13 October) expect, from Firebase Messaging and the Maps SDK, also ACCESS_NETWORK_STATE, WAKE_LOCK and `com.google.android.c2dm.permission.RECEIVE` — not yet seen in a merged manifest (no Gradle build was run for that change); confirm on the first build, and block anything else** | A build machine run (no credential), then a handset |
 | A9 | The production address (`EXPO_PUBLIC_SUPABASE_URL`, publishable key, `EXPO_PUBLIC_APP_*`) in the build shell's environment — not in `apps/field/.env`, which the build script refuses | **Q-19** |
 | A10 | Physical-device pass: install over the previous build (versionCode higher), sign in, permission prompts in order (location while using, microphone only at recording, notifications), a full offline day, check-in/out, report, Pending sync, reconnect | A **handset** |
 | A11 | The release keystore, its four Gradle properties, and its SHA-256 fingerprint | The **release key** |
@@ -353,3 +354,23 @@ W1-S rehearsal** on a production-shaped copy — `20261002000200` (the `model_re
 `20261002000300` (UCPMP sees company caps), `20261002000400` (rejection log append-only). Each is a
 `create or replace function`, a trigger, or a check-constraint change; each applies in order from an
 empty database in every CI run, and none rewrites a table.
+
+## Maps and push notifications — what the owner supplies (`BE-W195`–`BE-W197`, `FE-W85`–`FE-W87`, 13 October 2026)
+
+**Both are OFF until switched on, and nothing breaks while they are off.** Not rehearsed against a
+deployment.
+
+| # | Step | Where | Without it |
+| --- | --- | --- | --- |
+| M1 | Q-2 Android key in the APK build shell: `EXPO_PUBLIC_MAPS=true` and `GOOGLE_MAPS_ANDROID_API_KEY=<key>` | build machine | the app has no map; "Directions" still opens the phone's maps app |
+| M2 | *Optional* console map: `NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY` — a browser key, **Maps Embed API** only, HTTP-referrer-restricted to the console domain | console host env | `/tracking` keeps its "Open in Google Maps" links |
+| P1 | Migrations `20261013000400_push_notifications` and `20261013000410_push_notification_events` (operator step 3 applies them with the rest) | database | nothing is recorded to send |
+| P2 | `pnpm exec supabase --workdir services/api functions deploy push-sender --no-verify-jwt --project-ref <ref>` — **`--no-verify-jwt` on purpose**: the schedule holds no user token; the function authenticates every call itself (the schedule secret, or an admin's session checked by `push_sender_authorise`) | Supabase | — |
+| P3 | Function secrets: `FCM_SERVICE_ACCOUNT` = Q-3's service-account JSON (role *Firebase Cloud Messaging API Admin* only); `PUSH_SENDER_CRON_SECRET` = 32+ random characters. Optionally a secret key named `push_sender` in Settings → API Keys (else `default`) | Supabase → Edge Functions → Secrets | the function answers `{"configured": false, "message": "not configured: …"}` and claims nothing |
+| P4 | GitHub: variable `PUSH_ENABLED=true`; secrets `PUSH_SENDER_URL` (`https://<ref>.supabase.co/functions/v1/push-sender`) and `PUSH_SENDER_CRON_SECRET` (same value as P3) — `.github/workflows/push-sender.yml` then runs every 10 minutes and FAILS on a missing secret or "not configured" | GitHub | nothing sends; notifications expire unsent after 24 hours |
+| P5 | The APK build shell: `EXPO_PUBLIC_PUSH=true` and `GOOGLE_SERVICES_JSON=<path to google-services.json>` | build machine | the phone registers no token |
+| P6 | Check: an admin runs it by hand — `curl -X POST -H "Authorization: Bearer <admin access token>" https://<ref>.supabase.co/functions/v1/push-sender` → `{"configured": true, …}` | — | — |
+
+**What is sent** (`20261013000410`): a manager saving a rep's plan, a reopened working day, a course
+assigned, a manager's note on a visit analysis. The text is fixed server-side and carries only counts and
+dates — never a doctor, clinic, product, course title or note. Nothing for the adverse-event path.

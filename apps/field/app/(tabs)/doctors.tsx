@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { DoctorListScreen, Screen } from '@fieldforce/ui';
+import { Button, DoctorListScreen, Screen } from '@fieldforce/ui';
 import { useRouter } from 'expo-router';
 import type { SyncQueueItem } from '@fieldforce/core';
 import { visitsAsWitnessed, withPhoneTimes } from '../../src/capture/visit';
 import { loadQueueState, onQueueChanged } from '../../src/sync/async-storage-store';
 import { usePulledStore } from '../../src/sync/pulled-store';
+import { mapsEnabled } from '../../src/features';
 import { dayMonthIn } from '../../src/today/territory-day';
 import { beatPlanView, onPlanDoctorIds } from '../../src/today/beat-plan-view';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
@@ -191,6 +192,16 @@ export default function Doctors(): ReactNode {
         }))}
         total={all.length}
       />
+      {/* `FE-W85`. Only in a maps build: the clinics on a map, the ones with no location listed. */}
+      {mapsEnabled && doctors.length > 0 ? (
+        <Button
+          label="See your doctors on a map"
+          variant="secondary"
+          onPress={() => {
+            router.push('/map');
+          }}
+        />
+      ) : null}
     </Screen>
   );
 }

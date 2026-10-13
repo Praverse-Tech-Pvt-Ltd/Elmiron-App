@@ -238,6 +238,9 @@ describe.skipIf(!reachable)('D2 — a restrictive tenant boundary cannot be wide
         'course_modules',
         'course_versions',
         'courses',
+        // `BE-W195` (`20261013000400`): a phone's push token and a notification each carry the
+        // company of the person they belong to.
+        'device_push_tokens',
         'doctors',
         'knowledge_chunks',
         'knowledge_document_versions',
@@ -250,6 +253,7 @@ describe.skipIf(!reachable)('D2 — a restrictive tenant boundary cannot be wide
         'live_tracking_notice_versions',
         'location_pings',
         'markets',
+        'notification_outbox',
         'organisations',
         // `BE-W171` (`20261009000200`): an admin's planning grant and a manager's reassignment
         // each carry the organisation they were made in.
