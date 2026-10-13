@@ -2,8 +2,9 @@
 
 import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { compactTypography, tokens } from '@fieldforce/ui-tokens';
+import { Icon } from './icons';
 import { browserClient } from './supabase';
+import { btn } from './theme-css';
 
 /**
  * MR-52 A1 — signing out, beside whoever is signed in.
@@ -12,18 +13,25 @@ import { browserClient } from './supabase';
  * identity left on it — and this one reads employment data. `signOut()` clears the cookie both
  * halves read; `router.refresh()` makes the server re-render, which the middleware then sends to
  * the sign-in page.
+ *
+ * `FE-W121`: drawn as the sidebar's identity block — the first letter of the address on a disc,
+ * the address beside it, and the way out under both. The words are unchanged and stay in the
+ * markup when the rail hides them, so the button is still named "Sign out".
  */
 export const SignOut = ({ email }: { readonly email: string }): ReactNode => {
   const router = useRouter();
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <span
-        style={{ fontSize: compactTypography.label.size, color: tokens.color.textSecondary }}
-        title={email}
-      >
-        {email}
-      </span>
+    <div className="ff-user">
+      <div className="ff-user-id">
+        <span aria-hidden="true" className="ff-avatar">
+          {email.slice(0, 1)}
+        </span>
+        <span className="ff-user-email" title={email}>
+          {email}
+        </span>
+      </div>
       <button
+        className={btn('secondary')}
         onClick={() => {
           void browserClient()
             .auth.signOut()
@@ -32,18 +40,11 @@ export const SignOut = ({ email }: { readonly email: string }): ReactNode => {
               router.refresh();
             });
         }}
-        style={{
-          padding: `6px ${String(tokens.space.sm)}px`,
-          borderRadius: tokens.radius.control,
-          border: `1px solid ${tokens.color.border}`,
-          background: 'transparent',
-          color: tokens.color.textPrimary,
-          fontSize: compactTypography.control.size,
-          cursor: 'pointer',
-        }}
+        title="Sign out"
         type="button"
       >
-        Sign out
+        <Icon name="signOut" size={16} />
+        <span className="ff-nav-text">Sign out</span>
       </button>
     </div>
   );
