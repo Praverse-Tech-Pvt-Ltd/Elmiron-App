@@ -19,6 +19,13 @@
         {
           "microphonePermission": "Elmiron Field records a consultation only after the doctor agrees on screen, and your own voice notes when you hold the button."
         }
+      ],
+      [
+        "expo-video",
+        {
+          "supportsBackgroundPlayback": false,
+          "supportsPictureInPicture": false
+        }
       ]
     ],
     "experiments": {

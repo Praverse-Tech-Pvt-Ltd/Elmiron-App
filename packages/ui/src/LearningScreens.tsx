@@ -217,6 +217,11 @@ export type LessonView =
       readonly title: string;
       readonly body: string;
       readonly minutes: string | null;
+      /**
+       * `FE-W127` — what the lesson shows above its text, when it has more than text: the app's video
+       * player. A slot rather than a player here, so the design system takes no media dependency.
+       */
+      readonly media?: ReactNode;
       /** The server's stamp for this lesson, already formatted, or null while not finished. */
       readonly finished: string | null;
       readonly recording: boolean;
@@ -278,6 +283,7 @@ export const LessonScreen = ({ view }: { readonly view: LessonView }): ReactNode
             <Title>{view.title}</Title>
             {view.minutes === null ? null : <Label muted>{view.minutes}</Label>}
           </View>
+          {view.media ?? null}
           <LessonBody body={view.body} />
           <View style={styles.foot}>
             {view.finished === null ? (
