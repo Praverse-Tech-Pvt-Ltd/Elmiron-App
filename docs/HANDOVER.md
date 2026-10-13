@@ -109,6 +109,13 @@ the five. What remains is `switched off` (your choice: `… on all`) and model a
 | 6 | Submit it for review | `content-step.mjs submit-knowledge "<document title>" …` (a draft does not appear in the console until submitted) | seconds |
 | 7 | Approve it | **a different admin**, in the console's `/knowledge` | minutes per document, to read it |
 
+**Lesson videos (`BE-W213`).** A lesson can carry a trimmed section of the client's conference videos:
+`pnpm video:trim` cuts a phone-sized clip (under 48 MB), a `Video:` line in the course file names it, and
+step 2's `--write` uploads it into the private `lesson-videos` bucket. Clinical clips need the client's
+medical/regulatory approval before step 3 (Q-21 is whether the system should also ask a second admin). The
+whole path, with the storage and bandwidth maths (Free plan: about 20 clips; plan on Pro for a real pilot):
+**`docs/operator/lesson-videos.md`**.
+
 Every loader lists every problem in the file, by line, and writes nothing if there is one. The samples are
 refused by name (their titles start `EXAMPLE`), so copy and rename them.
 
