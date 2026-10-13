@@ -92,6 +92,7 @@ own. Renewing is one more row like 3.2; replacing it is 3.1 below. "Local territ
 | 1.1 | `pnpm exec supabase --workdir services/api db push --db-url "$PROD_DB_URL" --yes` | Ends *"Finished supabase db push."*, exit 0; **87** "Applying migration" lines (10 October; was 77, and 74 before that). Rehearsal: **8 seconds** on an empty copy | It stops at ONE migration, exits 1 and names the file, statement and SQLSTATE. **Everything before that file stays applied; that file is rolled back whole** (rehearsed: nothing of it was left behind). **Fix the cause, then run 1.1 again — it resumes at that file** (rehearsed: 18 remaining applied). **Re-running without fixing the cause fails on the same file** |
 | 1.2 | Actions → **Migration drift** → *Run workflow* on `main` | **Green with no notice**: *"No drift. 106 migration(s), all applied."* (rehearsed locally with `check:migration-drift`) | A shortfall means 1.1 did not finish — back to 1.1 |
 | 1.3 | `pnpm --filter @fieldforce/core build` then `pnpm exec supabase --workdir services/api functions deploy ai-gateway --project-ref <production ref>` | The CLI lists `ai-gateway` as deployed | **Not rehearsed** — see the limits. Read the CLI's error; the most likely is a stale `packages/core/dist` |
+| 1.3a | **(`BE-W186`, once merged)** `pnpm exec supabase --workdir services/api functions deploy admin-accounts --project-ref <production ref>`. Optionally create a secret key named `account_admin` in Settings → API Keys (it falls back to `default`) | The CLI lists `admin-accounts` as deployed; the console's **Users & roles** screen creates an account | **Not rehearsed against a deployment.** Without it the screen still lists, changes and deactivates users; creating accounts and resetting passwords answer *"not configured"* or fail to reach the function |
 | 1.4 | Pushing again: `…db push --db-url "$PROD_DB_URL" --yes` | *"Remote database is up to date"*, nothing applied (rehearsed: "up to date") | — this is the safe re-run check, not a step that changes anything |
 
 ## Operator step 4 — reference data (minutes; safe to re-run)
@@ -110,6 +111,14 @@ The operator fills `docs/operator/territory-template.xlsx` and exports its two s
 first real MR day" below.
 
 ### Operator step 4, continued — accounts, BY HAND (`BE-W137`) — users are a master (item 11)
+
+> **Superseded once `BE-W185`/`BE-W186` are deployed (13 October 2026, branch `pratham/console-admin`):**
+> the console's **Users & roles** screen does 4.1 and 4.2 in one step, as the signed-in admin, and
+> refuses each of the five silent mistakes below by name (the admin role needs the email typed again;
+> territories and managers are picked, never typed; a rep needs a bottom-level territory and a
+> manager who covers it; accounts are always created confirmed). The FIRST admin of a company still
+> needs 4.A1/4.A2 — the screen needs an admin to sign in to it — and 4.3's read-back is the screen's
+> People table. The by-hand procedure below stays valid and is the fallback.
 
 **There is no tool that creates the MR sheet's accounts on production.** `seed:mr` refuses any
 non-local target by design and creates its own company and territory; `check-territory-sheet`'s note

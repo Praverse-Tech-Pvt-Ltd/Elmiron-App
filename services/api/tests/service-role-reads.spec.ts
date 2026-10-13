@@ -66,7 +66,41 @@ describe('W2-A A — the service-role key is reachable from exactly one place', 
     const failures = failuresFor(
       withFile(WRITER_PATH, (t) => `${t}\nexport const leaked = 'x';\n`),
     );
-    expect(failures).toEqual([expect.stringMatching(/must export only practiceWriterFromEnv/u)]);
+    expect(failures).toEqual([
+      expect.stringMatching(/must export only accountAdminFromEnv and practiceWriterFromEnv/u),
+    ]);
+  });
+
+  it('BE-W186: the account writer dropped from the exports fails too — the list is exact both ways', () => {
+    const failures = failuresFor(
+      withFile(WRITER_PATH, (t) =>
+        t.replace('export const accountAdminFromEnv', 'const accountAdminFromEnv'),
+      ),
+    );
+    expect(failures).toEqual([expect.stringMatching(/must export only/u)]);
+  });
+
+  it('BE-W186: the account writer reaching a THIRD GoTrue operation fails, naming it', () => {
+    const failures = failuresFor(
+      withFile(WRITER_PATH, (t) =>
+        t.replace(
+          'await client.auth.admin.updateUserById(userId, { password });',
+          'await client.auth.admin.updateUserById(userId, { password });\n      await client.auth.admin.deleteUser(userId);',
+        ),
+      ),
+    );
+    expect(failures).toEqual([
+      expect.stringMatching(/calls createUser, deleteUser, updateUserById/u),
+    ]);
+  });
+
+  it('BE-W186: the account function itself never reads the key — it imports the writer', () => {
+    const fn = repo.functions.find((f) => f.path === 'admin-accounts/index.ts');
+    expect(fn?.text).toMatch(/accountAdminFromEnv/u);
+    const failures = failuresFor(
+      withFile('admin-accounts/index.ts', (t) => `${t}\nconst k = Deno.env.get('${KEY}');\n`),
+    );
+    expect(failures).toEqual([expect.stringMatching(/admin-accounts\/index\.ts ×1/u)]);
   });
 
   it('widening the writer’s allow-list fails', () => {
