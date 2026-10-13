@@ -66,6 +66,7 @@ const STALE_PICTURE: ReadonlySet<PingRefusal> = new Set([
   'company_off',
   'no_acceptance',
   'outside_working_hours',
+  'day_ended',
 ]);
 
 export const refreshAfter = (verdict: PingVerdict): boolean =>
@@ -92,6 +93,7 @@ const REFUSED_WORDS: Readonly<Record<PingRefusal, string>> = {
   implausible_accuracy:
     'The phone could not tell where you were precisely enough, so it was not kept.',
   too_frequent: 'It came too soon after the one before, so it was not kept.',
+  day_ended: 'You have ended your working day, so your company did not keep it.',
 };
 
 /**

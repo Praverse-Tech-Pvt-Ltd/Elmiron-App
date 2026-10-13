@@ -27,6 +27,7 @@ import { onDay } from '../src/today/plan';
 import { clockIn } from '../src/today/territory-day';
 import { endDayBlocker, workDayRequest, workDayStatus } from '../src/today/work-day';
 import { refusedDetail } from '../src/errors/plain';
+import { useLiveTracker } from '../src/tracking/tracker';
 
 /**
  * B7 — the day-end binding.
@@ -70,6 +71,7 @@ export default function DayEnd(): ReactNode {
   const [distanceLoading, setDistanceLoading] = useState(true);
   // `FE-W42` C1. The territory's day, from the server's clock -- never the handset's.
   const { store, status, today, zone, failure: pullFailure, refresh } = usePulledStore();
+  const tracker = useLiveTracker();
   const [noDay, setNoDay] = useState<{ title: string; detail: string } | null>(null);
   // `FE-W44`. The load, not the state — see the note in app/(tabs)/home.tsx.
   const [queue, setQueue] = useState<QueueLoad>({ kind: 'loaded', state: emptyQueue });
@@ -195,6 +197,9 @@ export default function DayEnd(): ReactNode {
       occurredAt: new Date().toISOString(),
       note,
     });
+    // BE-W200 / FE-W90: ending the day ends the sharing at once, on this phone, before the request
+    // is even sent; the server refuses any later position for an ended day (`day_ended`) regardless.
+    void tracker?.closeDay();
     void (async () => {
       const queued = await enqueueFirst(workDayQueueItem(body));
       if (queued.kind === 'queue_unreadable') {

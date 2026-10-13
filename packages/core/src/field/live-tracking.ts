@@ -73,6 +73,8 @@ export const PingRefusalSchema = z.enum([
   'too_old',
   'implausible_accuracy',
   'too_frequent',
+  // BE-W200: the rep ended their working day (`BE-W190`); only a manager's reopen undoes it.
+  'day_ended',
 ]);
 export type PingRefusal = z.infer<typeof PingRefusalSchema>;
 
