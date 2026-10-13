@@ -52,6 +52,26 @@ running.
 **What proves it worked:** `pnpm ai:live` stops printing `SKIPPING` and its two suites **run and pass**. Read
 both runner lines: a skipped suite also exits 0.
 
+### OpenAI — the pilot's provider (`BE-C79`; added 14 October 2026, `BE-W206`)
+
+**Who:** the owner, with an OpenAI API key for an organisation that has billing. No AWS account and no
+model-access grant are involved; the Bedrock path above is kept, not used.
+
+**First hour:** **`docs/KEY-DAY.md`**, section A — the key into `services/api/supabase/functions/.env`
+(`AI_PROVIDER=openai`, `OPENAI_API_KEY=…`, in an editor; `.env.example` beside it is the template), then
+`pnpm db:start`, **`pnpm key-day`** (a local TEST company with two admins, the five instruction sets and
+the practice content approved by four eyes, TEST content loaded, every AI feature and live tracking on —
+`BE-W205`), `pnpm functions:serve`, `pnpm ai:live`.
+
+**What proves it worked:** `pnpm ai:live` prints `gate: READY (openai)`, and its runner lines read
+`Test Files 2 passed` and `Tests 11 passed | 2 skipped` (the two skipped are the Bedrock profiles, which
+the suite skips under OpenAI and says so). A key OpenAI refuses is a **red** first test naming the
+vendor's code (401 bad key, 429 no quota, 404 model) — not a skip (`BE-W203`).
+
+**Production, when the owner says:** `KEY-DAY.md` section B — the two Edge Function secrets and the
+`practice_writer` key, then `docs/DEPLOY-RUNBOOK.md`. **Watch `BE-W207`:** OpenAI shuts both configured
+models down on 14 January 2027.
+
 ---
 
 ## The second admin (Q-14)

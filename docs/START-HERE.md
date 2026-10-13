@@ -261,6 +261,7 @@ current as a list of ids, but a row's text is true of the day it was minted), `.
 | Document | Status | For | Answers |
 | --- | --- | --- | --- |
 | `docs/HANDOVER.md` | current | anyone acting on an arrival | what to do first when a blocker clears |
+| `docs/KEY-DAY.md` | current (14 October) | the owner | the OpenAI key arrives: the four commands, what "it worked" looks like, production later |
 | `docs/ai-platform/DAY-ONE.md` | current | engineering | the hour model access lands; the predicted failures |
 | `docs/DEPLOY-RUNBOOK.md` | current; stopped at step 0.1 on 5 October | the operator, then engineering | how to deploy to production |
 | `docs/restore-runbook.md` | current | engineering | restoring the database, and why it is a compliance event |
@@ -300,6 +301,8 @@ work is on any critical path.**
 
 **What to do first.**
 
+* **The OpenAI key has arrived** (the pilot's provider, `BE-C79`): **`docs/KEY-DAY.md`** — one page; the
+  key in the functions `.env`, then `pnpm key-day`, `pnpm functions:serve`, `pnpm ai:live` (`BE-W206`).
 * **Nothing has arrived:** check that it has not — model access with `pnpm ai:live` (it says `SKIPPING`
   when not granted), and `docs/operator-inputs.md` for answers — and do not invent work. If you must
   learn the code, walk `docs/DEMO-SCRIPT.md` on the emulator.

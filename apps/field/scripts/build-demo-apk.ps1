@@ -19,6 +19,9 @@
 
   Also refuses if no usable CMake is installed (W2-F A3, see Resolve-Cmake).
 
+  With -AllFeatures (FE-W92, key day) it first switches every built feature on for this process and
+  fills the EXPO_PUBLIC_APP_* local defaults; every check above then runs on that environment.
+
   Then: clean prebuild with DEMO_CLEARTEXT_HOSTS=<Ip>; point Gradle at the resolved CMake through
   android\local.properties (cmake.dir) and verify it from disk; build with the JS bundle forced to
   rebuild; verify the APK (display name, cleartext hosts, baked Supabase address); copy it to
@@ -40,8 +43,28 @@
   the demo APK. Without it, a set EXPO_PUBLIC_COACHING_ENABLED is refused exactly as before.
   EXPO_PUBLIC_RECORDING_ENABLED is refused either way.
 
+.PARAMETER AllFeatures
+  FE-W92. Key day: a demo APK with every BUILT feature on, so nothing is left to set by hand once the
+  AI key is in (docs/KEY-DAY.md). For this process only (restored at the end), it sets to 'true':
+    EXPO_PUBLIC_LEARNING      courses (Me -> Learning)
+    EXPO_PUBLIC_LESSON_TUTOR  the lesson tutor (lms_tutor; only meaningful with Learning)
+    EXPO_PUBLIC_ASSISTANT     the assistant (mr_chat)
+    EXPO_PUBLIC_PRODUCT_QA    Product Q&A (product_qa)
+    EXPO_PUBLIC_PRACTICE      AI Doctor practice and its feedback (ai_doctor, ai_coach)
+    EXPO_PUBLIC_LIVE_TRACKING live location during working hours (the company switch still decides)
+  and EXPO_PUBLIC_MAPS / EXPO_PUBLIC_PUSH ONLY when their inputs are in the shell
+  (GOOGLE_MAPS_ANDROID_API_KEY; GOOGLE_SERVICES_JSON naming a file) -- the same rule
+  release-build-checks.mjs --integrations-only enforces; a flag already set by hand is left as it is.
+  It also fills the four EXPO_PUBLIC_APP_* values with the local defaults from the root .env.example
+  when the shell has none (a value already set is kept). Recording and coaching stay OFF and are still
+  refused if set: decision D-15, blocked on the PV/DPDP signatory. Cannot be combined with
+  -CoachingCheck. The APK is named ...-all-features.apk.
+
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File apps\field\scripts\build-demo-apk.ps1 -Ip 192.168.1.15
+
+.EXAMPLE
+  powershell -ExecutionPolicy Bypass -File apps\field\scripts\build-demo-apk.ps1 -Ip 192.168.1.15 -AllFeatures -CheckOnly
 #>
 [CmdletBinding()]
 param(
@@ -51,6 +74,9 @@ param(
   [switch]$CheckOnly,
 
   [switch]$CoachingCheck,
+
+  # FE-W92. Every built feature on, for key day. See .PARAMETER AllFeatures.
+  [switch]$AllFeatures,
 
   # W2-F A3. A CMake install directory (the one holding bin\cmake.exe) to use instead of searching.
   [string]$CmakeDir = ''
@@ -94,15 +120,39 @@ $OperatorValues = @(
 $OptionalUrlList = 'EXPO_PUBLIC_APP_ADDITIONAL_REDIRECT_URLS'
 $MustBeUnset = @('EXPO_PUBLIC_COACHING_ENABLED', 'EXPO_PUBLIC_RECORDING_ENABLED')
 
+<#
+  FE-W92 -AllFeatures. The flags are the ones apps/field/src/features.ts reads (each OFF unless exactly
+  'true'). COACHING and RECORDING are deliberately absent: they stay in $MustBeUnset (D-15). MAPS and
+  PUSH are key-gated, so they are switched on only when their inputs are present -- a map with no key
+  is broken in any build (BE-W197).
+#>
+$AllFeatureFlags = @(
+  'EXPO_PUBLIC_LEARNING', 'EXPO_PUBLIC_LESSON_TUTOR', 'EXPO_PUBLIC_ASSISTANT',
+  'EXPO_PUBLIC_PRODUCT_QA', 'EXPO_PUBLIC_PRACTICE', 'EXPO_PUBLIC_LIVE_TRACKING'
+)
+$KeyGatedFlags = @(
+  @{ Flag = 'EXPO_PUBLIC_MAPS'; Input = 'GOOGLE_MAPS_ANDROID_API_KEY'; IsFile = $false },
+  @{ Flag = 'EXPO_PUBLIC_PUSH'; Input = 'GOOGLE_SERVICES_JSON'; IsFile = $true }
+)
+# The local defaults, exactly as the root .env.example's EXPO_PUBLIC_APP_* lines (docs/START-HERE.md,
+# "The app"). Not secrets. Used only when the shell has no value of its own.
+$LocalAppDefaults = [ordered]@{
+  'EXPO_PUBLIC_APP_JWT_AUDIENCE'             = 'authenticated'
+  'EXPO_PUBLIC_APP_SITE_URL'                 = 'http://127.0.0.1:3000'
+  'EXPO_PUBLIC_APP_DEEP_LINK_SCHEME'         = 'com.praversetech.fieldforce'
+  'EXPO_PUBLIC_APP_ADDITIONAL_REDIRECT_URLS' = 'com.praversetech.fieldforce://auth-callback'
+}
+
 # Everything this script sets in the environment, so it can be put back exactly.
 $Touched = @(
   'EXPO_PUBLIC_SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_KEY',
   'DEMO_CLEARTEXT_HOSTS', 'ANDROID_HOME', 'JAVA_TOOL_OPTIONS', 'Path'
-)
+) + $AllFeatureFlags + @('EXPO_PUBLIC_MAPS', 'EXPO_PUBLIC_PUSH') + @($LocalAppDefaults.Keys)
 $Saved = @{}
 foreach ($name in $Touched) { $Saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 
 function Write-Step([string]$Text) { Write-Host "==> $Text" -ForegroundColor Cyan }
+function Write-Note([string]$Text) { Write-Host "    $Text" }
 function Write-Ok([string]$Text) { Write-Host "    ok: $Text" -ForegroundColor Green }
 function Write-Refusal([string]$Text) { Write-Host "    REFUSED: $Text" -ForegroundColor Red }
 
@@ -133,6 +183,44 @@ function Get-GitDirt {
   $out = & cmd.exe /d /c "git -C `"$RepoRoot`" status --porcelain --untracked-files=all 2>&1"
   if ($LASTEXITCODE -ne 0) { return @("git status failed: $out") }
   return @($out | Where-Object { $_ -ne '' })
+}
+
+<#
+  FE-W92 -AllFeatures: set the flags for THIS process (restored in `finally`), before the checks run,
+  so the checks judge exactly the environment the build will see. Prints every flag it set and why
+  maps/push are on or off; prints no value of any key.
+#>
+function Set-AllFeatures {
+  Write-Step '-AllFeatures: every built feature ON for this build (apps/field/src/features.ts)'
+  foreach ($name in $AllFeatureFlags) {
+    [Environment]::SetEnvironmentVariable($name, 'true', 'Process')
+    Write-Ok "$name = true"
+  }
+  foreach ($gated in $KeyGatedFlags) {
+    $current = [Environment]::GetEnvironmentVariable($gated.Flag, 'Process')
+    if (-not [string]::IsNullOrWhiteSpace($current)) {
+      Write-Note "$($gated.Flag) = '$current' was set by hand; left as it is (the maps/push check below judges it)"
+      continue
+    }
+    # Not `$input`: that is a PowerShell automatic variable.
+    $source = [Environment]::GetEnvironmentVariable($gated.Input, 'Process')
+    $present = -not [string]::IsNullOrWhiteSpace($source) -and ((-not $gated.IsFile) -or (Test-Path -LiteralPath $source -PathType Leaf))
+    if ($present) {
+      [Environment]::SetEnvironmentVariable($gated.Flag, 'true', 'Process')
+      Write-Ok "$($gated.Flag) = true ($($gated.Input) is present; value not printed)"
+    } else {
+      Write-Note "$($gated.Flag) stays off: no $($gated.Input) in this shell$(if ($gated.IsFile) { ' naming a file' })"
+    }
+  }
+  foreach ($name in $LocalAppDefaults.Keys) {
+    if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name, 'Process'))) {
+      [Environment]::SetEnvironmentVariable($name, $LocalAppDefaults[$name], 'Process')
+      Write-Ok "$name = $($LocalAppDefaults[$name]) (local default, root .env.example)"
+    } else {
+      Write-Ok "$name kept from the shell"
+    }
+  }
+  Write-Note 'Recording and coaching of real visits stay OFF (D-15, blocked on the PV/DPDP signatory).'
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -439,7 +527,7 @@ function Invoke-Build {
   Write-Step "Copying to $DemoApkDir (never overwriting)"
   $null = New-Item -ItemType Directory -Force -Path $DemoApkDir
   $date = Get-Date -Format 'yyyy-MM-dd'
-  $suffix = if ($CoachingCheck) { '-coaching-check' } else { '' }
+  $suffix = if ($CoachingCheck) { '-coaching-check' } elseif ($AllFeatures) { '-all-features' } else { '' }
   $target = Join-Path $DemoApkDir "field-force-demo-$Ip-$date-$commit$suffix.apk"
   if (Test-Path $target) { throw "$target already exists; not overwriting it. Move it aside yourself if you mean to replace it." }
   [IO.File]::Copy($apk, $target, $false)
@@ -448,6 +536,8 @@ function Invoke-Build {
   Write-Host ''
   if ($CoachingCheck) {
     Write-Host 'COACHING-CHECK APK READY: Coaching is ON. NOT FOR THE DEMO.' -ForegroundColor Yellow
+  } elseif ($AllFeatures) {
+    Write-Host 'DEMO APK READY (-AllFeatures: every built feature on; recording and coaching off)' -ForegroundColor Green
   } else {
     Write-Host 'DEMO APK READY' -ForegroundColor Green
   }
@@ -459,7 +549,13 @@ function Invoke-Build {
 
 $code = 0
 try {
-  Write-Host "build-demo-apk: -Ip $Ip$(if ($CheckOnly) { ' -CheckOnly' })$(if ($CoachingCheck) { ' -CoachingCheck' })"
+  Write-Host "build-demo-apk: -Ip $Ip$(if ($CheckOnly) { ' -CheckOnly' })$(if ($CoachingCheck) { ' -CoachingCheck' })$(if ($AllFeatures) { ' -AllFeatures' })"
+  if ($AllFeatures -and $CoachingCheck) {
+    # Two different builds: -AllFeatures keeps coaching OFF by design (D-15); -CoachingCheck is the
+    # one local build with it on. One APK cannot be both.
+    throw '-AllFeatures and -CoachingCheck cannot be combined: -AllFeatures keeps coaching off (D-15).'
+  }
+  if ($AllFeatures) { Set-AllFeatures }
   $failures = Invoke-Checks
   if ($failures -gt 0) {
     Write-Host ''

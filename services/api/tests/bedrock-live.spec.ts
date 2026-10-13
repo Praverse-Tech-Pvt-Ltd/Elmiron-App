@@ -5,7 +5,13 @@ import {
   createBedrockProvider,
 } from '../supabase/functions/_shared/bedrock-provider.ts';
 import { bedrockConverse } from '../supabase/functions/_shared/bedrock-client.ts';
-import { modelAccessGate, readCredential } from './live-credential.js';
+import {
+  bedrockAccessGate,
+  gateTitle,
+  readCredential,
+  readFunctionsEnv,
+} from './live-credential.js';
+import type { LiveGate } from './live-credential.js';
 
 /**
  * W1-V A5 — the LIVE Bedrock calls, gated so they SKIP with a stated reason rather than fail.
@@ -19,6 +25,11 @@ import { modelAccessGate, readCredential } from './live-credential.js';
  *
  * The reason is the title of the first test, so every run SAYS why it skipped. The credential is
  * read into this process only; it is never printed, and only the vendor's error NAME is reported.
+ *
+ * **Bedrock only, on purpose (`BE-W203`).** With `AI_PROVIDER=openai` — the pilot's provider,
+ * `BE-C79` — this file SKIPS and says so: the two India profiles are not what the gateway will call,
+ * and `ai-live.spec.ts` proves the five features against OpenAI instead. Any other setting keeps the
+ * W1-V behaviour, so a Bedrock credential is still checked whenever one is present.
  */
 
 /** Unreachable: the live tests run only when the gate built a client. */
@@ -36,21 +47,30 @@ const request = (text: string, signal = AbortSignal.timeout(30_000)): LlmGenerat
   signal,
 });
 
-const gate = await modelAccessGate();
+const gate: LiveGate =
+  readFunctionsEnv()?.['AI_PROVIDER'] === 'openai'
+    ? {
+        state: 'skip',
+        provider: 'openai',
+        reason:
+          'AI_PROVIDER=openai — this suite checks the Bedrock India profiles only; ai-live.spec.ts runs the five features against OpenAI',
+      }
+    : await bedrockAccessGate();
 
 describe('W1-V A5 — live Bedrock, gated', () => {
-  it(`gate: ${gate.ready ? 'READY' : `SKIPPING — ${gate.reason}`}`, () => {
+  it(gateTitle(gate), () => {
     expect(gate.reason.length).toBeGreaterThan(0);
   });
 
-  describe.skipIf(!gate.ready)('the two India profiles answer for real', () => {
+  describe.skipIf(gate.state !== 'ready')('the two India profiles answer for real', () => {
     const credential = readCredential();
-    const converse = gate.ready
-      ? bedrockConverse({
-          accessKeyId: credential?.accessKeyId,
-          secretAccessKey: credential?.secretAccessKey,
-        })
-      : undefined;
+    const converse =
+      gate.state === 'ready'
+        ? bedrockConverse({
+            accessKeyId: credential?.accessKeyId,
+            secretAccessKey: credential?.secretAccessKey,
+          })
+        : undefined;
 
     for (const [name, profileId] of Object.entries(INDIA_PROFILES)) {
       it(`${name}: ${profileId} answers, with real token counts and its own model id`, async () => {
