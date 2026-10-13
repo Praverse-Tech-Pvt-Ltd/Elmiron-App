@@ -10,9 +10,11 @@
  *   2. nothing under `supabase/functions` reads the WHOLE environment (`Deno.env.toObject()`);
  *   3. every `Deno.env.get(...)` names its variable as a string literal — a computed name could be
  *      the key under another spelling;
- *   4. `_shared/practice-writer.ts` exports exactly one name, `practiceWriterFromEnv` — never the key,
- *      never the client — and its allow-list is exactly `record_sim_turn`, `record_sim_coach_analysis`
- *      and (W2-E C, `BE-W146`) `ai_gateway_complete_request`;
+ *   4. `_shared/practice-writer.ts` exports exactly `practiceWriterFromEnv` and (`BE-W186`)
+ *      `accountAdminFromEnv` — never the key, never the client — its allow-list is exactly
+ *      `record_sim_turn`, `record_sim_coach_analysis` and (W2-E C, `BE-W146`)
+ *      `ai_gateway_complete_request`, and the GoTrue admin operations it reaches are exactly
+ *      `createUser` and `updateUserById`;
  *   5. `packages/core/src`, which the function imports, reads no environment at all;
  *   6. (W2-B E) the OTHER credentials the platform hands every Edge Function by default — since W2-C
  *      D2 the LEGACY service-role key (`SUPABASE_SERVICE_ROLE_KEY`), `SUPABASE_SECRET_KEY` (the local
@@ -47,6 +49,13 @@ export const WRITER_ALLOWED = [
   'record_sim_coach_analysis',
   'record_sim_turn',
 ];
+/**
+ * Rule 4, `BE-W186` — the module's exports (sorted): the gateway's practice writer and the console's
+ * account writer. The key is still READ once; this is the second narrow object it is handed to.
+ */
+export const WRITER_EXPORTS = ['accountAdminFromEnv', 'practiceWriterFromEnv'];
+/** Rule 4, `BE-W186` — the GoTrue admin operations the account writer may call (sorted). */
+export const ACCOUNT_ADMIN_ALLOWED = ['createUser', 'updateUserById'];
 /** Rule 6 — credentials with the key's reach (or more) that the function must never name. */
 export const EQUIVALENT_CREDENTIALS = [
   'SUPABASE_SERVICE_ROLE_KEY',
@@ -107,13 +116,25 @@ export const checkServiceRoleReads = (functions, core) => {
     const exported = [
       ...code.matchAll(/export\s+(?:const|function|let|class|default)\s*([A-Za-z0-9_]*)/g),
     ].map((m) => m[1] || 'default');
-    if (exported.length !== 1 || exported[0] !== 'practiceWriterFromEnv') {
+    if (JSON.stringify([...exported].sort()) !== JSON.stringify(WRITER_EXPORTS)) {
       failures.push(
-        `${WRITER_PATH} must export only practiceWriterFromEnv; exports: ${exported.join(', ') || 'none'}`,
+        `${WRITER_PATH} must export only ${WRITER_EXPORTS.join(' and ')}; exports: ${exported.join(', ') || 'none'}`,
       );
     }
     if (/export\s*\{/.test(code))
-      failures.push(`${WRITER_PATH}: re-exports a list — export only practiceWriterFromEnv`);
+      failures.push(
+        `${WRITER_PATH}: re-exports a list — export only ${WRITER_EXPORTS.join(' and ')}`,
+      );
+    // `BE-W186`: the account writer's GoTrue operations, exactly. A third (`deleteUser`,
+    // `generateLink`, `listUsers` …) is a new capability and must be a reviewed change to this list.
+    const operations = [...code.matchAll(/auth\s*\.\s*admin\s*\.\s*([A-Za-z]+)/g)]
+      .map((m) => m[1])
+      .sort();
+    if (JSON.stringify(operations) !== JSON.stringify(ACCOUNT_ADMIN_ALLOWED)) {
+      failures.push(
+        `${WRITER_PATH}: the account writer may call exactly auth.admin.${ACCOUNT_ADMIN_ALLOWED.join(', auth.admin.')}; calls ${operations.join(', ') || 'none'}`,
+      );
+    }
     const allow = /PRACTICE_WRITES[^=]*=\s*new Set\(\s*\[([^\]]*)\]/.exec(code);
     const names = allow ? [...allow[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort() : null;
     if (names === null || JSON.stringify(names) !== JSON.stringify(WRITER_ALLOWED)) {

@@ -21,9 +21,14 @@
  * read appears anywhere under `supabase/functions`, if anything reads the whole environment or a
  * variable whose name is not spelled out, if this module exports anything else, or if the list below
  * changes.
+ *
+ * **`BE-W186`: a second export, still one read.** `accountAdminFromEnv` (at the end) is the console's
+ * account writer — two GoTrue operations, nothing else. The check now allows exactly these two
+ * exports and exactly those two `auth.admin` operations, so the module stays the one door.
  */
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import type { ControlPlaneRpc } from './core.ts';
+import type { AccountAdmin } from './account-requests.ts';
 
 /**
  * W2-E C (`BE-W146`, `BE-C74`): a third name, `ai_gateway_complete_request` — the close of EVERY AI
@@ -49,12 +54,19 @@ const PRACTICE_WRITES: ReadonlySet<string> = new Set([
  */
 const PRACTICE_WRITER_KEY_NAME = 'practice_writer';
 
-const secretKey = (): string | null => {
+/**
+ * `BE-W186` — the console's account writer prefers its OWN named key, `account_admin`, for the same
+ * reason the practice writer prefers `practice_writer`: each can be rotated or revoked without the
+ * other. Both fall back to `default`. Still ONE read of the variable, here.
+ */
+const ACCOUNT_ADMIN_KEY_NAME = 'account_admin';
+
+const secretKey = (name: string): string | null => {
   const raw = Deno.env.get('SUPABASE_SECRET_KEYS');
   if (raw === undefined || raw.length === 0) return null;
   try {
     const keys = JSON.parse(raw) as Record<string, unknown>;
-    const chosen = keys[PRACTICE_WRITER_KEY_NAME] ?? keys['default'];
+    const chosen = keys[name] ?? keys['default'];
     return typeof chosen === 'string' && chosen.length > 0 ? chosen : null;
   } catch {
     return null;
@@ -63,7 +75,7 @@ const secretKey = (): string | null => {
 
 /** The gateway's practice writer, or null when the key is not configured. The key never leaves here. */
 export const practiceWriterFromEnv = (supabaseUrl: string): ControlPlaneRpc | null => {
-  const key = secretKey();
+  const key = secretKey(PRACTICE_WRITER_KEY_NAME);
   if (key === null) return null;
   const client = createClient(supabaseUrl, key, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -84,6 +96,44 @@ export const practiceWriterFromEnv = (supabaseUrl: string): ControlPlaneRpc | nu
         throw wrapped;
       }
       return data;
+    },
+  };
+};
+
+/**
+ * `BE-W186` — the console's account writer, and the two GoTrue operations it may perform.
+ *
+ * **Why here, against "two things it may do".** Creating a sign-in account is GoTrue's admin API,
+ * which only a secret key reaches; the database cannot do it and must not hold the key. So the
+ * `admin-accounts` function needs the key, and the rule that the key is READ in exactly one place is
+ * kept by reading it here and handing out a second narrow object rather than adding a second read.
+ *
+ * **What it may do — exactly two operations**: `auth.admin.createUser`, always confirmed (the
+ * runbook's "auto-confirm unticked" cannot happen), and `auth.admin.updateUserById` with a password
+ * and nothing else. It never returns the key or the client, and never decides WHO: `admin-accounts`
+ * calls it only after an RPC run as the signed-in admin has said yes and written the audit row.
+ * `check-service-role-reads.mjs` fails the build if this module exports a third name or reaches any
+ * other `auth.admin` operation.
+ */
+export const accountAdminFromEnv = (supabaseUrl: string): AccountAdmin | null => {
+  const key = secretKey(ACCOUNT_ADMIN_KEY_NAME);
+  if (key === null) return null;
+  const client = createClient(supabaseUrl, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return {
+    createConfirmedUser: async (email: string, password: string): Promise<{ id: string }> => {
+      const { data, error } = await client.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+      });
+      if (error !== null) throw new Error(error.message);
+      return { id: data.user.id };
+    },
+    setPassword: async (userId: string, password: string): Promise<void> => {
+      const { error } = await client.auth.admin.updateUserById(userId, { password });
+      if (error !== null) throw new Error(error.message);
     },
   };
 };
