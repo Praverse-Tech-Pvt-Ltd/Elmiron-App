@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { readPersistedSession } from './persisted-session';
 import { supabase } from './supabase';
 import { setQueueOwner } from './sync/async-storage-store';
+import { runBeforeSignOut } from './push/before-sign-out';
 
 export interface SessionState {
   /** `loading` until the stored session has been read from disk. */
@@ -89,6 +90,9 @@ export const SessionProvider = ({ children }: { readonly children: ReactNode }):
         // shared handset -- therefore never ran: offline on the emulator, Sign out did nothing and
         // said nothing, and the next person would have held this rep's session. Same shape as
         // `signIn` above, which always checked.
+        // `FE-W86`: retire this phone's push token for the person leaving, while their session still
+        // exists. Bounded and never throws; a no-op unless the build has push on.
+        await runBeforeSignOut();
         const { error } = await supabase.auth.signOut();
         if (error !== null) throw error;
       },

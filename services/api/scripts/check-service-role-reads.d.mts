@@ -13,6 +13,7 @@ export declare const WRITER_PATH: string;
 export declare const WRITER_ALLOWED: string[];
 export declare const WRITER_EXPORTS: string[];
 export declare const ACCOUNT_ADMIN_ALLOWED: string[];
+export declare const PUSH_SENDER_ALLOWED: string[];
 export declare const EQUIVALENT_CREDENTIALS: string[];
 export declare const stripComments: (text: string) => string;
 export declare const checkServiceRoleReads: (

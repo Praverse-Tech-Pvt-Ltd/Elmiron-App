@@ -67,7 +67,9 @@ describe('W2-A A — the service-role key is reachable from exactly one place', 
       withFile(WRITER_PATH, (t) => `${t}\nexport const leaked = 'x';\n`),
     );
     expect(failures).toEqual([
-      expect.stringMatching(/must export only accountAdminFromEnv and practiceWriterFromEnv/u),
+      expect.stringMatching(
+        /must export only accountAdminFromEnv and practiceWriterFromEnv and pushOutboxFromEnv/u,
+      ),
     ]);
   });
 
@@ -101,6 +103,31 @@ describe('W2-A A — the service-role key is reachable from exactly one place', 
       withFile('admin-accounts/index.ts', (t) => `${t}\nconst k = Deno.env.get('${KEY}');\n`),
     );
     expect(failures).toEqual([expect.stringMatching(/admin-accounts\/index\.ts ×1/u)]);
+  });
+
+  it('BE-W196: the push outbox reaching a THIRD database function fails, naming the list', () => {
+    const failures = failuresFor(
+      withFile(WRITER_PATH, (t) =>
+        t.replace("'push_record_results']", "'push_record_results', 'enqueue_notification']"),
+      ),
+    );
+    expect(failures).toEqual([expect.stringMatching(/push outbox's calls must be exactly/u)]);
+  });
+
+  it('BE-W196: the push outbox dropped from the exports fails — and its function only imports it', () => {
+    const failures = failuresFor(
+      withFile(WRITER_PATH, (t) =>
+        t.replace('export const pushOutboxFromEnv', 'const pushOutboxFromEnv'),
+      ),
+    );
+    expect(failures).toEqual([expect.stringMatching(/must export only/u)]);
+    const fn = repo.functions.find((f) => f.path === 'push-sender/index.ts');
+    expect(fn?.text).toMatch(/pushOutboxFromEnv/u);
+    expect(
+      failuresFor(
+        withFile('push-sender/index.ts', (t) => `${t}\nconst k = Deno.env.get('${KEY}');\n`),
+      ),
+    ).toEqual([expect.stringMatching(/push-sender\/index\.ts ×1/u)]);
   });
 
   it('widening the writer’s allow-list fails', () => {

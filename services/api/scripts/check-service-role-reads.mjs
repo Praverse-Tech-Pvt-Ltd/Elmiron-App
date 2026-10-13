@@ -14,7 +14,8 @@
  *      `accountAdminFromEnv` — never the key, never the client — its allow-list is exactly
  *      `record_sim_turn`, `record_sim_coach_analysis` and (W2-E C, `BE-W146`)
  *      `ai_gateway_complete_request`, and the GoTrue admin operations it reaches are exactly
- *      `createUser` and `updateUserById`;
+ *      `createUser` and `updateUserById`; and (`BE-W196`) it exports `pushOutboxFromEnv`, whose calls
+ *      are exactly `push_claim_batch` and `push_record_results`;
  *   5. `packages/core/src`, which the function imports, reads no environment at all;
  *   6. (W2-B E) the OTHER credentials the platform hands every Edge Function by default — since W2-C
  *      D2 the LEGACY service-role key (`SUPABASE_SERVICE_ROLE_KEY`), `SUPABASE_SECRET_KEY` (the local
@@ -53,7 +54,12 @@ export const WRITER_ALLOWED = [
  * Rule 4, `BE-W186` — the module's exports (sorted): the gateway's practice writer and the console's
  * account writer. The key is still READ once; this is the second narrow object it is handed to.
  */
-export const WRITER_EXPORTS = ['accountAdminFromEnv', 'practiceWriterFromEnv'];
+export const WRITER_EXPORTS = ['accountAdminFromEnv', 'practiceWriterFromEnv', 'pushOutboxFromEnv'];
+/**
+ * Rule 4, `BE-W196` — the database functions the push sender's outbox may call (sorted). Both are
+ * granted to `service_role` alone (`20261013000400_push_notifications`).
+ */
+export const PUSH_SENDER_ALLOWED = ['push_claim_batch', 'push_record_results'];
 /** Rule 4, `BE-W186` — the GoTrue admin operations the account writer may call (sorted). */
 export const ACCOUNT_ADMIN_ALLOWED = ['createUser', 'updateUserById'];
 /** Rule 6 — credentials with the key's reach (or more) that the function must never name. */
@@ -133,6 +139,13 @@ export const checkServiceRoleReads = (functions, core) => {
     if (JSON.stringify(operations) !== JSON.stringify(ACCOUNT_ADMIN_ALLOWED)) {
       failures.push(
         `${WRITER_PATH}: the account writer may call exactly auth.admin.${ACCOUNT_ADMIN_ALLOWED.join(', auth.admin.')}; calls ${operations.join(', ') || 'none'}`,
+      );
+    }
+    const push = /PUSH_SENDER_CALLS[^=]*=\s*new Set\(\s*\[([^\]]*)\]/.exec(code);
+    const pushNames = push ? [...push[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort() : null;
+    if (pushNames === null || JSON.stringify(pushNames) !== JSON.stringify(PUSH_SENDER_ALLOWED)) {
+      failures.push(
+        `${WRITER_PATH}: the push outbox's calls must be exactly ${PUSH_SENDER_ALLOWED.join(', ')}; are ${pushNames === null ? 'not found' : pushNames.join(', ')}`,
       );
     }
     const allow = /PRACTICE_WRITES[^=]*=\s*new Set\(\s*\[([^\]]*)\]/.exec(code);

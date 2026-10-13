@@ -24,6 +24,9 @@ const BLOCKED_PERMISSIONS = [
   'android.permission.READ_EXTERNAL_STORAGE',
   'android.permission.WRITE_EXTERNAL_STORAGE',
   'android.permission.SYSTEM_ALERT_WINDOW',
+  // `FE-W86`: `expo-notifications` declares it to re-schedule LOCAL notifications after a reboot.
+  // This app schedules none -- every notification is pushed by the server -- so it is blocked.
+  'android.permission.RECEIVE_BOOT_COMPLETED',
 ];
 
 /** The version code for this build, from `FIELD_ANDROID_VERSION_CODE`; throws on a bad value. */

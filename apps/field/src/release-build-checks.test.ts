@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { releaseBuildProblems } from '../scripts/release-build-checks.mjs';
+import {
+  integrationBuildProblems,
+  releaseBuildProblems,
+} from '../scripts/release-build-checks.mjs';
 
 /**
  * `BE-W177` — what `build-release-apk.ps1` refuses before Gradle starts. The values are made up; no
@@ -105,5 +108,57 @@ describe('BE-W177 — a production APK build is refused before Gradle unless', (
     expect(report).not.toContain('DO_NOT_PRINT');
     expect(report).not.toContain('store-password-example');
     expect(report).not.toContain('key-password-example');
+  });
+});
+
+describe('BE-W197 — maps and push: a flag that is on has what it needs, in every build', () => {
+  const FIREBASE = '/build/google-services.json';
+  const has = (path: string): boolean => path === STORE || path === FIREBASE;
+  const check = (overrides: Record<string, string | undefined>): string[] =>
+    integrationBuildProblems(overrides, { exists: has });
+
+  it('POSITIVE CONTROL: both flags off needs neither input — the build every pilot ships today', () => {
+    expect(check({})).toEqual([]);
+    expect(problems({})).toEqual([]);
+    // A key set with the flag off is not an error; it is simply not written into the manifest.
+    expect(
+      check({ GOOGLE_MAPS_ANDROID_API_KEY: 'AIza-example', EXPO_PUBLIC_MAPS: 'false' }),
+    ).toEqual([]);
+  });
+
+  it('maps on without a key is refused, naming the variable; with one it is accepted', () => {
+    expect(check({ EXPO_PUBLIC_MAPS: 'true' }).join('\n')).toMatch(
+      /EXPO_PUBLIC_MAPS is true but GOOGLE_MAPS_ANDROID_API_KEY is not set/u,
+    );
+    expect(check({ EXPO_PUBLIC_MAPS: 'true', GOOGLE_MAPS_ANDROID_API_KEY: '  ' })).toHaveLength(1);
+    expect(
+      check({ EXPO_PUBLIC_MAPS: 'true', GOOGLE_MAPS_ANDROID_API_KEY: 'AIza-example' }),
+    ).toEqual([]);
+  });
+
+  it('push on without google-services.json, or with a path to nothing, is refused', () => {
+    expect(check({ EXPO_PUBLIC_PUSH: 'true' }).join('\n')).toMatch(
+      /EXPO_PUBLIC_PUSH is true but GOOGLE_SERVICES_JSON is not set/u,
+    );
+    expect(
+      check({ EXPO_PUBLIC_PUSH: 'true', GOOGLE_SERVICES_JSON: '/build/nowhere.json' }),
+    ).toEqual(['GOOGLE_SERVICES_JSON names a file that does not exist']);
+    expect(check({ EXPO_PUBLIC_PUSH: 'true', GOOGLE_SERVICES_JSON: FIREBASE })).toEqual([]);
+  });
+
+  it('the production check refuses the same, and never prints the key', () => {
+    const report = problems({
+      EXPO_PUBLIC_MAPS: 'true',
+      EXPO_PUBLIC_PUSH: 'true',
+      GOOGLE_SERVICES_JSON: '/build/nowhere.json',
+    }).join('\n');
+    expect(report).toMatch(/GOOGLE_MAPS_ANDROID_API_KEY is not set/u);
+    expect(report).toMatch(/does not exist/u);
+    const withKey = problems({
+      EXPO_PUBLIC_MAPS: 'true',
+      GOOGLE_MAPS_ANDROID_API_KEY: 'AIza-DO_NOT_PRINT',
+      EXPO_PUBLIC_PUSH: 'true',
+    }).join('\n');
+    expect(withKey).not.toContain('DO_NOT_PRINT');
   });
 });

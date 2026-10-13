@@ -10,7 +10,13 @@ import { tokens } from '@fieldforce/ui-tokens';
 import { signedIn } from '../../lib/session';
 import { Body, Card, Heading, MissingNote, Pill, Title, cell, headerCell } from '../../lib/ui';
 import { TrackingSwitch } from '../../lib/tracking-switch';
-import { accuracyLabel, ageLabel, clockIn, trackingRefusal } from '../../lib/tracking-text';
+import {
+  accuracyLabel,
+  ageLabel,
+  clockIn,
+  embedMapUrl,
+  trackingRefusal,
+} from '../../lib/tracking-text';
 
 /**
  * `FE-W72` / `BE-W180` — live location, for a field manager or an admin.
@@ -23,6 +29,9 @@ import { accuracyLabel, ageLabel, clockIn, trackingRefusal } from '../../lib/tra
  * **A list, not a map.** Each position links to Google Maps (`https://www.google.com/maps?q=lat,lng`,
  * no key and nothing but the coordinates in the URL); drawing a map in the console needs the Maps SDK,
  * which is a separate, later item.
+ *
+ * `FE-W87`: when `NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY` is set, the chosen rep's newest position is also
+ * shown in a Google Maps Embed frame (no library, no new dependency). Unset, nothing changes.
  */
 export const dynamic = 'force-dynamic';
 
@@ -43,44 +52,71 @@ const LatestCell = ({ rep }: { rep: TeamRep }): ReactNode =>
     </span>
   );
 
-const Trail = ({ trail }: { trail: TrackingTrail }): ReactNode => (
-  <Card>
-    <Heading>
-      {trail.fullName} — {trail.day}
-    </Heading>
-    <Body muted>
-      Every position kept for this rep on {trail.day}, oldest first, on the rep’s clock (
-      {trail.timeZone}). Positions are deleted 90 days after the server received them.
-    </Body>
-    {trail.points.length === 0 ? (
-      <MissingNote tone="info">No position was kept for this rep on this day.</MissingNote>
-    ) : (
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr>
-            <th style={headerCell}>Received</th>
-            <th style={headerCell}>Phone said</th>
-            <th style={headerCell}>Accuracy</th>
-            <th style={headerCell}>Where</th>
-          </tr>
-        </thead>
-        <tbody>
-          {trail.points.map((point) => (
-            <tr key={point.id}>
-              <td style={cell}>{clockIn(point.receivedAt, trail.timeZone)}</td>
-              <td style={cell}>{clockIn(point.recordedAt, trail.timeZone)}</td>
-              <td style={cell}>{accuracyLabel(point.accuracyM)}</td>
-              <td style={cell}>
-                {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)} ·{' '}
-                <MapLink latitude={point.latitude} longitude={point.longitude} />
-              </td>
+const EmbeddedMap = ({
+  latitude,
+  longitude,
+}: {
+  latitude: number;
+  longitude: number;
+}): ReactNode => {
+  const src = embedMapUrl(process.env['NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY'], latitude, longitude);
+  return src === null ? null : (
+    <iframe
+      title="Newest position on a map"
+      src={src}
+      width="100%"
+      height={320}
+      style={{ border: 0, borderRadius: tokens.radius.card }}
+      loading="lazy"
+      referrerPolicy="strict-origin-when-cross-origin"
+    />
+  );
+};
+
+const Trail = ({ trail }: { trail: TrackingTrail }): ReactNode => {
+  const newest = trail.points.at(-1);
+  return (
+    <Card>
+      <Heading>
+        {trail.fullName} — {trail.day}
+      </Heading>
+      {newest === undefined ? null : (
+        <EmbeddedMap latitude={newest.latitude} longitude={newest.longitude} />
+      )}
+      <Body muted>
+        Every position kept for this rep on {trail.day}, oldest first, on the rep’s clock (
+        {trail.timeZone}). Positions are deleted 90 days after the server received them.
+      </Body>
+      {trail.points.length === 0 ? (
+        <MissingNote tone="info">No position was kept for this rep on this day.</MissingNote>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={headerCell}>Received</th>
+              <th style={headerCell}>Phone said</th>
+              <th style={headerCell}>Accuracy</th>
+              <th style={headerCell}>Where</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    )}
-  </Card>
-);
+          </thead>
+          <tbody>
+            {trail.points.map((point) => (
+              <tr key={point.id}>
+                <td style={cell}>{clockIn(point.receivedAt, trail.timeZone)}</td>
+                <td style={cell}>{clockIn(point.recordedAt, trail.timeZone)}</td>
+                <td style={cell}>{accuracyLabel(point.accuracyM)}</td>
+                <td style={cell}>
+                  {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)} ·{' '}
+                  <MapLink latitude={point.latitude} longitude={point.longitude} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Card>
+  );
+};
 
 export default async function Tracking({
   searchParams,
