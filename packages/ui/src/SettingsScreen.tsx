@@ -32,6 +32,11 @@ export interface SettingRow {
 
 export interface SettingsScreenProps {
   readonly groups: readonly { readonly heading: string; readonly rows: readonly SettingRow[] }[];
+  /**
+   * `FE-W126`. Shown directly under the title, before every group — the place for a status that must
+   * never be silent (live location, `FE-W71`). Above the title, it opened the screen on a banner.
+   */
+  readonly lead?: ReactNode;
 }
 
 const styles = StyleSheet.create({
@@ -47,10 +52,11 @@ const styles = StyleSheet.create({
  */
 const NOT_YET = 'This setting does nothing yet.';
 
-export const SettingsScreen = ({ groups }: SettingsScreenProps): ReactNode => (
+export const SettingsScreen = ({ groups, lead }: SettingsScreenProps): ReactNode => (
   <>
     {/* FE-D12 V5. A screen title, like Today's; FE-D7 4 moved the others and missed this one. */}
     <Title>Settings</Title>
+    {lead}
 
     {groups.map((group) => (
       <View key={group.heading} style={styles.group}>

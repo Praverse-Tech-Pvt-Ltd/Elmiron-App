@@ -57,13 +57,16 @@ export default function Me(): ReactNode {
 
   return (
     <Screen scrollable>
-      {/* `FE-W71`. What live location is doing, above everything else on Me; nothing when it is off. */}
-      <LiveTrackingStatusLine
-        onOpen={() => {
-          router.push('/live-tracking');
-        }}
-      />
       <SettingsScreen
+        // `FE-W71`. What live location is doing, before everything else on Me (under the title,
+        // `FE-W126`); nothing when it is off.
+        lead={
+          <LiveTrackingStatusLine
+            onOpen={() => {
+              router.push('/live-tracking');
+            }}
+          />
+        }
         groups={settingsGroups({
           onOpenMileage: () => {
             router.push('/mileage');
