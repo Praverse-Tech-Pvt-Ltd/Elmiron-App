@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
-import { StartSimSessionResponseSchema } from '@fieldforce/core';
+import { GATEWAY_MODEL, OPENAI_MODEL, StartSimSessionResponseSchema } from '@fieldforce/core';
 import { INDIA_PROFILES } from '../supabase/functions/_shared/bedrock-provider.ts';
 import { requireDatabase, withClient } from './db.js';
 import { API_URL, asUser, signIn, withIdentityLock } from './auth.js';
@@ -10,56 +10,72 @@ import type { ProfileLike } from './auth.js';
 import { acquireGlobalThresholds } from './global-thresholds.js';
 import { seedFixtures } from './fixtures.js';
 import type { FixtureWorld } from './fixtures.js';
-import { modelAccessGate, readFunctionsEnv } from './live-credential.js';
+import { gateTitle, isConfiguredModel, liveProviderGate } from './live-credential.js';
+import type { LiveGate, LiveProvider } from './live-credential.js';
 
 /**
  * W2-D A3 — ALL FIVE features against the real model, through the real gateway. `pnpm ai:live`.
  *
- * `bedrock-live.spec.ts` proves the two India profiles answer. This file proves the five FEATURES
- * do: a real sign-in, a real `POST /functions/v1/ai-gateway`, the function's own Deno process calling
- * Bedrock, and the audit row read back. **The instruction sets used are the DRAFTS in
+ * **Provider-agnostic since `BE-W203`.** It follows `AI_PROVIDER` in the functions `.env`, exactly as
+ * the gateway's construction line does: `openai` (`BE-C79`, the pilot's provider) or `bedrock`. Until
+ * then every gate below said Bedrock, so with an OpenAI key in place this file printed SKIPPING and
+ * proved nothing.
+ *
+ * `bedrock-live.spec.ts` proves the two India profiles answer (and skips under OpenAI). This file
+ * proves the five FEATURES do: a real sign-in, a real `POST /functions/v1/ai-gateway`, the function's
+ * own Deno process calling the vendor, and the audit row read back. **The instruction sets used are the DRAFTS in
  * `docs/ai-platform/drafts/`** (text and model config), approved locally through the real four-eyes
  * RPCs by fixture admins — so the first live run also tests the words the operator will be asked to
  * approve, not a test sentence.
  *
- * It SKIPS, with the reason in the first test's title, until every gate is open, in this order:
- *   1. no credential in `services/api/supabase/functions/.env` (every CI run, by design);
- *   2. model access not granted (the probe names the vendor's error);
- *   3. `AI_PROVIDER` is not `bedrock` in that file — the gateway would answer from the STUB, and a
- *      green run would prove nothing about the model;
- *   4. no local database, or no function being served.
+ * It SKIPS, with the reason in the first test's title, until every gate is open, in this order
+ * (`live-credential.ts`, `liveProviderGate`):
+ *   1. no `services/api/supabase/functions/.env` (every CI run, by design);
+ *   2. `AI_PROVIDER` is neither `openai` nor `bedrock` in that file — the gateway would answer from
+ *      the STUB, and a green run would prove nothing about the model;
+ *   3. the vendor's probe: for OpenAI, no `OPENAI_API_KEY` SKIPS; a key OpenAI refuses (401 bad key,
+ *      429 no quota, 404 a model the key cannot use) is **REFUSED — a red first test naming the
+ *      vendor's code**, never a skip; for Bedrock, model access not granted skips, as since W1-V;
+ *   4. no local database, or `ai-gateway` not being served by `pnpm functions:serve`.
  *
  * **Past the gates it does not skip — it fails.** If the gates say "live" and a row says
  * `model_provider = 'stub'`, `functions serve` was started before `AI_PROVIDER` was set: that is a
  * misconfigured day, and a red that names it is the honest outcome.
  *
  * What it asserts per feature (`KEY-DAY-CHECKLIST.md` D1 §5):
- *   ordinary request → row `completed`, `model_provider` `bedrock`, `model_name` the feature's India
- *   profile, real token counts, the approved prompt's id;
+ *   ordinary request → row `completed`, `model_provider` the configured vendor, `model_name` the
+ *   feature's model (`OPENAI_MODEL[GATEWAY_MODEL[feature]]`, which OpenAI reports as its dated snapshot,
+ *   e.g. `gpt-4.1-2025-04-14`; or the feature's India profile), real token counts, the approved
+ *   prompt's id;
  *   a patient detail → row `blocked`, `model_provider` NULL — refused before any provider call.
  */
 
 const FUNCTION_URL = `${API_URL}/functions/v1/ai-gateway`;
 const PATIENT = 'patient Meena Kumari, 42, has bladder pain';
 
-const gate = await (async (): Promise<{ ready: boolean; reason: string }> => {
-  const access = await modelAccessGate();
-  if (!access.ready) return access;
-  if (readFunctionsEnv()?.['AI_PROVIDER'] !== 'bedrock') {
-    return {
-      ready: false,
-      reason:
-        'AI_PROVIDER is not bedrock in services/api/supabase/functions/.env — the gateway would answer from the stub',
-    };
-  }
-  if (!(await requireDatabase())) return { ready: false, reason: 'no local database' };
+const gate = await (async (): Promise<LiveGate> => {
+  const access = await liveProviderGate();
+  if (access.state !== 'ready') return access;
+  const skip = (reason: string): LiveGate => ({ ...access, state: 'skip', reason });
+  if (!(await requireDatabase())) return skip('no local database (pnpm db:start)');
+  // `BE-W203`: the gateway's OWN refusal of a request with no token (`28000`) is the proof that it is
+  // `ai-gateway`, served by `functions serve --no-verify-jwt` from this checkout. Any answer used to
+  // pass here — including the API gateway's when nothing was served — so a missing function surfaced
+  // as nine reds instead of one reason.
   try {
-    await fetch(FUNCTION_URL, { method: 'POST' });
+    const response = await fetch(FUNCTION_URL, { method: 'POST' });
+    const body = (await response.json().catch(() => null)) as { code?: unknown } | null;
+    if (response.status !== 401 || body?.code !== '28000') {
+      return skip(
+        `ai-gateway is not served at ${FUNCTION_URL} (answered ${String(response.status)}) — run pnpm functions:serve, started AFTER the .env was saved`,
+      );
+    }
   } catch {
-    return { ready: false, reason: `no function served at ${FUNCTION_URL} (pnpm functions:serve)` };
+    return skip(`nothing answers at ${FUNCTION_URL} — pnpm db:start, then pnpm functions:serve`);
   }
-  return { ready: true, reason: 'live' };
+  return access;
 })();
+const READY = gate.state === 'ready';
 
 type Feature = 'product_qa' | 'mr_chat' | 'lms_tutor' | 'ai_doctor' | 'ai_coach';
 
@@ -71,14 +87,14 @@ const SCHEMA: Record<Feature, string> = {
   ai_coach: 'SimCoachOutputSchema',
 };
 
-/** The same choice the gateway makes (`ai-gateway/index.ts`, `BEDROCK_PROFILE`). */
-const PROFILE: Record<Feature, string> = {
-  product_qa: INDIA_PROFILES.sonnet,
-  ai_doctor: INDIA_PROFILES.sonnet,
-  ai_coach: INDIA_PROFILES.sonnet,
-  mr_chat: INDIA_PROFILES.haiku,
-  lms_tutor: INDIA_PROFILES.haiku,
-};
+/**
+ * The same choice the gateway makes (`ai-gateway/index.ts`, the construction line): the feature's
+ * TIER from `GATEWAY_MODEL`, then the vendor's model for that tier.
+ */
+const expectedModel = (provider: LiveProvider | null, feature: Feature): string =>
+  provider === 'openai'
+    ? OPENAI_MODEL[GATEWAY_MODEL[feature]]
+    : INDIA_PROFILES[GATEWAY_MODEL[feature]];
 
 /** The draft's own text and model config — the first ```text and ```json blocks of its file. */
 const draft = (feature: Feature): { text: string; modelConfig: string } => {
@@ -165,13 +181,23 @@ const latestRow = (feature: Feature): Promise<AuditRow> =>
   ]);
 
 const expectAnsweredByTheModel = (row: AuditRow, feature: Feature): void => {
+  if (row.model_provider === 'stub') {
+    // Not a model defect: the function was started before AI_PROVIDER was in the .env.
+    throw new Error(
+      `${feature} was answered by the STUB, not ${String(gate.provider)}: restart pnpm functions:serve after saving services/api/supabase/functions/.env`,
+    );
+  }
   expect(row, JSON.stringify(row)).toMatchObject({
     feature,
     status: 'completed',
-    model_provider: 'bedrock',
-    model_name: PROFILE[feature],
+    model_provider: gate.provider,
     prompt_version_id: promptId[feature],
   });
+  const configured = expectedModel(gate.provider, feature);
+  expect(
+    isConfiguredModel(row.model_name, configured),
+    `model_name ${String(row.model_name)} is not ${configured}`,
+  ).toBe(true);
   expect(row.input_tokens).toBeGreaterThan(0);
   expect(row.output_tokens).toBeGreaterThan(0);
 };
@@ -185,7 +211,7 @@ const expectRefusedBeforeTheModel = (row: AuditRow, feature: Feature): void => {
 };
 
 beforeAll(async () => {
-  if (!gate.ready) return;
+  if (!READY) return;
   releaseGlobalThresholds = await acquireGlobalThresholds();
   world = await seedFixtures();
   runId = randomUUID().slice(0, 8);
@@ -406,7 +432,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   try {
-    if (!gate.ready || runId === '') return;
+    if (!READY || runId === '') return;
     await withClient(async (db) => {
       await db.query(`delete from public.product_markets where product_id = $1`, [productId]);
     });
@@ -417,11 +443,13 @@ afterAll(async () => {
 });
 
 describe('W2-D A3 — all five features, live, through the gateway', () => {
-  it(`gate: ${gate.ready ? 'READY' : `SKIPPING — ${gate.reason}`}`, () => {
+  it(gateTitle(gate), () => {
     expect(gate.reason.length).toBeGreaterThan(0);
+    // `BE-W203`: the .env says live and the vendor refused — red, with the vendor's code in the title.
+    if (gate.state === 'refused') throw new Error(gate.reason);
   });
 
-  describe.skipIf(!gate.ready)('each feature answered by its India profile', () => {
+  describe.skipIf(!READY)('each feature answered by its configured model', () => {
     it('product_qa: an ordinary question is answered by the model', async () => {
       const r = await gateway({ question: 'How should it be stored?', marketId, productId });
       expect(r.status, JSON.stringify(r.body)).toBe(200);

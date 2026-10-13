@@ -1,5 +1,12 @@
 # Day one — from "the credential is present" to "all five features verified" (W2-D A)
 
+> **14 October 2026 (`BE-W206`): the pilot's provider is OpenAI (`BE-C79`). For an OpenAI key, follow
+> `docs/KEY-DAY.md`, not the local path below** — that page's `pnpm key-day` does steps 1–3's setup and
+> H5–H9's approvals on a local TEST company. This page stays right for Bedrock, and its A2 predictions
+> apply to either vendor. Since `BE-W203`, `pnpm ai:live` follows `AI_PROVIDER`; its first lines are
+> listed in `KEY-DAY.md`, and the Bedrock lines in the table below now read `no AWS credential` and
+> `AI_PROVIDER is not set … the gateway would answer from the stub`.
+
 **This is the one page to follow.** It replaces the six steps of `KEY-DAY-CHECKLIST.md` (W1-V A6) and
 the five of the W1-Z B5 list in `docs/log/backend.md`, and adds the steps that arrived since (the named
 practice-writer key, `BE-W162`; the deploy; `BE-W146`'s gate). `KEY-DAY-CHECKLIST.md` stays as the record

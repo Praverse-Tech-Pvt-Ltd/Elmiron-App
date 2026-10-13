@@ -23,6 +23,7 @@
     "db:instrument": "node services/api/scripts/enable-lock-logging.mjs",
     "db:types": "supabase --workdir services/api gen types typescript --local",
     "functions:serve": "supabase --workdir services/api functions serve --no-verify-jwt",
+    "key-day": "node services/api/scripts/key-day.mjs",
     "ai:live": "pnpm --filter @fieldforce/api exec vitest run tests/bedrock-live.spec.ts tests/ai-live.spec.ts --reporter=verbose"
   },
   "devDependencies": {
