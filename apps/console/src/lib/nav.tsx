@@ -42,6 +42,8 @@ const GROUPS: readonly { readonly title: string; readonly items: readonly NavIte
       { label: 'Plan a rep’s day', href: '/planning' },
       // `FE-W72` / `BE-W180`. Reps' latest positions and today's list; the admin's company switch.
       { label: 'Live location', href: '/tracking' },
+      // `BE-W191`. Who started and ended their day, and reopening an ended one, with a reason.
+      { label: 'The team’s day', href: '/days' },
       // W2-G B (OP-6). The screen `assign_course` waited for: a rep's Learning shows only assigned courses.
       { label: 'Course assignments', href: '/learning' },
     ],

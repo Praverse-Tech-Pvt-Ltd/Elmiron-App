@@ -151,6 +151,35 @@ describe('what reaches the server', () => {
   });
 });
 
+describe('BE-W190 — the working day', () => {
+  it('pushes an END as work_day, keyed by its own id, which is also its entityId', async () => {
+    // Its own entity: the act belongs to no visit, so it must not group under one -- nor be held
+    // by the outbox behind a visit it has nothing to do with.
+    const { db, push } = clientWith(() => ({ data: response(), error: null }));
+    await push.sendWorkDay({
+      id: ITEM,
+      action: 'close',
+      workDate: '2026-09-10',
+      occurredAt: '2026-09-10T12:50:00.000+00:00',
+      note: 'Car broke down',
+    });
+    expect(db.rpc.mock.calls[0]?.[1]?.['p_items']).toEqual([
+      {
+        id: ITEM,
+        entity: 'work_day',
+        entityId: ITEM,
+        payload: {
+          id: ITEM,
+          action: 'close',
+          workDate: '2026-09-10',
+          occurredAt: '2026-09-10T12:50:00.000+00:00',
+          note: 'Car broke down',
+        },
+      },
+    ]);
+  });
+});
+
 describe('EXACTLY ONCE — B4', () => {
   it('treats a DUPLICATE as success, because the write landed and the answer did not', async () => {
     // **The replay that actually happens.** Not a synthetic double-send: the request

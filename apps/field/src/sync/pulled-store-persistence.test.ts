@@ -40,6 +40,7 @@ const stored = (visits: readonly unknown[]): unknown => ({
   beat_plan_entry: [],
   clinic_address: [],
   consent_text_version: [],
+  work_day: [],
 });
 
 describe('BE-W107 — a stored visit without its server day forces a re-sync', () => {
@@ -57,5 +58,19 @@ describe('BE-W107 — a stored visit without its server day forces a re-sync', (
   it('keeps a visit whose day the server said was null — a key present is not a key missing', () => {
     const loaded = deserialise(stored([{ ...visit, visitDay: null }]));
     expect(loaded?.visit.get(visit.id)?.visitDay).toBeNull();
+  });
+});
+
+describe('BE-W190 — a store written before working days joined the pull forces a re-sync', () => {
+  it('REFUSES a store with no work_day key, so the cursor is cleared and the days arrive', () => {
+    // A day that already existed has an `xmin` older than any cursor, so an incremental pull would
+    // never send it. Refusing the load is what makes it reach an existing handset.
+    const before = stored([visit]) as Record<string, unknown>;
+    delete before['work_day'];
+    expect(deserialise(before)).toBeNull();
+  });
+
+  it('POSITIVE CONTROL: the same store WITH the key loads', () => {
+    expect(deserialise(stored([visit]))?.work_day.size).toBe(0);
   });
 });

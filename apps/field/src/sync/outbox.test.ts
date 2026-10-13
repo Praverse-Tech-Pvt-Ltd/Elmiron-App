@@ -10,8 +10,10 @@ import {
   checkOutQueueItem,
   consentQueueItem,
   flushOutbox,
+  enqueueFirst,
   sampleQueueItem,
   sendOrQueue,
+  workDayQueueItem,
 } from './outbox';
 import type { QueuePersistence } from './outbox';
 import { SyncPushRefusal } from './push-client';
@@ -313,6 +315,66 @@ describe('the flush sends each queued row through its own endpoint', () => {
     expect(createCheckIn).not.toHaveBeenCalled();
     expect(result.sent).toBe(0);
     expect(store.current().items).toHaveLength(1);
+  });
+});
+
+describe('BE-W190 — the end of the day waits behind what came before it', () => {
+  const end = {
+    id: '88888888-8888-4888-8888-888888888801',
+    action: 'close' as const,
+    workDate: '2026-09-02',
+    occurredAt: '2026-09-02T18:05:00+05:30',
+    note: null,
+  };
+
+  it('replays an END through its own call, after the check-out queued before it', async () => {
+    // The order is the point: a check-out made with no signal must reach the server before the
+    // close, or the close is refused for a visit the server still thinks is checked in (45016).
+    const store = inMemory();
+    const calls: string[] = [];
+    await sendOrQueue(
+      () => Promise.reject(new Error('Network request failed')),
+      checkOutQueueItem(body),
+      store,
+    );
+    await enqueueFirst(workDayQueueItem(end), store);
+
+    const createCheckOut = vi.fn(() => {
+      calls.push('check_out');
+      return Promise.resolve({});
+    });
+    const sendWorkDay = vi.fn(() => {
+      calls.push('work_day');
+      return Promise.resolve({});
+    });
+    const createCheckIn = vi.fn(() => Promise.resolve({}));
+    const result = await flushOutbox(
+      { createCheckIn, createCheckOut, sendWorkDay } as unknown as OutboxWriteClient,
+      store,
+    );
+
+    expect(calls).toEqual(['check_out', 'work_day']);
+    expect(createCheckIn).not.toHaveBeenCalled();
+    // Byte-identical: the same request id, so a replay is the same end of the same day.
+    expect(sendWorkDay).toHaveBeenCalledWith(end);
+    expect(result.sent).toBe(2);
+  });
+
+  it('is its own entity, grouped under its own id — never held behind a visit', () => {
+    const item = workDayQueueItem(end);
+    expect(item.entity).toBe('work_day');
+    expect(item.entityId).toBe(end.id);
+  });
+
+  it('refuses to replay a row whose payload says it is something else', async () => {
+    // The `__queueEntity` discriminant, as for every other kind: a check-in body filed as a
+    // `work_day` row is unreadable, never sent as an end of day.
+    const store = inMemory();
+    await enqueueFirst({ ...checkInQueueItem(body), entity: 'work_day' as const }, store);
+    const sendWorkDay = vi.fn(() => Promise.resolve({}));
+    const result = await flushOutbox({ sendWorkDay } as unknown as OutboxWriteClient, store);
+    expect(sendWorkDay).not.toHaveBeenCalled();
+    expect(result.sent).toBe(0);
   });
 });
 

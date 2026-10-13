@@ -533,6 +533,9 @@ export const SyncPullEntitySchema = z.enum([
   // RECORD, which stays out of the pull for MR-12 Q4's reason: ~3,000 audit rows a day for
   // reinstall-only value.
   'consent_text_version',
+  // `BE-W190`. The rep's working day, so the phone holds the server's word on whether it is open
+  // or ended -- and the live-tracking rule's `dayOpen` can be answered offline.
+  'work_day',
 ]);
 export type SyncPullEntity = z.infer<typeof SyncPullEntitySchema>;
 

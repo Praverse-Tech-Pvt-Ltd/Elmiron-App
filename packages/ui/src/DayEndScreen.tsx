@@ -7,6 +7,7 @@ import { Button } from './Button';
 import { Card } from './Card';
 import { Spinner } from './Spinner';
 import { SyncQueueIndicator } from './SyncQueueIndicator';
+import { TextField } from './TextField';
 import type { SyncQueueState } from './SyncQueueIndicator';
 
 /**
@@ -44,6 +45,36 @@ import type { SyncQueueState } from './SyncQueueIndicator';
  *   use. A figure here would be decoration on the one screen whose entire claim is
  *   that its numbers are the honest ones.
  */
+/**
+ * `FE-W80` / `BE-W190` — the working day as the SERVER records it, and the one act on it.
+ *
+ * Every line is the caller's: this component decides nothing about whether the day is open,
+ * ending or ended. It draws the record and the button. Null hides the card -- no server day to
+ * read, so nothing honest to say about it.
+ */
+export interface DayEndWorkDay {
+  /** "Your day is open — started 09:12", "Ended at 18:05. The server has it." */
+  readonly title: string;
+  readonly detail: string | null;
+  /**
+   * `refused`: the server said no to the last attempt, and `detail` says why and what to do.
+   * Drawn as a critical banner, because a refusal the rep scrolls past is a day they think ended.
+   */
+  readonly tone: 'plain' | 'waiting' | 'done' | 'refused';
+  /** The optional note for the manager. Null once the day is ending or ended. */
+  readonly note: { readonly value: string; readonly onChange: (value: string) => void } | null;
+  /**
+   * "End my day". Null when there is nothing to press. `blockedBy` is the reason it cannot be
+   * pressed yet -- a disabled button always says why.
+   */
+  readonly action: {
+    readonly label: string;
+    readonly onPress: () => void;
+    readonly busy: boolean;
+    readonly blockedBy: string | null;
+  } | null;
+}
+
 export interface DayEndScreenProps {
   /** "Thursday" — the caller formats it; the device locale is the caller's problem. */
   readonly dayLabel: string;
@@ -95,6 +126,8 @@ export interface DayEndScreenProps {
   readonly onOpenTransparency: () => void;
   readonly loading?: boolean;
   readonly failure?: { readonly title: string; readonly detail: string } | null;
+  /** `FE-W80`. The working day and "End my day". Omitted or null: the card is not drawn. */
+  readonly workDay?: DayEndWorkDay | null;
 }
 
 const styles = StyleSheet.create({
@@ -121,6 +154,7 @@ export const DayEndScreen = ({
   onOpenTransparency,
   loading = false,
   failure = null,
+  workDay = null,
 }: DayEndScreenProps): ReactNode => {
   if (failure !== null) {
     return (
@@ -214,16 +248,17 @@ export const DayEndScreen = ({
         <Label muted>{rateNote}</Label>
       </Card>
 
+      {workDay === null ? null : <WorkDayCard workDay={workDay} />}
+
       <SyncQueueIndicator onPress={onOpenQueue} state={sync} />
 
       <View style={styles.spacer} />
 
       <View style={styles.foot}>
         {/*
-          The single action, and it is the transparency screen rather than anything
-          that ends or starts a day. There is no day to end: capture is per press,
-          so a "Start day tomorrow" button would switch on nothing and tell the MR
-          it had.
+          `FE-W80`. Ending the day now has a record behind it (`BE-W190`), and its button lives
+          in the working-day card above, beside what it does. This one is still not a "start
+          day tomorrow" button: capture is per press, so that would switch on nothing.
         */}
         {/* FE-D7 4. Secondary, as B7 draws it: the day is over, and nothing here is the next step. */}
         <Button
@@ -233,5 +268,49 @@ export const DayEndScreen = ({
         />
       </View>
     </>
+  );
+};
+
+/**
+ * The working day's card. Under the totals, never above the stop confirmation (C11): ending the day
+ * changes the record, not whether the phone is reading a position -- it never was between presses.
+ */
+const WorkDayCard = ({ workDay }: { readonly workDay: DayEndWorkDay }): ReactNode => {
+  const { action, note } = workDay;
+  return (
+    <Card>
+      <Label muted>Your working day</Label>
+      {workDay.tone === 'refused' ? (
+        <Banner
+          tone="critical"
+          title={workDay.title}
+          {...(workDay.detail === null ? {} : { detail: workDay.detail })}
+        />
+      ) : (
+        <View style={styles.stopLines}>
+          <Heading>{workDay.title}</Heading>
+          {workDay.detail === null ? null : <BodyText>{workDay.detail}</BodyText>}
+        </View>
+      )}
+      {note === null ? null : (
+        <TextField
+          help="Optional. Your manager sees it with your day."
+          label="Note for your manager"
+          multiline
+          onChangeText={note.onChange}
+          value={note.value}
+        />
+      )}
+      {action === null ? null : action.blockedBy === null ? (
+        <Button
+          label={action.label}
+          loading={action.busy}
+          loadingLabel="Ending your day"
+          onPress={action.onPress}
+        />
+      ) : (
+        <Button disabled label={action.label} note={action.blockedBy} onPress={action.onPress} />
+      )}
+    </Card>
   );
 };

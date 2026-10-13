@@ -272,6 +272,10 @@ describe.skipIf(!reachable)('D2 — a restrictive tenant boundary cannot be wide
         'visit_audio_quarantine_clearances',
         'visits',
         'voice_notes',
+        // `BE-W190` (`20261013000310`): a rep's working day and a reopening of it each carry the
+        // organisation the rep belongs to.
+        'work_day_reopenings',
+        'work_days',
         'write_rejections',
       ]);
     });

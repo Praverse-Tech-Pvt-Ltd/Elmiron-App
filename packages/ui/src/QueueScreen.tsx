@@ -257,6 +257,8 @@ const ENTITY_WORDS: Readonly<Record<string, string>> = {
   voice_note: 'Voice note',
   recording: 'Visit recording',
   adverse_event: 'Side-effect flag',
+  // `BE-W190`. "Start my day" or "End my day", waiting to go.
+  work_day: 'Your working day',
 };
 
 export const entityWords = (entity: string): string =>

@@ -130,3 +130,90 @@ describe('the way out', () => {
     expect(screen.queryByText('Nothing is being recorded.')).toBeNull();
   });
 });
+
+describe('FE-W80 — the working day and "End my day"', () => {
+  const open = {
+    title: 'Your day is open — started 08:55',
+    detail: 'When you end it, the server keeps your day as it stands.',
+    tone: 'plain' as const,
+    note: { value: '', onChange: noop },
+    action: { label: 'End my day', onPress: noop, busy: false, blockedBy: null },
+  };
+
+  it('draws no card when there is no working day to speak of', async () => {
+    await render(<DayEndScreen {...props} />);
+    expect(screen.queryByText('Your working day')).toBeNull();
+    expect(screen.queryByText('End my day')).toBeNull();
+  });
+
+  it('draws the server’s word on the day, the note, and the button that ends it', async () => {
+    const onPress = jest.fn();
+    await render(
+      <DayEndScreen {...props} workDay={{ ...open, action: { ...open.action, onPress } }} />,
+    );
+    expect(screen.getByText('Your day is open — started 08:55')).toBeTruthy();
+    expect(screen.getByLabelText('Note for your manager')).toBeTruthy();
+    await fireEvent.press(screen.getByText('End my day'));
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('a button that cannot be pressed says why, and does nothing', async () => {
+    const onPress = jest.fn();
+    await render(
+      <DayEndScreen
+        {...props}
+        workDay={{
+          ...open,
+          action: { ...open.action, onPress, blockedBy: 'A visit is still checked in.' },
+        }}
+      />,
+    );
+    expect(screen.getByText('A visit is still checked in.')).toBeTruthy();
+    await fireEvent.press(screen.getByText('End my day'));
+    expect(onPress).not.toHaveBeenCalled();
+  });
+
+  it('keeps the stop confirmation FIRST: the day card comes after it (C11)', async () => {
+    await render(<DayEndScreen {...props} workDay={open} />);
+    // The rendered tree, serialised in document order: the confirmation's text comes first.
+    const order = JSON.stringify(screen.toJSON());
+    const stop = order.indexOf('Nothing is being recorded.');
+    expect(stop).toBeGreaterThan(-1);
+    expect(stop).toBeLessThan(order.indexOf('Your day is open — started 08:55'));
+  });
+
+  it('an ended day offers no button and no note', async () => {
+    await render(
+      <DayEndScreen
+        {...props}
+        workDay={{
+          title: 'Day ended at 18:22',
+          detail: 'The server has your day.',
+          tone: 'done',
+          note: null,
+          action: null,
+        }}
+      />,
+    );
+    expect(screen.getByText('Day ended at 18:22')).toBeTruthy();
+    expect(screen.queryByText('End my day')).toBeNull();
+    expect(screen.queryByLabelText('Note for your manager')).toBeNull();
+  });
+
+  it('a refusal is drawn as an alert, with what to do', async () => {
+    await render(
+      <DayEndScreen
+        {...props}
+        workDay={{
+          ...open,
+          title: 'Your day was not ended',
+          detail: 'A visit is still checked in. Check out of it, then end your day again.',
+          tone: 'refused',
+        }}
+      />,
+    );
+    expect(screen.getByText('Your day was not ended')).toBeTruthy();
+    expect(screen.getByText(/Check out of it, then end your day again/u)).toBeTruthy();
+    expect(screen.getByText('End my day')).toBeTruthy();
+  });
+});
