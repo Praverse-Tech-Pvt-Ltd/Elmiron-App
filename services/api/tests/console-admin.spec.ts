@@ -1032,3 +1032,46 @@ describe.skipIf(!reachable)('BE-W189 — the retention worker, as an admin sees 
     });
   });
 });
+
+describe.skipIf(!reachable)(
+  'BE-W202 — admins change people and territories only through the RPCs',
+  () => {
+    it('a direct write is refused 42501 on all three tables; reading is unchanged', async () => {
+      await asTx(world.users.admin, async (client) => {
+        for (const sql of [
+          `update public.user_profiles set full_name = 'Direct' where id = '${world.users.puneMr.id}'`,
+          `update public.territories set name = 'Direct' where id = '${world.territories.pune}'`,
+          `delete from public.territory_shift_windows where territory_id = '${world.territories.pune}'`,
+          `insert into public.territories (name, code, organisation_id)
+           values ('Direct', 'DIRECT-${randomUUID().slice(0, 6)}', '${world.organisationId}')`,
+        ]) {
+          expect((await failure(client, sql)).code, sql).toBe('42501');
+        }
+        // What an admin READS is exactly what `*_admin_all` allowed: the company's people and tree.
+        const people = await client.query<{ id: string }>(
+          'select id from public.user_profiles where id = $1',
+          [world.users.puneMr.id],
+        );
+        expect(people.rowCount).toBe(1);
+        const tree = await client.query<{ id: string }>(
+          'select id from public.territories where id = $1',
+          [world.territories.pune],
+        );
+        expect(tree.rowCount).toBe(1);
+      });
+    });
+
+    it('the audited RPC still renames the same territory', async () => {
+      await asTx(world.users.admin, async (client) => {
+        expect(
+          (
+            await failure(client, 'select public.admin_rename_territory($1, $2)', [
+              world.territories.pune,
+              'Pune (renamed)',
+            ])
+          ).code,
+        ).toBeNull();
+      });
+    });
+  },
+);
