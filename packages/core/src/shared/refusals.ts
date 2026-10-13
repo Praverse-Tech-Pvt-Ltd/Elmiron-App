@@ -38,6 +38,10 @@ import { z } from 'zod';
  * | `45010`  |      1 | audio older than the maximum sync lag (MR-54 `BE-W96`) |
  * | `45011`  |      3 | AI feature switched off or not configured (AI-D0) |
  * | `45012`  |      1 | AI daily allowance used up (AI-D0) |
+ * | `45013`  |      1 | check-in or check-out in the future (`BE-W173`) |
+ * | `45014`  |      1 | check-out before check-in (`BE-W173`) |
+ * | `45015`  |      2 | the working day is ended (`BE-W190`) |
+ * | `45016`  |      1 | a visit is still checked in, so the day cannot end (`BE-W190`) |
  *
  * **`45004` was minted in FIX-09 and never reached this table.** A server-side code with
  * no client-side mapping renders as `unrecognised`, which is honest and useless: the MR is
@@ -86,6 +90,13 @@ export const RefusalCodeSchema = z.enum([
   'field_event_in_future',
   /** `BE-W173`, 45014. A check-out timed before the visit's first check-in. */
   'check_out_before_check_in',
+  /**
+   * `BE-W190`, 45015. The rep's working day for that date has been ENDED, so a check-in on it (or
+   * starting it again) is refused. Not the rep's to fix: their manager or an admin reopens the day.
+   */
+  'work_day_closed',
+  /** `BE-W190`, 45016. A visit on the day is still checked in; check out of it, then end the day. */
+  'work_day_has_open_visit',
   'append_only',
   'invalid_for_this_record',
   'references_missing_record',
@@ -163,6 +174,10 @@ export const BY_SQLSTATE: Readonly<Record<string, { code: RefusalCode; actionabl
   // `BE-W173`. Both actionable, and both by the phone's clock -- the visit itself is fine.
   '45013': { code: 'field_event_in_future', actionable: true },
   '45014': { code: 'check_out_before_check_in', actionable: true },
+  // `BE-W190`. Not actionable by the rep: only their manager or an admin reopens an ended day.
+  '45015': { code: 'work_day_closed', actionable: false },
+  // Actionable: check out of the visit, then end the day again.
+  '45016': { code: 'work_day_has_open_visit', actionable: true },
   '23001': { code: 'append_only', actionable: false },
   '23514': { code: 'invalid_for_this_record', actionable: false },
   '23503': { code: 'references_missing_record', actionable: false },

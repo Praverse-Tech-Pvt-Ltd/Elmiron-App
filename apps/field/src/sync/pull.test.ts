@@ -703,3 +703,51 @@ describe('MR-26 C1: every error type that can cross the read boundary', () => {
     ).toEqual(['pulled', 'refused']);
   });
 });
+
+describe('BE-W190 — the working day rides the pull', () => {
+  // The key set `sync-pull-contract.spec.ts` pins for a `work_days` row: `to_jsonb(w)`.
+  const REAL_WORK_DAY_ROW = {
+    id: '55555555-5555-4555-8555-555555555501',
+    organisation_id: '55555555-5555-4555-8555-5555555555aa',
+    mr_id: '55555555-5555-4555-8555-5555555555bb',
+    territory_id: '55555555-5555-4555-8555-5555555555cc',
+    work_date: '2026-10-13',
+    time_zone: 'Asia/Kolkata',
+    opened_at: '2026-10-13T03:25:00.123456+00:00',
+    opened_via: 'check_in',
+    client_opened_at: '2026-10-13T03:24:50+00:00',
+    open_request_id: null,
+    closed_at: '2026-10-13T12:52:00.654321+00:00',
+    close_request_id: '66666666-6666-4666-8666-666666666601',
+    client_closed_at: '2026-10-13T12:51:58+00:00',
+    closing_note: null,
+    visits_total: 5,
+    visits_completed: 3,
+    visits_not_met: 1,
+    visits_missed: 1,
+    visits_unplanned: 0,
+    check_in_count: 4,
+    distance_metres: 48200.5,
+    samples_quantity: 6,
+    inputs_quantity: 0,
+    reopen_count: 0,
+    created_at: '2026-10-13T03:25:00.123456+00:00',
+    updated_at: '2026-10-13T12:52:00.654321+00:00',
+  };
+
+  it('maps the row into the store under work_day, and nowhere else', () => {
+    const changes = mapChanges(
+      response({
+        changes: [upsert('work_day', REAL_WORK_DAY_ROW)],
+      } as unknown as Partial<SyncPullResponse>),
+    );
+    expect(changes[0]).toMatchObject({
+      kind: 'upsert',
+      entity: 'work_day',
+      record: { workDate: '2026-10-13', closedAt: REAL_WORK_DAY_ROW.closed_at },
+    });
+    const store = applyChanges(emptyStore(), changes);
+    expect(store.work_day.size).toBe(1);
+    expect(store.visit.size + store.beat_plan.size, 'a work day landed elsewhere').toBe(0);
+  });
+});

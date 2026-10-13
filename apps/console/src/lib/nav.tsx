@@ -40,6 +40,8 @@ const GROUPS: readonly { readonly title: string; readonly items: readonly NavIte
       // `BE-W171` / `BE-C78`. The manager plans a rep's day; the screen refuses, in words, the role
       // it is not for.
       { label: 'Plan a rep’s day', href: '/planning' },
+      // `BE-W191`. Who started and ended their day, and reopening an ended one, with a reason.
+      { label: 'The team’s day', href: '/days' },
       // W2-G B (OP-6). The screen `assign_course` waited for: a rep's Learning shows only assigned courses.
       { label: 'Course assignments', href: '/learning' },
     ],

@@ -6,6 +6,7 @@ import {
   fromPulledConsentTextVersionRow,
   fromDoctorRow,
   fromVisitRow,
+  fromWorkDayRow,
   refusalForSqlState,
 } from '@fieldforce/core';
 import type {
@@ -18,6 +19,7 @@ import type {
   SyncCompleteness,
   SyncPullResponse,
   Visit,
+  WorkDay,
 } from '@fieldforce/core';
 import { resolveClient } from '../capture/client';
 import type { RpcCaller } from '../capture/client';
@@ -80,6 +82,11 @@ export type PullChange =
       readonly entity: 'consent_text_version';
       readonly record: PulledConsentTextVersion;
     }
+  /**
+   * `BE-W190`. The rep's working day: opened, ended, or reopened by their manager. Its own
+   * entity, the server's record, so whether the day is open is never the phone's guess.
+   */
+  | { readonly kind: 'upsert'; readonly entity: 'work_day'; readonly record: WorkDay }
   | {
       readonly kind: 'remove';
       readonly entity:
@@ -88,7 +95,8 @@ export type PullChange =
         | 'beat_plan'
         | 'beat_plan_entry'
         | 'clinic_address'
-        | 'consent_text_version';
+        | 'consent_text_version'
+        | 'work_day';
       readonly id: string;
       /**
        * Why it is going. `deleted` means the record is gone; `out_of_scope` means it still
@@ -185,6 +193,8 @@ const mapChange = (change: SyncPullResponse['changes'][number]): PullChange => {
         entity: 'consent_text_version',
         record: fromPulledConsentTextVersionRow(change.payload),
       };
+    case 'work_day':
+      return { kind: 'upsert', entity: 'work_day', record: fromWorkDayRow(change.payload) };
     default: {
       // **The same guard `applyChanges` got in MR-11, on the dispatcher directly above
       // it.** MR-11 fixed the bare `else` forty lines down and left this switch alone,
@@ -328,6 +338,11 @@ export type LocalStore = {
    * as an upsert carrying its new end date rather than silently staying offerable.
    */
   readonly consent_text_version: ReadonlyMap<string, PulledConsentTextVersion>;
+  /**
+   * `BE-W190`. The rep's working days, keyed by the row's id. Read through
+   * `today/work-day.ts` (`workDayStatus`, `isDayOpen`), never directly by a screen.
+   */
+  readonly work_day: ReadonlyMap<string, WorkDay>;
 };
 
 export const emptyStore = (): LocalStore => ({
@@ -337,6 +352,7 @@ export const emptyStore = (): LocalStore => ({
   beat_plan_entry: new Map(),
   clinic_address: new Map(),
   consent_text_version: new Map(),
+  work_day: new Map(),
 });
 
 export const applyChanges = (store: LocalStore, changes: readonly PullChange[]): LocalStore => {
@@ -347,6 +363,7 @@ export const applyChanges = (store: LocalStore, changes: readonly PullChange[]):
     beat_plan_entry: new Map(store.beat_plan_entry),
     clinic_address: new Map(store.clinic_address),
     consent_text_version: new Map(store.consent_text_version),
+    work_day: new Map(store.work_day),
   };
   for (const change of changes) {
     if (change.kind === 'remove') {
@@ -380,6 +397,9 @@ export const applyChanges = (store: LocalStore, changes: readonly PullChange[]):
         break;
       case 'consent_text_version':
         next.consent_text_version.set(change.record.id, change.record);
+        break;
+      case 'work_day':
+        next.work_day.set(change.record.id, change.record);
         break;
       default: {
         const unhandled: never = change;

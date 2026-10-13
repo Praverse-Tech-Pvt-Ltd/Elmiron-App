@@ -77,6 +77,11 @@ const REMEDIES: Partial<Readonly<Record<RefusalCode, string>>> = {
   // `BE-W173`, 45014. The times are out of order; the remedy is the same clock.
   check_out_before_check_in:
     "The check-out is timed before the check-in, so the phone's clock changed during the visit. Turn on automatic date and time in Settings, then send again.",
+  // `BE-W190`, 45015. The day was ended; reopening it is the manager's, never the rep's.
+  work_day_closed:
+    'You ended your working day for this date, so nothing more can be checked in on it. If this visit really happened that day, ask your manager to reopen the day — then send again.',
+  // `BE-W190`, 45016. The remedy is a step the rep can take now.
+  work_day_has_open_visit: 'A visit is still checked in. Check out of it, then end your day again.',
   // 45004. Not actionable by the MR: the remedy is to stop and speak to a manager, which is
   // somebody else's decision rather than a next step the app can offer.
   ucpmp_sample_cap_exceeded:

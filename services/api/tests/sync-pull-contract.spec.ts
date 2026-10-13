@@ -155,6 +155,9 @@ describe.skipIf(!reachable)('C4 — what the payload actually contains', () => {
       'consent_text_version',
       'doctor',
       'visit',
+      // `BE-W190`. The rep's working day: the fixture's committed check-in opened one, so it is
+      // here -- and this list is, again, where the migration landing was first said.
+      'work_day',
     ]);
     for (const [entity, payload] of Object.entries(payloads)) {
       const camel = Object.keys(payload).filter((k) => /[A-Z]/.test(k));
@@ -269,6 +272,35 @@ describe.skipIf(!reachable)('C4 — what the payload actually contains', () => {
       'territory_id',
       'updated_at',
       'version',
+    ]);
+    // `BE-W190`. `fromWorkDayRow` and `apps/field/src/sync/pull.test.ts` hold this key set.
+    expect(Object.keys(payloads['work_day'] ?? {}).sort()).toEqual([
+      'check_in_count',
+      'client_closed_at',
+      'client_opened_at',
+      'close_request_id',
+      'closed_at',
+      'closing_note',
+      'created_at',
+      'distance_metres',
+      'id',
+      'inputs_quantity',
+      'mr_id',
+      'open_request_id',
+      'opened_at',
+      'opened_via',
+      'organisation_id',
+      'reopen_count',
+      'samples_quantity',
+      'territory_id',
+      'time_zone',
+      'updated_at',
+      'visits_completed',
+      'visits_missed',
+      'visits_not_met',
+      'visits_total',
+      'visits_unplanned',
+      'work_date',
     ]);
   });
 

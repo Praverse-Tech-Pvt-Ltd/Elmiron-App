@@ -21,6 +21,9 @@ export const SyncEntitySchema = z.enum([
   // W2-C B / `BE-W159`. A possible adverse event the rep FLAGS (`BE-C36`), queued like every
   // other write so a flag typed with no signal is not lost.
   'adverse_event',
+  // `BE-W190`. The rep opens or ENDS their working day (`20261013000310_work_days`), queued like
+  // every other write: the day often ends where the signal does.
+  'work_day',
 ]);
 export type SyncEntity = z.infer<typeof SyncEntitySchema>;
 

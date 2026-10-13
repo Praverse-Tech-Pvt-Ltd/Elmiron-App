@@ -6,6 +6,7 @@ import {
   PulledConsentTextVersionSchema,
   DoctorRecordSchema,
   VisitSchema,
+  WorkDaySchema,
 } from '@fieldforce/core';
 import { emptyStore } from './pull';
 import type { LocalStore } from './pull';
@@ -55,6 +56,7 @@ interface StoredShape {
   readonly beat_plan_entry: readonly unknown[];
   readonly clinic_address: readonly unknown[];
   readonly consent_text_version: readonly unknown[];
+  readonly work_day: readonly unknown[];
 }
 
 export interface PulledStorePersistence {
@@ -152,6 +154,7 @@ const serialise = (store: LocalStore): StoredShape => ({
   beat_plan_entry: [...store.beat_plan_entry.values()],
   clinic_address: [...store.clinic_address.values()],
   consent_text_version: [...store.consent_text_version.values()],
+  work_day: [...store.work_day.values()],
 });
 
 /**
@@ -181,7 +184,11 @@ export const deserialise = (raw: unknown): LocalStore | null => {
     // MR-26 B1. A store written before the notices joined the pull has no such key, so it
     // fails here and `loadPulledStore` clears the cursor with it -- P1's rule, that records
     // and the cursor move together. The next pull is a full re-sync that fetches them.
-    !Array.isArray(shape.consent_text_version)
+    !Array.isArray(shape.consent_text_version) ||
+    // `BE-W190`. The same mechanism once more: a store written before working days joined the
+    // pull has no such key, fails here, and the cursor goes with it -- so the next pull is a full
+    // re-sync that brings the days that already existed (their `xmin` predates any cursor).
+    !Array.isArray(shape.work_day)
   ) {
     return null;
   }
@@ -193,6 +200,7 @@ export const deserialise = (raw: unknown): LocalStore | null => {
   const beatPlanEntry = new Map(next.beat_plan_entry);
   const clinicAddress = new Map(next.clinic_address);
   const consentTextVersion = new Map(next.consent_text_version);
+  const workDay = new Map(next.work_day);
 
   for (const row of shape.visit) {
     // MR-47 / `BE-W107`. A visit stored before the pull carried `visit_day` has no `visitDay`
@@ -230,6 +238,11 @@ export const deserialise = (raw: unknown): LocalStore | null => {
     if (!parsed.success) return null;
     consentTextVersion.set(parsed.data.id, parsed.data);
   }
+  for (const row of shape.work_day) {
+    const parsed = WorkDaySchema.safeParse(row);
+    if (!parsed.success) return null;
+    workDay.set(parsed.data.id, parsed.data);
+  }
 
   return {
     visit,
@@ -238,6 +251,7 @@ export const deserialise = (raw: unknown): LocalStore | null => {
     beat_plan_entry: beatPlanEntry,
     clinic_address: clinicAddress,
     consent_text_version: consentTextVersion,
+    work_day: workDay,
   };
 };
 

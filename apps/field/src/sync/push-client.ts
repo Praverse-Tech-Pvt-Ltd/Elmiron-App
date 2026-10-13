@@ -11,6 +11,7 @@ import type {
   CreateVisitRequest,
   SyncEntity,
   SyncRejectionCode,
+  WorkDayRequest,
 } from '@fieldforce/core';
 import { resolveClient } from '../capture/client';
 import type { RpcCaller } from '../capture/client';
@@ -163,6 +164,8 @@ export interface OutboxWriteClient {
   createUnplannedVisit: (body: CreateVisitRequest) => Promise<PushAccepted>;
   /** W2-C B / `BE-W159`. The rep FLAGS a possible adverse event (`BE-C36`). Nothing is assessed. */
   createAdverseEventFlag: (body: CreateAdverseEventFlagRequest) => Promise<PushAccepted>;
+  /** `BE-W190`. The rep opens or ENDS their working day. The server stamps it and snapshots it. */
+  sendWorkDay: (body: WorkDayRequest) => Promise<PushAccepted>;
   /** MR-51 D1 / `FE-W29`. Upload, then finalise through `sync_push`, then forget the phone's copy. */
   uploadVoiceNote: (body: VoiceNoteUpload) => Promise<PushAccepted>;
   /**
@@ -392,6 +395,15 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
         unplannedReason: body.unplannedReason.trim(),
       }),
     createAdverseEventFlag: (body) => push('adverse_event', body),
+    // The request is its own entity (no visit): `entityId` is its id, as the queue row's is.
+    sendWorkDay: (body) =>
+      pushItem('work_day', body.id, body.id, {
+        id: body.id,
+        action: body.action,
+        workDate: body.workDate,
+        occurredAt: body.occurredAt,
+        note: body.note ?? null,
+      }),
     uploadVoiceNote: (body) => uploadAudio('voice_note', body),
     uploadRecording: (body) => uploadAudio('recording', body, { bitrateKbps: body.bitrateKbps }),
   };

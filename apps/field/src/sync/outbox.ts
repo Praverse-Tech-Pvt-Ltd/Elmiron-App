@@ -6,6 +6,7 @@ import {
   CreateConsentRecordRequestSchema,
   CreateSampleAndInputRequestSchema,
   SyncQueueItemSchema,
+  WorkDayRequestSchema,
   knownSyncWarnings,
 } from '@fieldforce/core';
 import type {
@@ -20,6 +21,7 @@ import type {
   CreateConsentRecordRequest,
   CreateSampleAndInputRequest,
   SyncQueueItem,
+  WorkDayRequest,
 } from '@fieldforce/core';
 import { asyncStorageQueueStore, loadQueueState, queueOwner } from './async-storage-store';
 import type { QueueLoad } from './async-storage-store';
@@ -354,6 +356,30 @@ export const adverseEventQueueItem = (body: CreateAdverseEventFlagRequest): Sync
     operation: 'create',
     entityId: body.visitId,
     payload: { ...body, __queueEntity: 'adverse_event' },
+    status: 'queued',
+    attemptCount: 1,
+    lastError: null,
+    clientCreatedAt: nowIso(),
+    syncedAt: null,
+  });
+
+/**
+ * `BE-W190` — the rep opening or ENDING their working day, as a queue row.
+ *
+ * `entityId` is the request's own id, as an unplanned visit's is: the act belongs to no visit, so it
+ * must not group under one -- and it must never collide with a visit id, or `flushOutbox` would
+ * hold it behind a visit it has nothing to do with. Queued BEHIND everything already on the phone
+ * (`enqueueFirst`, then a flush, which sends oldest first): a check-out still waiting to go must
+ * reach the server before the close, or the close is refused for a visit the server still thinks
+ * is checked in (45016).
+ */
+export const workDayQueueItem = (body: WorkDayRequest): SyncQueueItem =>
+  SyncQueueItemSchema.parse({
+    id: body.id,
+    entity: 'work_day',
+    operation: 'create',
+    entityId: body.id,
+    payload: { ...body, __queueEntity: 'work_day' },
     status: 'queued',
     attemptCount: 1,
     lastError: null,
@@ -805,6 +831,10 @@ const sendFor = (client: OutboxWriteClient, item: SyncQueueItem): SendPlan => {
     // Until then this was `blocked('not_convertible')`: visits were written straight to the table.
     case 'visit':
       return plan(CreateVisitRequestFrom(item), (body) => client.createUnplannedVisit(body));
+
+    // `BE-W190`. A day opened or ended replays as exactly that, with its own request id.
+    case 'work_day':
+      return plan(WorkDayRequestFrom(item), (body) => client.sendWorkDay(body));
   }
 
   // Unreachable while every member is handled above. If a member is added to
@@ -936,6 +966,12 @@ const CreateAdverseEventFlagRequestFrom = (
 ): CreateAdverseEventFlagRequest | null => {
   if (!payloadIs(item, 'adverse_event')) return null;
   const parsed = CreateAdverseEventFlagRequestSchema.safeParse(item.payload);
+  return parsed.success ? parsed.data : null;
+};
+
+const WorkDayRequestFrom = (item: SyncQueueItem): WorkDayRequest | null => {
+  if (!payloadIs(item, 'work_day')) return null;
+  const parsed = WorkDayRequestSchema.safeParse(item.payload);
   return parsed.success ? parsed.data : null;
 };
 

@@ -53,7 +53,10 @@ export interface RemovalNotice {
     // MR-44 / `BE-W89`. A stop can leave a plan on its own, without the plan going.
     | 'beat_plan_entry'
     | 'clinic_address'
-    | 'consent_text_version';
+    | 'consent_text_version'
+    // `BE-W190`. A working day is never deleted and never changes owner, so this cannot arrive;
+    // the union follows the wire's so the compiler, not a comment, says so if that changes.
+    | 'work_day';
   readonly id: string;
   readonly reason: 'deleted' | 'out_of_scope';
   /**
