@@ -53,8 +53,27 @@ export default function SignIn(): ReactNode {
 
   const blocked = busy || email === '' || password === '';
 
+  /*
+    Phase 1 §05 pairs every disabled control with the reason it is disabled —
+    without one the button greys out and says nothing, which reads as a broken
+    app rather than as an unfinished form. `PrimaryButton` renders the note only
+    while disabled, so it appears and disappears with the blocked state.
+
+    FE-W102. Pinned in the footer, as every other screen's one primary is (§04): it sits in the
+    thumb's reach and rides up with the keyboard, instead of under the fields at whatever height
+    the form happens to end. The fields stay in the scrolling content above it.
+  */
+  const action = (
+    <PrimaryButton
+      label={busy ? 'Signing in…' : 'Sign in'}
+      onPress={submit}
+      disabled={blocked}
+      note={busy ? 'Checking your details.' : 'Enter your email and password.'}
+    />
+  );
+
   return (
-    <Screen scrollable>
+    <Screen scrollable footer={action}>
       {/*
         §03's login splash, and the only place Cormorant appears in the product.
         Above the heading rather than instead of it: the brand line is not a screen
@@ -84,18 +103,6 @@ export default function SignIn(): ReactNode {
         secure
         autoCapitalize="none"
         editable={!busy}
-      />
-      {/*
-        Phase 1 §05 pairs every disabled control with the reason it is disabled —
-        without one the button greys out and says nothing, which reads as a broken
-        app rather than as an unfinished form. `PrimaryButton` renders the note only
-        while disabled, so it appears and disappears with the blocked state.
-      */}
-      <PrimaryButton
-        label={busy ? 'Signing in…' : 'Sign in'}
-        onPress={submit}
-        disabled={blocked}
-        note={busy ? 'Checking your details.' : 'Enter your email and password.'}
       />
     </Screen>
   );

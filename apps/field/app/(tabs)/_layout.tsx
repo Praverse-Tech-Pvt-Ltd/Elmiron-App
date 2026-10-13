@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { Tabs } from 'expo-router';
 import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
-import { TabIcon } from '@fieldforce/ui';
+import { elevationStyle, TabBarIcon } from '@fieldforce/ui';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { coachingEnabled } from '../../src/features';
 
 /**
@@ -30,20 +31,34 @@ import { coachingEnabled } from '../../src/features';
  * `packages/ui/src/TabIcon.tsx`.
  */
 export default function TabsLayout(): ReactNode {
+  const insets = useSafeAreaInsets();
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: tokens.color.accent,
         tabBarInactiveTintColor: tokens.color.textSecondary,
-        tabBarStyle: { backgroundColor: tokens.color.surface },
+        // FE-W101. The bar as B1 draws it: white, a little taller than the navigator's iOS-sized
+        // default so the label has room under the icon well, a soft upward shadow instead of the
+        // navigator's grey rule and material `elevation: 8`, and the gesture inset added back
+        // because a custom height replaces the one the navigator would have computed.
+        tabBarStyle: {
+          backgroundColor: tokens.color.surface,
+          height: tokens.target.tabBar + insets.bottom,
+          paddingTop: tokens.space.xs + 2,
+          borderTopWidth: 1,
+          borderTopColor: tokens.color.hairline,
+          ...elevationStyle('dock'),
+        },
         tabBarLabelStyle: {
           fontSize: tokens.typography.label.size,
+          lineHeight: tokens.typography.label.lineHeight,
           fontWeight: tokens.typography.label.weight,
           // UX polish: the family carries the weight on Android (`fontFamilyFor`); without it the
           // tab labels were the one text in the app in the system font.
           fontFamily: fontFamilyFor(tokens.typography.label.weight),
         },
+        tabBarIconStyle: { marginBottom: 2 },
         // Explicitly set, exactly as it was when it returned null: leaving it
         // unset renders the platform's placeholder glyph, which arrives as tofu on
         // the OEM font stacks this product targets — the same failure the queue
@@ -56,21 +71,21 @@ export default function TabsLayout(): ReactNode {
         name="home"
         options={{
           title: 'Today',
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="today" />,
+          tabBarIcon: ({ focused }) => <TabBarIcon focused={focused} name="today" />,
         }}
       />
       <Tabs.Screen
         name="doctors"
         options={{
           title: 'Doctors',
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="doctors" />,
+          tabBarIcon: ({ focused }) => <TabBarIcon focused={focused} name="doctors" />,
         }}
       />
       <Tabs.Screen
         name="coaching"
         options={{
           title: 'Coaching',
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="coaching" />,
+          tabBarIcon: ({ focused }) => <TabBarIcon focused={focused} name="coaching" />,
           // FE-D4 1. Out of the bar unless `coachingEnabled` (off by default): its content is mock
           // AI output nothing real produces. `href: null` is expo-router's way to hide a tab.
           ...(coachingEnabled ? {} : { href: null }),
@@ -80,7 +95,7 @@ export default function TabsLayout(): ReactNode {
         name="me"
         options={{
           title: 'Me',
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="me" />,
+          tabBarIcon: ({ focused }) => <TabBarIcon focused={focused} name="me" />,
         }}
       />
     </Tabs>

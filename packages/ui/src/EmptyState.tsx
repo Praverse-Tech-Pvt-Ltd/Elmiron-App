@@ -20,8 +20,12 @@ import { elevationStyle } from './depth';
  *
  * Left-aligned, like every other block in the app, so a two-line message reads as a sentence and
  * not as a centred poster.
+ *
+ * The marks are drawn, not typed — a ring, a dashed ring, a tick made of two borders — so an empty
+ * state adds no character to the screen's text (a screen reader, or a test reading the screen's
+ * lines, sees only the words) and cannot render as tofu on an OEM font stack.
  */
-export type EmptyStateKind = Extract<StatusKind, 'neutral' | 'success' | 'info' | 'offline'>;
+export type EmptyStateKind = Extract<StatusKind, 'neutral' | 'success' | 'offline'>;
 
 export interface EmptyStateProps {
   readonly title: string;
@@ -49,7 +53,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   words: { flex: 1, gap: tokens.space.xs, paddingTop: tokens.space.xs },
+  // A tick as two borders of a rotated box — the classic drawn check, B1's 2.4 stroke.
+  tick: {
+    width: 7,
+    height: 12,
+    marginTop: -3,
+    borderRightWidth: 2.4,
+    borderBottomWidth: 2.4,
+    borderColor: tokens.color.success,
+    transform: [{ rotate: '45deg' }],
+  },
 });
+
+const Mark = ({ kind }: { readonly kind: EmptyStateKind }): ReactNode =>
+  kind === 'success' ? <View style={styles.tick} /> : <StatusGlyph kind={kind} large />;
 
 export const EmptyState = ({ title, detail, kind = 'neutral' }: EmptyStateProps): ReactNode => (
   <View style={styles.box}>
@@ -63,7 +80,7 @@ export const EmptyState = ({ title, detail, kind = 'neutral' }: EmptyStateProps)
         { backgroundColor: kind === 'neutral' ? tokens.color.wash : STATUS_FILL[kind] },
       ]}
     >
-      <StatusGlyph kind={kind} large />
+      <Mark kind={kind} />
     </View>
     <View style={styles.words}>
       <Heading>{title}</Heading>

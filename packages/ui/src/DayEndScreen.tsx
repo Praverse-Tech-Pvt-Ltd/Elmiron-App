@@ -9,6 +9,7 @@ import { Spinner } from './Spinner';
 import { SyncQueueIndicator } from './SyncQueueIndicator';
 import { TextField } from './TextField';
 import type { SyncQueueState } from './SyncQueueIndicator';
+import { FadeIn } from './FadeIn';
 
 /**
  * Phase 2 B7 — the day is over and nothing is running.
@@ -176,18 +177,21 @@ export const DayEndScreen = ({
         thing rendered and everything else follows it. This is also the screen's one
         hero card — §05 allows exactly one, and this is what it is for.
       */}
-      <Card tone="hero">
-        <View style={styles.stopLines}>
-          <Heading>Nothing is being recorded.</Heading>
-          <BodyText>{captureNote}</BodyText>
-        </View>
-        {firstCaptureLabel === null && lastCaptureLabel === null ? null : (
-          <View style={styles.stamps}>
-            {firstCaptureLabel === null ? null : <Label>{firstCaptureLabel}</Label>}
-            {lastCaptureLabel === null ? null : <Label>{lastCaptureLabel}</Label>}
+      {/* FE-W102. The day's summary settles in top to bottom, the confirmation first. */}
+      <FadeIn index={0}>
+        <Card tone="hero">
+          <View style={styles.stopLines}>
+            <Heading>Nothing is being recorded.</Heading>
+            <BodyText>{captureNote}</BodyText>
           </View>
-        )}
-      </Card>
+          {firstCaptureLabel === null && lastCaptureLabel === null ? null : (
+            <View style={styles.stamps}>
+              {firstCaptureLabel === null ? null : <Label>{firstCaptureLabel}</Label>}
+              {lastCaptureLabel === null ? null : <Label>{lastCaptureLabel}</Label>}
+            </View>
+          )}
+        </Card>
+      </FadeIn>
 
       {/*
         Under the confirmation, never over it, and non-blocking: a day already
@@ -201,52 +205,56 @@ export const DayEndScreen = ({
       */}
       <Label muted>Your day</Label>
 
-      <Card>
-        <Label muted>Visits</Label>
-        {planned === null || done === null || notMet === null ? (
-          // FE-D2 7. Unknown. While loading the spinner above already says so; once loading has
-          // finished and the counts are still absent, the day could not be fetched.
-          loading ? null : (
-            <BodyText>Not available — the day could not be fetched.</BodyText>
-          )
-        ) : (
-          <View style={styles.figureRow}>
-            <Figure>{`${String(done + notMet)} of ${String(planned)}`}</Figure>
+      <FadeIn index={1}>
+        <Card>
+          <Label muted>Visits</Label>
+          {planned === null || done === null || notMet === null ? (
+            // FE-D2 7. Unknown. While loading the spinner above already says so; once loading has
+            // finished and the counts are still absent, the day could not be fetched.
+            loading ? null : (
+              <BodyText>Not available — the day could not be fetched.</BodyText>
+            )
+          ) : (
+            <View style={styles.figureRow}>
+              <Figure>{`${String(done + notMet)} of ${String(planned)}`}</Figure>
+              <Label muted>
+                {planned === 0
+                  ? 'nothing was planned'
+                  : done + notMet === planned
+                    ? 'you went to all of them'
+                    : 'visits attended'}
+              </Label>
+            </View>
+          )}
+          {notMet === null || notMet === 0 ? null : (
             <Label muted>
-              {planned === 0
-                ? 'nothing was planned'
-                : done + notMet === planned
-                  ? 'you went to all of them'
-                  : 'visits attended'}
+              {notMet === 1
+                ? 'One doctor was not available. That is recorded against the visit, not against you.'
+                : `${String(notMet)} doctors were not available. That is recorded against those visits, not against you.`}
             </Label>
-          </View>
-        )}
-        {notMet === null || notMet === 0 ? null : (
-          <Label muted>
-            {notMet === 1
-              ? 'One doctor was not available. That is recorded against the visit, not against you.'
-              : `${String(notMet)} doctors were not available. That is recorded against those visits, not against you.`}
-          </Label>
-        )}
-      </Card>
+          )}
+        </Card>
+      </FadeIn>
 
-      <Card>
-        <Label muted>On your claim</Label>
-        {distanceLabel === null ? (
-          // FE-D3 B4. Null is UNKNOWN: still loading (the spinner above says so) or the mileage
-          // fetch failed. A real zero arrives as a figure. This used to read "No distance yet. It
-          // appears once you have checked into more than one visit" — a false reason for a
-          // fetch that had failed.
-          loading ? null : (
-            <BodyText>Distance not available — it could not be fetched.</BodyText>
-          )
-        ) : (
-          <View style={styles.figureRow}>
-            <Figure>{distanceLabel}</Figure>
-          </View>
-        )}
-        <Label muted>{rateNote}</Label>
-      </Card>
+      <FadeIn index={2}>
+        <Card>
+          <Label muted>On your claim</Label>
+          {distanceLabel === null ? (
+            // FE-D3 B4. Null is UNKNOWN: still loading (the spinner above says so) or the mileage
+            // fetch failed. A real zero arrives as a figure. This used to read "No distance yet. It
+            // appears once you have checked into more than one visit" — a false reason for a
+            // fetch that had failed.
+            loading ? null : (
+              <BodyText>Distance not available — it could not be fetched.</BodyText>
+            )
+          ) : (
+            <View style={styles.figureRow}>
+              <Figure>{distanceLabel}</Figure>
+            </View>
+          )}
+          <Label muted>{rateNote}</Label>
+        </Card>
+      </FadeIn>
 
       {workDay === null ? null : <WorkDayCard workDay={workDay} />}
 

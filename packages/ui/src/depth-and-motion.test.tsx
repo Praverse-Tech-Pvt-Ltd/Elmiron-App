@@ -239,6 +239,15 @@ describe('EmptyState — a designed state, never an error', () => {
     );
   });
 
+  it.each(['neutral', 'success', 'offline'] as const)(
+    'draws its %s mark rather than typing one, so the screen’s text is only the words',
+    async (kind) => {
+      await render(<EmptyState detail="Detail words." kind={kind} title="Title words" />);
+      const texts = JSON.stringify(screen.toJSON()).match(/"type":"Text"/gu) ?? [];
+      expect(texts).toHaveLength(2);
+    },
+  );
+
   it('carries no warning colour', async () => {
     await render(<EmptyState title="Nothing matches “Iyer”." />);
     const json = JSON.stringify(screen.toJSON());

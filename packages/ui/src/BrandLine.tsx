@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 
 /**
@@ -26,6 +26,16 @@ export interface BrandLineProps {
 }
 
 const styles = StyleSheet.create({
+  // FE-W102. A1 gives the line the room of a splash: air above it, so it does not sit under the
+  // clock like a form label, and a short accent rule under it that closes the brand moment before
+  // the working screen starts. Nothing here is copy and nothing is the mark.
+  mast: { paddingTop: tokens.space.xl, paddingBottom: tokens.space.sm, gap: tokens.space.md },
+  rule: {
+    width: tokens.space.xl,
+    height: 3,
+    borderRadius: tokens.radius.pill,
+    backgroundColor: tokens.color.accent,
+  },
   line: {
     fontSize: tokens.typography.brand.size,
     lineHeight: tokens.typography.brand.lineHeight,
@@ -39,5 +49,12 @@ export const BrandLine = ({ children }: BrandLineProps): ReactNode => (
   // Not a heading. `accessibilityRole="header"` here would make a brand line the
   // first landmark a screen reader announces on the sign-in screen, ahead of the
   // thing the MR came to do.
-  <Text style={styles.line}>{children}</Text>
+  <View style={styles.mast}>
+    <Text style={styles.line}>{children}</Text>
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={styles.rule}
+    />
+  </View>
 );
