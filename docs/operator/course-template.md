@@ -5,6 +5,14 @@
 #
 # The loader REFUSES this file as it is: the title below starts with EXAMPLE, so the example can never
 # be loaded by mistake. Lines starting with # inside this block are notes and are ignored.
+#
+# A VIDEO in a lesson (BE-W210): make a clip from a long recording with
+#     pnpm video:trim --in <source.mp4> --from HH:MM:SS --to HH:MM:SS --out clips/my-clip.mp4
+# then put these lines right under the lesson's ### title (with minutes: if you use it), before its text:
+#     Video: clips/my-clip.mp4
+#     Poster: clips/my-clip.jpg
+# Paths are relative to this file. The clip is uploaded when you load with --write. Clinical content needs
+# the client's medical/regulatory approval before the course is published: docs/operator/lesson-videos.md.
 course: EXAMPLE — Storage and handling basics
 # market: the name of one of your company's markets (for example India), or "any" for every market.
 market: any
