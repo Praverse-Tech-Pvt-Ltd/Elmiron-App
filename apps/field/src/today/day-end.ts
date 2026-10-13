@@ -1,4 +1,7 @@
 import type { Visit } from '@fieldforce/core';
+import { clockIn } from './territory-day';
+import type { TerritoryZone } from './territory-day';
+import type { WorkDayStatus } from './work-day';
 
 /**
  * B7's day, reduced to what the screen puts on it.
@@ -77,3 +80,85 @@ export const summariseDayEnd = (visits: readonly Visit[]): DayEnd => {
  */
 export const CAPTURE_NOTE =
   'This app only ever reads your position at the moment you press check in or check out. It has not been reading it between visits, it is not reading it now, and it will not until you press again.';
+
+/**
+ * `FE-W80` — what the working-day card says, for every state the server and this phone can be in.
+ *
+ * **Every time shown is the SERVER's** (`openedAt`, `closedAt`), rendered in the territory zone.
+ * Where only the phone knows something -- an end pressed with no signal -- the sentence says it is
+ * the phone's ("on this phone"), never presents it as the server's, and shows no time at all.
+ */
+export interface WorkDayCopy {
+  readonly title: string;
+  readonly detail: string | null;
+  readonly tone: 'plain' | 'waiting' | 'done' | 'refused';
+  /** "End my day" is offered. Whether it can be PRESSED is `endDayBlocker`'s. */
+  readonly offerEnd: boolean;
+}
+
+/** What a check-in on an ended day meets -- said before the press, not discovered after it. */
+const AFTER_END =
+  'When you end it, the server keeps your day as it stands and refuses further check-ins for today unless your manager reopens it.';
+
+export const workDayCopy = (
+  status: WorkDayStatus,
+  zone: TerritoryZone,
+  /** The server's last "no" to ending this day, already in words, or null. */
+  refusal: { readonly title: string; readonly detail: string } | null,
+): WorkDayCopy | null => {
+  switch (status.kind) {
+    case 'unknown':
+      return null;
+    case 'closed': {
+      const { day } = status;
+      const totals = day.totals;
+      const attended =
+        totals === null
+          ? null
+          : `${String(totals.visitsCompleted + totals.visitsNotMet)} of ${String(totals.visitsTotal)} visits attended`;
+      return {
+        title: `Day ended at ${clockIn(day.closedAt ?? day.updatedAt, zone)}`,
+        detail: [
+          attended === null ? 'The server has your day.' : `The server has your day: ${attended}.`,
+          'Further check-ins for today are refused unless your manager reopens the day.',
+        ].join(' '),
+        tone: 'done',
+        offerEnd: false,
+      };
+    }
+    case 'ending':
+      return status.sent
+        ? {
+            title: 'Ending your day — the server has it',
+            detail: 'Its confirmation arrives with your next sync.',
+            tone: 'waiting',
+            offerEnd: false,
+          }
+        : {
+            title: 'Ended on this phone — waiting to send',
+            detail:
+              'It sends by itself when you have signal, after anything else still waiting. Nothing is lost.',
+            tone: 'waiting',
+            offerEnd: false,
+          };
+    case 'open': {
+      if (refusal !== null) return { ...refusal, tone: 'refused', offerEnd: true };
+      const { day } = status;
+      const title =
+        day === null
+          ? 'Your day is started on this phone — waiting to send'
+          : `Your day is open — started ${clockIn(day.openedAt, zone)}`;
+      const reopened =
+        day !== null && day.reopenCount > 0 ? 'Your manager reopened this day. ' : '';
+      return { title, detail: `${reopened}${AFTER_END}`, tone: 'plain', offerEnd: true };
+    }
+    case 'not_started':
+      if (refusal !== null) return { ...refusal, tone: 'refused', offerEnd: true };
+      return {
+        title: 'Your day has not started',
+        detail: `It starts with your first check-in. ${AFTER_END}`,
+        tone: 'plain',
+        offerEnd: true,
+      };
+  }
+};

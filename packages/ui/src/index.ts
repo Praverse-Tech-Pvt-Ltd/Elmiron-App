@@ -92,7 +92,7 @@ export type {
 export { ConsentDetailsScreen } from './ConsentDetailsScreen';
 export type { ConsentDetailItem, ConsentDetailsScreenProps } from './ConsentDetailsScreen';
 export { DayEndScreen } from './DayEndScreen';
-export type { DayEndScreenProps } from './DayEndScreen';
+export type { DayEndScreenProps, DayEndWorkDay } from './DayEndScreen';
 export type { CitationSpanProps } from './CitationSpan';
 export { DoctorListScreen } from './DoctorListScreen';
 export { DoctorProfileScreen } from './DoctorProfileScreen';
