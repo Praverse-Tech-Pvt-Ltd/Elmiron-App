@@ -4,16 +4,17 @@ import type { SettingRow } from '@fieldforce/ui';
  * C4's entries, transcribed from `docs/design/phase2-first-run-and-the-day.dc.html`.
  *
  * **What is deliberately missing: the data-usage figures.** C4 opens with "84 MB of
- * your plan · Audio 52 MB · Everything else 20 MB". Nothing in this app measures
- * network usage and nothing in the contract reports it, so those numbers have no
- * source. They are also the numbers most likely to be believed — an MR deciding
+ * your plan · Audio 52 MB · Everything else 20 MB". Nothing in this app measures the
+ * phone's network usage and nothing in the contract reports it, so those numbers have
+ * no source. They are also the numbers most likely to be believed — an MR deciding
  * whether to turn WiFi-only on reads them first — which makes them the worst
- * candidates for a plausible-looking guess.
+ * candidates for a plausible-looking guess. `FE-W137` measures ONE narrower thing —
+ * this app's own uploads over mobile data — and the Mobile data screen shows it under
+ * that name, never as "your plan".
  *
- * **Why WiFi-only is listed even though it does nothing yet.** The design's note is
- * that it ships *on*, because "audio is 62% of the bill and the MR didn't choose to
- * generate it". That default is a commitment worth recording before the upload path
- * is written, so the row is here and marked honestly rather than left out.
+ * **WiFi-only and the 100 MB note now govern something** (`FE-W135`–`FE-W139`), so both
+ * rows are `available` and open the Mobile data screen. WiFi-only ships *on*, as the
+ * design said: "audio is 62% of the bill and the MR didn't choose to generate it".
  *
  * **Consent language is separate from app language on purpose** — the design calls
  * that a product decision as much as a design one. The consent screen is what the
@@ -26,6 +27,8 @@ export interface SettingsNavigation {
   readonly onOpenBattery: () => void;
   readonly onOpenTransparency: () => void;
   readonly onOpenLocation: () => void;
+  /** `FE-W139`. The Mobile data screen, behind both "Your data" rows. */
+  readonly onOpenDataSettings: () => void;
   /**
    * FE-D15. Present only when `assistantEnabled`. Absent, there is no assistant row, so a
    * build with the flag off carries no trace of it.
@@ -117,13 +120,15 @@ export const settingsGroups = (
         id: 'wifi-only',
         title: 'Send audio on WiFi only',
         detail: 'Recordings wait for WiFi. Everything else still sends.',
-        state: 'not-yet',
+        state: 'available',
+        onPress: nav.onOpenDataSettings,
       },
       {
         id: 'warn-over',
         title: 'Warn me over 100 MB',
         detail: 'A note on home, nothing stops working.',
-        state: 'not-yet',
+        state: 'available',
+        onPress: nav.onOpenDataSettings,
       },
     ],
   },

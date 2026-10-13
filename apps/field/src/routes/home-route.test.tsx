@@ -31,8 +31,11 @@ jest.mock('expo-router', () => ({
 
 import Home from '../../app/(tabs)/home';
 import { asyncStorageQueueStore, setQueueOwner } from '../sync/async-storage-store';
-import { checkInQueueItem } from '../sync/outbox';
+import { checkInQueueItem, voiceNoteQueueItem } from '../sync/outbox';
 import { emptyQueue } from '../sync/reducer';
+import { WARN_OVER_KEY } from '../settings/data-prefs';
+import { DATA_USE_KEY } from '../sync/data-use-store';
+import { bindUploadDevice } from '../sync/upload-conditions';
 
 const signedInAs = (role: string) => ({ status: 'signed-in', role, signOut: jest.fn() });
 
@@ -406,5 +409,79 @@ describe('app/home.tsx — W2-B C, the sync line follows the queue while Today s
     await asyncStorageQueueStore.save(emptyQueue);
 
     expect(await screen.findByText('Everything sent')).toBeTruthy();
+  });
+});
+
+/**
+ * `FE-W136` / `FE-W138`. Today says "waiting for WiFi" for held audio rather than "no signal", and
+ * shows the 100 MB note -- in attention, with the way to the setting -- only when asked for and over.
+ */
+describe('Today — mobile data (FE-W136, FE-W138)', () => {
+  const REP = '22222222-2222-4222-8222-222222222298';
+  const mobile = {
+    read: () => Promise.resolve({ connection: 'mobile' as const, wifiOnlyAudio: true }),
+    recordUse: () => Promise.resolve(),
+    onConnectionChange: () => () => undefined,
+    heldAudioBytes: () => null,
+  };
+
+  it('held audio alone reads "waiting for WiFi", not "no signal"', async () => {
+    bindUploadDevice(mobile);
+    try {
+      setQueueOwner(REP);
+      await asyncStorageQueueStore.save({
+        ...emptyQueue,
+        items: [
+          voiceNoteQueueItem({
+            id: '0d0d0d0d-0d0d-4d0d-8d0d-0d0d0d0d0d01',
+            noteId: '0e0e0e0e-0e0e-4e0e-8e0e-0e0e0e0e0e01',
+            visitId: '0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f01',
+            userId: REP,
+            durationSeconds: 7,
+            recordedAt: '2026-09-14T10:00:00.000Z',
+          }),
+        ],
+      });
+      mockSession.mockReturnValue(signedInAs('mr'));
+      mockStore.mockReturnValue(emptyPulled());
+      await render(<Home />);
+      expect(await screen.findByText('1 waiting for WiFi')).toBeTruthy();
+      expect(screen.queryByText(/no signal/u)).toBeNull();
+    } finally {
+      bindUploadDevice(null);
+    }
+  });
+
+  it('over 100 MB this month, with the warning on, a calm note that leads to the setting', async () => {
+    await AsyncStorage.setItem(WARN_OVER_KEY, 'on');
+    await AsyncStorage.setItem(
+      DATA_USE_KEY,
+      JSON.stringify({ month: '2026-09', bytes: 140_000_000 }),
+    );
+    setQueueOwner(REP);
+    await asyncStorageQueueStore.save(emptyQueue);
+    mockSession.mockReturnValue(signedInAs('mr'));
+    mockStore.mockReturnValue(emptyPulled());
+    await render(<Home />);
+    expect(
+      await screen.findByText('This app has sent 140 MB over mobile data this month'),
+    ).toBeTruthy();
+    await fireEvent.press(screen.getByText('Mobile data settings'));
+    expect(mockPush).toHaveBeenCalledWith('/data-settings');
+  });
+
+  it('with the warning off, the same month says nothing', async () => {
+    await AsyncStorage.setItem(WARN_OVER_KEY, 'off');
+    await AsyncStorage.setItem(
+      DATA_USE_KEY,
+      JSON.stringify({ month: '2026-09', bytes: 140_000_000 }),
+    );
+    setQueueOwner(REP);
+    await asyncStorageQueueStore.save(emptyQueue);
+    mockSession.mockReturnValue(signedInAs('mr'));
+    mockStore.mockReturnValue(emptyPulled());
+    await render(<Home />);
+    expect(await screen.findByText('Everything sent')).toBeTruthy();
+    expect(screen.queryByText(/over mobile data this month/u)).toBeNull();
   });
 });

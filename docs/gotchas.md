@@ -4049,3 +4049,19 @@ so a stuck runtime and a slow one looked identical.
 **This is the same family as the six stale-artefact instances above, one level up.** Those were checks
 reading something they did not produce; this is a check whose *condition* was wider than its claim. The
 question generalises: **when a check passes, ask what else would also have made it pass.**
+
+## 14 October 2026 — a lazy `import()` cannot be mocked in a field render test (`FE-W135`)
+
+`apps/field` loads native-backed modules lazily with `await import('./x-device')` so the node-side
+logic runner never loads them (`voice-note-device.ts`). **Under jest that `import()` is not
+transformed**: it throws `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG` (no `--experimental-vm-modules`),
+and `jest.mock('./x-device')` never applies. Code that catches the throw and falls back then runs the
+FALLBACK in every render test, silently.
+
+For WiFi-only the fallback is "unknown network, hold audio", so the voice-note route test still saw
+"Saved on this phone…" and only the wording gave it away. **A fallback that is the safe answer in
+production is the untested answer in a test.**
+
+What `FE-W135` does instead: the device half is BOUND once at the app root (`bindUploadDevice` in
+`app/_layout.tsx`, the `setQueueOwner` pattern), and a render test binds a fake. Lazy `import()` stays
+fine where every test injects the dependency anyway (`createPushClient({ voiceNotes })`).

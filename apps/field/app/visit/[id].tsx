@@ -105,6 +105,10 @@ const SENT: Record<SendOutcome['kind'], (message: string) => string> = {
     'Recording saved on this phone, but it could not be put in line to send, so it will not send by itself.',
 };
 
+/** `FE-W135`. Held by "Send audio on WiFi only": it goes on WiFi, not merely with signal. */
+const RECORDING_WAITING_FOR_WIFI =
+  'Recording saved on this phone. It will send by itself when this phone is on WiFi, and is then removed from this phone.';
+
 export default function VisitRoute(): ReactNode {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -408,7 +412,11 @@ export default function VisitRoute(): ReactNode {
           () => createPushClient().uploadRecording(body),
           recordingQueueItem(body),
         );
-        setRecordingOutcome(SENT[outcome.kind](outcome.kind === 'refused' ? outcome.message : ''));
+        setRecordingOutcome(
+          outcome.kind === 'queued' && outcome.waitingForWifi === true
+            ? RECORDING_WAITING_FOR_WIFI
+            : SENT[outcome.kind](outcome.kind === 'refused' ? outcome.message : ''),
+        );
       })
       .catch((error: unknown) => {
         setActionFailure({

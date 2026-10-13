@@ -74,6 +74,13 @@ const SAVED: Record<SendOutcome['kind'], (message: string) => string> = {
     'Saved on this phone, but it could not be put in line to send, so it will not send by itself.',
 };
 
+/**
+ * `FE-W135`. Not tried, because "Send audio on WiFi only" is on and the phone is not on WiFi -- so
+ * "when you have signal" would be the wrong promise. Neutral: the MR chose this.
+ */
+const WAITING_FOR_WIFI =
+  'Saved on this phone. It will send by itself when this phone is on WiFi, and is then removed from this phone. To send it sooner, open the list of things waiting to send.';
+
 export default function VoiceNoteRoute(): ReactNode {
   const { visitId } = useLocalSearchParams<{ visitId: string }>();
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -249,7 +256,11 @@ export default function VoiceNoteRoute(): ReactNode {
           () => createPushClient().uploadVoiceNote(body),
           voiceNoteQueueItem(body),
         );
-        setSaved(SAVED[outcome.kind](outcome.kind === 'refused' ? outcome.message : ''));
+        setSaved(
+          outcome.kind === 'queued' && outcome.waitingForWifi === true
+            ? WAITING_FOR_WIFI
+            : SAVED[outcome.kind](outcome.kind === 'refused' ? outcome.message : ''),
+        );
       })
       .catch((error: unknown) => {
         setActionFailure({

@@ -17,7 +17,17 @@ import { summarise } from './reducer';
  * red — an MR offline all morning has done nothing wrong." Waiting, whatever the
  * count and however long, is the ordinary condition of the job.
  */
-export const indicatorStateFor = (load: QueueLoad, zone: TerritoryZone): UiSyncQueueState => {
+export const indicatorStateFor = (
+  load: QueueLoad,
+  zone: TerritoryZone,
+  /**
+   * `FE-W136`. How many of the waiting items are audio that "Send audio on WiFi only" is holding
+   * (`heldAudioIds`). When they are ALL that is waiting, the line says "N waiting for WiFi" -- the
+   * indicator's own `wifi` state, neutral like `waiting` -- instead of "no signal", which would be
+   * false on a phone with signal. Mixed with other waiting work, the line stays as it was.
+   */
+  heldForWifi = 0,
+): UiSyncQueueState => {
   // `FE-W44`. Taking the LOAD rather than the state is the fix: a caller cannot reach the
   // queue without first saying what it will do when there isn't one.
   if (load.kind === 'unreadable') return { kind: 'unreadable' };
@@ -34,6 +44,9 @@ export const indicatorStateFor = (load: QueueLoad, zone: TerritoryZone): UiSyncQ
   }
 
   if (summary.unsynced > 0) {
+    if (heldForWifi > 0 && heldForWifi >= summary.unsynced) {
+      return { kind: 'wifi', count: summary.unsynced };
+    }
     return { kind: 'waiting', count: summary.unsynced };
   }
 

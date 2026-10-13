@@ -8,6 +8,17 @@ import { emptyQueue, syncQueueReducer } from './reducer';
 import type { SyncQueueState } from './reducer';
 import { recordingUploadFrom } from './voice-note-upload';
 import type { RecordingUpload } from './voice-note-upload';
+import type { UploadConditions } from './upload-conditions';
+
+/**
+ * `FE-W135`. Audio now waits for WiFi by default ("Send audio on WiFi only" ships on), so a test
+ * about how audio is SENT says the phone is on WiFi. The gate itself is tested in
+ * `upload-gating.test.ts`.
+ */
+const onWifi: UploadConditions = {
+  read: () => Promise.resolve({ connection: 'wifi', wifiOnlyAudio: true }),
+  recordUse: () => Promise.resolve(),
+};
 
 /**
  * MR-53 C1/C2 — a consultation recording goes through the voice-note sender, not beside it.
@@ -208,8 +219,8 @@ describe('MR-53 C1 — the queue row', () => {
     const uploadRecording = vi.fn(() => Promise.resolve({ receivedAt: '2026-09-23T10:05:00Z' }));
     const client = { uploadRecording } as unknown as OutboxWriteClient;
 
-    const first = await flushOutbox(client, store, () => REP);
-    const second = await flushOutbox(client, store, () => REP);
+    const first = await flushOutbox(client, store, () => REP, onWifi);
+    const second = await flushOutbox(client, store, () => REP, onWifi);
 
     expect(uploadRecording).toHaveBeenCalledTimes(1);
     expect(uploadRecording).toHaveBeenCalledWith(recording);

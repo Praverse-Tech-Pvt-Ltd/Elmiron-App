@@ -83,6 +83,10 @@ export default function Me(): ReactNode {
           onOpenLocation: () => {
             router.push('/onboarding/location');
           },
+          // `FE-W139`. Both "Your data" rows open the one Mobile data screen.
+          onOpenDataSettings: () => {
+            router.push('/data-settings');
+          },
           // FE-D15 / W2-G A. Only with the assistant flag on; off, the row does not exist.
           ...(assistantEnabled
             ? {

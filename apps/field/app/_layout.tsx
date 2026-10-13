@@ -14,6 +14,8 @@ import {
 import { SessionProvider } from '../src/session';
 import { AuthGate } from '../src/auth-gate';
 import { OutboxFlusher } from '../src/sync/flusher';
+import { bindUploadDevice } from '../src/sync/upload-conditions';
+import { deviceUpload } from '../src/sync/upload-conditions-device';
 import { PulledStoreProvider } from '../src/sync/pulled-store';
 import { LiveTrackingProvider } from '../src/tracking/tracker';
 import { PushProvider } from '../src/push/push-provider';
@@ -52,6 +54,13 @@ const FACES = {
  * short enough that a hang is a blink rather than a broken app.
  */
 const FONT_DEADLINE_MS = 3_000;
+
+/**
+ * `FE-W135`. The phone's network and the WiFi-only switch, given to the outbox and the screens that
+ * say what is waiting. Bound here, once, because this is the app's root -- as the flusher and the
+ * store are mounted here -- and a binding made on any one screen would leave the others guessing.
+ */
+bindUploadDevice(deviceUpload);
 
 /**
  * `BE-W150` (closed 9 October). There is no start-up gate here any more. FE-D2 2 stopped a release
