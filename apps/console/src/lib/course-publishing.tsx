@@ -6,8 +6,13 @@ import type { ReactNode } from 'react';
 import { LMS_RPC } from '@fieldforce/core';
 import { browserClient } from './supabase';
 import { Card, MissingNote, StatusPill } from './ui';
-import { publishRefusal, versionAction } from './course-publishing-text';
-import type { CourseVersionStatus } from './course-publishing-text';
+import {
+  publishRefusal,
+  versionAction,
+  videoLessonsLine,
+  videoTotal,
+} from './course-publishing-text';
+import type { CourseVersionStatus, VideoLesson } from './course-publishing-text';
 import { btn } from './theme-css';
 
 /**
@@ -22,6 +27,8 @@ export interface CourseVersionRow {
   readonly title: string;
   readonly status: CourseVersionStatus;
   readonly lessons: number;
+  /** `FE-W128` — the lessons of this version that carry a video (`BE-W208`), in order. */
+  readonly videos: readonly VideoLesson[];
 }
 
 const label = (action: 'publish' | 'retire', busy: boolean): string => {
@@ -58,6 +65,20 @@ const VersionLine = ({ row }: { readonly row: CourseVersionRow }): ReactNode => 
       <td>{row.course}</td>
       <td>{`v${String(row.version)} — ${row.title}`}</td>
       <td className="ff-num">{String(row.lessons)}</td>
+      <td>
+        {row.videos.length === 0 ? (
+          <span className="ff-muted">None</span>
+        ) : (
+          <>
+            <strong>
+              {`${String(row.videos.length)} of ${String(row.lessons)}`}
+              {videoTotal(row.videos) === null ? '' : ` · ${String(videoTotal(row.videos))}`}
+            </strong>
+            <br />
+            <span className="ff-muted">{videoLessonsLine(row.videos)}</span>
+          </>
+        )}
+      </td>
       <td>
         <StatusPill status={row.status} />
       </td>
@@ -96,6 +117,7 @@ export const CoursePublishing = ({
             <th>Course</th>
             <th>Version</th>
             <th className="ff-num">Lessons</th>
+            <th>Videos</th>
             <th>Status</th>
             <th>Action</th>
           </tr>

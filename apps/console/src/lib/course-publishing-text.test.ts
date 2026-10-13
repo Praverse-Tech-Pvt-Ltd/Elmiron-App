@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { publishRefusal, versionAction } from './course-publishing-text';
+import {
+  publishRefusal,
+  versionAction,
+  videoLessonsLine,
+  videoTotal,
+} from './course-publishing-text';
 
 /** Each message is the database's own text (`20260924000500_lms_core.sql`). */
 describe('course publishing refusals', () => {
@@ -29,5 +34,25 @@ describe('course publishing refusals', () => {
     expect(versionAction('draft')).toBe('publish');
     expect(versionAction('published')).toBe('retire');
     expect(versionAction('retired')).toBeNull();
+  });
+});
+
+describe('FE-W128 — which lessons carry a video', () => {
+  it('names each video lesson with its length, and invents none', () => {
+    expect(videoLessonsLine([])).toBe('None');
+    expect(
+      videoLessonsLine([
+        { lesson: 'Phenotyping', seconds: 754 },
+        { lesson: 'Cystoscopy', seconds: null },
+      ]),
+    ).toBe('Phenotyping (12:34) · Cystoscopy (length not measured)');
+    expect(
+      videoTotal([
+        { lesson: 'A', seconds: 3000 },
+        { lesson: 'B', seconds: 723 },
+      ]),
+    ).toBe('1:02:03');
+    expect(videoTotal([{ lesson: 'A', seconds: null }])).toBeNull();
+    expect(videoTotal([])).toBeNull();
   });
 });
