@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { LIVE_TRACKING_RPC, TrackingSwitchResultSchema } from '@fieldforce/core';
-import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { browserClient } from './supabase';
 import { Body, Card, Heading, Label, MissingNote } from './ui';
 import { trackingRefusal } from './tracking-text';
@@ -71,14 +70,6 @@ export const TrackingSwitch = ({
       <Label>Why are you changing it? (kept with the change)</Label>
       <input
         aria-label="Reason"
-        style={{
-          width: '100%',
-          padding: tokens.space.sm,
-          border: `1px solid ${tokens.color.border}`,
-          borderRadius: tokens.radius.control,
-          fontSize: compactTypography.body.size,
-          fontFamily: 'inherit',
-        }}
         value={reason}
         onChange={(e) => {
           setReason(e.target.value);

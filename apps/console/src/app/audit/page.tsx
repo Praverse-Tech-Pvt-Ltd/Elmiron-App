@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react';
 import { ADMIN_RPC, AUDIT_ACTIONS, AuditSearchSchema } from '@fieldforce/core';
-import { tokens } from '@fieldforce/ui-tokens';
 import { signedIn } from '../../lib/session';
-import { Body, Card, Label, MissingNote, Pill, Title, cell, headerCell } from '../../lib/ui';
+import { Body, Card, Label, MissingNote, Pill, Title } from '../../lib/ui';
 import { adminRefusal, dayAfterStart, dayStart } from '../../lib/admin-text';
 import { auditQuery, readAuditFilters } from '../../lib/audit-filters';
 import { btn } from '../../lib/theme-css';
@@ -26,13 +25,6 @@ const dateTime = (iso: string): string =>
     dateStyle: 'medium',
     timeStyle: 'medium',
   });
-
-const field = {
-  padding: tokens.space.sm,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.control,
-  fontFamily: 'inherit',
-};
 
 export default async function AuditPage({
   searchParams,
@@ -67,8 +59,8 @@ export default async function AuditPage({
   const page = result.error === null ? AuditSearchSchema.safeParse(result.data) : null;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1320 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-page">
+      <div className="ff-page-header-text">
         <Title>Audit log</Title>
         <Body muted>
           Every change to a record, and every read of someone else’s, by a person in your company —
@@ -77,18 +69,10 @@ export default async function AuditPage({
       </div>
 
       <Card>
-        <form
-          method="get"
-          style={{
-            display: 'flex',
-            gap: tokens.space.md,
-            flexWrap: 'wrap',
-            alignItems: 'flex-end',
-          }}
-        >
-          <div>
+        <form className="ff-filters" method="get">
+          <div className="ff-field">
             <Label>Who</Label>
-            <select name="actor" aria-label="Who" defaultValue={filters.actor ?? ''} style={field}>
+            <select name="actor" aria-label="Who" defaultValue={filters.actor ?? ''}>
               <option value="">Anyone</option>
               {(people.data ?? []).map((p) => (
                 <option key={String(p.id)} value={String(p.id)}>
@@ -97,14 +81,9 @@ export default async function AuditPage({
               ))}
             </select>
           </div>
-          <div>
+          <div className="ff-field">
             <Label>Table</Label>
-            <select
-              name="table"
-              aria-label="Table"
-              defaultValue={filters.table ?? ''}
-              style={field}
-            >
+            <select name="table" aria-label="Table" defaultValue={filters.table ?? ''}>
               <option value="">Any</option>
               {(page?.success === true ? page.data.tables : []).map((t) => (
                 <option key={t} value={t}>
@@ -113,14 +92,9 @@ export default async function AuditPage({
               ))}
             </select>
           </div>
-          <div>
+          <div className="ff-field">
             <Label>Action</Label>
-            <select
-              name="action"
-              aria-label="Action"
-              defaultValue={filters.action ?? ''}
-              style={field}
-            >
+            <select name="action" aria-label="Action" defaultValue={filters.action ?? ''}>
               <option value="">Any</option>
               {AUDIT_ACTIONS.map((a) => (
                 <option key={a} value={a}>
@@ -129,27 +103,15 @@ export default async function AuditPage({
               ))}
             </select>
           </div>
-          <div>
+          <div className="ff-field">
             <Label>From</Label>
-            <input
-              name="from"
-              aria-label="From"
-              type="date"
-              defaultValue={filters.from ?? ''}
-              style={field}
-            />
+            <input name="from" aria-label="From" type="date" defaultValue={filters.from ?? ''} />
           </div>
-          <div>
+          <div className="ff-field">
             <Label>Until (inclusive)</Label>
-            <input
-              name="until"
-              aria-label="Until"
-              type="date"
-              defaultValue={filters.until ?? ''}
-              style={field}
-            />
+            <input name="until" aria-label="Until" type="date" defaultValue={filters.until ?? ''} />
           </div>
-          <label style={{ display: 'flex', gap: tokens.space.xs, alignItems: 'center' }}>
+          <label>
             <input type="checkbox" name="refused" value="1" defaultChecked={filters.refused} />{' '}
             Include refused reads
           </label>
@@ -179,38 +141,38 @@ export default async function AuditPage({
               No entries match. The filters above are the only reason this is empty.
             </Body>
           ) : (
-            <table className="ff-table" style={{ borderCollapse: 'collapse', width: '100%' }}>
-              <thead>
-                <tr>
-                  <th style={headerCell}>When</th>
-                  <th style={headerCell}>Who</th>
-                  <th style={headerCell}>What</th>
-                  <th style={headerCell}>Record</th>
-                  <th style={headerCell}>Reason given</th>
-                </tr>
-              </thead>
-              <tbody>
-                {page.data.data.map((row) => (
-                  <tr key={row.id}>
-                    <td style={{ ...cell, whiteSpace: 'nowrap' }}>{dateTime(row.occurredAt)}</td>
-                    <td style={cell}>
-                      {row.actorName}
-                      {row.actorRole === null ? '' : ` (${row.actorRole})`}
-                    </td>
-                    <td style={cell}>
-                      {row.action === 'select' ? 'read' : row.action} {row.tableName}{' '}
-                      {row.refused ? <Pill tone="critical">refused</Pill> : null}
-                    </td>
-                    <td style={{ ...cell, fontFamily: 'ui-monospace, monospace' }}>
-                      {row.rowId ?? '—'}
-                    </td>
-                    <td style={cell}>{row.reason ?? '—'}</td>
+            <Card>
+              <table>
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>Who</th>
+                    <th>What</th>
+                    <th>Record</th>
+                    <th>Reason given</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {page.data.data.map((row) => (
+                    <tr key={row.id}>
+                      <td className="ff-nowrap">{dateTime(row.occurredAt)}</td>
+                      <td>
+                        {row.actorName}
+                        {row.actorRole === null ? '' : ` (${row.actorRole})`}
+                      </td>
+                      <td>
+                        {row.action === 'select' ? 'read' : row.action} {row.tableName}{' '}
+                        {row.refused ? <Pill tone="critical">refused</Pill> : null}
+                      </td>
+                      <td className="ff-mono">{row.rowId ?? '—'}</td>
+                      <td>{row.reason ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
           )}
-          <div style={{ display: 'flex', gap: tokens.space.md, alignItems: 'center' }}>
+          <div className="ff-row">
             {filters.before === null ? null : (
               <a className={btn('secondary')} href={auditQuery({ ...filters, before: null })}>
                 Newest

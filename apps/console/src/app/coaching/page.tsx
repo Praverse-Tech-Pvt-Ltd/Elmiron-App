@@ -1,17 +1,7 @@
 import type { ReactNode } from 'react';
 import { signedIn } from '../../lib/session';
-import { tokens } from '@fieldforce/ui-tokens';
-import {
-  Body,
-  Card,
-  Figure,
-  Label,
-  MissingNote,
-  Pill,
-  Title,
-  cell,
-  headerCell,
-} from '../../lib/ui';
+import { btn } from '../../lib/theme-css';
+import { Body, Card, Figure, Label, MissingNote, Pill, Title } from '../../lib/ui';
 import { consentSignal, queueRows } from '../../lib/queue';
 
 /**
@@ -76,8 +66,8 @@ export default async function CoachingQueue(): Promise<ReactNode> {
   const consent = consents === null ? null : consentSignal(consents.data);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1320 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-page">
+      <div className="ff-page-header-text">
         <Title>Coaching queue</Title>
         <Body muted>
           Patterns that recurred across recent visits. Everyone else is not listed — that is the
@@ -99,27 +89,23 @@ export default async function CoachingQueue(): Promise<ReactNode> {
       ) : null}
 
       <Card>
-        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+        <table>
           <thead>
             <tr>
-              <th style={headerCell}>MR</th>
-              <th style={headerCell}>Pattern across recent visits</th>
-              <th style={headerCell}>Seen in</th>
-              <th style={headerCell}>Their reply</th>
-              <th style={headerCell} />
+              <th>MR</th>
+              <th>Pattern across recent visits</th>
+              <th>Seen in</th>
+              <th>Their reply</th>
+              <th />
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr key={`${row.mrId}-${row.category}`}>
-                <td style={cell}>
-                  {names.get(row.mrId) ?? (
-                    <span style={{ fontFamily: 'ui-monospace, monospace' }}>
-                      {row.mrId.slice(0, 8)}
-                    </span>
-                  )}
+                <td>
+                  {names.get(row.mrId) ?? <span className="ff-mono">{row.mrId.slice(0, 8)}</span>}
                 </td>
-                <td style={cell}>
+                <td>
                   <div>{row.pattern}</div>
                   {/*
                     The citations themselves, not a count. A manager who cannot see
@@ -134,22 +120,16 @@ export default async function CoachingQueue(): Promise<ReactNode> {
                       .join(' · ')}
                   </Label>
                 </td>
-                <td style={cell}>
+                <td className="ff-nowrap">
                   {row.occurrences.length} of {row.reviewed} reviewed
                 </td>
-                <td style={cell}>
+                <td>
                   {row.replied ? <Pill tone="success">Replied</Pill> : <Body muted>Not yet</Body>}
                 </td>
-                <td style={cell}>
+                <td>
                   <a
+                    className={btn('secondary')}
                     href={`/coaching/${row.occurrences[0]?.analysisId ?? ''}`}
-                    style={{
-                      background: tokens.color.textPrimary,
-                      color: tokens.color.onAccent,
-                      borderRadius: tokens.radius.md,
-                      padding: `${String(tokens.space.sm)}px ${String(tokens.space.md)}px`,
-                      textDecoration: 'none',
-                    }}
                   >
                     Review
                   </a>
@@ -158,7 +138,7 @@ export default async function CoachingQueue(): Promise<ReactNode> {
             ))}
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={5} style={cell}>
+                <td className="ff-empty" colSpan={5}>
                   <Body muted>Nothing has recurred. There is no queue.</Body>
                 </td>
               </tr>
@@ -167,15 +147,15 @@ export default async function CoachingQueue(): Promise<ReactNode> {
         </table>
       </Card>
 
-      <div style={{ display: 'flex', gap: tokens.space.md }}>
-        <div style={{ flex: 1, display: 'flex' }}>
+      <div className="ff-columns">
+        <div>
           <Card>
             <Label>Consent rate — a data-quality signal, not a performance one</Label>
             {consent === null ? (
               <MissingNote tone="critical">The consent ledger could not be reached.</MissingNote>
             ) : (
               <>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: tokens.space.sm }}>
+                <div className="ff-row" style={{ alignItems: 'baseline' }}>
                   <Figure>{`${String(consent.rate)}%`}</Figure>
                   <Body muted>{`across ${String(consent.total)} answered visits`}</Body>
                 </div>
@@ -197,7 +177,7 @@ export default async function CoachingQueue(): Promise<ReactNode> {
             )}
           </Card>
         </div>
-        <div style={{ flex: 1, display: 'flex' }}>
+        <div>
           <Card>
             <Label>Your overrides</Label>
             {/*

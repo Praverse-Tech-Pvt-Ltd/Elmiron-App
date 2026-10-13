@@ -3,7 +3,6 @@
 import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { SIMULATION_RPC } from '@fieldforce/core';
-import { tokens } from '@fieldforce/ui-tokens';
 import { browserClient } from './supabase';
 import { Body, Title } from './ui';
 import { PersonaDraftForm, ScenarioDraftForm, SimContentReview } from './sim-content';
@@ -65,7 +64,7 @@ export const PracticeContent = ({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg }}>
+    <div className="ff-stack ff-stack-lg">
       <PersonaDraftForm
         onCreate={async (input) => {
           await insertRow('sim_personas', {

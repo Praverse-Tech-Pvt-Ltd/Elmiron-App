@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { KNOWLEDGE_RPC } from '@fieldforce/core';
 import type { KnowledgeDocumentVersion } from '@fieldforce/core';
-import { tokens } from '@fieldforce/ui-tokens';
 import { browserClient } from './supabase';
 import { KnowledgeReview } from './knowledge-review';
 
@@ -66,7 +65,7 @@ export const KnowledgeReviewList = ({
   const router = useRouter();
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg }}>
+    <div className="ff-stack ff-stack-lg">
       {rows.map((row) => (
         <KnowledgeReview
           key={row.version.id}

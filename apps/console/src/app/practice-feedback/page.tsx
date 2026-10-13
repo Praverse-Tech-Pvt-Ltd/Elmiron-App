@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { SimCoachFindingSchema } from '@fieldforce/core';
 import type { SimCoachFinding } from '@fieldforce/core';
-import { tokens } from '@fieldforce/ui-tokens';
 import { signedIn } from '../../lib/session';
 import { Body, Card, Heading, Label, MissingNote, Title } from '../../lib/ui';
 
@@ -43,7 +42,7 @@ const FindingList = ({
   readonly heading: string;
   readonly rows: readonly SimCoachFinding[];
 }): ReactNode => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+  <div className="ff-cell-stack">
     <Label>{heading}</Label>
     {rows.map((row) => (
       <Body key={`${row.title}-${String(row.turnIndex)}`}>
@@ -78,7 +77,7 @@ export default async function PracticeFeedback(): Promise<ReactNode> {
   ]);
 
   const header = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-page-header-text">
       <Title>Practice feedback</Title>
       <Body muted>
         The AI coach’s feedback on reps’ practice sessions with an AI doctor. Practice only — not
@@ -89,9 +88,7 @@ export default async function PracticeFeedback(): Promise<ReactNode> {
 
   if (me.data?.role !== 'admin') {
     return (
-      <div
-        style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1000 }}
-      >
+      <div className="ff-page ff-page-medium">
         {header}
         <MissingNote>
           Practice feedback is visible to the rep who practised and to admins only.
@@ -108,7 +105,7 @@ export default async function PracticeFeedback(): Promise<ReactNode> {
   const rows = analyses.data ?? [];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1000 }}>
+    <div className="ff-page ff-page-medium">
       {header}
       {rows.length === 0 ? <Body muted>No practice session has been analysed yet.</Body> : null}
       {rows.map((row) => {
@@ -126,7 +123,7 @@ export default async function PracticeFeedback(): Promise<ReactNode> {
             </Body>
             <details>
               <summary>Open the feedback</summary>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.sm }}>
+              <div className="ff-stack ff-stack-sm">
                 <Body>{String(row.summary)}</Body>
                 <Label>Scores</Label>
                 {rowScores.map(([key, value]) => (

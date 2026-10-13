@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { PlanningGrantSchema, grantState } from '@fieldforce/core';
-import { tokens } from '@fieldforce/ui-tokens';
 import { signedIn } from '../../../lib/session';
 import { Body, MissingNote, Title } from '../../../lib/ui';
 import { PlanningAccess } from '../../../lib/planning-access';
@@ -66,8 +65,8 @@ export default async function PlanningAccessPage(): Promise<ReactNode> {
   }));
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1000 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-page ff-page-medium">
+      <div className="ff-page-header-text">
         <Title>Planning access</Title>
         <Body muted>
           A field manager plans the reps in their own territory. To let them plan somewhere else —

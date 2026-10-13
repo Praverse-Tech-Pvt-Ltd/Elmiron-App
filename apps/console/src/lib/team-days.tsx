@@ -2,12 +2,11 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { WORK_DAY_RPC, WorkDayRowSchema } from '@fieldforce/core';
 import type { TeamWorkDay } from '@fieldforce/core';
-import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { browserClient } from './supabase';
-import { Body, MissingNote, Pill, cell, headerCell } from './ui';
+import { Body, Card, MissingNote, Pill } from './ui';
 import { attendance, dayStatusLabel, distanceLabel, reopenRefusal, timeIn } from './team-days-text';
 import { btn } from './theme-css';
 
@@ -16,14 +15,6 @@ import { btn } from './theme-css';
  * decides whether this manager may reopen it (`reopen_work_day`), and the page is refreshed from the
  * server afterwards rather than patched locally.
  */
-const field = (): CSSProperties => ({
-  width: '100%',
-  padding: tokens.space.sm,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.control,
-  fontSize: compactTypography.body.size,
-  fontFamily: 'inherit',
-});
 
 type Outcome =
   | { readonly kind: 'idle' }
@@ -34,25 +25,27 @@ export const TeamDays = ({ days }: { readonly days: readonly TeamWorkDay[] }): R
   days.length === 0 ? (
     <Body muted>No rep is in your view.</Body>
   ) : (
-    <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-      <thead>
-        <tr>
-          <th style={headerCell}>Rep</th>
-          <th style={headerCell}>Day</th>
-          <th style={headerCell}>Started</th>
-          <th style={headerCell}>Ended</th>
-          <th style={headerCell}>Visits</th>
-          <th style={headerCell}>Distance</th>
-          <th style={headerCell}>Note</th>
-          <th style={headerCell}>Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        {days.map((day) => (
-          <DayLine day={day} key={day.mr_id} />
-        ))}
-      </tbody>
-    </table>
+    <Card>
+      <table>
+        <thead>
+          <tr>
+            <th>Rep</th>
+            <th>Day</th>
+            <th>Started</th>
+            <th>Ended</th>
+            <th className="ff-num">Visits</th>
+            <th className="ff-num">Distance</th>
+            <th>Note</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {days.map((day) => (
+            <DayLine day={day} key={day.mr_id} />
+          ))}
+        </tbody>
+      </table>
+    </Card>
   );
 
 const DayLine = ({ day }: { readonly day: TeamWorkDay }): ReactNode => {
@@ -81,11 +74,11 @@ const DayLine = ({ day }: { readonly day: TeamWorkDay }): ReactNode => {
   const ended = timeIn(day.closed_at, day.time_zone);
   return (
     <tr>
-      <td style={cell}>
+      <td>
         {day.full_name}
         {day.territory_name === null ? null : <Body muted>{day.territory_name}</Body>}
       </td>
-      <td style={cell}>
+      <td>
         <Pill
           tone={day.status === 'closed' ? 'success' : day.status === 'open' ? 'info' : 'neutral'}
         >
@@ -99,19 +92,18 @@ const DayLine = ({ day }: { readonly day: TeamWorkDay }): ReactNode => {
           </Body>
         ) : null}
       </td>
-      <td style={cell}>{started ?? '—'}</td>
-      <td style={cell}>{ended ?? '—'}</td>
+      <td>{started ?? '—'}</td>
+      <td>{ended ?? '—'}</td>
       {/* The snapshot is the server's, taken when the rep ended the day; an open day has none. */}
-      <td style={cell}>{attendance(day) ?? '—'}</td>
-      <td style={cell}>{distanceLabel(day.distance_metres) ?? '—'}</td>
-      <td style={cell}>{day.closing_note ?? '—'}</td>
-      <td style={cell}>
+      <td className="ff-num">{attendance(day) ?? '—'}</td>
+      <td className="ff-num">{distanceLabel(day.distance_metres) ?? '—'}</td>
+      <td>{day.closing_note ?? '—'}</td>
+      <td>
         {day.status === 'closed' ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+          <div className="ff-cell-stack">
             <input
               aria-label={`Why reopen ${day.full_name}'s day`}
               placeholder="Why it reopens"
-              style={field()}
               value={reason}
               onChange={(e) => {
                 setReason(e.target.value);

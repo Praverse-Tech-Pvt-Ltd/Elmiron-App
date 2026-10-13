@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { ADMIN_RPC, AdminUserListSchema, TerritoryTreeSchema } from '@fieldforce/core';
-import { tokens } from '@fieldforce/ui-tokens';
 import { signedIn } from '../../lib/session';
 import { Body, MissingNote, Title } from '../../lib/ui';
 import { UsersAdmin } from '../../lib/users-admin';
@@ -36,7 +35,7 @@ export default async function UsersPage(): Promise<ReactNode> {
   ]);
 
   const header = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-page-header-text">
       <Title>Users &amp; roles</Title>
       <Body muted>
         Everyone who signs in to the app or this console. Accounts are created confirmed, with a
@@ -48,9 +47,7 @@ export default async function UsersPage(): Promise<ReactNode> {
 
   if (list.error !== null) {
     return (
-      <div
-        style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1320 }}
-      >
+      <div className="ff-page">
         {header}
         <MissingNote tone={list.error.code === '42501' ? 'info' : 'critical'}>
           {list.error.code === '42501'
@@ -65,9 +62,7 @@ export default async function UsersPage(): Promise<ReactNode> {
   const territories = TerritoryTreeSchema.safeParse(tree.data);
   if (!parsed.success) {
     return (
-      <div
-        style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1320 }}
-      >
+      <div className="ff-page">
         {header}
         <MissingNote tone="critical">
           The user list came back in a shape this console does not recognise, so it is not shown.
@@ -78,7 +73,7 @@ export default async function UsersPage(): Promise<ReactNode> {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1320 }}>
+    <div className="ff-page">
       {header}
       {territories.success ? null : (
         <MissingNote tone="critical">

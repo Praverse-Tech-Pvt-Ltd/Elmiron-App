@@ -1,9 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type { KnowledgeDocumentVersion } from '@fieldforce/core';
-import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { Body, Card, Heading, Label, MissingNote, Pill, StatusPill } from './ui';
 import { btn } from './theme-css';
 
@@ -134,16 +133,6 @@ type State =
   | { readonly kind: 'rejected' }
   | { readonly kind: 'failed'; readonly message: string };
 
-const box = (): CSSProperties => ({
-  width: '100%',
-  minHeight: 96,
-  padding: tokens.space.sm,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.control,
-  fontSize: compactTypography.body.size,
-  fontFamily: 'inherit',
-});
-
 export const KnowledgeReview = ({
   version,
   documentTitle,
@@ -207,7 +196,7 @@ export const KnowledgeReview = ({
     <Card>
       <Heading>{documentTitle}</Heading>
 
-      <div style={{ display: 'flex', gap: tokens.space.xs, flexWrap: 'wrap' }}>
+      <div className="ff-row ff-row-tight">
         <Pill tone="neutral">{`version ${String(version.versionNumber)}`}</Pill>
         <StatusPill status={version.status} />
         {/* E4. Market and product are shown for EVERY draft, not only AI ones: a human author can
@@ -239,7 +228,7 @@ export const KnowledgeReview = ({
       {/* `whiteSpace: pre-wrap` on purpose: the body is frozen at submit and chunked on its own
           line breaks, so the reviewer must see the same line breaks the chunker did. */}
       <Body>
-        <span style={{ whiteSpace: 'pre-wrap' }}>{version.body}</span>
+        <span className="ff-prewrap">{version.body}</span>
       </Body>
 
       {state.kind === 'approved' ? (
@@ -259,7 +248,6 @@ export const KnowledgeReview = ({
           <Label>Your attestation — required to approve</Label>
           <textarea
             aria-label="Your attestation"
-            style={box()}
             value={attestation}
             onChange={(e) => {
               setAttestation(e.target.value);
@@ -268,7 +256,6 @@ export const KnowledgeReview = ({
           <Label>Or a reason — required to reject</Label>
           <textarea
             aria-label="Reason for rejecting"
-            style={box()}
             value={reason}
             onChange={(e) => {
               setReason(e.target.value);
@@ -277,7 +264,7 @@ export const KnowledgeReview = ({
           {/* Approve and Reject are the same control, side by side, one click each, no confirm on
               either — the same choice `override-form.tsx` made and for the same reason: making one
               path harder quietly turns a review into a rubber stamp in the easy direction. */}
-          <div style={{ display: 'flex', gap: tokens.space.sm }}>
+          <div className="ff-btn-pair">
             <button
               type="button"
               className={btn('secondary')}

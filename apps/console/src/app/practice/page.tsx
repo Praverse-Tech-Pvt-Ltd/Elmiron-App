@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { SimPersonaSchema, SimScenarioSchema } from '@fieldforce/core';
 import type { SimPersona, SimScenario } from '@fieldforce/core';
-import { tokens } from '@fieldforce/ui-tokens';
 import { signedIn } from '../../lib/session';
 import { Body, MissingNote, Title } from '../../lib/ui';
 import { simPersonaRow, simScenarioRow, type SimContentRow } from '../../lib/sim-content-row';
@@ -142,8 +141,8 @@ export default async function PracticeAuthoring(): Promise<ReactNode> {
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1000 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-page ff-page-medium">
+      <div className="ff-page-header-text">
         <Title>Practice doctors and scenarios</Title>
         <Body muted>
           A rep can only practise against a scenario that reads approved. You cannot approve

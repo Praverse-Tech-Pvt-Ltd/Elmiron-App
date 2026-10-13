@@ -1,19 +1,7 @@
 import type { ReactNode } from 'react';
 import { ADMIN_RPC, RetentionOverviewSchema } from '@fieldforce/core';
-import { tokens } from '@fieldforce/ui-tokens';
 import { signedIn } from '../../lib/session';
-import {
-  Body,
-  Card,
-  Figure,
-  Heading,
-  Label,
-  MissingNote,
-  Pill,
-  Title,
-  cell,
-  headerCell,
-} from '../../lib/ui';
+import { Body, Card, Heading, MissingNote, Pill, Stat, Stats, Title } from '../../lib/ui';
 import { adminRefusal, retentionAlerts } from '../../lib/admin-text';
 
 /**
@@ -59,7 +47,7 @@ export default async function RetentionPage(): Promise<ReactNode> {
   const parsed = result.error === null ? RetentionOverviewSchema.safeParse(result.data) : null;
 
   const header = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-page-header-text">
       <Title>Retention &amp; purge</Title>
       <Body muted>
         What is kept, for how long, and whether the worker that destroys expired audio is running.
@@ -70,9 +58,7 @@ export default async function RetentionPage(): Promise<ReactNode> {
 
   if (result.error !== null || parsed === null || !parsed.success) {
     return (
-      <div
-        style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1320 }}
-      >
+      <div className="ff-page">
         {header}
         <MissingNote tone="critical">
           {result.error === null
@@ -94,7 +80,7 @@ export default async function RetentionPage(): Promise<ReactNode> {
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1320 }}>
+    <div className="ff-page">
       {header}
 
       {retentionAlerts(o).map((alert) => (
@@ -105,40 +91,38 @@ export default async function RetentionPage(): Promise<ReactNode> {
 
       <Card>
         <Heading>What is kept, and for how long</Heading>
-        <table className="ff-table" style={{ borderCollapse: 'collapse', width: '100%' }}>
+        <table>
           <thead>
             <tr>
-              <th style={headerCell}>What</th>
-              <th style={headerCell}>Kept</th>
-              <th style={headerCell}>How</th>
+              <th>What</th>
+              <th>Kept</th>
+              <th>How</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td style={cell}>Visit recordings and voice notes</td>
-              <td style={cell}>{o.retentionDays} days from when the server received them</td>
-              <td style={cell}>
+              <td>Visit recordings and voice notes</td>
+              <td>{o.retentionDays} days from when the server received them</td>
+              <td>
                 Destroyed by the hourly retention worker; each destruction is logged. New uploads
                 are refused while the worker is stalled.
               </td>
             </tr>
             <tr>
-              <td style={cell}>Abandoned partial uploads</td>
-              <td style={cell}>Until the next run after they are abandoned</td>
-              <td style={cell}>Destroyed by the same worker.</td>
+              <td>Abandoned partial uploads</td>
+              <td>Until the next run after they are abandoned</td>
+              <td>Destroyed by the same worker.</td>
             </tr>
             <tr>
-              <td style={cell}>
+              <td>
                 Append-only records ({o.appendOnlyTables.length} tables, including the audit log and
                 consent records)
               </td>
-              <td style={cell}>Kept; never edited or deleted, by any role</td>
-              <td style={cell}>
+              <td>Kept; never edited or deleted, by any role</td>
+              <td>
                 A database trigger refuses every update and delete.
                 <br />
-                <span style={{ color: tokens.color.textSecondary }}>
-                  {o.appendOnlyTables.join(', ')}
-                </span>
+                <span className="ff-muted">{o.appendOnlyTables.join(', ')}</span>
               </td>
             </tr>
           </tbody>
@@ -151,14 +135,13 @@ export default async function RetentionPage(): Promise<ReactNode> {
 
       <Card>
         <Heading>Your company’s audio</Heading>
-        <div style={{ display: 'flex', gap: tokens.space.lg, flexWrap: 'wrap' }}>
+        <Stats>
           {figures.map((f) => (
-            <div key={f.label} style={{ minWidth: 140 }}>
-              <Label>{f.label}</Label>
-              <Figure>{f.value}</Figure>
-            </div>
+            <Stat key={f.label} label={f.label}>
+              {f.value}
+            </Stat>
           ))}
-        </div>
+        </Stats>
         {o.yours.oldestOverdueAt === null ? null : (
           <Body muted>Oldest overdue since {dateTime(o.yours.oldestOverdueAt)}.</Body>
         )}
@@ -183,21 +166,21 @@ export default async function RetentionPage(): Promise<ReactNode> {
         {o.runs.length === 0 ? (
           <Body muted>No run is recorded.</Body>
         ) : (
-          <table className="ff-table" style={{ borderCollapse: 'collapse', width: '100%' }}>
+          <table>
             <thead>
               <tr>
-                <th style={headerCell}>Started</th>
-                <th style={headerCell}>Finished</th>
-                <th style={headerCell}>Outcome</th>
-                <th style={headerCell}>Your objects destroyed</th>
+                <th>Started</th>
+                <th>Finished</th>
+                <th>Outcome</th>
+                <th className="ff-num">Your objects destroyed</th>
               </tr>
             </thead>
             <tbody>
               {o.runs.map((run) => (
                 <tr key={run.id}>
-                  <td style={cell}>{dateTime(run.startedAt)}</td>
-                  <td style={cell}>{run.finishedAt === null ? '—' : dateTime(run.finishedAt)}</td>
-                  <td style={cell}>
+                  <td>{dateTime(run.startedAt)}</td>
+                  <td>{run.finishedAt === null ? '—' : dateTime(run.finishedAt)}</td>
+                  <td>
                     <Pill
                       tone={
                         run.outcome === 'succeeded'
@@ -214,9 +197,7 @@ export default async function RetentionPage(): Promise<ReactNode> {
                           : 'Did not finish'}
                     </Pill>
                   </td>
-                  <td style={{ ...cell, fontVariantNumeric: 'tabular-nums' }}>
-                    {run.destroyedForYou}
-                  </td>
+                  <td className="ff-num">{run.destroyedForYou}</td>
                 </tr>
               ))}
             </tbody>

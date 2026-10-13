@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import {
   GATEWAY_FEATURES,
   GATEWAY_MODEL,
@@ -10,7 +10,6 @@ import {
   PromptModelConfigSchema,
 } from '@fieldforce/core';
 import type { AiPromptVersion, GatewayFeature, PromptModelConfig } from '@fieldforce/core';
-import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { Body, Card, Heading, Label, MissingNote, StatusPill } from './ui';
 import { approvalAffordance, submitAffordance } from './knowledge-review';
 import { btn } from './theme-css';
@@ -46,17 +45,6 @@ import { btn } from './theme-css';
  *   → W1-F Part C names who should write each of the two texts. A form that coached the author
  *   would be the engineering track making that judgement by the back door.
  */
-
-const field = (): CSSProperties => ({
-  width: '100%',
-  padding: tokens.space.sm,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.control,
-  fontSize: compactTypography.body.size,
-  fontFamily: 'inherit',
-});
-
-const box = (): CSSProperties => ({ ...field(), minHeight: 160 });
 
 export const PROMPT_REGULATED_CAUTION =
   'A prompt must not contain a product claim, an indication or prescribing information. Those are ' +
@@ -173,7 +161,6 @@ export const PromptDraftForm = ({ features, onCreate }: PromptDraftProps): React
       <Label>Which feature this prompt is for</Label>
       <select
         aria-label="Which feature this prompt is for"
-        style={field()}
         value={feature}
         onChange={(e) => {
           setFeature(e.target.value as GatewayFeature);
@@ -195,7 +182,7 @@ export const PromptDraftForm = ({ features, onCreate }: PromptDraftProps): React
       <Label>The instructions the model is given</Label>
       <textarea
         aria-label="The instructions the model is given"
-        style={box()}
+        rows={8}
         value={systemPrompt}
         onChange={(e) => {
           setSystemPrompt(e.target.value);
@@ -207,7 +194,6 @@ export const PromptDraftForm = ({ features, onCreate }: PromptDraftProps): React
       <input
         aria-label="Temperature, from 0 to 1"
         inputMode="decimal"
-        style={field()}
         value={temperature}
         onChange={(e) => {
           setTemperature(e.target.value);
@@ -217,7 +203,6 @@ export const PromptDraftForm = ({ features, onCreate }: PromptDraftProps): React
       <input
         aria-label="Longest answer, in tokens"
         inputMode="numeric"
-        style={field()}
         value={maxTokens}
         onChange={(e) => {
           setMaxTokens(e.target.value);
@@ -280,7 +265,7 @@ export const PromptReview = ({
       <Heading>
         {version.feature} — version {version.versionNumber}
       </Heading>
-      <div style={{ display: 'flex', gap: tokens.space.xs, flexWrap: 'wrap' }}>
+      <div className="ff-row ff-row-tight">
         <StatusPill status={version.status} />
       </div>
 
@@ -288,7 +273,7 @@ export const PromptReview = ({
       <Body>
         {/* Whole, with its line breaks. A reviewer approving a truncated prompt is approving
             something they did not read. */}
-        <span style={{ whiteSpace: 'pre-wrap' }}>{version.systemPrompt}</span>
+        <span className="ff-prewrap">{version.systemPrompt}</span>
       </Body>
 
       {/* W2-E A3: what the approver signs besides the words. Read from the ROW, so a version
@@ -325,7 +310,6 @@ export const PromptReview = ({
           <Label>Your attestation — required to approve</Label>
           <textarea
             aria-label="Your attestation"
-            style={box()}
             value={attestation}
             onChange={(e) => {
               setAttestation(e.target.value);
@@ -334,13 +318,12 @@ export const PromptReview = ({
           <Label>Or a reason — required to reject</Label>
           <textarea
             aria-label="Reason for rejecting"
-            style={box()}
             value={reason}
             onChange={(e) => {
               setReason(e.target.value);
             }}
           />
-          <div style={{ display: 'flex', gap: tokens.space.sm }}>
+          <div className="ff-btn-pair">
             <button
               type="button"
               className={btn('secondary')}

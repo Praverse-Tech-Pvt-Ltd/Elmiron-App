@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { LIVE_TRACKING_RPC, LiveTrackingNoticesSchema } from '@fieldforce/core';
-import { tokens } from '@fieldforce/ui-tokens';
 import { signedIn } from '../../../lib/session';
 import { Body, Card, Heading, MissingNote, Pill, Title } from '../../../lib/ui';
 import { NoticeText, NoticeVersionCard, ProposeNotice } from '../../../lib/tracking-notice';
@@ -20,7 +19,7 @@ export const dynamic = 'force-dynamic';
 export default async function TrackingNotice(): Promise<ReactNode> {
   const session = await signedIn();
   const header = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-page-header-text">
       <Title>Live location notice</Title>
       <Body muted>
         The notice each rep reads and accepts before their location is shared during working hours.
@@ -30,7 +29,7 @@ export default async function TrackingNotice(): Promise<ReactNode> {
     </div>
   );
   const page = (children: ReactNode): ReactNode => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1100 }}>
+    <div className="ff-page ff-page-medium">
       {header}
       {children}
     </div>
@@ -56,9 +55,7 @@ export default async function TrackingNotice(): Promise<ReactNode> {
       <MissingNote tone="info">{REACCEPT_NOTE}</MissingNote>
 
       <Card>
-        <div
-          style={{ display: 'flex', gap: tokens.space.sm, alignItems: 'center', flexWrap: 'wrap' }}
-        >
+        <div className="ff-row">
           <Heading>In force now{current === null ? '' : `: ${current.versionLabel}`}</Heading>
           {current === null ? null : current.isDraft ? (
             <Pill tone="attention">Engineering draft — not approved</Pill>
@@ -91,7 +88,7 @@ export default async function TrackingNotice(): Promise<ReactNode> {
 
       {/* One list, newest first, so a card that is approved stays where it is (and keeps its
           "Approved" message) when the page refreshes underneath it. */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.md }}>
+      <div className="ff-stack">
         <Heading>Your company’s versions, newest first</Heading>
         <Body muted>
           {waiting === 0

@@ -5,7 +5,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { LMS_RPC } from '@fieldforce/core';
 import { browserClient } from './supabase';
-import { MissingNote, cell, headerCell, StatusPill } from './ui';
+import { Card, MissingNote, StatusPill } from './ui';
 import { publishRefusal, versionAction } from './course-publishing-text';
 import type { CourseVersionStatus } from './course-publishing-text';
 import { btn } from './theme-css';
@@ -55,13 +55,13 @@ const VersionLine = ({ row }: { readonly row: CourseVersionRow }): ReactNode => 
 
   return (
     <tr>
-      <td style={cell}>{row.course}</td>
-      <td style={cell}>{`v${String(row.version)} — ${row.title}`}</td>
-      <td style={cell}>{String(row.lessons)}</td>
-      <td style={cell}>
+      <td>{row.course}</td>
+      <td>{`v${String(row.version)} — ${row.title}`}</td>
+      <td className="ff-num">{String(row.lessons)}</td>
+      <td>
         <StatusPill status={row.status} />
       </td>
-      <td style={cell}>
+      <td>
         {action === null ? null : (
           <button
             disabled={busy}
@@ -89,20 +89,22 @@ export const CoursePublishing = ({
       (services/api/scripts/load-course.mjs) and published here.
     </MissingNote>
   ) : (
-    <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-      <thead>
-        <tr>
-          <th style={headerCell}>Course</th>
-          <th style={headerCell}>Version</th>
-          <th style={headerCell}>Lessons</th>
-          <th style={headerCell}>Status</th>
-          <th style={headerCell}>Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <VersionLine key={row.id} row={row} />
-        ))}
-      </tbody>
-    </table>
+    <Card>
+      <table>
+        <thead>
+          <tr>
+            <th>Course</th>
+            <th>Version</th>
+            <th className="ff-num">Lessons</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <VersionLine key={row.id} row={row} />
+          ))}
+        </tbody>
+      </table>
+    </Card>
   );

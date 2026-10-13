@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { AI_RPC, promptDraftRow } from '@fieldforce/core';
 import type { AiPromptVersion, GatewayFeature } from '@fieldforce/core';
-import { tokens } from '@fieldforce/ui-tokens';
 import { browserClient } from './supabase';
 import { Body, Title } from './ui';
 import { PromptDraftForm, PromptReview } from './prompt-review';
@@ -40,7 +39,7 @@ export const PromptList = ({ versions, features, viewerUserId }: PromptListProps
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg }}>
+    <div className="ff-stack ff-stack-lg">
       <PromptDraftForm
         features={features}
         onCreate={async (input) => {

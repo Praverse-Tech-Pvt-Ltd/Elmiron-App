@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import {
   PLANNING_RPC,
   PlanSummarySchema,
@@ -10,9 +10,8 @@ import {
   UnplannedVisitReviewSchema,
 } from '@fieldforce/core';
 import type { DayReview, PlannableDoctor, PlannableRep, ReviewVisit } from '@fieldforce/core';
-import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { browserClient } from './supabase';
-import { Body, Card, Heading, Label, MissingNote, Pill, cell, headerCell } from './ui';
+import { Body, Card, Heading, Label, MissingNote, Pill } from './ui';
 import {
   canReassign,
   originLabel,
@@ -35,14 +34,6 @@ interface Stop {
   readonly doctorId: string;
   readonly clinicAddressId: string | null;
 }
-
-const field = (): CSSProperties => ({
-  padding: tokens.space.sm,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.control,
-  fontSize: compactTypography.body.size,
-  fontFamily: 'inherit',
-});
 
 type Outcome =
   | { readonly kind: 'idle' }
@@ -136,14 +127,10 @@ export const PlanDay = ({
   return (
     <>
       <Card>
-        <form
-          method="get"
-          action="/planning"
-          style={{ display: 'flex', gap: tokens.space.sm, alignItems: 'end', flexWrap: 'wrap' }}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+        <form method="get" action="/planning" className="ff-filters">
+          <div className="ff-cell-stack">
             <Label>Rep</Label>
-            <select aria-label="Rep" name="rep" defaultValue={rep.mr_id} style={field()}>
+            <select aria-label="Rep" name="rep" defaultValue={rep.mr_id}>
               {reps.map((r) => (
                 <option key={r.mr_id} value={r.mr_id}>
                   {r.full_name} — {r.territory_name}
@@ -152,9 +139,9 @@ export const PlanDay = ({
               ))}
             </select>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+          <div className="ff-cell-stack">
             <Label>Day</Label>
-            <input aria-label="Day" name="date" type="date" defaultValue={day} style={field()} />
+            <input aria-label="Day" name="date" type="date" defaultValue={day} />
           </div>
           <button type="submit" className={btn('secondary')}>
             Show
@@ -177,31 +164,16 @@ export const PlanDay = ({
           </MissingNote>
         ) : null}
         {stops.length === 0 ? <Body muted>No stops. Add a doctor below.</Body> : null}
-        <ol
-          style={{
-            margin: 0,
-            paddingLeft: tokens.space.lg,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: tokens.space.sm,
-          }}
-        >
+        {/* `role="list"`: a list drawn without bullets loses its list semantics in Safari. */}
+        <ol className="ff-route" role="list">
           {stops.map((stop, index) => {
             const clinics = doctorById.get(stop.doctorId)?.clinics ?? [];
             return (
               <li key={stop.doctorId}>
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: tokens.space.sm,
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <span style={{ minWidth: 220 }}>{nameOf(stop.doctorId)}</span>
+                <div className="ff-route-stop">
+                  <span className="ff-route-name">{nameOf(stop.doctorId)}</span>
                   <select
                     aria-label={`Clinic for ${nameOf(stop.doctorId)}`}
-                    style={field()}
                     value={stop.clinicAddressId ?? ''}
                     disabled={ended}
                     onChange={(e) => {
@@ -260,12 +232,9 @@ export const PlanDay = ({
           })}
         </ol>
 
-        <div
-          style={{ display: 'flex', gap: tokens.space.sm, alignItems: 'center', flexWrap: 'wrap' }}
-        >
+        <div className="ff-row">
           <select
             aria-label="Doctor to add"
-            style={field()}
             value={adding}
             disabled={ended || available.length === 0}
             onChange={(e) => {
@@ -310,33 +279,35 @@ export const PlanDay = ({
         </button>
       </Card>
 
-      <Heading>Visits on {day}</Heading>
-      {review.visits.length === 0 ? (
-        <Body muted>No visits on this day.</Body>
-      ) : (
-        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-          <thead>
-            <tr>
-              <th style={headerCell}>Doctor</th>
-              <th style={headerCell}>Kind</th>
-              <th style={headerCell}>Status</th>
-              <th style={headerCell}>Note</th>
-              <th style={headerCell}>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {review.visits.map((visit) => (
-              <VisitRow
-                key={visit.visitId}
-                visit={visit}
-                reps={reps}
-                rep={rep}
-                repToday={review.today}
-              />
-            ))}
-          </tbody>
-        </table>
-      )}
+      <Card>
+        <Heading>Visits on {day}</Heading>
+        {review.visits.length === 0 ? (
+          <Body muted>No visits on this day.</Body>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Doctor</th>
+                <th>Kind</th>
+                <th>Status</th>
+                <th>Note</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {review.visits.map((visit) => (
+                <VisitRow
+                  key={visit.visitId}
+                  visit={visit}
+                  reps={reps}
+                  rep={rep}
+                  repToday={review.today}
+                />
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
     </>
   );
 };
@@ -406,15 +377,15 @@ const VisitRow = ({
 
   return (
     <tr>
-      <td style={cell}>{visit.doctorName}</td>
-      <td style={cell}>
+      <td>{visit.doctorName}</td>
+      <td>
         <Pill tone={visit.origin === 'unplanned' ? 'attention' : 'neutral'}>
           {originLabel(visit.origin)}
         </Pill>
       </td>
-      <td style={cell}>{statusLabel(visit.status)}</td>
-      <td style={cell}>{note}</td>
-      <td style={cell}>
+      <td>{statusLabel(visit.status)}</td>
+      <td>{note}</td>
+      <td>
         {visit.origin === 'unplanned' ? (
           visit.reviewedByMe ? (
             <Pill tone="success">Reviewed</Pill>
@@ -430,10 +401,9 @@ const VisitRow = ({
           )
         ) : null}
         {canReassign(visit, visit.plannedDate, repToday) && others.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+          <div className="ff-cell-stack">
             <select
               aria-label={`Move ${visit.doctorName} to`}
-              style={field()}
               value={target}
               onChange={(e) => {
                 setTarget(e.target.value);
@@ -449,7 +419,6 @@ const VisitRow = ({
             <input
               aria-label="Why it moves"
               placeholder="Why it moves"
-              style={field()}
               value={reason}
               onChange={(e) => {
                 setReason(e.target.value);

@@ -2,10 +2,9 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { LIVE_TRACKING_RPC } from '@fieldforce/core';
 import type { CompanyNoticeVersion } from '@fieldforce/core';
-import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { browserClient } from './supabase';
 import { Body, Card, Heading, Label, MissingNote, Pill } from './ui';
 import {
@@ -34,16 +33,6 @@ type Outcome =
   | { readonly kind: 'done'; readonly message: string }
   | { readonly kind: 'refused'; readonly message: string };
 
-const field = (rows?: number): CSSProperties => ({
-  width: '100%',
-  padding: tokens.space.sm,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.control,
-  fontSize: compactTypography.body.size,
-  fontFamily: 'inherit',
-  ...(rows === undefined ? {} : { minHeight: rows * 22, resize: 'vertical' as const }),
-});
-
 const OutcomeNote = ({ outcome }: { readonly outcome: Outcome }): ReactNode =>
   outcome.kind === 'done' ? (
     <MissingNote tone="info">{outcome.message}</MissingNote>
@@ -53,19 +42,7 @@ const OutcomeNote = ({ outcome }: { readonly outcome: Outcome }): ReactNode =>
 
 /** The full text, with its line breaks. An approver approving a truncated text did not read it. */
 export const NoticeText = ({ body }: { readonly body: string }): ReactNode => (
-  <div
-    style={{
-      whiteSpace: 'pre-wrap',
-      background: tokens.color.wash,
-      borderRadius: tokens.radius.well,
-      padding: tokens.space.md,
-      fontSize: compactTypography.body.size,
-      maxHeight: 420,
-      overflowY: 'auto',
-    }}
-  >
-    {body}
-  </div>
+  <div className="ff-well ff-prewrap ff-notice-text">{body}</div>
 );
 
 export const ProposeNotice = (): ReactNode => {
@@ -112,7 +89,6 @@ export const ProposeNotice = (): ReactNode => {
         aria-label="Version label"
         maxLength={80}
         placeholder="for example: v1 — October 2026"
-        style={field()}
         value={label}
         onChange={(e) => {
           setLabel(e.target.value);
@@ -121,7 +97,7 @@ export const ProposeNotice = (): ReactNode => {
       <Label>The full text reps will read</Label>
       <textarea
         aria-label="Notice text"
-        style={field(12)}
+        rows={12}
         value={body}
         onChange={(e) => {
           setBody(e.target.value);
@@ -178,9 +154,7 @@ export const NoticeVersionCard = ({
 
   return (
     <Card>
-      <div
-        style={{ display: 'flex', gap: tokens.space.sm, alignItems: 'center', flexWrap: 'wrap' }}
-      >
+      <div className="ff-row">
         <Heading>{version.versionLabel}</Heading>
         <Pill tone={statusTone(version.status)}>{statusLabel(version.status)}</Pill>
       </div>
@@ -205,7 +179,6 @@ export const NoticeVersionCard = ({
           <input
             aria-label={`What you checked in ${version.versionLabel}`}
             maxLength={500}
-            style={field()}
             value={attestation}
             onChange={(e) => {
               setAttestation(e.target.value);

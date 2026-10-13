@@ -1,19 +1,7 @@
 import type { ReactNode } from 'react';
-import { tokens } from '@fieldforce/ui-tokens';
 import { consentTextVersions } from '../../lib/consent-text';
 import { signedIn } from '../../lib/session';
-import {
-  Body,
-  Card,
-  Figure,
-  Heading,
-  Label,
-  MissingNote,
-  Pill,
-  Title,
-  cell,
-  headerCell,
-} from '../../lib/ui';
+import { Body, Card, Figure, Heading, Label, MissingNote, Pill, Stats, Title } from '../../lib/ui';
 import { dateFrom, versionRows } from '../../lib/versions';
 import {
   AUDIT_CAVEAT,
@@ -93,8 +81,8 @@ export default async function Admin(): Promise<ReactNode> {
   const hidden = audit === null ? null : hiddenRowsNote(audit);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1320 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-page">
+      <div className="ff-page-header-text">
         <Title>Consent versions</Title>
         <Body muted>
           Every recording is stamped with the notice version the doctor actually saw. Versions are
@@ -110,33 +98,31 @@ export default async function Admin(): Promise<ReactNode> {
       ) : null}
 
       <Card>
-        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+        <table>
           <thead>
             <tr>
-              <th style={headerCell}>Version</th>
-              <th style={headerCell}>Languages</th>
-              <th style={headerCell}>Hash</th>
-              <th style={headerCell}>Live from</th>
-              <th style={headerCell}>Consents on it</th>
-              <th style={headerCell}>Status</th>
+              <th>Version</th>
+              <th>Languages</th>
+              <th>Hash</th>
+              <th>Live from</th>
+              <th className="ff-num">Consents on it</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.versionLabel}>
-                <td style={{ ...cell, fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
-                  {row.versionLabel}
-                </td>
-                <td style={cell}>{row.languages.join(' · ')}</td>
+                <td style={{ fontWeight: 600 }}>{row.versionLabel}</td>
+                <td>{row.languages.join(' · ')}</td>
                 {/*
                   The hash is on the table because it is the only column here that
                   cannot be reused or mistyped. A version label can be repeated
                   across a re-publish; a SHA-256 of the text cannot.
                 */}
-                <td style={{ ...cell, fontFamily: 'ui-monospace, monospace' }}>{row.hashPrefix}</td>
-                <td style={cell}>{dateFrom(row.effectiveFrom)}</td>
-                <td style={{ ...cell, fontVariantNumeric: 'tabular-nums' }}>{row.consents}</td>
-                <td style={cell}>
+                <td className="ff-mono">{row.hashPrefix}</td>
+                <td>{dateFrom(row.effectiveFrom)}</td>
+                <td className="ff-num">{row.consents}</td>
+                <td>
                   <Pill tone={row.live ? 'success' : 'neutral'}>
                     {row.live ? 'Live' : 'Superseded'}
                   </Pill>
@@ -145,7 +131,7 @@ export default async function Admin(): Promise<ReactNode> {
             ))}
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={6} style={cell}>
+                <td className="ff-empty" colSpan={6}>
                   <Body muted>No consent notice has been published.</Body>
                 </td>
               </tr>
@@ -154,8 +140,8 @@ export default async function Admin(): Promise<ReactNode> {
         </table>
       </Card>
 
-      <div style={{ display: 'flex', gap: tokens.space.md, alignItems: 'stretch' }}>
-        <div style={{ flex: 1.4, display: 'flex' }}>
+      <div className="ff-columns">
+        <div className="ff-col-wide">
           <Card>
             <Heading>{AUDIT_HEADING}</Heading>
             {/*
@@ -170,22 +156,22 @@ export default async function Admin(): Promise<ReactNode> {
             {audit !== null && trail.length === 0 ? <Body muted>{emptyTrailNote()}</Body> : null}
 
             {trail.length > 0 ? (
-              <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+              <table>
                 <thead>
                   <tr>
-                    <th style={headerCell}>When</th>
-                    <th style={headerCell}>Who</th>
-                    <th style={headerCell}>What</th>
-                    <th style={headerCell}>Reason given</th>
+                    <th>When</th>
+                    <th>Who</th>
+                    <th>What</th>
+                    <th>Reason given</th>
                   </tr>
                 </thead>
                 <tbody>
                   {trail.map((row) => (
                     <tr key={row.id}>
-                      <td style={cell}>{dateFrom(row.occurredAt)}</td>
-                      <td style={cell}>{row.actorRole}</td>
-                      <td style={cell}>{row.what}</td>
-                      <td style={cell}>{row.reason}</td>
+                      <td>{dateFrom(row.occurredAt)}</td>
+                      <td>{row.actorRole}</td>
+                      <td>{row.what}</td>
+                      <td>{row.reason}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -200,7 +186,7 @@ export default async function Admin(): Promise<ReactNode> {
             </Body>
           </Card>
         </div>
-        <div style={{ flex: 1, display: 'flex' }}>
+        <div>
           <Card>
             <Heading>Retention</Heading>
             <Body muted>{retentionSentence(retention)}</Body>
@@ -209,15 +195,15 @@ export default async function Admin(): Promise<ReactNode> {
               <MissingNote tone="critical">{refusedNote()}</MissingNote>
             ) : (
               <>
-                <div style={{ display: 'flex', gap: tokens.space.md, flexWrap: 'wrap' }}>
+                <Stats>
                   {retentionFigures(retention).map((figure) => (
-                    <div key={figure.label} style={{ minWidth: 120 }}>
+                    <div className="ff-stat" key={figure.label}>
                       <Label>{figure.label}</Label>
                       <Figure>{figure.value}</Figure>
                       <Body muted>{figure.note}</Body>
                     </div>
                   ))}
-                </div>
+                </Stats>
                 {purgeNotice(retention) === null ? null : (
                   <MissingNote>{purgeNotice(retention)}</MissingNote>
                 )}

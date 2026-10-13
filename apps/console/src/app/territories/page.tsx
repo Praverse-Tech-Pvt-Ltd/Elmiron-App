@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { ADMIN_RPC, TerritoryTreeSchema } from '@fieldforce/core';
-import { tokens } from '@fieldforce/ui-tokens';
 import { signedIn } from '../../lib/session';
 import { Body, MissingNote, Title } from '../../lib/ui';
 import { TerritoriesAdmin } from '../../lib/territories-admin';
@@ -30,8 +29,8 @@ export default async function TerritoriesPage(): Promise<ReactNode> {
   const parsed = tree.error === null ? TerritoryTreeSchema.safeParse(tree.data) : null;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1320 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-page">
+      <div className="ff-page-header-text">
         <Title>Territories</Title>
         <Body muted>
           National, then Region, then Area/Territory. Reps sit on the lowest level; a manager sees

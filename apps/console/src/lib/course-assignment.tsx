@@ -2,11 +2,10 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { LMS_RPC } from '@fieldforce/core';
-import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { browserClient } from './supabase';
-import { Body, Card, Heading, Label, MissingNote, cell, headerCell } from './ui';
+import { Body, Card, Heading, Label, MissingNote } from './ui';
 import { assignRefusal, courseOptionLabel } from './course-assignment-text';
 import { btn } from './theme-css';
 
@@ -30,15 +29,6 @@ export interface AssignedRow {
   readonly person: string;
   readonly dueOn: string | null;
 }
-
-const field = (): CSSProperties => ({
-  width: '100%',
-  padding: tokens.space.sm,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.control,
-  fontSize: compactTypography.body.size,
-  fontFamily: 'inherit',
-});
 
 type State =
   | { readonly kind: 'idle' }
@@ -98,7 +88,6 @@ export const CourseAssignment = ({
         <Label>Course</Label>
         <select
           aria-label="Course"
-          style={field()}
           value={courseId}
           onChange={(e) => {
             setCourseId(e.target.value);
@@ -114,7 +103,6 @@ export const CourseAssignment = ({
         <Label>Person</Label>
         <select
           aria-label="Person"
-          style={field()}
           value={personId}
           onChange={(e) => {
             setPersonId(e.target.value);
@@ -130,7 +118,6 @@ export const CourseAssignment = ({
         <Label>Due date (optional, YYYY-MM-DD)</Label>
         <input
           aria-label="Due date"
-          style={field()}
           value={dueOn}
           onChange={(e) => {
             setDueOn(e.target.value.trim());
@@ -150,29 +137,31 @@ export const CourseAssignment = ({
         </button>
       </Card>
 
-      <Heading>Assigned</Heading>
-      {assigned.length === 0 ? (
-        <Body muted>Nothing assigned to anyone you can see.</Body>
-      ) : (
-        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-          <thead>
-            <tr>
-              <th style={headerCell}>Course</th>
-              <th style={headerCell}>Person</th>
-              <th style={headerCell}>Due</th>
-            </tr>
-          </thead>
-          <tbody>
-            {assigned.map((row) => (
-              <tr key={row.id}>
-                <td style={cell}>{row.course}</td>
-                <td style={cell}>{row.person}</td>
-                <td style={cell}>{row.dueOn ?? '—'}</td>
+      <Card>
+        <Heading>Assigned</Heading>
+        {assigned.length === 0 ? (
+          <Body muted>Nothing assigned to anyone you can see.</Body>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Course</th>
+                <th>Person</th>
+                <th>Due</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+            </thead>
+            <tbody>
+              {assigned.map((row) => (
+                <tr key={row.id}>
+                  <td>{row.course}</td>
+                  <td>{row.person}</td>
+                  <td className="ff-nowrap">{row.dueOn ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
     </>
   );
 };
