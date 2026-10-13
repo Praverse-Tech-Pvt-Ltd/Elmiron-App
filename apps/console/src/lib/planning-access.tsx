@@ -2,11 +2,10 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { PLANNING_RPC, PlanningGrantRevocationSchema, PlanningGrantSchema } from '@fieldforce/core';
-import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { browserClient } from './supabase';
-import { Body, Card, Heading, Label, MissingNote, Pill, cell, headerCell } from './ui';
+import { Body, Card, Heading, Label, MissingNote, Pill } from './ui';
 import { grantRefusal, grantStateLabel } from './planning-text';
 import { btn } from './theme-css';
 
@@ -28,15 +27,6 @@ export interface GrantRow {
   readonly reason: string;
   readonly state: 'revoked' | 'ended' | 'not_started' | 'active';
 }
-
-const field = (): CSSProperties => ({
-  width: '100%',
-  padding: tokens.space.sm,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.control,
-  fontSize: compactTypography.body.size,
-  fontFamily: 'inherit',
-});
 
 type Outcome =
   | { readonly kind: 'idle' }
@@ -108,7 +98,6 @@ export const PlanningAccess = ({
           <Label>Field manager</Label>
           <select
             aria-label="Field manager"
-            style={field()}
             value={managerId}
             onChange={(e) => {
               setManagerId(e.target.value);
@@ -123,7 +112,6 @@ export const PlanningAccess = ({
           <Label>Territory (and everything beneath it)</Label>
           <select
             aria-label="Territory"
-            style={field()}
             value={territoryId}
             onChange={(e) => {
               setTerritoryId(e.target.value);
@@ -139,7 +127,6 @@ export const PlanningAccess = ({
           <input
             aria-label="From"
             type="date"
-            style={field()}
             value={from}
             onChange={(e) => {
               setFrom(e.target.value);
@@ -149,7 +136,6 @@ export const PlanningAccess = ({
           <input
             aria-label="Until"
             type="date"
-            style={field()}
             value={until}
             onChange={(e) => {
               setUntil(e.target.value);
@@ -158,7 +144,6 @@ export const PlanningAccess = ({
           <Label>Why</Label>
           <input
             aria-label="Why"
-            style={field()}
             value={reason}
             onChange={(e) => {
               setReason(e.target.value);
@@ -174,28 +159,30 @@ export const PlanningAccess = ({
         </Card>
       ) : null}
 
-      <Heading>Grants</Heading>
-      {grants.length === 0 ? (
-        <Body muted>No planning access has been granted.</Body>
-      ) : (
-        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-          <thead>
-            <tr>
-              <th style={headerCell}>Manager</th>
-              <th style={headerCell}>Territory</th>
-              <th style={headerCell}>Dates</th>
-              <th style={headerCell}>Why</th>
-              <th style={headerCell}>State</th>
-              <th style={headerCell}>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {grants.map((row) => (
-              <GrantLine key={row.id} row={row} canRevoke={canGrant} />
-            ))}
-          </tbody>
-        </table>
-      )}
+      <Card>
+        <Heading>Grants</Heading>
+        {grants.length === 0 ? (
+          <Body muted>No planning access has been granted.</Body>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Manager</th>
+                <th>Territory</th>
+                <th>Dates</th>
+                <th>Why</th>
+                <th>State</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {grants.map((row) => (
+                <GrantLine key={row.id} row={row} canRevoke={canGrant} />
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
     </>
   );
 };
@@ -227,24 +214,23 @@ const GrantLine = ({
 
   return (
     <tr>
-      <td style={cell}>{row.manager}</td>
-      <td style={cell}>{row.territory}</td>
-      <td style={cell}>
+      <td>{row.manager}</td>
+      <td>{row.territory}</td>
+      <td>
         {row.from} – {row.until ?? 'no end'}
       </td>
-      <td style={cell}>{row.reason}</td>
-      <td style={cell}>
+      <td>{row.reason}</td>
+      <td>
         <Pill tone={row.state === 'active' ? 'success' : 'neutral'}>
           {grantStateLabel(row.state)}
         </Pill>
       </td>
-      <td style={cell}>
+      <td>
         {canRevoke && row.state !== 'revoked' ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+          <div className="ff-cell-stack">
             <input
               aria-label={`Why revoke ${row.manager}'s grant`}
               placeholder="Why it ends"
-              style={field()}
               value={reason}
               onChange={(e) => {
                 setReason(e.target.value);

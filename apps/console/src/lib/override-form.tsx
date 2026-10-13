@@ -4,7 +4,6 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { createApiClient } from '@fieldforce/core';
 import { browserClient } from './supabase';
-import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { Body, Card, Heading, Label, MissingNote } from './ui';
 import { btn } from './theme-css';
 
@@ -39,18 +38,6 @@ type State =
   | { readonly kind: 'disagreeing' }
   | { readonly kind: 'logged' }
   | { readonly kind: 'failed'; readonly message: string };
-
-const button = (): React.CSSProperties => ({
-  flex: 1,
-  minHeight: 52,
-  background: tokens.color.surface,
-  border: `2px solid ${tokens.color.textPrimary}`,
-  borderRadius: tokens.radius.control,
-  color: tokens.color.textPrimary,
-  fontSize: compactTypography.control.size,
-  fontWeight: Number(compactTypography.control.weight),
-  cursor: 'pointer',
-});
 
 /**
  * MR-52 A2 — the write carries the signed-in admin's token.
@@ -129,7 +116,7 @@ export const OverrideForm = ({ analysisId, findingId }: OverrideFormProps): Reac
       ) : (
         <>
           <Heading>Do you agree with it?</Heading>
-          <div style={{ display: 'flex', gap: tokens.space.sm }}>
+          <div className="ff-btn-pair">
             <button
               onClick={() => {
                 setState({ kind: 'agreed' });
@@ -158,31 +145,15 @@ export const OverrideForm = ({ analysisId, findingId }: OverrideFormProps): Reac
                   setReason(event.target.value);
                 }}
                 rows={4}
-                style={{
-                  background: tokens.color.background,
-                  border: `1px solid ${tokens.color.border}`,
-                  borderRadius: tokens.radius.well,
-                  padding: tokens.space.sm,
-                  fontSize: compactTypography.value.size,
-                  color: tokens.color.textPrimary,
-                  fontFamily: 'inherit',
-                  resize: 'vertical',
-                }}
                 value={reason}
               />
               {state.kind === 'failed' ? (
                 <MissingNote tone="critical">{state.message}</MissingNote>
               ) : null}
               <button
+                className={`${btn('primary')} ff-btn-block`}
                 disabled={busy || reason.trim() === ''}
                 onClick={log}
-                style={{
-                  ...button(),
-                  background: reason.trim() === '' ? tokens.color.wash : tokens.color.accent,
-                  color: reason.trim() === '' ? tokens.color.textSecondary : tokens.color.onAccent,
-                  border: 'none',
-                  cursor: reason.trim() === '' ? 'not-allowed' : 'pointer',
-                }}
                 type="button"
               >
                 {busy ? 'Logging…' : 'Log the override'}

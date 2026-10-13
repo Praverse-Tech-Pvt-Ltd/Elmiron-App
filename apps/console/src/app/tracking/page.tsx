@@ -6,9 +6,8 @@ import {
   googleMapsUrl,
 } from '@fieldforce/core';
 import type { TeamRep, TrackingTrail } from '@fieldforce/core';
-import { tokens } from '@fieldforce/ui-tokens';
 import { signedIn } from '../../lib/session';
-import { Body, Card, Heading, MissingNote, Pill, Title, cell, headerCell } from '../../lib/ui';
+import { Body, Card, Heading, MissingNote, Pill, Title } from '../../lib/ui';
 import { TrackingSwitch } from '../../lib/tracking-switch';
 import {
   accuracyLabel,
@@ -43,7 +42,7 @@ const MapLink = ({ latitude, longitude }: { latitude: number; longitude: number 
 
 const LatestCell = ({ rep }: { rep: TeamRep }): ReactNode =>
   rep.latest === null ? (
-    <span style={{ color: tokens.color.textSecondary }}>No position yet</span>
+    <span className="ff-muted">No position yet</span>
   ) : (
     <span>
       {clockIn(rep.latest.receivedAt, rep.timeZone)} ({ageLabel(rep.latest.ageSeconds)}),{' '}
@@ -66,7 +65,7 @@ const EmbeddedMap = ({
       src={src}
       width="100%"
       height={320}
-      style={{ border: 0, borderRadius: tokens.radius.card }}
+      className="ff-map"
       loading="lazy"
       referrerPolicy="strict-origin-when-cross-origin"
     />
@@ -90,22 +89,22 @@ const Trail = ({ trail }: { trail: TrackingTrail }): ReactNode => {
       {trail.points.length === 0 ? (
         <MissingNote tone="info">No position was kept for this rep on this day.</MissingNote>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <table>
           <thead>
             <tr>
-              <th style={headerCell}>Received</th>
-              <th style={headerCell}>Phone said</th>
-              <th style={headerCell}>Accuracy</th>
-              <th style={headerCell}>Where</th>
+              <th>Received</th>
+              <th>Phone said</th>
+              <th>Accuracy</th>
+              <th>Where</th>
             </tr>
           </thead>
           <tbody>
             {trail.points.map((point) => (
               <tr key={point.id}>
-                <td style={cell}>{clockIn(point.receivedAt, trail.timeZone)}</td>
-                <td style={cell}>{clockIn(point.recordedAt, trail.timeZone)}</td>
-                <td style={cell}>{accuracyLabel(point.accuracyM)}</td>
-                <td style={cell}>
+                <td>{clockIn(point.receivedAt, trail.timeZone)}</td>
+                <td>{clockIn(point.recordedAt, trail.timeZone)}</td>
+                <td>{accuracyLabel(point.accuracyM)}</td>
+                <td>
                   {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)} ·{' '}
                   <MapLink latitude={point.latitude} longitude={point.longitude} />
                 </td>
@@ -133,7 +132,7 @@ export default async function Tracking({
   }
 
   const header = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-page-header-text">
       <Title>Live location</Title>
       <Body muted>
         Where your reps were, during their working hours, after each accepted the live location
@@ -143,7 +142,7 @@ export default async function Tracking({
     </div>
   );
   const page = (children: ReactNode): ReactNode => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1100 }}>
+    <div className="ff-page ff-page-medium">
       {header}
       {children}
     </div>
@@ -207,32 +206,32 @@ export default async function Tracking({
             There is no rep in your territory or reporting line.
           </MissingNote>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table>
             <thead>
               <tr>
-                <th style={headerCell}>Rep</th>
-                <th style={headerCell}>Territory</th>
-                <th style={headerCell}>Notice</th>
-                <th style={headerCell}>Latest position</th>
-                <th style={headerCell}>Today</th>
+                <th>Rep</th>
+                <th>Territory</th>
+                <th>Notice</th>
+                <th>Latest position</th>
+                <th>Today</th>
               </tr>
             </thead>
             <tbody>
               {overview.reps.map((rep) => (
                 <tr key={rep.mrId}>
-                  <td style={cell}>
+                  <td>
                     <a href={`/tracking?rep=${rep.mrId}`}>{rep.fullName}</a>
                   </td>
-                  <td style={cell}>{rep.territoryName ?? '—'}</td>
-                  <td style={cell}>
+                  <td>{rep.territoryName ?? '—'}</td>
+                  <td>
                     <Pill tone={rep.accepted ? 'success' : 'neutral'}>
                       {rep.accepted ? 'Accepted' : 'Not accepted'}
                     </Pill>
                   </td>
-                  <td style={cell}>
+                  <td>
                     <LatestCell rep={rep} />
                   </td>
-                  <td style={cell}>
+                  <td>
                     <a href={`/tracking?rep=${rep.mrId}`}>
                       {rep.pingsToday} position(s) — see the list
                     </a>

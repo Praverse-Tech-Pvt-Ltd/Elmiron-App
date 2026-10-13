@@ -1,10 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type { SimPersonaStance } from '@fieldforce/core';
 import { SIM_PERSONA_STANCES } from '@fieldforce/core';
-import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { Body, Card, Heading, Label, MissingNote, Pill, StatusPill } from './ui';
 import { approvalAffordance, submitAffordance } from './knowledge-review';
 import type { SimContentRow } from './sim-content-row';
@@ -37,17 +36,6 @@ import { btn } from './theme-css';
 // ---------------------------------------------------------------------------
 // Shared bits
 // ---------------------------------------------------------------------------
-
-const field = (): CSSProperties => ({
-  width: '100%',
-  padding: tokens.space.sm,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.control,
-  fontSize: compactTypography.body.size,
-  fontFamily: 'inherit',
-});
-
-const box = (): CSSProperties => ({ ...field(), minHeight: 96 });
 
 export const PERSONA_NAME_CAUTION =
   'This name is shown to the rep as the doctor they are practising with. Use a label such as ' +
@@ -118,7 +106,6 @@ export const PersonaDraftForm = ({ onCreate }: PersonaDraftProps): ReactNode => 
       <Label>Name shown to the rep</Label>
       <input
         aria-label="Name shown to the rep"
-        style={field()}
         value={displayName}
         onChange={(e) => {
           setDisplayName(e.target.value);
@@ -129,7 +116,6 @@ export const PersonaDraftForm = ({ onCreate }: PersonaDraftProps): ReactNode => 
       <Label>Specialty</Label>
       <input
         aria-label="Specialty"
-        style={field()}
         value={specialty}
         onChange={(e) => {
           setSpecialty(e.target.value);
@@ -141,7 +127,6 @@ export const PersonaDraftForm = ({ onCreate }: PersonaDraftProps): ReactNode => 
           here would be writing prompt text through a field with no approval of its own. */}
       <select
         aria-label="How they behave"
-        style={field()}
         value={stance}
         onChange={(e) => {
           setStance(e.target.value as SimPersonaStance);
@@ -157,7 +142,6 @@ export const PersonaDraftForm = ({ onCreate }: PersonaDraftProps): ReactNode => 
       <Label>Brief — what this doctor knows and cares about</Label>
       <textarea
         aria-label="Brief"
-        style={box()}
         value={brief}
         onChange={(e) => {
           setBrief(e.target.value);
@@ -254,7 +238,6 @@ export const ScenarioDraftForm = ({
       <Label>Practice doctor</Label>
       <select
         aria-label="Practice doctor"
-        style={field()}
         value={personaId}
         onChange={(e) => {
           setPersonaId(e.target.value);
@@ -270,7 +253,6 @@ export const ScenarioDraftForm = ({
       <Label>Title</Label>
       <input
         aria-label="Title"
-        style={field()}
         value={title}
         onChange={(e) => {
           setTitle(e.target.value);
@@ -280,7 +262,6 @@ export const ScenarioDraftForm = ({
       <Label>What the rep should achieve</Label>
       <textarea
         aria-label="What the rep should achieve"
-        style={box()}
         value={objective}
         onChange={(e) => {
           setObjective(e.target.value);
@@ -290,7 +271,6 @@ export const ScenarioDraftForm = ({
       <Label>The objection the doctor will raise</Label>
       <textarea
         aria-label="The objection the doctor will raise"
-        style={box()}
         value={objection}
         onChange={(e) => {
           setObjection(e.target.value);
@@ -300,7 +280,6 @@ export const ScenarioDraftForm = ({
       <Label>Product — optional</Label>
       <select
         aria-label="Product"
-        style={field()}
         value={productId}
         onChange={(e) => {
           setProductId(e.target.value);
@@ -317,7 +296,6 @@ export const ScenarioDraftForm = ({
       <Label>Market{productId === '' ? ' — optional' : ' — REQUIRED for a product'}</Label>
       <select
         aria-label="Market"
-        style={field()}
         value={marketId}
         onChange={(e) => {
           setMarketId(e.target.value);
@@ -397,7 +375,7 @@ export const SimContentReview = ({
   return (
     <Card>
       <Heading>{row.title}</Heading>
-      <div style={{ display: 'flex', gap: tokens.space.xs, flexWrap: 'wrap' }}>
+      <div className="ff-row ff-row-tight">
         <Pill tone="neutral">{row.kind}</Pill>
         <StatusPill status={row.status} />
       </div>
@@ -406,7 +384,7 @@ export const SimContentReview = ({
         <div key={label}>
           <Label>{label}</Label>
           <Body>
-            <span style={{ whiteSpace: 'pre-wrap' }}>{value}</span>
+            <span className="ff-prewrap">{value}</span>
           </Body>
         </div>
       ))}
@@ -446,7 +424,6 @@ export const SimContentReview = ({
           <Label>Your attestation — required to approve</Label>
           <textarea
             aria-label="Your attestation"
-            style={box()}
             value={attestation}
             onChange={(e) => {
               setAttestation(e.target.value);
@@ -455,7 +432,6 @@ export const SimContentReview = ({
           <Label>Or a reason — required to reject</Label>
           <textarea
             aria-label="Reason for rejecting"
-            style={box()}
             value={reason}
             onChange={(e) => {
               setReason(e.target.value);
@@ -464,7 +440,7 @@ export const SimContentReview = ({
           {/* Approve and Reject are the same control, side by side, one click each, no confirm on
               either -- the choice `override-form.tsx` and the knowledge screen both made, for the
               same reason: making one path harder turns a review into a rubber stamp. */}
-          <div style={{ display: 'flex', gap: tokens.space.sm }}>
+          <div className="ff-btn-pair">
             <button
               type="button"
               className={btn('secondary')}

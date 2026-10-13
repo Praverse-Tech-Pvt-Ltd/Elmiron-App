@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { tokens } from '@fieldforce/ui-tokens';
 import { signedIn } from '../../lib/session';
 import { Body, MissingNote, Title } from '../../lib/ui';
 import { CoursePublishing } from '../../lib/course-publishing';
@@ -55,8 +54,8 @@ export default async function Courses(): Promise<ReactNode> {
   }));
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1000 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-page ff-page-medium">
+      <div className="ff-page-header-text">
         <Title>Courses</Title>
         <Body muted>
           Publish a loaded course version so it can be assigned and taken in the app; retire one

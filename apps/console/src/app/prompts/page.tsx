@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { AiPromptVersionSchema, GATEWAY_FEATURES } from '@fieldforce/core';
 import type { AiPromptVersion, GatewayFeature } from '@fieldforce/core';
-import { tokens } from '@fieldforce/ui-tokens';
 import { signedIn } from '../../lib/session';
 import { Body, MissingNote, Title } from '../../lib/ui';
 import { PromptList } from '../../lib/prompt-review-list';
@@ -84,8 +83,8 @@ export default async function Prompts(): Promise<ReactNode> {
   });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1000 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-page ff-page-medium">
+      <div className="ff-page-header-text">
         <Title>What the AI is told to do</Title>
         <Body muted>
           These are the instructions a model is given before it answers anything. You cannot approve

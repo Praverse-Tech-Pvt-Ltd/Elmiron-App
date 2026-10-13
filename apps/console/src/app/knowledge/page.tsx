@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { KnowledgeDocumentVersionSchema } from '@fieldforce/core';
 import type { KnowledgeDocumentVersion } from '@fieldforce/core';
-import { tokens } from '@fieldforce/ui-tokens';
 import { signedIn } from '../../lib/session';
 import { Body, MissingNote, Title } from '../../lib/ui';
 import { KnowledgeReviewList } from '../../lib/knowledge-review-list';
@@ -117,8 +116,8 @@ export default async function KnowledgeReviewQueue(): Promise<ReactNode> {
   const drafts = rows?.filter((row) => row.version.status === 'draft') ?? [];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1000 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-page ff-page-medium">
+      <div className="ff-page-header-text">
         <Title>Knowledge awaiting your approval</Title>
         <Body muted>
           Nothing here is answerable to a rep until you approve it. You cannot approve a version you

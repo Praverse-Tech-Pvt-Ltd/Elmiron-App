@@ -2,7 +2,8 @@
 
 import type { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
-import { compactTypography, tokens } from '@fieldforce/ui-tokens';
+import { Icon } from './icons';
+import type { IconName } from './icons';
 import { SignOut } from './sign-out';
 
 /**
@@ -29,13 +30,38 @@ import { SignOut } from './sign-out';
  *
  * `FE-W79`: the last four "Coming later" entries were built, so the section is gone rather than
  * left empty. A future unbuilt destination goes back under that heading, never as a dead link.
+ *
+ * `FE-W121`: the sidebar of a desk product — a brand mark, each entry with a glyph, the current
+ * page lifted onto a card, and whoever is signed in at the foot. Under 1100px it folds to a rail of
+ * glyphs; the words stay in the markup, so a link's accessible name never changes with the width.
  */
 interface NavItem {
   readonly label: string;
   readonly href: string;
 }
 
-const GROUPS: readonly { readonly title: string; readonly items: readonly NavItem[] }[] = [
+/** One glyph per destination, keyed by route. Decorative: the label names the entry. */
+const ICONS: Readonly<Record<string, IconName>> = {
+  '/coaching': 'inbox',
+  '/planning': 'calendar',
+  '/tracking': 'pin',
+  '/days': 'clock',
+  '/learning': 'cap',
+  '/knowledge': 'book',
+  '/practice': 'pulse',
+  '/practice-feedback': 'message',
+  '/prompts': 'sparkle',
+  '/courses': 'layers',
+  '/admin': 'fileCheck',
+  '/planning/access': 'key',
+  '/tracking/notice': 'shield',
+  '/users': 'users',
+  '/territories': 'map',
+  '/audit': 'list',
+  '/retention': 'archive',
+};
+
+export const GROUPS: readonly { readonly title: string; readonly items: readonly NavItem[] }[] = [
   {
     title: 'Team',
     items: [
@@ -89,25 +115,10 @@ const GROUPS: readonly { readonly title: string; readonly items: readonly NavIte
 ];
 
 /** The most specific link that contains the current path is the current one. */
-const currentHref = (pathname: string): string | null => {
+export const currentHref = (pathname: string): string | null => {
   const all = GROUPS.flatMap((group) => group.items.map((item) => item.href));
   const matches = all.filter((href) => pathname === href || pathname.startsWith(`${href}/`));
   return matches.sort((a, b) => b.length - a.length)[0] ?? null;
-};
-
-const groupTitle = {
-  fontSize: compactTypography.label.size,
-  fontWeight: 600,
-  color: tokens.color.textSecondary,
-  textTransform: 'uppercase' as const,
-  letterSpacing: 0.4,
-  padding: `${String(tokens.space.md)}px ${String(tokens.space.sm)}px ${String(tokens.space.xs)}px`,
-};
-
-const linkStyle = {
-  display: 'block',
-  padding: `${String(tokens.space.sm)}px ${String(tokens.space.sm)}px`,
-  fontSize: compactTypography.body.size,
 };
 
 /**
@@ -119,53 +130,34 @@ export const Nav = ({
 }: { readonly signedInEmail?: string | null } = {}): ReactNode => {
   const current = currentHref(usePathname());
   return (
-    <nav
-      aria-label="Console"
-      className="ff-nav"
-      style={{
-        width: 232,
-        flex: 'none',
-        background: tokens.color.wash,
-        padding: `${String(tokens.space.lg)}px ${String(tokens.space.sm)}px`,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: tokens.space.xs,
-      }}
-    >
-      <div
-        style={{
-          padding: `0 ${String(tokens.space.sm)}px ${String(tokens.space.sm)}px`,
-          fontSize: compactTypography.heading.size,
-          fontWeight: Number(compactTypography.heading.weight),
-        }}
-      >
-        Admin
+    <nav aria-label="Console" className="ff-nav">
+      <div className="ff-brand">
+        <span className="ff-brand-mark">
+          <Icon name="leaf" size={18} strokeWidth={2} />
+        </span>
+        <span className="ff-nav-text">Admin</span>
       </div>
-      <div className="ff-nav-items" style={{ display: 'flex', flexDirection: 'column' }}>
+      <div className="ff-nav-items">
         {GROUPS.map((group) => (
-          <div key={group.title}>
-            <div style={groupTitle}>{group.title}</div>
+          <div className="ff-nav-group" key={group.title}>
+            <div className="ff-nav-title">{group.title}</div>
             {group.items.map((item) => (
               <a
                 aria-current={item.href === current ? 'page' : undefined}
                 className="ff-nav-link"
                 href={item.href}
                 key={item.href}
-                style={linkStyle}
+                title={item.label}
               >
-                {item.label}
+                <Icon name={ICONS[item.href] ?? 'list'} />
+                <span className="ff-nav-text">{item.label}</span>
               </a>
             ))}
           </div>
         ))}
       </div>
       {signedInEmail === null ? null : (
-        <div
-          style={{
-            marginTop: 'auto',
-            padding: `${String(tokens.space.md)}px ${String(tokens.space.sm)}px 0`,
-          }}
-        >
+        <div className="ff-nav-foot">
           <SignOut email={signedInEmail} />
         </div>
       )}

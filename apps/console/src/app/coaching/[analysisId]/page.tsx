@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { signedIn } from '../../../lib/session';
-import { tokens } from '@fieldforce/ui-tokens';
-import { Body, Card, Heading, Label, MissingNote, Title } from '../../../lib/ui';
+import { Body, Card, Heading, Label, MissingNote, Page, PageHeader } from '../../../lib/ui';
 import { OverrideForm } from '../../../lib/override-form';
 import { OverridesPanel, loadOverrides } from '../../../lib/overrides-panel';
 
@@ -58,13 +57,13 @@ export default async function Review({
 
   if (analysis === null) {
     return (
-      <div style={{ maxWidth: 900 }}>
-        <Title>Review</Title>
+      <Page width="narrow">
+        <PageHeader title="Review" />
         <MissingNote tone="critical">
           This analysis could not be loaded. Nothing is shown rather than a partial view — a
           decision about somebody made from half a record is worse than no decision.
         </MissingNote>
-      </div>
+      </Page>
     );
   }
 
@@ -73,76 +72,57 @@ export default async function Review({
   const overrides = session === null ? null : await loadOverrides(session.client, analysis.id);
 
   return (
-    <div
-      style={{ display: 'flex', gap: tokens.space.lg, maxWidth: 1320, alignItems: 'flex-start' }}
-    >
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: tokens.space.md }}>
-        <div>
-          <Label>{`Analysis ${analysis.id.slice(0, 8)} · rubric ${analysis.rubricVersion} · ${analysis.modelProvider} ${analysis.modelVersion}`}</Label>
-          <Title>{findings[0]?.title ?? 'Nothing was flagged'}</Title>
-        </div>
+    <Page>
+      <div className="ff-split">
+        <div className="ff-split-main">
+          <PageHeader
+            eyebrow={`Analysis ${analysis.id.slice(0, 8)} · rubric ${analysis.rubricVersion} · ${analysis.modelProvider} ${analysis.modelVersion}`}
+            title={findings[0]?.title ?? 'Nothing was flagged'}
+          />
 
-        {findings.map((finding) => (
-          <Card key={finding.id}>
-            <Label>The cited moment</Label>
-            <Body>{finding.detail}</Body>
-            {finding.citations.map((citation) => (
-              <div
-                key={citation.segmentId}
-                style={{
-                  background: tokens.color.wash,
-                  borderRadius: tokens.radius.well,
-                  borderLeft: `3px solid ${tokens.color.accent}`,
-                  padding: tokens.space.md,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: tokens.space.xs,
-                }}
-              >
-                <Label>{`${stamp(citation.startMs)} – ${stamp(citation.endMs)}`}</Label>
-                <Body>{`“${citation.quotedText}”`}</Body>
-              </div>
-            ))}
-            <Label>
-              Transcript redacted before analysis. No patient detail reaches this screen or the
-              model.
-            </Label>
-          </Card>
-        ))}
+          {findings.map((finding) => (
+            <Card key={finding.id}>
+              <Label>The cited moment</Label>
+              <Body>{finding.detail}</Body>
+              {finding.citations.map((citation) => (
+                <div className="ff-well ff-quote" key={citation.segmentId}>
+                  <Label>{`${stamp(citation.startMs)} – ${stamp(citation.endMs)}`}</Label>
+                  <Body>{`“${citation.quotedText}”`}</Body>
+                </div>
+              ))}
+              <Label>
+                Transcript redacted before analysis. No patient detail reaches this screen or the
+                model.
+              </Label>
+            </Card>
+          ))}
 
-        {/*
+          {/*
           The MR's reply, above the controls and never behind a disclosure. A
           manager who has not read it is deciding without the only account that
           comes from the room.
         */}
-        <Card>
-          <Heading>
-            {analysis.mrRespondedAt === null
-              ? 'The MR has not replied'
-              : 'The MR replied before you opened this'}
-          </Heading>
-          {analysis.mrResponse === null ? (
-            <Body muted>
-              They have read it or will. A finding with no reply is not a finding they agree with.
-            </Body>
-          ) : (
-            <Body>{analysis.mrResponse}</Body>
-          )}
-        </Card>
-      </div>
+          <Card>
+            <Heading>
+              {analysis.mrRespondedAt === null
+                ? 'The MR has not replied'
+                : 'The MR replied before you opened this'}
+            </Heading>
+            {analysis.mrResponse === null ? (
+              <Body muted>
+                They have read it or will. A finding with no reply is not a finding they agree with.
+              </Body>
+            ) : (
+              <Body>{analysis.mrResponse}</Body>
+            )}
+          </Card>
+        </div>
 
-      <div
-        style={{
-          width: 404,
-          flex: 'none',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: tokens.space.md,
-        }}
-      >
-        <OverridesPanel result={overrides} />
-        <OverrideForm analysisId={analysis.id} findingId={findings[0]?.id ?? null} />
+        <div className="ff-split-side">
+          <OverridesPanel result={overrides} />
+          <OverrideForm analysisId={analysis.id} findingId={findings[0]?.id ?? null} />
+        </div>
       </div>
-    </div>
+    </Page>
   );
 }

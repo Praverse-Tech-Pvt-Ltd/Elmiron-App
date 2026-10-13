@@ -5,6 +5,7 @@ import { signedIn } from '../../lib/session';
 import { Body, MissingNote, Title } from '../../lib/ui';
 import { TeamDays } from '../../lib/team-days';
 import { teamDaysRefusal } from '../../lib/team-days-text';
+import { btn } from '../../lib/theme-css';
 
 /**
  * `BE-W191` — the team's working days on one date: who started, who ended, what each day held.
@@ -41,26 +42,28 @@ export default async function TeamDaysPage({
 
   const result = await session.db.rpc(WORK_DAY_RPC.teamWorkDays, { p_on: day });
   const header = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-page-header-text">
       <Title>The team’s day</Title>
       <Body muted>
         Each rep’s working day on {day}: started with their first check-in or when they started it,
         ended when they pressed End my day. An ended day refuses further check-ins until you reopen
         it, and the reason you give is kept with it.
       </Body>
-      <form method="get" style={{ display: 'flex', gap: tokens.space.sm, alignItems: 'center' }}>
-        <label htmlFor="days-date">Day</label>
+      <form className="ff-row" method="get" style={{ marginTop: tokens.space.sm }}>
+        <label className="ff-label" htmlFor="days-date">
+          Day
+        </label>
         <input defaultValue={day} id="days-date" name="date" type="date" />
-        <button type="submit">Show</button>
+        <button className={btn('secondary')} type="submit">
+          Show
+        </button>
       </form>
     </div>
   );
 
   if (result.error !== null) {
     return (
-      <div
-        style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1100 }}
-      >
+      <div className="ff-page ff-page-medium">
         {header}
         <MissingNote tone="critical">{teamDaysRefusal(result.error)}</MissingNote>
       </div>
@@ -69,7 +72,7 @@ export default async function TeamDaysPage({
 
   const days = ((result.data ?? []) as unknown[]).map((row) => TeamWorkDaySchema.parse(row));
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1100 }}>
+    <div className="ff-page ff-page-medium">
       {header}
       <TeamDays days={days} />
     </div>

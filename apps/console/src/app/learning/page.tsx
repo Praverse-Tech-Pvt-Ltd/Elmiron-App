@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { tokens } from '@fieldforce/ui-tokens';
 import { signedIn } from '../../lib/session';
 import { Body, MissingNote, Title } from '../../lib/ui';
 import { CourseAssignment } from '../../lib/course-assignment';
@@ -60,8 +59,8 @@ export default async function Learning(): Promise<ReactNode> {
   }));
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1000 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-page ff-page-medium">
+      <div className="ff-page-header-text">
         <Title>Course assignments</Title>
         <Body muted>
           Give someone in your team a course to take in the app. Only a course with a published

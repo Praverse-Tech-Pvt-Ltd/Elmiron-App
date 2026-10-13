@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import {
   ADMIN_ACCOUNTS_FUNCTION,
   ADMIN_RPC,
@@ -20,9 +20,8 @@ import type {
   Role,
   TerritoryNode,
 } from '@fieldforce/core';
-import { compactTypography, tokens } from '@fieldforce/ui-tokens';
 import { browserClient } from './supabase';
-import { Body, Card, Heading, Label, MissingNote, Pill, cell, headerCell } from './ui';
+import { Body, Card, Heading, Label, MissingNote, Pill } from './ui';
 import {
   accessWarnings,
   adminRefusal,
@@ -40,15 +39,6 @@ import { btn } from './theme-css';
  * **The temporary password is shown once, here, and nowhere else.** It is not stored by the console
  * or the database; reloading the page loses it, and the screen says so.
  */
-
-const field = (): CSSProperties => ({
-  width: '100%',
-  padding: tokens.space.sm,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.control,
-  fontSize: compactTypography.body.size,
-  fontFamily: 'inherit',
-});
 
 type Outcome =
   | { readonly kind: 'idle' }
@@ -98,12 +88,8 @@ const invokeAccounts = async (
 const Password = ({ value }: { readonly value: string }): ReactNode => (
   <MissingNote tone="info">
     Temporary password, shown once — copy it now and give it to the person directly:{' '}
-    <code
-      style={{ fontFamily: 'ui-monospace, monospace', fontSize: compactTypography.heading.size }}
-    >
-      {value}
-    </code>
-    . It is not stored anywhere and is gone when this page reloads.
+    <code className="ff-secret">{value}</code>. It is not stored anywhere and is gone when this page
+    reloads.
   </MissingNote>
 );
 
@@ -152,7 +138,6 @@ const Placement = ({
       <Label>Role</Label>
       <select
         aria-label="Role"
-        style={field()}
         value={role}
         onChange={(e) => {
           onRole(e.target.value as Role);
@@ -173,7 +158,6 @@ const Placement = ({
           </Label>
           <select
             aria-label="Territory"
-            style={field()}
             value={territoryId}
             onChange={(e) => {
               onTerritory(e.target.value);
@@ -189,7 +173,6 @@ const Placement = ({
           <Label>Reporting manager{role === 'mr' ? ' (required for a rep)' : ' (optional)'}</Label>
           <select
             aria-label="Reporting manager"
-            style={field()}
             value={managerId}
             onChange={(e) => {
               onManager(e.target.value);
@@ -275,7 +258,6 @@ const CreateUser = ({ pickers }: { readonly pickers: Pickers }): ReactNode => {
         aria-label="Email"
         type="email"
         autoComplete="off"
-        style={field()}
         value={email}
         onChange={(e) => {
           setEmail(e.target.value);
@@ -284,7 +266,6 @@ const CreateUser = ({ pickers }: { readonly pickers: Pickers }): ReactNode => {
       <Label>Full name</Label>
       <input
         aria-label="Full name"
-        style={field()}
         value={fullName}
         onChange={(e) => {
           setFullName(e.target.value);
@@ -314,7 +295,6 @@ const CreateUser = ({ pickers }: { readonly pickers: Pickers }): ReactNode => {
           <input
             aria-label="Email again"
             autoComplete="off"
-            style={field()}
             value={confirm}
             onChange={(e) => {
               setConfirm(e.target.value);
@@ -350,22 +330,22 @@ const PendingLine = ({ row }: { readonly row: PendingUser }): ReactNode => {
 
   return (
     <tr>
-      <td style={cell}>
+      <td>
         {row.fullName}
         <br />
-        <span style={{ color: tokens.color.textSecondary }}>{row.email}</span>
+        <span className="ff-muted">{row.email}</span>
       </td>
-      <td style={cell}>{roleLabel(row.role)}</td>
-      <td style={cell}>
+      <td>{roleLabel(row.role)}</td>
+      <td>
         {row.accountExists
           ? row.accountConfirmed
             ? 'Account exists, confirmed — no profile yet'
             : 'Account exists, NOT confirmed'
           : 'No sign-in account'}
       </td>
-      <td style={cell}>{row.requestedBy}</td>
-      <td style={cell}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+      <td>{row.requestedBy}</td>
+      <td>
+        <div className="ff-cell-stack">
           {row.accountExists && !row.accountHasProfile ? (
             <button
               type="button"
@@ -381,7 +361,6 @@ const PendingLine = ({ row }: { readonly row: PendingUser }): ReactNode => {
           <input
             aria-label={`Why cancel ${row.email}`}
             placeholder="Why cancel"
-            style={field()}
             value={reason}
             onChange={(e) => {
               setReason(e.target.value);
@@ -496,19 +475,19 @@ const UserLine = ({
 
   return (
     <tr>
-      <td style={cell}>
+      <td>
         <strong>{user.fullName}</strong>
         {isSelf ? ' (you)' : ''}
         <br />
-        <span style={{ color: tokens.color.textSecondary }}>{user.email ?? 'no email'}</span>
+        <span className="ff-muted">{user.email ?? 'no email'}</span>
       </td>
-      <td style={cell}>{roleLabel(user.role)}</td>
-      <td style={cell}>
+      <td>{roleLabel(user.role)}</td>
+      <td>
         {user.territoryCode === null ? '—' : `${user.territoryCode} — ${user.territoryName ?? ''}`}
       </td>
-      <td style={cell}>{user.managerName ?? '—'}</td>
-      <td style={cell}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+      <td>{user.managerName ?? '—'}</td>
+      <td>
+        <div className="ff-cell-stack">
           <Pill tone={user.isActive ? 'success' : 'neutral'}>
             {user.isActive ? 'Active' : 'Deactivated'}
           </Pill>
@@ -519,16 +498,13 @@ const UserLine = ({
           ))}
         </div>
       </td>
-      <td style={cell}>
-        <div
-          style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs, minWidth: 260 }}
-        >
+      <td>
+        <div className="ff-cell-stack ff-cell-actions">
           {open ? (
             <>
               <Label>Full name</Label>
               <input
                 aria-label={`Full name of ${user.fullName}`}
-                style={field()}
                 value={fullName}
                 onChange={(e) => {
                   setFullName(e.target.value);
@@ -550,7 +526,6 @@ const UserLine = ({
                   <input
                     aria-label={`Email of ${user.fullName} again`}
                     autoComplete="off"
-                    style={field()}
                     value={confirm}
                     onChange={(e) => {
                       setConfirm(e.target.value);
@@ -567,13 +542,12 @@ const UserLine = ({
               <input
                 aria-label={`Why change ${user.fullName}`}
                 placeholder="Why (kept in the audit log)"
-                style={field()}
                 value={reason}
                 onChange={(e) => {
                   setReason(e.target.value);
                 }}
               />
-              <div style={{ display: 'flex', gap: tokens.space.xs, flexWrap: 'wrap' }}>
+              <div className="ff-row ff-row-tight">
                 {open ? (
                   <button
                     type="button"
@@ -660,20 +634,20 @@ export const UsersAdmin = ({
       ) : null}
 
       {pending.length === 0 ? null : (
-        <>
+        <Card>
           <Heading>Started, not finished</Heading>
           <Body muted>
             A sign-in account and its profile are made in two systems. These were started and did
             not finish — finish each once its account exists, or cancel it.
           </Body>
-          <table className="ff-table" style={{ borderCollapse: 'collapse', width: '100%' }}>
+          <table>
             <thead>
               <tr>
-                <th style={headerCell}>Person</th>
-                <th style={headerCell}>Role</th>
-                <th style={headerCell}>Sign-in account</th>
-                <th style={headerCell}>Started by</th>
-                <th style={headerCell}>Action</th>
+                <th>Person</th>
+                <th>Role</th>
+                <th>Sign-in account</th>
+                <th>Started by</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -682,31 +656,33 @@ export const UsersAdmin = ({
               ))}
             </tbody>
           </table>
-        </>
+        </Card>
       )}
 
-      <Heading>People</Heading>
-      <Body muted>
-        Read this list against the sheet you were given: role, territory and manager for every
-        person, and no warning on anyone who should be working.
-      </Body>
-      <table className="ff-table" style={{ borderCollapse: 'collapse', width: '100%' }}>
-        <thead>
-          <tr>
-            <th style={headerCell}>Person</th>
-            <th style={headerCell}>Role</th>
-            <th style={headerCell}>Territory</th>
-            <th style={headerCell}>Reports to</th>
-            <th style={headerCell}>State</th>
-            <th style={headerCell}>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((user) => (
-            <UserLine key={user.id} user={user} pickers={pickers} selfId={selfId} />
-          ))}
-        </tbody>
-      </table>
+      <Card>
+        <Heading>People</Heading>
+        <Body muted>
+          Read this list against the sheet you were given: role, territory and manager for every
+          person, and no warning on anyone who should be working.
+        </Body>
+        <table>
+          <thead>
+            <tr>
+              <th>Person</th>
+              <th>Role</th>
+              <th>Territory</th>
+              <th>Reports to</th>
+              <th>State</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((user) => (
+              <UserLine key={user.id} user={user} pickers={pickers} selfId={selfId} />
+            ))}
+          </tbody>
+        </table>
+      </Card>
     </>
   );
 };

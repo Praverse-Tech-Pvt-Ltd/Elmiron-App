@@ -5,7 +5,6 @@ import {
   PlannableDoctorSchema,
   PlannableRepSchema,
 } from '@fieldforce/core';
-import { tokens } from '@fieldforce/ui-tokens';
 import { signedIn } from '../../lib/session';
 import { Body, MissingNote, Title } from '../../lib/ui';
 import { PlanDay } from '../../lib/plan-day';
@@ -45,7 +44,7 @@ export default async function Planning({
 
   const repsResult = await session.db.rpc(PLANNING_RPC.plannableReps, { p_on: day });
   const header = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-page-header-text">
       <Title>Plan a rep’s day</Title>
       <Body muted>
         Choose a rep and a day, put the doctors in route order, and save. Each save is a new version
@@ -57,9 +56,7 @@ export default async function Planning({
 
   if (repsResult.error !== null) {
     return (
-      <div
-        style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1000 }}
-      >
+      <div className="ff-page ff-page-medium">
         {header}
         <MissingNote tone="critical">{planRefusal(repsResult.error)}</MissingNote>
       </div>
@@ -69,9 +66,7 @@ export default async function Planning({
   const reps = ((repsResult.data ?? []) as unknown[]).map((row) => PlannableRepSchema.parse(row));
   if (reps.length === 0) {
     return (
-      <div
-        style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1000 }}
-      >
+      <div className="ff-page ff-page-medium">
         {header}
         <MissingNote>
           There is no rep you may plan on {day}: nobody in your territory, and no territory granted
@@ -95,9 +90,7 @@ export default async function Planning({
   const refusal = doctorsResult.error ?? reviewResult.error;
   if (refusal !== null) {
     return (
-      <div
-        style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1000 }}
-      >
+      <div className="ff-page ff-page-medium">
         {header}
         <MissingNote>{planRefusal(refusal)}</MissingNote>
       </div>
@@ -110,7 +103,7 @@ export default async function Planning({
   const review = DayReviewSchema.parse(reviewResult.data);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.lg, maxWidth: 1000 }}>
+    <div className="ff-page ff-page-medium">
       {header}
       <PlanDay day={day} doctors={doctors} rep={selected} reps={reps} review={review} />
     </div>

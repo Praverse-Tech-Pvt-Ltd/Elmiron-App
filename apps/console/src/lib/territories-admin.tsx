@@ -2,12 +2,12 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { ADMIN_RPC, territoryLevel } from '@fieldforce/core';
 import type { TerritoryNode } from '@fieldforce/core';
-import { compactTypography, tokens } from '@fieldforce/ui-tokens';
+import { tokens } from '@fieldforce/ui-tokens';
 import { browserClient } from './supabase';
-import { Body, Card, Heading, Label, MissingNote, cell, headerCell } from './ui';
+import { Body, Card, Heading, Label, MissingNote } from './ui';
 import { adminRefusal, clock, hoursSource, treeOrder, weekdaysLabel } from './admin-text';
 import { btn } from './theme-css';
 
@@ -15,15 +15,6 @@ import { btn } from './theme-css';
  * `FE-W76` — the client half of `/territories`. Every write is an RPC as the signed-in admin; the
  * level rules, the code rules and the hours rules are the database's, named by `adminRefusal`.
  */
-
-const field = (): CSSProperties => ({
-  width: '100%',
-  padding: tokens.space.sm,
-  border: `1px solid ${tokens.color.border}`,
-  borderRadius: tokens.radius.control,
-  fontSize: compactTypography.body.size,
-  fontFamily: 'inherit',
-});
 
 type Outcome =
   | { readonly kind: 'idle' }
@@ -77,7 +68,7 @@ const AddTerritory = ({
   const [code, setCode] = useState(parent === null ? '' : `${parent.code}-`);
   const level = territoryLevel(parent === null ? 1 : parent.depth + 1);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-cell-stack">
       <Label>
         New {level}
         {parent === null ? '' : ` beneath ${parent.code}`}
@@ -85,7 +76,6 @@ const AddTerritory = ({
       <input
         aria-label={`Name of the new ${level}`}
         placeholder="Name"
-        style={field()}
         value={name}
         onChange={(e) => {
           setName(e.target.value);
@@ -94,7 +84,6 @@ const AddTerritory = ({
       <input
         aria-label={`Code of the new ${level}`}
         placeholder="Code (unique across the whole system)"
-        style={field()}
         value={code}
         onChange={(e) => {
           setCode(e.target.value.toUpperCase());
@@ -138,13 +127,12 @@ const Hours = ({
   const [grace, setGrace] = useState(String(base?.graceMinutes ?? 15));
   const [days, setDays] = useState<readonly number[]>(base?.activeWeekdays ?? [1, 2, 3, 4, 5, 6]);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-cell-stack">
       <Label>Working hours for {node.code}</Label>
-      <div style={{ display: 'flex', gap: tokens.space.xs }}>
+      <div className="ff-row ff-row-tight">
         <input
           aria-label={`Start of day in ${node.code}`}
           type="time"
-          style={field()}
           value={start}
           onChange={(e) => {
             setStart(e.target.value);
@@ -153,7 +141,6 @@ const Hours = ({
         <input
           aria-label={`End of day in ${node.code}`}
           type="time"
-          style={field()}
           value={end}
           onChange={(e) => {
             setEnd(e.target.value);
@@ -162,7 +149,6 @@ const Hours = ({
       </div>
       <input
         aria-label={`Time zone of ${node.code}`}
-        style={field()}
         value={zone}
         onChange={(e) => {
           setZone(e.target.value);
@@ -174,15 +160,14 @@ const Hours = ({
         type="number"
         min={0}
         max={240}
-        style={field()}
         value={grace}
         onChange={(e) => {
           setGrace(e.target.value);
         }}
       />
-      <div style={{ display: 'flex', gap: tokens.space.sm, flexWrap: 'wrap' }}>
+      <div className="ff-row">
         {DAYS.map(([day, label]) => (
-          <label key={day} style={{ fontSize: compactTypography.body.size }}>
+          <label key={day}>
             <input
               type="checkbox"
               checked={days.includes(day)}
@@ -195,7 +180,7 @@ const Hours = ({
         ))}
       </div>
       <Refused outcome={outcome} />
-      <div style={{ display: 'flex', gap: tokens.space.xs, flexWrap: 'wrap' }}>
+      <div className="ff-row ff-row-tight">
         <button
           type="button"
           className={btn('primary')}
@@ -244,11 +229,10 @@ const Rename = ({
   const { outcome, write } = useWrite();
   const [name, setName] = useState(node.name);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space.xs }}>
+    <div className="ff-cell-stack">
       <Label>Rename {node.code} (the code does not change)</Label>
       <input
         aria-label={`New name of ${node.code}`}
-        style={field()}
         value={name}
         onChange={(e) => {
           setName(e.target.value);
@@ -289,33 +273,26 @@ const Line = ({
   const canAdd = node.depth < 3 && node.reps === 0;
   return (
     <tr>
-      <td style={{ ...cell, paddingLeft: tokens.space.md + indent * 24 }}>
-        <span style={{ color: tokens.color.textSecondary }}>{territoryLevel(node.depth)}</span>
+      <td style={{ paddingLeft: tokens.space.md + indent * 24 }}>
+        <span className="ff-muted">{territoryLevel(node.depth)}</span>
         <br />
         <strong>{node.code}</strong> — {node.name}
       </td>
-      <td style={{ ...cell, fontVariantNumeric: 'tabular-nums' }}>
+      <td className="ff-num">
         {node.activeUsers} ({node.reps} rep{node.reps === 1 ? '' : 's'})
       </td>
-      <td style={{ ...cell, fontVariantNumeric: 'tabular-nums' }}>{node.doctors}</td>
-      <td style={cell}>
+      <td className="ff-num">{node.doctors}</td>
+      <td>
         {node.hours === null
           ? '—'
           : `${clock(node.hours.shiftStart)}–${clock(node.hours.shiftEnd)} · ${weekdaysLabel(node.hours.activeWeekdays)} · ${node.hours.timezone}`}
         <br />
-        <span style={{ color: tokens.color.textSecondary }}>{hoursSource(node, codeOf)}</span>
+        <span className="ff-muted">{hoursSource(node, codeOf)}</span>
       </td>
       {canEdit ? (
-        <td style={cell}>
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: tokens.space.xs,
-              minWidth: 240,
-            }}
-          >
-            <div style={{ display: 'flex', gap: tokens.space.xs, flexWrap: 'wrap' }}>
+        <td>
+          <div className="ff-cell-stack ff-cell-actions">
+            <div className="ff-row ff-row-tight">
               {(['hours', 'rename', 'add'] as const)
                 .filter((p) => p !== 'add' || canAdd)
                 .map((p) => (
@@ -366,22 +343,24 @@ export const TerritoriesAdmin = ({
       {ordered.length === 0 ? (
         <Body muted>No territories yet.</Body>
       ) : (
-        <table className="ff-table" style={{ borderCollapse: 'collapse', width: '100%' }}>
-          <thead>
-            <tr>
-              <th style={headerCell}>Territory</th>
-              <th style={headerCell}>Active users</th>
-              <th style={headerCell}>Doctors</th>
-              <th style={headerCell}>Working hours</th>
-              {canEdit ? <th style={headerCell}>Change</th> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {ordered.map(({ node, indent }) => (
-              <Line key={node.id} node={node} indent={indent} canEdit={canEdit} codeOf={codeOf} />
-            ))}
-          </tbody>
-        </table>
+        <Card>
+          <table>
+            <thead>
+              <tr>
+                <th>Territory</th>
+                <th className="ff-num">Active users</th>
+                <th className="ff-num">Doctors</th>
+                <th>Working hours</th>
+                {canEdit ? <th>Change</th> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {ordered.map(({ node, indent }) => (
+                <Line key={node.id} node={node} indent={indent} canEdit={canEdit} codeOf={codeOf} />
+              ))}
+            </tbody>
+          </table>
+        </Card>
       )}
     </>
   );
