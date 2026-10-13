@@ -342,7 +342,7 @@ describe.skipIf(!reachable)('BE-W185 — creating a user end to end', () => {
                   (select count(*)::int from public.audit_log l
                     where l.table_name = 'user_profiles' and l.row_id = $1::text
                       and l.reason like 'created %') as reasoned
-             from public.user_profiles p where p.id = $1`,
+             from public.user_profiles p where p.id = $1::uuid`,
           [id, started.provisioningId, world.users.admin.id],
         ),
       );
