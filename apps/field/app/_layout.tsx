@@ -15,6 +15,7 @@ import { SessionProvider } from '../src/session';
 import { AuthGate } from '../src/auth-gate';
 import { OutboxFlusher } from '../src/sync/flusher';
 import { PulledStoreProvider } from '../src/sync/pulled-store';
+import { LiveTrackingProvider } from '../src/tracking/tracker';
 import { ZoneCaveatBanner } from '../src/today/ZoneCaveatBanner';
 import { useReduceMotion } from '../src/reduce-motion';
 
@@ -114,26 +115,34 @@ function App(): ReactNode {
               signed-out session never pulls with no token.
             */}
             <PulledStoreProvider>
-              <StatusBar style="dark" />
               {/*
+                `FE-W71`. The live tracker, at the root for the reason the flusher is: it must keep
+                its state across screens, and it watches only while the app is on screen. Inside
+                AuthGate, so it never asks anything with no token. A passthrough unless the build
+                has `EXPO_PUBLIC_LIVE_TRACKING=true` and the user is a rep.
+              */}
+              <LiveTrackingProvider>
+                <StatusBar style="dark" />
+                {/*
                 `FE-W45`, second half. Eleven screens render a date in the territory zone and
                 none of them read its `source`, so a UTC fallback has been indistinguishable
                 from a real answer. One banner here rather than eleven edits, for the same
                 reason the flusher and the store are here: this is where the zone lives.
               */}
-              <ZoneCaveatBanner />
-              {/*
+                <ZoneCaveatBanner />
+                {/*
                 FE-D7 3. ONE transition for every stack screen. The design specifies none, and
                 the native stack's 'default' is whatever the Android version does, so it would
                 differ between the emulator and a rep's phone. With "Remove animations" on,
                 none at all. Tab switches stay instant, as before.
               */}
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  animation: reduceMotion ? 'none' : 'slide_from_right',
-                }}
-              />
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    animation: reduceMotion ? 'none' : 'slide_from_right',
+                  }}
+                />
+              </LiveTrackingProvider>
             </PulledStoreProvider>
           </OutboxFlusher>
         </AuthGate>

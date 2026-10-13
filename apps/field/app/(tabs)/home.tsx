@@ -23,6 +23,7 @@ import type { TerritoryZone } from '../../src/today/territory-day';
 import type { DayOrigin, PullFailure } from '../../src/sync/pulled-store';
 import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
 import { NOT_PERMITTED_DETAIL, refusedDetail } from '../../src/errors/plain';
+import { LiveTrackingStatusLine } from '../../src/tracking/status-line';
 
 /**
  * **`FE-W40` B5. Why there is no day — and an EXPIRED anchor gets its own sentence.**
@@ -292,12 +293,20 @@ const MrToday = (): ReactNode => {
       notices={notices}
       onRetry={refresh}
       after={
-        <PendingSyncSection
-          items={pending}
-          onOpen={(item) => {
-            router.push(item.state === 'refused' ? '/queue' : `/visit/${item.id}`);
-          }}
-        />
+        <>
+          {/* `FE-W71`. Live location says what it is doing; nothing when the build has it off. */}
+          <LiveTrackingStatusLine
+            onOpen={() => {
+              router.push('/live-tracking');
+            }}
+          />
+          <PendingSyncSection
+            items={pending}
+            onOpen={(item) => {
+              router.push(item.state === 'refused' ? '/queue' : `/visit/${item.id}`);
+            }}
+          />
+        </>
       }
     />
   );

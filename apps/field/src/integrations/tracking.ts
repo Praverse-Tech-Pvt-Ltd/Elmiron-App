@@ -1,23 +1,23 @@
 /**
  * Live tracking — the decision of WHETHER the phone may track, with no tracking SDK at all.
  *
- * Nothing here records a position. Live tracking is undecided (operator question Q-12) and its rep
- * notice is a draft (`docs/operator/live-tracking-notice-DRAFT.md`). What is fixed whatever the
- * answers: tracking is never on outside working hours, never before the rep has accepted the notice,
- * never while the app is in the background (this app requests no background location -- blocked in
- * the manifest, `plugins/android-release.cjs`), and never unless the company has switched it on.
- * `trackingState` is that rule as code, so a future SDK is started and stopped by it, not beside it.
+ * Nothing here records a position. What is fixed: tracking is never on outside working hours, never
+ * before the rep has accepted the notice, never while the app is in the background (this app requests
+ * no background location -- blocked in the manifest, `plugins/android-release.cjs`), and never unless
+ * the company has switched it on. `trackingState` is that rule as code, and `FE-W71`'s tracker
+ * (`src/tracking/tracker.tsx`) is started and stopped by it, not beside it. The server holds the same
+ * rules again for every position it is sent (`record_location_ping`, `BE-W180`).
  */
 export interface TrackingInputs {
-  /** The company has switched live tracking on (no such switch exists yet: false). */
+  /** The company has switched live tracking on (`live_tracking_enabled`, from the server). */
   readonly companyEnabled: boolean;
-  /** The rep accepted the live-tracking notice in the app (not built yet: false). */
+  /** The rep accepted the CURRENT live-tracking notice (the server says, `my_live_tracking`). */
   readonly noticeAccepted: boolean;
   /** Inside the territory's working hours, by the SERVER's shift window (`my_shift_window`). */
   readonly withinWorkingHours: boolean;
   /** The app is on screen. */
   readonly foreground: boolean;
-  /** The rep's working day is open. */
+  /** The rep started sharing for today, on the server's today (`src/tracking/decide.ts`). */
   readonly dayOpen: boolean;
 }
 

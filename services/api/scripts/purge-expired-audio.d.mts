@@ -19,6 +19,10 @@ export interface PurgeResult {
    * or `revoked` — so its object would never be destroyed.
    */
   abandoned: number;
+  /** `BE-W181`. Live-tracking positions deleted because their `purge_after` had passed. */
+  pingsPurged: number;
+  /** `BE-W181`. Why deleting expired positions failed, or null. A failure fails the CLI run. */
+  pingPurgeError: string | null;
 }
 
 export interface PurgeOptions {
@@ -27,6 +31,8 @@ export interface PurgeOptions {
   serviceKey?: string;
   bucket?: string;
   limit?: number;
+  /** `BE-W181`. Positions deleted per run; 10,000 unless a caller says otherwise. */
+  locationPingLimit?: number;
   runId?: string;
 }
 

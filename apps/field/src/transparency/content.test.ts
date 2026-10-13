@@ -2,7 +2,12 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import * as content from './content';
-import { NEVER_RECORDED, TRANSPARENCY_ENTRIES, transparencyEntries } from './content';
+import {
+  NEVER_RECORDED,
+  TRANSPARENCY_ENTRIES,
+  neverRecordedFor,
+  transparencyEntries,
+} from './content';
 
 /**
  * **FE-D12 item 1. A9 must say what this build records, and nothing it does not.**
@@ -106,5 +111,37 @@ describe('A9 — consultation recording follows the build flag (FE-D12 item 1)',
 
   it('the default export is the recording-off build', () => {
     expect(TRANSPARENCY_ENTRIES).toEqual(transparencyEntries({ recordingEnabled: false }));
+  });
+});
+
+describe('A9 — live location follows the build flag (`FE-W71`)', () => {
+  const liveRow = (enabled: boolean) =>
+    transparencyEntries({ recordingEnabled: false, liveTrackingEnabled: enabled }).find((e) =>
+      /during working hours/i.test(e.title),
+    );
+
+  it('says nothing about live location when the build has it off', () => {
+    expect(liveRow(false)).toBeUndefined();
+    expect(neverRecordedFor({ liveTrackingEnabled: false })).toBe(NEVER_RECORDED);
+  });
+
+  it('says what is recorded, and its conditions, when the build has it on', () => {
+    const row = liveRow(true);
+    expect(row?.state).toBe('active');
+    expect(row?.detail).toMatch(/accept/i);
+    expect(row?.detail).toMatch(/90 days/i);
+    // The old sentence -- "only at the moment you press" -- would be false with it on.
+    const sentence = neverRecordedFor({ liveTrackingEnabled: true });
+    expect(sentence).not.toBe(NEVER_RECORDED);
+    expect(sentence).toMatch(/nothing in the background/i);
+    expect(sentence).toMatch(/only if you agreed/i);
+  });
+
+  it('the check-in row still describes a press, flag or not', () => {
+    const location = transparencyEntries({
+      recordingEnabled: false,
+      liveTrackingEnabled: true,
+    }).find((e) => /where you are, when you check in/i.test(e.title));
+    expect(location?.detail).toMatch(/check in or check out/i);
   });
 });

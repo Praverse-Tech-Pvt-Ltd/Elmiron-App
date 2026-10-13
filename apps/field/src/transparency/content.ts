@@ -28,8 +28,22 @@ import type { TransparencyEntry } from '@fieldforce/ui';
 export const NEVER_RECORDED =
   'Your calls, messages, contacts, camera or other apps: this app has no permission to reach them. And nothing in the background: your position is read only at the moment you press check in or check out.';
 
+/**
+ * `FE-W71`. With live tracking in the build, "nothing in the background" is still true -- there is
+ * no background location -- but "only at the moment you press check in or check out" is not: while
+ * the rep shares live location, a position is read every few minutes with the app on screen. So the
+ * sentence the build shows follows the build, as the recordings row does.
+ */
+export const NEVER_RECORDED_WITH_LIVE_TRACKING =
+  'Your calls, messages, contacts, camera or other apps: this app has no permission to reach them. And nothing in the background: your position is read when you press check in or check out, and, only if you agreed to share live location, every few minutes during your working hours while the app is on your screen.';
+
+export const neverRecordedFor = (build: { readonly liveTrackingEnabled: boolean }): string =>
+  build.liveTrackingEnabled ? NEVER_RECORDED_WITH_LIVE_TRACKING : NEVER_RECORDED;
+
 export const transparencyEntries = (build: {
   readonly recordingEnabled: boolean;
+  /** `FE-W71`. Absent is off, which is every build that does not set `EXPO_PUBLIC_LIVE_TRACKING`. */
+  readonly liveTrackingEnabled?: boolean;
 }): readonly TransparencyEntry[] => [
   {
     title: 'Where you are, when you check in or out',
@@ -37,6 +51,16 @@ export const transparencyEntries = (build: {
       'One position each time you press check in or check out, and how far that was from the clinic. Never in the background, never between visits.',
     state: 'active',
   },
+  ...(build.liveTrackingEnabled === true
+    ? [
+        {
+          title: 'Where you are during working hours — only if you agree',
+          detail:
+            'Only after you accept the live location notice and start sharing for the day, only in your working hours, and only while the app is on your screen: your position about every 5 minutes. Kept 90 days from when your company received it, then deleted. Withdraw any time from Me.',
+          state: 'active' as const,
+        },
+      ]
+    : []),
   {
     title: 'Which doctors you saw, and when',
     detail: 'Check-in and check-out times.',

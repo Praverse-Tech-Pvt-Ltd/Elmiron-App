@@ -74,3 +74,16 @@ export const learningEnabled: boolean = process.env.EXPO_PUBLIC_LEARNING === 'tr
  */
 export const lessonTutorEnabled: boolean =
   learningEnabled && process.env.EXPO_PUBLIC_LESSON_TUTOR === 'true';
+
+/**
+ * `FE-W71` / `BE-W180` — live tracking: the rep's position every few minutes, during working hours,
+ * while the app is on screen, after the rep has accepted the notice, and only if their company has
+ * switched it on.
+ *
+ * **Off by default.** Off, nothing of it exists in the app: no Me row, no status line, no watcher,
+ * and `/live-tracking` goes to Today. On, the tracker is mounted at the root and obeys
+ * `trackingState` (`src/integrations/tracking.ts`) — and the server re-checks every position anyway
+ * (`record_location_ping`), so a build with the flag on and a company with the switch off records
+ * nothing. Foreground only: background location stays blocked in the manifest.
+ */
+export const liveTrackingEnabled: boolean = process.env.EXPO_PUBLIC_LIVE_TRACKING === 'true';

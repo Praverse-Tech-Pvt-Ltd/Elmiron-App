@@ -3,11 +3,8 @@ import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import { Screen, TransparencyScreen } from '@fieldforce/ui';
 import { hasCompletedFirstRun, markFirstRunComplete } from '../src/onboarding/progress';
-import {
-  NEVER_RECORDED,
-  TRANSPARENCY_ENTRIES,
-  transparencyEntries,
-} from '../src/transparency/content';
+import { liveTrackingEnabled } from '../src/features';
+import { neverRecordedFor, transparencyEntries } from '../src/transparency/content';
 
 /**
  * A9 / C10 — reachable from Home, every day, and never buried in settings.
@@ -44,12 +41,21 @@ export default function Transparency(): ReactNode {
    * imported on use, as `recording-permission.ts` does: it throws at import on a misconfigured
    * build, and a flag that cannot be read is OFF. This build ships with recording off.
    */
-  const [entries, setEntries] = useState(TRANSPARENCY_ENTRIES);
+  const [entries, setEntries] = useState(
+    transparencyEntries({ recordingEnabled: false, liveTrackingEnabled }),
+  );
   useEffect(() => {
     let live = true;
     void import('../src/config')
       .then(({ appConfig }) => {
-        if (live) setEntries(transparencyEntries({ recordingEnabled: appConfig.recordingEnabled }));
+        if (live) {
+          setEntries(
+            transparencyEntries({
+              recordingEnabled: appConfig.recordingEnabled,
+              liveTrackingEnabled,
+            }),
+          );
+        }
       })
       .catch(() => undefined);
     return () => {
@@ -61,7 +67,8 @@ export default function Transparency(): ReactNode {
     <Screen scrollable>
       <TransparencyScreen
         entries={entries}
-        neverRecorded={NEVER_RECORDED}
+        // `FE-W71`. With live tracking in the build, the sentence about location says so.
+        neverRecorded={neverRecordedFor({ liveTrackingEnabled })}
         {...(inFirstRun === true
           ? {
               onContinue: () => {

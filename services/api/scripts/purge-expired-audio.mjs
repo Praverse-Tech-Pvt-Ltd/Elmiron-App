@@ -35,6 +35,9 @@ const DEFAULTS = {
   // JS number until growing the fleet past the pilot size would have needed a
   // code change and a deploy instead of a threshold row.
   limit: 100,
+  // `BE-W181`. Positions per run. 150 reps x 12 an hour x 10 hours is 18,000 a day, 750 an hour:
+  // an hourly run of 10,000 drains a whole day's arrivals in one pass.
+  locationPingLimit: 10_000,
 };
 
 /**
@@ -67,6 +70,8 @@ export const runPurge = async (overrides = {}) => {
   let destroyed = 0;
   let failed = 0;
   let abandoned = 0;
+  let pingsPurged = 0;
+  let pingPurgeError = null;
 
   try {
     // BE-W7. An upload session whose clocks ran out is still `open`, and
@@ -123,11 +128,26 @@ export const runPurge = async (overrides = {}) => {
     }
 
     await client.query('select public.finish_audio_purge_run($1, $2)', [runId, claimed]);
+
+    // `BE-W181`. Live-tracking positions expire 90 days after the server received them, and this
+    // hourly run is what deletes them -- the same schedule, the same watchdogged workflow, rather
+    // than a second worker nothing watches. A position is a row with no storage object, so it is
+    // one SQL call, after the audio so a failure here cannot hold an audio object past its date.
+    // A failure is recorded and fails the run (exit 1), never swallowed.
+    try {
+      const purged = await client.query(
+        'select public.purge_expired_location_pings($1) as purged',
+        [config.locationPingLimit],
+      );
+      pingsPurged = Number(purged.rows[0]?.purged ?? 0);
+    } catch (error) {
+      pingPurgeError = error instanceof Error ? error.message : String(error);
+    }
   } finally {
     await client.end();
   }
 
-  return { runId, claimed, destroyed, failed, abandoned };
+  return { runId, claimed, destroyed, failed, abandoned, pingsPurged, pingPurgeError };
 };
 
 // CLI entry. Importing this module does not run anything.
@@ -139,7 +159,10 @@ if (
   console.log(
     `purge ${result.runId}: closed ${String(result.abandoned)} stale session(s), ` +
       `claimed ${String(result.claimed)}, destroyed ${String(result.destroyed)}, ` +
-      `failed ${String(result.failed)}`,
+      `failed ${String(result.failed)}; deleted ${String(result.pingsPurged)} expired position(s)`,
   );
-  if (result.failed > 0) process.exit(1);
+  if (result.pingPurgeError !== null) {
+    console.error(`expired positions were NOT deleted: ${result.pingPurgeError}`);
+  }
+  if (result.failed > 0 || result.pingPurgeError !== null) process.exit(1);
 }

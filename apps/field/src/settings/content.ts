@@ -37,6 +37,8 @@ export interface SettingsNavigation {
   readonly onOpenProductQa?: () => void;
   /** W2-F B. Present only when `learningEnabled`; absent, there is no row. */
   readonly onOpenLearning?: () => void;
+  /** `FE-W71`. Present only when `liveTrackingEnabled`; absent, there is no row. */
+  readonly onOpenLiveTracking?: () => void;
 }
 
 export const settingsGroups = (
@@ -145,6 +147,17 @@ export const settingsGroups = (
   {
     heading: 'This phone',
     rows: [
+      ...(nav.onOpenLiveTracking === undefined
+        ? []
+        : [
+            {
+              id: 'live-tracking',
+              title: 'Live location',
+              detail: 'The notice, your agreement, and sharing your location during working hours.',
+              state: 'available' as const,
+              onPress: nav.onOpenLiveTracking,
+            },
+          ]),
       {
         id: 'location',
         title: 'Location',

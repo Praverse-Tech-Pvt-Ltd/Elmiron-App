@@ -7,6 +7,7 @@ import {
   practiceEnabled,
   productQaEnabled,
   learningEnabled,
+  liveTrackingEnabled,
 } from '../../src/features';
 import { useSession } from '../../src/session';
 import { settingsGroups } from '../../src/settings/content';
@@ -16,6 +17,7 @@ import {
   onQueueChanged,
 } from '../../src/sync/async-storage-store';
 import { unsentBeforeSignOut } from '../../src/sync/indicator';
+import { LiveTrackingStatusLine } from '../../src/tracking/status-line';
 
 /**
  * C4 — route binding. The entries and their honest states live in
@@ -55,6 +57,12 @@ export default function Me(): ReactNode {
 
   return (
     <Screen scrollable>
+      {/* `FE-W71`. What live location is doing, above everything else on Me; nothing when it is off. */}
+      <LiveTrackingStatusLine
+        onOpen={() => {
+          router.push('/live-tracking');
+        }}
+      />
       <SettingsScreen
         groups={settingsGroups({
           onOpenMileage: () => {
@@ -93,6 +101,14 @@ export default function Me(): ReactNode {
             ? {
                 onOpenProductQa: () => {
                   router.push('/product-qa');
+                },
+              }
+            : {}),
+          // `FE-W71`. Only with the live tracking flag on; off, the row does not exist.
+          ...(liveTrackingEnabled
+            ? {
+                onOpenLiveTracking: () => {
+                  router.push('/live-tracking');
                 },
               }
             : {}),

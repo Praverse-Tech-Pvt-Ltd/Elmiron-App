@@ -35,3 +35,24 @@ describe('settingsGroups — Product questions', () => {
     expect(opened).toBe(true);
   });
 });
+
+describe('settingsGroups — Live location (`FE-W71`)', () => {
+  it('has NO row when the flag is off', () => {
+    expect(ids(settingsGroups(nav))).not.toContain('live-tracking');
+  });
+
+  it('has the row, opening the screen, when the flag is on', () => {
+    let opened = false;
+    const row = settingsGroups({
+      ...nav,
+      onOpenLiveTracking: () => {
+        opened = true;
+      },
+    })
+      .flatMap((group) => group.rows)
+      .find((each) => each.id === 'live-tracking');
+    expect(row?.title).toBe('Live location');
+    row?.onPress?.();
+    expect(opened).toBe(true);
+  });
+});

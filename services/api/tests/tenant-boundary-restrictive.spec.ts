@@ -244,6 +244,11 @@ describe.skipIf(!reachable)('D2 — a restrictive tenant boundary cannot be wide
         'knowledge_documents',
         'lesson_completions',
         'lessons',
+        // `BE-W180` (`20261013000100`): a rep's acceptances and positions carry their company; a
+        // notice version carries its company, or none for the engineering draft every company sees.
+        'live_tracking_acceptances',
+        'live_tracking_notice_versions',
+        'location_pings',
         'markets',
         'organisations',
         // `BE-W171` (`20261009000200`): an admin's planning grant and a manager's reassignment

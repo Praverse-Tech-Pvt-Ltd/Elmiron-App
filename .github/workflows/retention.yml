@@ -112,6 +112,8 @@ jobs:
           fi
           echo "Retention target configured."
 
+      # `BE-W181`: the same run also deletes live-tracking positions past their 90 days
+      # (`purge_expired_location_pings`), and fails if it could not.
       - name: Destroy expired audio
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
