@@ -1,10 +1,12 @@
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
 import { BodyText } from './Text';
 import { StatusGlyph } from './StatusGlyph';
 import type { StatusKind } from './StatusGlyph';
+import { elevationStyle } from './depth';
+import { useEntrance } from './motion';
 
 /** §05: five seconds. Long enough to read a short line, short enough not to nag. */
 export const TOAST_DURATION_MS = 5000;
@@ -50,11 +52,8 @@ const styles = StyleSheet.create({
     paddingVertical: tokens.space.sm,
     paddingHorizontal: tokens.space.md,
     minHeight: tokens.target.secondary,
-    shadowColor: '#14150F',
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
+    // FE-W101. Floating over the content, a step above the cards it passes over.
+    ...elevationStyle('floating'),
   },
   message: { flex: 1 },
   action: {
@@ -81,6 +80,9 @@ export const Toast = ({
   durationMs = TOAST_DURATION_MS,
 }: ToastProps): ReactNode => {
   const { height } = useWindowDimensions();
+  // Fades up into place over `quick`; already there under reduce-motion. The toast is live — and
+  // its action pressable — from the first frame, so the arrival never delays anything.
+  const entrance = useEntrance({ duration: tokens.motion.quick });
 
   useEffect(() => {
     const timer = setTimeout(onDismiss, durationMs);
@@ -94,7 +96,14 @@ export const Toast = ({
       pointerEvents="box-none"
       style={[styles.overlay, { bottom: height * tokens.target.reachZoneFraction }]}
     >
-      <View accessibilityLiveRegion="polite" accessibilityRole="alert" style={styles.toast}>
+      <Animated.View
+        accessibilityLiveRegion="polite"
+        accessibilityRole="alert"
+        // Always its own native view, so the entrance's opacity settling to 1 is a prop change and
+        // never a Fabric reparent of the toast's children (see `text-field-flattening.test.tsx`).
+        collapsable={false}
+        style={[styles.toast, entrance]}
+      >
         <StatusGlyph kind={status} />
         <View style={styles.message}>
           <BodyText>{message}</BodyText>
@@ -108,7 +117,7 @@ export const Toast = ({
             <Text style={styles.actionLabel}>{action.label}</Text>
           </Pressable>
         )}
-      </View>
+      </Animated.View>
     </View>
   );
 };

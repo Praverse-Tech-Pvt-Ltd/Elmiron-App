@@ -203,6 +203,96 @@ export interface TargetTokens {
   readonly gap: number;
   /** Fraction of screen height reserved for the reach zone (281/844). */
   readonly reachZoneFraction: number;
+  /**
+   * The tab bar's own height, above the gesture inset: a 28pt icon well, an 18pt label and the
+   * padding around them. The navigator's default (49) is iOS's, and with a 13.5 label under a
+   * drawn icon it left the label touching the bar's bottom edge.
+   */
+  readonly tabBar: number;
+}
+
+/**
+ * One layer of a shadow, in the shape React Native's `boxShadow` takes (and CSS's `box-shadow`
+ * describes), so a level can be handed straight to a style without translation.
+ */
+export interface ShadowLayer {
+  readonly offsetX: number;
+  readonly offsetY: number;
+  readonly blurRadius: number;
+  /** Negative pulls the shadow in under the surface — how the design keeps a deep shadow soft. */
+  readonly spreadDistance: number;
+  /** `#RRGGBBAA`, always a palette colour plus an alpha — see `withAlpha`. */
+  readonly color: string;
+}
+
+export interface ElevationLevel {
+  /** Drawn bottom-most last, as CSS and React Native both order them. Empty is flat. */
+  readonly layers: readonly ShadowLayer[];
+  /**
+   * The Android `elevation` used where `boxShadow` cannot draw — outset shadows need API 28. Only
+   * ever applied INSTEAD of `layers`, never beside them, or a card would cast two shadows.
+   */
+  readonly androidFallback: number;
+}
+
+/**
+ * Depth, as the designs draw it.
+ *
+ * Every shadow in Phases 1–4 is the same warm ink (`palette.shadow`) at a low alpha, and the
+ * deep ones are pulled in with a negative spread so they read as a soft pool under the surface
+ * rather than a dark halo around it. These are those values — taken from the design files, not
+ * invented — so a card in the app sits on the page the way it sits in the mock.
+ *
+ * A level is chosen by what the surface IS, never by how important it feels:
+ *
+ * - `flat` — on the page: offline (§02 — waiting, not arriving) and quiet notes.
+ * - `hairline` — a list row or a chip. One tiny layer, cheap enough for every row of a long list.
+ * - `card` — a card resting on the page.
+ * - `raised` — the screen's one dark hero.
+ * - `floating` — something over the content: a toast.
+ * - `sheet` — a bottom sheet, casting upward over the page it covers.
+ * - `dock` — the tab bar and a pinned footer: content scrolls under them.
+ * - `accent` — the primary action's own soft underglow, in its own colour. One per screen,
+ *   because there is one primary per screen.
+ */
+export interface ElevationTokens {
+  readonly flat: ElevationLevel;
+  readonly hairline: ElevationLevel;
+  readonly card: ElevationLevel;
+  readonly raised: ElevationLevel;
+  readonly floating: ElevationLevel;
+  readonly sheet: ElevationLevel;
+  readonly dock: ElevationLevel;
+  readonly accent: ElevationLevel;
+}
+
+/**
+ * Motion. Short, and only ever confirming something that already happened — content arriving, a
+ * toast appearing, a sheet rising. **Nothing waits for an animation**: every duration here is
+ * under the ~400ms at which a transition starts to read as the app being slow, and a control is
+ * live from its first frame. All of it is skipped when Android's "Remove animations" is on.
+ *
+ * §05 still holds for presses: a press darkens the fill and never scales or fades. Motion here is
+ * for arrival, never for a press.
+ */
+export interface MotionTokens {
+  /** A toast, a small state change. */
+  readonly quick: number;
+  /** Content fading up into place. */
+  readonly standard: number;
+  /** A sheet rising. */
+  readonly gentle: number;
+  /** Delay between successive blocks arriving, so a screen settles top to bottom. */
+  readonly stagger: number;
+  /** How far (pt) content rises as it fades in. Small: arrival, not travel. */
+  readonly rise: number;
+  /** One half-cycle of a loading placeholder's breathing. Slow, so it never flickers. */
+  readonly pulse: number;
+}
+
+export interface OverlayTokens {
+  /** Behind a bottom sheet. The shadow ink at 40%, as the design's sheets are drawn. */
+  readonly scrim: string;
 }
 
 export interface DesignTokens {
@@ -218,7 +308,39 @@ export interface DesignTokens {
   readonly radius: RadiusTokens;
   readonly typography: TypographyTokens;
   readonly target: TargetTokens;
+  readonly elevation: ElevationTokens;
+  readonly motion: MotionTokens;
+  readonly overlay: OverlayTokens;
 }
+
+/**
+ * A palette colour at an alpha, as `#RRGGBBAA`.
+ *
+ * The only way a translucent colour is made, so a shadow or a scrim still traces back to a named
+ * palette entry — `tokens.test.ts` checks that every one does. Accepts `#RRGGBB` only.
+ */
+export const withAlpha = (hex: string, alpha: number): string => {
+  if (!/^#[0-9A-Fa-f]{6}$/u.test(hex)) {
+    throw new Error(`withAlpha takes #RRGGBB, got ${hex}`);
+  }
+  if (!(alpha >= 0 && alpha <= 1)) {
+    throw new Error(`withAlpha takes an alpha in [0, 1], got ${String(alpha)}`);
+  }
+  const byte = Math.round(alpha * 255)
+    .toString(16)
+    .toUpperCase()
+    .padStart(2, '0');
+  return `${hex.toUpperCase()}${byte}`;
+};
+
+const shade = (alpha: number): string => withAlpha(brandPalette.shadow, alpha);
+
+const layer = (
+  offsetY: number,
+  blurRadius: number,
+  spreadDistance: number,
+  color: string,
+): ShadowLayer => ({ offsetX: 0, offsetY, blurRadius, spreadDistance, color });
 
 export const tokens: DesignTokens = {
   status: 'brand',
@@ -278,7 +400,43 @@ export const tokens: DesignTokens = {
     row: 70,
     gap: 8,
     reachZoneFraction: 281 / 844,
+    tabBar: 64,
   },
+  // The design's own shadows (`box-shadow` in docs/design/*.dc.html), layer for layer.
+  elevation: {
+    flat: { layers: [], androidFallback: 0 },
+    // "0 1px 2px rgba(20,21,15,.05)" — Phase 1's list rows.
+    hairline: { layers: [layer(1, 2, 0, shade(0.05))], androidFallback: 1 },
+    // "0 1px 2px rgba(20,21,15,.04), 0 14px 34px -22px rgba(20,21,15,.4)" — B1's cards.
+    card: {
+      layers: [layer(1, 2, 0, shade(0.04)), layer(14, 34, -22, shade(0.4))],
+      androidFallback: 2,
+    },
+    // B1's hero, "0 18px 40px -24px rgba(20,21,15,.8)", with the contact layer the cards carry.
+    raised: {
+      layers: [layer(2, 6, 0, shade(0.06)), layer(18, 40, -24, shade(0.8))],
+      androidFallback: 6,
+    },
+    // "0 1px 2px rgba(20,21,15,.04), 0 16px 40px -22px rgba(20,21,15,.35)", lifted a step so a
+    // toast clears the cards it floats over.
+    floating: {
+      layers: [layer(2, 6, 0, shade(0.06)), layer(16, 40, -20, shade(0.4))],
+      androidFallback: 8,
+    },
+    // "0 -10px 44px -14px rgba(20,21,15,.35)" — the design's sheets.
+    sheet: { layers: [layer(-10, 44, -14, shade(0.35))], androidFallback: 16 },
+    // The sheet's direction at a third of its weight: content passes under the tab bar and the
+    // pinned footer, and this says so without drawing a line across the screen.
+    dock: { layers: [layer(-6, 24, -12, shade(0.12))], androidFallback: 0 },
+    // "0 18px 40px -24px rgba(53,89,58,.9)", Phase 2's primary action, softened: the design draws
+    // it on one button, the app has one primary per screen and it should glow, not shout.
+    accent: {
+      layers: [layer(14, 32, -18, withAlpha(brandPalette.accent, 0.55))],
+      androidFallback: 0,
+    },
+  },
+  motion: { quick: 160, standard: 240, gentle: 320, stagger: 50, rise: 8, pulse: 900 },
+  overlay: { scrim: shade(0.4) },
 };
 
 /**

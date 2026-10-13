@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateContrast, formatRatio } from './contrast.js';
 import { brandPalette } from './palette.js';
-import { fontFamilyFor, requiredContrastPairs, tokens } from './tokens.js';
+import { fontFamilyFor, requiredContrastPairs, tokens, withAlpha } from './tokens.js';
 
 describe('tokens', () => {
   it('is labelled brand, because Phase 1 is committed', () => {
@@ -103,5 +103,109 @@ describe('the typeface', () => {
       .filter((role) => role !== 'brand')
       .map((role) => tokens.typography[role].size);
     expect(others).not.toContain(36);
+  });
+});
+
+/**
+ * Depth and motion (FE-W100). The shadows are the design's own values; what is pinned here is the
+ * discipline around them — every shadow colour is still a palette colour, a flat surface really is
+ * flat, and no animation is long enough to make the MR wait.
+ */
+describe('elevation', () => {
+  const levels = Object.keys(tokens.elevation) as (keyof typeof tokens.elevation)[];
+  const palette: readonly string[] = Object.values(brandPalette);
+
+  it('casts every shadow in a palette colour, at an alpha', () => {
+    expect(levels.length).toBeGreaterThan(0);
+    for (const level of levels) {
+      for (const shadow of tokens.elevation[level].layers) {
+        expect(shadow.color, `elevation.${level}`).toMatch(/^#[0-9A-F]{8}$/u);
+        // The first seven characters are the colour; the last two are only the alpha.
+        expect(palette, `elevation.${level} is cast in a colour outside the palette`).toContain(
+          shadow.color.slice(0, 7),
+        );
+      }
+    }
+  });
+
+  it('keeps flat surfaces flat — offline is waiting, not arriving (§02)', () => {
+    expect(tokens.elevation.flat.layers).toEqual([]);
+    expect(tokens.elevation.flat.androidFallback).toBe(0);
+  });
+
+  it('gives a list row one small layer, cheap enough for every row of a long list', () => {
+    expect(tokens.elevation.hairline.layers).toHaveLength(1);
+    for (const shadow of tokens.elevation.hairline.layers) {
+      expect(shadow.blurRadius).toBeLessThanOrEqual(4);
+    }
+  });
+
+  it('casts the dock and the sheet upward, over the content beneath them', () => {
+    for (const level of ['dock', 'sheet'] as const) {
+      for (const shadow of tokens.elevation[level].layers) {
+        expect(shadow.offsetY, level).toBeLessThan(0);
+      }
+    }
+  });
+
+  it('glows the primary action in its own accent, never in grey', () => {
+    expect(tokens.elevation.accent.layers.length).toBeGreaterThan(0);
+    for (const shadow of tokens.elevation.accent.layers) {
+      expect(shadow.color.slice(0, 7)).toBe(brandPalette.accent);
+    }
+  });
+
+  it('never gives a level a negative fallback or blur', () => {
+    for (const level of levels) {
+      expect(tokens.elevation[level].androidFallback).toBeGreaterThanOrEqual(0);
+      for (const shadow of tokens.elevation[level].layers) {
+        expect(shadow.blurRadius).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  it('makes the scrim from the shadow ink, not a literal', () => {
+    expect(tokens.overlay.scrim.slice(0, 7)).toBe(brandPalette.shadow);
+  });
+});
+
+describe('withAlpha', () => {
+  it('appends the alpha as a byte', () => {
+    expect(withAlpha('#14150F', 0.4)).toBe('#14150F66');
+    expect(withAlpha('#35593a', 1)).toBe('#35593AFF');
+    expect(withAlpha('#FFFFFF', 0)).toBe('#FFFFFF00');
+  });
+
+  it('refuses anything but #RRGGBB and an alpha in [0, 1]', () => {
+    expect(() => withAlpha('#FFF', 0.5)).toThrow();
+    expect(() => withAlpha('#14150F66', 0.5)).toThrow();
+    expect(() => withAlpha('#14150F', 1.2)).toThrow();
+    expect(() => withAlpha('#14150F', Number.NaN)).toThrow();
+  });
+});
+
+describe('motion', () => {
+  it('never makes the MR wait — every duration is under 400ms', () => {
+    const { quick, standard, gentle, stagger, pulse } = tokens.motion;
+    for (const duration of [quick, standard, gentle, stagger]) {
+      expect(duration).toBeGreaterThan(0);
+      expect(duration).toBeLessThan(400);
+    }
+    expect(quick).toBeLessThanOrEqual(standard);
+    expect(standard).toBeLessThanOrEqual(gentle);
+    // A placeholder's breathing is slow on purpose: under ~600ms a pulse reads as flicker.
+    expect(pulse).toBeGreaterThanOrEqual(600);
+  });
+
+  it('rises content a few points, not across the screen', () => {
+    expect(tokens.motion.rise).toBeGreaterThan(0);
+    expect(tokens.motion.rise).toBeLessThanOrEqual(12);
+  });
+});
+
+describe('the tab bar', () => {
+  it('fits a 28pt icon well and a label line, and never drops below the touch floor', () => {
+    expect(tokens.target.tabBar).toBeGreaterThanOrEqual(tokens.target.floor);
+    expect(tokens.target.tabBar).toBeGreaterThanOrEqual(28 + tokens.typography.label.lineHeight);
   });
 });

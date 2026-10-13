@@ -1,7 +1,17 @@
 import type { ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import {
+  Animated,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Heading } from './Text';
+import { elevationStyle } from './depth';
+import { useEntrance, useReduceMotion } from './motion';
 
 /**
  * Phase 1 §05: every option list. A handle, 70pt rows, a sticky footer, and a
@@ -29,13 +39,15 @@ const styles = StyleSheet.create({
   scrim: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(20,21,15,0.4)',
+    backgroundColor: tokens.overlay.scrim,
   },
   sheet: {
     backgroundColor: tokens.color.surface,
     borderTopLeftRadius: tokens.radius.card,
     borderTopRightRadius: tokens.radius.card,
     paddingBottom: tokens.space.lg,
+    // FE-W101. The design's sheet shadow, cast upward over the page it covers.
+    ...elevationStyle('sheet'),
   },
   handleArea: { alignItems: 'center', paddingVertical: tokens.space.sm },
   handle: {
@@ -62,9 +74,17 @@ export const BottomSheet = ({
   footer,
 }: BottomSheetProps): ReactNode => {
   const { height } = useWindowDimensions();
+  const reduceMotion = useReduceMotion();
 
+  // FE-W101. The scrim fades and the sheet rises through it, rather than the whole modal — scrim
+  // included — sliding up from the bottom edge as one slab. Under reduce-motion neither moves.
   return (
-    <Modal animationType="slide" onRequestClose={onDismiss} transparent visible={visible}>
+    <Modal
+      animationType={reduceMotion ? 'none' : 'fade'}
+      onRequestClose={onDismiss}
+      transparent
+      visible={visible}
+    >
       {/*
         The scrim is the dismiss target, so it is a Pressable rather than a View.
         The sheet sits inside it and stops the press going through — without that,
@@ -76,24 +96,50 @@ export const BottomSheet = ({
         onPress={onDismiss}
         style={styles.scrim}
       >
-        <Pressable
-          accessibilityRole="none"
-          accessibilityViewIsModal
-          onPress={() => {
-            // Swallows the press. The scrim above must not see it.
-          }}
-          style={[styles.sheet, { maxHeight: height * 0.7 }]}
-        >
-          <View style={styles.handleArea}>
-            <View style={styles.handle} />
-          </View>
-          <View style={styles.header}>
-            <Heading>{title}</Heading>
-          </View>
-          <ScrollView contentContainerStyle={styles.content}>{children}</ScrollView>
-          {footer === undefined ? null : <View style={styles.footer}>{footer}</View>}
-        </Pressable>
+        <SheetBody height={height} title={title} footer={footer}>
+          {children}
+        </SheetBody>
       </Pressable>
     </Modal>
+  );
+};
+
+/**
+ * The sheet itself, separate so it owns its entrance: it mounts when the sheet opens, so the rise
+ * plays on every opening and never on a re-render of an open sheet.
+ */
+const SheetBody = ({
+  height,
+  title,
+  footer,
+  children,
+}: {
+  readonly height: number;
+  readonly title: string;
+  readonly footer: ReactNode;
+  readonly children: ReactNode;
+}): ReactNode => {
+  // Rises a sheet-height's fraction, not the full screen: arrival, not travel.
+  const entrance = useEntrance({ duration: tokens.motion.gentle, rise: tokens.space.xl * 2 });
+  return (
+    <Animated.View collapsable={false} style={entrance}>
+      <Pressable
+        accessibilityRole="none"
+        accessibilityViewIsModal
+        onPress={() => {
+          // Swallows the press. The scrim above must not see it.
+        }}
+        style={[styles.sheet, { maxHeight: height * 0.7 }]}
+      >
+        <View style={styles.handleArea}>
+          <View style={styles.handle} />
+        </View>
+        <View style={styles.header}>
+          <Heading>{title}</Heading>
+        </View>
+        <ScrollView contentContainerStyle={styles.content}>{children}</ScrollView>
+        {footer === undefined ? null : <View style={styles.footer}>{footer}</View>}
+      </Pressable>
+    </Animated.View>
   );
 };

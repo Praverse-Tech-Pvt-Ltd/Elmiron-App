@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { BodyText, Label } from './Text';
+import { elevationStyle } from './depth';
 
 /**
  * The plain row: a title, an optional detail, an optional press.
@@ -27,6 +28,8 @@ const styles = StyleSheet.create({
     gap: tokens.space.xs,
     minHeight: tokens.target.secondary,
     justifyContent: 'center',
+    // FE-W101. The same one-layer edge as `ListItem`.
+    ...elevationStyle('hairline'),
   },
   // §05: press darkens the fill. It never fades and never scales.
   pressed: { backgroundColor: tokens.color.wash },

@@ -6,6 +6,8 @@ import { BodyText, Heading, Label, Title } from './Text';
 import { Card } from './Card';
 import { ListItem } from './ListItem';
 import { Spinner } from './Spinner';
+import { EmptyState } from './EmptyState';
+import { SkeletonRows } from './Skeleton';
 
 /**
  * B3 — today's route, as a timeline.
@@ -161,14 +163,14 @@ export const BeatPlanScreen = ({
       ) : null}
 
       {!loading && notice === null && stops.length === 0 ? (
-        <Card>
-          <BodyText>No route for today</BodyText>
-          <Label muted>
-            No beat plan came through. You can still visit anyone in your territory and it&apos;ll
-            all be logged.
-          </Label>
-        </Card>
+        <EmptyState
+          detail="No beat plan came through. You can still visit anyone in your territory and it'll all be logged."
+          title="No route for today"
+        />
       ) : null}
+
+      {/* FE-W101. The route's shape while it loads, under the spinner's words — never instead. */}
+      {loading && stops.length === 0 ? <SkeletonRows count={4} /> : null}
 
       <View style={styles.rows}>
         {stops.map((stop) =>

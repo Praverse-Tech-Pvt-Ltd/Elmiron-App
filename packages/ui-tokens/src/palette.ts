@@ -69,6 +69,15 @@ export const brandPalette = {
   /** Recording in progress. Terracotta by decision, not signal red. */
   recording: '#8A4A32',
 
+  // 03 — Depth
+  /**
+   * The ink every shadow in the design is cast in — `rgba(20,21,15,…)` throughout Phases 1–4.
+   * A warm near-black rather than pure black, so a shadow on paper reads as paper lifting, not as
+   * a grey smudge. Never a text or fill colour: `tokens.elevation` is its only consumer, and it
+   * always arrives there with an alpha.
+   */
+  shadow: '#14150F',
+
   white: '#FFFFFF',
 } as const;
 

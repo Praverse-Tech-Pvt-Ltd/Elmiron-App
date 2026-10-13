@@ -4,6 +4,7 @@ import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from '
 import type { StyleProp, ViewStyle } from 'react-native';
 import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
 import { Label } from './Text';
+import { elevationStyle } from './depth';
 
 /**
  * Phase 1 §05, the whole button.
@@ -83,7 +84,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: tokens.space.sm,
   },
-  primary: { backgroundColor: tokens.color.accent, minHeight: tokens.target.primary },
+  // FE-W101. The one primary on a screen carries a soft underglow in its own green — Phase 2's
+  // primary-action shadow — so the action the screen exists for sits forward of everything else.
+  // The glow does not change on press (§05: press darkens the fill, nothing more) and is dropped
+  // when disabled, where a lifted button would contradict the reason line beneath it.
+  primary: {
+    backgroundColor: tokens.color.accent,
+    minHeight: tokens.target.primary,
+    ...elevationStyle('accent'),
+  },
   primaryPressed: { backgroundColor: tokens.color.accentPressed },
   secondary: { backgroundColor: tokens.color.wash, minHeight: tokens.target.secondary },
   secondaryPressed: { backgroundColor: tokens.color.washPressed },
@@ -91,7 +100,7 @@ const styles = StyleSheet.create({
   quietPressed: { backgroundColor: tokens.color.wash },
   destructive: { backgroundColor: 'transparent', minHeight: tokens.target.secondary },
   destructivePressed: { backgroundColor: tokens.color.criticalFill },
-  disabled: { opacity: 0.5 },
+  disabled: { opacity: 0.5, ...elevationStyle('flat') },
   label: {
     fontSize: tokens.typography.control.size,
     lineHeight: tokens.typography.control.lineHeight,

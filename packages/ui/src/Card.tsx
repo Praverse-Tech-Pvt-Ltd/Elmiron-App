@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { SurfaceContext } from './surface';
+import { elevationStyle } from './depth';
 
 /**
  * Phase 1 §05: 20px radius, shadow rather than an outline, one dark hero per
@@ -37,14 +38,20 @@ const styles = StyleSheet.create({
     padding: tokens.space.md,
     gap: tokens.space.xs,
     backgroundColor: tokens.color.surface,
-    // Soft and low, so a stack of cards reads as paper rather than as elevation.
-    shadowColor: '#14150F',
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 2,
+    // FE-W101. B1's card shadow, layer for layer: a 1pt contact line and a deep, soft pool pulled
+    // in under the card, so a stack of cards reads as paper resting on paper rather than as
+    // material elevation. It replaces a single grey `elevation: 2` and a literal shadow colour.
+    ...elevationStyle('card'),
   },
-  hero: { backgroundColor: tokens.color.textPrimary },
+  // B1's hero: more room inside (20 × 24), a little more between its lines, and the deeper shadow
+  // the design gives the one dark card on the screen.
+  hero: {
+    backgroundColor: tokens.color.textPrimary,
+    paddingVertical: tokens.space.md + tokens.space.xs,
+    paddingHorizontal: tokens.space.lg,
+    gap: tokens.space.sm,
+    ...elevationStyle('raised'),
+  },
   offline: {
     backgroundColor: tokens.color.offlineFill,
     borderWidth: 1,
@@ -52,14 +59,14 @@ const styles = StyleSheet.create({
     borderColor: tokens.color.offlineEdge,
     // A saved-here card is not raised — it is waiting, not arriving.
     shadowOpacity: 0,
-    elevation: 0,
+    ...elevationStyle('flat'),
   },
   quiet: {
     backgroundColor: tokens.color.background,
     borderWidth: 1,
     borderColor: tokens.color.hairline,
     shadowOpacity: 0,
-    elevation: 0,
+    ...elevationStyle('flat'),
   },
   pressedDefault: { backgroundColor: tokens.color.wash },
   pressedHero: { backgroundColor: tokens.color.accentPressed },

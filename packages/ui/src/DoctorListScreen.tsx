@@ -6,6 +6,8 @@ import { Banner } from './Banner';
 import { Label, Title } from './Text';
 import { ListItem } from './ListItem';
 import { Spinner } from './Spinner';
+import { EmptyState } from './EmptyState';
+import { SkeletonRows } from './Skeleton';
 import { SurfaceContext } from './surface';
 import { TextField } from './TextField';
 
@@ -164,16 +166,14 @@ export const DoctorListScreen = ({
 
       {loading ? <Spinner label="Getting your doctor list" /> : null}
 
+      {/* FE-W101. The list's shape while it loads, under the spinner's words — never instead. */}
+      {loading && rows.length === 0 ? <SkeletonRows count={5} /> : null}
+
       {!loading && rows.length === 0 ? (
-        <View style={styles.count}>
-          {/*
-            Three different emptinesses, and telling an MR the wrong one sends them
-            to the wrong place: a filter that matched nothing is a chip to turn off,
-            a search that matched nothing is a word to change, and an empty
-            territory is somebody else's job to fix.
-          */}
-          <Label muted>{emptyMessage(query, filterLabel, total)}</Label>
-        </View>
+        // Three different emptinesses, and telling an MR the wrong one sends them to the wrong
+        // place: a filter that matched nothing is a chip to turn off, a search that matched
+        // nothing is a word to change, and an empty territory is somebody else's job to fix.
+        <EmptyState title={emptyMessage(query, filterLabel, total)} />
       ) : null}
 
       <View style={styles.rows}>

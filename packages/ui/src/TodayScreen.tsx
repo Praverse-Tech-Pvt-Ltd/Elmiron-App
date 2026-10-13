@@ -1,7 +1,11 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Figure, Heading, Label, Secondary, Title } from './Text';
+import { BodyText, Display, Figure, Label, Secondary, Title } from './Text';
+import { EmptyState } from './EmptyState';
+import { FadeIn } from './FadeIn';
+import { ProgressSegments } from './ProgressSegments';
+import { SkeletonCard } from './Skeleton';
 import { Banner } from './Banner';
 import { Button } from './Button';
 import { Card } from './Card';
@@ -177,7 +181,9 @@ export interface TodayScreenProps {
 }
 
 const styles = StyleSheet.create({
-  head: { gap: 2 },
+  // FE-W102. A little air under the day's title before the first card, as B1 sets it.
+  head: { gap: 2, paddingBottom: tokens.space.xs },
+  strip: { paddingTop: tokens.space.sm },
   progress: { flexDirection: 'row', alignItems: 'baseline', gap: tokens.space.sm },
   heroLines: { gap: 2 },
   // The single primary action is pinned rather than scrolled to: §04 puts it inside
@@ -258,8 +264,9 @@ export const TodayScreen = ({
     <Screen scrollable footer={footer}>
       <View style={styles.head}>
         <Title>{dayLabel}</Title>
-        {dayAsOfLabel === null ? null : <Label muted>{dayAsOfLabel}</Label>}
-        {startedLabel === null ? null : <Label muted>{startedLabel}</Label>}
+        {/* FE-W102. B1 sets these at 14.5 under the title — `Secondary`, not a field label. */}
+        {dayAsOfLabel === null ? null : <Secondary>{dayAsOfLabel}</Secondary>}
+        {startedLabel === null ? null : <Secondary>{startedLabel}</Secondary>}
       </View>
 
       {/*
@@ -281,76 +288,109 @@ export const TodayScreen = ({
         </Card>
       ))}
 
-      {loading && planned === 0 ? null : next === null ? (
-        // Two different nulls, and conflating them would be a lie in one direction
-        // or the other: a day with no plan (S2) is not a day that has been worked
-        // through. S2's copy never says "ask your manager for a beat plan" — that
-        // hands the MR's day to somebody else.
-        stillOnPlan > 0 ? (
-          // MR-49 D1 / `FE-W60`. The plan is not done: stops on it have no visit yet. Said as
-          // a count and a way to the route, never as "everyone on the plan".
-          <Card>
-            <BodyText>
-              {stillOnPlan === 1
-                ? '1 more stop on today’s plan'
-                : `${String(stillOnPlan)} more stops on today’s plan`}
-            </BodyText>
-            <Label muted>
-              No visit has started for them yet. See today’s route for who is left.
-            </Label>
-          </Card>
-        ) : (
-          <Card>
-            <BodyText>
-              {planned === 0 ? 'Nothing planned for today' : "That's everyone on the plan"}
-            </BodyText>
-            <Label muted>
-              {planned === 0
-                ? "No beat plan came through. You can still visit anyone in your territory and it'll all be logged."
-                : notMet === 0
-                  ? 'You went to every visit on the plan.'
-                  : notMet === 1
-                    ? 'You went to every visit on the plan. One doctor was not available.'
-                    : `You went to every visit on the plan. ${String(notMet)} doctors were not available.`}
-            </Label>
-          </Card>
-        )
-      ) : (
-        <Card
-          tone="hero"
-          {...(onStartNextVisit === undefined ? {} : { onPress: onStartNextVisit })}
-        >
-          <Label>{next.inProgress === true ? 'In progress' : 'Next visit'}</Label>
-          <View style={styles.heroLines}>
-            <Heading>{next.doctorName}</Heading>
-            {next.clinic !== null ? (
-              <BodyText>{next.clinic}</BodyText>
-            ) : next.clinicPending ? (
-              // MR-14 B4. The address is expected and has not arrived. Said plainly,
-              // because silence here reads as "this visit has no clinic" -- and the one
-              // thing this screen must never do is present an absence as a fact. Never a
-              // wrong address, never an empty one dressed up as an answer.
-              <BodyText>Address still syncing</BodyText>
-            ) : null}
-            {next.scheduledLabel === null ? null : <BodyText>{next.scheduledLabel}</BodyText>}
-          </View>
-        </Card>
+      {/*
+        FE-W102. While the first plan of the day is on its way there is nothing to show yet; the
+        day's two cards stand in as placeholders, at their own size, so the screen does not jump
+        when the day arrives. The spinner line above still says what is happening.
+      */}
+      {loading && planned === 0 ? (
+        <>
+          <SkeletonCard hero />
+          <SkeletonCard />
+        </>
+      ) : null}
+
+      {loading && planned === 0 ? null : (
+        <FadeIn index={0}>
+          {next === null ? (
+            // Two different nulls, and conflating them would be a lie in one direction
+            // or the other: a day with no plan (S2) is not a day that has been worked
+            // through. S2's copy never says "ask your manager for a beat plan" — that
+            // hands the MR's day to somebody else.
+            stillOnPlan > 0 ? (
+              // MR-49 D1 / `FE-W60`. The plan is not done: stops on it have no visit yet. Said as
+              // a count and a way to the route, never as "everyone on the plan".
+              <Card>
+                <BodyText>
+                  {stillOnPlan === 1
+                    ? '1 more stop on today’s plan'
+                    : `${String(stillOnPlan)} more stops on today’s plan`}
+                </BodyText>
+                <Label muted>
+                  No visit has started for them yet. See today’s route for who is left.
+                </Label>
+              </Card>
+            ) : (
+              // FE-W102. Both ends of the day as designed states, words unchanged: no plan is
+              // neutral, never a fault; a plan worked through carries the tick it has earned.
+              <EmptyState
+                detail={
+                  planned === 0
+                    ? "No beat plan came through. You can still visit anyone in your territory and it'll all be logged."
+                    : notMet === 0
+                      ? 'You went to every visit on the plan.'
+                      : notMet === 1
+                        ? 'You went to every visit on the plan. One doctor was not available.'
+                        : `You went to every visit on the plan. ${String(notMet)} doctors were not available.`
+                }
+                kind={planned === 0 ? 'neutral' : 'success'}
+                title={planned === 0 ? 'Nothing planned for today' : "That's everyone on the plan"}
+              />
+            )
+          ) : (
+            <Card
+              tone="hero"
+              {...(onStartNextVisit === undefined ? {} : { onPress: onStartNextVisit })}
+            >
+              <Label>{next.inProgress === true ? 'In progress' : 'Next visit'}</Label>
+              <View style={styles.heroLines}>
+                {/*
+                  FE-W102. B1 sets the doctor at 29/600, tracked in: the next visit is the largest
+                  thing on the screen. `Display` is the scale's step for that one large line.
+                */}
+                <Display>{next.doctorName}</Display>
+                {next.clinic !== null ? (
+                  <BodyText>{next.clinic}</BodyText>
+                ) : next.clinicPending ? (
+                  // MR-14 B4. The address is expected and has not arrived. Said plainly,
+                  // because silence here reads as "this visit has no clinic" -- and the one
+                  // thing this screen must never do is present an absence as a fact. Never a
+                  // wrong address, never an empty one dressed up as an answer.
+                  <BodyText>Address still syncing</BodyText>
+                ) : null}
+                {next.scheduledLabel === null ? null : <BodyText>{next.scheduledLabel}</BodyText>}
+              </View>
+            </Card>
+          )}
+        </FadeIn>
       )}
 
       {loading && planned === 0 ? null : (
-        <Card {...(routePress === undefined ? {} : { onPress: routePress })}>
-          <View style={styles.progressLink}>
-            <Label muted>Today</Label>
-            {routeOpen ? <Label muted>See today’s route ›</Label> : null}
-          </View>
-          <View style={styles.progress}>
-            <Figure>{`${String(done + notMet)} of ${String(planned)}`}</Figure>
-            <Secondary>visits attended</Secondary>
-          </View>
-        </Card>
+        <FadeIn index={1}>
+          <Card {...(routePress === undefined ? {} : { onPress: routePress })}>
+            <View style={styles.progressLink}>
+              <Label muted>Today</Label>
+              {routeOpen ? <Label muted>See today’s route ›</Label> : null}
+            </View>
+            <View style={styles.progress}>
+              <Figure>{`${String(done + notMet)} of ${String(planned)}`}</Figure>
+              <Secondary>visits attended</Secondary>
+            </View>
+            {/* FE-W102. B1's strip: the figure above, drawn. Decorative — the words carry it. */}
+            {planned > 0 ? (
+              <View style={styles.strip}>
+                <ProgressSegments filled={done + notMet} total={planned} />
+              </View>
+            ) : null}
+          </Card>
+        </FadeIn>
       )}
 
-      {sync === null ? null : <SyncQueueIndicator onPress={onOpenQueue} state={sync} />}
+      {sync === null ? null : (
+        <FadeIn index={2}>
+          <SyncQueueIndicator onPress={onOpenQueue} state={sync} />
+        </FadeIn>
+      )}
 
       {after}
 
