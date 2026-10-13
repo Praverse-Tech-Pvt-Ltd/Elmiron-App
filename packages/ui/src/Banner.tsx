@@ -4,6 +4,7 @@ import { tokens } from '@fieldforce/ui-tokens';
 import { BodyText, Label } from './Text';
 import { Button } from './Button';
 import { StatusGlyph, STATUS_COLOR, STATUS_FILL } from './StatusGlyph';
+import { elevationStyle } from './depth';
 
 /**
  * Phase 1 §05: in flow, and it persists until the thing it reports is resolved.
@@ -57,6 +58,9 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', gap: tokens.space.sm },
   title: { flex: 1 },
   offline: { borderStyle: 'dashed', borderWidth: 1, borderLeftWidth: 4 },
+  // FE-W101. `info` is the one banner on the white card ground rather than a tint; the row shadow
+  // gives it the same edge on the page a card has. The tinted tones need none.
+  raised: elevationStyle('hairline'),
   action: { alignSelf: 'flex-start' },
 });
 
@@ -73,6 +77,7 @@ export const Banner = ({ tone, title, detail, action }: BannerProps): ReactNode 
         borderLeftColor: STATUS_COLOR[KIND[tone]],
       },
       tone === 'offline' ? [styles.offline, { borderColor: tokens.color.offlineEdge }] : null,
+      tone === 'info' ? styles.raised : null,
     ]}
   >
     <View style={styles.head}>

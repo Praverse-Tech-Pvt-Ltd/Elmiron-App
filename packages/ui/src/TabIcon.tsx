@@ -82,7 +82,34 @@ const styles = StyleSheet.create({
   // Me — three rules, the last one short. A list, not a face: this tab is
   // settings and the MR's own data, and a face would promise a profile.
   rule: { height: STROKE, borderRadius: STROKE / 2, marginVertical: 2 },
+
+  // B1's active-tab pill.
+  indicator: {
+    width: 44,
+    height: 26,
+    borderRadius: tokens.radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  indicatorOn: { backgroundColor: tokens.color.successFill },
 });
+
+/**
+ * FE-W101. The tab bar's icon slot as B1 draws it: the open tab's icon sits in a soft green pill
+ * (44 × 26, `successFill`), the others on nothing.
+ *
+ * Separate from `TabIcon` so the icon keeps its own rule — focus changes its colour and nothing
+ * else — and the indicator is the one extra thing. The pill is always laid out, transparent when
+ * the tab is not open, so switching tab changes two fills and moves nothing under the thumb. It
+ * is wider than the navigator's icon slot (31) on purpose and overflows it sideways, centred, as
+ * the design draws it; the slot is not a touch target, the whole tab is.
+ */
+export const TabBarIcon = ({ name, focused }: TabIconProps): ReactNode => (
+  <View style={[styles.indicator, focused ? styles.indicatorOn : null]}>
+    <TabIcon focused={focused} name={name} />
+  </View>
+);
 
 export const TabIcon = ({ name, focused }: TabIconProps): ReactNode => {
   const color = focused ? tokens.color.accent : tokens.color.textSecondary;

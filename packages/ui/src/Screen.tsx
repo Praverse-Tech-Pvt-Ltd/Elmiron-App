@@ -4,6 +4,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 're
 import type { NativeScrollEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { tokens } from '@fieldforce/ui-tokens';
+import { elevationStyle } from './depth';
 
 export interface ScreenProps {
   readonly children: ReactNode;
@@ -46,8 +47,11 @@ const styles = StyleSheet.create({
     backgroundColor: tokens.color.background,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: tokens.color.hairline,
-    paddingTop: tokens.space.sm,
+    // FE-W101. A touch more air above the pinned action, and a soft upward shadow so content
+    // visibly passes UNDER the footer as it scrolls, rather than being cut by a line.
+    paddingTop: tokens.space.sm + tokens.space.xs,
     gap: tokens.space.sm,
+    ...elevationStyle('dock'),
   },
 });
 

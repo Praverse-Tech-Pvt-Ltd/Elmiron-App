@@ -5,6 +5,7 @@ import { tokens } from '@fieldforce/ui-tokens';
 import { BodyText, Label } from './Text';
 import { StatusGlyph } from './StatusGlyph';
 import type { StatusKind } from './StatusGlyph';
+import { elevationStyle } from './depth';
 
 /**
  * Phase 1 §05: on every screen, countable, tappable.
@@ -104,6 +105,8 @@ const styles = StyleSheet.create({
     borderRadius: tokens.radius.control,
     backgroundColor: tokens.color.surface,
     minHeight: tokens.target.secondary,
+    // FE-W101. B1's sync row carries the row shadow, so it sits on the page like the cards above.
+    ...elevationStyle('hairline'),
   },
   failed: { backgroundColor: tokens.color.criticalFill },
   offline: {
@@ -111,6 +114,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderStyle: 'dashed',
     borderColor: tokens.color.offlineEdge,
+    // §02: waiting on this phone, not raised.
+    ...elevationStyle('flat'),
   },
   pressed: { backgroundColor: tokens.color.wash },
   // FE-D7 2. Offline is the wash already, so it presses one step darker, as the design does.

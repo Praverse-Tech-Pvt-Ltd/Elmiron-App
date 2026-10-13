@@ -18,6 +18,8 @@ import { PulledStoreProvider } from '../src/sync/pulled-store';
 import { LiveTrackingProvider } from '../src/tracking/tracker';
 import { PushProvider } from '../src/push/push-provider';
 import { ZoneCaveatBanner } from '../src/today/ZoneCaveatBanner';
+import { ReduceMotionContext } from '@fieldforce/ui';
+import { tokens } from '@fieldforce/ui-tokens';
 import { useReduceMotion } from '../src/reduce-motion';
 
 /**
@@ -101,59 +103,68 @@ function App(): ReactNode {
 
   return (
     <SafeAreaProvider>
-      <SessionProvider>
-        <AuthGate>
-          {/*
+      {/*
+        FE-W101. The one answer to "Remove animations", handed to every shared component that
+        animates, so a screen of animated blocks asks the platform once rather than once each.
+      */}
+      <ReduceMotionContext.Provider value={reduceMotion}>
+        <SessionProvider>
+          <AuthGate>
+            {/*
             Inside AuthGate, so a signed-out session never pushes queued work with
             no token; and at the root, so an MR's offline check-ins go from whatever
             screen they happen to be on.
           */}
-          <OutboxFlusher>
-            {/*
+            <OutboxFlusher>
+              {/*
               MR-14 B1. The pull's caller, at the root for the same reason the flusher is:
               every screen that reads the day reads it from here, and mounting it on one
               screen would leave the next one reading nothing. Inside AuthGate, so a
               signed-out session never pulls with no token.
             */}
-            <PulledStoreProvider>
-              {/*
+              <PulledStoreProvider>
+                {/*
                 `FE-W71`. The live tracker, at the root for the reason the flusher is: it must keep
                 its state across screens, and it watches only while the app is on screen. Inside
                 AuthGate, so it never asks anything with no token. A passthrough unless the build
                 has `EXPO_PUBLIC_LIVE_TRACKING=true` and the user is a rep.
               */}
-              <LiveTrackingProvider>
-                {/*
+                <LiveTrackingProvider>
+                  {/*
                   `FE-W86`. Push registration after sign-in, and opening a tapped notification.
                   Inside AuthGate for the token; a passthrough unless `EXPO_PUBLIC_PUSH=true`.
                 */}
-                <PushProvider>
-                  <StatusBar style="dark" />
-                  {/*
+                  <PushProvider>
+                    <StatusBar style="dark" />
+                    {/*
                 `FE-W45`, second half. Eleven screens render a date in the territory zone and
                 none of them read its `source`, so a UTC fallback has been indistinguishable
                 from a real answer. One banner here rather than eleven edits, for the same
                 reason the flusher and the store are here: this is where the zone lives.
               */}
-                  <ZoneCaveatBanner />
-                  {/*
+                    <ZoneCaveatBanner />
+                    {/*
                 FE-D7 3. ONE transition for every stack screen. The design specifies none, and
                 the native stack's 'default' is whatever the Android version does, so it would
                 differ between the emulator and a rep's phone. With "Remove animations" on,
                 none at all. Tab switches stay instant, as before.
               */}
-                  <Stack
-                    screenOptions={{
-                      headerShown: false,
-                      animation: reduceMotion ? 'none' : 'slide_from_right',
-                    }}
-                  />
-                </PushProvider>
-              </LiveTrackingProvider>
-            </PulledStoreProvider>
-          </OutboxFlusher>
-        </AuthGate>
-      </SessionProvider>
+                    <Stack
+                      screenOptions={{
+                        headerShown: false,
+                        animation: reduceMotion ? 'none' : 'slide_from_right',
+                        // FE-W101. The paper ground behind every screen, so a slide never shows the
+                        // navigator's white between the leaving screen and the arriving one.
+                        contentStyle: { backgroundColor: tokens.color.background },
+                      }}
+                    />
+                  </PushProvider>
+                </LiveTrackingProvider>
+              </PulledStoreProvider>
+            </OutboxFlusher>
+          </AuthGate>
+        </SessionProvider>
+      </ReduceMotionContext.Provider>
     </SafeAreaProvider>
   );
 }

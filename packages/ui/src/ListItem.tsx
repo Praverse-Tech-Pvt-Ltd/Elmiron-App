@@ -5,6 +5,7 @@ import { tokens } from '@fieldforce/ui-tokens';
 import { BodyText, Label } from './Text';
 import { StatusGlyph } from './StatusGlyph';
 import type { StatusKind } from './StatusGlyph';
+import { elevationStyle } from './depth';
 
 /**
  * Phase 1 §05: 70pt minimum, status glyph mandatory, colour never alone.
@@ -41,6 +42,9 @@ const styles = StyleSheet.create({
     borderRadius: tokens.radius.card,
     backgroundColor: tokens.color.surface,
     minHeight: tokens.target.row,
+    // FE-W101. Phase 1's row shadow — one 2pt layer, cheap enough for every row of a long list —
+    // so a white row on warm paper has an edge without an outline.
+    ...elevationStyle('hairline'),
   },
   text: { flex: 1, gap: 2 },
   detail: { flexDirection: 'row', alignItems: 'center', gap: tokens.space.xs },
@@ -55,6 +59,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderStyle: 'dashed',
     borderColor: tokens.color.offlineEdge,
+    // §02: a saved-here row is waiting, not raised.
+    ...elevationStyle('flat'),
   },
   disabled: { opacity: 0.5 },
 });
