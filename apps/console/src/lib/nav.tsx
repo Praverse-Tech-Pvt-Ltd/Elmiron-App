@@ -26,6 +26,9 @@ import { SignOut } from './sign-out';
  * - Unbuilt entries are named under "Coming later" in full-contrast muted text. They were drawn
  *   at 60% opacity — below the contrast the token tests guarantee — with the explanation only in
  *   a hover tooltip no keyboard or touch could reach.
+ *
+ * `FE-W79`: the last four "Coming later" entries were built, so the section is gone rather than
+ * left empty. A future unbuilt destination goes back under that heading, never as a dead link.
  */
 interface NavItem {
   readonly label: string;
@@ -66,13 +69,17 @@ const GROUPS: readonly { readonly title: string; readonly items: readonly NavIte
       { label: 'Planning access', href: '/planning/access' },
     ],
   },
-];
-
-const COMING_LATER: readonly string[] = [
-  'Users & roles',
-  'Audit log',
-  'Territories',
-  'Retention & purge',
+  {
+    // `FE-W75`–`FE-W78`. The four that sat under "Coming later": each now has a screen and the
+    // database functions behind it (`BE-W185`–`BE-W189`).
+    title: 'Administration',
+    items: [
+      { label: 'Users & roles', href: '/users' },
+      { label: 'Territories', href: '/territories' },
+      { label: 'Audit log', href: '/audit' },
+      { label: 'Retention & purge', href: '/retention' },
+    ],
+  },
 ];
 
 /** The most specific link that contains the current path is the current one. */
@@ -145,17 +152,6 @@ export const Nav = ({
             ))}
           </div>
         ))}
-        <div className="ff-nav-later">
-          <div style={groupTitle}>Coming later</div>
-          {COMING_LATER.map((label) => (
-            <span
-              key={label}
-              style={{ ...linkStyle, color: tokens.color.textSecondary, cursor: 'default' }}
-            >
-              {label}
-            </span>
-          ))}
-        </div>
       </div>
       {signedInEmail === null ? null : (
         <div
