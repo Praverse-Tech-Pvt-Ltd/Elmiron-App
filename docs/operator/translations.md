@@ -1,6 +1,6 @@
 # Translations — Hindi and Marathi for the field app
 
-**Written 14 October 2026 (`FE-W146`).** The owner's decision that day: *"Hindi + Marathi; client
+**Written 14 October 2026 (`FE-W146`); brought up to date after the second pass the same day (`FE-W159`).** The owner's decision that day: *"Hindi + Marathi; client
 translates".* So the app ships everything except the translated words, and the client's translators
 fill in a file we hand them. Nothing in this repository machine-translates anything.
 
@@ -8,7 +8,7 @@ fill in a file we hand them. Nothing in this repository machine-translates anyth
 
 Me → Settings → **Language** lists **English**, **हिन्दी** and **मराठी**, each written in its own
 script. With the translation files empty, Hindi and Marathi read *"Coming later — Hindi: waiting for
-translation (0 of 221 done)"* and cannot be pressed. The moment a file is **complete**, its row
+translation (0 of 910 done)"* and cannot be pressed. The moment a file is **complete**, its row
 becomes pressable and the app switches to it, with no code change. A half-done file is never offered:
 a rep would be reading half Hindi and half English, and the app would be claiming a translation that
 does not exist.
@@ -91,13 +91,48 @@ Rows missing from the file leave those strings as they were.
   the app language is; translating it is a legal decision for the client, and it would arrive the same
   way as the notice, not through this file. A test fails the build if those files ever call the
   catalogue.
+- **The adverse-event screen's regulated wording (`FE-W157`).** Six sentences about what a rep's
+  flag is and is not, and what must not be written in it, stay English-only exactly as consent
+  does — they describe a pharmacovigilance duty, and their translation is the client's safety and
+  legal team's to approve, not a translator's. The screen's chrome (title, field label, buttons,
+  "Flag sent" / "Flag saved", errors) is translated, so a Hindi screen shows a Hindi title above an
+  English sentence. The English-only sentences, verbatim:
+  - "You are flagging it, not assessing it."
+  - "Write what you were told, in your own words. The safety team decides what it means and will
+    contact the doctor if they need more."
+  - "Do not write the patient’s name, phone number, address or any ID number. They are not needed,
+    and they must not leave the clinic through this app."
+  - "The safety team has it. You do not need to do anything else." (after sending)
+  - "Saved on this phone. It will send by itself when you have signal — you do not have to write it
+    again." (kept for later)
+  - "This looks like it contains {a phone number / an email address / an ID number}. Take it out
+    before sending — the safety team does not need it."
+
+  Each carries a `FE-W157` comment in the code. Moving one into the catalogue is a decision for the
+  client, not a code change to make quietly.
 - **The brand line on the sign-in screen** ("Relief at the root."). It is brand copy, set in a face
   that has no Devanagari.
 - **Anything the server or a person wrote**: doctor and clinic names, the reason a rep typed, the
   figures attached to a server refusal, the live-location privacy notice (legal, operator-approved —
   Q-12).
-- **Dates and times** are still drawn as "14 Oct" and "18:05". Month names are English in every
-  language for now.
+- **Messages already saved on the phone in another language.** A few queue reasons ("Waiting for
+  its visit to be sent first.", "No answer from the server.") are written into the queue row when they
+  happen, so a row recorded before a language change keeps the language it was recorded in until it
+  sends. Fixing that would change the saved queue format.
+
+## Dates (`FE-W149`)
+
+Month and weekday names follow the language. English keeps the app's own short months ("Sep", not
+"Sept"). Hindi and Marathi are named by `Intl.DateTimeFormat` with `hi-IN` / `mr-IN`, in the
+territory's time zone, with Latin digits (`-u-nu-latn` — Marathi's default is Devanagari digits, and
+every clock time and count beside a date is Latin): "11 सित॰", "11 सप्टें", "सोमवार".
+
+**Why Intl and not a translated list:** React Native 0.86 builds Hermes with Intl switched on
+(`HERMES_ENABLE_INTL=True` in `ReactAndroid/hermes-engine/build.gradle.kts`), and on Android that Intl
+is backed by the phone's own ICU (minSdk 24), which carries Hindi and Marathi. That is read from the
+build, not seen on a handset. If a phone's runtime ever fails to resolve the locale, the date is shown
+in English rather than guessed — a correct "11 Sep" beats a wrong name. Clock times ("18:05") are the
+same in every language.
 
 ## How Devanagari is drawn (`FE-W147`)
 
@@ -126,31 +161,26 @@ including the bold weights and the tab bar.
 
 ## What has moved, and what is left
 
-**Moved (`FE-W145`)** — every word on these, including the helpers that build their sentences:
-sign-in and the start-up spinner; the tab bar; **Today** (the day card, the next visit, the progress
-card, the buttons, the sync line, the pending-sync list, the mobile data note, the live location line,
-the "list rebuilt" and "record moved" notices, the time-zone banner); the manager/administrator home
-placeholder; **Me / Settings** (every row, sign out and its warnings); **Day end**; and the words
-the shared controls supply themselves (Choose one, On/Off, Close, Clear). The shared error and
-"what to do" messages (`errors/plain.ts`, `sync/explanation.ts`) are in the catalogue too, so they
-follow the language on every screen that shows them.
+**Every screen a rep sees is on the catalogue except Learning** (`FE-W145`, `FE-W150`–`FE-W158`):
+sign-in, the tab bar, Today, Me / Settings, Day end; a visit; the Doctors tab and a doctor's profile;
+call report, samples and voice note; the outbox (queue); today's route, an unplanned visit and the map;
+mileage, Mobile data, What this app records and the Live location screen; the first-run screens
+(location, battery & autostart, notifications, microphone) and the start-up error screen; the adverse
+event screen (except its regulated wording, above); coaching, an analysis and the reply; the
+assistant, product questions and AI doctor practice. The shared error and "what to do" messages
+follow the language on every screen. `pnpm i18n:export` prints today's count of strings.
 
-**Not moved yet** — these still show English whatever the language, and each is a whole screen, so
-none is half done:
+**Not moved:**
 
-| Screen | Route / component |
+| Screen | Why |
 | --- | --- |
-| Doctors tab and a doctor's profile | `app/(tabs)/doctors.tsx`, `app/doctor/[id].tsx`, `DoctorListScreen`, `DoctorProfileScreen` |
-| A visit (check in / out, not met) | `app/visit/[id].tsx`, `VisitScreen` |
-| Call report, samples, voice note | `app/report/[visitId].tsx`, `app/samples/[visitId].tsx`, `app/voice-note/[visitId].tsx` and their screens |
-| The outbox (queue) screen | `app/queue.tsx`, `QueueScreen` |
-| Today's route, unplanned visit, map | `app/beat-plan.tsx`, `app/unplanned-visit.tsx`, `app/map.tsx` |
-| Mileage, Mobile data, What this app records | `app/mileage.tsx`, `app/data-settings.tsx`, `app/transparency.tsx` |
-| Live location (the screen; its notice is legal and excluded) | `app/live-tracking.tsx` |
-| First run: location, battery & autostart, notifications, microphone | `app/onboarding/*` |
-| Adverse event | `app/adverse-event/[visitId].tsx` |
-| Coaching, analysis, reply (behind a flag) | `app/(tabs)/coaching.tsx`, `app/analysis/[id].tsx`, `app/reply/[analysisId].tsx` |
-| Assistant, product questions, practice, learning (behind flags) | `app/assistant.tsx`, `app/product-qa.tsx`, `app/practice/*`, `app/learning/*` |
+| Learning — courses, a lesson, its quiz and tutor (`app/learning/*`, `LearningScreens`, `TutorPanel`, `src/learning/*`) | another branch is changing these screens; they move after it merges |
 | Consent | **excluded by rule**, above |
 
-The visit screen is the next most used after Today and should go first.
+**Words that went into the catalogue on a judgement call** — say if any should be English-only:
+the C14 line on a doctor's profile ("Nothing here about what they prescribe, and nothing about their
+patients…", `doctors.boundary`), the coaching screens' "Written by an AI model" lines, the
+"What this app records" copy (its own comment says it still needs privacy review), the Live location
+screen's DRAFT banner and its "I have read this notice and agree" button (the notice itself is the
+operator's, untouched), and the two "this visit / this doctor is not on your phone yet" banners, which
+the consent screen shows to the REP as well (the doctor-facing consent words are unaffected).
