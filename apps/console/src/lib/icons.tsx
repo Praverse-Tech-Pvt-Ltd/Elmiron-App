@@ -52,6 +52,16 @@ const PATHS = {
     'M10 12h4',
   ],
   signOut: ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'M16 17l5-5-5-5', 'M21 12H9'],
+  // `FE-W200`, `FE-W202`, `FE-W203`: call reports, team exceptions and visit coverage.
+  clipboard: [
+    'M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z',
+    'M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2',
+    'M9 14l2 2 4-4',
+  ],
+  flag: ['M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z', 'M4 22v-7'],
+  checks: ['M3 7l2 2 4-4', 'M3 17l2 2 4-4', 'M13 6h8', 'M13 12h8', 'M13 18h8'],
+  // `FE-W204`: side-effect flags, which are routed to a person.
+  bell: ['M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9', 'M10.3 21a1.94 1.94 0 0 0 3.4 0'],
   // `FE-W170`: the phone layout's menu button, open and shut.
   menu: ['M4 6h16', 'M4 12h16', 'M4 18h16'],
   close: ['M18 6 6 18', 'M6 6l12 12'],

@@ -35,12 +35,18 @@ export const GROUPS: readonly NavGroup[] = [
     title: 'Team',
     items: [
       { label: 'Coaching queue', href: '/coaching', roles: BOTH },
+      // `FE-W200`. `approve_call_report` admits a field manager or an admin, each for the reps they see.
+      { label: 'Call reports', href: '/reports', roles: BOTH },
+      // `FE-W202`. `team_exceptions` answers for whoever the caller sees: a team, or a company.
+      { label: 'Team exceptions', href: '/exceptions', roles: BOTH },
       // `BE-W171` / `BE-C78`. The manager plans a rep's day; `plannable_reps` refuses an admin.
       { label: 'Plan a rep’s day', href: '/planning', roles: MANAGER },
       // `FE-W72` / `BE-W180`. Reps' latest positions and today's list; the admin's company switch.
       { label: 'Live location', href: '/tracking', roles: BOTH },
       // `BE-W191`. Who started and ended their day, and reopening an ended one, with a reason.
       { label: 'The team’s day', href: '/days', roles: BOTH },
+      // `FE-W203`. `coverage`: planned against completed visits, for the reps the caller sees.
+      { label: 'Visit coverage', href: '/coverage', roles: BOTH },
       // W2-G B (OP-6). `assign_course` admits an admin or a field manager, each for people they see.
       { label: 'Course assignments', href: '/learning', roles: BOTH },
     ],
@@ -69,6 +75,8 @@ export const GROUPS: readonly NavGroup[] = [
       { label: 'Planning access', href: '/planning/access', roles: ADMIN },
       // `FE-W91` / `BE-W201`. `live_tracking_notices` refuses anybody but an admin.
       { label: 'Live location notice', href: '/tracking/notice', roles: ADMIN },
+      // `FE-W204` / `BE-W215`. The adverse-event reads refuse anybody but an admin, own company only.
+      { label: 'Side-effect flags', href: '/adverse-events', roles: ADMIN },
     ],
   },
   {

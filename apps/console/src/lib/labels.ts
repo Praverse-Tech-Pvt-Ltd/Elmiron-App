@@ -142,6 +142,7 @@ const CONSOLE_READ_REASONS: Readonly<Record<string, string>> = {
   'console audit log screen': 'Opened the audit log',
   'console coaching queue — queue render': 'Opened the coaching queue',
   'console retention & purge screen': 'Opened Retention & purge',
+  'console side-effect flags screen': 'Opened Side-effect flags',
   'console review screen — analysis opened for review': 'Opened an analysis to review it',
   'console review screen — override history render': 'Opened an analysis’s overrides',
   'console users & roles screen render': 'Opened Users & roles',

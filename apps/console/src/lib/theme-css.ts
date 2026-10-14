@@ -213,6 +213,10 @@ ul.ff-plain-list {
   color: var(--ff-text-secondary); ${typeRule(t.secondary)};
 }
 td > .ff-note, td > .ff-btn + .ff-note { margin-top: ${px(s.sm)}; }
+/* FE-W202: a short glossary — each term, and its one-sentence meaning beneath it. */
+dl.ff-defs { margin: 0; display: flex; flex-direction: column; gap: ${px(s.sm + s.xs)}; max-width: 96ch; }
+.ff-defs dt { ${typeRule(t.body)}; font-weight: 600; color: var(--ff-text-primary); }
+.ff-defs dd { margin: 2px 0 0; ${typeRule(t.secondary)}; color: var(--ff-text-secondary); }
 .ff-columns { display: flex; flex-wrap: wrap; gap: ${px(s.md)}; align-items: flex-start; }
 .ff-columns > * { flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: ${px(s.md)}; }
 .ff-columns > .ff-col-wide { flex: 2 1 520px; }
@@ -323,6 +327,8 @@ main td.ff-indent-3 { padding-left: ${px(s.md + 72)}; }
 }
 .ff-stat-attention { background: var(--ff-attention-fill); box-shadow: inset 0 0 0 1px ${alpha(c.attention, 0.16)}; }
 .ff-stat-attention .ff-label, .ff-stat-attention .ff-figure, .ff-stat-attention .ff-text { color: var(--ff-attention); }
+.ff-stat-critical { background: var(--ff-critical-fill); box-shadow: inset 0 0 0 1px ${alpha(c.critical, 0.22)}; }
+.ff-stat-critical .ff-label, .ff-stat-critical .ff-figure, .ff-stat-critical .ff-text { color: var(--ff-critical); }
 
 /* ---------------------------------------------------------------- the notice, as written */
 
@@ -389,6 +395,12 @@ main tbody tr:last-child td { border-bottom: 0; }
 main tbody tr:hover td { background: ${alpha(c.background, 0.9)}; }
 main th.ff-num, main td.ff-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 main td.ff-nowrap { white-space: nowrap; }
+/* FE-W200: a tick-box column is as narrow as its box, on a phone too (beats the 112px minimum). */
+main th.ff-check, main td.ff-check { width: 1%; min-width: 0; padding-right: ${px(s.xs)}; }
+/* FE-W200: a cell of sentences keeps a reading width when a phone squeezes the table. */
+main td.ff-cell-prose { min-width: 220px; }
+/* FE-W203: a small count needs no more room than its heading. */
+main td.ff-count { min-width: 0; }
 main td.ff-empty { padding: ${px(s.xl)} ${px(s.md)}; text-align: center; }
 main td.ff-empty .ff-text { color: var(--ff-text-secondary); }
 

@@ -8,9 +8,12 @@ describe('FE-W164 — each role is offered the destinations that work for it', (
   it('offers a manager the team’s work, courses to read and their own territories', () => {
     expect(hrefs('field_manager')).toEqual([
       '/coaching',
+      '/reports',
+      '/exceptions',
       '/planning',
       '/tracking',
       '/days',
+      '/coverage',
       '/learning',
       '/courses',
       '/territories',
@@ -27,6 +30,7 @@ describe('FE-W164 — each role is offered the destinations that work for it', (
       '/practice-feedback',
       '/planning/access',
       '/prompts',
+      '/adverse-events',
     ]) {
       expect(offered).not.toContain(refused);
     }
@@ -62,6 +66,8 @@ describe('FE-W164 — the brand line and the current entry', () => {
     expect(currentHref('/tracking/notice')).toBe('/tracking/notice');
     expect(currentHref('/tracking')).toBe('/tracking');
     expect(currentHref('/coaching/abc')).toBe('/coaching');
+    // `FE-W201`: one report, beneath the list it was opened from.
+    expect(currentHref('/reports/abc')).toBe('/reports');
     expect(currentHref('/nowhere')).toBeNull();
   });
 

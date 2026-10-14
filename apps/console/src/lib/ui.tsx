@@ -119,6 +119,9 @@ export const Columns = ({ children }: { readonly children: ReactNode }): ReactNo
  * `FE-W168`: `tone="attention"` draws the tile in the attention fill. `retention.ts` has always
  * marked a non-zero "Past their date" as the one figure that is a broken promise, and nothing drew
  * the mark; now it shows. The pair is the attention pill's, already in `requiredContrastPairs`.
+ *
+ * `FE-W204`: `tone="critical"` for a figure that is a missed legal deadline — side-effect flags
+ * past their statutory date. The critical pill's pair, likewise already checked.
  */
 export const Stat = ({
   label,
@@ -129,9 +132,15 @@ export const Stat = ({
   readonly label: ReactNode;
   readonly children: ReactNode;
   readonly note?: ReactNode;
-  readonly tone?: 'neutral' | 'attention';
+  readonly tone?: 'neutral' | 'attention' | 'critical';
 }): ReactNode => (
-  <div className={cx('ff-stat', tone === 'attention' && 'ff-stat-attention')}>
+  <div
+    className={cx(
+      'ff-stat',
+      tone === 'attention' && 'ff-stat-attention',
+      tone === 'critical' && 'ff-stat-critical',
+    )}
+  >
     <Label>{label}</Label>
     <Figure>{children}</Figure>
     {note === undefined ? null : <Body muted>{note}</Body>}

@@ -39,9 +39,12 @@ import { SignOut } from './sign-out';
 /** One glyph per destination, keyed by route. Decorative: the label names the entry. */
 const ICONS: Readonly<Record<string, IconName>> = {
   '/coaching': 'inbox',
+  '/reports': 'clipboard',
+  '/exceptions': 'flag',
   '/planning': 'calendar',
   '/tracking': 'pin',
   '/days': 'clock',
+  '/coverage': 'checks',
   '/learning': 'cap',
   '/knowledge': 'book',
   '/practice': 'pulse',
@@ -51,6 +54,7 @@ const ICONS: Readonly<Record<string, IconName>> = {
   '/admin': 'fileCheck',
   '/planning/access': 'key',
   '/tracking/notice': 'shield',
+  '/adverse-events': 'bell',
   '/users': 'users',
   '/territories': 'map',
   '/audit': 'list',
