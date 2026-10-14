@@ -4049,3 +4049,34 @@ so a stuck runtime and a slow one looked identical.
 **This is the same family as the six stale-artefact instances above, one level up.** Those were checks
 reading something they did not produce; this is a check whose *condition* was wider than its claim. The
 question generalises: **when a check passes, ask what else would also have made it pass.**
+
+---
+
+## 14 October 2026 — the console's loading skeletons intermittently swallowed `router.refresh()` (`FE-W160`)
+
+`FE-W124` gave every server-rendered console route a `loading.tsx` skeleton. On GitHub CI, PR #33's
+browser suite then failed tests that had been green on `main` for weeks. Three failed on the first
+run and one on the rerun, always the same shape:
+- the admin's action succeeded and its message showed ("Granted from 2026-10-14", "Approved. This is
+  the prompt the feature now uses.");
+- the server-rendered list beside it stayed as it was before the action;
+- once, the sign-in never navigated to `/coaching`.
+
+The Playwright trace showed the refresh request made, answered `200`, and dynamic
+(`private, no-store`). So the server was asked, and something between that response and the screen
+dropped the update.
+
+**It was proved by measurement, not by reading Next's source.** On the local stack, same source, the
+three flaky specs ran 10 times each, twice per arm:
+
+| | failed |
+| --- | --- |
+| with the 15 `loading.tsx` files | **6 of 240** |
+| without them | **0 of 240** |
+
+They were removed. The exact mechanism inside Next 15.5 / React 19 (a refresh landing while a
+loading boundary's streamed segment is still pending is the likeliest shape) is **not established**.
+
+**How to apply.** Before adding a `loading.tsx` or a `<Suspense>` around a page that refreshes after a
+write, repeat the console specs that write (`--repeat-each=10`) against a production build. A
+once-only green run proves nothing about a race that shows up once in forty runs.
