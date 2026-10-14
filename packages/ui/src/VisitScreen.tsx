@@ -9,6 +9,8 @@ import { Card } from './Card';
 import { RecordingIndicator } from './RecordingIndicator';
 import { Screen } from './Screen';
 import { Spinner } from './Spinner';
+import { useT } from './i18n';
+import type { TextKey } from './i18n';
 
 /**
  * Phase 2 B4 → B5 → B6, on one screen.
@@ -176,11 +178,12 @@ const styles = StyleSheet.create({
   figureRow: { flexDirection: 'row', alignItems: 'baseline', gap: tokens.space.sm },
 });
 
-const STAGE_WORDS = {
-  before: 'Not started',
-  during: 'You are checked in',
-  after: 'Visit finished',
-} as const;
+// `FE-W150`. Keys, read at render, so a language change repaints the stage line.
+const STAGE_WORDS: Record<VisitScreenProps['stage'], TextKey> = {
+  before: 'visit.stageBefore',
+  during: 'visit.stageDuring',
+  after: 'visit.stageAfter',
+};
 
 /**
  * The same three stages, for a write the server has not acknowledged yet.
@@ -193,11 +196,11 @@ const STAGE_WORDS = {
  * `before` has no pending form and never will: nothing has been queued in that state, so
  * there is nothing to be pending about. It is present so the lookup is total.
  */
-const STAGE_WORDS_PENDING = {
-  before: 'Not started',
-  during: 'Checked in — waiting to send',
-  after: 'Visit finished — waiting to send',
-} as const;
+const STAGE_WORDS_PENDING: Record<VisitScreenProps['stage'], TextKey> = {
+  before: 'visit.stageBefore',
+  during: 'visit.stageDuringPending',
+  after: 'visit.stageAfterPending',
+};
 
 export const VisitScreen = ({
   doctorName,
@@ -227,6 +230,7 @@ export const VisitScreen = ({
   failure = null,
   actionFailure = null,
 }: VisitScreenProps): ReactNode => {
+  const { t } = useT();
   if (failure !== null) {
     return (
       <Screen>
@@ -238,14 +242,31 @@ export const VisitScreen = ({
   // UX polish. Where the rep is in the visit, as four steps they can see at once. Derived only
   // from the stage this screen already has -- the report step reads "next" after check-out and
   // claims nothing about whether one was filed, which this screen is not told.
-  const steps: readonly { readonly label: string; readonly state: 'done' | 'now' | 'later' }[] = [
-    { label: 'Check in', state: stage === 'before' ? 'now' : 'done' },
+  const steps: readonly {
+    readonly key: TextKey;
+    readonly label: string;
+    readonly state: 'done' | 'now' | 'later';
+  }[] = [
     {
-      label: 'With the doctor',
+      key: 'visit.stepCheckIn',
+      label: t('visit.stepCheckIn'),
+      state: stage === 'before' ? 'now' : 'done',
+    },
+    {
+      key: 'visit.stepWithDoctor',
+      label: t('visit.stepWithDoctor'),
       state: stage === 'during' ? 'now' : stage === 'after' ? 'done' : 'later',
     },
-    { label: 'Check out', state: stage === 'after' ? 'done' : 'later' },
-    { label: 'Report', state: stage === 'after' ? 'now' : 'later' },
+    {
+      key: 'visit.stepCheckOut',
+      label: t('visit.stepCheckOut'),
+      state: stage === 'after' ? 'done' : 'later',
+    },
+    {
+      key: 'visit.stepReport',
+      label: t('visit.stepReport'),
+      state: stage === 'after' ? 'now' : 'later',
+    },
   ];
 
   // Only the action the rep is here for is pinned: the stage's own step, or the report after it.
@@ -253,11 +274,11 @@ export const VisitScreen = ({
     actionLabel === null && !(stage === 'after' && onWriteReport !== undefined) ? null : (
       <>
         {stage === 'after' && onWriteReport !== undefined ? (
-          <Button label="Write your report" onPress={onWriteReport} />
+          <Button label={t('visit.writeReport')} onPress={onWriteReport} />
         ) : null}
         {actionLabel === null ? null : (
           <Button
-            label={busy ? 'Finding your position…' : actionLabel}
+            label={busy ? t('visit.findingPosition') : actionLabel}
             loading={busy}
             onPress={onAction}
           />
@@ -284,14 +305,18 @@ export const VisitScreen = ({
           <RecordingIndicator elapsed={recording.elapsed} state="recording" />
           <Label muted>{recording.label}</Label>
           <View style={styles.foot}>
-            <Button label="Stop recording" onPress={recording.onStop} variant="secondary" />
+            <Button
+              label={t('visit.stopRecording')}
+              onPress={recording.onStop}
+              variant="secondary"
+            />
             {/*
               `destructive`, and §05 puts a destructive control outside the reach
               zone deliberately — a resting thumb must not be able to destroy a
               recording the doctor agreed to.
             */}
             <Button
-              label="Stop and delete it"
+              label={t('visit.stopAndDelete')}
               onPress={recording.onStopAndDelete}
               variant="destructive"
             />
@@ -304,22 +329,22 @@ export const VisitScreen = ({
         {clinic === null ? null : <Secondary>{clinic}</Secondary>}
         {unplanned === null ? null : (
           <>
-            <Badge label="Unplanned" tone="info" />
+            <Badge label={t('visit.unplanned')} tone="info" />
             <Secondary>{unplanned.reason}</Secondary>
           </>
         )}
         {onOpenDirections === undefined ? null : (
           <View style={styles.directions}>
-            <Button label="Directions" onPress={onOpenDirections} variant="quiet" />
+            <Button label={t('visit.directions')} onPress={onOpenDirections} variant="quiet" />
           </View>
         )}
       </View>
 
-      <View accessibilityLabel="Visit progress" accessible style={styles.steps}>
+      <View accessibilityLabel={t('visit.progress')} accessible style={styles.steps}>
         {steps.map((step) => (
           <Badge
-            key={step.label}
-            label={step.state === 'done' ? `✓ ${step.label}` : step.label}
+            key={step.key}
+            label={step.state === 'done' ? t('visit.stepDone', { step: step.label }) : step.label}
             tone={step.state === 'done' ? 'success' : step.state === 'now' ? 'info' : 'neutral'}
           />
         ))}
@@ -329,14 +354,14 @@ export const VisitScreen = ({
         <Banner detail={actionFailure.detail} title={actionFailure.title} tone="critical" />
       )}
 
-      {loading ? <Spinner label="Getting this visit" /> : null}
+      {loading ? <Spinner label={t('visit.loading')} /> : null}
 
       <Card tone={stage === 'during' ? 'hero' : 'default'}>
-        <Label muted>{(stagePending ? STAGE_WORDS_PENDING : STAGE_WORDS)[stage]}</Label>
+        <Label muted>{t((stagePending ? STAGE_WORDS_PENDING : STAGE_WORDS)[stage])}</Label>
         {durationLabel === null ? null : (
           <View style={styles.figureRow}>
             <Figure>{durationLabel}</Figure>
-            <Label muted>with the doctor</Label>
+            <Label muted>{t('visit.withTheDoctor')}</Label>
           </View>
         )}
         {startedLabel === null ? null : <BodyText>{startedLabel}</BodyText>}
@@ -355,19 +380,14 @@ export const VisitScreen = ({
         <Card>
           <BodyText>
             {/* W2-B B1. "He agreed" assumed the doctor's gender; the app does not know it. */}
-            {consent.outcome === 'declined'
-              ? 'Noted — no recording.'
-              : 'The doctor agreed to a recording.'}
+            {consent.outcome === 'declined' ? t('visit.consentDeclined') : t('visit.consentAgreed')}
           </BodyText>
           {consent.answeredLabel == null ? null : <Label muted>{consent.answeredLabel}</Label>}
           {consent.outcome === 'consented' ? (
             // The MR must not be left believing audio is being captured. Recording
             // is FE-W4 and nothing in this build can capture it; a screen that
             // implied otherwise would have them speak as though it were.
-            <Label muted>
-              Recording is not in this build, so nothing is being captured. The doctor’s answer is
-              on the record either way.
-            </Label>
+            <Label muted>{t('visit.recordingNotInBuild')}</Label>
           ) : null}
         </Card>
       )}
@@ -392,40 +412,58 @@ export const VisitScreen = ({
           */
           title={
             (blockedWrite ?? (stage === 'before' ? 'check-in' : 'check-out')) === 'check-in'
-              ? 'This check-in cannot be sent yet'
-              : 'This check-out cannot be sent yet'
+              ? t('visit.checkInNotSent')
+              : t('visit.checkOutNotSent')
           }
           tone="attention"
         />
       )}
 
       {recordingNotice === null ? null : (
-        <Banner detail={recordingNotice} title="The recording" tone="info" />
+        <Banner detail={recordingNotice} title={t('visit.recordingTitle')} tone="info" />
       )}
       {stage === 'during' && recording === undefined && recordingBlockedReason !== null ? (
         // The reason instead of the control. §02 keeps `attention` for a
         // condition with a remedy — a doctor who said no is not a failure.
-        <Banner detail={recordingBlockedReason} title="No recording can be made" tone="attention" />
+        <Banner detail={recordingBlockedReason} title={t('visit.noRecording')} tone="attention" />
       ) : null}
 
       {duringActions ? (
         <View style={styles.foot}>
-          <Heading>{stage === 'during' ? 'During this visit' : 'After this visit'}</Heading>
+          <Heading>
+            {stage === 'during' ? t('visit.duringThisVisit') : t('visit.afterThisVisit')}
+          </Heading>
           {stage === 'during' && consent?.outcome === 'unasked' && consent.onAsk !== undefined ? (
-            <Button label="Ask about recording" onPress={consent.onAsk} variant="secondary" />
+            <Button
+              label={t('visit.askAboutRecording')}
+              onPress={consent.onAsk}
+              variant="secondary"
+            />
           ) : null}
           {stage === 'during' && recording === undefined && onStartRecording !== undefined ? (
-            <Button label="Record this visit" onPress={onStartRecording} variant="secondary" />
+            <Button
+              label={t('visit.recordThisVisit')}
+              onPress={onStartRecording}
+              variant="secondary"
+            />
           ) : null}
           {stage === 'during' && onRecordSamples !== undefined ? (
-            <Button label="Record what you left" onPress={onRecordSamples} variant="secondary" />
+            <Button
+              label={t('visit.recordSamples')}
+              onPress={onRecordSamples}
+              variant="secondary"
+            />
           ) : null}
           {stage !== 'before' && onRecordVoiceNote !== undefined ? (
-            <Button label="Record a voice note" onPress={onRecordVoiceNote} variant="secondary" />
+            <Button
+              label={t('visit.recordVoiceNote')}
+              onPress={onRecordVoiceNote}
+              variant="secondary"
+            />
           ) : null}
           {stage !== 'before' && onFlagAdverseEvent !== undefined ? (
             <Button
-              label="Flag a possible side effect"
+              label={t('visit.flagSideEffect')}
               onPress={onFlagAdverseEvent}
               variant="secondary"
             />

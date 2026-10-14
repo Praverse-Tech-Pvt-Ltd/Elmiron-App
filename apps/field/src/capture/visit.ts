@@ -1,4 +1,5 @@
 import type { CreateCheckInRequest, Coordinates, SyncWarning, Visit } from '@fieldforce/core';
+import { t } from '@fieldforce/ui/i18n';
 import type { FixOutcome } from './location';
 
 /**
@@ -200,9 +201,9 @@ export const blockedReason = (outcome: FixOutcome): string | null => {
     case 'fix':
       return null;
     case 'denied':
-      return 'Location is off, so this check-in cannot be sent yet. Turn location on for this app and press again.';
+      return t('visit.locationOff');
     case 'unavailable':
-      return `${outcome.reason} Move somewhere with a clearer view of the sky and press again.`;
+      return t('visit.fixUnavailable', { reason: outcome.reason });
   }
 };
 
@@ -243,14 +244,14 @@ export const checkOutRequest = checkInRequest;
  * verdict "was decided by a coin", so an `outside` beside an approximate fix is not a fact about
  * where the rep stood, and saying "your phone placed you away from it" would be the overstatement.
  */
-export const CHECK_IN_APPROXIMATE =
-  "The clinic could not be confirmed: your phone's position was too rough to tell.";
-export const CHECK_IN_OUTSIDE =
-  'The clinic could not be confirmed: your phone placed you away from it.';
+// `FE-W150`. Functions, not constants: a sentence fixed at import would stay in the language the
+// app started in.
+export const checkInApproximate = (): string => t('visit.checkInApproximate');
+export const checkInOutside = (): string => t('visit.checkInOutside');
 
 export const checkInCaveat = (warnings: readonly SyncWarning[]): string | null => {
-  if (warnings.includes('check_in_location_approximate')) return CHECK_IN_APPROXIMATE;
-  if (warnings.includes('check_in_outside_geofence')) return CHECK_IN_OUTSIDE;
+  if (warnings.includes('check_in_location_approximate')) return checkInApproximate();
+  if (warnings.includes('check_in_outside_geofence')) return checkInOutside();
   return null;
 };
 
@@ -286,9 +287,9 @@ export const checkInWarningsFor = (
 export const actionLabelFor = (stage: VisitStage): string | null => {
   switch (stage) {
     case 'before':
-      return 'I am here — check in';
+      return t('visit.checkInAction');
     case 'during':
-      return 'Leaving — check out';
+      return t('visit.checkOutAction');
     case 'after':
       return null;
   }

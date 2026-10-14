@@ -79,7 +79,7 @@ import { setQueueOwner } from '../sync/async-storage-store';
 import { SyncPushRefusal } from '../sync/push-client';
 import type { OutboxWriteClient } from '../sync/push-client';
 import { flushOutbox } from '../sync/outbox';
-import { CHECK_IN_APPROXIMATE, CHECK_IN_OUTSIDE } from '../capture/visit';
+import { checkInApproximate, checkInOutside } from '../capture/visit';
 import { recordWitnessedConsent } from '../consent/witnessed';
 import VisitRoute from '../../app/visit/[id]';
 
@@ -334,7 +334,7 @@ describe('app/visit/[id].tsx — BE-C5, a check-in the clinic could not confirm 
       warnings: ['check_in_outside_geofence'],
     });
     await pressCheckIn();
-    expect(await screen.findByText(CHECK_IN_OUTSIDE)).toBeTruthy();
+    expect(await screen.findByText(checkInOutside())).toBeTruthy();
   });
 
   it('SENT: an ordinary check-in shows NO line', async () => {
@@ -346,8 +346,8 @@ describe('app/visit/[id].tsx — BE-C5, a check-in the clinic could not confirm 
     await waitFor(() => {
       expect(mockRefresh).toHaveBeenCalled();
     });
-    expect(screen.queryByText(CHECK_IN_OUTSIDE)).toBeNull();
-    expect(screen.queryByText(CHECK_IN_APPROXIMATE)).toBeNull();
+    expect(screen.queryByText(checkInOutside())).toBeNull();
+    expect(screen.queryByText(checkInApproximate())).toBeNull();
   });
 
   it('SENT: a coarse fix says "too rough", not "away" — BE-C2, the verdict was a coin', async () => {
@@ -358,8 +358,8 @@ describe('app/visit/[id].tsx — BE-C5, a check-in the clinic could not confirm 
       warnings: ['check_in_outside_geofence', 'check_in_location_approximate'],
     });
     await pressCheckIn();
-    expect(await screen.findByText(CHECK_IN_APPROXIMATE)).toBeTruthy();
-    expect(screen.queryByText(CHECK_IN_OUTSIDE)).toBeNull();
+    expect(await screen.findByText(checkInApproximate())).toBeTruthy();
+    expect(screen.queryByText(checkInOutside())).toBeNull();
   });
 
   const flushWith = async (answer: unknown): Promise<void> => {
@@ -376,14 +376,14 @@ describe('app/visit/[id].tsx — BE-C5, a check-in the clinic could not confirm 
     mockCreateCheckIn.mockRejectedValue(new Error('Network request failed'));
     await pressCheckIn();
     await screen.findByText(/Saved on this phone/u);
-    expect(screen.queryByText(CHECK_IN_OUTSIDE)).toBeNull();
+    expect(screen.queryByText(checkInOutside())).toBeNull();
 
     await flushWith({
       receivedAt: '2026-09-11T12:05:00+05:30',
       warnings: ['check_in_outside_geofence'],
     });
     await render(<VisitRoute />);
-    expect(await screen.findByText(CHECK_IN_OUTSIDE)).toBeTruthy();
+    expect(await screen.findByText(checkInOutside())).toBeTruthy();
   });
 
   it('QUEUED: an ordinary flushed check-in shows NO line', async () => {
@@ -398,8 +398,8 @@ describe('app/visit/[id].tsx — BE-C5, a check-in the clinic could not confirm 
     // Wait for the queue to be read (the stage moves to `during` from it), so the absence below is
     // an answer and not "too early".
     await screen.findByText('Leaving — check out');
-    expect(screen.queryByText(CHECK_IN_OUTSIDE)).toBeNull();
-    expect(screen.queryByText(CHECK_IN_APPROXIMATE)).toBeNull();
+    expect(screen.queryByText(checkInOutside())).toBeNull();
+    expect(screen.queryByText(checkInApproximate())).toBeNull();
   });
 });
 

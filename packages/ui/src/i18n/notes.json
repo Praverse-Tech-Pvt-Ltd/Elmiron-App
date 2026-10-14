@@ -14,40 +14,238 @@
     "settings": "Me — the settings list",
     "me": "Me — sign out and warnings",
     "errors": "Error messages, on many screens",
-    "remedy": "What to do when the server refuses something, on many screens"
+    "remedy": "What to do when the server refuses something, on many screens",
+    "visit": "The visit screen: one visit from arriving to leaving — check in, check out, the recording bar, and the actions during and after the visit",
+    "adverse": "Flag a possible side effect (adverse event), opened from a visit. The guidance about what the report is and what must not be written stays in English and is not in this file"
   },
   "keys": {
-    "tabs.today": { "note": "Tab label, under an icon", "max": 12 },
-    "tabs.doctors": { "note": "Tab label, under an icon", "max": 12 },
-    "tabs.coaching": { "note": "Tab label, under an icon", "max": 12 },
-    "tabs.me": { "note": "Tab label, under an icon. The rep's own page", "max": 12 },
-    "common.on": { "note": "Beside a switch", "max": 6 },
-    "common.off": { "note": "Beside a switch", "max": 6 },
-    "common.clearField": { "note": "Spoken by a screen reader; {field} is the field's label" },
-    "common.nOfM": { "note": "A large figure, e.g. 3 of 8 (visits)", "max": 16 },
-    "common.km": { "note": "A distance, e.g. 12.4 km" },
-    "common.megabytes": { "note": "A size, e.g. 140 MB" },
-    "settings.comingLater": { "note": "A small badge", "max": 20 },
-    "settings.inUse": { "note": "A small badge on the language in use", "max": 16 },
+    "tabs.today": {
+      "note": "Tab label, under an icon",
+      "max": 12
+    },
+    "tabs.doctors": {
+      "note": "Tab label, under an icon",
+      "max": 12
+    },
+    "tabs.coaching": {
+      "note": "Tab label, under an icon",
+      "max": 12
+    },
+    "tabs.me": {
+      "note": "Tab label, under an icon. The rep's own page",
+      "max": 12
+    },
+    "common.on": {
+      "note": "Beside a switch",
+      "max": 6
+    },
+    "common.off": {
+      "note": "Beside a switch",
+      "max": 6
+    },
+    "common.clearField": {
+      "note": "Spoken by a screen reader; {field} is the field's label"
+    },
+    "common.nOfM": {
+      "note": "A large figure, e.g. 3 of 8 (visits)",
+      "max": 16
+    },
+    "common.km": {
+      "note": "A distance, e.g. 12.4 km"
+    },
+    "common.megabytes": {
+      "note": "A size, e.g. 140 MB"
+    },
+    "settings.comingLater": {
+      "note": "A small badge",
+      "max": 20
+    },
+    "settings.inUse": {
+      "note": "A small badge on the language in use",
+      "max": 16
+    },
     "settings.languageWaiting": {
       "note": "{language} is Hindi or Marathi, in English; {done} and {total} are numbers"
     },
-    "sync.waitingNoSignal": { "note": "One line on a narrow strip; {count} is a number" },
-    "sync.unreadableMeta": { "note": "Small text at the end of the sync line", "max": 30 },
-    "today.startVisit": { "note": "Main button; {doctor} is the doctor's name" },
-    "today.continueVisit": { "note": "Main button; {doctor} is the doctor's name" },
+    "sync.waitingNoSignal": {
+      "note": "One line on a narrow strip; {count} is a number"
+    },
+    "sync.unreadableMeta": {
+      "note": "Small text at the end of the sync line",
+      "max": 30
+    },
+    "today.startVisit": {
+      "note": "Main button; {doctor} is the doctor's name"
+    },
+    "today.continueVisit": {
+      "note": "Main button; {doctor} is the doctor's name"
+    },
     "today.seeRoute": {
       "note": "A small link at the corner of a card; keep the › at the end",
       "max": 28
     },
-    "today.lastSyncOtherDay": { "note": "{date} is like 14 Oct; {time} is like 18:05" },
-    "pending.unplanned": { "note": "{reason} is what the rep typed" },
-    "dayEnd.title": { "note": "Screen title; {day} is the word for Today" },
-    "dayEnd.endMyDay": { "note": "Button", "max": 24 },
-    "tracking.lastRefused": { "note": "{reason} is one of the tracking.refused… sentences" },
-    "remedy.figures": { "note": "{figures} is technical text from the server, left as it is" },
-    "errors.reference": { "note": "{code} is a five-character error code" },
-    "home.teamDetail": { "note": "Placeholder row; FE-W6 is an internal reference, keep it" },
-    "home.adminDetail": { "note": "Placeholder row; FE-W6 is an internal reference, keep it" }
+    "today.lastSyncOtherDay": {
+      "note": "{date} is like 14 Oct; {time} is like 18:05"
+    },
+    "pending.unplanned": {
+      "note": "{reason} is what the rep typed"
+    },
+    "dayEnd.title": {
+      "note": "Screen title; {day} is the word for Today"
+    },
+    "dayEnd.endMyDay": {
+      "note": "Button",
+      "max": 24
+    },
+    "tracking.lastRefused": {
+      "note": "{reason} is one of the tracking.refused… sentences"
+    },
+    "remedy.figures": {
+      "note": "{figures} is technical text from the server, left as it is"
+    },
+    "errors.reference": {
+      "note": "{code} is a five-character error code"
+    },
+    "home.teamDetail": {
+      "note": "Placeholder row; FE-W6 is an internal reference, keep it"
+    },
+    "home.adminDetail": {
+      "note": "Placeholder row; FE-W6 is an internal reference, keep it"
+    },
+    "visit.thisVisit": {
+      "note": "Stands in for the doctor's name as the heading when it is not known"
+    },
+    "visit.checkInAction": {
+      "note": "Main button. Keep the dash: what the rep says, then what pressing does",
+      "max": 32
+    },
+    "visit.checkOutAction": {
+      "note": "Main button. Keep the dash: what the rep says, then what pressing does",
+      "max": 32
+    },
+    "visit.findingPosition": {
+      "note": "Main button while the phone reads its position",
+      "max": 32
+    },
+    "visit.fixUnavailable": {
+      "note": "{reason} is a sentence from the phone, sometimes in English from the phone's own system"
+    },
+    "visit.checkInApproximate": {
+      "note": "One plain line under the check-in time (decision BE-C5). Must say nothing about consequences — no manager, no review, no pay"
+    },
+    "visit.checkInOutside": {
+      "note": "One plain line under the check-in time (decision BE-C5). Must say nothing about consequences — no manager, no review, no pay"
+    },
+    "visit.checkedIn": {
+      "note": "{time} is a clock time such as 11:56"
+    },
+    "visit.checkedInAndOut": {
+      "note": "{checkedIn} and {checkedOut} are clock times such as 11:56"
+    },
+    "visit.stageDuring": {
+      "note": "The server has confirmed the check-in"
+    },
+    "visit.stageDuringPending": {
+      "note": "This phone recorded the check-in and the server has not confirmed it. Must not read as confirmed"
+    },
+    "visit.stageAfterPending": {
+      "note": "This phone recorded the check-out and the server has not confirmed it. Must not read as confirmed"
+    },
+    "visit.stepCheckIn": {
+      "note": "A small step badge, one of four in a row",
+      "max": 16
+    },
+    "visit.stepWithDoctor": {
+      "note": "A small step badge, one of four in a row",
+      "max": 18
+    },
+    "visit.stepCheckOut": {
+      "note": "A small step badge, one of four in a row",
+      "max": 16
+    },
+    "visit.stepReport": {
+      "note": "A small step badge, one of four in a row",
+      "max": 16
+    },
+    "visit.stepDone": {
+      "note": "A finished step badge. {step} is one of the visit.step… words; keep the ✓"
+    },
+    "visit.progress": {
+      "note": "Spoken by a screen reader for the row of step badges"
+    },
+    "visit.loading": {
+      "note": "Spinner label"
+    },
+    "visit.unplanned": {
+      "note": "A small badge: the rep made this visit without a plan",
+      "max": 14
+    },
+    "visit.directions": {
+      "note": "Small button: opens the phone's maps app at the clinic",
+      "max": 20
+    },
+    "visit.withTheDoctor": {
+      "note": "Lower case, after a duration such as 17 min"
+    },
+    "visit.consentDeclined": {
+      "note": "The doctor said no to recording. An ordinary outcome, not a failure — no warning tone"
+    },
+    "visit.consentAgreed": {
+      "note": "Does not say he or she: the app does not know the doctor's gender"
+    },
+    "visit.recordingAgreedAt": {
+      "note": "On the recording bar. {time} is the clock time the doctor agreed, such as 11:58"
+    },
+    "visit.recordingWithElapsed": {
+      "note": "Spoken by a screen reader. {state} is one of the visit.recording… words; {elapsed} is like 02:41"
+    },
+    "visit.recordingPausedBecause": {
+      "note": "{reason} is why it paused, such as 'a call came in'"
+    },
+    "visit.recordingRefused": {
+      "note": "{message} is the server's reason, left as it is"
+    },
+    "visit.notSaved": {
+      "note": "NOT is in capitals for emphasis: nothing was kept on the phone"
+    },
+    "visit.doctorSaidNo": {
+      "note": "Must not blame or pressure anyone; the visit carries on"
+    },
+    "visit.doctorWithdrew": {
+      "note": "Not the same as 'said no': the doctor agreed first"
+    },
+    "adverse.title": {
+      "note": "Screen title. A rep flags what they heard; they do not assess it"
+    },
+    "adverse.send": {
+      "note": "Main button",
+      "max": 24
+    },
+    "adverse.sending": {
+      "note": "Main button while sending",
+      "max": 24
+    },
+    "adverse.writeFirst": {
+      "note": "Under the disabled Send button: why it cannot be pressed"
+    },
+    "adverse.sent": {
+      "note": "Banner title: the server has the flag",
+      "max": 24
+    },
+    "adverse.saved": {
+      "note": "Banner title: kept on the phone, NOT yet sent. Must not read as sent",
+      "max": 24
+    },
+    "adverse.notSaved": {
+      "note": "NOT is in capitals for emphasis: nothing was kept on the phone"
+    },
+    "adverse.notSavedYet": {
+      "note": "Banner title",
+      "max": 24
+    },
+    "adverse.whatHappened": {
+      "note": "Field label",
+      "max": 24
+    }
   }
 }
