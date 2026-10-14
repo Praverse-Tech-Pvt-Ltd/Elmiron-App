@@ -6186,3 +6186,65 @@ network. **Pushed with `--no-verify` on the operator's instruction**, resting on
 record; do not merge it without CI having run** (`docs/START-HERE.md`, the rules). Also seen: the
 14:51 run left its `supabase functions serve` running after it finished — the orphan W2-K stopped by
 hand. Stopped here too.
+
+### 15 October — the handover audit (Pratham, with Claude)
+
+The owner asked for an audit of what is left, every font and alignment, and a product ready to hand to
+the client. Four read-only audits ran first: the field app's code (type scale, Android weight pairing,
+colour, layout), the console (code, plus 79 screenshots for both roles at 1440 and 390 wide), the field
+app on the Pixel_10 emulator (the e0c18d2 APK, every reachable screen, font scale 1.3), and a
+completeness pass (feature inventory, translations, open inputs, stale documents). Their findings were
+then fixed on `pratham/handover-polish`, cut from `pratham/ios-ready` at `e0c18d2`.
+
+- **Console** (`FE-W164`–`FE-W171`): each role offered only the pages that work for it; developer text
+  out of the UI and stored values in words; India time everywhere; the notice laid out; tab titles,
+  icon, 404 and error pages; a phone layout. **Manager tools** (`FE-W200`–`FE-W205`): call report
+  review and approval, team exceptions, visit coverage, and side-effect flags for admins.
+- **Field app** (`FE-W176`–`FE-W184`): the voice note's microphone banner was white on its tint; no
+  tappable label below 14pt; sentences at `Secondary`; wrapping rows; pinned footers; Learning on the
+  catalogue.
+- **Adverse events** (`BE-W215`, `BE-W216`; the owner approved the migration, LOCAL only):
+  `adverse_event_clock_summary()` counted every organisation's reports for any signed-in user, and no
+  one but the reporting rep could read a flag. Now a company's admins list and read their own (each read
+  audited, the list never carries the text), and the summary is admin-only and scoped. Applied with
+  `supabase migration up --local`; not in production.
+- **Contract** (`BE-W217`): `TeamExceptionKindSchema` gains `org_default_shift_window`.
+- **Documents:** `docs/CLIENT-HANDOVER.md`, `docs/client/rep-guide.md`, `docs/client/admin-guide.md`,
+  `THIRD-PARTY-NOTICES.md`; stale lines in `docs/HANDOVER.md` and `docs/operator-inputs.md` corrected
+  (Q-16–Q-18 and Q-19 answered, maps/push/tracking built, courses publish on the console).
+- **Not done, and why:** a `LICENSE` (ownership is a contract question); Hindi and Marathi (the owner's
+  rule: the client translates); a samples/UCPMP manager view (no summary function; needs a migration);
+  reps seeing their report's approval (call reports are not in `sync_pull`; needs a migration); a
+  "passed on" state for side-effect flags (needs Q-13 and a migration).
+
+#### Status — 15 October
+
+| MODULE | STATUS | OWNER | BLOCKER | ETA |
+| --- | --- | --- | --- | --- |
+| Core MR workflow — emulator, local stack [OP-1] | DONE | Pratham | — | — |
+| Core MR workflow — offline day on a real handset, DEMO build [OP-1] | BLOCKED | Operator | A handset | about ½ day after it |
+| Core MR workflow — signed production build on a handset [OP-1] | BLOCKED | Operator, then Pratham | A handset, the release key, the production deploy | about 1 day after all three |
+| Call report review and approval on the console (`FE-W200`, `FE-W201`) [OP-1] | DONE | Pratham | — | — |
+| Hindi and Marathi [OP-1] | BLOCKED | Client's translators | The translated file (`docs/operator/translations.md`) | minutes to import |
+| Day planning — the manager plans a rep's day on the console (`BE-C78`) [OP-2] | DONE | Pratham | — | — |
+| Day execution — Today and the route on the real server [OP-2] | DONE | Pratham | — | — |
+| Real backend — every screen reads and writes the server [OP-3] | DONE | Pratham | — | — |
+| Production deploy [OP-3] | BLOCKED | Operator, then Pratham | The Supabase paid plan and the go-ahead (Q-19 answered, `BE-C80`) | about 1 day after |
+| Console hosting [OP-3] | BLOCKED | Operator | A host and a web address | about ½ day after |
+| Production APK — the build [OP-3] | BLOCKED | Operator, then Pratham | The release key; the production address | about ½ day after both |
+| Day End — on the real server [OP-4] | DONE | Pratham | — | — |
+| Mileage — on the real server [OP-5] | DONE | Pratham | — | — |
+| LMS — courses, lessons, videos, assignment, publishing on the console [OP-6] | DONE | Pratham | — | — |
+| LMS — the course for real reps [OP-6] | BLOCKED | Operator (content owners) | Medical/regulatory approval of the text and clips; the Elmiron catalogue (Q-6); the missing videos | minutes after |
+| Product Q&A — screen, loader, approvals [OP-7] | DONE | Pratham | — | — |
+| Product Q&A — real answers in production [OP-7] | BLOCKED | Operator | Approved material (Q-9); a second admin (Q-14); the production OpenAI key | about ½ day after all |
+| Assistant — the draft names the app's real screens [OP-8] | BLOCKED | Operator | A second admin approves the new `mr_chat` version in `/prompts` | minutes |
+| Assistant, AI Doctor practice and tutor — wired to OpenAI (`BE-C79`), tried locally [OP-8] [OP-9] | IN PROGRESS | Pratham | Production key; approvals (Q-14) | — |
+| AI Analysis / Coaching of real visits [OP-10] | BLOCKED | Operator | Recording deferred (`D-15`); the PV/DPDP signatory (Q-13) | — |
+| Maps — built 13 October [OP-11] | BLOCKED | Operator | A Google Maps key (Q-2) | minutes after the key |
+| Notifications — built 13 October, Android only [OP-12] | BLOCKED | Operator | Firebase (Q-3) | minutes after |
+| Voice — AI Doctor practice by voice (`FE-W163`, `BE-W214`) [OP-13] | IN PROGRESS | Pratham | Not yet heard on a real phone | — |
+| Live tracking — built 13 October [OP-14] | BLOCKED | Operator | The approved notice (Q-12, seven blanks) | minutes after |
+| Side-effect flags reach the company's admins (`BE-W215`, `FE-W204`) | DONE | Pratham | — | — |
+| Where side-effect flags go after the admins | BLOCKED | Operator | Q-13, the PV contact | — |
+| iOS build | BLOCKED | Operator | An Apple Developer account and an Expo account | about ½ day after |
