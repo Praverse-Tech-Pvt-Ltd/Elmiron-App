@@ -3,7 +3,7 @@ import { signedIn } from '../../lib/session';
 import { Body, MissingNote, Title } from '../../lib/ui';
 import { CoursePublishing } from '../../lib/course-publishing';
 import type { CourseVersionRow } from '../../lib/course-publishing';
-import type { CourseVersionStatus } from '../../lib/course-publishing-text';
+import type { CourseVersionStatus, VideoLesson } from '../../lib/course-publishing-text';
 
 /**
  * LMS admin flow — publish and retire course versions. Until this page a loaded course moved on
@@ -35,14 +35,26 @@ export default async function Courses(): Promise<ReactNode> {
       .from('course_versions')
       .select('id, course_id, version_number, title, status')
       .order('created_at', { ascending: false }),
-    session.db.from('lessons').select('id, course_version_id'),
+    session.db
+      .from('lessons')
+      .select('id, course_version_id, title, position, video_object_path, video_duration_seconds')
+      .order('position', { ascending: true }),
   ]);
 
   const titleOf = new Map((courses.data ?? []).map((c) => [String(c.id), String(c.title)]));
   const lessonCount = new Map<string, number>();
+  // `FE-W128` — the lessons that carry a video (`BE-W208`), per version, with the loader's measured length.
+  const videosOf = new Map<string, VideoLesson[]>();
   for (const lesson of lessons.data ?? []) {
     const version = String(lesson.course_version_id);
     lessonCount.set(version, (lessonCount.get(version) ?? 0) + 1);
+    if (typeof lesson.video_object_path === 'string') {
+      const seconds: unknown = lesson.video_duration_seconds;
+      videosOf.set(version, [
+        ...(videosOf.get(version) ?? []),
+        { lesson: String(lesson.title), seconds: typeof seconds === 'number' ? seconds : null },
+      ]);
+    }
   }
   const rows: CourseVersionRow[] = (versions.data ?? []).map((v) => ({
     id: String(v.id),
@@ -51,6 +63,7 @@ export default async function Courses(): Promise<ReactNode> {
     title: String(v.title),
     status: asStatus(v.status),
     lessons: lessonCount.get(String(v.id)) ?? 0,
+    videos: videosOf.get(String(v.id)) ?? [],
   }));
 
   return (
@@ -60,7 +73,8 @@ export default async function Courses(): Promise<ReactNode> {
         <Body muted>
           Publish a loaded course version so it can be assigned and taken in the app; retire one
           that should no longer be started. Publishing a new version retires the previous one for
-          the same market. Only admins can publish or retire.
+          the same market. Only admins can publish or retire. A lesson&apos;s video is loaded with
+          its course (docs/operator/lesson-videos.md) and is frozen with the version, like its text.
         </Body>
       </div>
       <CoursePublishing rows={rows} />

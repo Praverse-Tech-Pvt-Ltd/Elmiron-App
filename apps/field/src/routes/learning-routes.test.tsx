@@ -12,6 +12,8 @@ import type * as ReactModule from 'react';
  */
 const mockPush = jest.fn();
 jest.mock('../live-connection', () => ({ appLiveConnection: () => ({}) }));
+// `FE-W127`: the lesson route imports the player; a text-only lesson never creates one.
+jest.mock('expo-video', () => ({ VideoView: () => null, useVideoPlayer: () => ({}) }));
 jest.mock('../sync/pulled-store', () => ({
   usePulledStore: () => ({ zone: { timeZone: 'Asia/Kolkata', source: 'territory' } }),
 }));
@@ -58,6 +60,7 @@ const backendWith = (over: Partial<LearningBackend>): LearningBackend => ({
   lesson: jest.fn(async () => Promise.resolve(null)),
   start: jest.fn(async () => Promise.reject(new Error('not expected'))),
   complete: jest.fn(async () => Promise.reject(new Error('not expected'))),
+  videoUrl: jest.fn(async () => Promise.reject(new Error('not expected'))),
   ...over,
 });
 
@@ -209,6 +212,7 @@ describe('app/learning — W2-F B', () => {
           body: 'Keep below 25 °C.',
           estimatedMinutes: 5,
           completedAt: null,
+          video: null,
         }),
       ),
       complete,

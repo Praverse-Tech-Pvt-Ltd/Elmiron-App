@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useLocalSearchParams } from 'expo-router';
 import type { CompleteLessonResponse } from '@fieldforce/core';
@@ -6,6 +6,7 @@ import { LessonScreen, Screen } from '@fieldforce/ui';
 import type { LessonView } from '@fieldforce/ui';
 import { learningEnabled, lessonTutorEnabled } from '../../../src/features';
 import { LessonTutor } from '../../../src/learning/lesson-tutor';
+import { LessonVideo } from '../../../src/learning/lesson-video';
 import { appLearningBackend } from '../../../src/learning/backend';
 import type { LearningBackend, LessonRow } from '../../../src/learning/live';
 import { failureKind, finishNotice } from '../../../src/learning/view';
@@ -39,6 +40,8 @@ export const Lesson = ({
   const [recording, setRecording] = useState(false);
   const [recorded, setRecorded] = useState<CompleteLessonResponse | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Stable, so the player's poster is signed once per lesson, not on every re-render.
+  const videoUrl = useCallback((path: string) => backend.videoUrl(path), [backend]);
 
   useEffect(() => {
     let live = true;
@@ -94,6 +97,11 @@ export const Lesson = ({
                 loaded.lesson.estimatedMinutes === null
                   ? null
                   : `About ${String(loaded.lesson.estimatedMinutes)} minutes`,
+              // `FE-W127` — a lesson with a clip shows it above its text; a text-only lesson is unchanged.
+              media:
+                loaded.lesson.video === null ? null : (
+                  <LessonVideo video={loaded.lesson.video} videoUrl={videoUrl} />
+                ),
               // The server's stamp: from this finish if it just came back, else from the read.
               finished:
                 recorded !== null

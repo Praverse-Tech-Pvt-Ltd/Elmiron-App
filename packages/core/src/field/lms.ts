@@ -30,6 +30,124 @@ export const CourseVersionStatusSchema = z.enum(COURSE_VERSION_STATUSES);
 export type CourseVersionStatus = z.infer<typeof CourseVersionStatusSchema>;
 
 // ---------------------------------------------------------------------------
+// Lesson videos — `BE-W208` (`20261014000100_lesson_videos.sql`), `BE-W211`
+// ---------------------------------------------------------------------------
+
+/** The private bucket lesson clips and their posters live in. No public URL exists for it. */
+export const LESSON_VIDEO_BUCKET = 'lesson-videos';
+/** One object's limit: 50 MiB — the bucket's, `config.toml`'s, and the Free plan's per-file limit. */
+export const LESSON_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
+/**
+ * How long a signed URL lives. An hour: long enough for a rep to pause a clip (the longest that fits
+ * the size limit is under half an hour) and resume while the player still holds the URL, short enough
+ * that a URL copied out of a log is soon worth nothing. The app asks for one only when the rep presses
+ * play.
+ */
+export const LESSON_VIDEO_URL_TTL_SECONDS = 3600;
+
+const UUID_PART = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+
+/**
+ * `<organisation_id>/<course_version_id>/<lesson_id>/<file>.mp4|.jpg` — the convention the storage
+ * policies read to decide whose draft an object belongs to. Mirrors `lesson_video_path_parts`.
+ */
+export const LessonVideoPathSchema = z
+  .string()
+  .regex(
+    new RegExp(
+      `^${UUID_PART}/${UUID_PART}/${UUID_PART}/[A-Za-z0-9][A-Za-z0-9._-]{0,120}\\.(mp4|jpg)$`,
+      'u',
+    ),
+  );
+
+/** The folder one lesson's clip and poster go in. */
+export const lessonVideoFolder = (ids: {
+  readonly organisationId: string;
+  readonly courseVersionId: string;
+  readonly lessonId: string;
+}): string => `${ids.organisationId}/${ids.courseVersionId}/${ids.lessonId}/`;
+
+/** Storage's answer to `POST /storage/v1/object/sign/<bucket>/<path>`: a path relative to `/storage/v1`. */
+export const SignedObjectUrlResponseSchema = z.object({ signedURL: z.string().min(1) });
+
+/** A refusal from Storage. `notFound` covers "no such object" AND "RLS will not let you read it". */
+export class LessonVideoUrlError extends Error {
+  constructor(
+    readonly status: number,
+    readonly notFound: boolean,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'LessonVideoUrlError';
+  }
+}
+
+export interface StorageConnection {
+  /** The Supabase project URL. */
+  readonly baseUrl: string;
+  /** The project's publishable key — identifies the project, never the user. */
+  readonly apiKey: string;
+  /** The SIGNED-IN user's access token: Storage signs only what RLS lets this user read. */
+  readonly accessToken: () => string | null | Promise<string | null>;
+  readonly fetch?: typeof globalThis.fetch;
+}
+
+/**
+ * `BE-W211` — a short-lived URL for one lesson clip or poster, created AS THE SIGNED-IN USER.
+ *
+ * Storage issues the URL only when the caller's SELECT on the object passes
+ * `lesson_videos_select_readable_lesson` — the lesson's own read rule — so whether a rep may watch is
+ * decided by the database, never by this function. A refusal and a missing object look the same
+ * (Storage answers 400 with a 404 in the body for both), and both throw `LessonVideoUrlError`; no
+ * answer at all (no signal) throws what `fetch` threw.
+ */
+export const createLessonVideoSignedUrl = async (
+  c: StorageConnection,
+  objectPath: string,
+  expiresInSeconds: number = LESSON_VIDEO_URL_TTL_SECONDS,
+): Promise<string> => {
+  const token = await c.accessToken();
+  if (token === null) throw new LessonVideoUrlError(401, false, 'not signed in');
+  const base = c.baseUrl.replace(/\/+$/u, '');
+  const doFetch = c.fetch ?? globalThis.fetch;
+  const response = await doFetch(
+    `${base}/storage/v1/object/sign/${LESSON_VIDEO_BUCKET}/${encodeURI(objectPath)}`,
+    {
+      method: 'POST',
+      headers: {
+        apikey: c.apiKey,
+        Authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ expiresIn: expiresInSeconds }),
+    },
+  );
+  const text = await response.text();
+  let body: unknown = null;
+  try {
+    body = text === '' ? null : (JSON.parse(text) as unknown);
+  } catch {
+    body = null;
+  }
+  if (!response.ok) {
+    const record = (body ?? {}) as { statusCode?: unknown; error?: unknown; message?: unknown };
+    const notFound =
+      response.status === 404 ||
+      String(record.statusCode) === '404' ||
+      record.error === 'not_found';
+    throw new LessonVideoUrlError(
+      response.status,
+      notFound,
+      typeof record.message === 'string' ? record.message : `HTTP ${String(response.status)}`,
+    );
+  }
+  const parsed = SignedObjectUrlResponseSchema.parse(body);
+  return parsed.signedURL.startsWith('http')
+    ? parsed.signedURL
+    : `${base}/storage/v1${parsed.signedURL.startsWith('/') ? '' : '/'}${parsed.signedURL}`;
+};
+
+// ---------------------------------------------------------------------------
 // Entities (table reads)
 // ---------------------------------------------------------------------------
 
@@ -84,6 +202,17 @@ export const LessonSchema = z.object({
   title: z.string().min(1),
   body: z.string().min(1),
   estimatedMinutes: z.number().int().positive().nullable(),
+  /**
+   * `BE-W208` — the lesson's clip in the private `lesson-videos` bucket, or null for a text-only
+   * lesson. Frozen with the version exactly like `body`. Never a URL: a client asks for a short-lived
+   * signed URL (`createLessonVideoSignedUrl`), and Storage issues it only if RLS lets the caller read
+   * the lesson.
+   */
+  videoObjectPath: LessonVideoPathSchema.nullable(),
+  /** The clip's poster (JPEG) in the same folder, or null. Only with a video. */
+  videoPosterPath: LessonVideoPathSchema.nullable(),
+  /** The clip's length as measured at load, or null when it could not be measured. */
+  videoDurationSeconds: z.number().int().positive().nullable(),
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,
 });
