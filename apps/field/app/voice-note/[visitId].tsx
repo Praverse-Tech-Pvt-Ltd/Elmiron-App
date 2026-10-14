@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { AppState, Linking } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import uuid from 'expo-modules-core/src/uuid';
 import {
@@ -11,7 +12,7 @@ import {
 } from 'expo-audio';
 import { VoiceNoteScreen, t, useLanguage } from '@fieldforce/ui';
 import type { TextKey } from '@fieldforce/ui';
-import { blockReason, elapsedLabel } from '../../src/capture/recording';
+import { elapsedLabel } from '../../src/capture/recording';
 import {
   discardNote,
   keepNote,
@@ -26,7 +27,7 @@ import type { SendOutcome } from '../../src/sync/outbox';
 import { createPushClient } from '../../src/sync/push-client';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
-import { failureDetail } from '../../src/errors/plain';
+import { failureDetail, refusedDetail } from '../../src/errors/plain';
 import { useBack } from '../../src/navigation/back';
 
 /**
@@ -80,7 +81,7 @@ const VISIT_NOT_HERE: { readonly title: string; readonly detail: string } = {
  */
 type SaveResult =
   | { readonly kind: Exclude<SendOutcome['kind'], 'refused'> | 'wifi' }
-  | { readonly kind: 'refused'; readonly message: string };
+  | { readonly kind: 'refused'; readonly sqlState: string | null };
 
 /** What Save says, per outcome. Each sentence claims only what that outcome established. */
 const savedText = (result: SaveResult): string => {
@@ -90,8 +91,9 @@ const savedText = (result: SaveResult): string => {
     case 'queued':
       return t('voiceNote.queued');
     case 'refused':
-      // The server's sentence, verbatim, inside ours.
-      return t('voiceNote.refused', { message: result.message });
+      // `FE-W197`. The remedy for the SQLSTATE, inside ours. This printed the server's sentence
+      // verbatim, which names ids ("visit … is not yours") and tells a rep nothing to do.
+      return t('voiceNote.refused', { message: refusedDetail(result.sqlState) });
     case 'queue_unreadable':
       return t('voiceNote.queueUnreadable');
     case 'wifi':
@@ -204,6 +206,30 @@ export default function VoiceNoteRoute(): ReactNode {
     };
   }, [userId]);
 
+  /**
+   * `FE-W198`. Back from Settings with the microphone turned on, the screen offers recording without
+   * being reopened: the permission is read again whenever the app returns to the foreground while
+   * it is off. Read, never requested -- Android will not show its prompt a second time.
+   */
+  useEffect(() => {
+    if (granted !== false) return undefined;
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') return;
+      void AudioModule.getRecordingPermissionsAsync()
+        .then(async (permission) => {
+          if (!permission.granted) return;
+          await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+          setGranted(true);
+        })
+        .catch(() => {
+          // Still off, as far as this screen can tell: the banner and its way to Settings stay.
+        });
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, [granted]);
+
   // "Not on this phone" is a claim about the store, so only a settled pull may make it.
   const visitMissing = status !== 'loading' && visit === null;
 
@@ -280,7 +306,7 @@ export default function VoiceNoteRoute(): ReactNode {
           outcome.kind === 'queued' && outcome.waitingForWifi === true
             ? { kind: 'wifi' }
             : outcome.kind === 'refused'
-              ? { kind: 'refused', message: outcome.message }
+              ? { kind: 'refused', sqlState: outcome.sqlState }
               : { kind: outcome.kind },
         );
       })
@@ -292,9 +318,12 @@ export default function VoiceNoteRoute(): ReactNode {
       });
   };
 
+  // `FE-W198`. The voice note's own sentence. This borrowed the consultation recording's, which
+  // says to record "with the doctor's agreement" -- but a voice note is the rep's own note, with no
+  // doctor in it, and onboarding says exactly that.
   const blocked =
     granted === false
-      ? blockReason({ kind: 'no_microphone' })
+      ? t('voiceNote.microphoneOff')
       : granted === null
         ? t('voiceNote.askingMicrophone')
         : null;
@@ -304,6 +333,14 @@ export default function VoiceNoteRoute(): ReactNode {
     <VoiceNoteScreen
       onBack={back}
       blocked={blocked}
+      {...(granted === false
+        ? {
+            // `FE-W198`. The sentence says Settings, so the banner goes there, as onboarding's do.
+            onOpenSettings: () => {
+              void Linking.openSettings();
+            },
+          }
+        : {})}
       busy={busy}
       elapsed={elapsedLabel(
         state.isRecording ? state.durationMillis / 1000 : (captured?.seconds ?? 0),

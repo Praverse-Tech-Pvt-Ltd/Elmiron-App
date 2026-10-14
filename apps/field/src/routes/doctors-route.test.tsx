@@ -227,10 +227,14 @@ describe("app/doctors.tsx — FE-W42, the age is the server's or it is not claim
   it('measures the age from the SERVER instant', async () => {
     mockStore.mockReturnValue(withDoctor());
     await render(<Doctors />);
-    // 29 Sep 23:00 IST to 1 Oct 00:05 IST is one calendar day and change: "yesterday".
+    // `FE-W199`. 29 Sep 23:00 IST to 1 Oct 00:05 IST is TWO of the territory's calendar days.
+    // This read "yesterday" while the age counted elapsed 24-hour periods (25 h 5 min is one);
+    // in UTC the same two instants are 29 and 30 September, so "yesterday" was also the answer
+    // in the wrong calendar.
     await waitFor(() => {
-      expect(screen.getByText(/yesterday/u)).toBeTruthy();
+      expect(screen.getByText(/2 days ago/u)).toBeTruthy();
     });
+    expect(screen.queryByText(/yesterday/u)).toBeNull();
   });
 
   it('with NO server clock, renders the DATE and never "never visited"', async () => {

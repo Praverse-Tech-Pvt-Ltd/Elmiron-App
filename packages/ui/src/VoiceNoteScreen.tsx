@@ -63,6 +63,11 @@ export interface VoiceNoteScreenProps {
   readonly saved?: string | null;
   /** Why the microphone cannot open. Blocks the control entirely. */
   readonly blocked?: string | null;
+  /**
+   * `FE-W198`. The way to the phone's settings for this app, when `blocked` sends the rep there. A
+   * banner that says "turn it on in Settings" and offers no way there leaves the rep to find it.
+   */
+  readonly onOpenSettings?: () => void;
   /** The microphone could not be opened. Replaces the screen: there is nothing to record with. */
   readonly failure?: { readonly title: string; readonly detail: string } | null;
   /**
@@ -144,6 +149,7 @@ export const VoiceNoteScreen = ({
   busy = false,
   saved = null,
   blocked = null,
+  onOpenSettings,
   failure = null,
   actionFailure = null,
   onBack,
@@ -226,7 +232,14 @@ export const VoiceNoteScreen = ({
             // Not `critical`: a microphone the MR has not granted is a condition with
             // a remedy, not a failure of theirs. §02. Inside the dark card on purpose: `Banner`
             // takes paper ink on its own fill (`FE-W176`), so it no longer inherits the hero's white.
-            <Banner detail={blocked} title={t('voiceNote.blockedTitle')} tone="attention" />
+            <Banner
+              detail={blocked}
+              title={t('voiceNote.blockedTitle')}
+              tone="attention"
+              {...(onOpenSettings === undefined
+                ? {}
+                : { action: { label: t('voiceNote.openSettings'), onPress: onOpenSettings } })}
+            />
           )}
         </View>
       </SurfaceContext.Provider>

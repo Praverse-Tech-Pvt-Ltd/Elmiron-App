@@ -1,6 +1,7 @@
 import type { ConsentOutcome, ConsentRecord, Doctor, Visit } from '@fieldforce/core';
 import { t } from '@fieldforce/ui/i18n';
-import { localisedDayMonth } from '../today/territory-day';
+import { calendarDaysBetween, localisedDayMonth } from '../today/territory-day';
+import type { TerritoryZone } from '../today/territory-day';
 
 /**
  * B9 — the doctor profile, from the MR's own visit history.
@@ -50,7 +51,6 @@ export interface DoctorProfile {
 }
 
 const MS_PER_MINUTE = 60 * 1000;
-const MS_PER_DAY = 24 * 60 * MS_PER_MINUTE;
 
 const minutesBetween = (startedAt: string | null, completedAt: string | null): number | null => {
   if (startedAt === null || completedAt === null) return null;
@@ -71,6 +71,8 @@ export const buildDoctorProfile = (
   consents: readonly ConsentRecord[],
   /** The SERVER's instant in epoch ms, or null when none is known — see `buildDoctorRows`. */
   now: number | null,
+  /** `FE-W199`. The territory's zone, whose calendar days "last seen" counts. */
+  zone: TerritoryZone,
 ): DoctorProfile => {
   // Consent is looked up per visit rather than per doctor: a withdrawal supersedes
   // an earlier row without touching it, so the *latest* row for a visit is the one
@@ -109,7 +111,8 @@ export const buildDoctorProfile = (
     daysSince:
       latest === undefined || now === null
         ? null
-        : Math.floor((now - new Date(latest.completedAt).getTime()) / MS_PER_DAY),
+        : // `FE-W199`. Calendar days in the territory, not elapsed 24-hour periods.
+          calendarDaysBetween(latest.completedAt, now, zone),
     recentVisits: completed.map((visit) => ({
       visitId: visit.id,
       completedAt: visit.completedAt,

@@ -8,6 +8,7 @@ import { lastSeenLabel } from '../../src/doctors/list';
 import { availabilityFrom, availabilitySentence } from '../../src/doctors/availability';
 import { buildDoctorProfile, consentLabel, sentenceCase } from '../../src/doctors/profile';
 import { dayMonthIn } from '../../src/today/territory-day';
+import { durationLabel } from '../../src/today/duration';
 import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
 import { notPermittedDetail, refusedDetail } from '../../src/errors/plain';
 import { witnessedStage } from '../../src/capture/visit';
@@ -66,7 +67,8 @@ export default function DoctorProfile(): ReactNode {
   // `daysSince` is already null-checked below before it becomes a label, so a null clock
   // renders no age rather than a wrong one.
   const serverNow = serverTime === null ? null : Date.parse(serverTime);
-  const profile = doctor === undefined ? null : buildDoctorProfile(doctor, visits, [], serverNow);
+  const profile =
+    doctor === undefined ? null : buildDoctorProfile(doctor, visits, [], serverNow, zone);
 
   const failure =
     pullFailure !== null
@@ -119,8 +121,8 @@ export default function DoctorProfile(): ReactNode {
           // same day in IST, and one completed at 19:00Z is the NEXT day and rendered as the
           // previous one. MR-24's B1 checked "9 Sep" here and it happened to be correct.
           dateLabel: dayMonthIn(visit.completedAt, zone),
-          durationLabel:
-            visit.minutes === null ? null : t('doctors.visitMinutes', { minutes: visit.minutes }),
+          // `FE-W198`. "8 h 4 min", not "484 min" (15 October re-check): the beat plan's words.
+          durationLabel: visit.minutes === null ? null : durationLabel(visit.minutes),
           consentLabel: consentLabel(visit.consent),
         }))}
         sinceLabel={

@@ -1,5 +1,7 @@
 import type { Doctor, Visit } from '@fieldforce/core';
 import { t } from '@fieldforce/ui/i18n';
+import { calendarDaysBetween } from '../today/territory-day';
+import type { TerritoryZone } from '../today/territory-day';
 
 /**
  * B8 — the doctor list, ranked and searchable.
@@ -33,10 +35,12 @@ export interface DoctorRow {
 /** B8's badge threshold, and the "Not seen 30d" filter, from one constant. */
 export const OVERDUE_AFTER_DAYS = 30;
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
 /**
- * Days between a server timestamp and a server instant.
+ * Calendar days, in the territory, between a server timestamp and a server instant.
+ *
+ * `FE-W199`. This was `Math.floor((now - completedAt) / MS_PER_DAY)` -- elapsed 24-hour periods,
+ * so a visit at 23:38 read at 02:20 the next morning was "today". It is now the difference of the
+ * two territory DAYS (`calendarDaysBetween`), which is what "today" and "yesterday" mean.
  *
  * **MR-31 C1 — `now` is no longer the device's, and the old rationale is recorded rather
  * than deleted.** This comment used to read *"the one place the device clock is allowed into
@@ -49,8 +53,8 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  * badge and the filter of the same name, which decide which doctors an MR goes to see. A
  * handset three days fast marks doctors overdue who are not.
  */
-const daysBetween = (iso: string, now: number): number =>
-  Math.floor((now - new Date(iso).getTime()) / MS_PER_DAY);
+const daysBetween = (iso: string, now: number, zone: TerritoryZone): number =>
+  calendarDaysBetween(iso, now, zone);
 
 const cityOf = (doctor: Doctor): string | null => doctor.clinicAddresses[0]?.city ?? null;
 
@@ -77,6 +81,8 @@ export const buildDoctorRows = (
    * value produces an age, and an age is rendered as fact and filtered on.
    */
   now: number | null,
+  /** `FE-W199`. The territory's zone, whose calendar days "last seen" counts. */
+  zone: TerritoryZone,
 ): readonly DoctorRow[] => {
   const lastByDoctor = new Map<string, string>();
   for (const visit of visits) {
@@ -92,7 +98,8 @@ export const buildDoctorRows = (
     // Null for BOTH "never visited" and "no server clock", which loses nothing: in either
     // case there is no age to render, and `lastSeenAt === null` still distinguishes the two
     // for anything that needs to.
-    const daysSince = lastSeenAt === null || now === null ? null : daysBetween(lastSeenAt, now);
+    const daysSince =
+      lastSeenAt === null || now === null ? null : daysBetween(lastSeenAt, now, zone);
     return {
       id: doctor.id,
       name: doctor.fullName,
@@ -170,6 +177,11 @@ export const rankDoctors = (
       if (a.daysSince === null) return -1;
       if (b.daysSince === null) return 1;
       if (a.daysSince !== b.daysSince) return b.daysSince - a.daysSince;
+      // `FE-W199`. Days are calendar days now, so three doctors seen today tie on 0; the one seen
+      // longest ago still comes first, as it did when the age was counted in elapsed time.
+      if (a.lastSeenAt !== null && b.lastSeenAt !== null && a.lastSeenAt !== b.lastSeenAt) {
+        return Date.parse(a.lastSeenAt) - Date.parse(b.lastSeenAt);
+      }
       return a.name.localeCompare(b.name);
     });
 

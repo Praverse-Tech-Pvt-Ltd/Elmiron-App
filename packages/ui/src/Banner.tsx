@@ -64,7 +64,20 @@ const styles = StyleSheet.create({
   // FE-W101. `info` is the one banner on the white card ground rather than a tint; the row shadow
   // gives it the same edge on the page a card has. The tinted tones need none.
   raised: elevationStyle('hairline'),
-  action: { alignSelf: 'flex-start' },
+  /**
+   * `FE-W198`. The action's LABEL in the words' column, and no extra floor under it. The quiet
+   * button keeps its 24pt side padding and its 52pt height (the tap floor, untouched), so its label
+   * sat 24pt inside the title's edge and its empty lower half added to the banner's own padding
+   * (15 October re-check, screenshot 03b). Pulled back by exactly that padding -- the pressed fill
+   * still lands inside the banner, over the glyph's column -- and up into the banner's bottom
+   * padding, which its own empty space now stands in for.
+   */
+  action: {
+    alignSelf: 'flex-start',
+    marginLeft: -tokens.space.lg,
+    marginTop: -tokens.space.xs,
+    marginBottom: -tokens.space.md,
+  },
 });
 
 export const Banner = ({ tone, title, detail, action }: BannerProps): ReactNode => (

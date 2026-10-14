@@ -66,7 +66,7 @@ import { clockIn } from '../../src/today/territory-day';
 import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
 import { RECORD_AUDIO, microphoneRationaleDue } from '../../src/onboarding/microphone-gate';
 import { hasAnsweredMicrophoneRationale } from '../../src/onboarding/progress';
-import { notPermittedDetail, failureDetail } from '../../src/errors/plain';
+import { notPermittedDetail, failureDetail, refusedDetail } from '../../src/errors/plain';
 
 /**
  * B4 / B5 / B6 — one visit, from arriving to leaving.
@@ -146,7 +146,8 @@ const recordingNoticeFor = (outcome: SendOutcome): string => {
         ? t('visit.recordingWaitingForWifi')
         : t('visit.recordingQueued');
     case 'refused':
-      return t('visit.recordingRefused', { message: outcome.message });
+      // `FE-W197`. The remedy for its SQLSTATE, not the server's sentence, which names ids.
+      return t('visit.recordingRefused', { message: refusedDetail(outcome.sqlState) });
     case 'queue_unreadable':
       return t('visit.recordingQueueUnreadable');
   }
@@ -550,12 +551,16 @@ export default function VisitRoute(): ReactNode {
           return;
         }
         if (sendResult.kind === 'refused') {
-          // The server answered and said no. That is a decision, shown as one -- in its own words.
-          const { message } = sendResult;
+          // The server answered and said no. That is a decision, shown as one -- as the remedy
+          // for its SQLSTATE. `FE-W197`: this used to print the server's own sentence, and the
+          // 15 October emulator check read "check-out at 2026-10-14 20:51:59.263+00 is outside
+          // the configured shift window for territory 4db000a6-…" to a rep. `refusedDetail` gives
+          // the remedy, or a plain sentence with a reference for a code it does not know.
+          const { sqlState } = sendResult;
           setActionFailure(
             live(
               () => t('visit.refused'),
-              () => message,
+              () => refusedDetail(sqlState),
             ),
           );
           return;
@@ -575,11 +580,11 @@ export default function VisitRoute(): ReactNode {
         return;
       } catch (error: unknown) {
         if (error instanceof ApiRequestError && error.code === 'permission_denied') {
-          const { message } = error;
+          // `FE-W197`: the server's sentence names ids ("visit … is not yours"); the rep reads ours.
           setActionFailure(
             live(
               () => t('visit.refused'),
-              () => message,
+              () => notPermittedDetail(),
             ),
           );
           return;

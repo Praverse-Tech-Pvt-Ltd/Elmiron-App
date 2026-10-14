@@ -2,6 +2,7 @@ import { LiveRequestError } from '../live-rest';
 import type { CompleteLessonResponse } from '@fieldforce/core';
 import { t } from '@fieldforce/ui/i18n';
 import { dayMonthOfDate } from '../today/territory-day';
+import { durationLabel } from '../today/duration';
 import type { AssignmentRow, CoursePreview, EnrolmentRow, OutlineRows, VersionRow } from './live';
 
 /*
@@ -126,7 +127,10 @@ export const courseFacts = (preview: CoursePreview | null): string | null => {
   if (preview === null || preview.lessons === 0) return null;
   return [
     t('learning.courseLessons', { count: preview.lessons }),
-    preview.minutes === null ? null : t('learning.aboutMinutes', { minutes: preview.minutes }),
+    // `FE-W198`. "about 1 h 30 min", not "about 90 min".
+    preview.minutes === null
+      ? null
+      : t('learning.aboutDuration', { duration: durationLabel(preview.minutes) }),
   ]
     .filter((part): part is string => part !== null)
     .join(' · ');

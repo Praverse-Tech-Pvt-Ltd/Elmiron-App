@@ -24,6 +24,7 @@
     "db:types": "supabase --workdir services/api gen types typescript --local",
     "functions:serve": "supabase --workdir services/api functions serve --no-verify-jwt",
     "key-day": "node services/api/scripts/key-day.mjs",
+    "expo-go": "node apps/field/scripts/expo-go.mjs",
     "video:trim": "node services/api/scripts/trim-video.mjs",
     "i18n:export": "node scripts/i18n.mjs export",
     "i18n:import": "node scripts/i18n.mjs import",

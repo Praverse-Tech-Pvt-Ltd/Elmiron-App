@@ -184,6 +184,9 @@ describe('BE-W176 — Add an unplanned visit', () => {
     await fireEvent.press(screen.getByText('Start this visit'));
 
     expect(await screen.findByText('This visit was not accepted')).toBeTruthy();
+    // `FE-W197`. A plain sentence and its reference, not the server's own words.
+    expect(screen.getByText(/This was turned down\..*Reference: 22023\./u)).toBeTruthy();
+    expect(screen.queryByText(/unplanned_visit_needs_reason/u)).toBeNull();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 

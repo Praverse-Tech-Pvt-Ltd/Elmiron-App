@@ -13,7 +13,7 @@ import { queueUnreadable } from '../../src/sync/async-storage-store';
 import { adverseEventQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
-import { failureDetail } from '../../src/errors/plain';
+import { failureDetail, refusedDetail } from '../../src/errors/plain';
 import { useBack } from '../../src/navigation/back';
 
 /**
@@ -110,12 +110,13 @@ export default function AdverseEventFlag(): ReactNode {
           setFailure(live(() => t('adverse.notSaved'), queueUnreadable));
           return;
         }
-        // The server's reason is its own words, shown as they came.
-        const { message } = result;
+        // `FE-W197`. The remedy for the SQLSTATE. This showed the server's own words, which are
+        // written for support and name ids -- not something a rep can act on.
+        const { sqlState } = result;
         setFailure(
           live(
             () => t('adverse.refused'),
-            () => message,
+            () => refusedDetail(sqlState),
           ),
         );
       })

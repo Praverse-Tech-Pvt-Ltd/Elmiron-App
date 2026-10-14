@@ -105,6 +105,30 @@ export const dayIn = (iso: string, zone: TerritoryZone): string => {
   return `${parts['year'] ?? ''}-${parts['month'] ?? ''}-${parts['day'] ?? ''}`;
 };
 
+/** Epoch ms of a `YYYY-MM-DD` at UTC midnight -- a day number, never read in local time. */
+const dayNumber = (day: string): number => {
+  const [year = 0, month = 1, date = 1] = day.split('-').map(Number);
+  return Date.UTC(year, month - 1, date);
+};
+
+/**
+ * `FE-W199` — how many calendar days, in the territory, lie between an instant and now.
+ *
+ * "Last seen" counted elapsed 24-hour periods, so a visit completed at 23:38 and read at 02:20 the
+ * next morning said "today", and one at 09:00 read at 08:00 two days later said "yesterday". A rep
+ * means the DAY: this compares `dayIn` of both instants, as `Date.UTC` day numbers so the device's
+ * own zone and its daylight changes play no part.
+ */
+export const calendarDaysBetween = (
+  earlierIso: string,
+  nowMs: number,
+  zone: TerritoryZone,
+): number =>
+  Math.round(
+    (dayNumber(dayIn(new Date(nowMs).toISOString(), zone)) - dayNumber(dayIn(earlierIso, zone))) /
+      (24 * 60 * 60 * 1000),
+  );
+
 /**
  * The month names the screens already render.
  *

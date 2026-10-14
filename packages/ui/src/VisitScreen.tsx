@@ -181,21 +181,28 @@ const styles = StyleSheet.create({
   head: { gap: tokens.space.xs },
   foot: { gap: tokens.space.sm },
   /**
-   * `FE-W190`. Four cells of one width, in one row. The chips sized to their words, so each "✓"
-   * a finished step gained widened its chip and pushed "Report" onto a second line part-way
-   * through a visit (QA 19, 39). A cell's width no longer depends on its state; a long word wraps
-   * inside its own cell, and the row's cells stretch to the tallest.
+   * `FE-W190`. Four cells in one row, whose widths never depend on their state. The chips sized to
+   * their words, so each "✓" a finished step gained widened its chip and pushed "Report" onto a
+   * second line part-way through a visit (QA 19, 39).
+   *
+   * `FE-W198`. Four EQUAL cells were the next defect: at 360dp each is 79pt, and "With the doctor"
+   * wrapped to two lines while "Report" sat in a cell twice its width (15 October re-check). Each
+   * cell now starts at its own words plus a tick slot every state reserves (`tickSlot`), and the
+   * row's spare width is shared out equally -- so a cell is as wide as its label needs, and still
+   * no wider when its step is done. The label is "With doctor", and the side padding is `xxs`.
    */
   steps: { flexDirection: 'row', gap: tokens.space.xs },
   step: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 'auto',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: tokens.space.xs,
+    gap: tokens.space.xxs,
     borderRadius: tokens.radius.well,
     borderWidth: 1,
-    paddingHorizontal: tokens.space.xs,
+    paddingHorizontal: tokens.space.xxs,
     paddingVertical: tokens.space.xs,
   },
   // The accent's own wash, not `infoFill`: the blue was the one colour on the visit from outside
@@ -212,6 +219,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     flexShrink: 1,
   },
+  // `FE-W198`. Room for the tick in every state, so finishing a step never widens its cell.
+  tickSlot: { width: 7, alignItems: 'center' },
   // A tick drawn in Views (two strokes of a turned box), never a font glyph: `TabIcon`'s reason.
   tick: {
     width: 5,
@@ -274,7 +283,7 @@ const StepCell = ({
       state === 'done' ? styles.stepDone : state === 'now' ? styles.stepNow : styles.stepLater,
     ]}
   >
-    {state === 'done' ? <View style={styles.tick} /> : null}
+    <View style={styles.tickSlot}>{state === 'done' ? <View style={styles.tick} /> : null}</View>
     <Text
       style={[
         styles.stepText,

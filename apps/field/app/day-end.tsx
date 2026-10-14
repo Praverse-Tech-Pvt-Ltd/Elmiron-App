@@ -13,7 +13,6 @@ import {
   onQueueChanged,
   queueOwner,
 } from '../src/sync/async-storage-store';
-import { presentRejection } from '../src/sync/explanation';
 import { enqueueFirst, flushOutbox, workDayQueueItem } from '../src/sync/outbox';
 import { createPushClient } from '../src/sync/push-client';
 import { usePulledStore } from '../src/sync/pulled-store';
@@ -169,17 +168,14 @@ export default function DayEnd(): ReactNode {
     lastAct?.status === 'failed' && queue.kind === 'loaded'
       ? queue.state.rejections[lastAct.id]
       : undefined;
-  const shown = lastRejection === undefined ? null : presentRejection(lastRejection);
+  // `FE-W197`. The remedy for the verdict's SQLSTATE, or a plain sentence with its reference. This
+  // led with the server's own sentence ("work_day_has_open_visit: 1 visit(s) on …"), written for
+  // support; the queue screen still keeps it, for the help desk.
   const refusal =
     notSaved ??
-    (shown === null
+    (lastRejection === undefined
       ? null
-      : {
-          title: t('dayEnd.notEnded'),
-          detail: [shown.explanation ?? shown.fallback, shown.remedy]
-            .filter((line): line is string => line !== null && line !== '')
-            .join(' '),
-        });
+      : { title: t('dayEnd.notEnded'), detail: refusedDetail(lastRejection.sqlState) });
   const copy = workDayCopy(dayStatus, zone, refusal);
   // As this phone witnessed them: a check-out made offline counts, and goes before the close.
   const witnessedToday =

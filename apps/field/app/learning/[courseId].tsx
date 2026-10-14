@@ -17,6 +17,7 @@ import {
 import { useBack } from '../../src/navigation/back';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { dayMonthIn } from '../../src/today/territory-day';
+import { durationLabel } from '../../src/today/duration';
 
 /**
  * W2-F B — one course: start it (pinning a version), or its lessons once started. Which version is
@@ -150,7 +151,8 @@ export const Course = ({
             lesson.done ? t('learning.lessonDone') : t('learning.lessonNotDone'),
             lesson.minutes === null
               ? null
-              : t('learning.aboutMinutes', { minutes: lesson.minutes }),
+              : // `FE-W198`. Hours and minutes past the hour, as the beat plan says them.
+                t('learning.aboutDuration', { duration: durationLabel(lesson.minutes) }),
           ]
             .filter((part): part is string => part !== null)
             .join(' · '),

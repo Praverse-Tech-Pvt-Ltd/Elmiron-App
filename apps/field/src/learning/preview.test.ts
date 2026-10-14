@@ -20,6 +20,11 @@ describe('courseFacts', () => {
     expect(courseFacts({ lessons: 1, minutes: 4 })).toBe('1 lesson · about 4 min');
   });
 
+  it('FE-W198: an hour or more is hours and minutes, as the beat plan says it', () => {
+    expect(courseFacts({ lessons: 9, minutes: 90 })).toBe('9 lessons · about 1 h 30 min');
+    expect(courseFacts({ lessons: 4, minutes: 60 })).toBe('4 lessons · about 1 h');
+  });
+
   it('without every estimate there is no length: a sum with gaps under-states the course', () => {
     expect(courseFacts({ lessons: 3, minutes: null })).toBe('3 lessons');
   });

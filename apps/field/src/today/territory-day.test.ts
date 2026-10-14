@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   UTC_FALLBACK,
+  calendarDaysBetween,
   clockIn,
   dayIn,
   dayMonthIn,
@@ -195,5 +196,45 @@ describe('zoneCaveat — the fallback is visible, not merely representable', () 
     // is a legitimate answer and 'UTC' alone cannot tell you which one it was.
     expect(zoneCaveat({ timeZone: 'UTC', source: 'territory' })).toBeNull();
     expect(zoneCaveat({ timeZone: 'UTC', source: 'fallback_utc' })).not.toBeNull();
+  });
+});
+
+describe('FE-W199 — calendarDaysBetween counts days, not 24-hour periods', () => {
+  const IST: TerritoryZone = { timeZone: 'Asia/Kolkata', source: 'territory' };
+  const at = (iso: string): number => Date.parse(iso);
+
+  it('23:38 to 02:20 the next morning is one day, though under three hours passed', () => {
+    expect(
+      calendarDaysBetween('2026-10-13T23:38:00+05:30', at('2026-10-14T02:20:00+05:30'), IST),
+    ).toBe(1);
+  });
+
+  it('the same day is zero', () => {
+    expect(
+      calendarDaysBetween('2026-10-14T00:01:00+05:30', at('2026-10-14T23:59:00+05:30'), IST),
+    ).toBe(0);
+  });
+
+  it('09:00 to 08:00 two days later is two, though under 48 hours passed', () => {
+    expect(
+      calendarDaysBetween('2026-10-12T09:00:00+05:30', at('2026-10-14T08:00:00+05:30'), IST),
+    ).toBe(2);
+  });
+
+  it('across a month end and a year end', () => {
+    expect(
+      calendarDaysBetween('2026-10-31T22:00:00+05:30', at('2026-11-01T07:00:00+05:30'), IST),
+    ).toBe(1);
+    expect(
+      calendarDaysBetween('2026-12-31T23:00:00+05:30', at('2027-01-02T01:00:00+05:30'), IST),
+    ).toBe(2);
+  });
+
+  it('in the territory’s zone, where the UTC date is a different one', () => {
+    // 00:30 IST on 15 Oct is 19:00 UTC on the 14th.
+    expect(calendarDaysBetween('2026-10-14T19:00:00Z', at('2026-10-15T10:00:00Z'), IST)).toBe(0);
+    expect(
+      calendarDaysBetween('2026-10-14T19:00:00Z', at('2026-10-15T10:00:00Z'), UTC_FALLBACK),
+    ).toBe(1);
   });
 });

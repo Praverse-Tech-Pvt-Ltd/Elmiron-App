@@ -38,6 +38,7 @@ jest.mock('../capture/voice-note-fs', () => ({
 }));
 
 const mockRequestPermissions = jest.fn<() => Promise<{ granted: boolean }>>();
+const mockGetPermissions = jest.fn<() => Promise<{ granted: boolean }>>();
 const mockRecorder = {
   uri: null as string | null,
   prepareToRecordAsync: jest.fn(() => Promise.resolve()),
@@ -46,7 +47,10 @@ const mockRecorder = {
 };
 const mockRecorderState = { isRecording: false, durationMillis: 0 };
 jest.mock('expo-audio', () => ({
-  AudioModule: { requestRecordingPermissionsAsync: () => mockRequestPermissions() },
+  AudioModule: {
+    requestRecordingPermissionsAsync: () => mockRequestPermissions(),
+    getRecordingPermissionsAsync: () => mockGetPermissions(),
+  },
   RecordingPresets: { HIGH_QUALITY: {} },
   setAudioModeAsync: () => Promise.resolve(),
   useAudioRecorder: () => mockRecorder,
@@ -73,6 +77,7 @@ jest.mock('../sync/push-client', () => {
 });
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState, Linking } from 'react-native';
 import { setQueueOwner } from '../sync/async-storage-store';
 import { bindUploadDevice } from '../sync/upload-conditions';
 
@@ -130,6 +135,8 @@ beforeEach(async () => {
   mockFiles.clear();
   mockRequestPermissions.mockReset();
   mockRequestPermissions.mockResolvedValue({ granted: true });
+  mockGetPermissions.mockReset();
+  mockGetPermissions.mockResolvedValue({ granted: false });
   mockRecorder.uri = null;
   mockRecorderState.isRecording = false;
   mockStore.mockReturnValue(pulled([visit]));
@@ -149,6 +156,61 @@ const recordOne = async (id: string) => {
   await screen.findByText('Save this note');
   return view;
 };
+
+/**
+ * `FE-W198` — the microphone banner is about the rep's own note, and leads to Settings.
+ *
+ * It said "Turn it on in Settings if you want to record with the doctor's agreement" -- the
+ * consultation recording's sentence, on the screen onboarding calls "yours". And it named Settings
+ * with no way there (15 October re-check, screenshot 08a).
+ */
+describe('FE-W198 — the microphone is off', () => {
+  it('says so about the rep’s own note, never the doctor’s agreement', async () => {
+    mockRequestPermissions.mockResolvedValue({ granted: false });
+    await render(<VoiceNoteRoute />);
+    expect(
+      await screen.findByText(
+        'The microphone is off for this app. Turn it on in Settings to record your note.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/agreement/u)).toBeNull();
+  });
+
+  it('"Open Settings" opens this app’s settings', async () => {
+    const openSettings = jest.spyOn(Linking, 'openSettings').mockResolvedValue(undefined);
+    mockRequestPermissions.mockResolvedValue({ granted: false });
+    await render(<VoiceNoteRoute />);
+    await fireEvent.press(await screen.findByText('Open Settings'));
+    expect(openSettings).toHaveBeenCalledTimes(1);
+    openSettings.mockRestore();
+  });
+
+  it('back from Settings with it on, the banner goes and recording is offered', async () => {
+    const listeners: ((state: string) => void)[] = [];
+    const listen = jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, handler) => {
+      listeners.push(handler as (state: string) => void);
+      return { remove: () => undefined };
+    });
+    mockRequestPermissions.mockResolvedValue({ granted: false });
+    mockGetPermissions.mockResolvedValue({ granted: true });
+    await render(<VoiceNoteRoute />);
+    await screen.findByText('Open Settings');
+
+    for (const listener of listeners) listener('active');
+
+    await waitFor(() => {
+      expect(screen.queryByText('Open Settings')).toBeNull();
+    });
+    expect(mockGetPermissions).toHaveBeenCalled();
+    listen.mockRestore();
+  });
+
+  it('POSITIVE CONTROL: with the microphone on there is no banner and no Settings action', async () => {
+    await render(<VoiceNoteRoute />);
+    await screen.findByLabelText('Hold to record your note');
+    expect(screen.queryByText('Open Settings')).toBeNull();
+  });
+});
 
 describe('each failure carries its own remedy', () => {
   it('a MICROPHONE failure says so', async () => {
@@ -239,7 +301,11 @@ describe('MR-51 D — Save sends the note it kept', () => {
     );
     await recordOne('seven');
     await fireEvent.press(screen.getByText('Save this note'));
-    await screen.findByText(/the server refused to take it: visit is not yours/u);
+    // `FE-W197`. The remedy for 42501 and its reference -- never the server's own sentence.
+    await screen.findByText(
+      /the server refused to take it: Your account can’t open this\..*Reference: 42501\./u,
+    );
+    expect(screen.queryByText(/visit is not yours/u)).toBeNull();
     expect(screen.queryByText(/It will send by itself/u)).toBeNull();
   });
 });

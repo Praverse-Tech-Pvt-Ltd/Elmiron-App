@@ -16,7 +16,7 @@ import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { dayMonthIn, dayMonthOfDate } from '../../src/today/territory-day';
 import { loadProductChoices, toggleProduct } from '../../src/catalogue/products';
 import type { ProductList } from '../../src/catalogue/products';
-import { failureDetail } from '../../src/errors/plain';
+import { failureDetail, refusedDetail } from '../../src/errors/plain';
 import { queueOwner } from '../../src/sync/async-storage-store';
 import {
   clearReportDraft,
@@ -43,7 +43,7 @@ type ReportOutcome = 'sent' | 'queued';
 
 type ReportFailure =
   | { readonly kind: 'queue_unreadable' }
-  | { readonly kind: 'refused'; readonly message: string }
+  | { readonly kind: 'refused'; readonly sqlState: string | null }
   | { readonly kind: 'not_saved'; readonly error: unknown };
 
 const outcomeText = (outcome: ReportOutcome): { title: string; detail: string } =>
@@ -56,8 +56,9 @@ const failureText = (failure: ReportFailure): { title: string; detail: string } 
     case 'queue_unreadable':
       return { title: t('report.notSavedOnEitherTitle'), detail: queueUnreadable() };
     case 'refused':
-      // The server's sentence, verbatim.
-      return { title: t('report.refusedTitle'), detail: failure.message };
+      // `FE-W197`. The remedy for the SQLSTATE. This printed the server's sentence verbatim,
+      // which is written for support and names ids.
+      return { title: t('report.refusedTitle'), detail: refusedDetail(failure.sqlState) };
     case 'not_saved':
       return {
         title: t('report.notSavedTitle'),
@@ -223,7 +224,7 @@ export default function CallReport(): ReactNode {
           setFailure({ kind: 'queue_unreadable' });
           return;
         }
-        setFailure({ kind: 'refused', message: outcome.message });
+        setFailure({ kind: 'refused', sqlState: outcome.sqlState });
       })
       .catch((error: unknown) => {
         // `sendOrQueue` only rejects if the QUEUE itself could not be written, which means

@@ -44,6 +44,36 @@ describe('FE-W189 — a banner’s detail and action sit in the title’s column
     expect(within(column, 'Your last position did not reach your company.')).toBe(true);
     expect(within(column, 'Live location')).toBe(true);
   });
+
+  /**
+   * `FE-W198`. In the column was not enough: the quiet button's own 24pt side padding still put the
+   * LABEL 24pt inside the title's edge, and its 52pt height added a strip under it (screenshot 03b).
+   */
+  it('FE-W198: the action’s label starts at the title’s edge, with no strip under it', async () => {
+    await render(
+      <Banner
+        action={{ label: 'Live location', onPress: () => undefined }}
+        title="Live location is paused outside your working hours."
+        tone="info"
+      />,
+    );
+    // The wrapper the banner puts round its button: the nearest ancestor with a margin.
+    let wrapper = screen.getByText('Live location').parent;
+    const margins = (node: typeof wrapper): Record<string, unknown> =>
+      Object.assign(
+        {},
+        StyleSheet.flatten(node?.props['style'] as Parameters<typeof StyleSheet.flatten>[0]),
+      );
+    while (wrapper !== null && margins(wrapper)['marginLeft'] === undefined)
+      wrapper = wrapper.parent;
+    if (wrapper === null) throw new Error('no wrapper round the action');
+    // Exactly the button's side padding back: the label lands on the column's edge.
+    expect(margins(wrapper)['marginLeft']).toBe(-tokens.space.lg);
+    // Its empty lower half stands in for the banner's bottom padding instead of adding to it.
+    expect(margins(wrapper)['marginBottom']).toBe(-tokens.space.md);
+    // The button itself keeps its tap height.
+    expect(screen.getByRole('button', { name: 'Live location' })).toBeTruthy();
+  });
 });
 
 describe('FE-W189 — a Select looks like a list, not a text field', () => {

@@ -166,3 +166,19 @@ describe('FE-W190 — the profile during a visit, and its figure', () => {
     expect(screen.queryByText('today')).toBeNull();
   });
 });
+
+/** `FE-W198` — a visit's length as a person says it: "8 h 4 min", never "484 min". */
+describe('FE-W198 — the profile’s visit durations', () => {
+  it('an hour or more is hours and minutes', async () => {
+    const long = VisitSchema.parse({
+      ...completedVisit,
+      startedAt: '2026-09-10T05:00:00.000Z',
+      completedAt: '2026-09-10T13:04:00.000Z',
+    });
+    mockStore.mockReturnValue(pulled({ visits: [long] }));
+    await render(<DoctorProfile />);
+
+    expect(screen.getByText(/8 h 4 min/u)).toBeTruthy();
+    expect(screen.queryByText(/484 min/u)).toBeNull();
+  });
+});

@@ -139,8 +139,8 @@ export default function Doctors(): ReactNode {
    */
   const serverNow = serverTime === null ? null : Date.parse(serverTime);
   const all = useMemo(
-    () => buildDoctorRows(doctors, visits, serverNow),
-    [doctors, visits, serverNow],
+    () => buildDoctorRows(doctors, visits, serverNow, zone),
+    [doctors, visits, serverNow, zone],
   );
   const ranked = useMemo(
     () => rankDoctors(all, query, activeFilter, onPlan ?? new Set()),

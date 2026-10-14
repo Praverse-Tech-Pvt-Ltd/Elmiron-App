@@ -65,16 +65,21 @@ on screens and flows, not for a release.
 3. The iPhone and the laptop on the **same Wi-Fi**. Windows Firewall must let the phone reach
    Node.js (Metro, port 8081) and Docker (Supabase, port 54321). On this laptop both already have
    inbound allow rules.
-4. Start the local stack (`pnpm db:start`), then from `apps/field`, with the laptop's address in
-   place of `127.0.0.1`. Values already set in the shell win over `apps/field/.env`:
+4. With Docker Desktop running, from the repository root: **`pnpm expo-go`** (`FE-W206`). It starts
+   the local stack if it is down (the first time on a machine pulls several GB of images), runs
+   `pnpm key-day` (the TEST company, its people, approved content, a course, today's plans), finds
+   this laptop's Wi-Fi address, and starts Expo with the app pointed at it — not at `127.0.0.1`,
+   which on a phone is the phone. `--no-seed` skips `key-day`; `--ip <address>` picks the address.
+5. In Expo Go, open the project under **Development servers** (or enter the `exp://` address the
+   command prints). Allow "Local Network" when iOS asks. Sign in with a test rep the command lists;
+   the password is the `password` field of `services/api/.key-day/world.json`.
 
-   ```powershell
-   $env:EXPO_PUBLIC_SUPABASE_URL = 'http://<laptop address>:54321'
-   npx expo start --lan
-   ```
-
-5. Scan the QR code it prints with the iPhone's camera; Expo Go opens the app. Sign in with a test
-   rep (`pnpm key-day` prints who).
+**On a new machine**, before step 4: Git, Node 24, Docker Desktop, then
+`git clone https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App.git`, check out the working
+branch, and `corepack pnpm install` (`docs/START-HERE.md`, section 1). The test data is created
+fresh by `key-day`; nothing from another laptop's database is needed. The AI features answer from the
+labelled stub until an OpenAI key is put in `services/api/supabase/functions/.env` by hand
+(`docs/KEY-DAY.md`) — never in the repository.
 
 ## Not verified — check on a real iPhone first
 

@@ -8,9 +8,10 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
-import type { NativeScrollEvent } from 'react-native';
+import type { LayoutChangeEvent, NativeScrollEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
 import { elevationStyle } from './depth';
@@ -63,6 +64,40 @@ export const isAtBottom = (
   event: Pick<NativeScrollEvent, 'contentOffset' | 'contentSize' | 'layoutMeasurement'>,
 ): boolean =>
   event.contentOffset.y + event.layoutMeasurement.height >= event.contentSize.height - FOLLOW_SLACK;
+
+/**
+ * `FE-W198`. How much of the form below a focused field must show with it: a control directly under
+ * the field -- "Show password", a field's help line -- at the tap floor, and the design's margin.
+ */
+export const REVEAL_BELOW = tokens.target.floor + tokens.space.md;
+
+/**
+ * `FE-W198`. Where to scroll so a focused field, and `REVEAL_BELOW` under it, sit above the pinned
+ * footer -- or null when they already do. Pure, so the rule is tested without a native scroll view.
+ *
+ * `fieldTop`/`fieldHeight` are in the scroll CONTENT's coordinates; `offset` is how far it is
+ * scrolled and `viewport` the scroll view's own height, which ends at the footer's top edge.
+ */
+export const revealOffset = ({
+  fieldTop,
+  fieldHeight,
+  offset,
+  viewport,
+}: {
+  readonly fieldTop: number;
+  readonly fieldHeight: number;
+  readonly offset: number;
+  readonly viewport: number;
+}): number | null => {
+  const needed = fieldTop + fieldHeight + REVEAL_BELOW;
+  if (needed <= offset + viewport) return null;
+  // Never so far that the field's own top leaves the view on a short viewport.
+  return Math.max(0, Math.min(needed - viewport, fieldTop - tokens.space.md));
+};
+
+type FocusedField = NonNullable<ReturnType<typeof TextInput.State.currentlyFocusedInput>>;
+/** What `measureLayout` measures against: the focused field's own parameter type. */
+type MeasureTarget = Parameters<FocusedField['measureLayout']>[0];
 
 /** The back control's drawn chevron: arm length and stroke. Geometry, like `TabIcon`'s. */
 const CHEVRON = 9;
@@ -200,6 +235,9 @@ export const Screen = ({
   // Starts true: a conversation opens at its newest message.
   const atBottom = useRef(true);
   const keyboardShown = useKeyboardShown();
+  // `FE-W198`. The scroll view's own height and how far it is scrolled, for `reveal` below.
+  const viewport = useRef(0);
+  const offset = useRef(0);
   const hasFooter = footer !== undefined && footer !== null;
   const hasBack = onBack !== undefined;
   // `FE-W188`. With a back control the status bar's height sits above the control, on the
@@ -213,6 +251,45 @@ export const Screen = ({
     paddingRight: tokens.space.md + insets.right,
   };
 
+  /**
+   * `FE-W198`. With the keyboard up, the focused field and the control under it are scrolled above
+   * the pinned footer. Android scrolls only the CURSOR into view, and does it before the screen
+   * shrinks for the keyboard: on sign-in the footer's "Sign in" covered the password field's lower
+   * edge and its "Show password" (15 October re-check, screenshot 02b). Run whenever the keyboard
+   * comes up and whenever the scroll view's height changes while it is up -- the shrink arrives
+   * after the keyboard's own event.
+   */
+  const reveal = (): void => {
+    const scroll = scroller.current;
+    // Null when no field has focus, whatever the hand-written types say.
+    const field = TextInput.State.currentlyFocusedInput() as FocusedField | null;
+    if (scroll === null || field === null) return;
+    // The scroll CONTENT's own view, so the field is measured in the coordinates `offset` counts
+    // in. On the component since 0.7x, though the hand-written types still lack it.
+    const content = (
+      scroll as unknown as { getInnerViewRef?: () => MeasureTarget | null }
+    ).getInnerViewRef?.();
+    if (content === null || content === undefined) return;
+    field.measureLayout(
+      content,
+      (_x, fieldTop, _width, fieldHeight) => {
+        const y = revealOffset({
+          fieldTop,
+          fieldHeight,
+          offset: offset.current,
+          viewport: viewport.current,
+        });
+        if (y !== null) scroll.scrollTo({ y, animated: true });
+      },
+      () => undefined,
+    );
+  };
+
+  useEffect(() => {
+    // `reveal` reads refs only; the keyboard coming up is the event.
+    if (keyboardShown && scrollable) reveal();
+  }, [keyboardShown, scrollable]);
+
   // FE-D12 V1. When the screen scrolls, the status bar's height sits on a wrapper that does not
   // scroll. Inside the content it scrolled away with it, and scrolled content passed under the
   // clock -- over "May we record this" on the consent screen. The first paint is unchanged.
@@ -224,12 +301,18 @@ export const Screen = ({
       // the keyboard and making the rep tap again.
       keyboardShouldPersistTaps="handled"
       ref={scroller}
+      onLayout={({ nativeEvent }: LayoutChangeEvent) => {
+        const changed = nativeEvent.layout.height !== viewport.current;
+        viewport.current = nativeEvent.layout.height;
+        if (changed && keyboardShown) reveal();
+      }}
+      scrollEventThrottle={100}
+      onScroll={({ nativeEvent }: { nativeEvent: NativeScrollEvent }) => {
+        offset.current = nativeEvent.contentOffset.y;
+        if (followLatest) atBottom.current = isAtBottom(nativeEvent);
+      }}
       {...(followLatest
         ? {
-            scrollEventThrottle: 100,
-            onScroll: ({ nativeEvent }: { nativeEvent: NativeScrollEvent }) => {
-              atBottom.current = isAtBottom(nativeEvent);
-            },
             onContentSizeChange: () => {
               if (atBottom.current) scroller.current?.scrollToEnd({ animated: true });
             },

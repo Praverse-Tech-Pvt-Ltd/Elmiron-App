@@ -18,6 +18,7 @@ import { createPushClient } from '../src/sync/push-client';
 import { queueUnreadable, loadQueueState } from '../src/sync/async-storage-store';
 import { enqueueFirst, flushOutbox, unplannedVisitQueueItem } from '../src/sync/outbox';
 import { useBack } from '../src/navigation/back';
+import { refusedDetail } from '../src/errors/plain';
 import { usePulledStore } from '../src/sync/pulled-store';
 import { doctorsFromStore } from '../src/sync/selectors';
 import { todaysPlan } from '../src/today/beat-plan-view';
@@ -38,15 +39,20 @@ import { PROBLEM_WORDS, draftProblem, unplannedVisitRequest } from '../src/visit
  */
 type Failure =
   | { readonly kind: 'not_saved' }
-  | { readonly kind: 'not_accepted'; readonly lastError: string | null };
+  /** `sqlState` is the server's verdict code; `undefined` when the queue holds no verdict for it. */
+  | { readonly kind: 'not_accepted'; readonly sqlState: string | null | undefined };
 
 const failureWords = (failure: Failure): { title: string; detail: string } =>
   failure.kind === 'not_saved'
     ? { title: t('unplanned.notSavedTitle'), detail: queueUnreadable() }
     : {
         title: t('unplanned.notAcceptedTitle'),
-        // `lastError` is the server's own words, shown as sent.
-        detail: failure.lastError ?? t('unplanned.notAcceptedDetail'),
+        // `FE-W197`. The remedy for the verdict's SQLSTATE. This showed the queue row's `lastError`
+        // -- the server's own sentence, written for support -- as it came.
+        detail:
+          failure.sqlState === undefined
+            ? t('unplanned.notAcceptedDetail')
+            : refusedDetail(failure.sqlState),
       };
 
 export default function UnplannedVisit(): ReactNode {
@@ -104,7 +110,8 @@ export default function UnplannedVisit(): ReactNode {
       const mine =
         after.kind === 'loaded' ? after.state.items.find((item) => item.id === body.id) : undefined;
       if (mine?.status === 'failed') {
-        setFailure({ kind: 'not_accepted', lastError: mine.lastError ?? null });
+        const verdict = after.kind === 'loaded' ? after.state.rejections[mine.id] : undefined;
+        setFailure({ kind: 'not_accepted', sqlState: verdict?.sqlState });
         setBusy(false);
         return;
       }

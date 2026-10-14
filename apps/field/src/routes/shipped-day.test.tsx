@@ -335,7 +335,7 @@ const REBUILT = [
 const TRANSPARENCY = ['What this app records about me', 'What is recorded, and what never is.'];
 // UX polish: the visit’s progress row, one cell per step. `FE-W190`: a finished step's tick is
 // drawn, not written, so the words are the same at every stage (the cells no longer widen).
-const STEPS_BEFORE = ['Check in', 'With the doctor', 'Check out', 'Report'];
+const STEPS_BEFORE = ['Check in', 'With doctor', 'Check out', 'Report'];
 const STEPS_DURING = STEPS_BEFORE;
 const STEPS_AFTER = STEPS_BEFORE;
 // `FE-W188`. Every pushed screen draws its Back control first.
@@ -572,10 +572,12 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       'Not seen 30d',
       'On plan',
       // Final UX pass: a doctor who is not overdue carries a neutral ring, not a green tick.
-      'Dr Meera Iyer (DEMO)',
-      'Urology · Pune · today',
+      // `FE-W199`: all three are seen today, so they tie on the day and the one seen longest ago
+      // leads -- Vikram Rao before Meera Iyer, where the name used to decide.
       'Dr Vikram Rao (DEMO)',
       'Nephrology · Pune · today',
+      'Dr Meera Iyer (DEMO)',
+      'Urology · Pune · today',
       // `BE-W165`, FIXED W2-E D. Read "yesterday" (marked UNTRUE), and so was FIRST — the list puts
       // the longest-unseen doctor first. Seen today at 17:41 on this phone, the most recent of the
       // three, so now last, and said so.

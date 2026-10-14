@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { Keyboard, Platform } from 'react-native';
+import { Keyboard, Platform, ScrollView, TextInput } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { Metrics } from 'react-native-safe-area-context';
 import type { ReactElement } from 'react';
 import { tokens } from '@fieldforce/ui-tokens';
 import { BodyText } from './Text';
-import { FOLLOW_SLACK, Screen, isAtBottom } from './Screen';
+import { FOLLOW_SLACK, REVEAL_BELOW, Screen, isAtBottom, revealOffset } from './Screen';
 
 /**
  * The safe-area inset, asserted as arithmetic rather than as "a safe-area component
@@ -286,6 +286,38 @@ describe.each(['android', 'ios'] as const)(
       expect(footerPadding()).toBe(tokens.space.md + METRICS.insets.bottom);
     });
 
+    /**
+     * `FE-W198`. Android scrolled only the cursor into view, before the screen shrank: the footer
+     * covered the password field's lower edge and its "Show password" (screenshot 02b).
+     */
+    it('FE-W198: scrolls the focused field, and the control under it, above the footer', async () => {
+      const scrollTo = jest.fn();
+      jest.spyOn(ScrollView.prototype, 'scrollTo').mockImplementation(scrollTo);
+      // Not in the hand-written types, though the component has it (the jest mock's prototype too).
+      jest
+        .spyOn(
+          ScrollView.prototype as unknown as { getInnerViewRef: () => unknown },
+          'getInnerViewRef',
+        )
+        .mockReturnValue({});
+      jest.spyOn(TextInput.State, 'currentlyFocusedInput').mockReturnValue({
+        measureLayout: (_to: unknown, ok: (x: number, y: number, w: number, h: number) => void) => {
+          ok(16, 420, 358, 56);
+        },
+      } as unknown as ReturnType<typeof TextInput.State.currentlyFocusedInput>);
+      await renderForm();
+      // The scroll view after the shrink: 400 tall, ending at the footer's top edge.
+      let scroll = screen.getByText('a long form').parent;
+      while (scroll !== null && scroll.props['onScroll'] === undefined) scroll = scroll.parent;
+      if (scroll === null) throw new Error('no scroll view');
+      await emit('Show', 300);
+      await fireEvent(scroll, 'layout', {
+        nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 400 } },
+      });
+
+      expect(scrollTo).toHaveBeenCalledWith({ y: 420 + 56 + REVEAL_BELOW - 400, animated: true });
+    });
+
     it('adds nothing where the system already shrank the window to the keyboard', async () => {
       await renderForm();
       // The frame ends where the keyboard begins: a window resized by `adjustResize`.
@@ -359,5 +391,27 @@ describe('Screen back control on a doctor-facing screen (FE-W188, FE-W148)', () 
     // A word the catalogue does not hold, so the assertion fails if the catalogue's is drawn.
     expect(screen.getByRole('button', { name: 'Return' })).toBeTruthy();
     expect(screen.queryByText('Back')).toBeNull();
+  });
+});
+
+describe('revealOffset — a focused field and what is under it, above the footer (FE-W198)', () => {
+  it('already in view: nothing to do', () => {
+    expect(revealOffset({ fieldTop: 100, fieldHeight: 56, offset: 0, viewport: 400 })).toBeNull();
+  });
+
+  it('below the fold: scrolls just far enough for the field and the control under it', () => {
+    expect(revealOffset({ fieldTop: 420, fieldHeight: 56, offset: 0, viewport: 400 })).toBe(
+      420 + 56 + REVEAL_BELOW - 400,
+    );
+  });
+
+  it('counts how far the content is already scrolled', () => {
+    expect(revealOffset({ fieldTop: 420, fieldHeight: 56, offset: 200, viewport: 400 })).toBeNull();
+  });
+
+  it('on a viewport too short for both, keeps the field’s own top in view', () => {
+    expect(revealOffset({ fieldTop: 500, fieldHeight: 120, offset: 0, viewport: 100 })).toBe(
+      500 - tokens.space.md,
+    );
   });
 });

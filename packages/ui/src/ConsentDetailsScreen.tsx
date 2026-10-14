@@ -84,14 +84,22 @@ export const ConsentDetailsScreen = ({
         §01 bans a muted white — so this leads by position and by being the only
         item with no siblings above it, rather than by colour.
       */}
-      <View style={[styles.row, styles.last]}>
+      {/*
+        `FE-W198`. One rule between this row and the list, not two: it carried a bottom border and
+        the list's first row a top one, a gap apart (15 October re-check, screenshot 06b). Each row
+        draws the rule above it; only the last row of all draws the one below.
+      */}
+      <View style={[styles.row, collected.length === 0 ? styles.last : null]}>
         <BodyText>Never collected</BodyText>
         <Statement>{neverCollected}</Statement>
       </View>
 
       <View style={styles.rows}>
-        {collected.map((item) => (
-          <View key={item.title} style={styles.row}>
+        {collected.map((item, index) => (
+          <View
+            key={item.title}
+            style={[styles.row, index === collected.length - 1 ? styles.last : null]}
+          >
             <BodyText>{item.title}</BodyText>
             {item.detail === undefined ? null : <Statement>{item.detail}</Statement>}
           </View>

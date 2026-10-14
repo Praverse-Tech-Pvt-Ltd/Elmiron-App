@@ -234,10 +234,6 @@
     "doctors.notInYourList": {
       "note": "Shown in place of a doctor's name when the plan names a doctor this phone does not hold"
     },
-    "doctors.visitMinutes": {
-      "note": "How long a visit lasted. {minutes} is a whole number of minutes",
-      "max": 16
-    },
     "doctors.bestTime": {
       "note": "Card heading over a sentence such as 'Tuesdays and Thursdays, 09:00–13:00 — from your last 5 visits.'"
     },
@@ -683,8 +679,8 @@
       "max": 16
     },
     "visit.stepWithDoctor": {
-      "note": "A small step badge, one of four in a row",
-      "max": 18
+      "note": "A small step badge, one of four in a row on a narrow phone: keep it as short as \"Check out\" (FE-W198)",
+      "max": 12
     },
     "visit.stepCheckOut": {
       "note": "A small step badge, one of four in a row",
@@ -736,7 +732,7 @@
       "note": "{reason} is why it paused, such as 'a call came in'"
     },
     "visit.recordingRefused": {
-      "note": "{message} is the server's reason, left as it is"
+      "note": "{message} is the app's own sentence for the refusal, already in the reader's language (FE-W197)"
     },
     "visit.notSaved": {
       "note": "NOT is in capitals for emphasis: nothing was kept on the phone"
@@ -859,7 +855,13 @@
       "note": "After a big number: \"6 of 12 packs\". {unit} is already in the reader's language"
     },
     "voiceNote.refused": {
-      "note": "{message} is the server's own sentence and is not translated here"
+      "note": "{message} is the app's own sentence for the refusal, already in the reader's language (FE-W197)"
+    },
+    "voiceNote.microphoneOff": {
+      "note": "In a banner when the microphone is off. The voice note is the rep's own note: no doctor is in it, so never mention the doctor's agreement (FE-W198)"
+    },
+    "voiceNote.openSettings": {
+      "note": "Button in that banner: opens the phone's settings for this app. Settings is the phone's own word"
     },
     "voiceNote.subject": {
       "note": "{doctor} is the doctor's name, or \"this visit\""
@@ -1159,8 +1161,8 @@
     "learning.courseFinished": {
       "note": "{date} is a day and month, e.g. 7 Oct"
     },
-    "learning.aboutMinutes": {
-      "note": "{minutes} is a number; 'min' is short for minutes. Beside a lesson's title, and under a course's title before it is started"
+    "learning.aboutDuration": {
+      "note": "{duration} is a length already worded, e.g. \"30 min\" or \"1 h 30 min\" (route.durationMinutes / route.durationHours). Beside a lesson's title, and under a course's title before it is started"
     },
     "learning.lessonNotDone": {
       "note": "Under a lesson the rep has not finished (whether or not they have opened it), before its length",

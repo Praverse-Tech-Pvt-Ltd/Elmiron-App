@@ -42,26 +42,44 @@ const visit = (over: Partial<VisitScreenProps> = {}): VisitScreenProps => ({
 });
 
 describe('the visit’s steps hold their width (FE-W190, QA 19 and 39)', () => {
-  it('draws four cells of one flexible width, whatever their state', async () => {
+  it('draws four cells sized to their words, whatever their state', async () => {
     await render(<VisitScreen {...visit({ stage: 'after', actionLabel: null })} />);
-    const cells = ['Check in', 'With the doctor', 'Check out', 'Report'].map(
+    const cells = ['Check in', 'With doctor', 'Check out', 'Report'].map(
       (label) => screen.getByText(label).parent,
     );
-    for (const cell of cells) expect(flat(cell)['flex']).toBe(1);
+    // `FE-W198`. Its words plus an equal share of the spare width -- not four equal cells, which
+    // wrapped "With the doctor" at 360dp while "Report" sat in a cell twice its width.
+    for (const cell of cells) {
+      expect(flat(cell)['flexGrow']).toBe(1);
+      expect(flat(cell)['flexBasis']).toBe('auto');
+    }
     // The tick is drawn, never written: no "✓ " is added to a label to widen it.
     expect(screen.queryByText(/✓/u)).toBeNull();
+  });
+
+  it('FE-W198: every state reserves the tick’s room, so finishing a step never widens it', async () => {
+    await render(<VisitScreen {...visit({ stage: 'during' })} />);
+    // "Check in" is done (tick drawn), "Report" is later (no tick): the slot is there for both.
+    const done = screen.getByText('Check in').parent;
+    const later = screen.getByText('Report').parent;
+    const slotWidth = (cell: Node | null): unknown => {
+      const first = cell?.children[0];
+      return first === undefined || typeof first === 'string' ? undefined : flat(first)['width'];
+    };
+    expect(slotWidth(done)).toBe(7);
+    expect(slotWidth(later)).toBe(7);
   });
 
   it('says which steps are done and which is now, to a screen reader', async () => {
     await render(<VisitScreen {...visit()} />);
     expect(screen.getByLabelText('Check in: done')).toBeTruthy();
-    expect(screen.getByLabelText('With the doctor: now')).toBeTruthy();
+    expect(screen.getByLabelText('With doctor: now')).toBeTruthy();
     expect(screen.getByLabelText('Report')).toBeTruthy();
   });
 
   it('marks the current step with the accent’s own wash and edge, not the info blue', async () => {
     await render(<VisitScreen {...visit()} />);
-    const now = flat(screen.getByText('With the doctor').parent);
+    const now = flat(screen.getByText('With doctor').parent);
     expect(now['backgroundColor']).toBe(tokens.color.successFill);
     expect(now['borderColor']).toBe(tokens.color.accent);
     expect(now['backgroundColor']).not.toBe(tokens.color.infoFill);
