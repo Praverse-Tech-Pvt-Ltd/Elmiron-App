@@ -1,4 +1,4 @@
-import { t } from '@fieldforce/ui/i18n';
+import { languageStore, t } from '@fieldforce/ui/i18n';
 /**
  * Which day is it, and what time does that timestamp say — MR-15 A2.
  *
@@ -130,6 +130,46 @@ const MONTHS = [
 ] as const;
 
 /**
+ * `FE-W149` — a date in the app's language, or null for English (which keeps `MONTHS` above).
+ *
+ * Hindi and Marathi take their month names from `Intl.DateTimeFormat`, in the territory's zone:
+ * React Native 0.86 builds Hermes with `HERMES_ENABLE_INTL`, whose Android half is backed by the
+ * platform's ICU (minSdk 24), and Android's ICU carries `hi` and `mr`. `-u-nu-latn` keeps the
+ * digits Latin, as every clock time and count on the same screen is (Marathi's default is
+ * Devanagari digits). If the runtime does not resolve the locale it asked for, this answers null
+ * and the caller prints the English form — a correct date in English rather than a guess.
+ */
+const INTL_LOCALE = { hi: 'hi-IN-u-nu-latn', mr: 'mr-IN-u-nu-latn' } as const;
+
+export const localisedDayMonth = (instant: Date, timeZone: string): string | null => {
+  const language = languageStore.current();
+  if (language === 'en') return null;
+  const formatter = new Intl.DateTimeFormat(INTL_LOCALE[language], {
+    timeZone,
+    day: 'numeric',
+    month: 'short',
+  });
+  return formatter.resolvedOptions().locale.startsWith(language) ? formatter.format(instant) : null;
+};
+
+/**
+ * `FE-W149` — a weekday's name (0 = Sunday) in the app's language, or null for English. Long form,
+ * because the one place it is shown says "Mondays and Thursdays" in English; in Hindi and Marathi
+ * the weekday's own name reads the same way. Same fallback rule as `localisedDayMonth`.
+ */
+export const localisedWeekday = (day: number): string | null => {
+  const language = languageStore.current();
+  if (language === 'en') return null;
+  const formatter = new Intl.DateTimeFormat(INTL_LOCALE[language], {
+    timeZone: 'UTC',
+    weekday: 'long',
+  });
+  // 4 January 2026 was a Sunday; add `day` to reach the weekday asked for.
+  const instant = new Date(Date.UTC(2026, 0, 4 + day));
+  return formatter.resolvedOptions().locale.startsWith(language) ? formatter.format(instant) : null;
+};
+
+/**
  * `9 Sep` — the calendar date this instant falls on, in that zone, for a human.
  *
  * Replaces `dayMonthFrom` in `src/doctors/profile.ts` for any screen reading real server
@@ -148,6 +188,8 @@ const MONTHS = [
  * the format the screens already use.
  */
 export const dayMonthIn = (iso: string, zone: TerritoryZone): string => {
+  const localised = localisedDayMonth(new Date(iso), zone.timeZone);
+  if (localised !== null) return localised;
   const parts = partsIn(iso, zone.timeZone);
   const month = MONTHS[Number(parts['month'] ?? '0') - 1];
   const day = Number(parts['day'] ?? '0');
@@ -182,6 +224,12 @@ export const dayMonthIn = (iso: string, zone: TerritoryZone): string => {
 export const dayMonthOfDate = (date: string): string | null => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(date);
   if (match === null) return null;
+  // `FE-W149`. A calendar date, so it is read in UTC: nothing to convert, only to name.
+  const localised = localisedDayMonth(
+    new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))),
+    'UTC',
+  );
+  if (localised !== null) return localised;
   const month = MONTHS[Number(match[2]) - 1];
   return month === undefined ? null : `${String(Number(match[3]))} ${month}`;
 };

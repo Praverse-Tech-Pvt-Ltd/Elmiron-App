@@ -1,4 +1,4 @@
-import { clockIn, dayIn } from '../today/territory-day';
+import { clockIn, dayIn, localisedWeekday } from '../today/territory-day';
 import type { TerritoryZone } from '../today/territory-day';
 import { t } from '@fieldforce/ui/i18n';
 
@@ -101,7 +101,8 @@ export const availabilityFrom = (
   const repeated = [...counts.entries()]
     .filter(([, seen]) => seen > 1)
     .sort((a, b) => b[1] - a[1] || a[0] - b[0])
-    .map(([day]) => DAY_NAMES[day] ?? '')
+    // `FE-W149`. The weekday in the app's language; English keeps its own plural table.
+    .map(([day]) => localisedWeekday(day) ?? DAY_NAMES[day] ?? '')
     .filter((name) => name !== '');
 
   if (repeated.length === 0) return null;
