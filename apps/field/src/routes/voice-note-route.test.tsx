@@ -72,6 +72,18 @@ jest.mock('../sync/push-client', () => {
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setQueueOwner } from '../sync/async-storage-store';
+import { bindUploadDevice } from '../sync/upload-conditions';
+
+// `FE-W135`. The phone's network, as WiFi-only sees it -- bound as `app/_layout.tsx` binds the real
+// one. On WiFi unless a test says otherwise, so the cases are about sending; the WiFi-only case
+// below sets mobile data.
+let connection: 'wifi' | 'mobile' = 'wifi';
+bindUploadDevice({
+  read: () => Promise.resolve({ connection, wifiOnlyAudio: true }),
+  recordUse: () => Promise.resolve(),
+  onConnectionChange: () => () => undefined,
+  heldAudioBytes: () => null,
+});
 import type * as PushClient from '../sync/push-client';
 
 type PushClientModule = typeof PushClient;
@@ -119,6 +131,7 @@ beforeEach(async () => {
   mockRecorder.uri = null;
   mockRecorderState.isRecording = false;
   mockStore.mockReturnValue(pulled([visit]));
+  connection = 'wifi';
 });
 
 /** Render mid-recording, release the hold, and wait until a note is captured. */
@@ -166,6 +179,23 @@ describe('FE-W54 — Save keeps the note, from a REAL visit', () => {
     const kept = [...mockFiles];
     expect(kept).toHaveLength(1);
     expect(kept[0]).toMatch(new RegExp(`^${DOC}voice-notes/${REP_A}/[0-9a-f-]+\\.m4a$`, 'u'));
+  });
+});
+
+describe('FE-W135 — on mobile data, with WiFi-only on (the default)', () => {
+  it('keeps and queues the note WITHOUT trying, and says it goes on WiFi', async () => {
+    connection = 'mobile';
+    mockUpload.mockResolvedValue({ receivedAt: '2026-09-22T10:05:00Z' });
+    await recordOne('wifi');
+    await fireEvent.press(screen.getByText('Save this note'));
+    await screen.findByText(/It will send by itself when this phone is on WiFi/u);
+    expect(mockUpload).not.toHaveBeenCalled();
+    expect(screen.queryByText(/when you have signal/u)).toBeNull();
+
+    const keys = await AsyncStorage.getAllKeys();
+    const raw = await AsyncStorage.getItem(keys.find((k) => k.includes(REP_A)) ?? '');
+    const items = (JSON.parse(raw ?? '{}') as { items?: { entity: string }[] }).items ?? [];
+    expect(items.map((i) => i.entity)).toEqual(['voice_note']);
   });
 });
 

@@ -12,7 +12,8 @@ import { Card } from './Card';
  * one.** C4's "Send audio on WiFi only" is the clearest case: an MR who flips it
  * believes their recordings will wait for WiFi, and acts on that belief with their
  * own data plan. Shipping the switch before the upload path exists would make the
- * app lie about something the MR pays for.
+ * app lie about something the MR pays for. (`FE-W135`–`FE-W139` built that path, so
+ * WiFi-only and the 100 MB note are `available` now; the language rows are not.)
  *
  * So every entry declares whether it governs anything yet. `available` rows are
  * pressable and do what they say; `not-yet` rows are inert, say so, and exist

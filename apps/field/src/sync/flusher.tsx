@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 import { useSession } from '../session';
 import { flushOutbox } from './outbox';
 import { createPushClient } from './push-client';
+import { uploadDevice } from './upload-conditions';
 
 /**
  * Tries the outbox whenever the app comes to the foreground.
@@ -54,8 +55,19 @@ export const OutboxFlusher = ({ children }: { readonly children: ReactNode }): R
       if (next === 'active') attempt();
     });
 
+    // `FE-W135`. **And when the phone joins WiFi**, while the app is open. "Recordings wait for
+    // WiFi" is a promise that they then GO; without this, audio held on mobile data waited for
+    // the next time the app came to the foreground even with the rep standing on office WiFi.
+    // A network change is an event, not a timer, and only while the app is running -- the same
+    // line as above: no background work.
+    const stopNetwork =
+      uploadDevice()?.onConnectionChange((connection) => {
+        if (connection === 'wifi') attempt();
+      }) ?? ((): void => undefined);
+
     return () => {
       subscription.remove();
+      stopNetwork();
     };
   }, [userId]);
 

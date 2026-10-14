@@ -20,6 +20,8 @@ import { usePulledStore } from '../src/sync/pulled-store';
 import { visitsFromStore } from '../src/sync/selectors';
 import { NO_SERVER_CLOCK } from '../src/today/server-window';
 import { indicatorStateFor } from '../src/sync/indicator';
+import { heldAudioIds } from '../src/sync/upload-conditions';
+import { useUploadSnapshot } from '../src/sync/use-upload-snapshot';
 import { emptyQueue } from '../src/sync/reducer';
 import type { QueueLoad } from '../src/sync/async-storage-store';
 import { CAPTURE_NOTE, summariseDayEnd, workDayCopy } from '../src/today/day-end';
@@ -151,6 +153,8 @@ export default function DayEnd(): ReactNode {
   // rep owns the queue, and the session module cannot load under the test runner.
   const mrId = queueOwner();
   const items = queue.kind === 'loaded' ? queue.state.items : [];
+  // `FE-W136`. Audio WiFi-only is holding says "waiting for WiFi", not "no signal".
+  const uploadSnapshot = useUploadSnapshot();
   const dayStatus = workDayStatus(store, mrId, today, items);
   // The server's last "no" to ending this day, if the newest act on it was refused.
   const lastAct = [...items]
@@ -271,7 +275,7 @@ export default function DayEnd(): ReactNode {
         }}
         planned={summary?.planned ?? null}
         rateNote={RATE_NOTE}
-        sync={indicatorStateFor(queue, zone)}
+        sync={indicatorStateFor(queue, zone, heldAudioIds(items, uploadSnapshot).length)}
         workDay={workDay}
       />
     </Screen>

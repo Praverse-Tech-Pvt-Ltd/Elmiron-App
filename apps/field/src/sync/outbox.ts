@@ -31,6 +31,8 @@ import { recordingUploadFrom, voiceNoteUploadFrom } from './voice-note-upload';
 import type { RecordingUpload, VoiceNoteUpload } from './voice-note-upload';
 import { syncQueueReducer } from './reducer';
 import type { SyncQueueState } from './reducer';
+import { countsAsMobileData, deviceUploadConditions, heldForWifi } from './upload-conditions';
+import type { UploadConditions, UploadSnapshot } from './upload-conditions';
 
 /**
  * Where the outbox keeps its state.
@@ -119,8 +121,14 @@ export type SendOutcome =
        */
       readonly detail: string | null;
     }
-  /** No answer. The work is on disk and will go later. */
-  | { readonly kind: 'queued' }
+  /**
+   * No answer. The work is on disk and will go later.
+   *
+   * `FE-W135`. `waitingForWifi` when it was not even TRIED: it is audio, "Send audio on WiFi only"
+   * is on, and the phone is not on WiFi. Then "when you have signal" is the wrong promise -- it goes
+   * when the phone is on WiFi, or when the MR sends it from the queue screen.
+   */
+  | { readonly kind: 'queued'; readonly waitingForWifi?: true }
   /**
    * `FE-W44`. The server did not answer AND the queue could not be read, so the work is
    * **not** on disk and will **not** go later. Separate from `queued` because they are
@@ -400,9 +408,18 @@ export const sendOrQueue = async (
   send: () => Promise<unknown>,
   item: SyncQueueItem,
   store: QueuePersistence = devicePersistence,
+  conditions: UploadConditions = deviceUploadConditions,
 ): Promise<SendOutcome> => {
+  const snapshot = await conditions.read();
+  if (heldForWifi(item.entity, snapshot)) {
+    // `FE-W135`. Not attempted, so not a failure and not a retry: on disk, where the flush will
+    // send it once the phone is on WiFi.
+    const queued = await enqueueFirst(item, store);
+    return queued.kind === 'queued' ? { kind: 'queued', waitingForWifi: true } : queued;
+  }
   try {
     const response = await send();
+    await countUse(conditions, snapshot, response);
     return { kind: 'sent', warnings: serverWarnings(response) };
   } catch (error: unknown) {
     // **Both refusal classes, and MR-24 found out the expensive way what happens with
@@ -477,6 +494,25 @@ const serverReceivedAt = (response: unknown): string | null => {
   if (typeof response !== 'object' || response === null) return null;
   const value = (response as { receivedAt?: unknown }).receivedAt;
   return typeof value === 'string' ? value : null;
+};
+
+/**
+ * `FE-W137`. Count an accepted send toward the month's mobile-data uploads, when the phone was not
+ * on WiFi as it went. The bytes are the sender's own figure (`PushAccepted.bytesSent`) and the month
+ * is the SERVER's (`receivedAt`); a response carrying neither counts nothing. Never throws -- a
+ * count is a note, and it must not cost the verdict.
+ */
+const countUse = async (
+  conditions: UploadConditions,
+  snapshot: UploadSnapshot,
+  response: unknown,
+): Promise<void> => {
+  if (!countsAsMobileData(snapshot.connection)) return;
+  if (typeof response !== 'object' || response === null) return;
+  const bytes = (response as { bytesSent?: unknown }).bytesSent;
+  const serverTime = serverReceivedAt(response);
+  if (typeof bytes !== 'number' || bytes <= 0 || serverTime === null) return;
+  await conditions.recordUse({ bytes, serverTime }).catch(() => undefined);
 };
 
 /**
@@ -555,6 +591,12 @@ export interface FlushResult {
    * previous user's next flush resends whatever this one did not record.
    */
   readonly ownerChanged?: boolean;
+  /**
+   * `FE-W135`. Audio left on the phone, untried, because "Send audio on WiFi only" is on and the
+   * phone was not on WiFi. Present only when there was some. Their attempt counts are untouched: a
+   * recording waiting for WiFi has not failed, and must never drift toward "Still trying".
+   */
+  readonly heldForWifi?: number;
 }
 
 /**
@@ -568,6 +610,7 @@ export const flushOutbox = async (
   client: OutboxWriteClient,
   store: QueuePersistence = devicePersistence,
   owner: () => string | null = queueOwner,
+  conditions: UploadConditions = deviceUploadConditions,
 ): Promise<FlushResult> => {
   const startedFor = owner();
   const load = await store.read();
@@ -577,8 +620,19 @@ export const flushOutbox = async (
     return { attempted: 0, sent: 0, stillQueued: 0, unreadable: true };
   }
   let state = load.state;
-  const queued = state.items.filter((item) => item.status === 'queued');
-  if (queued.length === 0) return { attempted: 0, sent: 0, stillQueued: 0 };
+  const waiting = state.items.filter((item) => item.status === 'queued');
+  if (waiting.length === 0) return { attempted: 0, sent: 0, stillQueued: 0 };
+
+  // `FE-W135`. Read once per flush: the network the sends below go out on, and the MR's switch.
+  // Held audio is left out BEFORE the batch starts, so it is never marked in flight, never given a
+  // failed attempt, and never reaches the sender -- it is simply not part of this run.
+  const snapshot = await conditions.read();
+  const held = waiting.filter((item) => heldForWifi(item.entity, snapshot)).length;
+  const queued = waiting.filter((item) => !heldForWifi(item.entity, snapshot));
+  if (queued.length === 0) {
+    return { attempted: 0, sent: 0, stillQueued: waiting.length, heldForWifi: held };
+  }
+  const withHeld = held === 0 ? {} : { heldForWifi: held };
 
   state = syncQueueReducer(state, {
     type: 'batch_started',
@@ -604,7 +658,13 @@ export const flushOutbox = async (
     // MR-49 / `FE-W61`. The client sends under whoever is signed in NOW. If that is no longer
     // the user whose queue this is, stop before sending another of their items as someone else.
     if (owner() !== startedFor) {
-      return { attempted: sent, sent, stillQueued: queued.length - sent, ownerChanged: true };
+      return {
+        attempted: sent,
+        sent,
+        stillQueued: queued.length - sent,
+        ownerChanged: true,
+        ...withHeld,
+      };
     }
     if (item.entity !== 'visit' && visitsNotYetAccepted.has(item.entityId)) {
       // Held, with nothing sent. A refused visit is said to be the reason, so the rep acts on the
@@ -640,6 +700,7 @@ export const flushOutbox = async (
         continue;
       }
       const response = await plan.send();
+      await countUse(conditions, snapshot, response);
       // Accepted (or already the server's): what waits on this visit may go.
       if (item.entity === 'visit') visitsNotYetAccepted.delete(item.entityId);
       state = syncQueueReducer(state, {
@@ -741,6 +802,7 @@ export const flushOutbox = async (
     attempted: queued.length,
     sent,
     stillQueued: state.items.filter((item) => item.status === 'queued').length,
+    ...withHeld,
   };
 };
 

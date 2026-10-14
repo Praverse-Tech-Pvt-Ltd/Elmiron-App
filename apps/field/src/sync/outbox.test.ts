@@ -20,6 +20,17 @@ import { SyncPushRefusal } from './push-client';
 import type { OutboxWriteClient } from './push-client';
 import { emptyQueue } from './reducer';
 import type { SyncQueueState } from './reducer';
+import type { UploadConditions } from './upload-conditions';
+
+/**
+ * `FE-W135`. Audio now waits for WiFi by default ("Send audio on WiFi only" ships on), so a test
+ * about how audio is SENT says the phone is on WiFi. The gate itself is tested in
+ * `upload-gating.test.ts`.
+ */
+const onWifi: UploadConditions = {
+  read: () => Promise.resolve({ connection: 'wifi', wifiOnlyAudio: true }),
+  recordUse: () => Promise.resolve(),
+};
 
 /**
  * An in-memory store standing in for the device.
@@ -615,10 +626,16 @@ describe('MR-09 B: the misroute class, not just the one instance', () => {
         payload: { ...body, __queueEntity: 'recording' },
       },
       store,
+      onWifi,
     );
 
     const uploadRecording = vi.fn(() => Promise.resolve({ receivedAt: '2026-09-23T06:00:00Z' }));
-    await flushOutbox({ uploadRecording } as unknown as OutboxWriteClient, store);
+    await flushOutbox(
+      { uploadRecording } as unknown as OutboxWriteClient,
+      store,
+      undefined,
+      onWifi,
+    );
 
     expect(uploadRecording, 'an unreadable payload is never sent').not.toHaveBeenCalled();
     expect(store.current().items[0]?.lastError).toMatch(/different version of the app/i);

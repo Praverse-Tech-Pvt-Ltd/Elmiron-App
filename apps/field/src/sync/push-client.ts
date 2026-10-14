@@ -18,6 +18,7 @@ import type { RpcCaller } from '../capture/client';
 import { assertOwned, audioFolder } from '../capture/voice-note-files';
 import type { KeptAudioKind } from '../capture/voice-note-files';
 import type { RecordingUpload, VoiceNoteUpload } from './voice-note-upload';
+import { utf8Length } from './data-use';
 
 /**
  * The five writes, through `sync_push` — MR-18 B1. This is what closes `G-WRITE`.
@@ -110,6 +111,13 @@ export interface PushAccepted {
   readonly receivedAt: string;
   /** W2-B A / `BE-W147`. What the server said beside "accepted" — the ones this build knows. */
   readonly warnings: readonly SyncWarning[];
+  /**
+   * `FE-W137`. What this send put on the wire, in bytes: the request bodies, and for audio the
+   * file itself. Headers are not included. The outbox counts it toward the month's mobile-data
+   * uploads when the phone was not on WiFi. Optional so an older caller's fake stays valid; absent
+   * counts as nothing.
+   */
+  readonly bytesSent?: number;
 }
 
 /**
@@ -231,10 +239,9 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
     payload: object,
   ): Promise<PushAccepted> => {
     const db = await resolveClient<RpcCaller>(deps.client);
-    const { data, error } = await db.rpc('sync_push', {
-      p_batch_id: newBatchId(),
-      p_items: [{ id, entity, entityId, payload }],
-    });
+    const args = { p_batch_id: newBatchId(), p_items: [{ id, entity, entityId, payload }] };
+    const bytesSent = utf8Length(JSON.stringify(args));
+    const { data, error } = await db.rpc('sync_push', args);
 
     if (error !== null) {
       // A transport-level failure, or an RPC that never ran. NOT a refusal: the server has
@@ -257,7 +264,11 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
       // since `20260813000200`; this arm returned the clock alone, so `stale_beat_plan` and — from
       // `BE-C5` — "the clinic could not be confirmed" died here, one function after the wire.
       case 'accepted':
-        return { receivedAt: response.serverTime, warnings: knownSyncWarnings(verdict.warnings) };
+        return {
+          receivedAt: response.serverTime,
+          warnings: knownSyncWarnings(verdict.warnings),
+          bytesSent,
+        };
       // **A duplicate is a SUCCESS, not a failure.** It means this exact item is already
       // recorded -- the write landed and the acknowledgement did not. Treating it as an
       // error would dead-letter work the server already holds, and asking the MR to do
@@ -269,7 +280,11 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
       // The duplicate carries the warnings `sync_items` stored on the first landing, which is how a
       // rep whose answer was lost at the clinic door is still told.
       case 'duplicate':
-        return { receivedAt: response.serverTime, warnings: knownSyncWarnings(verdict.warnings) };
+        return {
+          receivedAt: response.serverTime,
+          warnings: knownSyncWarnings(verdict.warnings),
+          bytesSent,
+        };
       case 'rejected':
       case 'dead_lettered':
         throw new SyncPushRefusal({
@@ -340,14 +355,15 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
 
     const db = await resolveClient<RpcCaller>(deps.client);
     const size = notes.fileSize(uri);
-    const began = await db.rpc('begin_upload', {
+    const beginArgs = {
       p_visit_id: body.visitId,
       // The kind decides which rules apply: for a recording, `begin_upload` refuses unless a
       // standing consent exists. That check is the server's, and is never repeated here.
       p_kind: entity,
       p_size_bytes: size,
       p_duration_seconds: body.durationSeconds,
-    });
+    };
+    const began = await db.rpc('begin_upload', beginArgs);
     if (began.error !== null) throw refusalOrSilence(began.error);
     const grant = grantFrom(began.data);
 
@@ -371,7 +387,11 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
       // The server has it. A copy that could not be deleted is tidied by the next save's
       // listing, not reported as a failed send.
     }
-    return accepted;
+    // `FE-W137`. The file, plus the two requests that framed it.
+    return {
+      ...accepted,
+      bytesSent: size + utf8Length(JSON.stringify(beginArgs)) + (accepted.bytesSent ?? 0),
+    };
   };
 
   return {

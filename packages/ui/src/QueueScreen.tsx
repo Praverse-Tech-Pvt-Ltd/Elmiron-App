@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Label, Title } from './Text';
+import { BodyText, Label, Secondary, Title } from './Text';
 import { Banner } from './Banner';
 import { Button } from './Button';
+import { Card } from './Card';
 import { Screen } from './Screen';
 import { Spinner } from './Spinner';
 
@@ -104,9 +105,25 @@ export interface QueueScreenProps {
    * queue, and an empty one really is "Everything is sent".
    */
   readonly readState?: 'reading' | 'unreadable' | 'read';
+  /**
+   * `FE-W136`. Audio that "Send audio on WiFi only" is holding RIGHT NOW -- the route knows the
+   * switch and the network; this screen does not. Those rows say "Waiting for WiFi", are never
+   * counted as stuck (nothing was tried), and a neutral block above them says how many.
+   *
+   * `onSendNow` sends them over the network the phone is on, this once. **A secondary action, not a
+   * primary**: this screen still has no primary, and the design's own rule -- "the MR never spends
+   * their data without being told first" -- is kept by stating the size in the button's label when
+   * it is known (`sizeLabel`, e.g. "2.1 MB").
+   */
+  readonly waitingForWifi?: {
+    readonly ids: readonly string[];
+    readonly sizeLabel?: string | null;
+    readonly onSendNow?: () => void;
+  };
 }
 
-export type QueueRowState = 'sent' | 'waiting' | 'waiting-long' | 'refused' | 'needs-attention';
+export type QueueRowState =
+  'sent' | 'waiting' | 'waiting-wifi' | 'waiting-long' | 'refused' | 'needs-attention';
 
 /**
  * Which of the five states a row is in.
@@ -120,9 +137,12 @@ export const rowStateFor = (
   item: QueueScreenItem,
   rejection: QueueScreenRejection | undefined,
   longRetryAfterAttempts: number = LONG_RETRY_AFTER_ATTEMPTS,
+  /** `FE-W136`. Held by "Send audio on WiFi only": not tried, so never "Still trying". */
+  heldForWifi = false,
 ): QueueRowState => {
   if (rejection !== undefined) return rejection.deadLettered ? 'needs-attention' : 'refused';
   if (item.status === 'synced') return 'sent';
+  if (heldForWifi && item.status === 'queued') return 'waiting-wifi';
   return item.attemptCount >= longRetryAfterAttempts ? 'waiting-long' : 'waiting';
 };
 
@@ -183,6 +203,7 @@ export const stuckSummaryFor = (
 const GLYPH: Readonly<Record<QueueRowState, string>> = {
   sent: '\u2713',
   waiting: '\u21BB',
+  'waiting-wifi': '\u21BB',
   'waiting-long': '\u25F7',
   refused: '\u2715',
   'needs-attention': '\u2298',
@@ -192,6 +213,8 @@ const GLYPH: Readonly<Record<QueueRowState, string>> = {
 const LABEL: Readonly<Record<QueueRowState, string>> = {
   sent: 'Sent',
   waiting: 'Waiting to send',
+  // `FE-W136`. Neutral, like waiting: the MR chose this, and nothing is wrong.
+  'waiting-wifi': 'Waiting for WiFi',
   'waiting-long': 'Still trying',
   refused: 'Refused',
   'needs-attention': 'Needs someone to look',
@@ -332,16 +355,55 @@ const StuckBlock = ({
   </View>
 );
 
+/**
+ * `FE-W136`. How many recordings are waiting for WiFi, and -- when the route can do it -- the way to
+ * send them now. Offline's dashed wash, because waiting is a normal state (§05: never red).
+ */
+const WifiBlock = ({
+  count,
+  sizeLabel,
+  onSendNow,
+}: {
+  readonly count: number;
+  readonly sizeLabel: string | null;
+  readonly onSendNow: (() => void) | undefined;
+}): ReactNode => (
+  <Card tone="offline">
+    <BodyText>
+      {count === 1
+        ? '1 recording waiting for WiFi'
+        : `${String(count)} recordings waiting for WiFi`}
+    </BodyText>
+    <Secondary>
+      They are safe on this phone and send by themselves when it is on WiFi. You can change this in
+      Settings, under Mobile data.
+    </Secondary>
+    {onSendNow === undefined ? null : (
+      <Button
+        label={
+          sizeLabel === null
+            ? 'Send now on mobile data'
+            : `Send now on mobile data — uses ${sizeLabel}`
+        }
+        onPress={onSendNow}
+        variant="secondary"
+      />
+    )}
+  </Card>
+);
+
 const QueueRow = ({
   item,
   rejection,
   longRetryAfterAttempts,
+  heldForWifi,
 }: {
   readonly item: QueueScreenItem;
   readonly rejection: QueueScreenRejection | undefined;
   readonly longRetryAfterAttempts: number;
+  readonly heldForWifi: boolean;
 }): ReactNode => {
-  const state = rowStateFor(item, rejection, longRetryAfterAttempts);
+  const state = rowStateFor(item, rejection, longRetryAfterAttempts, heldForWifi);
   return (
     <View style={styles.row}>
       <View style={styles.statusLine}>
@@ -392,9 +454,20 @@ export const QueueScreen = ({
   onContactSupport,
   retryFailure,
   readState = 'read',
+  waitingForWifi,
 }: QueueScreenProps): ReactNode => {
   const outstanding = items.filter((item) => item.status !== 'synced');
-  const summary = stuckSummaryFor(items, rejections, longRetryAfterAttempts);
+  const held = new Set(waitingForWifi?.ids ?? []);
+  const heldHere = outstanding.filter(
+    (item) => held.has(item.id) && item.status === 'queued' && rejections[item.id] === undefined,
+  );
+  // `FE-W136`. Held audio was never tried, so it is never "won't go" -- whatever an older attempt
+  // count says. Only the stuck block is told to look past it.
+  const summary = stuckSummaryFor(
+    items.filter((item) => !heldHere.includes(item)),
+    rejections,
+    longRetryAfterAttempts,
+  );
 
   return (
     <Screen scrollable>
@@ -406,6 +479,14 @@ export const QueueScreen = ({
 
       {summary === null ? null : (
         <StuckBlock onContactSupport={onContactSupport} onRetry={onRetry} summary={summary} />
+      )}
+
+      {readState !== 'read' || heldHere.length === 0 ? null : (
+        <WifiBlock
+          count={heldHere.length}
+          sizeLabel={waitingForWifi?.sizeLabel ?? null}
+          onSendNow={waitingForWifi?.onSendNow}
+        />
       )}
 
       {readState === 'reading' ? <Spinner label="Reading your queue" /> : null}
@@ -431,6 +512,7 @@ export const QueueScreen = ({
             item={item}
             rejection={rejections[item.id]}
             longRetryAfterAttempts={longRetryAfterAttempts}
+            heldForWifi={heldHere.includes(item)}
           />
         ))
       )}

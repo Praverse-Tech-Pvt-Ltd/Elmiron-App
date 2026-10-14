@@ -21,6 +21,8 @@ jest.mock('../session', () => ({
 }));
 
 import { OutboxFlusher } from './flusher';
+import { bindUploadDevice } from './upload-conditions';
+import type { Connection } from './upload-conditions';
 
 const tree = (): React.JSX.Element => (
   <OutboxFlusher>
@@ -55,5 +57,37 @@ describe('OutboxFlusher — FE-W61, the queue is sent when its owner signs in', 
     mockUser.mockReturnValue(null);
     await render(tree());
     expect(mockFlush).not.toHaveBeenCalled();
+  });
+});
+
+describe('OutboxFlusher — FE-W135, audio held for WiFi goes when the phone joins WiFi', () => {
+  it('flushes when the network becomes WiFi, and not for any other change', async () => {
+    const listeners: ((connection: Connection) => void)[] = [];
+    bindUploadDevice({
+      read: () => Promise.resolve({ connection: 'mobile', wifiOnlyAudio: true }),
+      recordUse: () => Promise.resolve(),
+      onConnectionChange: (listener) => {
+        listeners.push(listener);
+        return () => undefined;
+      },
+      heldAudioBytes: () => null,
+    });
+    try {
+      mockUser.mockReturnValue('rep-a');
+      await render(tree());
+      expect(mockFlush).toHaveBeenCalledTimes(1);
+
+      listeners.forEach((listener) => {
+        listener('mobile');
+      });
+      expect(mockFlush).toHaveBeenCalledTimes(1);
+
+      listeners.forEach((listener) => {
+        listener('wifi');
+      });
+      expect(mockFlush).toHaveBeenCalledTimes(2);
+    } finally {
+      bindUploadDevice(null);
+    }
   });
 });

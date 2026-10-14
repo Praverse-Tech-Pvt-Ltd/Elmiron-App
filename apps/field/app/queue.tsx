@@ -7,6 +7,14 @@ import { flushOutbox } from '../src/sync/outbox';
 import { createPushClient } from '../src/sync/push-client';
 import { presentRejection } from '../src/sync/explanation';
 import { emptyQueue } from '../src/sync/reducer';
+import { megabytes } from '../src/sync/data-use';
+import {
+  deviceUploadConditions,
+  heldAudioIds,
+  sendingAudioAnyway,
+  uploadDevice,
+} from '../src/sync/upload-conditions';
+import { useUploadSnapshot } from '../src/sync/use-upload-snapshot';
 
 /**
  * Route binding. It reads state, passes it down, and renders. Nothing else.
@@ -48,9 +56,41 @@ export default function Queue(): ReactNode {
 
   useEffect(refresh, []);
 
+  // `FE-W136`. Audio WiFi-only is holding right now, and what sending it anyway would cost.
+  const uploadSnapshot = useUploadSnapshot();
+  const heldIds = heldAudioIds(state.items, uploadSnapshot);
+  const heldBytes =
+    heldIds.length === 0
+      ? null
+      : (uploadDevice()?.heldAudioBytes(state.items.filter((item) => heldIds.includes(item.id))) ??
+        null);
+
   return (
     <QueueScreen
       items={state.items}
+      waitingForWifi={{
+        ids: heldIds,
+        sizeLabel: heldBytes === null ? null : megabytes(heldBytes),
+        // The MR's deliberate choice, this once: the held audio goes over this network, and what
+        // it uses is counted like any other mobile-data upload. The switch itself is untouched.
+        onSendNow: () => {
+          setRetryFailed(null);
+          void flushOutbox(
+            createPushClient(),
+            undefined,
+            undefined,
+            sendingAudioAnyway(deviceUploadConditions),
+          )
+            .then(refresh)
+            .catch((error: unknown) => {
+              setRetryFailed(
+                error instanceof Error
+                  ? `${error.message} Nothing has been lost — everything below is still on this phone.`
+                  : 'Nothing has been lost — everything below is still on this phone.',
+              );
+            });
+        },
+      }}
       readState={
         load.kind === 'reading' ? 'reading' : load.kind === 'unreadable' ? 'unreadable' : 'read'
       }

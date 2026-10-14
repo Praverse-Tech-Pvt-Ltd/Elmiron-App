@@ -12,6 +12,7 @@ const nav = {
   onOpenBattery: () => undefined,
   onOpenTransparency: () => undefined,
   onOpenLocation: () => undefined,
+  onOpenDataSettings: () => undefined,
 };
 const ids = (groups: ReturnType<typeof settingsGroups>): string[] =>
   groups.flatMap((group) => group.rows.map((row) => row.id));
@@ -54,5 +55,32 @@ describe('settingsGroups — Live location (`FE-W71`)', () => {
     expect(row?.title).toBe('Live location');
     row?.onPress?.();
     expect(opened).toBe(true);
+  });
+});
+
+describe('settingsGroups — Your data (`FE-W139`)', () => {
+  it('both rows govern something now, and open the Mobile data screen', () => {
+    let opened = 0;
+    const rows = settingsGroups({
+      ...nav,
+      onOpenDataSettings: () => {
+        opened += 1;
+      },
+    }).flatMap((group) => group.rows);
+    for (const id of ['wifi-only', 'warn-over']) {
+      const row = rows.find((each) => each.id === id);
+      expect(row?.state).toBe('available');
+      row?.onPress?.();
+    }
+    expect(opened).toBe(2);
+  });
+
+  it('the two language rows are still honestly not built', () => {
+    const rows = settingsGroups(nav).flatMap((group) => group.rows);
+    for (const id of ['app-language', 'consent-language']) {
+      const row = rows.find((each) => each.id === id);
+      expect(row?.state).toBe('not-yet');
+      expect(row?.onPress).toBeUndefined();
+    }
   });
 });

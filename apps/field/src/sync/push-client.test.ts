@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SyncPushRefusal, createPushClient } from './push-client';
+import { utf8Length } from './data-use';
 
 /**
  * MR-18 B1/B4 — the five writes, through `sync_push`.
@@ -209,6 +210,8 @@ describe('EXACTLY ONCE — B4', () => {
     await expect(push.createCheckIn(checkIn)).resolves.toEqual({
       receivedAt: '2026-09-10T09:00:00.000+00:00',
       warnings: [],
+      // FE-W137. What the request put on the wire; its exact value is asserted below.
+      bytesSent: expect.any(Number) as unknown,
     });
   });
 
@@ -235,6 +238,8 @@ describe('EXACTLY ONCE — B4', () => {
     await expect(push.createCheckIn(checkIn)).resolves.toEqual({
       receivedAt: '2026-09-10T09:00:00.000+00:00',
       warnings: ['check_in_outside_geofence'],
+      // FE-W137. What the request put on the wire; its exact value is asserted below.
+      bytesSent: expect.any(Number) as unknown,
     });
   });
 
@@ -260,6 +265,8 @@ describe('EXACTLY ONCE — B4', () => {
     await expect(push.createCheckIn(checkIn)).resolves.toEqual({
       receivedAt: '2026-09-10T09:00:00.000+00:00',
       warnings: ['check_in_location_approximate'],
+      // FE-W137. What the request put on the wire; its exact value is asserted below.
+      bytesSent: expect.any(Number) as unknown,
     });
   });
 
@@ -405,5 +412,15 @@ describe('what a refusal carries', () => {
     // The only place that can notice the server changed shape.
     const { push } = clientWith(() => ({ data: { results: 'not an array' }, error: null }));
     await expect(push.createCheckIn(checkIn)).rejects.toThrow();
+  });
+});
+
+describe('FE-W137 — what a send says it put on the wire', () => {
+  it('is the byte length of the exact body sent to sync_push', async () => {
+    const { db, push } = clientWith(() => ({ data: response(), error: null }));
+    const accepted = await push.createCheckIn(checkIn);
+    const sentArgs = db.rpc.mock.calls[0]?.[1];
+    expect(accepted.bytesSent).toBe(utf8Length(JSON.stringify(sentArgs)));
+    expect(accepted.bytesSent).toBeGreaterThan(100);
   });
 });

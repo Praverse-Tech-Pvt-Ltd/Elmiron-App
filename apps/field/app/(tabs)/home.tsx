@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useRouter } from 'expo-router';
 import {
+  Banner,
   BodyText,
   Heading,
   ListRow,
@@ -9,6 +10,8 @@ import {
   Screen,
   TodayScreen,
 } from '@fieldforce/ui';
+import { heldAudioIds } from '../../src/sync/upload-conditions';
+import { useDataNote, useUploadSnapshot } from '../../src/sync/use-upload-snapshot';
 import { useSession } from '../../src/session';
 import { loadQueueState, onQueueChanged, queueOwner } from '../../src/sync/async-storage-store';
 import { indicatorStateFor } from '../../src/sync/indicator';
@@ -90,7 +93,12 @@ const MrToday = (): ReactNode => {
     today,
     dayOrigin,
     refresh,
+    serverTime,
   } = usePulledStore();
+  // `FE-W136`. What WiFi-only is holding right now, so the sync line can say "waiting for WiFi".
+  const uploadSnapshot = useUploadSnapshot();
+  // `FE-W138`. The month's note, when the MR asked for it and this app's uploads passed 100 MB.
+  const dataNote = useDataNote(serverTime);
 
   useEffect(() => {
     // B2. The queue is read on every visit to this screen rather than once, because
@@ -262,7 +270,15 @@ const MrToday = (): ReactNode => {
               inProgress: next.inProgress,
             }
       }
-      sync={queue === null ? null : indicatorStateFor(queue, zone)}
+      sync={
+        queue === null
+          ? null
+          : indicatorStateFor(
+              queue,
+              zone,
+              queue.kind === 'loaded' ? heldAudioIds(queue.state.items, uploadSnapshot).length : 0,
+            )
+      }
       onOpenQueue={() => {
         router.push('/queue');
       }}
@@ -294,6 +310,23 @@ const MrToday = (): ReactNode => {
       onRetry={refresh}
       after={
         <>
+          {/*
+            `FE-W138`. "A note on home, nothing stops working." Attention, never critical: going over
+            is the MR's information, not a failure. The way out is the setting itself.
+          */}
+          {dataNote === null ? null : (
+            <Banner
+              tone="attention"
+              title={dataNote.title}
+              detail={dataNote.detail}
+              action={{
+                label: 'Mobile data settings',
+                onPress: () => {
+                  router.push('/data-settings');
+                },
+              }}
+            />
+          )}
           {/* `FE-W71`. Live location says what it is doing; nothing when the build has it off. */}
           <LiveTrackingStatusLine
             onOpen={() => {
