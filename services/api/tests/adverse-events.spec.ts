@@ -200,11 +200,16 @@ describe.skipIf(!reachable)('the fifteen-day clock', () => {
       expect(clock.rows[0]?.overdue).toBe(false);
       expect(clock.rows[0]?.hours_remaining).toBeGreaterThan(14 * 24);
 
+      // `BE-W215`: the summary is counted by the company's ADMIN — the human a flag routes to until
+      // Q-13 names a PV contact — and over that company's reports only. The rep who filed it is
+      // refused the summary (`adverse-event-admin-read.spec.ts`), and the fixture company is new to
+      // this run, so the count is exact rather than "at least one somewhere in the database".
+      await asUser(client, world.users.admin);
       const summary = await client.query<{ s: { total: number; overdueCount: number } }>(
         'select public.adverse_event_clock_summary() as s',
       );
       // Because the thing that gets missed is a deadline nobody was counting.
-      expect(summary.rows[0]?.s.total).toBeGreaterThanOrEqual(1);
+      expect(summary.rows[0]?.s.total).toBe(1);
       expect(summary.rows[0]?.s.overdueCount).toBe(0);
     });
   });

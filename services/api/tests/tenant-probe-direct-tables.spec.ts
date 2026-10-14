@@ -88,10 +88,12 @@ const seedRivalRows = async (): Promise<void> => {
     const q = (sql: string, params: unknown[]) => db.query(sql, params);
     await q(
       // `statutory_due_at` is set explicitly because the trigger that would set it does not run
-      // under `replica`. Left to default it equals `received_at`, so the row is born overdue --
-      // and `adverse_event_clock_summary()` counts EVERY row in the database, so a probe row with
-      // a wrong deadline fails an unrelated suite. A committed fixture must look like a real row
-      // in any column another suite aggregates.
+      // under `replica`. Left to default it equals `received_at`, so the row is born overdue.
+      // `adverse_event_clock_summary()` counted EVERY row in the database until `BE-W215`, so a
+      // probe row with a wrong deadline failed an unrelated suite -- and every signed-in user of
+      // every tenant could read every tenant's count. It now counts the caller's own organisation,
+      // for its admin only (asserted below, over HTTP). The rule stands anyway: a committed
+      // fixture must look like a real row in any column another suite aggregates.
       `insert into public.adverse_event_reports
          (id, visit_id, source, reported_by_mr_id, reported_text, statutory_due_at)
        values ($1, $2, 'mr_reported', $3, 'MR-51 probe', now() + interval '15 days')`,
@@ -440,5 +442,84 @@ describe.skipIf(!reachable)('C1 — a row of another organisation, read directly
       expect(response.status, `${label}: ${response.text}`).toBe(403);
       expect(response.body).toMatchObject({ code: '42501' });
     }
+  });
+});
+
+/**
+ * `BE-W215` — the adverse-event READ FUNCTIONS, across the same boundary and over the same HTTP.
+ *
+ * `adverse_event_clock_summary()` was SECURITY DEFINER over the whole table and granted to every
+ * signed-in user, so the probe row above was counted by EVERY tenant: the leak this file's comment
+ * used to admit. It now counts the caller's own organisation for its admin, and the two new reads
+ * (`list_adverse_events`, `read_adverse_event`) are scoped the same way. Both fixture companies
+ * are new to this run, so the counts are exact: B holds exactly the probe row, A holds none.
+ * The reads below are audited and commit their audit rows, like the probe rows themselves.
+ */
+describe.skipIf(!reachable)('BE-W215 — the adverse-event reads, across the tenant boundary', () => {
+  const REASON = 'MR-51 probe: BE-W215 tenant boundary';
+  const rpc = async (fn: string, user: FixtureUser, body: Record<string, unknown> = {}) =>
+    rest(`/rpc/${fn}`, { method: 'POST', token: await token(user), body });
+  const probeId = (): string => rival.get('adverse_event_reports')?.[1] ?? '';
+
+  it('the clock: B’s admin counts B’s probe row, A’s admin counts nothing, A’s MR is refused', async () => {
+    const own = await rpc('adverse_event_clock_summary', world.users.rivalAdmin);
+    const admin = await rpc('adverse_event_clock_summary', world.users.admin);
+    const mr = await rpc('adverse_event_clock_summary', world.users.puneMr);
+    console.log(
+      `BE-W215 clock | A-MR ${String(mr.status)} | A-admin ${admin.text} | B-rivalAdmin ${own.text}`,
+    );
+    expect(own.status, own.text).toBe(200);
+    expect(own.body, 'positive control: the owning tenant counts its row').toMatchObject({
+      total: 1,
+      overdueCount: 0,
+    });
+    expect(admin.status, admin.text).toBe(200);
+    expect(admin.body, 'an admin of another organisation').toMatchObject({
+      total: 0,
+      overdueCount: 0,
+      dueWithin24Hours: 0,
+      nextDueAt: null,
+      oldestOverdueAt: null,
+    });
+    expect(mr.status, 'an MR is not on the route at all').toBe(403);
+    expect(mr.body).toMatchObject({ code: '42501' });
+  });
+
+  it('the list and the read: B’s report is B’s admin’s, and A’s admin cannot find it', async () => {
+    const id = probeId();
+    const ownList = await rpc('list_adverse_events', world.users.rivalAdmin, { p_reason: REASON });
+    const adminList = await rpc('list_adverse_events', world.users.admin, { p_reason: REASON });
+    const ownRead = await rpc('read_adverse_event', world.users.rivalAdmin, {
+      p_id: id,
+      p_reason: REASON,
+    });
+    const adminRead = await rpc('read_adverse_event', world.users.admin, {
+      p_id: id,
+      p_reason: REASON,
+    });
+    const mrRead = await rpc('read_adverse_event', world.users.puneMr, {
+      p_id: id,
+      p_reason: REASON,
+    });
+    const ids = (r: { body: unknown }) =>
+      (r.body as { data: { id: string }[] }).data.map((x) => x.id);
+    console.log(
+      `BE-W215 list/read | A-admin list ${String(ids(adminList).length)} read ${adminRead.text} | ` +
+        `B-rivalAdmin list ${String(ids(ownList).length)} | A-MR read ${String(mrRead.status)}`,
+    );
+
+    expect(ownList.status, ownList.text).toBe(200);
+    expect(ids(ownList), 'positive control: the owning tenant lists its row').toContain(id);
+    expect(ownRead.status, ownRead.text).toBe(200);
+    expect(ownRead.body).toMatchObject({ data: { id, reportedText: 'MR-51 probe' } });
+
+    expect(adminList.status, adminList.text).toBe(200);
+    expect(ids(adminList), 'an admin of another organisation').not.toContain(id);
+    expect(adminRead.status, adminRead.text).toBe(200);
+    expect(adminRead.body, 'reads exactly as an id that does not exist').toMatchObject({
+      data: null,
+    });
+    expect(mrRead.status).toBe(403);
+    expect(mrRead.body).toMatchObject({ code: '42501' });
   });
 });

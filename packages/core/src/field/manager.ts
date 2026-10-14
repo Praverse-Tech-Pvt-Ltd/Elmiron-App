@@ -57,11 +57,18 @@ export const CoverageRowSchema = z.object({
 });
 export type CoverageRow = z.infer<typeof CoverageRowSchema>;
 
+/**
+ * `BE-W217`. Mirrors `public.team_exception_kind`. `org_default_shift_window` was added to the
+ * database type in `20260815000100` and `team_exceptions()` emits it (captures judged against the
+ * organisation's default hours because the territory has none, `signal: 'unconfigured_territory'`),
+ * but this enum never learned it, so a parse of a real answer failed on the first such row.
+ */
 export const TeamExceptionKindSchema = z.enum([
   'missed_visits',
   'no_recent_sync',
   'high_rejection_rate',
   'consent_rate_anomaly',
+  'org_default_shift_window',
 ]);
 export type TeamExceptionKind = z.infer<typeof TeamExceptionKindSchema>;
 
