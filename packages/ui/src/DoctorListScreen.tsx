@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Pressable } from 'react-native';
 import { Banner } from './Banner';
-import { Label, Title } from './Text';
+import { Label, TapLabel, Title } from './Text';
 import { ListItem } from './ListItem';
 import { Spinner } from './Spinner';
 import { EmptyState } from './EmptyState';
@@ -153,12 +153,13 @@ export const DoctorListScreen = ({
                   that automatic — the alternative is a hardcoded white that the
                   next palette change silently breaks.
                 */}
+                {/* `FE-W177`. A chip is pressed, so its label is at the tappable floor (14). */}
                 {on ? (
                   <SurfaceContext.Provider value="accent">
-                    <Label>{filter.label}</Label>
+                    <TapLabel>{filter.label}</TapLabel>
                   </SurfaceContext.Provider>
                 ) : (
-                  <Label muted>{filter.label}</Label>
+                  <TapLabel muted>{filter.label}</TapLabel>
                 )}
               </Pressable>
             );

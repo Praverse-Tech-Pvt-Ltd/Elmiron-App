@@ -55,6 +55,9 @@ const styles = StyleSheet.create({
     // FE-W101. Floating over the content, a step above the cards it passes over.
     ...elevationStyle('floating'),
   },
+  // `FE-W179`. The glyph and the message share a top-aligned row of their own, so a message that
+  // wraps keeps the glyph on its first line, while the row as a whole stays centred on the action.
+  says: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: tokens.space.sm },
   message: { flex: 1 },
   action: {
     justifyContent: 'center',
@@ -63,10 +66,12 @@ const styles = StyleSheet.create({
     minHeight: tokens.target.floor,
   },
   actionPressed: { backgroundColor: tokens.color.wash },
+  // `FE-W177`. A tappable label, so the tappable step (14) — it was `label`'s 13.5, under Phase 1's
+  // floor. The control weight stays: it is the toast's one button.
   actionLabel: {
     color: tokens.color.accent,
-    fontSize: tokens.typography.label.size,
-    lineHeight: tokens.typography.label.lineHeight,
+    fontSize: tokens.typography.tappable.size,
+    lineHeight: tokens.typography.tappable.lineHeight,
     fontWeight: tokens.typography.control.weight,
     fontFamily: fontFamilyFor(tokens.typography.control.weight),
   },
@@ -104,9 +109,11 @@ export const Toast = ({
         collapsable={false}
         style={[styles.toast, entrance]}
       >
-        <StatusGlyph kind={status} />
-        <View style={styles.message}>
-          <BodyText>{message}</BodyText>
+        <View style={styles.says}>
+          <StatusGlyph kind={status} lineHeight={tokens.typography.body.lineHeight} />
+          <View style={styles.message}>
+            <BodyText>{message}</BodyText>
+          </View>
         </View>
         {action === undefined ? null : (
           <Pressable

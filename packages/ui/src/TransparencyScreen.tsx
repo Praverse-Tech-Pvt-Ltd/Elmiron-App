@@ -61,7 +61,7 @@ export interface TransparencyScreenProps {
 const styles = StyleSheet.create({
   intro: { gap: tokens.space.xs },
   row: { flexDirection: 'row', gap: tokens.space.sm, alignItems: 'flex-start' },
-  rowText: { flex: 1, gap: 2 },
+  rowText: { flex: 1, gap: tokens.space.xxs },
   // The never block is a card of its own, at the end, in the ink surface — it is
   // the answer to the question the MR actually came with.
   neverHead: { flexDirection: 'row', alignItems: 'center', gap: tokens.space.sm },

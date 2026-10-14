@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Label } from './Text';
+import { BodyText, Secondary } from './Text';
 import { Button } from './Button';
 import { StatusGlyph, STATUS_COLOR, STATUS_FILL } from './StatusGlyph';
 import { elevationStyle } from './depth';
+import { SurfaceContext } from './surface';
 
 /**
  * Phase 1 §05: in flow, and it persists until the thing it reports is resolved.
@@ -55,7 +56,9 @@ const styles = StyleSheet.create({
     padding: tokens.space.md,
     gap: tokens.space.xs,
   },
-  head: { flexDirection: 'row', alignItems: 'center', gap: tokens.space.sm },
+  // `FE-W179`. Top-aligned, with the glyph centred on the title's first line: a title that wraps
+  // used to float the glyph at the middle of the paragraph.
+  head: { flexDirection: 'row', alignItems: 'flex-start', gap: tokens.space.sm },
   title: { flex: 1 },
   offline: { borderStyle: 'dashed', borderWidth: 1, borderLeftWidth: 4 },
   // FE-W101. `info` is the one banner on the white card ground rather than a tint; the row shadow
@@ -80,17 +83,26 @@ export const Banner = ({ tone, title, detail, action }: BannerProps): ReactNode 
       tone === 'info' ? styles.raised : null,
     ]}
   >
-    <View style={styles.head}>
-      <StatusGlyph kind={KIND[tone]} />
-      <View style={styles.title}>
-        <BodyText>{title}</BodyText>
+    {/*
+      `FE-W176`. A banner's words always sit on the banner's own light fill, so they take paper ink
+      whatever surface the banner is placed on — as `Card` does for its content. Inside the voice
+      note's dark card the microphone banner inherited the hero's white and drew white on
+      `attentionFill`, invisible, on every first open.
+    */}
+    <SurfaceContext.Provider value="paper">
+      <View style={styles.head}>
+        <StatusGlyph kind={KIND[tone]} lineHeight={tokens.typography.body.lineHeight} />
+        <View style={styles.title}>
+          <BodyText>{title}</BodyText>
+        </View>
       </View>
-    </View>
-    {detail === undefined ? null : <Label muted>{detail}</Label>}
-    {action === undefined ? null : (
-      <View style={styles.action}>
-        <Button label={action.label} onPress={action.onPress} variant="quiet" />
-      </View>
-    )}
+      {/* `FE-W178`. The detail is a sentence, so it is set at the prose step, not `Label`. */}
+      {detail === undefined ? null : <Secondary>{detail}</Secondary>}
+      {action === undefined ? null : (
+        <View style={styles.action}>
+          <Button label={action.label} onPress={action.onPress} variant="quiet" />
+        </View>
+      )}
+    </SurfaceContext.Provider>
   </View>
 );

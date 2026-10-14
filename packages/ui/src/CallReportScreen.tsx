@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Label, Secondary, Title } from './Text';
+import { BodyText, Label, MAX_FONT_SCALE, Secondary, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Screen } from './Screen';
@@ -75,7 +75,7 @@ export interface CallReportScreenProps {
 }
 
 const styles = StyleSheet.create({
-  head: { gap: 2 },
+  head: { gap: tokens.space.xxs },
   fields: { gap: tokens.space.md },
   foot: { gap: tokens.space.sm },
   products: { gap: tokens.space.xs },
@@ -99,6 +99,17 @@ const styles = StyleSheet.create({
     borderColor: tokens.color.textPrimary,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  /**
+   * `FE-W179`. The tick inside the drawn box. The system face, as `StatusGlyph`'s marks are (U+2713
+   * is not a letter DM Sans promises), and capped in how far it grows with the font size: the box
+   * is a fixed 24pt, and an uncapped tick at the largest font sizes stands out of it.
+   */
+  tick: {
+    color: tokens.color.textPrimary,
+    fontSize: tokens.typography.body.size,
+    lineHeight: tokens.typography.label.lineHeight,
+    textAlign: 'center',
   },
 });
 
@@ -200,7 +211,8 @@ export const CallReportScreen = ({
 
       {products === undefined ? null : (
         <View style={styles.products}>
-          <Label>{t('report.products')}</Label>
+          {/* `FE-W178`. A section header, drawn as C6 draws "Products discussed": muted 13.5. */}
+          <Label muted>{t('report.products')}</Label>
           <Secondary>{t('report.productsHelp')}</Secondary>
           {productsNote === null ? null : <Secondary>{productsNote}</Secondary>}
           {products.map((product) => {
@@ -217,7 +229,18 @@ export const CallReportScreen = ({
                 }}
                 style={[styles.product, chosen ? styles.productChosen : null]}
               >
-                <View style={styles.box}>{chosen ? <BodyText>✓</BodyText> : null}</View>
+                <View style={styles.box}>
+                  {chosen ? (
+                    <Text
+                      accessibilityElementsHidden
+                      importantForAccessibility="no"
+                      maxFontSizeMultiplier={MAX_FONT_SCALE}
+                      style={styles.tick}
+                    >
+                      ✓
+                    </Text>
+                  ) : null}
+                </View>
                 <BodyText>{product.label}</BodyText>
               </Pressable>
             );

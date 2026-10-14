@@ -2,11 +2,12 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Label, Title } from './Text';
+import { BodyText, Label, Secondary, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { CitationSpan } from './CitationSpan';
 import type { CitationSpanProps } from './CitationSpan';
+import { Screen } from './Screen';
 import { Spinner } from './Spinner';
 import { useT } from './i18n';
 
@@ -74,10 +75,9 @@ export interface AnalysisScreenProps {
 }
 
 const styles = StyleSheet.create({
-  head: { gap: 2 },
+  head: { gap: tokens.space.xxs },
   section: { gap: tokens.space.sm },
   citations: { gap: tokens.space.xs },
-  spacer: { flex: 1, minHeight: tokens.space.md },
 });
 
 const Findings = ({
@@ -94,7 +94,8 @@ const Findings = ({
       {findings.map((finding) => (
         <Card key={finding.id}>
           <BodyText>{finding.summary}</BodyText>
-          {finding.detail === undefined ? null : <Label muted>{finding.detail}</Label>}
+          {/* `FE-W178`. The finding's explanation is prose: the prose step, not `Label`. */}
+          {finding.detail === undefined ? null : <Secondary>{finding.detail}</Secondary>}
           <View style={styles.citations}>
             {finding.citations.map((citation) => (
               <CitationSpan key={`${finding.id}-${citation.timestamp}`} {...citation} />
@@ -123,21 +124,36 @@ export const AnalysisScreen = ({
   const { t } = useT();
   if (failure !== null) {
     return (
-      <>
+      <Screen scrollable>
         <Title>{doctorName}</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
-      </>
+      </Screen>
     );
   }
 
   const worked = findings.filter((finding) => finding.workedWell);
   const tryThis = findings.filter((finding) => !finding.workedWell);
 
+  // `FE-W180`. The screen's one action, pinned in the reach zone as Today's and the visit's are.
+  // It sat after a `flex: 1` spacer, which does nothing inside a scroll view, so on an analysis with
+  // several findings "Add your reply" was at the bottom of the scroll.
+  const footer =
+    findings.length === 0 ? undefined : (
+      <Button
+        label={reply === null ? t('reply.add') : t('reply.change')}
+        onPress={onReply}
+        variant="primary"
+      />
+    );
+
   return (
-    <>
+    <Screen scrollable {...(footer === undefined ? {} : { footer })}>
       <View style={styles.head}>
         <Title>{doctorName}</Title>
-        <Label muted>{consentLabel === null ? whenLabel : `${whenLabel} · ${consentLabel}`}</Label>
+        {/* `FE-W178`. The line under a screen title is `Secondary`, as on the call report. */}
+        <Secondary>
+          {consentLabel === null ? whenLabel : `${whenLabel} · ${consentLabel}`}
+        </Secondary>
       </View>
 
       {loading ? <Spinner label={t('analysis.loading')} /> : null}
@@ -157,7 +173,7 @@ export const AnalysisScreen = ({
       <Findings findings={worked} heading={t('analysis.whatWorked')} />
       <Findings findings={tryThis} heading={t('analysis.tryNext', { count: tryThis.length })} />
 
-      {findings.length === 0 ? null : <Label muted>{audioNote}</Label>}
+      {findings.length === 0 ? null : <Secondary>{audioNote}</Secondary>}
 
       {reply === null ? null : (
         <Card>
@@ -166,19 +182,9 @@ export const AnalysisScreen = ({
         </Card>
       )}
 
-      <View style={styles.spacer} />
-
       <Card tone="quiet">
-        <Label muted>{provenanceNote}</Label>
+        <Secondary>{provenanceNote}</Secondary>
       </Card>
-
-      {findings.length === 0 ? null : (
-        <Button
-          label={reply === null ? t('reply.add') : t('reply.change')}
-          onPress={onReply}
-          variant="primary"
-        />
-      )}
-    </>
+    </Screen>
   );
 };

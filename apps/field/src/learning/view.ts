@@ -1,6 +1,14 @@
 import { LiveRequestError } from '../live-rest';
 import type { CompleteLessonResponse } from '@fieldforce/core';
+import { t } from '@fieldforce/ui/i18n';
+import { dayMonthOfDate } from '../today/territory-day';
 import type { AssignmentRow, EnrolmentRow, OutlineRows, VersionRow } from './live';
+
+/*
+ * `FE-W183`. Every sentence below is read from the catalogue (`learning.*`) when it is asked for,
+ * so it follows the app's language. Course and version titles and market names are the company's,
+ * from the server, and are placed into those sentences as they came.
+ */
 
 /**
  * A failed read or write, as the screen must describe it. The server ANSWERING no (any HTTP status,
@@ -18,11 +26,14 @@ export const finishNotice = (
 ): string =>
   'ok' in outcome
     ? outcome.ok.courseCompletedAt === null
-      ? `${String(outcome.ok.lessonsCompleted)} of ${String(outcome.ok.lessonsTotal)} lessons finished.`
-      : 'That was the last lesson — the course is finished.'
+      ? t('learning.finishProgress', {
+          done: outcome.ok.lessonsCompleted,
+          count: outcome.ok.lessonsTotal,
+        })
+      : t('learning.finishLast')
     : failureKind(outcome.failed) === 'offline'
-      ? 'No signal, so this was not recorded. Nothing is saved on the phone — try again when you have signal.'
-      : 'The server did not record this lesson as finished. Try again; if it keeps happening, tell your manager.';
+      ? t('learning.finishOffline')
+      : t('learning.finishRefused');
 
 /**
  * W2-F B — what each of a rep's courses IS, decided from what the server returned and nothing else.
@@ -79,19 +90,23 @@ export const courseState = (
       // A market is named only when there is a choice to make between markets.
       label:
         published.length > 1
-          ? `${v.title} — ${v.marketName ?? 'not specific to a market'}`
+          ? v.marketName === null
+            ? t('learning.versionNoMarket', { title: v.title })
+            : t('learning.versionForMarket', { title: v.title, market: v.marketName })
           : v.title,
     })),
   };
 };
 
-/** `2026-10-15` → `15 Oct`. A due date is a DATE: no clock and no zone are involved, so none is used. */
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/**
+ * `2026-10-15` → `Due 15 Oct`. A due date is a DATE: no clock and no zone are involved, so none is
+ * used. `FE-W183`: named by `dayMonthOfDate`, so the month follows the app's language (`FE-W149`)
+ * as every other date does; anything that is not exactly a date is still `null`, never a guess.
+ */
 export const dueLabel = (dueOn: string | null): string | null => {
   if (dueOn === null) return null;
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(dueOn);
-  const month = match === null ? undefined : MONTHS[Number(match[2]) - 1];
-  return match === null || month === undefined ? null : `Due ${String(Number(match[3]))} ${month}`;
+  const date = dayMonthOfDate(dueOn);
+  return date === null ? null : t('learning.due', { date });
 };
 
 export interface MyCourseItem {
@@ -119,11 +134,11 @@ export const myCourseItems = (
     const line =
       state.kind === 'started'
         ? state.completedAt === null
-          ? `Started ${day(state.startedAt)}`
-          : `Finished ${day(state.completedAt)}`
+          ? t('learning.startedOn', { date: day(state.startedAt) })
+          : t('learning.finishedOn', { date: day(state.completedAt) })
         : state.kind === 'can_start'
-          ? 'Not started'
-          : 'Not available yet — no version of this course has been published';
+          ? t('learning.notStarted')
+          : t('learning.notAvailableYet');
     return { courseId: a.courseId, title: a.courseTitle, due: dueLabel(a.dueOn), line };
   });
 

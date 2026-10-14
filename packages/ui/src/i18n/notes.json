@@ -37,7 +37,9 @@
     "dataSettings": "Mobile data — the WiFi-only and 100 MB settings",
     "transparency": "What this app records — the list of what is and is never recorded",
     "liveTracking": "Live location — the screen around the company's notice (the notice itself is not translated here)",
-    "onboarding": "First run (location, notifications, battery & autostart, microphone) and the start-up error screen"
+    "onboarding": "First run (location, notifications, battery & autostart, microphone) and the start-up error screen",
+    "learning": "Learning: the courses assigned to the rep, one course's lessons, and a lesson to read and mark finished, with its video. Course, module and lesson titles, market names and a lesson's text come from the server and are not in this file",
+    "tutor": "The lesson tutor, under a lesson: the rep asks about that lesson and an AI answers only from its text. The answers come from the server and are not in this file"
   },
   "keys": {
     "tabs.today": {
@@ -128,10 +130,10 @@
       "note": "{code} is a five-character error code"
     },
     "home.teamDetail": {
-      "note": "Placeholder row; FE-W6 is an internal reference, keep it"
+      "note": "Under 'Team' on a field manager's home in this app. The web console is the company's website for managers and administrators"
     },
     "home.adminDetail": {
-      "note": "Placeholder row; FE-W6 is an internal reference, keep it"
+      "note": "Under 'Administration' on an administrator's home in this app. The web console is the company's website for managers and administrators"
     },
     "doctors.searchLabel": {
       "note": "Label of the search box on the doctor list"
@@ -975,6 +977,87 @@
     },
     "onboarding.configError": {
       "note": "Title of a red banner; the detail under it is technical text left in English"
+    },
+    "home.signedInAsManager": {
+      "note": "Under the title on a field manager's home in this app"
+    },
+    "home.signedInAsAdmin": {
+      "note": "Under the title on an administrator's home in this app"
+    },
+    "learning.due": {
+      "note": "{date} is a day and month, e.g. 15 Oct. After a course's line, e.g. \"Not started · Due 15 Oct\""
+    },
+    "learning.startedOn": {
+      "note": "{date} is a day and month, e.g. 3 Oct. A line under a course's title"
+    },
+    "learning.finishedOn": {
+      "note": "{date} is a day and month, e.g. 3 Oct. A line under a course's title"
+    },
+    "learning.versionForMarket": {
+      "note": "One version of a course, on a Start button when there is a version per market. {title} is the version's title and {market} the market's name, both from the server"
+    },
+    "learning.versionNoMarket": {
+      "note": "One version of a course, on a Start button. {title} is the version's title, from the server"
+    },
+    "learning.startVersion": {
+      "note": "Button. {version} is learning.versionForMarket or learning.versionNoMarket"
+    },
+    "learning.lessonsFinished_one": {
+      "note": "{done} and {count} are numbers of lessons"
+    },
+    "learning.lessonsFinished_other": {
+      "note": "{done} and {count} are numbers of lessons"
+    },
+    "learning.courseFinished": {
+      "note": "{date} is a day and month, e.g. 7 Oct"
+    },
+    "learning.aboutMinutes": {
+      "note": "{minutes} is a number; 'min' is short for minutes. Beside a lesson's title"
+    },
+    "learning.minutes_one": {
+      "note": "{count} is the estimated reading time in minutes"
+    },
+    "learning.minutes_other": {
+      "note": "{count} is the estimated reading time in minutes"
+    },
+    "learning.saving": {
+      "note": "Button label while a finished lesson is being saved. Not 'recording': in this app recording means audio of a doctor"
+    },
+    "learning.stamp": {
+      "note": "When the server recorded a lesson as finished. {time} is a clock time (14:40), {date} a day and month (7 Oct)"
+    },
+    "learning.finishedRecorded": {
+      "note": "{when} is learning.stamp, e.g. \"14:40 on 7 Oct\""
+    },
+    "learning.finishProgress_one": {
+      "note": "{done} and {count} are numbers of lessons"
+    },
+    "learning.finishProgress_other": {
+      "note": "{done} and {count} are numbers of lessons"
+    },
+    "learning.videoLength": {
+      "note": "{length} is the video's length, e.g. 12:34"
+    },
+    "learning.playVideoLength": {
+      "note": "Read aloud by a screen reader. {length} is the video's length, e.g. 12:34"
+    },
+    "learning.playVideo": {
+      "note": "Read aloud by a screen reader on the play button"
+    },
+    "learning.videoPlayHint": {
+      "note": "Read aloud by a screen reader on the play button"
+    },
+    "learning.videoStarting": {
+      "note": "Read aloud by a screen reader while the video starts"
+    },
+    "tutor.badge": {
+      "note": "A small badge above the tutor's answer"
+    },
+    "tutor.moreFrom": {
+      "note": "{when} is ai.resetLabel, e.g. \"00:00 on 10 Oct\""
+    },
+    "home.signedInAs": {
+      "note": "{role} is a role this app does not recognise, written exactly as the server issued it, for support to read. Managers and administrators see home.signedInAsManager / home.signedInAsAdmin instead"
     }
   }
 }

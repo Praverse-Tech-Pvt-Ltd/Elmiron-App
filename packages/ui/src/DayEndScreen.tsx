@@ -2,9 +2,10 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Figure, Heading, Label, Title } from './Text';
+import { BodyText, Figure, Heading, Label, Secondary, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
+import { Screen } from './Screen';
 import { Spinner } from './Spinner';
 import { SyncQueueIndicator } from './SyncQueueIndicator';
 import { TextField } from './TextField';
@@ -67,7 +68,8 @@ export interface DayEndWorkDay {
   readonly note: { readonly value: string; readonly onChange: (value: string) => void } | null;
   /**
    * "End my day". Null when there is nothing to press. `blockedBy` is the reason it cannot be
-   * pressed yet -- a disabled button always says why.
+   * pressed yet -- a disabled button always says why. `FE-W180`: drawn in the screen's pinned
+   * footer, not in the card.
    */
   readonly action: {
     readonly label: string;
@@ -133,12 +135,10 @@ export interface DayEndScreenProps {
 }
 
 const styles = StyleSheet.create({
-  head: { gap: 2 },
+  head: { gap: tokens.space.xxs },
   stopLines: { gap: tokens.space.xs },
   figureRow: { flexDirection: 'row', alignItems: 'baseline', gap: tokens.space.sm },
-  stamps: { gap: 2 },
-  spacer: { flex: 1, minHeight: tokens.space.md },
-  foot: { gap: tokens.space.sm },
+  stamps: { gap: tokens.space.xxs },
 });
 
 export const DayEndScreen = ({
@@ -161,15 +161,40 @@ export const DayEndScreen = ({
   const { t } = useT();
   if (failure !== null) {
     return (
-      <>
+      <Screen scrollable>
         <Title>{dayLabel}</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
-      </>
+      </Screen>
     );
   }
 
-  return (
+  const action = workDay?.action ?? null;
+  /*
+    `FE-W180`. The screen's actions are PINNED in its footer, in the reach zone and above the
+    keyboard while the note is being written, as Today's and the visit's are. They sat after a
+    `flex: 1` spacer, which does nothing inside a scroll view — "End my day" was at the bottom of
+    the working-day card and "See everything" at the end of the scroll. The primary comes last,
+    nearest the thumb, as on Today.
+  */
+  const footer = (
     <>
+      {/* FE-D7 4. Secondary, as B7 draws it: the day is over, and nothing here is the next step. */}
+      <Button label={t('dayEnd.seeEverything')} onPress={onOpenTransparency} variant="secondary" />
+      {action === null ? null : action.blockedBy === null ? (
+        <Button
+          label={action.label}
+          loading={action.busy}
+          loadingLabel={t('dayEnd.ending')}
+          onPress={action.onPress}
+        />
+      ) : (
+        <Button disabled label={action.label} note={action.blockedBy} onPress={action.onPress} />
+      )}
+    </>
+  );
+
+  return (
+    <Screen scrollable footer={footer}>
       <View style={styles.head}>
         <Title>{t('dayEnd.title', { day: dayLabel })}</Title>
       </View>
@@ -219,13 +244,14 @@ export const DayEndScreen = ({
           ) : (
             <View style={styles.figureRow}>
               <Figure>{t('common.nOfM', { n: done + notMet, m: planned })}</Figure>
-              <Label muted>
+              {/* `FE-W178`. A figure's caption is `Secondary`, as Today's "visits attended" is. */}
+              <Secondary>
                 {planned === 0
                   ? t('dayEnd.nothingPlanned')
                   : done + notMet === planned
                     ? t('dayEnd.allOfThem')
                     : t('dayEnd.visitsAttended')}
-              </Label>
+              </Secondary>
             </View>
           )}
           {notMet === null || notMet === 0 ? null : (
@@ -257,33 +283,21 @@ export const DayEndScreen = ({
       {workDay === null ? null : <WorkDayCard workDay={workDay} />}
 
       <SyncQueueIndicator onPress={onOpenQueue} state={sync} />
-
-      <View style={styles.spacer} />
-
-      <View style={styles.foot}>
-        {/*
-          `FE-W80`. Ending the day now has a record behind it (`BE-W190`), and its button lives
-          in the working-day card above, beside what it does. This one is still not a "start
-          day tomorrow" button: capture is per press, so that would switch on nothing.
-        */}
-        {/* FE-D7 4. Secondary, as B7 draws it: the day is over, and nothing here is the next step. */}
-        <Button
-          label={t('dayEnd.seeEverything')}
-          onPress={onOpenTransparency}
-          variant="secondary"
-        />
-      </View>
-    </>
+    </Screen>
   );
 };
 
 /**
  * The working day's card. Under the totals, never above the stop confirmation (C11): ending the day
  * changes the record, not whether the phone is reading a position -- it never was between presses.
+ *
+ * `FE-W80` gave ending the day a record (`BE-W190`). Its button is the screen's pinned primary
+ * (`FE-W180`); this card says where the day stands and holds the note that goes with it. There is
+ * still no "start day tomorrow" button: capture is per press, so that would switch on nothing.
  */
 const WorkDayCard = ({ workDay }: { readonly workDay: DayEndWorkDay }): ReactNode => {
   const { t } = useT();
-  const { action, note } = workDay;
+  const { note } = workDay;
   return (
     <Card>
       <Label muted>{t('dayEnd.workingDay')}</Label>
@@ -307,16 +321,6 @@ const WorkDayCard = ({ workDay }: { readonly workDay: DayEndWorkDay }): ReactNod
           onChangeText={note.onChange}
           value={note.value}
         />
-      )}
-      {action === null ? null : action.blockedBy === null ? (
-        <Button
-          label={action.label}
-          loading={action.busy}
-          loadingLabel={t('dayEnd.ending')}
-          onPress={action.onPress}
-        />
-      ) : (
-        <Button disabled label={action.label} note={action.blockedBy} onPress={action.onPress} />
       )}
     </Card>
   );

@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Label } from './Text';
+import { BodyText, Secondary } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
+import { useT } from './i18n';
 
 /**
  * `FE-W127` — the frame a lesson's video sits in, above the lesson's text. The PLAYER is the app's
@@ -18,6 +19,9 @@ import { Card } from './Card';
  *   SECONDARY button, so the lesson keeps one primary action.
  *
  * Nothing here animates by itself, so "Remove animations" has nothing to suppress.
+ *
+ * `FE-W183`. Its words are on the catalogue; the length line and the play label arrive already in
+ * the app's language from `lesson-video-view.ts`.
  */
 export type LessonVideoFrameView =
   | {
@@ -57,16 +61,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  glyph: { color: tokens.color.onAccent, fontSize: 22, marginLeft: 3 },
+  /**
+   * `FE-W179`. The play mark is DRAWN — a triangle from three borders, as the tab icons are — and
+   * not the character "▶", which iOS can render as a colour emoji when no font claims it and which
+   * took an off-scale 22pt size and a 3pt nudge. The triangle points right; a `space.xs` margin
+   * moves it right of centre, because a triangle's weight sits toward its base and the eye reads
+   * the centred one as left of the circle's middle.
+   */
+  playMark: {
+    width: 0,
+    height: 0,
+    borderTopWidth: tokens.space.sm + tokens.space.xxs,
+    borderBottomWidth: tokens.space.sm + tokens.space.xxs,
+    borderLeftWidth: tokens.space.md + tokens.space.xxs,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
+    borderLeftColor: tokens.color.onAccent,
+    marginLeft: tokens.space.xs,
+  },
 });
 
 export const LessonVideoFrame = ({ view }: { readonly view: LessonVideoFrameView }): ReactNode => {
+  const { t } = useT();
   switch (view.kind) {
     case 'failed':
       return (
         <Card tone="quiet">
           <BodyText>{view.line}</BodyText>
-          <Button label="Try again" onPress={view.onRetry} variant="secondary" />
+          <Button label={t('common.tryAgain')} onPress={view.onRetry} variant="secondary" />
         </Card>
       );
     case 'playing':
@@ -79,14 +101,14 @@ export const LessonVideoFrame = ({ view }: { readonly view: LessonVideoFrameView
           >
             {view.renderPlayer(styles.fill)}
           </View>
-          <Label muted>{view.lengthLabel}</Label>
+          <Secondary>{view.lengthLabel}</Secondary>
         </View>
       );
     case 'poster':
       return (
         <View style={styles.block}>
           <Pressable
-            accessibilityHint="Plays here, in the lesson. It needs a connection."
+            accessibilityHint={t('learning.videoPlayHint')}
             accessibilityLabel={view.playLabel}
             accessibilityRole="button"
             accessibilityState={{ busy: view.starting }}
@@ -105,15 +127,15 @@ export const LessonVideoFrame = ({ view }: { readonly view: LessonVideoFrameView
             <View style={styles.play}>
               {view.starting ? (
                 <ActivityIndicator
-                  accessibilityLabel="Starting the video"
+                  accessibilityLabel={t('learning.videoStarting')}
                   color={tokens.color.onAccent}
                 />
               ) : (
-                <Text style={styles.glyph}>▶</Text>
+                <View style={styles.playMark} />
               )}
             </View>
           </Pressable>
-          <Label muted>{view.lengthLabel}</Label>
+          <Secondary>{view.lengthLabel}</Secondary>
         </View>
       );
   }

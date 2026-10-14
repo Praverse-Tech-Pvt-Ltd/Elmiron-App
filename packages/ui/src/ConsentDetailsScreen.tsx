@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Heading, Label, Statement } from './Text';
+import { BodyText, Heading, Label, Secondary, Statement } from './Text';
 import { Button } from './Button';
 import { SurfaceContext } from './surface';
 
@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: tokens.color.offlineEdge,
     paddingVertical: tokens.space.sm,
-    gap: 2,
+    gap: tokens.space.xxs,
   },
   last: { borderBottomWidth: 1, borderBottomColor: tokens.color.offlineEdge },
   notice: { gap: tokens.space.xs },
@@ -103,7 +103,8 @@ export const ConsentDetailsScreen = ({
         <Label>{noticeLabel}</Label>
       </View>
 
-      <Label>{fiduciaryNote}</Label>
+      {/* `FE-W178`. A sentence, so the prose step. White on the hero, as every role is here. */}
+      <Secondary>{fiduciaryNote}</Secondary>
 
       <Button label="Back to the question" onPress={onBack} variant="secondary" />
     </View>

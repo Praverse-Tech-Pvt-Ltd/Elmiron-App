@@ -47,7 +47,7 @@ export interface ProductQaScreenProps {
 }
 
 const styles = StyleSheet.create({
-  head: { gap: 2 },
+  head: { gap: tokens.space.xxs },
   sources: {
     gap: tokens.space.xs,
     marginTop: tokens.space.sm,
@@ -189,7 +189,8 @@ export const ProductQaScreen = ({
     <>
       <View style={styles.head}>
         <Title>{t('productQa.title')}</Title>
-        <Label muted>{t('productQa.intro')}</Label>
+        {/* `FE-W178`. The line under a screen title is `Secondary`, as on the call report. */}
+        <Secondary>{t('productQa.intro')}</Secondary>
       </View>
 
       {products === undefined || onChangeProduct === undefined ? null : (

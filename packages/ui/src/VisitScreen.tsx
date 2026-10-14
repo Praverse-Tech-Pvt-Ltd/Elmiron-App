@@ -172,9 +172,11 @@ const styles = StyleSheet.create({
   head: { gap: tokens.space.xs },
   foot: { gap: tokens.space.sm },
   steps: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.space.xs },
-  // The quiet button's own horizontal padding is taken back, so its label starts on the same
-  // edge as the doctor's name and clinic above it.
-  directions: { alignSelf: 'flex-start', marginLeft: -tokens.space.lg },
+  // `FE-W180`. Pulled left by the screen's gutter and no further, so the pressed fill reaches the
+  // screen's edge and stops there. It was pulled back by the button's whole 24pt padding to line
+  // the label up with the name above — which, against a 16pt gutter, drew the pressed fill 8pt off
+  // the screen. The label now sits 8pt inside the name's edge.
+  directions: { alignSelf: 'flex-start', marginLeft: -tokens.space.md },
   figureRow: { flexDirection: 'row', alignItems: 'baseline', gap: tokens.space.sm },
 });
 
@@ -361,7 +363,8 @@ export const VisitScreen = ({
         {durationLabel === null ? null : (
           <View style={styles.figureRow}>
             <Figure>{durationLabel}</Figure>
-            <Label muted>{t('visit.withTheDoctor')}</Label>
+            {/* `FE-W178`. A figure's caption is `Secondary`, as Today's "visits attended" is. */}
+            <Secondary>{t('visit.withTheDoctor')}</Secondary>
           </View>
         )}
         {startedLabel === null ? null : <BodyText>{startedLabel}</BodyText>}

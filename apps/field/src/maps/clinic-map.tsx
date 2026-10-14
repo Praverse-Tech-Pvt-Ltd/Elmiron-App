@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import MapView, { Circle, Marker } from 'react-native-maps';
-import { tokens } from '@fieldforce/ui-tokens';
+import { brandPalette, tokens, withAlpha } from '@fieldforce/ui-tokens';
 import type { MapPin, MapRegion } from './places';
 
 /**
@@ -13,6 +13,12 @@ import type { MapPin, MapRegion } from './places';
  * nothing new, and background location stays blocked in the manifest.
  */
 const MAP_STYLE = { height: 360, borderRadius: tokens.radius.card } as const;
+
+/**
+ * `FE-W181`. The geofence's shade: the design's shadow ink at 5%, made with `withAlpha` like every
+ * other translucent colour, so it still traces back to the palette. It was `rgba(0,0,0,0.05)`.
+ */
+const FENCE_FILL = withAlpha(brandPalette.shadow, 0.05);
 
 export const ClinicMap = ({
   pins,
@@ -41,7 +47,7 @@ export const ClinicMap = ({
         center={{ latitude: pin.latitude, longitude: pin.longitude }}
         radius={pin.radiusMetres}
         strokeColor={tokens.color.accent}
-        fillColor="rgba(0,0,0,0.05)"
+        fillColor={FENCE_FILL}
       />
     ))}
   </MapView>

@@ -229,7 +229,8 @@ const styles = StyleSheet.create({
   row: {
     paddingVertical: tokens.space.md,
     paddingHorizontal: tokens.space.md,
-    borderRadius: tokens.radius.sm,
+    // `FE-W184`. The card radius every other row has; it was the 4pt `sm`.
+    borderRadius: tokens.radius.card,
     backgroundColor: tokens.color.surface,
     gap: tokens.space.xs,
     // §04's absolute floor for anything tappable, from the token rather than as a
@@ -238,10 +239,13 @@ const styles = StyleSheet.create({
     minHeight: tokens.target.floor,
     justifyContent: 'center',
   },
-  statusLine: { flexDirection: 'row', alignItems: 'center', gap: tokens.space.sm },
+  // `FE-W179`. Top-aligned: the glyph carries the label's own line height, so it sits on the label's
+  // first line — on its baseline — and stays there when a translated state wraps.
+  statusLine: { flexDirection: 'row', alignItems: 'flex-start', gap: tokens.space.sm },
   glyph: {
     color: tokens.color.textSecondary,
     fontSize: tokens.typography.body.size,
+    lineHeight: tokens.typography.body.lineHeight,
     fontWeight: '500',
     fontFamily: fontFamilyFor('500'),
   },
@@ -263,7 +267,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: tokens.color.hairline,
     paddingTop: tokens.space.sm,
-    gap: 2,
+    gap: tokens.space.xxs,
   },
   actions: { flexDirection: 'row', gap: tokens.space.sm, paddingTop: tokens.space.xs },
   grow: { flex: 1 },

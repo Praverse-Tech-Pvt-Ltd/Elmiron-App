@@ -91,8 +91,11 @@ describe('UX polish — a lesson reads as the author wrote it', () => {
     );
     expect(screen.getByText('Opening paragraph.')).toBeTruthy();
     expect(screen.getByText('Dosing')).toBeTruthy();
-    expect(screen.getByText('•  Take with food')).toBeTruthy();
-    expect(screen.getByText('•  Once daily')).toBeTruthy();
+    // `FE-W184`. The mark and the point are separate texts in a row, so a wrapped point hangs
+    // under its own first word instead of running back under the "•".
+    expect(screen.getByText('Take with food')).toBeTruthy();
+    expect(screen.getByText('Once daily')).toBeTruthy();
+    expect(screen.getAllByText('•')).toHaveLength(2);
     expect(screen.getByText('Closing.')).toBeTruthy();
   });
 

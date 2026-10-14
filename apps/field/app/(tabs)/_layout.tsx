@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Tabs } from 'expo-router';
-import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
-import { elevationStyle, TabBarIcon, useT } from '@fieldforce/ui';
+import { tokens } from '@fieldforce/ui-tokens';
+import { elevationStyle, TabBarIcon, TabBarLabel, useT } from '@fieldforce/ui';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { coachingEnabled } from '../../src/features';
 
@@ -52,14 +52,14 @@ export default function TabsLayout(): ReactNode {
           borderTopColor: tokens.color.hairline,
           ...elevationStyle('dock'),
         },
-        tabBarLabelStyle: {
-          fontSize: tokens.typography.label.size,
-          lineHeight: tokens.typography.label.lineHeight,
-          fontWeight: tokens.typography.label.weight,
-          // UX polish: the family carries the weight on Android (`fontFamilyFor`); without it the
-          // tab labels were the one text in the app in the system font.
-          fontFamily: fontFamilyFor(tokens.typography.label.weight),
-        },
+        // `FE-W177` / `FE-W179`. The label is drawn by `TabBarLabel`: the tappable step (14, not
+        // `label`'s 13.5) in DM Sans, and capped in how far it grows with the system font size,
+        // because this bar's height is fixed and an uncapped label would slide under its bottom edge.
+        tabBarLabel: ({ color, children, position }) => (
+          <TabBarLabel color={color} position={position}>
+            {children}
+          </TabBarLabel>
+        ),
         tabBarIconStyle: { marginBottom: 2 },
         // Explicitly set, exactly as it was when it returned null: leaving it
         // unset renders the platform's placeholder glyph, which arrives as tofu on

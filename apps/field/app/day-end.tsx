@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import uuid from 'expo-modules-core/src/uuid';
-import { DayEndScreen, Screen, t, useLanguage } from '@fieldforce/ui';
+import { DayEndScreen, t, useLanguage } from '@fieldforce/ui';
 import type { DayEndWorkDay } from '@fieldforce/ui';
 import { totalDistanceMetres } from '../src/capture/mileage';
 import { visitsAsWitnessed } from '../src/capture/visit';
@@ -246,39 +246,38 @@ export default function DayEnd(): ReactNode {
         }
       : null);
 
+  // `FE-W180`. The screen renders its own `Screen`, so its actions can be pinned in the footer.
   return (
-    <Screen scrollable>
-      <DayEndScreen
-        captureNote={captureNote()}
-        dayLabel={t('dayEnd.today')}
-        distanceLabel={distanceMetres === null ? null : km(distanceMetres)}
-        // FE-D2 7. Null, not 0, when there is no summary: still loading, or the fetch failed. The
-        // comment above always said a failure leaves "the totals absent"; `?? 0` made them present.
-        done={summary?.done ?? null}
-        notMet={summary?.notMet ?? null}
-        failure={denial}
-        firstCaptureLabel={
-          summary?.firstCaptureAt == null
-            ? null
-            : t('dayEnd.firstCheckIn', { time: clockIn(summary.firstCaptureAt, zone) })
-        }
-        lastCaptureLabel={
-          summary?.lastCaptureAt == null
-            ? null
-            : t('dayEnd.lastCheckOut', { time: clockIn(summary.lastCaptureAt, zone) })
-        }
-        loading={status === 'loading' || distanceLoading}
-        onOpenQueue={() => {
-          router.push('/queue');
-        }}
-        onOpenTransparency={() => {
-          router.push('/transparency');
-        }}
-        planned={summary?.planned ?? null}
-        rateNote={rateNote()}
-        sync={indicatorStateFor(queue, zone, heldAudioIds(items, uploadSnapshot).length)}
-        workDay={workDay}
-      />
-    </Screen>
+    <DayEndScreen
+      captureNote={captureNote()}
+      dayLabel={t('dayEnd.today')}
+      distanceLabel={distanceMetres === null ? null : km(distanceMetres)}
+      // FE-D2 7. Null, not 0, when there is no summary: still loading, or the fetch failed. The
+      // comment above always said a failure leaves "the totals absent"; `?? 0` made them present.
+      done={summary?.done ?? null}
+      notMet={summary?.notMet ?? null}
+      failure={denial}
+      firstCaptureLabel={
+        summary?.firstCaptureAt == null
+          ? null
+          : t('dayEnd.firstCheckIn', { time: clockIn(summary.firstCaptureAt, zone) })
+      }
+      lastCaptureLabel={
+        summary?.lastCaptureAt == null
+          ? null
+          : t('dayEnd.lastCheckOut', { time: clockIn(summary.lastCaptureAt, zone) })
+      }
+      loading={status === 'loading' || distanceLoading}
+      onOpenQueue={() => {
+        router.push('/queue');
+      }}
+      onOpenTransparency={() => {
+        router.push('/transparency');
+      }}
+      planned={summary?.planned ?? null}
+      rateNote={rateNote()}
+      sync={indicatorStateFor(queue, zone, heldAudioIds(items, uploadSnapshot).length)}
+      workDay={workDay}
+    />
   );
 }

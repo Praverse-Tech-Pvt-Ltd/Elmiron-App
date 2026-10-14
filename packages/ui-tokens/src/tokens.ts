@@ -70,9 +70,17 @@ export interface ColorTokens {
    * glancing across the desk should read "on", not "alarm".
    */
   readonly recording: string;
+  /** `FE-W181`. The tint behind a recording in progress. Ink on it, never white. */
+  readonly recordingFill: string;
 }
 
 export interface SpaceTokens {
+  /**
+   * `FE-W181`. 2 — between lines that are one thing: a title and the line under it, a row's title
+   * and its detail. It was written as a bare `2` seventeen times; a step that is used that often is
+   * part of the scale whether or not the scale admits it.
+   */
+  readonly xxs: number;
   readonly xs: number;
   readonly sm: number;
   readonly md: number;
@@ -163,7 +171,15 @@ export interface TypographyTokens {
   readonly body: TypeStyle;
   /** 14.5/400 — "31.7 km · on this month's claim". */
   readonly secondary: TypeStyle;
+  /** 13.5/500 — a field's name, a caption, a badge. Never tappable, and never a sentence. */
   readonly label: TypeStyle;
+  /**
+   * `FE-W177`. 14/500 — the smallest label a finger presses: a tab, a filter chip, a small bordered
+   * action, a toast's action. Phase 1 bans any tappable label below 14, and the tab bar, the chips
+   * and "Mark done" were all set at `label` (13.5). Its own step rather than `secondary` (14.5/21)
+   * because the tab bar's label line has 18pt to live in.
+   */
+  readonly tappable: TypeStyle;
   /** 17/600 — every button label. Phase 1 §05, and never uppercased. */
   readonly control: TypeStyle;
   /** 19/400 — the value inside an input, larger than body on purpose. §05. */
@@ -370,6 +386,7 @@ export const tokens: DesignTokens = {
     offlineFill: brandPalette.offlineFill,
     offlineEdge: brandPalette.offlineEdge,
     recording: brandPalette.recording,
+    recordingFill: brandPalette.recordingFill,
   },
   font: {
     '400': 'DMSans_400Regular',
@@ -378,7 +395,7 @@ export const tokens: DesignTokens = {
     '700': 'DMSans_700Bold',
     brand: 'CormorantGaramond_500Medium',
   },
-  space: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 },
+  space: { xxs: 2, xs: 4, sm: 8, md: 16, lg: 24, xl: 32 },
   radius: { sm: 4, md: 8, well: 12, control: 16, card: 20, pill: 999 },
   typography: {
     figure: { size: 40, lineHeight: 44, weight: '600', letterSpacing: -1.8 },
@@ -388,6 +405,7 @@ export const tokens: DesignTokens = {
     body: { size: 16, lineHeight: 24, weight: '400' },
     secondary: { size: 14.5, lineHeight: 21, weight: '400' },
     label: { size: 13.5, lineHeight: 18, weight: '500' },
+    tappable: { size: 14, lineHeight: 18, weight: '500' },
     control: { size: 17, lineHeight: 22, weight: '600' },
     value: { size: 19, lineHeight: 24, weight: '400' },
     brand: { size: 36, lineHeight: 42, weight: '500' },
@@ -476,6 +494,9 @@ export const compactTypography: TypographyTokens = {
   body: { size: 14.5, lineHeight: 21, weight: '400' },
   secondary: { size: 13.5, lineHeight: 19, weight: '400' },
   label: { size: 12.5, lineHeight: 17, weight: '600' },
+  // `FE-W177`. The phone's 14pt tappable floor is an outdoor, one-thumb rule (see above); the
+  // console's small controls take `control`. The step exists to satisfy the shared type.
+  tappable: { size: 13, lineHeight: 17, weight: '600' },
   control: { size: 14, lineHeight: 19, weight: '600' },
   value: { size: 15, lineHeight: 20, weight: '400' },
   // The console has no login splash and no brand moment. The step exists to
@@ -572,6 +593,22 @@ export const requiredContrastPairs: readonly ContrastPair[] = [
     background: tokens.color.infoFill,
     usage: 'text',
   },
+  // `FE-W176`. A banner's title and detail are ink and muted ink on its tint, wherever the banner
+  // is placed — inside a dark hero included, where they used to inherit white.
+  ...(['criticalFill', 'attentionFill', 'infoFill'] as const).flatMap((fill): ContrastPair[] => [
+    {
+      name: `primary text on ${fill}`,
+      foreground: tokens.color.textPrimary,
+      background: tokens.color[fill],
+      usage: 'text',
+    },
+    {
+      name: `secondary text on ${fill}`,
+      foreground: tokens.color.textSecondary,
+      background: tokens.color[fill],
+      usage: 'text',
+    },
+  ]),
   {
     name: 'primary text on the offline fill',
     foreground: tokens.color.textPrimary,
@@ -590,6 +627,19 @@ export const requiredContrastPairs: readonly ContrastPair[] = [
     name: 'white on the recording bar',
     foreground: tokens.color.onAccent,
     background: tokens.color.recording,
+    usage: 'text',
+  },
+  // `FE-W181`. The recording indicator's words and its elapsed time sit on the recording tint.
+  {
+    name: 'primary text on the recording fill',
+    foreground: tokens.color.textPrimary,
+    background: tokens.color.recordingFill,
+    usage: 'text',
+  },
+  {
+    name: 'secondary text on the recording fill',
+    foreground: tokens.color.textSecondary,
+    background: tokens.color.recordingFill,
     usage: 'text',
   },
   {

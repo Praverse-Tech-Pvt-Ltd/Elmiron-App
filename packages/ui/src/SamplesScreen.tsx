@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Figure, Label, Title } from './Text';
+import { BodyText, Figure, Label, Secondary, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Select } from './Select';
@@ -117,7 +117,7 @@ const KIND_OPTIONS: readonly { readonly value: SampleLineKind; readonly label: T
 ];
 
 const styles = StyleSheet.create({
-  head: { gap: 2 },
+  head: { gap: tokens.space.xxs },
   lines: { gap: tokens.space.md },
   meter: { flexDirection: 'row', alignItems: 'baseline', gap: tokens.space.sm },
   track: {
@@ -199,7 +199,8 @@ export const SamplesScreen = ({
     >
       <View style={styles.head}>
         <Title>{t('samples.title')}</Title>
-        <Label muted>{`${doctorName} · ${dateLabel}`}</Label>
+        {/* `FE-W178`. The line under a screen title is `Secondary`, as on the call report. */}
+        <Secondary>{`${doctorName} · ${dateLabel}`}</Secondary>
       </View>
 
       {actionFailure === null ? null : (
@@ -274,7 +275,8 @@ export const SamplesScreen = ({
           <>
             <View style={styles.meter}>
               <Figure>{String(cap.used)}</Figure>
-              <Label muted>{t('samples.capOf', { limit: cap.limit, unit: cap.unitLabel })}</Label>
+              {/* `FE-W178`. A figure's caption is `Secondary`, as Today's "visits attended" is. */}
+              <Secondary>{t('samples.capOf', { limit: cap.limit, unit: cap.unitLabel })}</Secondary>
             </View>
             <View style={styles.track}>
               <View style={[styles.fill, { width: fillWidth(cap) }]} />

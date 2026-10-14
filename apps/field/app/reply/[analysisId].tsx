@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Analysis, Refusal } from '@fieldforce/core';
-import { AnalysisReplyScreen, Screen, t, useLanguage } from '@fieldforce/ui';
+import { AnalysisReplyScreen, t, useLanguage } from '@fieldforce/ui';
 import { coachingEnabled } from '../../src/features';
 import { readMyAnalysis, respondToMyAnalysis } from '../../src/coaching/server';
 import type { ServerRead } from '../../src/coaching/server';
@@ -171,27 +171,26 @@ function Reply(): ReactNode {
       });
   };
 
+  // `FE-W180`. The screen renders its own `Screen`, so its Send can be pinned in the footer.
   return (
-    <Screen scrollable>
-      <AnalysisReplyScreen
-        busy={busy}
-        failure={failure === null ? null : loadFailureWords(failure)}
-        finding={finding}
-        onChangeText={(next) => {
-          setValue(next);
-          setSaved(false);
-          setSendFailure(null);
-        }}
-        onSaveDraft={() => {
-          setSaved(true);
-        }}
-        onSend={send}
-        replyNote={replyNote()}
-        saved={saved ? t('reply.draftKept') : null}
-        sendFailure={sendFailure === null ? null : sendFailureWords(sendFailure)}
-        voiceNote={noAudioNote()}
-        value={value}
-      />
-    </Screen>
+    <AnalysisReplyScreen
+      busy={busy}
+      failure={failure === null ? null : loadFailureWords(failure)}
+      finding={finding}
+      onChangeText={(next) => {
+        setValue(next);
+        setSaved(false);
+        setSendFailure(null);
+      }}
+      onSaveDraft={() => {
+        setSaved(true);
+      }}
+      onSend={send}
+      replyNote={replyNote()}
+      saved={saved ? t('reply.draftKept') : null}
+      sendFailure={sendFailure === null ? null : sendFailureWords(sendFailure)}
+      voiceNote={noAudioNote()}
+      value={value}
+    />
   );
 }

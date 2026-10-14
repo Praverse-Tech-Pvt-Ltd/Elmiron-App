@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Analysis, ConsentRecord } from '@fieldforce/core';
-import { AnalysisScreen, Screen, t, useLanguage } from '@fieldforce/ui';
+import { AnalysisScreen, t, useLanguage } from '@fieldforce/ui';
 import type { AnalysisFinding } from '@fieldforce/ui';
 import type { CitationSpanProps } from '@fieldforce/ui';
 import { coachingEnabled } from '../../src/features';
@@ -189,38 +189,37 @@ function Analysis(): ReactNode {
   const visit = analysis === null ? undefined : store.visit.get(analysis.visitId);
   const doctor = visit === undefined ? undefined : store.doctor.get(visit.doctorId);
 
+  // `FE-W180`. The screen renders its own `Screen`, so its reply button can be pinned.
   return (
-    <Screen scrollable>
-      <AnalysisScreen
-        audioNote={noAudioNote()}
-        consentLabel={
-          consent === null
-            ? null
-            : consent.outcome === 'consented'
-              ? t('analysis.consentAgreed')
-              : t('analysis.consentNoRecording')
-        }
-        doctorName={doctor?.fullName ?? t('analysis.thisVisit')}
-        failure={failure === null ? null : failureWords(failure)}
-        findings={findings}
-        loading={loading}
-        onReply={() => {
-          router.push(`/reply/${id}`);
-        }}
-        noFindingsNote={
-          analysis !== null && analysis.status === 'completed' && analysis.findings.length === 0
-            ? noFindingsNote()
-            : null
-        }
-        // FE-D16. AI-written, said plainly. The claims about who opened it first are gone: no
-        // server record backs them (FE-CR-9).
-        provenanceNote={aiProvenanceNote()}
-        reply={analysis?.mrResponse ?? null}
-        statusNote={analysis === null ? null : statusNote(analysis)}
-        whenLabel={
-          visit?.startedAt == null ? t('analysis.thisVisit') : dayMonthIn(visit.startedAt, zone)
-        }
-      />
-    </Screen>
+    <AnalysisScreen
+      audioNote={noAudioNote()}
+      consentLabel={
+        consent === null
+          ? null
+          : consent.outcome === 'consented'
+            ? t('analysis.consentAgreed')
+            : t('analysis.consentNoRecording')
+      }
+      doctorName={doctor?.fullName ?? t('analysis.thisVisit')}
+      failure={failure === null ? null : failureWords(failure)}
+      findings={findings}
+      loading={loading}
+      onReply={() => {
+        router.push(`/reply/${id}`);
+      }}
+      noFindingsNote={
+        analysis !== null && analysis.status === 'completed' && analysis.findings.length === 0
+          ? noFindingsNote()
+          : null
+      }
+      // FE-D16. AI-written, said plainly. The claims about who opened it first are gone: no
+      // server record backs them (FE-CR-9).
+      provenanceNote={aiProvenanceNote()}
+      reply={analysis?.mrResponse ?? null}
+      statusNote={analysis === null ? null : statusNote(analysis)}
+      whenLabel={
+        visit?.startedAt == null ? t('analysis.thisVisit') : dayMonthIn(visit.startedAt, zone)
+      }
+    />
   );
 }

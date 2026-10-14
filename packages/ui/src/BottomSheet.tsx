@@ -8,9 +8,11 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Heading } from './Text';
 import { elevationStyle } from './depth';
+import { SurfaceContext } from './surface';
 import { useEntrance, useReduceMotion } from './motion';
 import { useT } from './i18n';
 
@@ -46,7 +48,7 @@ const styles = StyleSheet.create({
     backgroundColor: tokens.color.surface,
     borderTopLeftRadius: tokens.radius.card,
     borderTopRightRadius: tokens.radius.card,
-    paddingBottom: tokens.space.lg,
+    // The bottom padding is set in `SheetBody`, with the gesture inset added (`FE-W180`).
     // FE-W101. The design's sheet shadow, cast upward over the page it covers.
     ...elevationStyle('sheet'),
   },
@@ -123,6 +125,10 @@ const SheetBody = ({
 }): ReactNode => {
   // Rises a sheet-height's fraction, not the full screen: arrival, not travel.
   const entrance = useEntrance({ duration: tokens.motion.gentle, rise: tokens.space.xl * 2 });
+  // `FE-W180`. The sheet runs to the bottom edge, so its last row and its footer sat under the
+  // gesture bar. The inset is added to the token padding, as `Screen` does: one is the design's
+  // margin, the other the device's hardware.
+  const insets = useSafeAreaInsets();
   return (
     <Animated.View collapsable={false} style={entrance}>
       <Pressable
@@ -131,16 +137,25 @@ const SheetBody = ({
         onPress={() => {
           // Swallows the press. The scrim above must not see it.
         }}
-        style={[styles.sheet, { maxHeight: height * 0.7 }]}
+        style={[
+          styles.sheet,
+          { maxHeight: height * 0.7, paddingBottom: tokens.space.lg + insets.bottom },
+        ]}
       >
-        <View style={styles.handleArea}>
-          <View style={styles.handle} />
-        </View>
-        <View style={styles.header}>
-          <Heading>{title}</Heading>
-        </View>
-        <ScrollView contentContainerStyle={styles.content}>{children}</ScrollView>
-        {footer === undefined ? null : <View style={styles.footer}>{footer}</View>}
+        {/*
+          `FE-W176`. The sheet is white wherever it was opened from. A `Select` inside a hero card
+          would otherwise hand its white ink to the sheet's title and rows: white on white.
+        */}
+        <SurfaceContext.Provider value="paper">
+          <View style={styles.handleArea}>
+            <View style={styles.handle} />
+          </View>
+          <View style={styles.header}>
+            <Heading>{title}</Heading>
+          </View>
+          <ScrollView contentContainerStyle={styles.content}>{children}</ScrollView>
+          {footer === undefined ? null : <View style={styles.footer}>{footer}</View>}
+        </SurfaceContext.Provider>
       </Pressable>
     </Animated.View>
   );

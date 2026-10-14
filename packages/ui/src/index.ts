@@ -127,7 +127,18 @@ export { SyncQueueIndicator } from './SyncQueueIndicator';
 export type { SyncQueueIndicatorProps, SyncQueueState } from './SyncQueueIndicator';
 export { TOAST_DURATION_MS, Toast } from './Toast';
 export type { ToastAction, ToastProps } from './Toast';
-export { BodyText, Display, Figure, Heading, Label, Secondary, Statement, Title } from './Text';
+export {
+  BodyText,
+  Display,
+  Figure,
+  Heading,
+  Label,
+  MAX_FONT_SCALE,
+  Secondary,
+  Statement,
+  TapLabel,
+  Title,
+} from './Text';
 export { Badge } from './Badge';
 export type { BadgeProps, BadgeTone } from './Badge';
 export type { TextProps } from './Text';
@@ -176,7 +187,7 @@ export type { VoiceNoteScreenProps } from './VoiceNoteScreen';
 export type { VisitScreenProps } from './VisitScreen';
 export { TodayScreen } from './TodayScreen';
 export type { TodayNextVisit, TodayScreenProps } from './TodayScreen';
-export { TabBarIcon, TabIcon } from './TabIcon';
+export { TabBarIcon, TabBarLabel, TabIcon } from './TabIcon';
 export { EmptyState } from './EmptyState';
 export type { EmptyStateKind, EmptyStateProps } from './EmptyState';
 export { FadeIn } from './FadeIn';
@@ -189,7 +200,7 @@ export { elevationStyle } from './depth';
 export type { ElevationName } from './depth';
 export { ReduceMotionContext, useEntrance, usePulse, useReduceMotion } from './motion';
 export type { EntranceOptions } from './motion';
-export type { TabIconName, TabIconProps } from './TabIcon';
+export type { TabBarLabelProps, TabIconName, TabIconProps } from './TabIcon';
 export { TextField } from './TextField';
 export type { TextFieldProps } from './TextField';
 // `FE-W140`. The string catalogue; also published alone as `@fieldforce/ui/i18n` for node-side code.

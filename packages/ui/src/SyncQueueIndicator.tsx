@@ -107,6 +107,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: tokens.space.sm,
     paddingHorizontal: tokens.space.md,
+    // `FE-W179`. Room above and below a message that wraps to two lines; at one line the 52pt
+    // minimum height still decides, so the chip is unchanged.
+    paddingVertical: tokens.space.sm,
     borderRadius: tokens.radius.control,
     backgroundColor: tokens.color.surface,
     minHeight: tokens.target.secondary,
@@ -125,6 +128,9 @@ const styles = StyleSheet.create({
   pressed: { backgroundColor: tokens.color.wash },
   // FE-D7 2. Offline is the wash already, so it presses one step darker, as the design does.
   offlinePressed: { backgroundColor: tokens.color.washPressed },
+  // `FE-W179`. Glyph and message top-aligned in their own row, the glyph on the first line; the
+  // chip still centres that row against the trailing words.
+  says: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: tokens.space.sm },
   message: { flex: 1 },
 });
 
@@ -152,9 +158,11 @@ export const SyncQueueIndicator = ({
       onPress={onPress}
       style={({ pressed }) => syncQueueStyle(status, pressed)}
     >
-      <StatusGlyph kind={status} />
-      <View style={styles.message}>
-        <BodyText>{message}</BodyText>
+      <View style={styles.says}>
+        <StatusGlyph kind={status} lineHeight={tokens.typography.body.lineHeight} />
+        <View style={styles.message}>
+          <BodyText>{message}</BodyText>
+        </View>
       </View>
       {trailing === '' ? null : <Label muted>{trailing}</Label>}
     </Pressable>

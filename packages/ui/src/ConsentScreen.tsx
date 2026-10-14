@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
     backgroundColor: tokens.color.surface,
     borderRadius: tokens.radius.well,
     padding: tokens.space.md,
-    gap: 2,
+    gap: tokens.space.xxs,
   },
   panels: { gap: tokens.space.sm },
   panel: {
@@ -169,13 +169,13 @@ const styles = StyleSheet.create({
     borderBottomColor: tokens.color.offlineEdge,
     alignSelf: 'flex-start',
   },
+  detailsLabelPressed: { borderBottomColor: tokens.color.textPrimary },
   answers: { gap: tokens.space.sm },
   handBack: {
     minHeight: tokens.target.secondary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pressed: { opacity: 0.6 },
 });
 
 /**
@@ -240,14 +240,16 @@ const Notice = ({
   <View style={styles.notice}>
     <Statement>{notice}</Statement>
     <Label muted>{noticeLabel}</Label>
-    <Pressable
-      accessibilityRole="button"
-      onPress={onOpenDetails}
-      style={({ pressed }) => [styles.details, pressed ? styles.pressed : null]}
-    >
-      <View style={styles.detailsLabel}>
-        <BodyText muted>Exactly what is collected, in full</BodyText>
-      </View>
+    {/*
+      `FE-W184`. Presses as "Give the phone back" does: the words and their rule go from muted to
+      ink. It faded to 60% instead, which §05 forbids and which lightened the quietest words here.
+    */}
+    <Pressable accessibilityRole="button" onPress={onOpenDetails} style={styles.details}>
+      {({ pressed }) => (
+        <View style={[styles.detailsLabel, pressed ? styles.detailsLabelPressed : null]}>
+          <BodyText muted={handBackMuted(pressed)}>Exactly what is collected, in full</BodyText>
+        </View>
+      )}
     </Pressable>
   </View>
 );

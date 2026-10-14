@@ -80,15 +80,33 @@ export interface CoachingFeedScreenProps {
   readonly unavailable?: { readonly title: string; readonly detail: string } | null;
 }
 
+/** The tallest bar, in points. The others are drawn against it. */
+const BAR_MAX = 44;
+
 const styles = StyleSheet.create({
-  head: { gap: 2 },
+  head: { gap: tokens.space.xxs },
   rows: { gap: tokens.space.sm },
-  rowHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  rowHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: tokens.space.sm,
+  },
+  // `FE-W179`. The doctor's name takes the room and wraps; the date beside it keeps its width.
+  rowName: { flex: 1 },
   finding: { flexDirection: 'row', gap: tokens.space.sm, alignItems: 'flex-start' },
   findingText: { flex: 1 },
   actions: { flexDirection: 'row', gap: tokens.space.sm },
   half: { flex: 1 },
-  bars: { flexDirection: 'row', alignItems: 'flex-end', gap: tokens.space.sm, height: 64 },
+  // `FE-W184`. Sized from what it holds — the tallest bar, the gap, and a month's label line —
+  // and a minimum, not a height: it was a fixed 64 for 66 of content, and a larger font size
+  // makes the label line taller still.
+  bars: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: tokens.space.sm,
+    minHeight: BAR_MAX + tokens.space.xs + tokens.typography.label.lineHeight,
+  },
   bar: { flex: 1, alignItems: 'center', gap: tokens.space.xs },
   fill: {
     width: '100%',
@@ -106,7 +124,7 @@ const styles = StyleSheet.create({
  * turn a count into a measurement against a standard.
  */
 const barHeight = (count: number, highest: number): number =>
-  highest === 0 ? 4 : Math.max(4, Math.round((count / highest) * 44));
+  highest === 0 ? 4 : Math.max(4, Math.round((count / highest) * BAR_MAX));
 
 export const CoachingFeedScreen = ({
   periodLabel,
@@ -163,7 +181,9 @@ export const CoachingFeedScreen = ({
         {rows.map((row) => (
           <Card key={row.analysisId}>
             <View style={styles.rowHead}>
-              <Heading>{row.doctorName}</Heading>
+              <View style={styles.rowName}>
+                <Heading>{row.doctorName}</Heading>
+              </View>
               <Label muted>{row.whenLabel}</Label>
             </View>
 
@@ -184,7 +204,10 @@ export const CoachingFeedScreen = ({
                     `success` for what worked, `attention` for what to try; neither
                     is `critical`, because a coaching note is not a failure.
                   */}
-                  <StatusGlyph kind={finding.workedWell ? 'success' : 'attention'} />
+                  <StatusGlyph
+                    kind={finding.workedWell ? 'success' : 'attention'}
+                    lineHeight={tokens.typography.body.lineHeight}
+                  />
                   <View style={styles.findingText}>
                     <BodyText>{finding.summary}</BodyText>
                   </View>

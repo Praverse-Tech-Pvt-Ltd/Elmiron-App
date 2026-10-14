@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Label, Title } from './Text';
+import { BodyText, Secondary, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { TextField } from './TextField';
@@ -37,7 +37,7 @@ export interface AdverseEventScreenProps {
 }
 
 const styles = StyleSheet.create({
-  head: { gap: 2 },
+  head: { gap: tokens.space.xxs },
   foot: { gap: tokens.space.sm, paddingTop: tokens.space.sm },
 });
 
@@ -57,7 +57,8 @@ export const AdverseEventScreen = ({
     <>
       <View style={styles.head}>
         <Title>{t('adverse.title')}</Title>
-        <Label muted>{doctorName}</Label>
+        {/* `FE-W178`. The line under a screen title is `Secondary`, as on the call report. */}
+        <Secondary>{doctorName}</Secondary>
       </View>
 
       {failure === null ? null : (
@@ -67,14 +68,15 @@ export const AdverseEventScreen = ({
       {/* FE-W157: regulated wording, English-only like consent — not in the catalogue. */}
       <Card>
         <BodyText>You are flagging it, not assessing it.</BodyText>
-        <Label muted>
+        {/* `FE-W178`. Guidance in sentences, at the prose step. The words are unchanged. */}
+        <Secondary>
           Write what you were told, in your own words. The safety team decides what it means and
           will contact the doctor if they need more.
-        </Label>
-        <Label muted>
+        </Secondary>
+        <Secondary>
           Do not write the patient’s name, phone number, address or any ID number. They are not
           needed, and they must not leave the clinic through this app.
-        </Label>
+        </Secondary>
       </Card>
 
       <TextField

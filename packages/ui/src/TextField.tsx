@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
-import { Label } from './Text';
+import { Label, Secondary } from './Text';
 import { useT } from './i18n';
 
 /**
@@ -79,13 +79,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: -tokens.space.sm,
+    borderRadius: tokens.radius.pill,
   },
-  clearPressed: { opacity: 0.5 },
+  // `FE-W184`. §05: a press darkens the fill — it never fades. This faded the ✕ to half.
+  clearPressed: { backgroundColor: tokens.color.wash },
   clearGlyph: { fontSize: 18, color: tokens.color.textSecondary },
+  // `FE-W178`. The correction is a sentence, in the same slot as the help line, so it is set at
+  // the same prose step; the label weight keeps it a step firmer than the help it replaces.
   error: {
     color: tokens.color.critical,
-    fontSize: tokens.typography.label.size,
-    lineHeight: tokens.typography.label.lineHeight,
+    fontSize: tokens.typography.secondary.size,
+    lineHeight: tokens.typography.secondary.lineHeight,
     fontWeight: tokens.typography.label.weight,
     fontFamily: fontFamilyFor(tokens.typography.label.weight),
   },
@@ -159,7 +163,8 @@ export const TextField = ({
       </View>
       {error === undefined ? (
         help === undefined ? null : (
-          <Label muted>{help}</Label>
+          // `FE-W178`. Help is a sentence ("About this lesson — not about a patient."): prose step.
+          <Secondary>{help}</Secondary>
         )
       ) : (
         <Text style={styles.error}>{error}</Text>

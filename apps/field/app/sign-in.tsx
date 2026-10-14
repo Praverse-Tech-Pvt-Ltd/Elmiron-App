@@ -4,10 +4,10 @@ import {
   Banner,
   BodyText,
   BrandLine,
-  Heading,
   PrimaryButton,
   Screen,
   TextField,
+  Title,
   useT,
 } from '@fieldforce/ui';
 import { useSession } from '../src/session';
@@ -83,7 +83,8 @@ export default function SignIn(): ReactNode {
         this screen is for.
       */}
       <BrandLine>{BRAND_LINE}</BrandLine>
-      <Heading>{t('signIn.title')}</Heading>
+      {/* `FE-W178`. The screen's title is `Title`, as every other screen's is. */}
+      <Title>{t('signIn.title')}</Title>
       <BodyText muted>{t('signIn.lead')}</BodyText>
 
       {failure === null ? null : (

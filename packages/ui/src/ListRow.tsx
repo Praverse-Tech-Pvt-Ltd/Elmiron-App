@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Label } from './Text';
+import { BodyText, Secondary } from './Text';
 import { elevationStyle } from './depth';
 
 /**
@@ -39,7 +39,8 @@ export const ListRow = ({ title, detail, onPress }: ListRowProps): ReactNode => 
   const body = (
     <>
       <BodyText>{title}</BodyText>
-      {detail === undefined ? null : <Label muted>{detail}</Label>}
+      {/* `FE-W178`. A row's detail is a line of prose ("Started 3 Oct · Due 15 Oct"), not a label. */}
+      {detail === undefined ? null : <Secondary>{detail}</Secondary>}
     </>
   );
 

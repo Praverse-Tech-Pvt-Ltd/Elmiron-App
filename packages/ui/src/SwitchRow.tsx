@@ -46,8 +46,8 @@ const styles = StyleSheet.create({
     ...elevationStyle('card'),
   },
   pressed: { backgroundColor: tokens.color.wash },
-  text: { flex: 1, gap: tokens.space.xs / 2 },
-  control: { alignItems: 'center', gap: 2 },
+  text: { flex: 1, gap: tokens.space.xxs },
+  control: { alignItems: 'center', gap: tokens.space.xxs },
   track: {
     width: TRACK_WIDTH,
     height: TRACK_HEIGHT,

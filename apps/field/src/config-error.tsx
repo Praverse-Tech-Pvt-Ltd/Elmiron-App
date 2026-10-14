@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Banner, BodyText, Heading, Screen, t, useLanguage } from '@fieldforce/ui';
+import { Banner, BodyText, Screen, Title, t, useLanguage } from '@fieldforce/ui';
 
 /**
  * FE-D2 2 — what a release build with no real API address shows INSTEAD of the app.
@@ -22,7 +22,8 @@ export const ConfigurationError = ({ reason }: { readonly reason: string }): Rea
     <SafeAreaProvider>
       <StatusBar style="dark" />
       <Screen scrollable>
-        <Heading>{t('onboarding.notSetUp')}</Heading>
+        {/* `FE-W178`. The screen's title is `Title`, as every other screen's is. */}
+        <Title>{t('onboarding.notSetUp')}</Title>
         <BodyText>{t('onboarding.notSetUpDetail')}</BodyText>
         <Banner detail={reason} title={t('onboarding.configError')} tone="critical" />
       </Screen>

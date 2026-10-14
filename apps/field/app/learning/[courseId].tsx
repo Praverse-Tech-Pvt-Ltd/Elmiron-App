@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { CourseScreen, Screen } from '@fieldforce/ui';
+import { CourseScreen, Screen, t, useLanguage } from '@fieldforce/ui';
 import type { CourseView } from '@fieldforce/ui';
 import { learningEnabled } from '../../src/features';
 import { appLearningBackend } from '../../src/learning/backend';
@@ -31,6 +31,8 @@ export const Course = ({
   readonly courseId: string;
   readonly backend?: LearningBackend;
 }): ReactNode => {
+  // `FE-W183`. The screen's own words follow the app's language; a language change repaints it.
+  useLanguage();
   const router = useRouter();
   const { zone } = usePulledStore();
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
@@ -75,8 +77,8 @@ export const Course = ({
         setStarting(false);
         setNotice(
           failureKind(error) === 'offline'
-            ? 'No signal, so the course was not started. Try again when you have signal.'
-            : 'The server did not start this course. Try again; if it keeps happening, tell your manager.',
+            ? t('learning.startOffline')
+            : t('learning.startRefused'),
         );
       },
     );
@@ -124,8 +126,10 @@ export const Course = ({
           id: lesson.id,
           title: lesson.title,
           detail: [
-            lesson.done ? 'Finished' : 'Not finished',
-            lesson.minutes === null ? null : `about ${String(lesson.minutes)} min`,
+            lesson.done ? t('learning.lessonDone') : t('learning.lessonNotDone'),
+            lesson.minutes === null
+              ? null
+              : t('learning.aboutMinutes', { minutes: lesson.minutes }),
           ]
             .filter((part): part is string => part !== null)
             .join(' · '),

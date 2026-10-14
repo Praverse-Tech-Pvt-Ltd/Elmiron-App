@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Label } from './Text';
+import { BodyText, Secondary, TapLabel } from './Text';
 import { t, useT } from './i18n';
 
 /**
@@ -45,7 +45,8 @@ const styles = StyleSheet.create({
   list: { gap: tokens.space.md },
   step: {
     backgroundColor: tokens.color.surface,
-    borderRadius: tokens.radius.sm,
+    // `FE-W184`. A card's radius, like every other card and row; it was the 4pt `sm`.
+    borderRadius: tokens.radius.card,
     padding: tokens.space.md,
     gap: tokens.space.xs,
   },
@@ -58,7 +59,8 @@ const styles = StyleSheet.create({
   // thing to be squeezed would be the touch target.
   actions: { flexDirection: 'row', gap: tokens.space.sm, flexWrap: 'wrap' },
   action: {
-    borderRadius: tokens.radius.sm,
+    // `FE-W184`. §05's control radius — these are buttons — rather than the 4pt `sm`.
+    borderRadius: tokens.radius.control,
     borderWidth: 1,
     borderColor: tokens.color.border,
     paddingVertical: tokens.space.sm,
@@ -95,7 +97,9 @@ export const SetupStepList = ({ steps, onToggleDone }: SetupStepListProps): Reac
             <View style={styles.headerText}>
               <BodyText>{step.title}</BodyText>
               {step.whatYouWillSee === undefined ? null : (
-                <Label muted>{t('onboarding.whatYouWillSee', { text: step.whatYouWillSee })}</Label>
+                <Secondary>
+                  {t('onboarding.whatYouWillSee', { text: step.whatYouWillSee })}
+                </Secondary>
               )}
             </View>
           </View>
@@ -117,7 +121,8 @@ export const SetupStepList = ({ steps, onToggleDone }: SetupStepListProps): Reac
                 pressed ? styles.pressed : null,
               ]}
             >
-              <Label>{doneLabel(step.done)}</Label>
+              {/* `FE-W177`. Pressed, so at the tappable floor (14), not `Label`'s 13.5. */}
+              <TapLabel>{doneLabel(step.done)}</TapLabel>
             </Pressable>
 
             {/*
@@ -132,7 +137,7 @@ export const SetupStepList = ({ steps, onToggleDone }: SetupStepListProps): Reac
                 onPress={step.shortcut.onPress}
                 style={({ pressed }) => [styles.action, pressed ? styles.pressed : null]}
               >
-                <Label>{step.shortcut.label}</Label>
+                <TapLabel>{step.shortcut.label}</TapLabel>
               </Pressable>
             )}
           </View>

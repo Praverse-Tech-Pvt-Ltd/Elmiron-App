@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
-import { Figure, Label } from './Text';
+import { Figure, Label, MAX_FONT_SCALE } from './Text';
 import { useT } from './i18n';
 
 /**
@@ -105,7 +105,10 @@ export const Stepper = ({
         inert ? styles.keyDisabled : null,
       ]}
     >
-      <Text style={styles.glyph}>{glyph}</Text>
+      {/* `FE-W179`. The key is a fixed 66pt: the sign grows with the font size, up to the cap. */}
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.glyph}>
+        {glyph}
+      </Text>
     </Pressable>
   );
 

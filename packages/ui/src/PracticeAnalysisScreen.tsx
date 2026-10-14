@@ -5,7 +5,7 @@ import { Button } from './Button';
 import { Banner } from './Banner';
 import { Card } from './Card';
 import { Spinner } from './Spinner';
-import { BodyText, Figure, Heading, Label, Secondary, Title } from './Text';
+import { BodyText, Figure, Label, Secondary, Title } from './Text';
 import { t, useLanguage } from './i18n';
 
 /**
@@ -77,6 +77,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: tokens.color.border,
   },
+  // `FE-W179`. The area's name takes the room and wraps; its score keeps its width.
+  dimensionName: { flex: 1 },
 });
 
 const Findings = ({
@@ -88,7 +90,8 @@ const Findings = ({
 }): ReactNode =>
   rows.length === 0 ? null : (
     <View style={styles.group}>
-      <Heading>{heading}</Heading>
+      {/* `FE-W178`. A section header: muted 13.5, as the designs draw every one. */}
+      <Label muted>{heading}</Label>
       {rows.map((row) => (
         <Card key={row.id}>
           <View style={styles.group}>
@@ -126,7 +129,8 @@ export const PracticeAnalysisScreen = ({
   return (
     <View style={styles.stack}>
       <Title>{title}</Title>
-      <Label muted>{t('practice.practiceWith', { name: personaName })}</Label>
+      {/* `FE-W178`. The line under a screen title is `Secondary`, as on the call report. */}
+      <Secondary>{t('practice.practiceWith', { name: personaName })}</Secondary>
 
       {notAvailable ? (
         <Banner
@@ -159,12 +163,12 @@ export const PracticeAnalysisScreen = ({
 
           {modules.length === 0 ? null : (
             <View style={styles.group}>
-              <Heading>{t('practice.suggestedTraining')}</Heading>
+              <Label muted>{t('practice.suggestedTraining')}</Label>
               {modules.map((row) => (
                 <Card key={row.id}>
                   <View style={styles.group}>
                     <BodyText>{row.title}</BodyText>
-                    <Label muted>{row.reason}</Label>
+                    <Secondary>{row.reason}</Secondary>
                   </View>
                 </Card>
               ))}
@@ -180,10 +184,12 @@ export const PracticeAnalysisScreen = ({
 
           {/* UX polish: what worked and what to try lead; the numbers follow them. */}
           <View style={styles.group}>
-            <Heading>{t('practice.scoresByArea')}</Heading>
+            <Label muted>{t('practice.scoresByArea')}</Label>
             {dimensions.map((row) => (
               <View key={row.key} style={styles.dimension}>
-                <BodyText>{row.label}</BodyText>
+                <View style={styles.dimensionName}>
+                  <BodyText>{row.label}</BodyText>
+                </View>
                 <BodyText>{row.scoreLabel}</BodyText>
               </View>
             ))}
@@ -193,8 +199,8 @@ export const PracticeAnalysisScreen = ({
 
       <Card tone="quiet">
         <View style={styles.group}>
-          <Label muted>{practiceAiNote()}</Label>
-          <Label muted>{practiceVisibilityNote()}</Label>
+          <Secondary>{practiceAiNote()}</Secondary>
+          <Secondary>{practiceVisibilityNote()}</Secondary>
         </View>
       </Card>
     </View>

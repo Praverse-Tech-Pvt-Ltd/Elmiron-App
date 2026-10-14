@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
     backgroundColor: tokens.color.infoFill,
     borderRadius: tokens.radius.well,
     paddingHorizontal: tokens.space.sm,
-    paddingVertical: 2,
+    paddingVertical: tokens.space.xxs,
   },
   logged: {
     backgroundColor: tokens.color.successFill,

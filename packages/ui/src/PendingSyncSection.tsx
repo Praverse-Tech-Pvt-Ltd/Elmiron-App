@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { Heading, Secondary } from './Text';
+import { Label, Secondary } from './Text';
 import { ListItem } from './ListItem';
 import type { StatusKind } from './StatusGlyph';
 import { useT } from './i18n';
@@ -45,7 +45,7 @@ const STATE_GLYPH: Readonly<Record<PendingSyncItem['state'], StatusKind>> = {
 
 const styles = StyleSheet.create({
   section: { gap: tokens.space.sm, paddingTop: tokens.space.sm },
-  head: { gap: tokens.space.xs / 2 },
+  head: { gap: tokens.space.xxs },
 });
 
 export const PendingSyncSection = ({ items, onOpen }: PendingSyncSectionProps): ReactNode => {
@@ -53,7 +53,8 @@ export const PendingSyncSection = ({ items, onOpen }: PendingSyncSectionProps): 
   return items.length === 0 ? null : (
     <View style={styles.section}>
       <View style={styles.head}>
-        <Heading>{t('pending.heading')}</Heading>
+        {/* `FE-W178`. A section header, muted 13.5, as B6 draws "Added today". */}
+        <Label muted>{t('pending.heading')}</Label>
         <Secondary>{t('pending.lead')}</Secondary>
       </View>
       {items.map((item) => (

@@ -183,10 +183,10 @@ export interface TodayScreenProps {
 
 const styles = StyleSheet.create({
   // FE-W102. A little air under the day's title before the first card, as B1 sets it.
-  head: { gap: 2, paddingBottom: tokens.space.xs },
+  head: { gap: tokens.space.xxs, paddingBottom: tokens.space.xs },
   strip: { paddingTop: tokens.space.sm },
   progress: { flexDirection: 'row', alignItems: 'baseline', gap: tokens.space.sm },
-  heroLines: { gap: 2 },
+  heroLines: { gap: tokens.space.xxs },
   // The single primary action is pinned rather than scrolled to: §04 puts it inside
   // the bottom reach zone, where a thumb already is.
   progressLink: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
@@ -288,7 +288,8 @@ export const TodayScreen = ({
       {notices.map((item) => (
         <Card key={`${item.title}:${item.body}`}>
           <BodyText>{item.title}</BodyText>
-          <Label muted>{item.body}</Label>
+          {/* `FE-W178`. The server's sentence, at the prose step. */}
+          <Secondary>{item.body}</Secondary>
         </Card>
       ))}
 
@@ -316,7 +317,7 @@ export const TodayScreen = ({
               // a count and a way to the route, never as "everyone on the plan".
               <Card>
                 <BodyText>{t('today.stopsLeft', { count: stillOnPlan })}</BodyText>
-                <Label muted>{t('today.stopsLeftDetail')}</Label>
+                <Secondary>{t('today.stopsLeftDetail')}</Secondary>
               </Card>
             ) : (
               // FE-W102. Both ends of the day as designed states, words unchanged: no plan is
@@ -368,7 +369,11 @@ export const TodayScreen = ({
           <Card {...(routePress === undefined ? {} : { onPress: routePress })}>
             <View style={styles.progressLink}>
               <Label muted>{t('today.progressLabel')}</Label>
-              {routeOpen ? <Label muted>{t('today.seeRoute')}</Label> : null}
+              {/*
+                `FE-W177`. The words that say the card is pressable, so at least the tappable floor:
+                the prose step (14.5), as the caption under the figure is. It was `Label`'s 13.5.
+              */}
+              {routeOpen ? <Secondary>{t('today.seeRoute')}</Secondary> : null}
             </View>
             <View style={styles.progress}>
               <Figure>{t('common.nOfM', { n: done + notMet, m: planned })}</Figure>

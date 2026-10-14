@@ -98,10 +98,37 @@ describe('app/home.tsx — the role-aware shell', () => {
   it('names the role it read from the token rather than inferring one', async () => {
     // The role comes from the JWT claim Backend's auth hook installs. Displaying it
     // is how an MR and a support engineer can both see which role the server issued.
+    // `FE-W182`: in words — it printed the token's own "field_manager" on a client's phone.
     mockSession.mockReturnValue(signedInAs('field_manager'));
     mockStore.mockReturnValue(emptyPulled());
     await render(<Home />);
-    expect(screen.getByText(/Signed in as field_manager/u)).toBeTruthy();
+    expect(screen.getByText('Signed in as a field manager')).toBeTruthy();
+    expect(screen.queryByText(/field_manager/u)).toBeNull();
+  });
+
+  it('names an administrator in words too', async () => {
+    mockSession.mockReturnValue(signedInAs('admin'));
+    mockStore.mockReturnValue(emptyPulled());
+    await render(<Home />);
+    expect(screen.getByText('Signed in as an administrator')).toBeTruthy();
+  });
+
+  it('names a role it does not know exactly as the server issued it (FE-W182)', async () => {
+    // Not a guess at what it means: the raw value is what support needs to read.
+    mockSession.mockReturnValue(signedInAs('auditor'));
+    mockStore.mockReturnValue(emptyPulled());
+    await render(<Home />);
+    expect(screen.getByText('Signed in as auditor')).toBeTruthy();
+  });
+
+  it('says where a manager’s work is, with no internal reference (FE-W182)', async () => {
+    mockSession.mockReturnValue(signedInAs('field_manager'));
+    mockStore.mockReturnValue(emptyPulled());
+    await render(<Home />);
+    expect(
+      screen.getByText('Your team’s exceptions and approvals are in the web console.'),
+    ).toBeTruthy();
+    expect(screen.queryByText(/FE-W/u)).toBeNull();
   });
 
   // One render per case. Rendering repeatedly inside a single test leaves the earlier

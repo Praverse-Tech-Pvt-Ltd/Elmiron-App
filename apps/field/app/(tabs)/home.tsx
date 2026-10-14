@@ -4,11 +4,11 @@ import { Redirect, useRouter } from 'expo-router';
 import {
   Banner,
   BodyText,
-  Heading,
   ListRow,
   PendingSyncSection,
   Screen,
   TodayScreen,
+  Title,
   t,
   useLanguage,
 } from '@fieldforce/ui';
@@ -63,6 +63,22 @@ const dayDetail = (origin: DayOrigin, zone: TerritoryZone, failure: PullFailure)
  * if the API ever returns something this app should not show, that is a backend bug
  * to report rather than something to filter away here.
  */
+/**
+ * `FE-W182`. The role in words for the two roles this shell is shown to. It printed the token's
+ * own value — "Signed in as field_manager" — on a client's phone. A role this app does not know is
+ * still named exactly as the server issued it: that line is how support sees which role it was.
+ */
+const signedInLine = (role: string | null): string => {
+  switch (role) {
+    case 'field_manager':
+      return t('home.signedInAsManager');
+    case 'admin':
+      return t('home.signedInAsAdmin');
+    default:
+      return t('home.signedInAs', { role: role ?? t('home.unknownRole') });
+  }
+};
+
 const destinationsFor = (role: string): readonly { title: string; detail: string }[] => {
   switch (role) {
     case 'field_manager':
@@ -366,8 +382,9 @@ export default function Home(): ReactNode {
 
   return (
     <Screen scrollable>
-      <Heading>{t('today.title')}</Heading>
-      <BodyText muted>{t('home.signedInAs', { role: role ?? t('home.unknownRole') })}</BodyText>
+      {/* `FE-W178`. A screen's title is `Title`, as on every other tab; `Heading` is a card's. */}
+      <Title>{t('today.title')}</Title>
+      <BodyText muted>{signedInLine(role)}</BodyText>
       {destinationsFor(role ?? 'mr').map((destination) => (
         <ListRow key={destination.title} title={destination.title} detail={destination.detail} />
       ))}

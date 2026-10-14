@@ -147,7 +147,8 @@ export const VoiceNoteScreen = ({
 
           <View style={styles.centre}>
             <Figure>{elapsed}</Figure>
-            <Label>
+            {/* `FE-W184`. Centred line by line, so a status that wraps stays under the time. */}
+            <Label center>
               {blocked !== null
                 ? t('voiceNote.statusBlocked')
                 : recording
@@ -191,7 +192,8 @@ export const VoiceNoteScreen = ({
             </>
           ) : (
             // Not `critical`: a microphone the MR has not granted is a condition with
-            // a remedy, not a failure of theirs. §02.
+            // a remedy, not a failure of theirs. §02. Inside the dark card on purpose: `Banner`
+            // takes paper ink on its own fill (`FE-W176`), so it no longer inherits the hero's white.
             <Banner detail={blocked} title={t('voiceNote.blockedTitle')} tone="attention" />
           )}
         </View>

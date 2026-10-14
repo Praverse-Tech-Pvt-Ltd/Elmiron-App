@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Heading, Label, Title } from './Text';
+import { BodyText, Heading, Label, Secondary, Title } from './Text';
 import { Card } from './Card';
 import { ListItem } from './ListItem';
 import { Spinner } from './Spinner';
@@ -71,9 +71,9 @@ export interface BeatPlanScreenProps {
 }
 
 const styles = StyleSheet.create({
-  head: { gap: 2 },
+  head: { gap: tokens.space.xxs },
   rows: { gap: tokens.space.sm },
-  currentLines: { gap: 2 },
+  currentLines: { gap: tokens.space.xxs },
 });
 
 /**
@@ -154,7 +154,8 @@ export const BeatPlanScreen = ({
           `daily_mileage()`, server-side and without an endpoint, so it is absent
           rather than computed from positions this app does not take.
         */}
-        <Label muted>{t('route.plannedDone', { planned, done })}</Label>
+        {/* `FE-W178`. The line under a screen title is `Secondary`, as on the call report. */}
+        <Secondary>{t('route.plannedDone', { planned, done })}</Secondary>
         {statusLine === null ? null : <Label>{statusLine}</Label>}
       </View>
 

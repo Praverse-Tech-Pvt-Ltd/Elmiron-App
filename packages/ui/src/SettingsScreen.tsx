@@ -54,7 +54,7 @@ export interface SettingsScreenProps {
 const styles = StyleSheet.create({
   group: { gap: tokens.space.sm },
   row: { flexDirection: 'row', gap: tokens.space.sm, alignItems: 'center' },
-  rowText: { flex: 1, gap: tokens.space.xs / 2 },
+  rowText: { flex: 1, gap: tokens.space.xxs },
 });
 
 /**

@@ -46,7 +46,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: tokens.space.md,
     borderRadius: tokens.radius.control,
     minHeight: tokens.target.secondary,
-    backgroundColor: '#F6EDE9',
+    // `FE-W181`. The recording tint, from the palette; it was the app's one literal colour.
+    backgroundColor: tokens.color.recordingFill,
   },
   armed: { backgroundColor: tokens.color.wash },
   words: { flex: 1 },

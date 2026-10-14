@@ -61,7 +61,7 @@ export interface DoctorProfileScreenProps {
 }
 
 const styles = StyleSheet.create({
-  head: { gap: 2 },
+  head: { gap: tokens.space.xxs },
   since: { flexDirection: 'row', alignItems: 'baseline', gap: tokens.space.sm },
   rows: { gap: tokens.space.sm },
   // The boundary is a card of its own so it cannot be mistaken for a caption on the

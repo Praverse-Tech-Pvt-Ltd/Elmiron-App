@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { BodyText, Label } from './Text';
 import { BottomSheet } from './BottomSheet';
+import { SurfaceContext } from './surface';
 import { useT } from './i18n';
 
 /**
@@ -87,11 +88,17 @@ export const Select = ({
           disabled ? styles.disabled : null,
         ]}
       >
-        {chosen === undefined ? (
-          <BodyText muted>{prompt}</BodyText>
-        ) : (
-          <BodyText>{chosen.label}</BodyText>
-        )}
+        {/*
+          `FE-W176`. The control is a white field whatever it sits on, so its words take paper ink.
+          The label above it stays on the surrounding ground and reads that ground's ink.
+        */}
+        <SurfaceContext.Provider value="paper">
+          {chosen === undefined ? (
+            <BodyText muted>{prompt}</BodyText>
+          ) : (
+            <BodyText>{chosen.label}</BodyText>
+          )}
+        </SurfaceContext.Provider>
       </Pressable>
 
       <BottomSheet

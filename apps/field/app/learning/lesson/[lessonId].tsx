@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useLocalSearchParams } from 'expo-router';
 import type { CompleteLessonResponse } from '@fieldforce/core';
-import { LessonScreen, Screen } from '@fieldforce/ui';
+import { LessonScreen, Screen, t, useLanguage } from '@fieldforce/ui';
 import type { LessonView } from '@fieldforce/ui';
 import { learningEnabled, lessonTutorEnabled } from '../../../src/features';
 import { LessonTutor } from '../../../src/learning/lesson-tutor';
@@ -34,6 +34,8 @@ export const Lesson = ({
   /** The lesson tutor's switch (`EXPO_PUBLIC_LESSON_TUTOR`); injectable for tests. */
   readonly tutorEnabled?: boolean;
 }): ReactNode => {
+  // `FE-W183`. The screen's own words follow the app's language; a language change repaints it.
+  useLanguage();
   const { zone } = usePulledStore();
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
@@ -74,7 +76,8 @@ export const Lesson = ({
     );
   };
 
-  const stamp = (iso: string): string => `${clockIn(iso, zone)} on ${dayMonthIn(iso, zone)}`;
+  const stamp = (iso: string): string =>
+    t('learning.stamp', { time: clockIn(iso, zone), date: dayMonthIn(iso, zone) });
 
   const view: LessonView =
     loaded.kind === 'loading'
@@ -96,7 +99,7 @@ export const Lesson = ({
               minutes:
                 loaded.lesson.estimatedMinutes === null
                   ? null
-                  : `About ${String(loaded.lesson.estimatedMinutes)} minutes`,
+                  : t('learning.minutes', { count: loaded.lesson.estimatedMinutes }),
               // `FE-W127` — a lesson with a clip shows it above its text; a text-only lesson is unchanged.
               media:
                 loaded.lesson.video === null ? null : (

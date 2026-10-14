@@ -149,3 +149,70 @@ describe('the consent screen stays out of the catalogue', () => {
     expect(text).not.toMatch(/\buseT\b|\buseLanguage\b|from '[^']*i18n[^']*'/u);
   });
 });
+
+/**
+ * `FE-W182`. Nothing the rep or a manager reads names the project's own bookkeeping. Home's two
+ * rows for a manager and an administrator read "Exceptions and approvals — FE-W6" on a client's
+ * phone. Placeholders are removed before the check, so `{count}` is not mistaken for anything.
+ */
+describe('no internal reference in a word the app shows', () => {
+  const INTERNAL = [
+    /\b(?:FE|BE)-(?:W|C|D|CR)-?\d/u, // a change, decision or contract-request id
+    /\bMR-\d/u, // a review round
+    /\b[QD]-\d/u, // an open question or a decision
+    /\b[a-z]+_[a-z]+\b/u, // a schema name: a table, a column, an enum value
+  ];
+
+  it('finds none in any English value', () => {
+    const leaks = Object.entries(english)
+      .filter(([, value]) => {
+        const words = value.replace(/\{\w+\}/gu, '');
+        return INTERNAL.some((pattern) => pattern.test(words));
+      })
+      .map(([key, value]) => `${key}: ${value}`);
+    expect(leaks).toEqual([]);
+  });
+
+  it('would catch the two that shipped (a positive control on the patterns)', () => {
+    const caught = (text: string): boolean => INTERNAL.some((pattern) => pattern.test(text));
+    expect(caught('Exceptions and approvals — FE-W6')).toBe(true);
+    expect(caught('Signed in as field_manager')).toBe(true);
+    expect(caught('{count} visits reviewed of {total}'.replace(/\{\w+\}/gu, ''))).toBe(false);
+  });
+});
+
+/**
+ * `FE-W183`. Learning, the lesson tutor and the lesson video were the last rep-facing screens with
+ * their words written into the component. No English prop value and no English JSX text is left in
+ * them: everything shown is a catalogue key or the server's content.
+ */
+describe('Learning is on the catalogue', () => {
+  const FILES = [
+    'packages/ui/src/LearningScreens.tsx',
+    'packages/ui/src/TutorPanel.tsx',
+    'packages/ui/src/LessonVideoFrame.tsx',
+    'apps/field/src/learning/view.ts',
+    'apps/field/src/learning/lesson-video-view.ts',
+    'apps/field/app/learning/[courseId].tsx',
+    'apps/field/app/learning/lesson/[lessonId].tsx',
+  ];
+  /** Comments say things in English on purpose; only code is checked. */
+  const code = (text: string): string =>
+    text.replace(/\/\*[\s\S]*?\*\//gu, '').replace(/^\s*\/\/.*$/gmu, '');
+
+  it.each(FILES)('%s calls the catalogue', (file) => {
+    // `T_CALL` without its global flag: a `g` regex carries `lastIndex` from one test to the next.
+    expect(code(readFileSync(join(ROOT, file), 'utf8'))).toMatch(/(?<![.\w])t\(\s*['"]/u);
+  });
+
+  it.each(FILES)('%s writes no English sentence into what it shows', (file) => {
+    const text = code(readFileSync(join(ROOT, file), 'utf8'));
+    // A prop given a literal ("label=\"Try again\""), JSX text between tags, or a string literal
+    // that reads as words: two or more words, the first capitalised.
+    expect(text).not.toMatch(
+      /\b(?:label|title|detail|help|note|accessibilityLabel|accessibilityHint)="[^"]*[A-Za-z]/u,
+    );
+    expect(text).not.toMatch(/>\s*[A-Z][a-z]+(?: [a-z’']+)+[.…]?\s*</u);
+    expect(text).not.toMatch(/['`"][A-Z][a-z]+(?: [a-z’']+){2,}/u);
+  });
+});

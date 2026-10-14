@@ -5,7 +5,7 @@ import { Banner } from './Banner';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Spinner } from './Spinner';
-import { BodyText, Heading, Label, Title } from './Text';
+import { BodyText, Heading, Label, Secondary, Title } from './Text';
 import { t, useLanguage } from './i18n';
 
 /**
@@ -79,12 +79,16 @@ export const PracticeHomeScreen = ({
         <Spinner label={t('practice.loading')} />
       ) : (
         <>
-          <Heading>{t('practice.startHeading')}</Heading>
+          {/*
+            `FE-W178`. Section headers are muted 13.5, as the designs draw them — not `Heading`,
+            which is each card's own title below and made the header read as one more card.
+          */}
+          <Label muted>{t('practice.startHeading')}</Label>
           {scenarios.length === 0 ? (
             <Card>
               <View style={styles.card}>
                 <BodyText>{t('practice.noScenarios')}</BodyText>
-                <Label muted>{t('practice.noScenariosDetail')}</Label>
+                <Secondary>{t('practice.noScenariosDetail')}</Secondary>
               </View>
             </Card>
           ) : (
@@ -94,7 +98,7 @@ export const PracticeHomeScreen = ({
                   <Heading>{row.title}</Heading>
                   <Label muted>{row.personaLine}</Label>
                   <BodyText>{row.objective}</BodyText>
-                  <Label muted>{t('practice.theyWillSay', { objection: row.objection })}</Label>
+                  <Secondary>{t('practice.theyWillSay', { objection: row.objection })}</Secondary>
                   <Button
                     label={t('practice.start')}
                     loading={starting === row.id}
@@ -109,7 +113,7 @@ export const PracticeHomeScreen = ({
             ))
           )}
 
-          <Heading>{t('practice.sessionsHeading')}</Heading>
+          <Label muted>{t('practice.sessionsHeading')}</Label>
           {sessions.length === 0 ? (
             <Card>
               <BodyText>{t('practice.noSessions')}</BodyText>

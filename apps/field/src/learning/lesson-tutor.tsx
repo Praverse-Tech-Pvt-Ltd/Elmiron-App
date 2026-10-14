@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { TutorPanel } from '@fieldforce/ui';
+import { t, TutorPanel } from '@fieldforce/ui';
 import type { TutorView } from '@fieldforce/ui';
 import type { GatewayResponse } from '../assistant/contract';
 import { appLiveConnection } from '../live-connection';
@@ -53,7 +53,11 @@ export const LessonTutor = ({
             resetLabel:
               outcome.resetsAt === null
                 ? null
-                : `${clockIn(outcome.resetsAt, zone)} on ${dayMonthIn(outcome.resetsAt, zone)}`,
+                : // `FE-W183`. The AI screens' own "{time} on {date}", in the app's language.
+                  t('ai.resetLabel', {
+                    time: clockIn(outcome.resetsAt, zone),
+                    date: dayMonthIn(outcome.resetsAt, zone),
+                  }),
           });
           return;
         case 'offline':
