@@ -304,7 +304,7 @@ describe('app/home.tsx — the visit the MR is standing inside is never hidden',
     await render(<Home />);
 
     // MR-49 D2 / FE-W59: an in-progress visit is CONTINUED, not started.
-    await fireEvent.press(await screen.findByText('Continue the visit to Dr Asha Deshpande'));
+    await fireEvent.press(await screen.findByText('Back to Dr Asha Deshpande'));
     expect(mockPush).toHaveBeenCalledWith('/visit/66666666-6666-4666-8666-666666666606');
     expect(screen.queryByText('Nothing planned for today')).toBeNull();
   });
@@ -317,8 +317,8 @@ describe('app/home.tsx — the visit the MR is standing inside is never hidden',
     await render(<Home />);
 
     expect(await screen.findByText('Nothing planned for today')).toBeTruthy();
-    expect(screen.queryByText('Start the visit to Dr Asha Deshpande')).toBeNull();
-    expect(screen.queryByText('Continue the visit to Dr Asha Deshpande')).toBeNull();
+    expect(screen.queryByText('Visit Dr Asha Deshpande')).toBeNull();
+    expect(screen.queryByText('Back to Dr Asha Deshpande')).toBeNull();
   });
 
   it('W2-C A2 / BE-W154: a check-in queued on THIS phone makes it a visit in progress, offline', async () => {
@@ -347,7 +347,7 @@ describe('app/home.tsx — the visit the MR is standing inside is never hidden',
     mockStore.mockReturnValue(withVisit(visitOf('planned', id)));
     await render(<Home />);
 
-    expect(await screen.findByText('Continue the visit to Dr Asha Deshpande')).toBeTruthy();
+    expect(await screen.findByText('Back to Dr Asha Deshpande')).toBeTruthy();
     await asyncStorageQueueStore.save(emptyQueue);
   });
 });

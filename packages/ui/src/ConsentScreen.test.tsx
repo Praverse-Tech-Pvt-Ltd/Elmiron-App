@@ -23,7 +23,7 @@ const props = {
   ifAgree: 'Audio is recorded until Rahul stops it, kept 90 days, then deleted.',
   ifDecline: 'Nothing is recorded and the visit carries on exactly as it would have.',
   notice: NOTICE,
-  noticeLabel: 'Notice v1.2 · English · a1b2c3d4',
+  noticeLabel: 'Notice version 1.2 · English',
   onAnswer: noop,
   onHandBack: noop,
   onOpenDetails: noop,
@@ -63,7 +63,7 @@ describe('the rules that make the screen lawful hold in every variant', () => {
     // framing would make the ledger attest to text the doctor never saw.
     await render(<ConsentScreen {...props} variant={variant} />);
     expect(screen.getByText(NOTICE)).toBeTruthy();
-    expect(screen.getByText('Notice v1.2 · English · a1b2c3d4')).toBeTruthy();
+    expect(screen.getByText('Notice version 1.2 · English')).toBeTruthy();
   });
 
   it.each(VARIANTS)('%s names the person asking, not just the company', async (variant) => {

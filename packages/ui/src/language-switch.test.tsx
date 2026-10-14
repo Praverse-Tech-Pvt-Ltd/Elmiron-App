@@ -54,11 +54,11 @@ describe('a complete language, chosen while a screen is showing', () => {
     await act(() => {
       languageStore.choose('hi');
     });
-    expect(screen.getByText('हि Settings')).toBeTruthy();
+    expect(screen.getByText('हि Me')).toBeTruthy();
     await act(() => {
       languageStore.choose('en');
     });
-    expect(screen.getByText('Settings')).toBeTruthy();
+    expect(screen.getByText('Me')).toBeTruthy();
   });
 
   it('an incomplete language (Marathi, empty) is refused and nothing changes', async () => {
@@ -66,6 +66,6 @@ describe('a complete language, chosen while a screen is showing', () => {
     await act(() => {
       expect(languageStore.choose('mr')).toBe(false);
     });
-    expect(screen.getByText('Settings')).toBeTruthy();
+    expect(screen.getByText('Me')).toBeTruthy();
   });
 });

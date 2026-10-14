@@ -1,6 +1,7 @@
 import type { SettingRow } from '@fieldforce/ui';
 import { LANGUAGES, languageStore, t } from '@fieldforce/ui/i18n';
 import type { Language } from '@fieldforce/ui/i18n';
+import type { DataPrefs } from './data-prefs';
 
 /**
  * C4's entries, transcribed from `docs/design/phase2-first-run-and-the-day.dc.html`.
@@ -84,8 +85,18 @@ const languageRows = (nav: SettingsNavigation): SettingRow[] =>
     };
   });
 
+/**
+ * `FE-W192`. What a row's setting is set to, in words, or nothing while it is still being read off
+ * the phone — a row never shows a guessed position, as `DataSettingsScreen` never draws a guessed
+ * switch.
+ */
+const onOff = (value: boolean | undefined): { value?: string } =>
+  value === undefined ? {} : { value: value ? t('common.on') : t('common.off') };
+
 export const settingsGroups = (
   nav: SettingsNavigation,
+  /** `FE-W192`. The two "Your data" switches as this phone has them; absent until read. */
+  state: { readonly dataPrefs?: DataPrefs | null } = {},
 ): readonly { heading: string; rows: readonly SettingRow[] }[] => [
   {
     heading: t('settings.groupWork'),
@@ -162,6 +173,7 @@ export const settingsGroups = (
         detail: t('settings.wifiOnlyDetail'),
         state: 'available',
         onPress: nav.onOpenDataSettings,
+        ...onOff(state.dataPrefs?.wifiOnlyAudio),
       },
       {
         id: 'warn-over',
@@ -169,6 +181,7 @@ export const settingsGroups = (
         detail: t('settings.warnOverDetail'),
         state: 'available',
         onPress: nav.onOpenDataSettings,
+        ...onOff(state.dataPrefs?.warnOverMonthly),
       },
     ],
   },

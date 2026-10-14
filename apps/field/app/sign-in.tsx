@@ -4,14 +4,15 @@ import {
   Banner,
   BodyText,
   BrandLine,
-  PrimaryButton,
+  Button,
+  PasswordField,
   Screen,
   TextField,
   Title,
   useT,
 } from '@fieldforce/ui';
 import { useSession } from '../src/session';
-import { failureDetail } from '../src/errors/plain';
+import { signInFailure } from '../src/errors/sign-in';
 
 /**
  * The brand line, §03's one Cormorant moment.
@@ -23,6 +24,9 @@ import { failureDetail } from '../src/errors/plain';
  * words carry no trademark; the mark itself appears nowhere in this app.
  */
 const BRAND_LINE = 'Relief at the root.';
+
+/** `FE-W192`. A no-break space: one blank line of the note's own size, read as nothing. */
+const RESERVED_LINE = '\u00A0';
 
 export default function SignIn(): ReactNode {
   const { t } = useT();
@@ -37,16 +41,10 @@ export default function SignIn(): ReactNode {
     setFailure(null);
     void signIn(email, password)
       .catch((error: unknown) => {
-        // The server's wording, not ours. Inventing a friendlier message here is
-        // how "invalid credentials" becomes "something went wrong" and a support
-        // call becomes unanswerable.
-        // A network failure is the one exception: "Network request failed" is not the server's
-        // wording at all, and it reads as a broken app on a doorstep with one bar of signal.
-        setFailure(
-          error instanceof Error && !/network|fetch/iu.test(error.message)
-            ? error.message
-            : failureDetail(error),
-        );
+        // `FE-W186`. The app's own sentence for each failure the auth server names ("That email
+        // and password don't match."), never the server's English string ("Invalid login
+        // credentials") — specific still, so a wrong password is not "something went wrong".
+        setFailure(signInFailure(error));
       })
       .finally(() => {
         setBusy(false);
@@ -58,20 +56,27 @@ export default function SignIn(): ReactNode {
   /*
     Phase 1 §05 pairs every disabled control with the reason it is disabled —
     without one the button greys out and says nothing, which reads as a broken
-    app rather than as an unfinished form. `PrimaryButton` renders the note only
-    while disabled, so it appears and disappears with the blocked state.
+    app rather than as an unfinished form.
 
     FE-W102. Pinned in the footer, as every other screen's one primary is (§04): it sits in the
     thumb's reach and rides up with the keyboard, instead of under the fields at whatever height
     the form happens to end. The fields stay in the scrolling content above it.
+
+    `FE-W192`. The reason line's place is kept once there is no reason left. It used to vanish the
+    moment both fields were filled — `PrimaryButton` renders its note only while disabled — and
+    the pinned button dropped by a line under the thumb reaching for it. A blank line of the same
+    text role holds the place, so the button stays where the rep's thumb already is.
   */
-  const action = (
-    <PrimaryButton
-      label={busy ? t('signIn.submitting') : t('signIn.submit')}
-      onPress={submit}
-      disabled={blocked}
+  const label = busy ? t('signIn.submitting') : t('signIn.submit');
+  const action = blocked ? (
+    <Button
+      disabled
+      label={label}
       note={busy ? t('signIn.checking') : t('signIn.needDetails')}
+      onPress={submit}
     />
+  ) : (
+    <Button label={label} note={RESERVED_LINE} onPress={submit} />
   );
 
   return (
@@ -99,12 +104,11 @@ export default function SignIn(): ReactNode {
         keyboardType="email-address"
         editable={!busy}
       />
-      <TextField
+      {/* `FE-W192`. With "Show password", so a mistyped password is seen before it is sent. */}
+      <PasswordField
         label={t('signIn.password')}
         value={password}
         onChangeText={setPassword}
-        secure
-        autoCapitalize="none"
         editable={!busy}
       />
     </Screen>

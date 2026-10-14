@@ -98,6 +98,27 @@ const REFUSED_WORDS: Readonly<Record<PingRefusal, TextKey>> = {
 };
 
 /**
+ * `FE-W186`. A refusal that is ROUTINE: `too_frequent` means the position before it was kept a
+ * moment ago, so nothing is missing from what the company has. On Me it read "Your last position: It
+ * came too soon after the one before, so it was not kept." — a sentence about the app's own spacing,
+ * worded as though the rep had lost something. It is said as the kept position it follows.
+ */
+const ROUTINE: ReadonlySet<PingRefusal> = new Set(['too_frequent']);
+
+/**
+ * The detail line while sharing. `FE-W186`: ALWAYS a sentence, never absent — the line used to
+ * appear and disappear with each position's verdict, and everything under it jumped (~106px on Me).
+ * A kept position says so; only what the rep should know about is worded differently.
+ */
+const sharingDetail = (last: LastSend | null): string => {
+  if (last === null) return t('tracking.lastNone');
+  if (last.kind === 'kept') return t('tracking.lastKept');
+  if (last.kind === 'failed') return t('tracking.lastFailed');
+  if (ROUTINE.has(last.reason)) return t('tracking.lastKept');
+  return t('tracking.lastRefused', { reason: t(REFUSED_WORDS[last.reason]) });
+};
+
+/**
  * The one line the rep always sees — tracking is never silent. The state's own words from
  * `TRACKING_WORDS`, then whatever the rep can act on: a changed notice, a missing permission, a
  * position that did not reach the company.
@@ -147,15 +168,9 @@ export const trackingLine = (input: {
     input.status.shiftEnd === null
       ? ''
       : ` ${t('tracking.until', { time: input.status.shiftEnd.slice(0, 5) })}`;
-  const last = input.lastSend;
   return {
     title: `${TRACKING_WORDS.active}${until}`,
-    detail:
-      last === null || last.kind === 'kept'
-        ? null
-        : last.kind === 'failed'
-          ? t('tracking.lastFailed')
-          : t('tracking.lastRefused', { reason: t(REFUSED_WORDS[last.reason]) }),
+    detail: sharingDetail(input.lastSend),
     tone: 'attention',
   };
 };

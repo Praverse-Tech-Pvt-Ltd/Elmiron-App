@@ -1,10 +1,20 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import type { NativeScrollEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { tokens } from '@fieldforce/ui-tokens';
+import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
 import { elevationStyle } from './depth';
+import { useT } from './i18n';
 
 export interface ScreenProps {
   readonly children: ReactNode;
@@ -20,7 +30,7 @@ export interface ScreenProps {
    * pinned, never scrolled to". Before this slot the screens put their action at the end of
    * scrolling content behind a `flex: 1` spacer — which does nothing inside a ScrollView — so on a
    * long visit the rep scrolled to find "Check in". Anything passed here stays in reach, above the
-   * gesture bar, and rides up with the keyboard.
+   * gesture bar, and rides up with the keyboard (`FE-W187`).
    */
   readonly footer?: ReactNode;
   /**
@@ -29,6 +39,20 @@ export interface ScreenProps {
    * scrolling back down resumes following.
    */
   readonly followLatest?: boolean;
+  /**
+   * `FE-W188`. A screen pushed on the stack — a visit, a report, a setting — draws a "Back" control
+   * at its top, and this is what it does (the app passes `router.back`). The `Stack` runs with
+   * `headerShown: false`, so without it the only way back was the phone's own Back, which a rep on
+   * a gesture-navigation phone may not know is there. A tab's own screen passes nothing.
+   */
+  readonly onBack?: () => void;
+  /**
+   * `FE-W188`. The back control's word, when it must not follow the app's language. Only the
+   * doctor-facing consent screens pass one: their words stay English and out of the catalogue until
+   * an approved translation arrives (`FE-W148`), and a translator's "Back" would be the one word on
+   * them nobody legal reviewed. Everywhere else the catalogue's `common.back`.
+   */
+  readonly backLabel?: string;
 }
 
 /** How close to the bottom (pt) still counts as "at the bottom". */
@@ -39,6 +63,10 @@ export const isAtBottom = (
   event: Pick<NativeScrollEvent, 'contentOffset' | 'contentSize' | 'layoutMeasurement'>,
 ): boolean =>
   event.contentOffset.y + event.layoutMeasurement.height >= event.contentSize.height - FOLLOW_SLACK;
+
+/** The back control's drawn chevron: arm length and stroke. Geometry, like `TabIcon`'s. */
+const CHEVRON = 9;
+const CHEVRON_STROKE = 2;
 
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: tokens.color.background },
@@ -53,7 +81,91 @@ const styles = StyleSheet.create({
     gap: tokens.space.sm,
     ...elevationStyle('dock'),
   },
+  backRow: { paddingTop: tokens.space.xs, alignItems: 'flex-start' },
+  back: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.space.sm,
+    // `FE-W188`. The tap target floor, never the size of the word.
+    minHeight: tokens.target.floor,
+    minWidth: tokens.target.floor,
+    paddingHorizontal: tokens.space.sm,
+    borderRadius: tokens.radius.control,
+  },
+  // Press darkens, as every control's does (§05).
+  backPressed: { backgroundColor: tokens.color.wash },
+  chevron: {
+    width: CHEVRON,
+    height: CHEVRON,
+    borderLeftWidth: CHEVRON_STROKE,
+    borderBottomWidth: CHEVRON_STROKE,
+    borderColor: tokens.color.accent,
+    // A square's corner turned to point left, nudged right so the drawn point sits in the box.
+    transform: [{ rotate: '45deg' }],
+    marginLeft: CHEVRON_STROKE,
+  },
+  // `FE-W177`'s tappable step, in the accent ink every quiet action uses.
+  backLabel: {
+    fontSize: tokens.typography.tappable.size,
+    lineHeight: tokens.typography.tappable.lineHeight,
+    fontWeight: tokens.typography.tappable.weight,
+    fontFamily: fontFamilyFor(tokens.typography.tappable.weight),
+    color: tokens.color.accent,
+  },
 });
+
+/**
+ * `FE-W187`. Whether the software keyboard is up. iOS announces it before it moves, Android only
+ * after — the same pair `KeyboardAvoidingView` listens to.
+ */
+const useKeyboardShown = (): boolean => {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const ios = Platform.OS === 'ios';
+    const subscriptions = [
+      Keyboard.addListener(ios ? 'keyboardWillShow' : 'keyboardDidShow', () => {
+        setShown(true);
+      }),
+      Keyboard.addListener(ios ? 'keyboardWillHide' : 'keyboardDidHide', () => {
+        setShown(false);
+      }),
+    ];
+    return () => {
+      for (const subscription of subscriptions) subscription.remove();
+    };
+  }, []);
+  return shown;
+};
+
+/**
+ * `FE-W188`. The back control: a drawn chevron (Views, not a font glyph — the reason `TabIcon`
+ * gives) and the word. It sits on the screen's ground, never inside a hero, so its ink is fixed.
+ */
+const BackControl = ({
+  onBack,
+  label,
+}: {
+  readonly onBack: () => void;
+  readonly label: string | undefined;
+}): ReactNode => {
+  const { t } = useT();
+  const word = label ?? t('common.back');
+  return (
+    <Pressable
+      accessibilityLabel={word}
+      accessibilityRole="button"
+      hitSlop={tokens.space.xs}
+      onPress={onBack}
+      style={({ pressed }) => [styles.back, pressed ? styles.backPressed : null]}
+      testID="screen-back"
+    >
+      <View style={styles.chevron} />
+      <Text numberOfLines={1} style={styles.backLabel}>
+        {word}
+      </Text>
+    </Pressable>
+  );
+};
 
 /**
  * Every route renders inside this component, which is why the safe-area inset
@@ -80,14 +192,22 @@ export const Screen = ({
   scrollable = false,
   footer,
   followLatest = false,
+  onBack,
+  backLabel,
 }: ScreenProps): ReactNode => {
   const insets = useSafeAreaInsets();
   const scroller = useRef<ScrollView>(null);
   // Starts true: a conversation opens at its newest message.
   const atBottom = useRef(true);
+  const keyboardShown = useKeyboardShown();
   const hasFooter = footer !== undefined && footer !== null;
+  const hasBack = onBack !== undefined;
+  // `FE-W188`. With a back control the status bar's height sits above the control, on the
+  // wrapper, and the content starts a small step below the control rather than a margin below
+  // the clock.
+  const contentTop = hasBack ? tokens.space.xs : tokens.space.md;
   const inset = {
-    paddingTop: tokens.space.md + insets.top,
+    paddingTop: hasBack ? contentTop : tokens.space.md + insets.top,
     paddingBottom: hasFooter ? tokens.space.md : tokens.space.md + insets.bottom,
     paddingLeft: tokens.space.md + insets.left,
     paddingRight: tokens.space.md + insets.right,
@@ -99,7 +219,7 @@ export const Screen = ({
   const body = scrollable ? (
     <ScrollView
       style={styles.fill}
-      contentContainerStyle={[styles.content, inset, { paddingTop: tokens.space.md }]}
+      contentContainerStyle={[styles.content, inset, { paddingTop: contentTop }]}
       // A tap on a button while the keyboard is up presses the button, rather than only closing
       // the keyboard and making the rep tap again.
       keyboardShouldPersistTaps="handled"
@@ -127,7 +247,9 @@ export const Screen = ({
       style={[
         styles.footer,
         {
-          paddingBottom: tokens.space.md + insets.bottom,
+          // `FE-W187`. The keyboard covers the gesture bar, so while it is up the footer sits on
+          // the keyboard with the design's margin alone, not with a gap the height of a hidden bar.
+          paddingBottom: tokens.space.md + (keyboardShown ? 0 : insets.bottom),
           paddingLeft: tokens.space.md + insets.left,
           paddingRight: tokens.space.md + insets.right,
         },
@@ -137,14 +259,34 @@ export const Screen = ({
     </View>
   ) : null;
 
-  // iOS needs the padding behaviour; Android resizes the window itself (adjustResize), and a
-  // second adjustment there would push the footer up twice.
+  /**
+   * `FE-W187`. The footer rides up with the keyboard — and on Android it did not. Android used to
+   * shrink the window itself (`adjustResize`), so this view was left off there. Under the
+   * edge-to-edge layout Expo now gives every Android app the window is no longer resized: the
+   * keyboard was drawn OVER the pinned "Sign in", "Send report" and "Save", and the rep had to
+   * close the keyboard to find them (QA screenshots 02, 40, 95).
+   *
+   * `padding` on both platforms is safe either way, because the view measures its OWN frame
+   * against the keyboard's top: where a system does still resize the window, the frame already
+   * ends at the keyboard, the padding it computes is zero, and the footer is never lifted twice.
+   */
   return (
-    <KeyboardAvoidingView
-      style={styles.fill}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={[styles.fill, scrollable ? { paddingTop: insets.top } : null]}>
+    <KeyboardAvoidingView behavior="padding" style={styles.fill}>
+      <View style={[styles.fill, scrollable || hasBack ? { paddingTop: insets.top } : null]}>
+        {hasBack ? (
+          <View
+            style={[
+              styles.backRow,
+              {
+                // The chevron, not the control's padding, lines up with the content's edge.
+                paddingLeft: tokens.space.md + insets.left - tokens.space.sm,
+                paddingRight: tokens.space.md + insets.right,
+              },
+            ]}
+          >
+            <BackControl label={backLabel} onBack={onBack} />
+          </View>
+        ) : null}
         {body}
         {pinned}
       </View>

@@ -85,7 +85,8 @@ describe('what the screen does not claim', () => {
 describe('the screen title (FE-D12 V5)', () => {
   it('is drawn at the day-screen title size, like every other screen title', async () => {
     await render(<SettingsScreen groups={groups()} />);
-    const title = StyleSheet.flatten(screen.getByText('Settings').props['style']) as {
+    // `FE-W192`. The title reads "Me", as the tab does.
+    const title = StyleSheet.flatten(screen.getByText('Me').props['style']) as {
       fontSize?: number;
     };
     expect(title.fontSize).toBe(tokens.typography.title.size);

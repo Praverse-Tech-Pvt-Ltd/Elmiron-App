@@ -2,10 +2,15 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useRouter } from 'expo-router';
 import { PracticeHomeScreen, Screen, t, useLanguage } from '@fieldforce/ui';
-import type { PracticeScenarioRow, PracticeSessionRow, TextKey } from '@fieldforce/ui';
+import type { PracticeScenarioRow, PracticeSessionRow } from '@fieldforce/ui';
 import { practiceEnabled } from '../../src/features';
 import { practiceBackend } from '../../src/practice/transport';
+import { practiceDoctorName, stanceWord } from '../../src/practice/labels';
 import { failureDetail } from '../../src/errors/plain';
+import { useBack } from '../../src/navigation/back';
+import { usePulledStore } from '../../src/sync/pulled-store';
+import { clockIn, dayMonthIn } from '../../src/today/territory-day';
+import type { TerritoryZone } from '../../src/today/territory-day';
 import type {
   PracticePersona,
   PracticeScenario,
@@ -19,17 +24,6 @@ import type {
  * sample. By the operator's ruling of 1 October, this is what this release's
  * "Coaching / Analysis" means: feedback on a practice conversation, not on a recorded visit.
  */
-const STANCE: Readonly<Record<string, TextKey>> = {
-  receptive: 'practice.stanceReceptive',
-  sceptical: 'practice.stanceSceptical',
-  rushed: 'practice.stanceRushed',
-  hostile: 'practice.stanceHostile',
-};
-
-const stanceWord = (stance: string): string => {
-  const key = STANCE[stance];
-  return key === undefined ? stance : t(key);
-};
 
 /**
  * What the backend returned is kept, not the sentences built from it: the rows are written at
@@ -47,17 +41,34 @@ const scenarioRows = (
       personaLine:
         persona === undefined
           ? t('practice.aPracticeDoctor')
-          : `${persona.displayName} · ${persona.specialty} · ${stanceWord(persona.stance)}`,
+          : `${practiceDoctorName(persona.displayName)} · ${persona.specialty} · ${stanceWord(persona.stance)}`,
       objective: scenario.objective,
       objection: scenario.objection,
     };
   });
 
-const sessionRows = (mine: readonly PracticeSessionSummary[]): PracticeSessionRow[] =>
+/**
+ * `FE-W193` — when a session started, in the territory's clock: "Started 15 Oct at 14:40". Two
+ * practices of the same scenario were two identical rows; the start is what tells them apart. Only
+ * the server's own stamp is formatted, and a missing one shows nothing rather than a guess.
+ */
+const startedLabel = (startedAt: string, zone: TerritoryZone): string | null =>
+  Number.isNaN(Date.parse(startedAt))
+    ? null
+    : t('practice.startedAt', {
+        date: dayMonthIn(startedAt, zone),
+        time: clockIn(startedAt, zone),
+      });
+
+const sessionRows = (
+  mine: readonly PracticeSessionSummary[],
+  zone: TerritoryZone,
+): PracticeSessionRow[] =>
   mine.map((session) => ({
     sessionId: session.sessionId,
     title: session.scenarioTitle,
-    personaName: session.personaDisplayName,
+    personaName: practiceDoctorName(session.personaDisplayName),
+    started: startedLabel(session.startedAt, zone),
     stateLabel:
       session.analysisId !== null
         ? t('practice.feedbackReady')
@@ -76,6 +87,8 @@ interface Failure {
 const PracticeHome = (): ReactNode => {
   useLanguage();
   const router = useRouter();
+  const back = useBack();
+  const { zone } = usePulledStore();
   const [found, setFound] = useState<{
     readonly personas: readonly PracticePersona[];
     readonly scenarios: readonly PracticeScenario[];
@@ -104,8 +117,9 @@ const PracticeHome = (): ReactNode => {
     };
   }, []);
 
+  // `FE-W188`. Opened from Me: a pushed screen draws its own way back.
   return (
-    <Screen scrollable>
+    <Screen onBack={back} scrollable>
       <PracticeHomeScreen
         failure={
           failure === null
@@ -142,7 +156,7 @@ const PracticeHome = (): ReactNode => {
         }}
         sample={false}
         scenarios={scenarioRows(found.personas, found.scenarios)}
-        sessions={sessionRows(mine)}
+        sessions={sessionRows(mine, zone)}
         starting={starting}
       />
     </Screen>

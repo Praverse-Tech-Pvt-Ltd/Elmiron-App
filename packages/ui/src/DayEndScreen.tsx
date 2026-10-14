@@ -96,6 +96,13 @@ export interface DayEndScreenProps {
    */
   readonly captureNote: string;
   /**
+   * `FE-W185`. The heading above `captureNote` — "Nothing is being recorded." unless the caller
+   * knows better. While live location is shared that heading is false, and the caller says so.
+   */
+  readonly captureTitle?: string;
+  /** `FE-W188`. The screen's Back control (`Screen`'s `onBack`). */
+  readonly onBack?: () => void;
+  /**
    * FE-D2 7. **Null means UNKNOWN, and unknown is not zero.** The day is still loading, or it
    * could not be fetched. It used to arrive as 0, and `done + notMet === planned` read 0 of 0 as
    * "you went to all of them". A real zero (nothing planned) is 0, and says so plainly.
@@ -146,6 +153,8 @@ export const DayEndScreen = ({
   firstCaptureLabel,
   lastCaptureLabel,
   captureNote,
+  captureTitle,
+  onBack,
   planned,
   notMet,
   done,
@@ -159,9 +168,10 @@ export const DayEndScreen = ({
   workDay = null,
 }: DayEndScreenProps): ReactNode => {
   const { t } = useT();
+  const back = onBack === undefined ? {} : { onBack };
   if (failure !== null) {
     return (
-      <Screen scrollable>
+      <Screen scrollable {...back}>
         <Title>{dayLabel}</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </Screen>
@@ -194,7 +204,7 @@ export const DayEndScreen = ({
   );
 
   return (
-    <Screen scrollable footer={footer}>
+    <Screen scrollable footer={footer} {...back}>
       <View style={styles.head}>
         <Title>{t('dayEnd.title', { day: dayLabel })}</Title>
       </View>
@@ -208,7 +218,7 @@ export const DayEndScreen = ({
       <FadeIn index={0}>
         <Card tone="hero">
           <View style={styles.stopLines}>
-            <Heading>{t('dayEnd.nothingRecorded')}</Heading>
+            <Heading>{captureTitle ?? t('dayEnd.nothingRecorded')}</Heading>
             <BodyText>{captureNote}</BodyText>
           </View>
           {firstCaptureLabel === null && lastCaptureLabel === null ? null : (
@@ -254,8 +264,9 @@ export const DayEndScreen = ({
               </Secondary>
             </View>
           )}
+          {/* `FE-W189`. Sentences, so the prose step — round 1 left these two at `Label`. */}
           {notMet === null || notMet === 0 ? null : (
-            <Label muted>{t('dayEnd.notMet', { count: notMet })}</Label>
+            <Secondary>{t('dayEnd.notMet', { count: notMet })}</Secondary>
           )}
         </Card>
       </FadeIn>
@@ -276,13 +287,18 @@ export const DayEndScreen = ({
               <Figure>{distanceLabel}</Figure>
             </View>
           )}
-          <Label muted>{rateNote}</Label>
+          <Secondary>{rateNote}</Secondary>
         </Card>
       </FadeIn>
 
-      {workDay === null ? null : <WorkDayCard workDay={workDay} />}
-
       <SyncQueueIndicator onPress={onOpenQueue} state={sync} />
+
+      {/*
+        `FE-W191`. The working day's card is LAST, so its note sits directly above the pinned "End my
+        day" it is sent with: the field and the button read as one act, not as a note at one end of
+        the scroll and its button at the other. The sync line used to sit between them.
+      */}
+      {workDay === null ? null : <WorkDayCard workDay={workDay} />}
     </Screen>
   );
 };

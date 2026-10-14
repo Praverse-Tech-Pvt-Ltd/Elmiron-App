@@ -56,12 +56,30 @@ const mockDoctor = DoctorSchema.parse({
   updatedAt: '2026-09-01T08:00:00Z',
 });
 const mockRefresh = jest.fn();
+/** `FE-W191`. When true, today's plan carries the one doctor this phone holds. */
+const mockPlan = { onPlan: false };
+const PLAN = '55555555-5555-4555-8555-555555555501';
+const mockPlanId = PLAN;
 jest.mock('../sync/pulled-store', () => ({
   usePulledStore: () => ({
     store: {
       visit: new Map(),
       doctor: new Map([[mockDoctorId, mockDoctor]]),
-      beat_plan: new Map(),
+      beat_plan: new Map(
+        mockPlan.onPlan
+          ? [
+              [
+                mockPlanId,
+                { id: mockPlanId, planDate: '2026-10-09', version: 1, status: 'approved' },
+              ],
+            ]
+          : [],
+      ),
+      beat_plan_entry: new Map(
+        mockPlan.onPlan
+          ? [['entry-1', { id: 'entry-1', beatPlanId: mockPlanId, doctorId: mockDoctorId }]]
+          : [],
+      ),
       // Where the real store keeps clinics: their own map, joined to the doctor on read.
       clinic_address: new Map(mockDoctor.clinicAddresses.map((clinic) => [clinic.id, clinic])),
       consent_text_version: new Map(),
@@ -92,6 +110,7 @@ beforeEach(async () => {
   mockCreateUnplannedVisit.mockClear();
   mockReplace.mockClear();
   mockRefresh.mockClear();
+  mockPlan.onPlan = false;
   mockSend = () => Promise.resolve({ receivedAt: '2026-10-09T11:00:00Z', warnings: [] });
 });
 
@@ -166,5 +185,28 @@ describe('BE-W176 — Add an unplanned visit', () => {
 
     expect(await screen.findByText('This visit was not accepted')).toBeTruthy();
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  /**
+   * `FE-W191`. The sheet offered doctors already on today's plan (QA screenshot 52), under a
+   * screen that says it is for a doctor who is NOT on it.
+   */
+  it('FE-W191: offers no doctor who is already on today’s plan, and says why the list is empty', async () => {
+    mockPlan.onPlan = true;
+    await render(<UnplannedVisit />);
+    expect(
+      screen.getByText(
+        'Every doctor on this phone is on today’s plan. Open them from Today or today’s route.',
+      ),
+    ).toBeTruthy();
+    // The sheet, opened: the doctor is not in it.
+    await fireEvent.press(screen.getByLabelText('Doctor'));
+    expect(screen.queryByText('Dr Asha Deshpande')).toBeNull();
+  });
+
+  it('FE-W191: POSITIVE CONTROL — with no plan for today, the same doctor is offered', async () => {
+    await render(<UnplannedVisit />);
+    await fireEvent.press(screen.getByLabelText('Doctor'));
+    expect(screen.getByText('Dr Asha Deshpande')).toBeTruthy();
   });
 });

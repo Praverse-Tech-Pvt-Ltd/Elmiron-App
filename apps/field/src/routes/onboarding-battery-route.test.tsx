@@ -80,7 +80,7 @@ describe('A5-A8 — the fallback path, with zero working intents', () => {
     expect(screen.getByText('Xiaomi will shut this app off. Two taps stops it.')).toBeTruthy();
     expect(
       screen.getByText(
-        "If MIUI closes the app, your check-ins and mileage stop and you'll be entering them by hand.",
+        'If MIUI closes the app, your check-ins and mileage stop and you’ll be entering them by hand.',
       ),
     ).toBeTruthy();
     expect(screen.getByText('Autostart')).toBeTruthy();
@@ -94,7 +94,7 @@ describe('A5-A8 — the fallback path, with zero working intents', () => {
     await render(<BatterySetup />);
     expect(
       screen.getByText(
-        "What you'll see: High background power use. Switch it on, then press back twice.",
+        'What you’ll see: High background power use. Switch it on, then press back twice.',
       ),
     ).toBeTruthy();
   });

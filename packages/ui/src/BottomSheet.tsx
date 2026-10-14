@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import {
   Animated,
+  KeyboardAvoidingView,
   Modal,
   Pressable,
   ScrollView,
@@ -39,6 +40,7 @@ export interface BottomSheetProps {
 }
 
 const styles = StyleSheet.create({
+  avoider: { flex: 1 },
   scrim: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -51,7 +53,11 @@ const styles = StyleSheet.create({
     // The bottom padding is set in `SheetBody`, with the gesture inset added (`FE-W180`).
     // FE-W101. The design's sheet shadow, cast upward over the page it covers.
     ...elevationStyle('sheet'),
+    // `FE-W191`. Gives way to the keyboard: with a filter field focused the sheet is squeezed into
+    // the room above the keyboard instead of running off the top of the screen.
+    flexShrink: 1,
   },
+  rising: { flexShrink: 1 },
   handleArea: { alignItems: 'center', paddingVertical: tokens.space.sm },
   handle: {
     width: 36,
@@ -94,16 +100,24 @@ export const BottomSheet = ({
         The sheet sits inside it and stops the press going through — without that,
         a tap anywhere on the sheet closes it, including a tap on a row.
       */}
-      <Pressable
-        accessibilityLabel={t('common.close')}
-        accessibilityRole="button"
-        onPress={onDismiss}
-        style={styles.scrim}
-      >
-        <SheetBody height={height} title={title} footer={footer}>
-          {children}
-        </SheetBody>
-      </Pressable>
+      {/*
+        `FE-W191`. A sheet can hold a text field (the unplanned visit's doctor filter). A Modal is its
+        own window, and under Android's edge-to-edge layout nothing resizes it for the keyboard, so
+        the sheet — anchored to the bottom — would sit under the keyboard. The same padding
+        `Screen` uses (`FE-W187`) lifts it.
+      */}
+      <KeyboardAvoidingView behavior="padding" style={styles.avoider}>
+        <Pressable
+          accessibilityLabel={t('common.close')}
+          accessibilityRole="button"
+          onPress={onDismiss}
+          style={styles.scrim}
+        >
+          <SheetBody height={height} title={title} footer={footer}>
+            {children}
+          </SheetBody>
+        </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -130,7 +144,7 @@ const SheetBody = ({
   // margin, the other the device's hardware.
   const insets = useSafeAreaInsets();
   return (
-    <Animated.View collapsable={false} style={entrance}>
+    <Animated.View collapsable={false} style={[entrance, styles.rising]}>
       <Pressable
         accessibilityRole="none"
         accessibilityViewIsModal
@@ -153,7 +167,10 @@ const SheetBody = ({
           <View style={styles.header}>
             <Heading>{title}</Heading>
           </View>
-          <ScrollView contentContainerStyle={styles.content}>{children}</ScrollView>
+          {/* A tap on a row while the filter's keyboard is up chooses the row in one tap. */}
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+            {children}
+          </ScrollView>
           {footer === undefined ? null : <View style={styles.footer}>{footer}</View>}
         </SurfaceContext.Provider>
       </Pressable>

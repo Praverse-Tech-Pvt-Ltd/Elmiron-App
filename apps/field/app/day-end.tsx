@@ -24,7 +24,8 @@ import { heldAudioIds } from '../src/sync/upload-conditions';
 import { useUploadSnapshot } from '../src/sync/use-upload-snapshot';
 import { emptyQueue } from '../src/sync/reducer';
 import type { QueueLoad } from '../src/sync/async-storage-store';
-import { captureNote, summariseDayEnd, workDayCopy } from '../src/today/day-end';
+import { captureCopy, liveCaptureOf, summariseDayEnd, workDayCopy } from '../src/today/day-end';
+import { useBack } from '../src/navigation/back';
 import { onDay } from '../src/today/plan';
 import { clockIn } from '../src/today/territory-day';
 import { endDayBlocker, workDayRequest, workDayStatus } from '../src/today/work-day';
@@ -181,12 +182,20 @@ export default function DayEnd(): ReactNode {
         });
   const copy = workDayCopy(dayStatus, zone, refusal);
   // As this phone witnessed them: a check-out made offline counts, and goes before the close.
-  const blockedBy =
+  const witnessedToday =
     today === null
-      ? null
-      : endDayBlocker(
-          visitsAsWitnessed(visitsFromStore(store), items).filter((visit) => onDay(visit, today)),
-        );
+      ? []
+      : visitsAsWitnessed(visitsFromStore(store), items).filter((visit) => onDay(visit, today));
+  const blockedBy = today === null ? null : endDayBlocker(witnessedToday);
+  /**
+   * `FE-W191`. A visit still checked in. "Last check-out 23:33" under it read as the day's last word
+   * on position while the rep was still inside a visit whose check-out would read one again
+   * (QA screenshot 61); the line says the visit is open instead.
+   */
+  const stillOpen = witnessedToday.filter((visit) => visit.status === 'in_progress').length;
+  // `FE-W185`. What live location is doing decides what the confirmation may claim.
+  const capture = captureCopy(liveCaptureOf(tracker));
+  const back = useBack();
 
   const endDay = (): void => {
     if (ending || today === null || mrId === null) return;
@@ -249,7 +258,9 @@ export default function DayEnd(): ReactNode {
   // `FE-W180`. The screen renders its own `Screen`, so its actions can be pinned in the footer.
   return (
     <DayEndScreen
-      captureNote={captureNote()}
+      captureNote={capture.note}
+      captureTitle={capture.title}
+      onBack={back}
       dayLabel={t('dayEnd.today')}
       distanceLabel={distanceMetres === null ? null : km(distanceMetres)}
       // FE-D2 7. Null, not 0, when there is no summary: still loading, or the fetch failed. The
@@ -263,9 +274,11 @@ export default function DayEnd(): ReactNode {
           : t('dayEnd.firstCheckIn', { time: clockIn(summary.firstCaptureAt, zone) })
       }
       lastCaptureLabel={
-        summary?.lastCaptureAt == null
-          ? null
-          : t('dayEnd.lastCheckOut', { time: clockIn(summary.lastCaptureAt, zone) })
+        stillOpen > 0
+          ? t('dayEnd.stillCheckedIn', { count: stillOpen })
+          : summary?.lastCaptureAt == null
+            ? null
+            : t('dayEnd.lastCheckOut', { time: clockIn(summary.lastCaptureAt, zone) })
       }
       loading={status === 'loading' || distanceLoading}
       onOpenQueue={() => {

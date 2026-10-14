@@ -82,8 +82,18 @@ export interface QueueScreenProps {
    * place for one.
    */
   readonly onRetry?: () => void;
-  /** S3's "Tell the help desk". Absent until there is a help desk to tell. */
+  /**
+   * S3's "Tell the help desk". Absent until there is a help desk to tell. `FE-W195`: the route
+   * passes it when the build names one (`EXPO_PUBLIC_SUPPORT_EMAIL` / `_PHONE`).
+   */
   readonly onContactSupport?: () => void;
+  /**
+   * `FE-W191`. "Last sent at 14:05" under "Everything is sent" — the server's time for the newest
+   * delivery, already in the territory's clock. Null when the server has stamped nothing.
+   */
+  readonly lastSentLabel?: string | null;
+  /** `FE-W188`. The screen's Back control. */
+  readonly onBack?: () => void;
   /**
    * MR-28 C2 — what happened when the MR last pressed "Try again now", if it failed.
    *
@@ -209,6 +219,20 @@ const GLYPH: Readonly<Record<QueueRowState, string>> = {
   'waiting-long': '\u25F7',
   refused: '\u2715',
   'needs-attention': '\u2298',
+};
+
+/**
+ * `FE-W191`. The glyph's ink. "Sent" carries the success green it has everywhere else — the tick on
+ * a done stop, a visit's done step — and was the one grey tick in the app (QA screenshot 53). Every
+ * other state keeps the muted ink: waiting is never coloured as a fault (§05).
+ */
+const GLYPH_INK: Readonly<Record<QueueRowState, string>> = {
+  sent: tokens.color.success,
+  waiting: tokens.color.textSecondary,
+  'waiting-wifi': tokens.color.textSecondary,
+  'waiting-long': tokens.color.textSecondary,
+  refused: tokens.color.textSecondary,
+  'needs-attention': tokens.color.textSecondary,
 };
 
 /**
@@ -343,15 +367,16 @@ const StuckBlock = ({
   return (
     <View accessibilityRole="alert" accessible style={styles.stuck}>
       <BodyText>{t('queue.wontGo', { count: summary.count })}</BodyText>
-      <Label muted>
+      {/* `FE-W189`. Sentences, at the prose step; round 1 left the block's lines at `Label`. */}
+      <Secondary>
         {t('queue.stuck', { things: list(summary.stuckEntities.map(inSentence)) })}
-      </Label>
+      </Secondary>
 
       <View style={styles.reassurance}>
         {summary.sentEntities.length === 0 ? null : (
-          <Label muted>
+          <Secondary>
             {t('queue.wentThrough', { things: list(summary.sentEntities.map(inSentence)) })}
-          </Label>
+          </Secondary>
         )}
         {/*
         Said out loud, because the MR is the person most likely to assume otherwise.
@@ -359,7 +384,7 @@ const StuckBlock = ({
         percentile anywhere to count it against, and the backend has tests asserting
         those columns do not exist.
       */}
-        <Label muted>{t('queue.notAgainstYou')}</Label>
+        <Secondary>{t('queue.notAgainstYou')}</Secondary>
       </View>
 
       {onRetry === undefined && onContactSupport === undefined ? null : (
@@ -428,7 +453,11 @@ const QueueRow = ({
     <View style={styles.row}>
       <View style={styles.statusLine}>
         {/* Decorative. The label beside it is what a screen reader announces. */}
-        <Text importantForAccessibility="no" accessibilityElementsHidden style={styles.glyph}>
+        <Text
+          importantForAccessibility="no"
+          accessibilityElementsHidden
+          style={[styles.glyph, { color: GLYPH_INK[state] }]}
+        >
           {GLYPH[state]}
         </Text>
         <BodyText>{t(LABEL[state])}</BodyText>
@@ -452,7 +481,7 @@ const QueueRow = ({
           {rejection.receivedAt === null ? null : (
             <Label muted>{t('queue.serverRecorded', { time: rejection.receivedAt })}</Label>
           )}
-          {rejection.deadLettered ? <Label muted>{t('queue.canResend')}</Label> : null}
+          {rejection.deadLettered ? <Secondary>{t('queue.canResend')}</Secondary> : null}
           {/*
             The reference support asks for. The fallback sentence has always said "Report the
             code below to support" -- and nothing below it showed one.
@@ -475,6 +504,8 @@ export const QueueScreen = ({
   retryFailure,
   readState = 'read',
   waitingForWifi,
+  lastSentLabel = null,
+  onBack,
 }: QueueScreenProps): ReactNode => {
   useT();
   const outstanding = items.filter((item) => item.status !== 'synced');
@@ -484,6 +515,7 @@ export const QueueScreen = ({
   );
   // `FE-W136`. Held audio was never tried, so it is never "won't go" -- whatever an older attempt
   // count says. Only the stuck block is told to look past it.
+  const refusedHere = outstanding.some((item) => rejections[item.id] !== undefined);
   const summary = stuckSummaryFor(
     items.filter((item) => !heldHere.includes(item)),
     rejections,
@@ -491,7 +523,7 @@ export const QueueScreen = ({
   );
 
   return (
-    <Screen scrollable>
+    <Screen scrollable {...(onBack === undefined ? {} : { onBack })}>
       <Title>{t('queue.title')}</Title>
 
       {retryFailure === undefined ? null : (
@@ -515,13 +547,18 @@ export const QueueScreen = ({
       {readState !== 'read' ? null : outstanding.length === 0 ? (
         <View style={styles.empty}>
           <View style={styles.statusLine}>
-            <Text importantForAccessibility="no" accessibilityElementsHidden style={styles.glyph}>
+            <Text
+              importantForAccessibility="no"
+              accessibilityElementsHidden
+              style={[styles.glyph, { color: GLYPH_INK.sent }]}
+            >
               {GLYPH.sent}
             </Text>
             {/* Reassuring, not an error. Nothing waiting is the good outcome. */}
             <BodyText>{t('queue.everythingSent')}</BodyText>
           </View>
           <BodyText muted>{t('queue.nothingWaiting')}</BodyText>
+          {lastSentLabel === null ? null : <Secondary>{lastSentLabel}</Secondary>}
         </View>
       ) : (
         // Rendered in the order given. The long-retry threshold changes what a row
@@ -536,6 +573,14 @@ export const QueueScreen = ({
             heldForWifi={heldHere.includes(item)}
           />
         ))
+      )}
+
+      {/*
+        `FE-W195`. A refusal the rep cannot fix says "give the reference to your help desk" on its row;
+        with no stuck block above, the way to do that is here. With a stuck block it is in the block.
+      */}
+      {summary !== null || onContactSupport === undefined || !refusedHere ? null : (
+        <Button label={t('queue.tellHelpDesk')} onPress={onContactSupport} variant="quiet" />
       )}
     </Screen>
   );

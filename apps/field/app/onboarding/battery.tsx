@@ -3,7 +3,9 @@ import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import { OemBatteryScreen, t, useLanguage } from '@fieldforce/ui';
 import type { SetupStepView } from '@fieldforce/ui';
+import { useBack } from '../../src/navigation/back';
 import { detectDeviceOem, deviceLauncher } from '../../src/onboarding/device';
+import { firstRunPosition, useInFirstRun } from '../../src/onboarding/first-run';
 import { batteryStepsDone, saveBatteryStepsDone } from '../../src/onboarding/progress';
 import { intentsFor } from '../../src/onboarding/intents';
 import type { SettingsIntent } from '../../src/onboarding/intents';
@@ -31,6 +33,13 @@ import { contentFor } from '../../src/onboarding/oem-content';
 export default function BatterySetup(): ReactNode {
   useLanguage();
   const router = useRouter();
+  const back = useBack();
+  /**
+   * `FE-W192`. In first run: "Step 3 of 4" and Continue on to what the app records. Opened from Me:
+   * a Back, and "Done" returns to Me — it used to push "What this app records" there too, which
+   * then had no way on but the phone's Back.
+   */
+  const inFirstRun = useInFirstRun();
   const family = detectDeviceOem();
   const content = contentFor(family);
 
@@ -114,7 +123,18 @@ export default function BatterySetup(): ReactNode {
           return next;
         });
       }}
+      {...(inFirstRun === true
+        ? {
+            // This screen is only ever reached where the battery step applies, so it is counted.
+            stepLine: t('onboarding.stepOf', firstRunPosition('battery', true)),
+          }
+        : {})}
+      {...(inFirstRun === false ? { onBack: back, continueLabel: t('onboarding.done') } : {})}
       onContinue={() => {
+        if (inFirstRun === false) {
+          back();
+          return;
+        }
         // A9 closes first run, not this screen. The last thing a new MR sees before
         // their day is what the app records about them — which is the point of
         // putting it there rather than in a settings menu they never open.

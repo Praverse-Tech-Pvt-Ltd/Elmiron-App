@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Display, Heading, Label } from './Text';
+import { BodyText, Display, Heading, Label, Secondary } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { StatusGlyph } from './StatusGlyph';
@@ -56,6 +56,8 @@ export interface TransparencyScreenProps {
   readonly neverRecorded: string;
   readonly onContinue?: () => void;
   readonly continueLabel?: string;
+  /** `FE-W192`. "Step 4 of 4", when this screen ends first run. */
+  readonly stepLine?: string;
 }
 
 const styles = StyleSheet.create({
@@ -81,15 +83,17 @@ export const TransparencyScreen = ({
   neverRecorded,
   onContinue,
   continueLabel,
+  stepLine,
 }: TransparencyScreenProps): ReactNode => {
   useT();
   return (
     <>
       <View style={styles.intro}>
+        {stepLine === undefined ? null : <Label muted>{stepLine}</Label>}
         <Display>{t('settings.transparencyDetail')}</Display>
         {/* FE-D12 item 1. The promise that followed ("It never changes without telling you") had
           nothing behind it, and this screen had gone stale unannounced. The fact stays. */}
-        <Label muted>{t('transparency.openAnyTime')}</Label>
+        <Secondary>{t('transparency.openAnyTime')}</Secondary>
       </View>
 
       {preamble === undefined ? null : (
@@ -106,8 +110,9 @@ export const TransparencyScreen = ({
               <StatusGlyph kind={MARK[entry.state]} large />
               <View style={styles.rowText}>
                 <BodyText>{entry.title}</BodyText>
-                <Label muted>{entry.detail}</Label>
-                {note === null ? null : <Label muted>{t(note)}</Label>}
+                {/* `FE-W189`. The detail and the note are sentences: the prose step, not `Label`. */}
+                <Secondary>{entry.detail}</Secondary>
+                {note === null ? null : <Secondary>{t(note)}</Secondary>}
               </View>
             </View>
           </Card>

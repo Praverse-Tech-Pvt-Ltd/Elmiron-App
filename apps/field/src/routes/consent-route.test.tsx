@@ -38,8 +38,15 @@ jest.mock('../sync/push-client', () => ({
 }));
 const mockReplace = jest.fn();
 const mockBack = jest.fn();
+// `FE-W188`. An answer returns with `dismissTo`, to the visit already underneath.
+const mockDismissTo = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), replace: mockReplace, back: mockBack }),
+  useRouter: () => ({
+    push: jest.fn(),
+    replace: mockReplace,
+    back: mockBack,
+    dismissTo: mockDismissTo,
+  }),
   useLocalSearchParams: () => ({ visitId: '44444444-4444-4444-8444-444444444401' }),
 }));
 
@@ -139,6 +146,7 @@ const loaded = (): void => {
   mockCreateConsentRecord.mockClear();
   mockReplace.mockClear();
   mockBack.mockClear();
+  mockDismissTo.mockClear();
 };
 
 describe('app/consent/[visitId].tsx — the handoff', () => {
@@ -146,7 +154,9 @@ describe('app/consent/[visitId].tsx — the handoff', () => {
     loaded();
     await render(<ConsentRoute />);
     expect(await screen.findByText(notice.fullText)).toBeTruthy();
-    expect(screen.getByText('Notice v1.2 · English · a1b2c3d4')).toBeTruthy();
+    // `FE-W186`. Which notice, in words; the hash stays in the ledger.
+    expect(screen.getByText('Notice version 1.2 · English')).toBeTruthy();
+    expect(screen.queryByText(/a1b2c3d4/u)).toBeNull();
   });
 
   it('does NOT name the rep, because the token does not carry a name', async () => {
@@ -213,6 +223,23 @@ describe('app/consent/[visitId].tsx — the handoff', () => {
 
     expect(mockCreateConsentRecord).not.toHaveBeenCalled();
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('FE-W188: the details’ Back returns to the question, never out of it', async () => {
+    loaded();
+    await render(<ConsentRoute />);
+    await screen.findByText(notice.fullText);
+    // The question itself draws no Back: its way out is "Give the phone back", which records
+    // nothing, and a second exit beside it would be one the doctor did not choose.
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+
+    await fireEvent.press(screen.getByText('Exactly what is collected, in full'));
+    expect(await screen.findByText('Exactly what is collected')).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+
+    expect(await screen.findByText("Yes, that's fine")).toBeTruthy();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockCreateConsentRecord).not.toHaveBeenCalled();
   });
 
   // ---------------------------------------------------------------------------------------
@@ -330,6 +357,7 @@ describe('app/consent/[visitId].tsx — the handoff', () => {
     // The MR-facing REMEDY, not backend's sentence for support.
     expect(await screen.findByText(/read the current notice aloud/i)).toBeTruthy();
     // A refusal must not send them back as though it worked.
+    expect(mockDismissTo).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
@@ -343,9 +371,13 @@ describe('app/consent/[visitId].tsx — the handoff', () => {
     await screen.findByText(notice.fullText);
     await fireEvent.press(screen.getByText("Yes, that's fine"));
 
+    // `FE-W188`. To the visit that opened this screen -- dismissed back to, never a second copy
+    // pushed or replaced on top of it, which left two visits and a Back that seemed to do nothing.
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledTimes(1);
+      expect(mockDismissTo).toHaveBeenCalledWith(`/visit/${visit.id}`);
     });
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
     expect(screen.queryByText(/read the current notice aloud/i)).toBeNull();
   });
 
@@ -432,9 +464,9 @@ describe('app/consent/[visitId].tsx — consent language (`FE-W148`)', () => {
     await fireEvent.press(screen.getByLabelText('Language'));
     await fireEvent.press(await screen.findByText('हिंदी'));
 
-    // The notice on screen is the server's Hindi row, verbatim, with its own label and hash.
+    // The notice on screen is the server's Hindi row, verbatim, with its own version and language.
     expect(await screen.findByText(hindi.fullText)).toBeTruthy();
-    expect(screen.getByText('Notice v1.2-hi · हिंदी · bbbbbbbb')).toBeTruthy();
+    expect(screen.getByText('Notice version 1.2 · हिंदी')).toBeTruthy();
 
     await fireEvent.press(screen.getByText("Yes, that's fine"));
     expect(mockCreateConsentRecord).toHaveBeenCalledWith(

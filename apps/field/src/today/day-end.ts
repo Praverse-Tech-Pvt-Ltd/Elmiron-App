@@ -70,16 +70,63 @@ export const summariseDayEnd = (visits: readonly Visit[]): DayEnd => {
 };
 
 /**
+ * `FE-W185` — what live location is doing, as far as Day end's sentence is concerned.
+ *
+ * - `none`: live location is not part of this rep's day — the build has it off, the company has it
+ *   off, or the rep has not accepted the notice. A position is read on a press and at no other time.
+ * - `sharing`: the phone is reading positions for live location right now.
+ * - `paused`: the rep has accepted it and it is paused — outside working hours, not started (or
+ *   stopped) for today, or the app is off screen. Nothing is read now; it is read again when sharing
+ *   resumes.
+ */
+export type LiveCapture = 'none' | 'sharing' | 'paused';
+
+const PAUSED: ReadonlySet<string> = new Set([
+  'paused_outside_hours',
+  'paused_day_closed',
+  'paused_background',
+]);
+
+export const liveCaptureOf = (
+  tracker: { readonly state?: string; readonly readingNow?: boolean } | null,
+): LiveCapture => {
+  if (tracker === null) return 'none';
+  if (tracker.readingNow === true) return 'sharing';
+  // `active` without the location permission reads nothing: it is said as paused, which it is.
+  if (tracker.state === 'active' || PAUSED.has(tracker.state ?? '')) return 'paused';
+  return 'none';
+};
+
+/**
  * The standing truth about when this app reads a position.
  *
- * Present tense and unconditional, because under `fe-w3-spec.md` §4a it is
- * unconditional: there is no background location in this app, so between one press
- * and the next nothing is read. B7 draws this as a thing that happened at 18:22.
- * Writing it that way would imply the rest of the day was different, which would
- * teach the MR the app tracks them continuously — the exact belief the
- * transparency screen exists to correct.
+ * Present tense, because under `fe-w3-spec.md` §4a it is a standing fact: there is no background
+ * location in this app, so between one press and the next nothing is read. B7 draws this as a thing
+ * that happened at 18:22. Writing it that way would imply the rest of the day was different, which
+ * would teach the MR the app tracks them continuously — the exact belief the transparency screen
+ * exists to correct.
+ *
+ * **`FE-W185`. And it must be true in every state, which it was not.** With live location shared
+ * (`FE-W71`), "it has not been reading it between visits, it is not reading it now" was false on the
+ * screen whose whole claim is that its words are the honest ones (QA screenshot 61). The heading and
+ * the sentence now follow what live location is actually doing; while it is shared they say plainly
+ * when a position is read.
  */
-export const captureNote = (): string => t('dayEnd.captureNote');
+export const captureCopy = (
+  live: LiveCapture,
+): { readonly title: string; readonly note: string } => {
+  switch (live) {
+    case 'none':
+      return { title: t('dayEnd.nothingRecorded'), note: t('dayEnd.captureNote') };
+    case 'paused':
+      return { title: t('dayEnd.nothingRecorded'), note: t('dayEnd.captureNotePaused') };
+    case 'sharing':
+      return { title: t('dayEnd.liveSharingTitle'), note: t('dayEnd.captureNoteSharing') };
+  }
+};
+
+/** The sentence alone. With no live location in the picture, the press-only sentence. */
+export const captureNote = (live: LiveCapture = 'none'): string => captureCopy(live).note;
 
 /**
  * `FE-W80` — what the working-day card says, for every state the server and this phone can be in.

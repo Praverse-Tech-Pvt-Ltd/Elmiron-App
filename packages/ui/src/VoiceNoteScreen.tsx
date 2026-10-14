@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
-import { tokens } from '@fieldforce/ui-tokens';
+import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Display, Figure, Heading, Label, Statement } from './Text';
+import { Display, Figure, Heading, Label, Statement } from './Text';
 import { Button } from './Button';
+import { Screen } from './Screen';
 import { SurfaceContext } from './surface';
 import { useT } from './i18n';
 
@@ -25,6 +26,12 @@ import { useT } from './i18n';
  * it fires on every visit including a declined one, and that is why a declined
  * visit still produces coaching signal. `onboarding/microphone.tsx` keeps the two
  * apart in as many words and this screen must not collapse them.
+ *
+ * **`FE-W190`. The controls sit in the pinned footer, where every screen's action is.** They were
+ * inside the dark card, half-way up the screen, with "Start again" drawn before anything had been
+ * recorded (QA 33). Now "Hold to record" is the bottom-most control — under the thumb, and in the
+ * same place whatever else appears — and "Save this note" and "Start again" appear above it only
+ * once there is a note to save or throw away.
  */
 export interface VoiceNoteScreenProps {
   /** "Your note · Dr S. Iyer" — the caller formats it. */
@@ -63,6 +70,8 @@ export interface VoiceNoteScreenProps {
    * instead of it, so "Start again" and "Save this note" stay reachable.
    */
   readonly actionFailure?: { readonly title: string; readonly detail: string } | null;
+  /** `FE-W188`. The screen's Back control (`Screen`'s `onBack`). */
+  readonly onBack?: () => void;
 }
 
 const styles = StyleSheet.create({
@@ -73,6 +82,7 @@ const styles = StyleSheet.create({
     gap: tokens.space.md,
   },
   centre: { alignItems: 'center', gap: tokens.space.xs },
+  foot: { gap: tokens.space.sm },
   hold: {
     minHeight: tokens.target.inVisit,
     borderRadius: tokens.radius.card,
@@ -81,15 +91,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: tokens.space.sm,
     backgroundColor: tokens.color.sage,
+    // `FE-W190`. An accent edge: on its own the pale sage read as a control switched off (QA 33).
+    // The edge is the colour of every other action, so it reads as one; the fill stays the
+    // design's sage, which is what makes it the recorder rather than another button.
+    borderWidth: 2,
+    borderColor: tokens.color.accent,
   },
   // FE-D7 2. Phase 3 D7: sage #B8CDB8, pressed #9EB89E. Holding is pressing, so the pressed
   // value holds for the whole recording.
   holding: { backgroundColor: tokens.color.sagePressed },
+  // `FE-W190`. The record mark, always drawn: accent while waiting, terracotta while recording —
+  // the recording colour every other "on air" mark in the app uses.
   dot: {
     width: 14,
     height: 14,
     borderRadius: tokens.radius.pill,
-    backgroundColor: tokens.color.textPrimary,
+    backgroundColor: tokens.color.accent,
+  },
+  dotRecording: { backgroundColor: tokens.color.recording },
+  // `FE-W190`. The control's own role (17/600), as every button label is. It was body text at
+  // regular weight, which is part of why it did not read as something to press.
+  holdLabel: {
+    fontSize: tokens.typography.control.size,
+    lineHeight: tokens.typography.control.lineHeight,
+    fontWeight: tokens.typography.control.weight,
+    fontFamily: fontFamilyFor(tokens.typography.control.weight),
+    color: tokens.color.textPrimary,
+    textAlign: 'center',
+    flexShrink: 1,
   },
 });
 
@@ -117,19 +146,51 @@ export const VoiceNoteScreen = ({
   blocked = null,
   failure = null,
   actionFailure = null,
+  onBack,
 }: VoiceNoteScreenProps): ReactNode => {
   const { t } = useT();
+  const back = onBack === undefined ? {} : { onBack };
   if (failure !== null) {
     return (
-      <>
+      <Screen scrollable {...back}>
         <Heading>{t('voiceNote.heading')}</Heading>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
-      </>
+      </Screen>
     );
   }
 
+  const footer =
+    blocked !== null ? null : (
+      <View style={styles.foot}>
+        {onSave === undefined ? null : (
+          <Button label={t('voiceNote.save')} loading={busy} onPress={onSave} />
+        )}
+        {/*
+          `FE-W190`. Only once there is something to start again FROM. Offered on an empty
+          recorder it was a button that did nothing.
+        */}
+        {onSave === undefined ? null : (
+          <Button label={t('voiceNote.startAgain')} onPress={onStartAgain} variant="secondary" />
+        )}
+        <Pressable
+          accessibilityLabel={t('voiceNote.holdLabel')}
+          accessibilityRole="button"
+          accessibilityState={{ busy: recording }}
+          onPressIn={onHoldStart}
+          onPressOut={onHoldEnd}
+          style={({ pressed }) => holdStyle(pressed || recording)}
+        >
+          <View style={[styles.dot, recording ? styles.dotRecording : null]} />
+          {/* Ink on the sage, whatever the ground around it: the sage is always light. */}
+          <Text style={styles.holdLabel}>
+            {recording ? t('voiceNote.holding') : t('voiceNote.hold')}
+          </Text>
+        </Pressable>
+      </View>
+    );
+
   return (
-    <>
+    <Screen scrollable footer={footer} {...back}>
       {/*
         FE-D2 6. Outside the hero surface on purpose: a critical banner is the default surface's
         tone, and inside the dark card it would read as part of the recorder rather than a verdict
@@ -161,36 +222,7 @@ export const VoiceNoteScreen = ({
             </Label>
           </View>
 
-          {blocked === null ? (
-            <>
-              <Pressable
-                accessibilityLabel={t('voiceNote.holdLabel')}
-                accessibilityRole="button"
-                accessibilityState={{ busy: recording }}
-                onPressIn={onHoldStart}
-                onPressOut={onHoldEnd}
-                style={({ pressed }) => holdStyle(pressed || recording)}
-              >
-                {/*
-                  A light ground inside the dark card: its words are ink, as the design draws
-                  them. Inherited from the hero they were white on pale sage.
-                */}
-                <SurfaceContext.Provider value="paper">
-                  {recording ? <View style={styles.dot} /> : null}
-                  <BodyText>{recording ? t('voiceNote.holding') : t('voiceNote.hold')}</BodyText>
-                </SurfaceContext.Provider>
-              </Pressable>
-
-              {onSave === undefined ? null : (
-                <Button label={t('voiceNote.save')} loading={busy} onPress={onSave} />
-              )}
-              <Button
-                label={t('voiceNote.startAgain')}
-                onPress={onStartAgain}
-                variant="secondary"
-              />
-            </>
-          ) : (
+          {blocked === null ? null : (
             // Not `critical`: a microphone the MR has not granted is a condition with
             // a remedy, not a failure of theirs. §02. Inside the dark card on purpose: `Banner`
             // takes paper ink on its own fill (`FE-W176`), so it no longer inherits the hero's white.
@@ -198,6 +230,6 @@ export const VoiceNoteScreen = ({
           )}
         </View>
       </SurfaceContext.Provider>
-    </>
+    </Screen>
   );
 };

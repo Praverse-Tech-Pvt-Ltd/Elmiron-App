@@ -112,7 +112,7 @@ describe('app/(tabs)/me.tsx — the language rows, with empty translation files'
     await fireEvent.press(screen.getByText('हिन्दी'));
     await fireEvent.press(screen.getByText('मराठी'));
     expect(languageStore.current()).toBe('en');
-    expect(screen.getByText('Settings')).toBeTruthy();
+    expect(screen.getByText('Me')).toBeTruthy();
   });
 
   it('says consent is English only until an approved notice is published', async () => {

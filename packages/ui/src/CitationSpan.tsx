@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Label } from './Text';
+import { BodyText, Label, Secondary } from './Text';
 import { useT } from './i18n';
 
 /**
@@ -69,7 +69,11 @@ export const CitationSpan = ({
     <>
       <View style={styles.head}>
         <View style={styles.meta}>
-          <Label muted>{`${timestamp} · ${retention}`}</Label>
+          {/*
+            `FE-W189`. The retention is a sentence ("audio kept 61 more days"), so the line is set at
+            the prose step. The playing position beside it is a time, and stays a `Label`.
+          */}
+          <Secondary>{`${timestamp} · ${retention}`}</Secondary>
         </View>
         {playing && position !== undefined ? <Label muted>{position}</Label> : null}
       </View>

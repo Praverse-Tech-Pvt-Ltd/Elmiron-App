@@ -62,6 +62,8 @@ export interface AnalysisScreenProps {
   /** The MR's reply, once written. */
   readonly reply?: string | null;
   readonly onReply: () => void;
+  /** `FE-W188`. The screen's Back control (`Screen`'s `onBack`). */
+  readonly onBack?: () => void;
   /** "Written by the system from the recording. Your manager has not opened this yet." */
   readonly provenanceNote: string;
   /**
@@ -116,15 +118,17 @@ export const AnalysisScreen = ({
   statusNote = null,
   reply = null,
   onReply,
+  onBack,
   provenanceNote,
   loading = false,
   failure = null,
   noFindingsNote = null,
 }: AnalysisScreenProps): ReactNode => {
   const { t } = useT();
+  const back = onBack === undefined ? {} : { onBack };
   if (failure !== null) {
     return (
-      <Screen scrollable>
+      <Screen scrollable {...back}>
         <Title>{doctorName}</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </Screen>
@@ -147,7 +151,7 @@ export const AnalysisScreen = ({
     );
 
   return (
-    <Screen scrollable {...(footer === undefined ? {} : { footer })}>
+    <Screen scrollable {...back} {...(footer === undefined ? {} : { footer })}>
       <View style={styles.head}>
         <Title>{doctorName}</Title>
         {/* `FE-W178`. The line under a screen title is `Secondary`, as on the call report. */}

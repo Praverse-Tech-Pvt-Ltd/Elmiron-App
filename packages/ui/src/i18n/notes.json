@@ -66,6 +66,17 @@
       "note": "Beside a switch",
       "max": 6
     },
+    "common.back": {
+      "note": "A small control at the top left of a screen that returns to the screen before. Also read aloud by a screen reader",
+      "max": 14
+    },
+    "common.noMatch": {
+      "note": "Under a search field at the top of a list, when nothing in the list matches what was typed"
+    },
+    "unplanned.findDoctor": {
+      "note": "Label of a search field at the top of the list of doctors; typing part of a name narrows the list",
+      "max": 30
+    },
     "common.clearField": {
       "note": "Spoken by a screen reader; {field} is the field's label"
     },
@@ -101,7 +112,10 @@
       "note": "Main button; {doctor} is the doctor's name"
     },
     "today.continueVisit": {
-      "note": "Main button; {doctor} is the doctor's name"
+      "note": "Main button, at the bottom of Today, for the visit the rep is already in; {doctor} is the doctor's name. Keep it short: it must fit beside a long name"
+    },
+    "today.transparencyDetail": {
+      "note": "The line under 'What this app records about me' on Today, which opens the page listing what is and is never recorded"
     },
     "today.seeRoute": {
       "note": "A small link at the corner of a card; keep the › at the end",
@@ -114,7 +128,22 @@
       "note": "{reason} is what the rep typed"
     },
     "dayEnd.title": {
-      "note": "Screen title; {day} is the word for Today"
+      "note": "Screen title, e.g. 'Today at a glance'; {day} is the word for Today"
+    },
+    "dayEnd.captureNotePaused": {
+      "note": "Under 'Nothing is being recorded.' when the rep has agreed to share live location but it is paused right now (outside working hours, or not started today). Must stay exactly true: nothing is read now"
+    },
+    "dayEnd.liveSharingTitle": {
+      "note": "Heading on Day end while the rep's live location IS being shared. Replaces 'Nothing is being recorded.', which would be false"
+    },
+    "dayEnd.captureNoteSharing": {
+      "note": "Under the heading above: exactly when this app reads the rep's position while live location is shared. Must stay exactly true"
+    },
+    "dayEnd.stillCheckedIn_one": {
+      "note": "In place of 'Last check-out 18:22' while the rep is still inside a visit"
+    },
+    "dayEnd.stillCheckedIn_other": {
+      "note": "In place of 'Last check-out 18:22' while the rep is still inside visits; {count} is a number"
     },
     "dayEnd.endMyDay": {
       "note": "Button",
@@ -122,6 +151,12 @@
     },
     "tracking.lastRefused": {
       "note": "{reason} is one of the tracking.refused… sentences"
+    },
+    "tracking.lastNone": {
+      "note": "Under 'Your live location is being shared…' before the phone has sent any position"
+    },
+    "tracking.lastKept": {
+      "note": "Under 'Your live location is being shared…' once the last position reached the company"
     },
     "remedy.figures": {
       "note": "{figures} is technical text from the server, left as it is"
@@ -167,10 +202,16 @@
       "note": "Under a doctor's name, lower case: the rep has never visited them"
     },
     "doctors.seenToday": {
-      "note": "Under a doctor's name, lower case: last visited today"
+      "note": "Under a doctor's name, lower case: last visited today. Also the large figure on a doctor's profile, under 'Your last visit', where the app capitalises its first letter"
     },
     "doctors.seenYesterday": {
-      "note": "Under a doctor's name, lower case: last visited yesterday"
+      "note": "Under a doctor's name, lower case: last visited yesterday. Also the large figure on a doctor's profile, where the app capitalises its first letter"
+    },
+    "doctors.inVisitNow": {
+      "note": "On a doctor's profile while the rep is checked in with them, above when they last visited"
+    },
+    "doctors.inVisitFirst": {
+      "note": "On a doctor's profile while the rep is checked in with them for the first time"
     },
     "doctors.daysAgo": {
       "note": "Last visit, lower case. {days} is always 2 to 13"
@@ -232,9 +273,28 @@
     "route.timeOnPhone": {
       "note": "{time} is a clock time such as '10:04' this phone recorded and the server has not confirmed yet"
     },
-    "route.stopMinutes": {
-      "note": "How long the visit at this stop lasted. {minutes} is a whole number",
+    "route.durationMinutes_one": {
+      "note": "How long a visit lasted, in minutes, short form. {count} is a whole number",
       "max": 16
+    },
+    "route.durationMinutes_other": {
+      "note": "How long a visit lasted, in minutes, short form. {count} is a whole number",
+      "max": 16
+    },
+    "route.durationHours_one": {
+      "note": "How long a visit lasted, in hours, short form. {count} is a whole number",
+      "max": 14
+    },
+    "route.durationHours_other": {
+      "note": "How long a visit lasted, in hours, short form. {count} is a whole number",
+      "max": 14
+    },
+    "route.durationHoursMinutes": {
+      "note": "Hours then minutes, e.g. '8 h 4 min'. {hours} and {minutes} are the two short forms above, already filled in"
+    },
+    "route.inProgress": {
+      "note": "Small heading on the card of the stop the rep is checked into right now",
+      "max": 20
     },
     "route.stopCancelled": {
       "note": "Lower case: this stop was called off. A normal event, not an error"
@@ -257,6 +317,9 @@
     "unplanned.doctorLabel": {
       "note": "Field label",
       "max": 20
+    },
+    "unplanned.allPlanned": {
+      "note": "When every doctor on the phone is already on today's plan, so none can be added as unplanned. 'Today's route' is the beat plan screen"
     },
     "unplanned.clinicLabel": {
       "note": "Field label",
@@ -516,16 +579,23 @@
       "max": 20
     },
     "practice.stanceReceptive": {
-      "note": "How the practice doctor behaves; shown after the doctor's name and specialty, lower case in English"
+      "note": "How the practice doctor behaves; a short label after the doctor's name and specialty, separated by a dot, with a capital in English",
+      "max": 20
     },
     "practice.stanceSceptical": {
-      "note": "How the practice doctor behaves; shown after the doctor's name and specialty, lower case in English"
+      "note": "How the practice doctor behaves; a short label after the doctor's name and specialty, separated by a dot, with a capital in English",
+      "max": 20
     },
     "practice.stanceRushed": {
-      "note": "How the practice doctor behaves; shown after the doctor's name and specialty, lower case in English"
+      "note": "How the practice doctor behaves; a short label after the doctor's name and specialty, separated by a dot, with a capital in English",
+      "max": 20
     },
     "practice.stanceHostile": {
-      "note": "How the practice doctor behaves; shown after the doctor's name and specialty, lower case in English"
+      "note": "How the practice doctor behaves; a short label after the doctor's name and specialty, separated by a dot, with a capital in English",
+      "max": 20
+    },
+    "practice.startedAt": {
+      "note": "Under a past practice session: when it started. {date} is like 15 Oct; {time} is like 14:40"
     },
     "practice.theyWillSay": {
       "note": "{objection} is the objection the practice doctor will raise, from the server"
@@ -625,7 +695,13 @@
       "max": 16
     },
     "visit.stepDone": {
-      "note": "A finished step badge. {step} is one of the visit.step… words; keep the ✓"
+      "note": "Spoken by a screen reader for a finished step (the tick is drawn, not written). {step} is one of the visit.step… words"
+    },
+    "visit.stepNow": {
+      "note": "Spoken by a screen reader for the step the rep is on now. {step} is one of the visit.step… words"
+    },
+    "visit.recordingSwitchedOff": {
+      "note": "Under 'The doctor agreed to a recording.' when consultation recording is turned off for the company or this app, so nothing is recorded"
     },
     "visit.progress": {
       "note": "Spoken by a screen reader for the row of step badges"
@@ -792,16 +868,16 @@
       "note": "Stands in for the doctor's name, inside \"Your note · this visit\""
     },
     "voiceNote.statusBlocked": {
-      "note": "Small line under the timer, lower case on purpose"
+      "note": "Small line under the timer, in sentence case like every other line"
     },
     "voiceNote.statusRecording": {
-      "note": "Small line under the timer, lower case on purpose"
+      "note": "Small line under the timer while the rep holds the record button"
     },
     "voiceNote.statusRecorded": {
-      "note": "Small line under the timer, lower case on purpose"
+      "note": "Small line under the timer once a note is recorded and not yet saved"
     },
     "voiceNote.statusIdle": {
-      "note": "Small line under the timer, lower case on purpose"
+      "note": "Small line under the timer before anything is recorded; the record button is at the bottom of the screen"
     },
     "voiceNote.holdLabel": {
       "note": "Read aloud by a screen reader for the hold button"
@@ -825,6 +901,21 @@
     "queue.stateSent": {
       "note": "Status of one item",
       "max": 24
+    },
+    "queue.lastSent": {
+      "note": "Under 'Everything is sent'; {time} is a clock time such as 16:52"
+    },
+    "queue.supportSubject": {
+      "note": "Subject of the email the rep's mail app opens when they press 'Tell the help desk'. The help desk reads it"
+    },
+    "queue.supportBody": {
+      "note": "First line of that email, in the rep's voice. The lines below it are the references"
+    },
+    "queue.supportLine": {
+      "note": "One line of that email: {what} is what the work is (e.g. Call report), {code} the reference the screen shows, {id} a long technical id. Keep all three"
+    },
+    "queue.supportNoCode": {
+      "note": "Put in place of {code} in that line when the server gave no reference"
     },
     "queue.stateWaiting": {
       "note": "Status of one item",
@@ -922,6 +1013,63 @@
       "note": "Button",
       "max": 24
     },
+    "onboarding.done": {
+      "note": "Button that closes a setup screen opened from Me and goes back to Me",
+      "max": 24
+    },
+    "onboarding.stepOf": {
+      "note": "Small line above a first-run screen's headline, e.g. Step 2 of 4; {n} and {total} are numbers",
+      "max": 20
+    },
+    "onboarding.locationWithLive": {
+      "note": "Title of a dark card on the first-run location screen, in a build where live location exists but is not running now. Must stay true: position is read at check-in/out, and only if the rep shares live location"
+    },
+    "onboarding.locationWithLiveDetail": {
+      "note": "Under onboarding.locationWithLive. Says exactly when a position is read; keep every condition"
+    },
+    "onboarding.locationSharingNow": {
+      "note": "Title of the same card while the rep is sharing live location right now"
+    },
+    "onboarding.locationSharingNowDetail": {
+      "note": "Under onboarding.locationSharingNow. 'Live location' is the name of the screen where sharing is stopped"
+    },
+    "signIn.showPassword": {
+      "note": "A small control under the password field that shows the letters typed. A screen reader reads it as a switch",
+      "max": 20
+    },
+    "signIn.hidePassword": {
+      "note": "The same control while the password is shown",
+      "max": 20
+    },
+    "signIn.wrongDetails": {
+      "note": "Under 'Could not sign in', when the email and password do not match an account"
+    },
+    "signIn.notConfirmed": {
+      "note": "Under 'Could not sign in', when the account exists but was never confirmed"
+    },
+    "signIn.tooMany": {
+      "note": "Under 'Could not sign in', after too many attempts in a short time"
+    },
+    "signIn.switchedOff": {
+      "note": "Under 'Could not sign in', when the company has disabled the account"
+    },
+    "signIn.otherProblem": {
+      "note": "Under 'Could not sign in', for any other refusal; a 'Reference: 500.' may follow it"
+    },
+    "me.signedInAs": {
+      "note": "Under the title on Me; {who} is the account's name and email, e.g. Asha Patil · asha@company.in"
+    },
+    "me.version": {
+      "note": "Small line at the bottom of Me; {version} is like 1.2.0",
+      "max": 40
+    },
+    "me.versionBuild": {
+      "note": "Small line at the bottom of Me; {version} is like 1.2.0 and {build} a number",
+      "max": 40
+    },
+    "transparency.checkInLocationDetailLive": {
+      "note": "In a build with live location: the check-in row's detail, without 'never between visits' (live location reads between visits when shared)"
+    },
     "onboarding.stepDone": {
       "note": "A small toggle on a setup step, when it is marked done",
       "max": 16
@@ -1012,7 +1160,17 @@
       "note": "{date} is a day and month, e.g. 7 Oct"
     },
     "learning.aboutMinutes": {
-      "note": "{minutes} is a number; 'min' is short for minutes. Beside a lesson's title"
+      "note": "{minutes} is a number; 'min' is short for minutes. Beside a lesson's title, and under a course's title before it is started"
+    },
+    "learning.lessonNotDone": {
+      "note": "Under a lesson the rep has not finished (whether or not they have opened it), before its length",
+      "max": 16
+    },
+    "learning.courseLessons_one": {
+      "note": "Under a course's title before it is started: how many lessons it has. {count} is a number"
+    },
+    "learning.courseLessons_other": {
+      "note": "Under a course's title before it is started: how many lessons it has. {count} is a number"
     },
     "learning.minutes_one": {
       "note": "{count} is the estimated reading time in minutes"

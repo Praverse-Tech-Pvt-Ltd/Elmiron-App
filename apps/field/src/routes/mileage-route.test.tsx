@@ -24,6 +24,8 @@ const mockMockClient = jest.fn(() => {
 jest.mock('../api', () => ({ createClientForScenario: () => mockMockClient() }));
 const mockStore = jest.fn();
 jest.mock('../sync/pulled-store', () => ({ usePulledStore: () => mockStore() }));
+// `FE-W188`. The screen has a Back control now, so it asks for the router.
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 
 import Mileage from '../../app/mileage';
 

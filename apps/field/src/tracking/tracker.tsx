@@ -47,6 +47,13 @@ export interface LiveTracker {
   readonly state: TrackingState;
   readonly line: TrackingLine;
   readonly dayOpen: boolean;
+  /**
+   * `FE-W185`. The phone is reading positions for live location right now: the state is `active`
+   * AND location is allowed, so the watcher is running. A screen that says what this app is
+   * reading (Day end, first run's location screen) asks this, not `state` alone — `active` without
+   * the permission reads nothing.
+   */
+  readonly readingNow: boolean;
   readonly busy: boolean;
   readonly refresh: () => void;
   readonly accept: (noticeVersionId: string) => Promise<AcceptOutcome>;
@@ -267,6 +274,7 @@ const Tracker = ({
       state,
       line: trackingLine({ state, status, loadFailed, permissionDenied, lastSend }),
       dayOpen: dayIsOpen(status, openedDay),
+      readingNow: state === 'active' && !permissionDenied,
       busy,
       refresh,
       accept,

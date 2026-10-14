@@ -17,7 +17,7 @@ import { t, useLanguage } from './i18n';
 export interface PracticeScenarioRow {
   readonly id: string;
   readonly title: string;
-  /** "Dr Rao · Urology · sceptical", built by the route. */
+  /** "Dr Rao · Urology · Sceptical", built by the route. */
   readonly personaLine: string;
   readonly objective: string;
   readonly objection: string;
@@ -28,6 +28,11 @@ export interface PracticeSessionRow {
   readonly title: string;
   readonly personaName: string;
   readonly stateLabel: string;
+  /**
+   * `FE-W193`. "Started 15 Oct at 14:40", written by the route in the territory's clock, or null
+   * when the server sent no start. Two practices of one scenario were otherwise identical rows.
+   */
+  readonly started?: string | null;
   readonly analysisId: string | null;
 }
 
@@ -124,6 +129,9 @@ export const PracticeHomeScreen = ({
                 <View style={styles.card}>
                   <Heading>{row.title}</Heading>
                   <Label muted>{`${row.personaName} · ${row.stateLabel}`}</Label>
+                  {row.started === undefined || row.started === null ? null : (
+                    <Secondary>{row.started}</Secondary>
+                  )}
                   {row.analysisId === null ? (
                     <Button
                       label={t('practice.openSession')}

@@ -72,6 +72,8 @@ export interface CallReportScreenProps {
    * the outcome banner was a dead end at the bottom of the form.
    */
   readonly onDone?: () => void;
+  /** `FE-W188`. The screen's Back control (`Screen`'s `onBack`). */
+  readonly onBack?: () => void;
 }
 
 const styles = StyleSheet.create({
@@ -131,11 +133,13 @@ export const CallReportScreen = ({
   onToggleProduct,
   productsNote = null,
   onDone,
+  onBack,
 }: CallReportScreenProps): ReactNode => {
   const { t } = useT();
   return (
     <Screen
       scrollable
+      {...(onBack === undefined ? {} : { onBack })}
       footer={
         <View style={styles.foot}>
           {/*

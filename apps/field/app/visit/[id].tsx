@@ -58,6 +58,7 @@ import {
 } from '../../src/sync/async-storage-store';
 import type { QueueLoad } from '../../src/sync/async-storage-store';
 import { emptyQueue } from '../../src/sync/reducer';
+import { useBack } from '../../src/navigation/back';
 import { unavailableReason } from '../../src/capture/preconditions';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitFor, visitsFromStore } from '../../src/sync/selectors';
@@ -156,6 +157,7 @@ export default function VisitRoute(): ReactNode {
   useLanguage();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const back = useBack();
 
   /**
    * FE-D2 first run — A4, "Before your first visit" (operator ruling). The first time a visit is
@@ -284,11 +286,12 @@ export default function VisitRoute(): ReactNode {
    * answer on this phone.
    */
   const [witnessed, setWitnessed] = useState<WitnessedConsent | null>(null);
-  // W2-C A2 / `BE-W153`. **Kept current while mounted, not read once.** The consent screen returns
-  // with `router.replace`, so the visit screen that opened it stays mounted underneath -- and Back
-  // showed that copy as it was: "Ask about recording" and check-out offered again on a visit the rep
-  // had finished (emulator, 2 of 2 visits). Every copy now re-reads the witnessed answer and the
-  // queue whenever either changes, so whichever one Back reveals says what is true.
+  // W2-C A2 / `BE-W153`. **Kept current while mounted, not read once.** This screen stays mounted
+  // under the consent screen it opened. When consent returned with `router.replace` there were two
+  // copies, and Back showed the stale one: "Ask about recording" and check-out offered again on a
+  // visit the rep had finished (emulator, 2 of 2 visits). `FE-W188`: consent now dismisses back to
+  // this copy, so there is one -- and it re-reads the witnessed answer and the queue whenever
+  // either changes, which is what makes the copy it returns to say what is true.
   useEffect(() => {
     let live = true;
     const read = (): void => {
@@ -702,6 +705,10 @@ export default function VisitRoute(): ReactNode {
         ? { onStartRecording: startRecording }
         : {})}
       recordingNotice={recordingOutcome === null ? null : recordingNoticeFor(recordingOutcome)}
+      // `FE-W186`. Only `off` says recording is switched off. `unknown` (the server could not be
+      // asked) and `blocked` (a reason about this doctor, shown on its own) claim nothing of it.
+      recordingOff={availability.kind === 'off'}
+      onBack={back}
       recordingBlockedReason={
         // `off` and `unknown` say NOTHING: the feature being unbuilt for this build, or a server
         // that could not be asked, are not facts about the doctor and must not be dressed as one.

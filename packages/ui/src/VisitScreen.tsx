@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { tokens } from '@fieldforce/ui-tokens';
+import { StyleSheet, Text, View } from 'react-native';
+import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
 import { Badge } from './Badge';
 import { BodyText, Display, Figure, Heading, Label, Secondary } from './Text';
@@ -128,6 +128,13 @@ export interface VisitScreenProps {
    * banner that IS.
    */
   readonly recordingNotice?: string | null;
+  /**
+   * `FE-W186`. Consultation recording is switched off — for this build or this company — so a
+   * doctor's "yes" starts nothing. Said under the answer, in plain words, so the rep never speaks
+   * as though audio were being kept. Absent or false, the line is not drawn: a screen that may
+   * record (the control is offered) or that could not ask the server must not claim it is off.
+   */
+  readonly recordingOff?: boolean;
   /** D7. Offered on every visit, consent or not — a voice note has no third party. */
   readonly onRecordVoiceNote?: () => void;
   /**
@@ -166,12 +173,55 @@ export interface VisitScreenProps {
    * or record. The caller clears it when the next action starts.
    */
   readonly actionFailure?: { readonly title: string; readonly detail: string } | null;
+  /** `FE-W188`. The screen's Back control (`Screen`'s `onBack`). */
+  readonly onBack?: () => void;
 }
 
 const styles = StyleSheet.create({
   head: { gap: tokens.space.xs },
   foot: { gap: tokens.space.sm },
-  steps: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.space.xs },
+  /**
+   * `FE-W190`. Four cells of one width, in one row. The chips sized to their words, so each "✓"
+   * a finished step gained widened its chip and pushed "Report" onto a second line part-way
+   * through a visit (QA 19, 39). A cell's width no longer depends on its state; a long word wraps
+   * inside its own cell, and the row's cells stretch to the tallest.
+   */
+  steps: { flexDirection: 'row', gap: tokens.space.xs },
+  step: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: tokens.space.xs,
+    borderRadius: tokens.radius.well,
+    borderWidth: 1,
+    paddingHorizontal: tokens.space.xs,
+    paddingVertical: tokens.space.xs,
+  },
+  // The accent's own wash, not `infoFill`: the blue was the one colour on the visit from outside
+  // its palette. A finished step and the step the rep is on share the wash; the current one is
+  // told apart by its accent edge, a finished one by its tick.
+  stepDone: { backgroundColor: tokens.color.successFill, borderColor: tokens.color.successFill },
+  stepNow: { backgroundColor: tokens.color.successFill, borderColor: tokens.color.accent },
+  stepLater: { backgroundColor: tokens.color.background, borderColor: tokens.color.hairline },
+  stepText: {
+    fontSize: tokens.typography.label.size,
+    lineHeight: tokens.typography.label.lineHeight,
+    fontWeight: '600',
+    fontFamily: fontFamilyFor('600'),
+    textAlign: 'center',
+    flexShrink: 1,
+  },
+  // A tick drawn in Views (two strokes of a turned box), never a font glyph: `TabIcon`'s reason.
+  tick: {
+    width: 5,
+    height: 9,
+    borderRightWidth: 2,
+    borderBottomWidth: 2,
+    borderColor: tokens.color.accent,
+    transform: [{ rotate: '45deg' }],
+    marginBottom: 2,
+  },
   // `FE-W180`. Pulled left by the screen's gutter and no further, so the pressed fill reaches the
   // screen's edge and stops there. It was pulled back by the button's whole 24pt padding to line
   // the label up with the name above — which, against a 16pt gutter, drew the pressed fill 8pt off
@@ -204,6 +254,38 @@ const STAGE_WORDS_PENDING: Record<VisitScreenProps['stage'], TextKey> = {
   after: 'visit.stageAfterPending',
 };
 
+type StepState = 'done' | 'now' | 'later';
+
+/** `FE-W190`. One step of the visit, drawn at a width its state cannot change. */
+const StepCell = ({
+  label,
+  state,
+  spoken,
+}: {
+  readonly label: string;
+  readonly state: StepState;
+  readonly spoken: string;
+}): ReactNode => (
+  <View
+    accessible
+    accessibilityLabel={spoken}
+    style={[
+      styles.step,
+      state === 'done' ? styles.stepDone : state === 'now' ? styles.stepNow : styles.stepLater,
+    ]}
+  >
+    {state === 'done' ? <View style={styles.tick} /> : null}
+    <Text
+      style={[
+        styles.stepText,
+        { color: state === 'later' ? tokens.color.textSecondary : tokens.color.accent },
+      ]}
+    >
+      {label}
+    </Text>
+  </View>
+);
+
 export const VisitScreen = ({
   doctorName,
   clinic,
@@ -224,6 +306,7 @@ export const VisitScreen = ({
   onStartRecording,
   recordingBlockedReason = null,
   recordingNotice = null,
+  recordingOff = false,
   onRecordVoiceNote,
   onFlagAdverseEvent,
   recording,
@@ -231,11 +314,14 @@ export const VisitScreen = ({
   loading = false,
   failure = null,
   actionFailure = null,
+  onBack,
 }: VisitScreenProps): ReactNode => {
   const { t } = useT();
+  // `FE-W188`. Spread rather than passed, so an absent handler stays absent.
+  const back = onBack === undefined ? {} : { onBack };
   if (failure !== null) {
     return (
-      <Screen>
+      <Screen {...back}>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </Screen>
     );
@@ -247,7 +333,7 @@ export const VisitScreen = ({
   const steps: readonly {
     readonly key: TextKey;
     readonly label: string;
-    readonly state: 'done' | 'now' | 'later';
+    readonly state: StepState;
   }[] = [
     {
       key: 'visit.stepCheckIn',
@@ -297,7 +383,7 @@ export const VisitScreen = ({
   ].some(Boolean);
 
   return (
-    <Screen scrollable footer={footer}>
+    <Screen scrollable footer={footer} {...back}>
       {recording === undefined ? null : (
         <>
           {/*
@@ -342,12 +428,19 @@ export const VisitScreen = ({
         )}
       </View>
 
-      <View accessibilityLabel={t('visit.progress')} accessible style={styles.steps}>
+      <View accessibilityLabel={t('visit.progress')} style={styles.steps}>
         {steps.map((step) => (
-          <Badge
+          <StepCell
             key={step.key}
-            label={step.state === 'done' ? t('visit.stepDone', { step: step.label }) : step.label}
-            tone={step.state === 'done' ? 'success' : step.state === 'now' ? 'info' : 'neutral'}
+            label={step.label}
+            spoken={
+              step.state === 'done'
+                ? t('visit.stepDone', { step: step.label })
+                : step.state === 'now'
+                  ? t('visit.stepNow', { step: step.label })
+                  : step.label
+            }
+            state={step.state}
           />
         ))}
       </View>
@@ -359,7 +452,15 @@ export const VisitScreen = ({
       {loading ? <Spinner label={t('visit.loading')} /> : null}
 
       <Card tone={stage === 'during' ? 'hero' : 'default'}>
-        <Label muted>{t((stagePending ? STAGE_WORDS_PENDING : STAGE_WORDS)[stage])}</Label>
+        {/*
+          `FE-W190`. One line where there were two saying the same thing: a confirmed check-in with
+          its time reads "Checked in 15:29", not "You are checked in" above it. The stage's own
+          words stay whenever they add something — "waiting to send", "Visit finished", or a
+          check-in whose time has not arrived yet.
+        */}
+        {stage === 'during' && !stagePending && startedLabel !== null ? null : (
+          <Label muted>{t((stagePending ? STAGE_WORDS_PENDING : STAGE_WORDS)[stage])}</Label>
+        )}
         {durationLabel === null ? null : (
           <View style={styles.figureRow}>
             <Figure>{durationLabel}</Figure>
@@ -386,11 +487,11 @@ export const VisitScreen = ({
             {consent.outcome === 'declined' ? t('visit.consentDeclined') : t('visit.consentAgreed')}
           </BodyText>
           {consent.answeredLabel == null ? null : <Label muted>{consent.answeredLabel}</Label>}
-          {consent.outcome === 'consented' ? (
-            // The MR must not be left believing audio is being captured. Recording
-            // is FE-W4 and nothing in this build can capture it; a screen that
-            // implied otherwise would have them speak as though it were.
-            <Label muted>{t('visit.recordingNotInBuild')}</Label>
+          {consent.outcome === 'consented' && recording === undefined && recordingOff ? (
+            // The MR must not be left believing audio is being captured. `FE-W186`: said as what
+            // it is, recording switched off, and not as "not in this build", which is the
+            // developers' word for it. A sentence, so `Secondary` (`FE-W189`).
+            <Secondary>{t('visit.recordingSwitchedOff')}</Secondary>
           ) : null}
         </Card>
       )}

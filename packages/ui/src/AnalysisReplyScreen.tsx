@@ -57,6 +57,8 @@ export interface AnalysisReplyScreenProps {
    * must be on a screen where it is.
    */
   readonly sendFailure?: { readonly title: string; readonly detail: string } | null;
+  /** `FE-W188`. The screen's Back control (`Screen`'s `onBack`). */
+  readonly onBack?: () => void;
 }
 
 const styles = StyleSheet.create({
@@ -75,11 +77,13 @@ export const AnalysisReplyScreen = ({
   saved = null,
   failure = null,
   sendFailure = null,
+  onBack,
 }: AnalysisReplyScreenProps): ReactNode => {
   const { t } = useT();
+  const back = onBack === undefined ? {} : { onBack };
   if (failure !== null) {
     return (
-      <Screen scrollable>
+      <Screen scrollable {...back}>
         <Title>{t('reply.title')}</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </Screen>
@@ -122,7 +126,7 @@ export const AnalysisReplyScreen = ({
   );
 
   return (
-    <Screen scrollable footer={footer}>
+    <Screen scrollable footer={footer} {...back}>
       <View style={styles.head}>
         <Title>{t('reply.title')}</Title>
         {/* `FE-W178`. The line under a screen title is `Secondary`, as on the call report. */}

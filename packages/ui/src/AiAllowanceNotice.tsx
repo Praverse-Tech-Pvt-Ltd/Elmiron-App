@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { Label } from './Text';
+import { Secondary } from './Text';
 import { t, useLanguage } from './i18n';
 
 /**
@@ -69,7 +69,8 @@ export const AiAllowanceNotice = ({ allowance, sample }: AiAllowanceNoticeProps)
   return (
     <View style={styles.group}>
       {banner}
-      {sample ? <Label muted>{sampleFiguresNote()}</Label> : null}
+      {/* `FE-W189`. A sentence, so the prose step, not `Label`. */}
+      {sample ? <Secondary>{sampleFiguresNote()}</Secondary> : null}
     </View>
   );
 };

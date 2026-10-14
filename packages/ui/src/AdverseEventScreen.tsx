@@ -5,6 +5,7 @@ import { Banner } from './Banner';
 import { BodyText, Secondary, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
+import { Screen } from './Screen';
 import { TextField } from './TextField';
 import { useT } from './i18n';
 
@@ -22,6 +23,10 @@ import { useT } from './i18n';
  * something that looks like a phone number, an email address or an ID number, and the Send button
  * is withheld until it is removed. A name cannot be detected reliably and is not attempted; the
  * guidance asks for none, plainly, above the field.
+ *
+ * **`FE-W190`. A form like the call report and samples:** the field takes several lines (what a
+ * doctor describes is rarely one), and Send is pinned in the footer, above the keyboard, instead of
+ * after the field where the keyboard covered it. The screen draws its own `Screen` for that.
  */
 export interface AdverseEventScreenProps {
   readonly doctorName: string;
@@ -34,11 +39,13 @@ export interface AdverseEventScreenProps {
   /** What happened to the flag, in its own words — sent, or saved to send by itself. */
   readonly outcome?: { readonly title: string; readonly detail: string } | null;
   readonly failure?: { readonly title: string; readonly detail: string } | null;
+  /** `FE-W188`. The screen's Back control (`Screen`'s `onBack`). */
+  readonly onBack?: () => void;
 }
 
 const styles = StyleSheet.create({
   head: { gap: tokens.space.xxs },
-  foot: { gap: tokens.space.sm, paddingTop: tokens.space.sm },
+  foot: { gap: tokens.space.sm },
 });
 
 export const AdverseEventScreen = ({
@@ -50,11 +57,34 @@ export const AdverseEventScreen = ({
   identifierNote = null,
   outcome = null,
   failure = null,
+  onBack,
 }: AdverseEventScreenProps): ReactNode => {
   // `FE-W157`. The screen's chrome follows the app's language; the guidance in the card does not.
   const { t } = useT();
+  const footer = (
+    <View style={styles.foot}>
+      {outcome !== null ? (
+        <Banner detail={outcome.detail} title={outcome.title} tone="info" />
+      ) : identifierNote !== null ? (
+        <Button disabled label={t('adverse.send')} note={identifierNote} onPress={onSend} />
+      ) : text.trim() === '' ? (
+        <Button
+          disabled
+          label={t('adverse.send')}
+          note={t('adverse.writeFirst')}
+          onPress={onSend}
+        />
+      ) : (
+        <Button
+          label={sending ? t('adverse.sending') : t('adverse.send')}
+          loading={sending}
+          onPress={onSend}
+        />
+      )}
+    </View>
+  );
   return (
-    <>
+    <Screen scrollable footer={footer} {...(onBack === undefined ? {} : { onBack })}>
       <View style={styles.head}>
         <Title>{t('adverse.title')}</Title>
         {/* `FE-W178`. The line under a screen title is `Secondary`, as on the call report. */}
@@ -82,30 +112,10 @@ export const AdverseEventScreen = ({
       <TextField
         help={t('adverse.whatHappenedHelp')}
         label={t('adverse.whatHappened')}
+        multiline
         onChangeText={onTextChange}
         value={text}
       />
-
-      <View style={styles.foot}>
-        {outcome !== null ? (
-          <Banner detail={outcome.detail} title={outcome.title} tone="info" />
-        ) : identifierNote !== null ? (
-          <Button disabled label={t('adverse.send')} note={identifierNote} onPress={onSend} />
-        ) : text.trim() === '' ? (
-          <Button
-            disabled
-            label={t('adverse.send')}
-            note={t('adverse.writeFirst')}
-            onPress={onSend}
-          />
-        ) : (
-          <Button
-            label={sending ? t('adverse.sending') : t('adverse.send')}
-            loading={sending}
-            onPress={onSend}
-          />
-        )}
-      </View>
-    </>
+    </Screen>
   );
 };

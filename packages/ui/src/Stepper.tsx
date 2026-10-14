@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
-import { Figure, Label, MAX_FONT_SCALE } from './Text';
+import { Figure, Label, MAX_FONT_SCALE, Secondary } from './Text';
 import { useT } from './i18n';
 
 /**
@@ -127,7 +127,8 @@ export const Stepper = ({
         </View>
         {key(PLUS, t('stepper.more', { label }), disabled || atMax, value + 1)}
       </View>
-      {atMax && maxNote !== undefined ? <Label muted>{maxNote}</Label> : null}
+      {/* `FE-W189`. Why the plus key stopped is a sentence, so it is set at the prose step. */}
+      {atMax && maxNote !== undefined ? <Secondary>{maxNote}</Secondary> : null}
     </View>
   );
 };

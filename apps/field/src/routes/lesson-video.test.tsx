@@ -60,6 +60,7 @@ const backendWith = (
 ): LearningBackend => ({
   myCourses: jest.fn(async () => Promise.reject(new Error('not expected'))),
   course: jest.fn(async () => Promise.reject(new Error('not expected'))),
+  preview: jest.fn(async () => Promise.reject(new Error('not expected'))),
   outline: jest.fn(async () => Promise.reject(new Error('not expected'))),
   lesson: jest.fn(async () => Promise.resolve(lesson)),
   start: jest.fn(async () => Promise.reject(new Error('not expected'))),

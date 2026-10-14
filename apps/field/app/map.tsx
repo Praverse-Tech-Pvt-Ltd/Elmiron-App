@@ -6,6 +6,7 @@ import { mapsEnabled } from '../src/features';
 import { ClinicMap } from '../src/maps/clinic-map';
 import { doctorPlaces, noLocation, placeLink, todayPlaces } from '../src/maps/places';
 import type { MapPlan } from '../src/maps/places';
+import { useBack } from '../src/navigation/back';
 import { usePulledStore } from '../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../src/sync/selectors';
 import { beatPlanView } from '../src/today/beat-plan-view';
@@ -23,15 +24,18 @@ export const MapScreen = ({
   heading,
   empty,
   onOpen,
+  onBack,
 }: {
   readonly plan: MapPlan;
   readonly heading: string;
   readonly empty: string;
   readonly onOpen: (link: string) => void;
+  /** `FE-W188`. The screen's Back control. */
+  readonly onBack?: () => void;
 }): ReactNode => {
   useLanguage();
   return (
-    <Screen scrollable>
+    <Screen scrollable {...(onBack === undefined ? {} : { onBack })}>
       <Title>{heading}</Title>
       {plan.region === null ? (
         <Banner tone="info" title={empty} />
@@ -69,6 +73,7 @@ export default function MapRoute(): ReactNode {
   const router = useRouter();
   const { show } = useLocalSearchParams<{ show?: string }>();
   const { store, status, today } = usePulledStore();
+  const back = useBack();
   if (!mapsEnabled) return <Redirect href="/home" />;
 
   const doctors = doctorsFromStore(store);
@@ -104,6 +109,7 @@ export default function MapRoute(): ReactNode {
       onOpen={(link) => {
         router.push(link);
       }}
+      onBack={back}
     />
   );
 }

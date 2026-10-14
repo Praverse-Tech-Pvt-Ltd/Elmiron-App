@@ -13,7 +13,7 @@ const props = {
     { title: 'Date, time and duration' },
   ],
   notice: NOTICE,
-  noticeLabel: 'Notice v1.2 · English · a1b2c3d4',
+  noticeLabel: 'Notice version 1.2 · English',
   fiduciaryNote: 'Elmiron India Pvt Ltd is the Data Fiduciary for this recording.',
   onBack: (): void => undefined,
 };
@@ -41,7 +41,7 @@ describe('D3 — the legal layer', () => {
     // together they are what lets an audit reconstruct what was agreed to.
     await render(<ConsentDetailsScreen {...props} />);
     expect(screen.getByText(NOTICE)).toBeTruthy();
-    expect(screen.getByText('Notice v1.2 · English · a1b2c3d4')).toBeTruthy();
+    expect(screen.getByText('Notice version 1.2 · English')).toBeTruthy();
   });
 
   it('names the Data Fiduciary and where a complaint goes', async () => {

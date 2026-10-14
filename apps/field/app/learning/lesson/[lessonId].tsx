@@ -10,6 +10,7 @@ import { LessonVideo } from '../../../src/learning/lesson-video';
 import { appLearningBackend } from '../../../src/learning/backend';
 import type { LearningBackend, LessonRow } from '../../../src/learning/live';
 import { failureKind, finishNotice } from '../../../src/learning/view';
+import { useBack } from '../../../src/navigation/back';
 import { usePulledStore } from '../../../src/sync/pulled-store';
 import { clockIn, dayMonthIn } from '../../../src/today/territory-day';
 
@@ -36,6 +37,7 @@ export const Lesson = ({
 }): ReactNode => {
   // `FE-W183`. The screen's own words follow the app's language; a language change repaints it.
   useLanguage();
+  const back = useBack();
   const { zone } = usePulledStore();
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
@@ -117,8 +119,9 @@ export const Lesson = ({
               notice,
             };
 
+  // `FE-W188`. A pushed screen draws its own way back.
   return (
-    <Screen scrollable>
+    <Screen onBack={back} scrollable>
       <LessonScreen view={view} />
       {tutorEnabled && loaded.kind === 'loaded' && loaded.lesson !== null ? (
         <LessonTutor lessonId={lessonId} zone={zone} />

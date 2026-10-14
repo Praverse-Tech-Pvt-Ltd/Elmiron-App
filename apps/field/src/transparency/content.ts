@@ -63,7 +63,15 @@ export const transparencyEntries = (build: {
   /** `FE-W71`. Absent is off, which is every build that does not set `EXPO_PUBLIC_LIVE_TRACKING`. */
   readonly liveTrackingEnabled?: boolean;
 }): readonly TransparencyEntry[] => [
-  entry('transparency.checkInLocation', 'transparency.checkInLocationDetail', 'active'),
+  // `FE-W185`. "Never between visits" is false while the rep shares live location, so a build with
+  // live location says only what stays true; the live row below says when else it is read.
+  entry(
+    'transparency.checkInLocation',
+    build.liveTrackingEnabled === true
+      ? 'transparency.checkInLocationDetailLive'
+      : 'transparency.checkInLocationDetail',
+    'active',
+  ),
   ...(build.liveTrackingEnabled === true
     ? [entry('transparency.liveLocation', 'transparency.liveLocationDetail', 'active')]
     : []),

@@ -108,6 +108,8 @@ export interface SamplesScreenProps {
   readonly actionFailure?: { readonly title: string; readonly detail: string } | null;
   /** UX polish. Back to the visit once the lines are recorded -- the outcome was a dead end. */
   readonly onDone?: () => void;
+  /** `FE-W188`. The screen's Back control (`Screen`'s `onBack`). */
+  readonly onBack?: () => void;
 }
 
 /** `FE-W152`. Keys, not words: the labels are read at render, in the app's current language. */
@@ -152,11 +154,13 @@ export const SamplesScreen = ({
   failure = null,
   actionFailure = null,
   onDone,
+  onBack,
 }: SamplesScreenProps): ReactNode => {
   const { t } = useT();
+  const back = onBack === undefined ? {} : { onBack };
   if (failure !== null) {
     return (
-      <Screen>
+      <Screen {...back}>
         <Title>{t('samples.title')}</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </Screen>
@@ -172,6 +176,7 @@ export const SamplesScreen = ({
   return (
     <Screen
       scrollable
+      {...back}
       footer={
         <View style={styles.foot}>
           {saved === null ? null : (

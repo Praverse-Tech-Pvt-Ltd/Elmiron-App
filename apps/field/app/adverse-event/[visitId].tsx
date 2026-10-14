@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import uuid from 'expo-modules-core/src/uuid';
-import { AdverseEventScreen, Screen, t, useLanguage } from '@fieldforce/ui';
+import { AdverseEventScreen, t, useLanguage } from '@fieldforce/ui';
 import {
   adverseEventRequest,
   identifierNote,
@@ -14,6 +14,7 @@ import { adverseEventQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { failureDetail } from '../../src/errors/plain';
+import { useBack } from '../../src/navigation/back';
 
 /**
  * W2-C B / `BE-W159` — the rep flags a possible side effect, from the visit (`BE-C36`).
@@ -54,6 +55,8 @@ export default function AdverseEventFlag(): ReactNode {
   // `FE-W157`. Subscribed, so a language change repaints this screen's own lines.
   useLanguage();
   const { visitId } = useLocalSearchParams<{ visitId: string }>();
+  // `FE-W188`. The screen's Back control.
+  const back = useBack();
   const { store } = usePulledStore();
   const visit = visitsFromStore(store).find((candidate) => candidate.id === visitId);
   const doctor = doctorsFromStore(store).find((candidate) => candidate.id === visit?.doctorId);
@@ -132,18 +135,18 @@ export default function AdverseEventFlag(): ReactNode {
       });
   };
 
+  // `FE-W190`. `AdverseEventScreen` draws its own `Screen`, so Send can be pinned in its footer.
   return (
-    <Screen scrollable>
-      <AdverseEventScreen
-        doctorName={doctor?.fullName ?? t('adverse.thisVisit')}
-        failure={failure}
-        identifierNote={withheld}
-        onSend={send}
-        onTextChange={setText}
-        outcome={outcome}
-        sending={sending}
-        text={text}
-      />
-    </Screen>
+    <AdverseEventScreen
+      doctorName={doctor?.fullName ?? t('adverse.thisVisit')}
+      failure={failure}
+      identifierNote={withheld}
+      onBack={back}
+      onSend={send}
+      onTextChange={setText}
+      outcome={outcome}
+      sending={sending}
+      text={text}
+    />
   );
 }

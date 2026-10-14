@@ -38,6 +38,11 @@ export interface OemContent {
   readonly family: OemFamily;
   /** "A5", for cross-referencing the design. Shown to nobody. */
   readonly screen: string;
+  /**
+   * The phone's own name for its skin, shown over the headline because the MR's phone uses it.
+   * `FE-W192`: empty for the generic screen, which shows none — "Android" there read as a debug
+   * label, and naming the platform tells an MR nothing they did not know.
+   */
   readonly skin: string;
   readonly headline: string;
   /**
@@ -132,7 +137,7 @@ const REALME = (): OemContent => ({
 const UNKNOWN = (): OemContent => ({
   family: 'unknown',
   screen: '—',
-  skin: 'Android',
+  skin: '',
   headline: t('onboarding.genericHeadline'),
   consequence: t('onboarding.genericConsequence'),
   steps: [

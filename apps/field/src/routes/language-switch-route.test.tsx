@@ -37,13 +37,13 @@ afterEach(async () => {
 describe('a complete Hindi file, with no code change', () => {
   it('makes Hindi pressable; pressing it repaints Me in Hindi and keeps the choice', async () => {
     await render(<Me />);
-    expect(screen.getByText('Settings')).toBeTruthy();
+    expect(screen.getByText('Me')).toBeTruthy();
     expect(screen.queryByText(/^Hindi: waiting/u)).toBeNull();
     expect(screen.getByText(/^Marathi: waiting for translation/u)).toBeTruthy();
 
     await fireEvent.press(screen.getByText('हिन्दी'));
 
-    expect(await screen.findByText('हि Settings')).toBeTruthy();
+    expect(await screen.findByText('हि Me')).toBeTruthy();
     expect(screen.getByText('हि Sign out')).toBeTruthy();
     // Every language is still named in its own script, so the way back is always readable.
     expect(screen.getByText('English')).toBeTruthy();
@@ -56,7 +56,7 @@ describe('a complete Hindi file, with no code change', () => {
       expect(await loadAppLanguage()).toBe('hi');
     });
     await render(<Me />);
-    expect(screen.getByText('हि Settings')).toBeTruthy();
+    expect(screen.getByText('हि Me')).toBeTruthy();
   });
 
   it('never opens in a stored language that is incomplete', async () => {
@@ -65,6 +65,6 @@ describe('a complete Hindi file, with no code change', () => {
       expect(await loadAppLanguage()).toBe('en');
     });
     await render(<Me />);
-    expect(screen.getByText('Settings')).toBeTruthy();
+    expect(screen.getByText('Me')).toBeTruthy();
   });
 });

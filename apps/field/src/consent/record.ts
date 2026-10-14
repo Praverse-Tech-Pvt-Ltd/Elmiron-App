@@ -136,15 +136,22 @@ export const languageOptionsFrom = (
 };
 
 /**
- * "Notice v1.2 · English · a1b2c3d4" — what the record will point at, on screen.
+ * "Notice version 1.2 · English" — which notice this is, in words a doctor reads.
  *
- * The hash prefix is on the face of the screen rather than buried, because it is
- * the only part of this label that is checkable. A version label can be reused; the
- * hash cannot. Eight hex characters is enough to distinguish the handful of notices
- * a company has and short enough not to read as noise to a doctor.
+ * `FE-W186`. It used to end with the text's hash prefix and carry the operator's label whole, so
+ * a doctor read "Notice TEST Key-day v1 39c801 · English · 75ceb473" (QA 24): two hex strings that
+ * look like an error code. The checkable part was never this line. The record the phone writes
+ * cites the version's id, and the server holds that version's hash beside it
+ * (`consent_text_versions`), which is where an auditor checks it.
+ *
+ * The number is the label's own "v<n>" when it has one -- "v1.2", "DEMO v1 99a1dbfe" -- and the
+ * label as written when it has none: an operator's label is shown, never invented.
  */
+export const noticeVersionOf = (versionLabel: string): string =>
+  /\bv(\d+(?:\.\d+)*)/iu.exec(versionLabel)?.[1] ?? versionLabel;
+
 export const noticeLabelFor = (version: ConsentTextVersion): string =>
-  `Notice ${version.versionLabel} · ${languageName(version.language)} · ${version.hash.slice(0, 8)}`;
+  `Notice version ${noticeVersionOf(version.versionLabel)} · ${languageName(version.language)}`;
 
 /** The screen's two answers, as the ledger's outcomes. There is no third answer. */
 export const outcomeFor = (answer: ConsentAnswer): ConsentOutcome => answer;

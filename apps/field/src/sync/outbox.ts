@@ -1016,7 +1016,11 @@ const CreateSampleAndInputRequestFrom = (
 const CreateCallReportRequestFrom = (item: SyncQueueItem): CreateCallReportRequest | null => {
   if (!payloadIs(item, 'call_report')) return null;
   const parsed = CreateCallReportRequestSchema.safeParse(item.payload);
-  return parsed.success ? parsed.data : null;
+  if (!parsed.success) return null;
+  // `FE-W196`. A row queued by a build from before the status was sent has none. It was queued by
+  // "Send the report" all the same — the phone has no other way to make one — so it goes as
+  // `submitted`, not as the server's default `'draft'` that no manager is ever shown.
+  return { ...parsed.data, status: parsed.data.status ?? 'submitted' };
 };
 
 /** The same, for an unplanned visit: parsed by the contract, so it carries its reason or stays queued. */

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { DoctorProfileScreen, Screen, t, useLanguage } from '@fieldforce/ui';
@@ -5,10 +6,15 @@ import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { lastSeenLabel } from '../../src/doctors/list';
 import { availabilityFrom, availabilitySentence } from '../../src/doctors/availability';
-import { buildDoctorProfile, consentLabel } from '../../src/doctors/profile';
+import { buildDoctorProfile, consentLabel, sentenceCase } from '../../src/doctors/profile';
 import { dayMonthIn } from '../../src/today/territory-day';
 import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
 import { notPermittedDetail, refusedDetail } from '../../src/errors/plain';
+import { witnessedStage } from '../../src/capture/visit';
+import { loadQueueState, onQueueChanged } from '../../src/sync/async-storage-store';
+import type { QueueLoad } from '../../src/sync/async-storage-store';
+import { emptyQueue } from '../../src/sync/reducer';
+import { useBack } from '../../src/navigation/back';
 
 /** B9 shows three. More than that is a history screen, which this is not. */
 const VISITS_SHOWN = 3;
@@ -25,9 +31,25 @@ export default function DoctorProfile(): ReactNode {
   const { id } = useLocalSearchParams<{ id: string }>();
   // MR-14 B2. The doctor and their visits come from the store the pull maintains.
   const { store, status, zone, serverTime, failure: pullFailure } = usePulledStore();
+  // `FE-W188`. The screen's Back control.
+  const back = useBack();
 
   const doctor = doctorsFromStore(store).find((candidate) => candidate.id === id);
   const visits = visitsFromStore(store).filter((visit) => visit.doctorId === id);
+
+  // `FE-W190`. Whether the rep is in a visit with this doctor NOW -- read as the visit screen reads
+  // it (`witnessedStage`), so a check-in queued with no signal counts as much as one the server
+  // has. Kept current while the screen is open, as the visit screen keeps its own queue read.
+  const [queueLoad, setQueueLoad] = useState<QueueLoad>({ kind: 'loaded', state: emptyQueue });
+  useEffect(() => {
+    const read = (): void => {
+      void loadQueueState().then(setQueueLoad);
+    };
+    read();
+    return onQueueChanged(read);
+  }, []);
+  const queued = queueLoad.kind === 'loaded' ? queueLoad.state.items : emptyQueue.items;
+  const inVisitNow = visits.some((visit) => witnessedStage(visit, queued).stage === 'during');
 
   /**
    * **Consent records are not in the pull, by the server's own declaration.**
@@ -73,8 +95,9 @@ export default function DoctorProfile(): ReactNode {
         : null;
 
   return (
-    <Screen scrollable>
+    <Screen scrollable onBack={back}>
       <DoctorProfileScreen
+        inVisitNow={inVisitNow}
         availability={availabilitySentence(
           availabilityFrom(
             (profile?.recentVisits ?? [])
@@ -101,7 +124,9 @@ export default function DoctorProfile(): ReactNode {
           consentLabel: consentLabel(visit.consent),
         }))}
         sinceLabel={
-          profile === null || profile.daysSince === null ? null : lastSeenLabel(profile.daysSince)
+          profile === null || profile.daysSince === null
+            ? null
+            : sentenceCase(lastSeenLabel(profile.daysSince))
         }
       />
     </Screen>

@@ -5,8 +5,16 @@ import { CourseScreen, Screen, t, useLanguage } from '@fieldforce/ui';
 import type { CourseView } from '@fieldforce/ui';
 import { learningEnabled } from '../../src/features';
 import { appLearningBackend } from '../../src/learning/backend';
-import type { LearningBackend, OutlineRows } from '../../src/learning/live';
-import { courseState, failureKind, outlineSections } from '../../src/learning/view';
+import type { CoursePreview, LearningBackend, OutlineRows } from '../../src/learning/live';
+import {
+  courseFacts,
+  courseState,
+  failureKind,
+  outlineSections,
+  previewVersionId,
+  versionSummary,
+} from '../../src/learning/view';
+import { useBack } from '../../src/navigation/back';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { dayMonthIn } from '../../src/today/territory-day';
 
@@ -22,6 +30,8 @@ type Loaded =
       readonly kind: 'loaded';
       readonly course: Awaited<ReturnType<LearningBackend['course']>>;
       readonly outline: OutlineRows | null;
+      /** `FE-W193`. The one startable version's lesson count and length, before it is started. */
+      readonly preview: CoursePreview | null;
     };
 
 export const Course = ({
@@ -34,6 +44,7 @@ export const Course = ({
   // `FE-W183`. The screen's own words follow the app's language; a language change repaints it.
   useLanguage();
   const router = useRouter();
+  const back = useBack();
   const { zone } = usePulledStore();
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
@@ -54,7 +65,12 @@ export const Course = ({
             state.kind === 'started'
               ? await backend.outline(state.versionId, state.enrolmentId)
               : null;
-          if (live) setLoaded({ kind: 'loaded', course, outline });
+          // `FE-W193`. A preview that does not load leaves the page as it was — title and button —
+          // rather than failing a course the rep can still start.
+          const versionId = previewVersionId(state);
+          const preview =
+            versionId === null ? null : await backend.preview(versionId).catch(() => null);
+          if (live) setLoaded({ kind: 'loaded', course, outline, preview });
         })
         .catch((error: unknown) => {
           if (live) setLoaded({ kind: 'failed', failure: failureKind(error) });
@@ -103,6 +119,8 @@ export const Course = ({
       return {
         kind: 'can_start',
         title,
+        summary: versionSummary(versions, previewVersionId(state)),
+        facts: courseFacts(loaded.preview),
         starting,
         notice,
         choices: (state.kind === 'can_start' ? state.choices : []).map((choice) => ({
@@ -126,6 +144,9 @@ export const Course = ({
           id: lesson.id,
           title: lesson.title,
           detail: [
+            // `FE-W193`. "To do", not "Not finished": the server records a finish and nothing
+            // else, so an unopened lesson and a half-read one look the same — and "Not finished"
+            // told the rep they had started lessons they had never opened.
             lesson.done ? t('learning.lessonDone') : t('learning.lessonNotDone'),
             lesson.minutes === null
               ? null
@@ -141,8 +162,9 @@ export const Course = ({
     };
   };
 
+  // `FE-W188`. A pushed screen draws its own way back.
   return (
-    <Screen scrollable>
+    <Screen onBack={back} scrollable>
       <CourseScreen view={viewOf()} />
     </Screen>
   );

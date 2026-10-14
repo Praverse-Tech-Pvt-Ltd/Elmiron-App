@@ -14,7 +14,8 @@ import { useT } from './i18n';
  * track. It is ONE accessible element with role `switch` and its checked state, so TalkBack says
  * "Send audio on WiFi only, switch, on" rather than reading two texts and a shape.
  *
- * **On/off is said in words beside the track**, never by position or colour alone. The off track
+ * **On/off is said in words beside the track** (`FE-W192`: on its left, on one line), never by
+ * position or colour alone. The off track
  * carries the `border` token's edge (controls only) so the control is visible against the card at
  * 3:1; the on track is the accent. No third grey, and nothing animates -- the thumb is drawn where
  * it is, so "Remove animations" has nothing to remove.
@@ -47,7 +48,9 @@ const styles = StyleSheet.create({
   },
   pressed: { backgroundColor: tokens.color.wash },
   text: { flex: 1, gap: tokens.space.xxs },
-  control: { alignItems: 'center', gap: tokens.space.xxs },
+  // `FE-W192`. The word sits BESIDE the track, on its line, not under it: under it, "On" read as a
+  // caption for the next row's title, and it made the row a line taller than its text needed.
+  control: { flexDirection: 'row', alignItems: 'center', gap: tokens.space.sm },
   track: {
     width: TRACK_WIDTH,
     height: TRACK_HEIGHT,
@@ -109,10 +112,10 @@ export const SwitchRow = ({
         {detail === undefined ? null : <Secondary>{detail}</Secondary>}
       </View>
       <View style={styles.control}>
+        <Label muted>{value ? t('common.on') : t('common.off')}</Label>
         <View style={switchTrackStyle(value)}>
           <View style={[styles.thumb, value ? null : styles.thumbOff]} />
         </View>
-        <Label muted>{value ? t('common.on') : t('common.off')}</Label>
       </View>
     </Pressable>
   );

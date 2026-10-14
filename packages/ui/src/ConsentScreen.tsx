@@ -96,7 +96,10 @@ export interface ConsentScreenProps {
    * see the note at the top of this file.
    */
   readonly notice: string;
-  /** "Notice v1.2 · English (India)" — what the record will point at. */
+  /**
+   * "Notice version 1.2 · English" — which notice this is, in words. `FE-W186`: never a hash; the
+   * record cites the version, and its hash is checked in the ledger, not read by a doctor.
+   */
   readonly noticeLabel: string;
   readonly onAnswer: (answer: ConsentAnswer) => void;
   /** The exit that is not a decision. Records nothing. */
@@ -298,7 +301,8 @@ export const ConsentScreen = ({
   const picker =
     languages === undefined || languages.length < 2 || onChangeLanguage === undefined ? (
       languageNote === null ? null : (
-        <Label muted>{languageNote}</Label>
+        // `FE-W189`. Two sentences, so the prose step, not a field's label.
+        <Secondary>{languageNote}</Secondary>
       )
     ) : (
       // Offered from what the server actually has. A hard-coded list would offer a

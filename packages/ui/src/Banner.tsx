@@ -54,12 +54,12 @@ const styles = StyleSheet.create({
     borderRadius: tokens.radius.well,
     borderLeftWidth: 4,
     padding: tokens.space.md,
-    gap: tokens.space.xs,
   },
   // `FE-W179`. Top-aligned, with the glyph centred on the title's first line: a title that wraps
   // used to float the glyph at the middle of the paragraph.
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: tokens.space.sm },
-  title: { flex: 1 },
+  // `FE-W189`. The title, the detail and the action are one column beside the glyph.
+  words: { flex: 1, gap: tokens.space.xs },
   offline: { borderStyle: 'dashed', borderWidth: 1, borderLeftWidth: 4 },
   // FE-W101. `info` is the one banner on the white card ground rather than a tint; the row shadow
   // gives it the same edge on the page a card has. The tinted tones need none.
@@ -90,19 +90,25 @@ export const Banner = ({ tone, title, detail, action }: BannerProps): ReactNode 
       `attentionFill`, invisible, on every first open.
     */}
     <SurfaceContext.Provider value="paper">
+      {/*
+        `FE-W189`. The detail and the action start under the TITLE, not under the glyph: the QA pass
+        (screenshots 15, 36) showed the detail's lines and "Live location" running back to the
+        banner's edge, so the glyph sat in a notch of its own paragraph and the action read as
+        belonging to the card rather than to this banner.
+      */}
       <View style={styles.head}>
         <StatusGlyph kind={KIND[tone]} lineHeight={tokens.typography.body.lineHeight} />
-        <View style={styles.title}>
+        <View style={styles.words}>
           <BodyText>{title}</BodyText>
+          {/* `FE-W178`. The detail is a sentence, so it is set at the prose step, not `Label`. */}
+          {detail === undefined ? null : <Secondary>{detail}</Secondary>}
+          {action === undefined ? null : (
+            <View style={styles.action}>
+              <Button label={action.label} onPress={action.onPress} variant="quiet" />
+            </View>
+          )}
         </View>
       </View>
-      {/* `FE-W178`. The detail is a sentence, so it is set at the prose step, not `Label`. */}
-      {detail === undefined ? null : <Secondary>{detail}</Secondary>}
-      {action === undefined ? null : (
-        <View style={styles.action}>
-          <Button label={action.label} onPress={action.onPress} variant="quiet" />
-        </View>
-      )}
     </SurfaceContext.Provider>
   </View>
 );

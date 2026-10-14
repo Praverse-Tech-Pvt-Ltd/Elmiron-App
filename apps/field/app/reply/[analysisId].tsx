@@ -9,6 +9,7 @@ import type { ServerRead } from '../../src/coaching/server';
 import { noAudioNote, replyNote } from '../../src/coaching/content';
 import { orderedFindings } from '../../src/coaching/feed';
 import { failureDetail, refusedDetail } from '../../src/errors/plain';
+import { useBack } from '../../src/navigation/back';
 
 /**
  * `FE-W158`. Why the finding could not be loaded, and why a reply was not sent, each kept as its
@@ -91,6 +92,7 @@ function Reply(): ReactNode {
   useLanguage();
   const { analysisId } = useLocalSearchParams<{ analysisId: string }>();
   const router = useRouter();
+  const back = useBack();
 
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [value, setValue] = useState('');
@@ -157,7 +159,11 @@ function Reply(): ReactNode {
         if (outcome.kind === 'sent') {
           // Back to the analysis, where the reply now appears beside the findings —
           // the MR sees where it landed rather than being told it was sent.
-          router.replace(`/analysis/${analysis.id}`);
+          // `FE-W188`. `dismissTo`, not `replace`: the reply is usually opened FROM the analysis, and
+          // replacing the reply with a second copy of it left two analyses on the stack, so Back
+          // went from the analysis to the same analysis. `dismissTo` returns to the one underneath,
+          // or replaces the reply with it when it was opened from the Coaching tab.
+          router.dismissTo(`/analysis/${analysis.id}`);
           return;
         }
         setSendFailure({ kind: 'refused', refusal: outcome.refusal });
@@ -177,6 +183,7 @@ function Reply(): ReactNode {
       busy={busy}
       failure={failure === null ? null : loadFailureWords(failure)}
       finding={finding}
+      onBack={back}
       onChangeText={(next) => {
         setValue(next);
         setSaved(false);

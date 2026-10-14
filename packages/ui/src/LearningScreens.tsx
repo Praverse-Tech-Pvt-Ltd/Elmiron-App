@@ -129,6 +129,13 @@ export type CourseView =
   | {
       readonly kind: 'can_start';
       readonly title: string;
+      /**
+       * `FE-W193`. What the course is about — the version's own summary, as the company wrote it —
+       * and what it holds ("6 lessons · about 30 min"). Without them the page was a title and a
+       * button: the rep was asked to start a course without being told what it was.
+       */
+      readonly summary?: string | null;
+      readonly facts?: string | null;
       readonly starting: boolean;
       readonly choices: readonly { readonly label: string; readonly onStart: () => void }[];
       /** Set when the last start did not reach the server, or was refused. */
@@ -181,7 +188,15 @@ export const CourseScreen = ({ view }: { readonly view: CourseView }): ReactNode
     case 'can_start':
       return (
         <>
-          <Title>{view.title}</Title>
+          <View style={styles.head}>
+            <Title>{view.title}</Title>
+            {view.facts === undefined || view.facts === null ? null : (
+              <Secondary>{view.facts}</Secondary>
+            )}
+          </View>
+          {view.summary === undefined || view.summary === null ? null : (
+            <BodyText>{view.summary}</BodyText>
+          )}
           {view.choices.length > 1 ? <Secondary>{t('learning.chooseMarket')}</Secondary> : null}
           <View style={styles.foot}>
             {view.choices.map((choice) => (
@@ -256,18 +271,30 @@ export type LessonView =
 /**
  * UX polish. A lesson's text, read as the author wrote it: paragraphs split on a blank line, a line
  * opening with `# ` as a section heading, `- ` or `• ` as a bullet. It was one `BodyText` -- a long
- * clinical lesson arrived as a single wall of text. Nothing is reworded, dropped or reordered;
- * a body with no blank lines renders exactly as before.
+ * clinical lesson arrived as a single wall of text. Nothing is reworded or reordered; a body with
+ * no blank lines renders exactly as before.
+ *
+ * `FE-W193`. A heading with nothing under it — the last block, or straight before another heading —
+ * is not drawn: a "Check yourself" left without its questions is a title that asks the rep to do
+ * something and gives them nothing to do. A heading WITH its questions under it is the author's
+ * section and stays, drawn like every other section of the lesson.
  */
+const isHeading = (block: string | undefined): boolean => block?.startsWith('# ') ?? false;
+
 export const LessonBody = ({ body }: { readonly body: string }): ReactNode => (
   <View style={styles.lessonBody}>
     {body
       .split(/\n\s*\n/u)
       .map((block) => block.trim())
       .filter((block) => block !== '')
-      .map((block, index) => {
+      .map((block, index, blocks) => {
         const key = `${String(index)}:${block.slice(0, 24)}`;
-        if (block.startsWith('# ')) return <Heading key={key}>{block.slice(2)}</Heading>;
+        if (isHeading(block)) {
+          const next = blocks[index + 1];
+          return next === undefined || isHeading(next) ? null : (
+            <Heading key={key}>{block.slice(2)}</Heading>
+          );
+        }
         const lines = block.split('\n');
         if (lines.every((line) => /^\s*[-•]\s+/u.test(line))) {
           return (

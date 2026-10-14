@@ -40,6 +40,12 @@ export interface SettingRow {
    * "Hindi: waiting for translation (0 of 312 done)". Ignored on every other state.
    */
   readonly note?: string;
+  /**
+   * `FE-W192`. The setting's current position, said in words beside the row's way in — "On",
+   * "Off". The WiFi-only and 100 MB rows were drawn as plain destinations ("›"), so Me showed
+   * whether a screen existed and not what the switch behind it was set to.
+   */
+  readonly value?: string;
 }
 
 export interface SettingsScreenProps {
@@ -49,12 +55,18 @@ export interface SettingsScreenProps {
    * never be silent (live location, `FE-W71`). Above the title, it opened the screen on a banner.
    */
   readonly lead?: ReactNode;
+  /**
+   * `FE-W192`. Who is signed in, under the title. These phones are shared, and "whose day is this?"
+   * is the question to answer before anything else on the page that holds Sign out.
+   */
+  readonly signedInAs?: string;
 }
 
 const styles = StyleSheet.create({
   group: { gap: tokens.space.sm },
   row: { flexDirection: 'row', gap: tokens.space.sm, alignItems: 'center' },
   rowText: { flex: 1, gap: tokens.space.xxs },
+  intro: { gap: tokens.space.xxs },
 });
 
 /**
@@ -62,12 +74,18 @@ const styles = StyleSheet.create({
  * anything in this build", an engineer's sentence, under a dashed "offline" glyph. The rule it
  * keeps is unchanged: an unbuilt setting says it does nothing, and cannot be pressed.
  */
-export const SettingsScreen = ({ groups, lead }: SettingsScreenProps): ReactNode => {
+export const SettingsScreen = ({ groups, lead, signedInAs }: SettingsScreenProps): ReactNode => {
   const { t } = useT();
   return (
     <>
-      {/* FE-D12 V5. A screen title, like Today's; FE-D7 4 moved the others and missed this one. */}
-      <Title>{t('settings.title')}</Title>
+      {/*
+        FE-D12 V5. A screen title, like Today's; FE-D7 4 moved the others and missed this one.
+        `FE-W192`. It reads "Me", as the tab does: the tab said "Me" and the page said "Settings".
+      */}
+      <View style={styles.intro}>
+        <Title>{t('settings.title')}</Title>
+        {signedInAs === undefined ? null : <Secondary>{signedInAs}</Secondary>}
+      </View>
       {lead}
 
       {groups.map((group) => (
@@ -91,6 +109,7 @@ export const SettingsScreen = ({ groups, lead }: SettingsScreenProps): ReactNode
                     <Badge label={t('settings.inUse')} tone="success" />
                   ) : null}
                 </View>
+                {row.value === undefined ? null : <BodyText muted>{row.value}</BodyText>}
                 {press === undefined ? null : <BodyText muted>›</BodyText>}
               </View>
             );

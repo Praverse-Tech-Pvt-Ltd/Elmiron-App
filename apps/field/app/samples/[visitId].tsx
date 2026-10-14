@@ -24,6 +24,7 @@ import { sampleQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { SESSION_EXPIRED, refusalTextFor, sessionExpired } from '../../src/sync/explanation';
 import type { InTheMomentRefusal } from '../../src/sync/explanation';
 import { notPermittedDetail } from '../../src/errors/plain';
+import { useBack } from '../../src/navigation/back';
 
 /**
  * C5 — the samples binding.
@@ -73,6 +74,8 @@ const withoutLine = (
 export default function SamplesRoute(): ReactNode {
   useLanguage();
   const { visitId } = useLocalSearchParams<{ visitId: string }>();
+  // `FE-W188`. The screen's Back control.
+  const back = useBack();
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState<{ readonly sent: number; readonly queued: number } | null>(
     null,
@@ -276,6 +279,7 @@ export default function SamplesRoute(): ReactNode {
       onDone={() => {
         router.back();
       }}
+      onBack={back}
       busy={busy}
       capNote={capNote()}
       dateLabel={

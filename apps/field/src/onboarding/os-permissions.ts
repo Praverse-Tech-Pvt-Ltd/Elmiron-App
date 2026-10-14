@@ -35,6 +35,26 @@ export const requestLocationAnswers = async (
 };
 
 /**
+ * `FE-W192`. Whether foreground location is ALREADY allowed, asking nothing. A2 said "Turn location
+ * on" to a rep who had turned it on (reached again from Me, or after a reinstall that kept the
+ * grant). A check is not a request: no prompt is shown, so it is not a trigger
+ * `shouldPromptForLocation` has to allow. Approximate counts, as it does when asked. A check that
+ * fails answers "not granted", which only shows the question the screen showed before.
+ */
+export const locationAlreadyGranted = async (): Promise<boolean> => {
+  try {
+    if (isIos()) return (await Location.getForegroundPermissionsAsync()).granted;
+    const [fine, coarse] = await Promise.all([
+      PermissionsAndroid.check('android.permission.ACCESS_FINE_LOCATION'),
+      PermissionsAndroid.check('android.permission.ACCESS_COARSE_LOCATION'),
+    ]);
+    return fine || coarse;
+  } catch {
+    return false;
+  }
+};
+
+/**
  * The "API level" `requestNotificationPermission` decides by. iOS always has a notification
  * permission to ask for, so it is given the level from which Android has one too.
  */

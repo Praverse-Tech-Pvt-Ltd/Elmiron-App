@@ -35,6 +35,11 @@ export interface BeatPlanStop {
    * stop without one (the plan names a doctor with no visit row yet) opens the doctor.
    */
   readonly visitId?: string | null;
+  /**
+   * `FE-W191`. The current stop is a visit the rep is checked into, not merely the next one. Its
+   * card said "Next stop" over a visit already under way (QA screenshots 17, 49).
+   */
+  readonly inProgress?: boolean;
 }
 
 export interface BeatPlanScreenProps {
@@ -176,7 +181,9 @@ export const BeatPlanScreen = ({
         {stops.map((stop) =>
           stop.state === 'current' ? (
             <Card key={stop.id} {...pressFor(stop)}>
-              <Label muted>{t('route.nextStop')}</Label>
+              <Label muted>
+                {stop.inProgress === true ? t('route.inProgress') : t('route.nextStop')}
+              </Label>
               <View style={styles.currentLines}>
                 <Heading>{stop.doctorName}</Heading>
                 {stop.clinic === null ? null : <BodyText muted>{stop.clinic}</BodyText>}

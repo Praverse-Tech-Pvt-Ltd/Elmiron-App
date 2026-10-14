@@ -6,8 +6,8 @@ import {
   Banner,
   BodyText,
   Button,
-  Label,
   Screen,
+  Secondary,
   Select,
   TextField,
   Title,
@@ -17,8 +17,10 @@ import {
 import { createPushClient } from '../src/sync/push-client';
 import { queueUnreadable, loadQueueState } from '../src/sync/async-storage-store';
 import { enqueueFirst, flushOutbox, unplannedVisitQueueItem } from '../src/sync/outbox';
+import { useBack } from '../src/navigation/back';
 import { usePulledStore } from '../src/sync/pulled-store';
 import { doctorsFromStore } from '../src/sync/selectors';
+import { todaysPlan } from '../src/today/beat-plan-view';
 import { PROBLEM_WORDS, draftProblem, unplannedVisitRequest } from '../src/visits/unplanned';
 
 /**
@@ -50,8 +52,25 @@ const failureWords = (failure: Failure): { title: string; detail: string } =>
 export default function UnplannedVisit(): ReactNode {
   useLanguage();
   const router = useRouter();
-  const { store, refresh } = usePulledStore();
-  const doctors = doctorsFromStore(store);
+  const back = useBack();
+  const { store, today, refresh } = usePulledStore();
+  const everyDoctor = doctorsFromStore(store);
+  /**
+   * `FE-W191`. Only doctors who are NOT on today's plan. The sheet listed every doctor on the
+   * phone, today's planned stops included (QA screenshot 52), under a screen whose first line says
+   * it is "for a doctor who is not on today's plan" — and a planned doctor visited from here would
+   * be an unplanned visit to a planned stop, counted twice. A planned stop is opened from Today or
+   * the route. With no plan on the phone yet, nobody is excluded.
+   */
+  const plan = todaysPlan([...store.beat_plan.values()], today);
+  const planned = new Set(
+    plan === null
+      ? []
+      : [...store.beat_plan_entry.values()]
+          .filter((entry) => entry.beatPlanId === plan.id)
+          .map((entry) => entry.doctorId),
+  );
+  const doctors = everyDoctor.filter((d) => !planned.has(d.id));
   const [doctorId, setDoctorId] = useState('');
   const [clinicAddressId, setClinicAddressId] = useState<string | null>(null);
   const [reason, setReason] = useState('');
@@ -95,12 +114,18 @@ export default function UnplannedVisit(): ReactNode {
   };
 
   return (
-    <Screen scrollable>
+    <Screen onBack={back} scrollable>
       <Title>{t('unplanned.title')}</Title>
       <BodyText muted>{t('unplanned.intro')}</BodyText>
       {failure === null ? null : <Banner {...failureWords(failure)} tone="critical" />}
-      {doctors.length === 0 ? <Label muted>{t('unplanned.noDoctors')}</Label> : null}
+      {/* `FE-W189`. Sentences, so the prose step. */}
+      {everyDoctor.length === 0 ? (
+        <Secondary>{t('unplanned.noDoctors')}</Secondary>
+      ) : doctors.length === 0 ? (
+        <Secondary>{t('unplanned.allPlanned')}</Secondary>
+      ) : null}
       <Select
+        filterLabel={t('unplanned.findDoctor')}
         label={t('unplanned.doctorLabel')}
         onChange={(value) => {
           setDoctorId(value);

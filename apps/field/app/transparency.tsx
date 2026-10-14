@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
-import { Screen, TransparencyScreen, useLanguage } from '@fieldforce/ui';
+import { Screen, TransparencyScreen, t, useLanguage } from '@fieldforce/ui';
 import { hasCompletedFirstRun, markFirstRunComplete } from '../src/onboarding/progress';
 import { liveTrackingEnabled } from '../src/features';
+import { useBack } from '../src/navigation/back';
+import { batteryStepApplies } from '../src/onboarding/device';
+import { firstRunPosition } from '../src/onboarding/first-run';
 import { neverRecordedFor, transparencyEntries } from '../src/transparency/content';
 
 /**
@@ -25,6 +28,7 @@ import { neverRecordedFor, transparencyEntries } from '../src/transparency/conte
 export default function Transparency(): ReactNode {
   useLanguage();
   const router = useRouter();
+  const back = useBack();
   const [inFirstRun, setInFirstRun] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -59,8 +63,18 @@ export default function Transparency(): ReactNode {
   }, []);
 
   return (
-    <Screen scrollable>
+    // `FE-W188`. Reached from Today, Me or a first-run screen opened from Me, it is a pushed screen
+    // and has a way back. Ending first run it has none: "Start my first day" is the way on.
+    <Screen scrollable {...(inFirstRun === false ? { onBack: back } : {})}>
       <TransparencyScreen
+        {...(inFirstRun === true
+          ? {
+              stepLine: t(
+                'onboarding.stepOf',
+                firstRunPosition('transparency', batteryStepApplies()),
+              ),
+            }
+          : {})}
         entries={transparencyEntries({ recordingEnabled, liveTrackingEnabled })}
         // `FE-W71`. With live tracking in the build, the sentence about location says so.
         neverRecorded={neverRecordedFor({ liveTrackingEnabled })}

@@ -18,6 +18,7 @@ import {
   BeatPlanSchema,
   BeatPlanStatusSchema,
   CallReportSchema,
+  CallReportStatusSchema,
   CaptureSourceSchema,
   CheckInSchema,
   CheckOutSchema,
@@ -151,6 +152,14 @@ export type CreateCheckOutRequest = z.infer<typeof CreateCheckOutRequestSchema>;
 // Call reports — weeks 5 and 8
 // ---------------------------------------------------------------------------
 
+/**
+ * `FE-W196`. The only status a rep's phone may give a report it creates: `submitted` — sent for the
+ * manager's approval. `approved` and `rejected` are the manager's to give, and the phone keeps
+ * its own drafts (`src/capture/report-draft.ts`), so it never creates a server-side `draft`.
+ */
+export const RepCallReportStatusSchema = CallReportStatusSchema.extract(['submitted']);
+export type RepCallReportStatus = z.infer<typeof RepCallReportStatusSchema>;
+
 export const CreateCallReportRequestSchema = z.object({
   id: UuidSchema,
   visitId: UuidSchema,
@@ -158,6 +167,14 @@ export const CreateCallReportRequestSchema = z.object({
   productIdsDiscussed: z.array(UuidSchema),
   objectionsRaised: z.string().nullish(),
   nextStep: z.string().nullish(),
+  /**
+   * `FE-W196`. A report the rep pressed "Send the report" on is `submitted`. Without it the
+   * server's `apply_sync_item` stores a new report as `'draft'` — its default when the payload
+   * names none — and `approvable_call_reports` lists only `submitted`, so every report sent from
+   * a phone sat as a draft no manager was ever shown. Optional, so a row queued by an older build
+   * still parses; the outbox sends such a row as `submitted` too (it was always a send).
+   */
+  status: RepCallReportStatusSchema.optional(),
 });
 export type CreateCallReportRequest = z.infer<typeof CreateCallReportRequestSchema>;
 

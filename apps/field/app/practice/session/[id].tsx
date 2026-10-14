@@ -16,7 +16,9 @@ import { practiceBackend } from '../../../src/practice/transport';
 import { spokenTurnBody, spokenTurnOutcome } from '../../../src/practice/voice';
 import { useVoiceConversation } from '../../../src/practice/voice-device';
 import type { VoiceNext } from '../../../src/practice/voice-device';
+import { practiceDoctorName } from '../../../src/practice/labels';
 import { failureDetail } from '../../../src/errors/plain';
+import { useBack } from '../../../src/navigation/back';
 
 /**
  * FE-D17 — one AI Doctor practice conversation.
@@ -62,6 +64,7 @@ const PracticeSessionView = (): ReactNode => {
   useLanguage();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const back = useBack();
   const [session, setSession] = useState<PracticeSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState<Failure | null>(null);
@@ -233,8 +236,17 @@ const PracticeSessionView = (): ReactNode => {
             }
           : { kind: notice };
 
+  /**
+   * `FE-W193`. Follow the newest turn only once there IS a turn. `Screen` starts a conversation at
+   * the bottom, so a session with no turns yet opened scrolled past its own header — the title, the
+   * aim and the objection — to the empty box at the end (QA screenshots 66–67). With a first turn the
+   * conversation follows as before.
+   */
+  const following = (session?.turns.length ?? 0) > 0;
+
+  // `FE-W188`. A pushed screen draws its own way back.
   const sessionScreen = (voice: PracticeVoice | null): ReactNode => (
-    <Screen followLatest scrollable>
+    <Screen followLatest={following} onBack={back} scrollable>
       <PracticeSessionScreen
         allowance={allowance}
         busy={busy}
@@ -255,7 +267,7 @@ const PracticeSessionView = (): ReactNode => {
           sendTurn(body);
         }}
         personaLine={session?.scenarioTitle ?? ''}
-        personaName={session?.personaDisplayName ?? ''}
+        personaName={practiceDoctorName(session?.personaDisplayName ?? '')}
         phase={session?.state === 'ended' ? 'ended' : 'open'}
         sample={false}
         sending={sending}

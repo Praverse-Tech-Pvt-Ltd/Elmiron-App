@@ -1,5 +1,6 @@
-import { describe, expect, it } from '@jest/globals';
-import { render, screen } from '@testing-library/react-native';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Keyboard, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { Metrics } from 'react-native-safe-area-context';
 import type { ReactElement } from 'react';
@@ -178,5 +179,185 @@ describe('Screen followLatest — a conversation follows its newest message, not
     let node = screen.getByText('a conversation').parent;
     while (node !== null && node.props['onContentSizeChange'] === undefined) node = node.parent;
     expect(node).not.toBeNull();
+  });
+});
+
+/**
+ * `FE-W187`. The pinned footer rides up with the keyboard. Under Android's edge-to-edge layout the
+ * window is no longer resized for the keyboard, and the keyboard was drawn over "Sign in", "Send
+ * report" and "Save". The keyboard is driven here through the listeners `Screen` and its
+ * `KeyboardAvoidingView` register, with the frame the view measures — no native keyboard exists
+ * in a test.
+ */
+describe.each(['android', 'ios'] as const)(
+  'Screen footer and the keyboard on %s (FE-W187)',
+  (os) => {
+    type Handler = (event: unknown) => void;
+    const listeners: { event: string; handler: Handler }[] = [];
+
+    const emit = async (kind: 'Show' | 'Hide', keyboardHeight: number): Promise<void> => {
+      const event = {
+        duration: 0,
+        easing: 'keyboard',
+        startCoordinates: { screenX: 0, screenY: 844, width: 390, height: 0 },
+        endCoordinates: {
+          screenX: 0,
+          screenY: 844 - keyboardHeight,
+          width: 390,
+          height: keyboardHeight,
+        },
+      };
+      await act(async () => {
+        // Both platforms' names: iOS announces "will", Android "did". Whichever the test platform
+        // registered is the one that runs.
+        for (const { event: name, handler } of listeners) {
+          if (name === `keyboardWill${kind}` || name === `keyboardDid${kind}`) handler(event);
+        }
+        await Promise.resolve();
+      });
+    };
+
+    const styleOf = (node: { props: Record<string, unknown> }): Record<string, unknown> =>
+      Object.assign(
+        {},
+        ...([] as unknown[])
+          .concat(node.props['style'] as unknown[])
+          .flat(3)
+          .filter(Boolean),
+      ) as Record<string, unknown>;
+
+    /** The footer's own padded view: the nearest ancestor of the action with a bottom padding. */
+    const footerPadding = (): unknown => {
+      let node = screen.getByText('Send report').parent;
+      while (node !== null) {
+        const bottom = styleOf(node)['paddingBottom'];
+        if (bottom !== undefined) return bottom;
+        node = node.parent;
+      }
+      return undefined;
+    };
+
+    /** The KeyboardAvoidingView: the ancestor that measures its own frame. */
+    const avoider = () => {
+      let node = screen.getByText('Send report').parent;
+      while (node !== null && node.props['onLayout'] === undefined) node = node.parent;
+      if (node === null) throw new Error('no view above the footer measures its frame');
+      return node;
+    };
+
+    const renderForm = async (): Promise<void> => {
+      await renderInSafeArea(
+        <Screen scrollable footer={<BodyText>Send report</BodyText>}>
+          <BodyText>a long form</BodyText>
+        </Screen>,
+      );
+    };
+
+    beforeEach(() => {
+      // The defect was Android's: before the fix this view had no behaviour there at all.
+      jest.replaceProperty(Platform, 'OS', os);
+      listeners.length = 0;
+      jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, handler: Handler) => {
+        listeners.push({ event, handler });
+        return { remove: () => undefined };
+      }) as unknown as typeof Keyboard.addListener);
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('lifts the screen by the keyboard where the window is not resized (edge-to-edge)', async () => {
+      await renderForm();
+      // The whole window: edge-to-edge, the keyboard is drawn over the bottom of this frame.
+      await fireEvent(avoider(), 'layout', {
+        persist: () => undefined,
+        nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 844 } },
+      });
+      expect(styleOf(avoider())['paddingBottom'] ?? 0).toBe(0);
+
+      await emit('Show', 300);
+      expect(styleOf(avoider())['paddingBottom']).toBe(300);
+      // The keyboard covers the gesture bar: the footer keeps its margin, not the bar's inset too.
+      expect(footerPadding()).toBe(tokens.space.md);
+
+      await emit('Hide', 0);
+      expect(styleOf(avoider())['paddingBottom'] ?? 0).toBe(0);
+      expect(footerPadding()).toBe(tokens.space.md + METRICS.insets.bottom);
+    });
+
+    it('adds nothing where the system already shrank the window to the keyboard', async () => {
+      await renderForm();
+      // The frame ends where the keyboard begins: a window resized by `adjustResize`.
+      await fireEvent(avoider(), 'layout', {
+        persist: () => undefined,
+        nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 544 } },
+      });
+      await emit('Show', 300);
+      expect(styleOf(avoider())['paddingBottom'] ?? 0).toBe(0);
+    });
+  },
+);
+
+/**
+ * `FE-W188`. With `headerShown: false` no screen had a way back on screen. `onBack` draws one: a
+ * labelled control at least the tap floor, at the top, that does what the app passes.
+ */
+describe('Screen back control (FE-W188)', () => {
+  it('draws a labelled Back control that calls onBack', async () => {
+    const onBack = jest.fn();
+    await renderInSafeArea(
+      <Screen onBack={onBack} scrollable>
+        <BodyText>a pushed screen</BodyText>
+      </Screen>,
+    );
+    const back = screen.getByRole('button', { name: 'Back' });
+    await fireEvent.press(back);
+    expect(onBack).toHaveBeenCalledTimes(1);
+    const style = Object.assign(
+      {},
+      ...([] as unknown[])
+        .concat(
+          typeof back.props['style'] === 'function'
+            ? (back.props['style'] as (s: { pressed: boolean }) => unknown)({ pressed: false })
+            : back.props['style'],
+        )
+        .flat(3)
+        .filter(Boolean),
+    ) as Record<string, number>;
+    expect(style['minHeight']).toBeGreaterThanOrEqual(tokens.target.floor);
+  });
+
+  it('keeps the status bar inset above the control, outside the content', async () => {
+    await renderInSafeArea(
+      <Screen onBack={() => undefined}>
+        <BodyText>fixed content</BodyText>
+      </Screen>,
+    );
+    // The content no longer carries the status bar's height: the wrapper above the control does.
+    expect(paddingAroundText('fixed content')['paddingTop']).toBe(tokens.space.xs);
+    expect(screen.getByRole('button', { name: 'Back' })).toBeTruthy();
+  });
+
+  it('draws nothing when the screen has no onBack (a tab, sign-in, first run)', async () => {
+    await renderInSafeArea(
+      <Screen>
+        <BodyText>a tab</BodyText>
+      </Screen>,
+    );
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+  });
+});
+
+describe('Screen back control on a doctor-facing screen (FE-W188, FE-W148)', () => {
+  it('draws the word it is given instead of the catalogue’s', async () => {
+    await renderInSafeArea(
+      <Screen backLabel="Return" onBack={() => undefined}>
+        <BodyText>the notice in full</BodyText>
+      </Screen>,
+    );
+    // A word the catalogue does not hold, so the assertion fails if the catalogue's is drawn.
+    expect(screen.getByRole('button', { name: 'Return' })).toBeTruthy();
+    expect(screen.queryByText('Back')).toBeNull();
   });
 });

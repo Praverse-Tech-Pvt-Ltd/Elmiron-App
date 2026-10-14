@@ -1,14 +1,14 @@
 # Translations — Hindi and Marathi for the field app
 
-**Written 14 October 2026 (`FE-W146`); brought up to date after the second pass the same day (`FE-W159`).** The owner's decision that day: *"Hindi + Marathi; client
+**Written 14 October 2026 (`FE-W146`); brought up to date after the second pass the same day (`FE-W159`), and on 15 October after Learning moved and the handover polish (`FE-W193`).** The owner's decision that day: *"Hindi + Marathi; client
 translates".* So the app ships everything except the translated words, and the client's translators
 fill in a file we hand them. Nothing in this repository machine-translates anything.
 
 ## What the rep sees today
 
-Me → Settings → **Language** lists **English**, **हिन्दी** and **मराठी**, each written in its own
+Me → **Language** lists **English**, **हिन्दी** and **मराठी**, each written in its own
 script. With the translation files empty, Hindi and Marathi read *"Coming later — Hindi: waiting for
-translation (0 of 910 done)"* and cannot be pressed. The moment a file is **complete**, its row
+translation (0 of 1045 done)"* (the count on 15 October, `FE-W193`) and cannot be pressed. The moment a file is **complete**, its row
 becomes pressable and the app switches to it, with no code change. A half-done file is never offered:
 a rep would be reading half Hindi and half English, and the app would be claiming a translation that
 does not exist.
@@ -161,21 +161,26 @@ including the bold weights and the tab bar.
 
 ## What has moved, and what is left
 
-**Every screen a rep sees is on the catalogue except Learning** (`FE-W145`, `FE-W150`–`FE-W158`):
-sign-in, the tab bar, Today, Me / Settings, Day end; a visit; the Doctors tab and a doctor's profile;
-call report, samples and voice note; the outbox (queue); today's route, an unplanned visit and the map;
-mileage, Mobile data, What this app records and the Live location screen; the first-run screens
-(location, battery & autostart, notifications, microphone) and the start-up error screen; the adverse
-event screen (except its regulated wording, above); coaching, an analysis and the reply; the
-assistant, product questions and AI doctor practice. The shared error and "what to do" messages
-follow the language on every screen. `pnpm i18n:export` prints today's count of strings.
+**Every screen a rep sees is on the catalogue** (`FE-W145`, `FE-W150`–`FE-W158`, and Learning in
+`FE-W183`): sign-in, the tab bar, Today, Me, Day end; a visit; the Doctors tab and a doctor's
+profile; call report, samples and voice note; the outbox (queue); today's route, an unplanned visit
+and the map; mileage, Mobile data, What this app records and the Live location screen; the first-run
+screens (location, battery & autostart, notifications, microphone) and the start-up error screen; the
+adverse event screen (except its regulated wording, above); coaching, an analysis and the reply; the
+assistant, product questions and AI doctor practice; Learning — the course list, a course, a lesson,
+its video and the lesson tutor. The shared error and "what to do" messages, and the "Back" control at
+the top of a screen (`common.back`), follow the language on every screen. On 15 October the catalogue
+held **1045** strings (`FE-W193`); `pnpm i18n:export` prints today's count.
+
+**What stays the server's, untranslated by this file:** a course's, module's and lesson's title, a
+course's summary and a lesson's text (the company's content, as published); the answers of the
+assistant, product questions and the AI doctor; the live location notice.
 
 **Not moved:**
 
 | Screen | Why |
 | --- | --- |
-| Learning — courses, a lesson, its quiz and tutor (`app/learning/*`, `LearningScreens`, `TutorPanel`, `src/learning/*`) | another branch is changing these screens; they move after it merges |
-| Consent | **excluded by rule**, above |
+| Consent | **excluded by rule**, above — including the "Back" on its "Exactly what is collected" page, fixed English like every other word the doctor reads there (`FE-W188`) |
 
 **Words that went into the catalogue on a judgement call** — say if any should be English-only:
 the C14 line on a doctor's profile ("Nothing here about what they prescribe, and nothing about their

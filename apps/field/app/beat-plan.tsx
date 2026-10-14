@@ -8,7 +8,9 @@ import { mapsEnabled } from '../src/features';
 import { loadQueueState, onQueueChanged } from '../src/sync/async-storage-store';
 import { usePulledStore } from '../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../src/sync/selectors';
+import { useBack } from '../src/navigation/back';
 import { beatPlanView } from '../src/today/beat-plan-view';
+import { durationLabel } from '../src/today/duration';
 import type { BeatPlanView } from '../src/today/beat-plan-view';
 import { clockIn } from '../src/today/territory-day';
 import type { TerritoryZone } from '../src/today/territory-day';
@@ -84,7 +86,8 @@ const stopDetail = (stop: RouteStop, zone: TerritoryZone, fromPhone: boolean): s
       : fromPhone
         ? t('route.timeOnPhone', { time: clockIn(stop.startedAt, zone) })
         : clockIn(stop.startedAt, zone),
-    stop.minutes === null ? null : t('route.stopMinutes', { minutes: stop.minutes }),
+    // `FE-W191`. "8 h 4 min", never "484 min".
+    stop.minutes === null ? null : durationLabel(stop.minutes),
     stop.state === 'cancelled' ? t('route.stopCancelled') : null,
     // Attendance, stated plainly. "doctor not available" says what happened without saying
     // whose fault it was, which is the whole of the C5 decision.
@@ -117,6 +120,7 @@ const noticeOf = (view: BeatPlanView): { title: string; detail: string } | null 
 export default function BeatPlanRoute(): ReactNode {
   useLanguage();
   const router = useRouter();
+  const back = useBack();
   const { store, status, today, zone } = usePulledStore();
 
   // W2-C A2 / `BE-W154`. The queue, kept current, so the route counts what this phone witnessed:
@@ -151,7 +155,7 @@ export default function BeatPlanRoute(): ReactNode {
   const route = view.kind === 'route' ? view.route : null;
 
   return (
-    <Screen scrollable>
+    <Screen onBack={back} scrollable>
       <BeatPlanScreen
         done={route?.done ?? 0}
         failure={view.kind === 'unreachable' ? unreachable() : null}
@@ -172,6 +176,8 @@ export default function BeatPlanRoute(): ReactNode {
           doctorName: stop.doctorName,
           clinic: stop.clinic,
           state: stop.state,
+          // `FE-W191`. The current stop has begun: it is the visit the rep is in, not the next one.
+          inProgress: stop.state === 'current' && stop.startedAt !== null,
           detail: stopDetail(
             stop,
             zone,

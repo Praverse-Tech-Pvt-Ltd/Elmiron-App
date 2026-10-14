@@ -27,8 +27,9 @@ jest.mock('expo-router', () => ({
     const ui = jest.requireActual<typeof UiModule>('@fieldforce/ui');
     return React.createElement(ui.BodyText, null, `redirect:${href}`);
   },
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: jest.fn(), back: mockBack, canGoBack: () => true, replace: jest.fn() }),
 }));
+const mockBack = jest.fn();
 
 const mockTransport = jest.fn<(body: ChatRequestBody) => Promise<GatewayResponse>>();
 jest.mock('../assistant/transport', () => ({
@@ -159,7 +160,7 @@ describe('FE-D15 — the states, through the route', () => {
     expect(screen.queryByText(/PRACTICE STUB/u)).toBeNull();
   });
 
-  it("the warning shows the server's figures, and the reset in the territory zone", async () => {
+  it('the warning shows the server’s figures, and the reset in the territory zone', async () => {
     mockTransport.mockResolvedValue(
       answered('Sample answer.', {
         allowance: {
@@ -175,7 +176,7 @@ describe('FE-D15 — the states, through the route', () => {
     await ask('warn');
 
     expect(
-      await screen.findByText("You have used 83 of today's 104 assistant requests."),
+      await screen.findByText('You have used 83 of today’s 104 assistant requests.'),
     ).toBeTruthy();
     expect(screen.getByText('The allowance resets at 00:00 on 2 Oct.')).toBeTruthy();
   });
@@ -200,7 +201,7 @@ describe('FE-D15 — the states, through the route', () => {
     await ask('limit');
     expect(
       await screen.findByText(
-        "You have reached today's limit. The assistant is unavailable until it resets.",
+        'You have reached today’s limit. The assistant is unavailable until it resets.',
       ),
     ).toBeTruthy();
     expect(screen.getByText('It resets at 00:00 on 2 Oct.')).toBeTruthy();
@@ -237,5 +238,36 @@ describe('FE-D15 — the states, through the route', () => {
 
     expect(await screen.findByText('The assistant could not answer')).toBeTruthy();
     expect(screen.getByText('Try again')).toBeTruthy();
+  });
+});
+
+/**
+ * `FE-W193` / `FE-W188`. The conversation opens at its title — it follows the newest exchange only
+ * once there is one — and, pushed from Me, it draws its own Back control.
+ */
+describe('the assistant opens at its top, with a way back', () => {
+  /** The scroll view: the one ancestor with a content container. */
+  const scrollerAbove = (text: string) => {
+    let node = screen.getByText(text).parent;
+    while (node !== null && node.props['contentContainerStyle'] === undefined) node = node.parent;
+    if (node === null) throw new Error('no scroll view above the text');
+    return node;
+  };
+
+  it('does not follow while empty, and follows once there is an exchange', async () => {
+    mockTransport.mockResolvedValue(answered('Open Me, then How today ended.'));
+    await render(<Assistant />);
+    expect(scrollerAbove('Ask the assistant').props['onContentSizeChange']).toBeUndefined();
+
+    await ask('How do I end my day?');
+    expect(await screen.findByText('Open Me, then How today ended.')).toBeTruthy();
+    expect(scrollerAbove('Ask the assistant').props['onContentSizeChange']).toBeDefined();
+  });
+
+  it('Back goes back', async () => {
+    mockBack.mockClear();
+    await render(<Assistant />);
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+    expect(mockBack).toHaveBeenCalledTimes(1);
   });
 });

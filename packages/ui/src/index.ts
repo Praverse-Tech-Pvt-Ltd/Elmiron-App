@@ -146,10 +146,12 @@ export { ListRow } from './ListRow';
 export type { ListRowProps } from './ListRow';
 export { MileageScreen } from './MileageScreen';
 export type { MileageDayRow, MileageScreenProps } from './MileageScreen';
+export { NoticeText } from './NoticeText';
+export type { NoticeTextBlock, NoticeTextProps } from './NoticeText';
 export { OemBatteryScreen } from './OemBatteryScreen';
 export type { OemBatteryScreenProps } from './OemBatteryScreen';
 export { PrimaryButton } from './PrimaryButton';
-export { LONG_RETRY_AFTER_ATTEMPTS, QueueScreen, rowStateFor } from './QueueScreen';
+export { LONG_RETRY_AFTER_ATTEMPTS, QueueScreen, entityWords, rowStateFor } from './QueueScreen';
 export type {
   QueueRowState,
   QueueScreenItem,
@@ -203,5 +205,8 @@ export type { EntranceOptions } from './motion';
 export type { TabBarLabelProps, TabIconName, TabIconProps } from './TabIcon';
 export { TextField } from './TextField';
 export type { TextFieldProps } from './TextField';
+// `FE-W192`. Sign-in's password, with "Show password".
+export { PasswordField } from './PasswordField';
+export type { PasswordFieldProps } from './PasswordField';
 // `FE-W140`. The string catalogue; also published alone as `@fieldforce/ui/i18n` for node-side code.
 export * from './i18n';

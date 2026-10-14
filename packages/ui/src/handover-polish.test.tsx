@@ -423,6 +423,6 @@ describe('FE-W184 — the small layout details', () => {
         subject="Your note"
       />,
     );
-    expect(styleOf('hold the button to start')['textAlign']).toBe('center');
+    expect(styleOf('Hold the button below to start')['textAlign']).toBe('center');
   });
 });

@@ -9,6 +9,7 @@ import { chatRequestBody } from '../src/assistant/request';
 import type { ChatRequestBody } from '../src/assistant/contract';
 import { assistantTransport } from '../src/assistant/transport';
 import { assistantEnabled } from '../src/features';
+import { useBack } from '../src/navigation/back';
 import { usePulledStore } from '../src/sync/pulled-store';
 import { clockIn, dayMonthIn } from '../src/today/territory-day';
 import type { TerritoryZone } from '../src/today/territory-day';
@@ -66,6 +67,7 @@ const allowanceView = (seen: AllowanceSeen, zone: TerritoryZone): AiAllowanceSta
 
 const Assistant = (): ReactNode => {
   useLanguage();
+  const back = useBack();
   const { zone } = usePulledStore();
   const [turns, setTurns] = useState<readonly AssistantTurn[]>([]);
   const [draft, setDraft] = useState('');
@@ -138,8 +140,10 @@ const Assistant = (): ReactNode => {
       ? { kind: notice, onRetry: retry }
       : { kind: notice };
 
+  // `FE-W193`, as practice: follow the newest exchange only once there is one, so the screen opens
+  // at its title and intro rather than scrolled to the empty box. `FE-W188`: its own way back.
   return (
-    <Screen followLatest scrollable>
+    <Screen followLatest={turns.length > 0} onBack={back} scrollable>
       <AssistantScreen
         allowance={allowance}
         draft={draft}

@@ -2,7 +2,19 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Linking } from 'react-native';
 import { useRouter } from 'expo-router';
-import { BodyText, Button, Display, Label, Screen, t, useLanguage } from '@fieldforce/ui';
+import {
+  BodyText,
+  Button,
+  Display,
+  Label,
+  Screen,
+  Secondary,
+  t,
+  useLanguage,
+} from '@fieldforce/ui';
+import { useBack } from '../../src/navigation/back';
+import { batteryStepApplies } from '../../src/onboarding/device';
+import { firstRunPosition, useInFirstRun } from '../../src/onboarding/first-run';
 import { requestLocationPermission } from '../../src/onboarding/location-permission';
 import { requestLocationAnswers } from '../../src/onboarding/os-permissions';
 import { hasCompletedFirstRun } from '../../src/onboarding/progress';
@@ -47,8 +59,11 @@ import { hasCompletedFirstRun } from '../../src/onboarding/progress';
 export default function LocationDenied(): ReactNode {
   useLanguage();
   const router = useRouter();
+  const back = useBack();
   // `FE-W155`. Which answer came back, not its sentence: the words are read at render.
   const [note, setNote] = useState<'denied' | 'unanswered' | null>(null);
+  /** `FE-W192`. A branch of first run's first step: "Step 1 of N" there, a Back from Me. */
+  const inFirstRun = useInFirstRun();
 
   /** On to A3 in first run; back where they came from otherwise. */
   const carryOn = (): void => {
@@ -82,7 +97,12 @@ export default function LocationDenied(): ReactNode {
   };
 
   return (
-    <Screen scrollable>
+    <Screen scrollable {...(inFirstRun === false ? { onBack: back } : {})}>
+      {inFirstRun === true ? (
+        <Label muted>
+          {t('onboarding.stepOf', firstRunPosition('location', batteryStepApplies()))}
+        </Label>
+      ) : null}
       <Display>{t('onboarding.deniedHeadline')}</Display>
 
       <BodyText>{t('onboarding.deniedBody')}</BodyText>
@@ -98,12 +118,13 @@ export default function LocationDenied(): ReactNode {
 
         Remove this line only when someone has actually measured it.
       */}
-      <Label muted>{t('onboarding.deniedEstimate')}</Label>
+      {/* `FE-W189`. Sentences, so the prose step (`Secondary`), not the label step. */}
+      <Secondary>{t('onboarding.deniedEstimate')}</Secondary>
 
       {note === null ? null : (
-        <Label muted>
+        <Secondary>
           {note === 'denied' ? t('onboarding.stillOff') : t('onboarding.unanswered')}
-        </Label>
+        </Secondary>
       )}
 
       <Button label={t('onboarding.turnBackOn')} variant="secondary" onPress={turnBackOn} />

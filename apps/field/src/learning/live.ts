@@ -69,6 +69,18 @@ export interface OutlineRows {
  * `FE-W127` / `BE-W208` — a lesson's clip, as the lesson row names it: object paths in the PRIVATE
  * `lesson-videos` bucket, never URLs. A URL is asked for (`videoUrl`) only when the rep presses play.
  */
+/**
+ * `FE-W193` — what a course version holds, shown BEFORE the rep starts it: how many lessons, and how
+ * long they take in all. The read rules let a rep read a published version's lessons without an
+ * enrolment (`lessons_select_readable`), so the course page no longer offers "Start this course"
+ * under nothing but a title.
+ */
+export interface CoursePreview {
+  readonly lessons: number;
+  /** The sum of the lessons' estimates, or null when any lesson has none — never an under-count. */
+  readonly minutes: number | null;
+}
+
 export interface LessonVideoRef {
   readonly objectPath: string;
   readonly posterPath: string | null;
@@ -100,6 +112,8 @@ export interface LearningBackend {
     readonly versions: readonly VersionRow[];
     readonly enrolments: readonly EnrolmentRow[];
   }>;
+  /** `FE-W193`. A version's lesson count and total estimate, read before it is started. */
+  preview(versionId: string): Promise<CoursePreview>;
   /** One version's modules and lessons (titles only), and what this enrolment has completed. */
   outline(versionId: string, enrolmentId: string): Promise<OutlineRows>;
   /** One lesson in full, with whether this enrolment has completed it; null if not readable. */
@@ -197,6 +211,20 @@ export const createLiveLearningBackend = (c: LiveConnection): LearningBackend =>
       versions.map((v) => v.id),
     );
     return { title: course === undefined ? null : text(course['title']), versions, enrolments };
+  },
+
+  preview: async (versionId) => {
+    const lessons = await selectRows(
+      c,
+      `lessons?select=id,estimated_minutes&course_version_id=eq.${versionId}`,
+    );
+    const estimates = lessons.map((r) => intOrNull(r['estimated_minutes']));
+    return {
+      lessons: lessons.length,
+      minutes: estimates.every((m): m is number => m !== null)
+        ? estimates.reduce((sum, m) => sum + m, 0)
+        : null,
+    };
   },
 
   outline: async (versionId, enrolmentId) => {

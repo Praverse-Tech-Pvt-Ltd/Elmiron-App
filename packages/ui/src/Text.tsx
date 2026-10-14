@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, Text as RnText } from 'react-native';
+import { Platform, StyleSheet, Text as RnText, useWindowDimensions } from 'react-native';
+import type { TextStyle } from 'react-native';
 import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
 import { useSurfaceInk } from './surface';
 
@@ -23,6 +24,38 @@ export interface TextProps {
  * is for.
  */
 export const MAX_FONT_SCALE = 1.3;
+
+/**
+ * `FE-W189`. A screen's title and a thing's heading grow with the font size setting at least as
+ * much as body text does.
+ *
+ * Android 14 scales text NON-linearly: the larger the size, the less it grows, so that big text
+ * does not grow off the screen. At the 130% the QA pass used, body (16) grew by 30% and the 27pt
+ * title by a few percent (screenshots 90–98: "Settings" and a doctor's name the same size as at
+ * 100%, the line under them a third larger), and at 16.5 a card's heading drew no larger than the
+ * sentence beneath it. The hierarchy the design draws collapsed exactly for the people who need it.
+ *
+ * So on Android these two roles take the setting LINEARLY — the size times the setting, with the
+ * platform's own scaling switched off so it is not applied twice. iOS already scales linearly and
+ * is left to do so. Only `Figure` and `Display` are capped (`MAX_FONT_SCALE`): they are already
+ * the largest lines on a screen. Returns null where the platform's own scaling is used.
+ */
+const useLinearScale = (): number | null => {
+  const { fontScale } = useWindowDimensions();
+  return Platform.OS === 'android' ? fontScale : null;
+};
+
+const scaledBy = (
+  role: { readonly size: number; readonly lineHeight: number; readonly letterSpacing?: number },
+  scale: number | null,
+): TextStyle | null =>
+  scale === null
+    ? null
+    : {
+        fontSize: role.size * scale,
+        lineHeight: role.lineHeight * scale,
+        ...(role.letterSpacing === undefined ? {} : { letterSpacing: role.letterSpacing * scale }),
+      };
 
 /**
  * Colour comes from `useSurfaceInk`, not from the stylesheet, because the same
@@ -177,8 +210,19 @@ export const Statement = ({ children, muted = false, center = false }: TextProps
  */
 export const Title = ({ children, center = false }: TextProps): ReactNode => {
   const color = useSurfaceInk(false);
+  const scale = useLinearScale();
   return (
-    <RnText style={[styles.title, { color }, center ? styles.center : null]}>{children}</RnText>
+    <RnText
+      allowFontScaling={scale === null}
+      style={[
+        styles.title,
+        scaledBy(tokens.typography.title, scale),
+        { color },
+        center ? styles.center : null,
+      ]}
+    >
+      {children}
+    </RnText>
   );
 };
 
@@ -188,8 +232,19 @@ export const Title = ({ children, center = false }: TextProps): ReactNode => {
  */
 export const Heading = ({ children, center = false }: TextProps): ReactNode => {
   const color = useSurfaceInk(false);
+  const scale = useLinearScale();
   return (
-    <RnText style={[styles.heading, { color }, center ? styles.center : null]}>{children}</RnText>
+    <RnText
+      allowFontScaling={scale === null}
+      style={[
+        styles.heading,
+        scaledBy(tokens.typography.heading, scale),
+        { color },
+        center ? styles.center : null,
+      ]}
+    >
+      {children}
+    </RnText>
   );
 };
 

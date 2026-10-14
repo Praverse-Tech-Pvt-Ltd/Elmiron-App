@@ -48,10 +48,13 @@ const readAll = async (userId: string): Promise<readonly WitnessedConsent[]> => 
 /**
  * W2-C A2 / `BE-W153` — tell a visit screen that is still mounted that an answer was recorded.
  *
- * The consent screen returns with `router.replace`, which leaves the visit screen that opened it
- * mounted underneath. That copy read the witnessed answer once, at mount, so pressing Back showed it
- * with the question still open — "Ask about recording" again, on the emulator, after the doctor
- * had answered. Same shape as the queue's `onQueueChanged`.
+ * The visit screen that opened the consent screen stays mounted underneath it. That copy read the
+ * witnessed answer once, at mount, so it showed the question still open — "Ask about recording"
+ * again, on the emulator, after the doctor had answered. Same shape as the queue's `onQueueChanged`.
+ *
+ * `FE-W188`. The consent screen used to return with `router.replace`, which put a SECOND visit
+ * screen on top and left this stale one under it for Back to find. It returns with `dismissTo` now,
+ * to that very copy, so this notice is what makes the screen it lands on say what is true.
  */
 const listeners = new Set<() => void>();
 export const onWitnessedChanged = (listener: () => void): (() => void) => {

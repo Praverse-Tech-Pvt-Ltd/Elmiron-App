@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { QueueScreen, t, useLanguage } from '@fieldforce/ui';
+import { Linking } from 'react-native';
+import { QueueScreen, entityWords, rowStateFor, t, useLanguage } from '@fieldforce/ui';
+import { supportEmail, supportPhone } from '../src/features';
+import { useBack } from '../src/navigation/back';
+import { supportLink } from '../src/support/contact';
+import { indicatorStateFor } from '../src/sync/indicator';
+import { usePulledStore } from '../src/sync/pulled-store';
 import { queueUnreadable, loadQueueState } from '../src/sync/async-storage-store';
 import type { QueueLoad } from '../src/sync/async-storage-store';
 import { flushOutbox } from '../src/sync/outbox';
@@ -61,6 +67,40 @@ export default function Queue(): ReactNode {
   const [load, setLoad] = useState<QueueLoad | { readonly kind: 'reading' }>({ kind: 'reading' });
   const [retryFailed, setRetryFailed] = useState<RetryFailure | null>(null);
   const state = load.kind === 'loaded' ? load.state : emptyQueue;
+  const back = useBack();
+  // `FE-W191`. The territory's clock, for "Last sent at …" — the same line Today's sync row draws.
+  const { zone } = usePulledStore();
+  const sent = load.kind === 'loaded' ? indicatorStateFor(load, zone) : null;
+  const lastSentLabel =
+    sent?.kind === 'idle' && sent.at !== null ? t('queue.lastSent', { time: sent.at }) : null;
+
+  /*
+    MR-17 B1. Through `presentRejection`, which until now was written, tested and CALLED BY
+    NOTHING -- the reducer's records went straight to the screen, so the remedy it derives and the
+    retry/escalate judgement it makes were both unreachable. This is the line that makes the
+    SQLSTATE mean something to an MR.
+  */
+  const rejections = Object.fromEntries(
+    Object.entries(state.rejections).map(([id, record]) => [id, presentRejection(record)]),
+  );
+
+  /**
+   * `FE-W195`. "Tell the help desk", when the build names one: a message that already carries every
+   * reference the rep would otherwise have to copy off this screen — what each stuck or refused
+   * thing is, the reference its row shows, and its id. No help desk configured: no handler, and the
+   * screen draws no button (its rule since S3).
+   */
+  const references = state.items
+    .filter((item) => {
+      const row = rowStateFor(item, rejections[item.id]);
+      return row === 'refused' || row === 'needs-attention' || row === 'waiting-long';
+    })
+    .map((item) => ({
+      what: entityWords(item.entity),
+      code: rejections[item.id]?.code ?? null,
+      id: item.id,
+    }));
+  const helpDesk = supportLink({ email: supportEmail, phone: supportPhone }, references);
 
   const refresh = (): void => {
     void loadQueueState().then(setLoad);
@@ -80,6 +120,16 @@ export default function Queue(): ReactNode {
   return (
     <QueueScreen
       items={state.items}
+      onBack={back}
+      lastSentLabel={lastSentLabel}
+      {...(helpDesk === null
+        ? {}
+        : {
+            onContactSupport: () => {
+              // The phone's own mail app or dialler. Nothing is sent by this app.
+              void Linking.openURL(helpDesk).catch(() => undefined);
+            },
+          })}
       waitingForWifi={{
         ids: heldIds,
         sizeLabel: heldBytes === null ? null : megabytes(heldBytes),
@@ -132,15 +182,7 @@ export default function Queue(): ReactNode {
             setRetryFailed({ message: error instanceof Error ? error.message : null });
           });
       }}
-      /*
-        MR-17 B1. Through `presentRejection`, which until now was written, tested and
-        CALLED BY NOTHING -- the reducer's records went straight to the screen, so the
-        remedy it derives and the retry/escalate judgement it makes were both unreachable.
-        This is the line that makes the SQLSTATE mean something to an MR.
-      */
-      rejections={Object.fromEntries(
-        Object.entries(state.rejections).map(([id, record]) => [id, presentRejection(record)]),
-      )}
+      rejections={rejections}
     />
   );
 }

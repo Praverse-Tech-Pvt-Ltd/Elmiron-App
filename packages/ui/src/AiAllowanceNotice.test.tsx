@@ -12,7 +12,7 @@ import { AiAllowanceNotice } from './AiAllowanceNotice';
  */
 
 describe('AiAllowanceNotice — before the limit', () => {
-  it("states the server's figures", async () => {
+  it('states the server’s figures', async () => {
     await render(
       <AiAllowanceNotice
         allowance={{ kind: 'warning', used: 83, limit: 104, resetLabel: '00:00 on 2 Oct' }}
@@ -20,7 +20,7 @@ describe('AiAllowanceNotice — before the limit', () => {
       />,
     );
 
-    expect(screen.getByText("You have used 83 of today's 104 assistant requests.")).toBeTruthy();
+    expect(screen.getByText('You have used 83 of today’s 104 assistant requests.')).toBeTruthy();
     expect(screen.getByText('The allowance resets at 00:00 on 2 Oct.')).toBeTruthy();
   });
 
@@ -48,7 +48,7 @@ describe('AiAllowanceNotice — at the limit', () => {
 
     expect(
       screen.getByText(
-        "You have reached today's limit. The assistant is unavailable until it resets.",
+        'You have reached today’s limit. The assistant is unavailable until it resets.',
       ),
     ).toBeTruthy();
     expect(screen.getByText('It resets at 00:00 on 2 Oct.')).toBeTruthy();

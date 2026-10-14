@@ -9,7 +9,7 @@ import {
   useAudioRecorder,
   useAudioRecorderState,
 } from 'expo-audio';
-import { Screen, VoiceNoteScreen, t, useLanguage } from '@fieldforce/ui';
+import { VoiceNoteScreen, t, useLanguage } from '@fieldforce/ui';
 import type { TextKey } from '@fieldforce/ui';
 import { blockReason, elapsedLabel } from '../../src/capture/recording';
 import {
@@ -27,6 +27,7 @@ import { createPushClient } from '../../src/sync/push-client';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { failureDetail } from '../../src/errors/plain';
+import { useBack } from '../../src/navigation/back';
 
 /**
  * Phase 3 D7 — the voice note, with a real microphone behind it.
@@ -116,6 +117,8 @@ export default function VoiceNoteRoute(): ReactNode {
   const { session } = useSession();
   const userId = session?.user.id ?? null;
   const { store, status } = usePulledStore();
+  // `FE-W188`. The screen's Back control. Leaving still deletes an unsaved note (below).
+  const back = useBack();
 
   const visit = visitsFromStore(store).find((candidate) => candidate.id === visitId) ?? null;
   const doctor =
@@ -296,34 +299,34 @@ export default function VoiceNoteRoute(): ReactNode {
         ? t('voiceNote.askingMicrophone')
         : null;
 
+  // `FE-W190`. `VoiceNoteScreen` draws its own `Screen` now, so its controls can sit in the footer.
   return (
-    <Screen scrollable>
-      <VoiceNoteScreen
-        blocked={blocked}
-        busy={busy}
-        elapsed={elapsedLabel(
-          state.isRecording ? state.durationMillis / 1000 : (captured?.seconds ?? 0),
-        )}
-        failure={failure !== null ? problemText(failure) : visitMissing ? VISIT_NOT_HERE : null}
-        actionFailure={actionFailure === null ? null : problemText(actionFailure)}
-        hint={t('voiceNote.hint')}
-        onHoldEnd={stop}
-        onHoldStart={start}
-        onStartAgain={forget}
-        prompt={t('voiceNote.prompt')}
-        recording={state.isRecording}
-        saved={
-          saved !== null
-            ? savedText(saved)
-            : removed === 0
-              ? null
-              : t('voiceNote.olderRemoved', { count: removed })
-        }
-        subject={t('voiceNote.subject', {
-          doctor: doctor?.fullName ?? t('voiceNote.thisVisit'),
-        })}
-        {...(captured === null || saved !== null ? {} : { onSave: save })}
-      />
-    </Screen>
+    <VoiceNoteScreen
+      onBack={back}
+      blocked={blocked}
+      busy={busy}
+      elapsed={elapsedLabel(
+        state.isRecording ? state.durationMillis / 1000 : (captured?.seconds ?? 0),
+      )}
+      failure={failure !== null ? problemText(failure) : visitMissing ? VISIT_NOT_HERE : null}
+      actionFailure={actionFailure === null ? null : problemText(actionFailure)}
+      hint={t('voiceNote.hint')}
+      onHoldEnd={stop}
+      onHoldStart={start}
+      onStartAgain={forget}
+      prompt={t('voiceNote.prompt')}
+      recording={state.isRecording}
+      saved={
+        saved !== null
+          ? savedText(saved)
+          : removed === 0
+            ? null
+            : t('voiceNote.olderRemoved', { count: removed })
+      }
+      subject={t('voiceNote.subject', {
+        doctor: doctor?.fullName ?? t('voiceNote.thisVisit'),
+      })}
+      {...(captured === null || saved !== null ? {} : { onSave: save })}
+    />
   );
 }

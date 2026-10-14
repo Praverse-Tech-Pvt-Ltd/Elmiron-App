@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { DataSettingsScreen, Screen, t, useLanguage } from '@fieldforce/ui';
 import type { DataSettingKey } from '@fieldforce/ui';
+import { useBack } from '../src/navigation/back';
 import { readDataPrefs, writeDataPref } from '../src/settings/data-prefs';
 import type { DataPrefs } from '../src/settings/data-prefs';
 import { megabytes, usedThisMonth } from '../src/sync/data-use';
@@ -18,6 +19,7 @@ import { usePulledStore } from '../src/sync/pulled-store';
  */
 export default function DataSettings(): ReactNode {
   useLanguage();
+  const back = useBack();
   const { serverTime } = usePulledStore();
   const [prefs, setPrefs] = useState<DataPrefs | null>(null);
   const [record, setRecord] = useState<DataUseRecord | null>(null);
@@ -54,7 +56,8 @@ export default function DataSettings(): ReactNode {
   };
 
   return (
-    <Screen scrollable>
+    // `FE-W188`. Opened from Me or Today, so it has a way back.
+    <Screen onBack={back} scrollable>
       <DataSettingsScreen
         wifiOnlyAudio={prefs?.wifiOnlyAudio ?? null}
         warnOverMonthly={prefs?.warnOverMonthly ?? null}

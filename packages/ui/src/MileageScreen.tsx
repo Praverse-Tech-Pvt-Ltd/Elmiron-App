@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Figure, Label, Title } from './Text';
+import { BodyText, Figure, Label, Secondary, Title } from './Text';
 import { Card } from './Card';
 import { ListItem } from './ListItem';
 import { Spinner } from './Spinner';
@@ -85,7 +85,8 @@ export const MileageScreen = ({
             <Figure>{totalLabel}</Figure>
           </View>
         )}
-        <Label muted>{t('mileage.straightLines')}</Label>
+        {/* `FE-W189`. A sentence, so the prose step; round 1 left it at `Label`. */}
+        <Secondary>{t('mileage.straightLines')}</Secondary>
       </Card>
 
       <Card tone="quiet">
@@ -95,7 +96,7 @@ export const MileageScreen = ({
       {days.length === 0 && !loading ? (
         <Card>
           <BodyText>{t('mileage.none')}</BodyText>
-          <Label muted>{t('mileage.noneDetail')}</Label>
+          <Secondary>{t('mileage.noneDetail')}</Secondary>
         </Card>
       ) : null}
 

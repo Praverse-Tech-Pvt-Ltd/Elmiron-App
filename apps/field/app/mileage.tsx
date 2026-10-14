@@ -4,6 +4,7 @@ import type { MileageDay } from '@fieldforce/core';
 import { MileageScreen, Screen, t, useLanguage } from '@fieldforce/ui';
 import { totalDistanceMetres, travelDateLabel } from '../src/capture/mileage';
 import { listMileage } from '../src/capture/visits';
+import { useBack } from '../src/navigation/back';
 import { usePulledStore } from '../src/sync/pulled-store';
 import { noServerClock, monthWindowIn } from '../src/today/server-window';
 import { failureDetail, refusedDetail } from '../src/errors/plain';
@@ -58,6 +59,7 @@ export default function Mileage(): ReactNode {
   const [loading, setLoading] = useState(true);
   useLanguage();
   const [failure, setFailure] = useState<Failure | null>(null);
+  const back = useBack();
   // `FE-W42` C1. The instant and the zone both come from the server.
   const { serverTime, zone } = usePulledStore();
 
@@ -106,7 +108,7 @@ export default function Mileage(): ReactNode {
   }, [serverTime, zone]);
 
   return (
-    <Screen scrollable>
+    <Screen onBack={back} scrollable>
       <MileageScreen
         days={(days ?? []).map((day) => ({
           id: `${day.mrId}-${day.travelDate}`,

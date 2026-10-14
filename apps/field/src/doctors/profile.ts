@@ -121,6 +121,14 @@ export const buildDoctorProfile = (
 };
 
 /**
+ * `FE-W190`. The profile's large figure is a line on its own, so it starts with a capital: the
+ * list's "today", written for under a doctor's name, read as a lower-case word in the 40pt figure
+ * (QA 21). A typographic change only; a script without case (Devanagari) is left as it is.
+ */
+export const sentenceCase = (label: string): string =>
+  label.length === 0 ? label : `${label.charAt(0).toLocaleUpperCase()}${label.slice(1)}`;
+
+/**
  * The words for a consent outcome, from the doctor's side of it.
  *
  * `not_asked` is not a failure and is never rendered as one — the contract's own

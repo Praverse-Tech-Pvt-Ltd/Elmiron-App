@@ -18,6 +18,7 @@ import type { ServerRead } from '../../src/coaching/server';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { dayMonthIn } from '../../src/today/territory-day';
 import { failureDetail, refusedDetail } from '../../src/errors/plain';
+import { useBack } from '../../src/navigation/back';
 
 /**
  * `FE-W158`. Why the analysis could not be shown, kept as its cause. The title and detail are
@@ -82,6 +83,7 @@ function Analysis(): ReactNode {
   useLanguage();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const back = useBack();
 
   const { store, zone } = usePulledStore();
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
@@ -204,6 +206,7 @@ function Analysis(): ReactNode {
       failure={failure === null ? null : failureWords(failure)}
       findings={findings}
       loading={loading}
+      onBack={back}
       onReply={() => {
         router.push(`/reply/${id}`);
       }}

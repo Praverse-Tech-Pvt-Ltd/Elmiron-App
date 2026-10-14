@@ -5,11 +5,13 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
     "scheme": "com.praversetech.fieldforce",
     "platforms": ["android", "ios"],
     "ios": {
       "bundleIdentifier": "com.praversetech.fieldforce",
       "supportsTablet": false,
+      "icon": "./assets/icon.png",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Your position is read only when you press check in or check out, and, if you agree to share live location, every few minutes during your working hours while the app is on your screen.",
         "ITSAppUsesNonExemptEncryption": false
@@ -17,6 +19,10 @@
     },
     "android": {
       "package": "com.praversetech.fieldforce",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#35593A"
+      },
       "permissions": ["android.permission.POST_NOTIFICATIONS"]
     },
     "plugins": [
@@ -25,7 +31,7 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Elmiron Field records a consultation only after the doctor agrees on screen, your own voice notes when you hold the button, and your side of an AI Doctor practice when you choose to speak."
+          "microphonePermission": "This app records a consultation only after the doctor agrees on screen, your own voice notes when you hold the button, and your side of an AI Doctor practice when you choose to speak."
         }
       ],
       [

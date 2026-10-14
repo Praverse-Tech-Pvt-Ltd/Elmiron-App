@@ -61,6 +61,10 @@ export interface OemBatteryScreenProps {
   readonly onWatchVideo?: () => void;
   readonly onContinue: () => void;
   readonly continueLabel?: string;
+  /** `FE-W192`. "Step 3 of 4", in first run only. */
+  readonly stepLine?: string;
+  /** `FE-W188`. Opened from Me, the screen has a way back; in first run it has none. */
+  readonly onBack?: () => void;
 }
 
 export const OemBatteryScreen = ({
@@ -75,11 +79,15 @@ export const OemBatteryScreen = ({
   onWatchVideo,
   onContinue,
   continueLabel,
+  stepLine,
+  onBack,
 }: OemBatteryScreenProps): ReactNode => {
   useT();
   return (
-    <Screen scrollable>
-      <Label muted>{skin}</Label>
+    <Screen scrollable {...(onBack === undefined ? {} : { onBack })}>
+      {stepLine === undefined ? null : <Label muted>{stepLine}</Label>}
+      {/* `FE-W192`. The generic screen names no skin, rather than an "Android" eyebrow. */}
+      {skin === '' ? null : <Label muted>{skin}</Label>}
       <Display>{headline}</Display>
 
       {/*

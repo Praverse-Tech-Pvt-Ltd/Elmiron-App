@@ -54,6 +54,8 @@ jest.mock('expo-audio', () => ({
 }));
 
 jest.mock('expo-router', () => ({
+  // `FE-W188`. The screen's Back control reads the router; nothing here presses it.
+  useRouter: () => ({ back: jest.fn(), canGoBack: () => true, replace: jest.fn() }),
   useLocalSearchParams: () => ({ visitId: VISIT }),
 }));
 jest.mock('../session', () => ({

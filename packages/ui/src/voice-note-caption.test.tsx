@@ -23,17 +23,17 @@ const base: VoiceNoteScreenProps = {
 describe('VoiceNoteScreen — the caption under the timer (FE-D12 V4)', () => {
   it('says the note is recorded once there is one to save', async () => {
     await render(<VoiceNoteScreen {...base} elapsed="00:04" onSave={() => undefined} />);
-    expect(screen.getByText('recorded · save it, or start again')).toBeTruthy();
-    expect(screen.queryByText('hold the button to start')).toBeNull();
+    expect(screen.getByText('Recorded. Save it, or start again.')).toBeTruthy();
+    expect(screen.queryByText('Hold the button below to start')).toBeNull();
   });
 
   it('still says how to start when nothing has been recorded', async () => {
     await render(<VoiceNoteScreen {...base} />);
-    expect(screen.getByText('hold the button to start')).toBeTruthy();
+    expect(screen.getByText('Hold the button below to start')).toBeTruthy();
   });
 
   it('still says to keep holding while recording', async () => {
     await render(<VoiceNoteScreen {...base} recording />);
-    expect(screen.getByText('keep holding · release to finish')).toBeTruthy();
+    expect(screen.getByText('Keep holding. Let go to finish.')).toBeTruthy();
   });
 });

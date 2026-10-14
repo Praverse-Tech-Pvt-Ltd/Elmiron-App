@@ -36,6 +36,8 @@ jest.mock('../sync/pulled-store', () => ({
   }),
 }));
 jest.mock('expo-router', () => ({
+  // `FE-W188`. The screen's Back control reads the router; nothing here presses it.
+  useRouter: () => ({ back: jest.fn(), canGoBack: () => true, replace: jest.fn() }),
   useLocalSearchParams: () => ({ visitId: '44444444-4444-4444-8444-444444444401' }),
 }));
 
@@ -93,6 +95,17 @@ describe('BE-W175 — products on the call report', () => {
     expect(queuedPayload().productIdsDiscussed).toEqual([KITTO, ACTIVEX]);
     // The rep's words stay separate from the list.
     expect(queuedPayload().summary).toBe('Discussed the dosing guide.');
+  });
+
+  it('sends the report for approval: its status is submitted, never the server’s draft default (FE-W196)', async () => {
+    mockLoad.mockResolvedValue({ kind: 'fresh', products: CATALOGUE });
+    mockSendOrQueue.mockResolvedValue({ kind: 'sent' });
+    await render(<CallReport />);
+    await write();
+    await waitFor(() => {
+      expect(mockSendOrQueue).toHaveBeenCalledTimes(1);
+    });
+    expect(queuedPayload()).toMatchObject({ status: 'submitted' });
   });
 
   it('un-marking a product removes it', async () => {

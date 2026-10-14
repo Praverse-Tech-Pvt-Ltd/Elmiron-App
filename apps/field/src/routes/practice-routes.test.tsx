@@ -44,6 +44,7 @@ const mockSpoken: unknown[] = [];
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+const mockBack = jest.fn();
 let mockParams: Record<string, string> = {};
 jest.mock('expo-router', () => ({
   Redirect: ({ href }: { href: string }) => {
@@ -51,7 +52,12 @@ jest.mock('expo-router', () => ({
     const ui = jest.requireActual<typeof UiModule>('@fieldforce/ui');
     return React.createElement(ui.BodyText, null, `redirect:${href}`);
   },
-  useRouter: () => ({ push: mockPush, replace: mockReplace, back: jest.fn() }),
+  useRouter: () => ({
+    push: mockPush,
+    replace: mockReplace,
+    back: mockBack,
+    canGoBack: () => true,
+  }),
   useLocalSearchParams: () => mockParams,
 }));
 
@@ -330,5 +336,59 @@ describe('FE-W163 — practice by voice', () => {
     await expect(mockVoiceSend?.('QUJD')).resolves.toEqual({ next: 'pause', pause: 'no_voice' });
     mockSpokenResponse = { status: 200, body: { kind: 'no_speech' } };
     await expect(mockVoiceSend?.('QUJD')).resolves.toEqual({ next: 'listen' });
+  });
+});
+
+/**
+ * `FE-W193` — the practice screens' own words: a session says when it started (two practices of one
+ * scenario were identical rows), a stance is a label with a capital, and a session with no turns
+ * opens at its header instead of following an empty conversation to its bottom. `FE-W188`: each
+ * practice screen draws its own Back control.
+ */
+describe('FE-W193 — practice rows, labels and the first paint', () => {
+  /** The scroll view: the one ancestor with a content container. */
+  const scrollerAbove = (text: string) => {
+    let node = screen.getByText(text).parent;
+    while (node !== null && node.props['contentContainerStyle'] === undefined) node = node.parent;
+    if (node === null) throw new Error('no scroll view above the text');
+    return node;
+  };
+
+  it('a past session says when it started, in the territory’s clock; a stance has a capital', async () => {
+    await startSession();
+    await render(<PracticeHome />);
+    // The sample's start, 05:30 UTC, is 11:00 in Asia/Kolkata.
+    expect((await screen.findAllByText('Started 1 Oct at 11:00')).length).toBeGreaterThan(0);
+    expect(screen.getByText('Dr Sample Rao · Urology · Sceptical')).toBeTruthy();
+    expect(screen.getByText('Dr Sample Iyer · General practice · In a hurry')).toBeTruthy();
+  });
+
+  it('a session with no turns opens at its header; a first turn starts following', async () => {
+    mockParams = { id: await startSession() };
+    await render(<PracticeSession />);
+    await screen.findByText('Dr Sample Rao');
+    expect(scrollerAbove('Practice simulation').props['onContentSizeChange']).toBeUndefined();
+
+    await fireEvent.changeText(screen.getByLabelText('What you say'), 'Good morning, Doctor.');
+    await fireEvent.press(screen.getByText('Send'));
+    await screen.findByText(/^Sample reply from the practice doctor/u);
+    expect(scrollerAbove('Practice simulation').props['onContentSizeChange']).toBeDefined();
+  });
+
+  it('FE-W188: home, session and feedback each draw a Back control that goes back', async () => {
+    mockBack.mockClear();
+    await render(<PracticeHome />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Back' }));
+
+    mockParams = { id: await startSession() };
+    await render(<PracticeSession />);
+    await screen.findByText('Dr Sample Rao');
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+
+    mockParams = { id: '00000000-0000-4000-8000-000000000000' };
+    await render(<PracticeAnalysis />);
+    await screen.findByText('This feedback is not available to you');
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+    expect(mockBack).toHaveBeenCalledTimes(3);
   });
 });

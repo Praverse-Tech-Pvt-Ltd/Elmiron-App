@@ -2,12 +2,13 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect } from 'expo-router';
 import {
+  Badge,
   Banner,
   BodyText,
   Button,
   Card,
   Heading,
-  Label,
+  NoticeText,
   Screen,
   Title,
   t,
@@ -16,6 +17,7 @@ import {
 import type { TextKey } from '@fieldforce/ui';
 import { liveTrackingEnabled } from '../src/features';
 import { noticeBlocks } from '../src/tracking/notice-blocks';
+import { useBack } from '../src/navigation/back';
 import { useLiveTracker } from '../src/tracking/tracker';
 import type { LiveTracker } from '../src/tracking/tracker';
 
@@ -47,7 +49,14 @@ const OUTCOME: Readonly<Record<Outcome, { readonly title: TextKey; readonly deta
   'accept-failed': { title: 'liveTracking.agreeFailed', detail: 'liveTracking.agreeFailedDetail' },
 };
 
-export const LiveTrackingScreen = ({ tracker }: { readonly tracker: LiveTracker }): ReactNode => {
+export const LiveTrackingScreen = ({
+  tracker,
+  onBack,
+}: {
+  readonly tracker: LiveTracker;
+  /** `FE-W188`. The screen's Back control. */
+  readonly onBack?: () => void;
+}): ReactNode => {
   useLanguage();
   // `FE-W155`. Which outcome, not its sentences: they are read at render.
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -55,7 +64,7 @@ export const LiveTrackingScreen = ({ tracker }: { readonly tracker: LiveTracker 
   const notice = status?.notice ?? null;
 
   return (
-    <Screen scrollable>
+    <Screen scrollable {...(onBack === undefined ? {} : { onBack })}>
       <Title>{t('settings.liveLocation')}</Title>
       <Banner
         tone={line.tone}
@@ -87,25 +96,30 @@ export const LiveTrackingScreen = ({ tracker }: { readonly tracker: LiveTracker 
           ) : null}
           {/* FE-W155: the published notice — legal wording, English-only like consent — not in the catalogue. */}
           <Heading>{notice.versionLabel}</Heading>
-          {/* `FE-W162`: laid out as written (headings, paragraphs, bullets), every word kept. */}
-          {noticeBlocks(notice.body).flatMap((block, index) => {
-            const key = `${String(index)}:${block.kind}`;
-            if (block.kind === 'heading') return [<Heading key={key}>{block.text}</Heading>];
-            if (block.kind === 'paragraph') return [<BodyText key={key}>{block.text}</BodyText>];
-            return block.items.map((item, at) => (
-              <BodyText key={`${key}:${String(at)}`}>{`•  ${item}`}</BodyText>
-            ));
-          })}
+          {/*
+            `FE-W162`: laid out as written (headings, paragraphs, bullets), every word kept.
+            `FE-W191`: in `NoticeText`, so a section heading has air above it and a bullet hangs.
+          */}
+          <NoticeText blocks={noticeBlocks(notice.body)} />
         </Card>
       )}
 
       {notice === null || status === null ? null : status.accepted ? (
         <>
-          <Label muted>{t('liveTracking.accepted')}</Label>
+          {/*
+            `FE-W191`. Said as the done thing it is — the success pill — not as a muted caption that
+            read like small print under the notice.
+          */}
+          <Badge label={t('liveTracking.accepted')} tone="success" />
+          {/*
+            `FE-W191`. Start and Stop are the same button in two states, so they are the same size:
+            Stop was a secondary (52pt) where Start was a primary (60pt), and Withdraw below jumped
+            21px each time sharing was switched. Stopping is as much the screen's one action as
+            starting — live location must be as easy to stop as to start.
+          */}
           {dayOpen ? (
             <Button
               label={t('liveTracking.stop')}
-              variant="secondary"
               onPress={() => {
                 void tracker.closeDay();
               }}
@@ -157,6 +171,8 @@ export const LiveTrackingScreen = ({ tracker }: { readonly tracker: LiveTracker 
 
 export default function LiveTrackingRoute(): ReactNode {
   const tracker = useLiveTracker();
+  // Called before the early return: a hook is never conditional.
+  const back = useBack();
   if (!liveTrackingEnabled || tracker === null) return <Redirect href="/home" />;
-  return <LiveTrackingScreen tracker={tracker} />;
+  return <LiveTrackingScreen onBack={back} tracker={tracker} />;
 }

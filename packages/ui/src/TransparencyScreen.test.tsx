@@ -20,12 +20,12 @@ describe('the screen states what is true, not what is planned', () => {
     // and concluding they are already being tracked by a build that takes no
     // position fix at all. On this screen that is the worst possible error.
     await render(<TransparencyScreen entries={entries} neverRecorded={NEVER} />);
-    expect(screen.getByText('Not yet — this app cannot do this today.')).toBeTruthy();
+    expect(screen.getByText('Not switched on for your company yet.')).toBeTruthy();
   });
 
   it('does not add that line to something the app really does', async () => {
     await render(<TransparencyScreen entries={entries} neverRecorded={NEVER} />);
-    expect(screen.getAllByText('Not yet — this app cannot do this today.').length).toBe(1);
+    expect(screen.getAllByText('Not switched on for your company yet.').length).toBe(1);
   });
 
   it('carries a preamble when the honest answer differs from the list', async () => {

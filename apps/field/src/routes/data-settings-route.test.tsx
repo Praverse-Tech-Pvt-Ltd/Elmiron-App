@@ -10,6 +10,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const mockStore = jest.fn();
 jest.mock('../sync/pulled-store', () => ({ usePulledStore: () => mockStore() }));
+// `FE-W188`. The screen's Back control asks for the router.
+const mockBack = jest.fn();
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ back: mockBack, canGoBack: () => true, replace: jest.fn() }),
+}));
 
 import DataSettings from '../../app/data-settings';
 import { WIFI_ONLY_KEY } from '../settings/data-prefs';

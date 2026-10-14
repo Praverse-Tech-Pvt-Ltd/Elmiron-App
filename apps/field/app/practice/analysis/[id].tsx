@@ -14,7 +14,9 @@ import type {
   PracticeSession,
 } from '../../../src/practice/contract';
 import { practiceBackend } from '../../../src/practice/transport';
+import { practiceDoctorName } from '../../../src/practice/labels';
 import { failureDetail } from '../../../src/errors/plain';
+import { useBack } from '../../../src/navigation/back';
 
 /**
  * FE-D17 — the feedback on one AI Doctor practice session.
@@ -57,6 +59,7 @@ const finding =
 const PracticeAnalysisView = (): ReactNode => {
   useLanguage();
   const router = useRouter();
+  const back = useBack();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [analysis, setAnalysis] = useState<PracticeAnalysis | null>(null);
   const [session, setSession] = useState<PracticeSession | null>(null);
@@ -101,8 +104,9 @@ const PracticeAnalysisView = (): ReactNode => {
 
   const stub = analysis?.modelProvider === STUB_PROVIDER;
 
+  // `FE-W188`. A pushed screen draws its own way back.
   return (
-    <Screen scrollable>
+    <Screen onBack={back} scrollable>
       <PracticeAnalysisScreen
         dimensions={
           analysis === null
@@ -126,7 +130,11 @@ const PracticeAnalysisView = (): ReactNode => {
           router.push('/learning');
         }}
         overallLabel={analysis === null ? '' : score(analysis.overallScore)}
-        personaName={session?.personaDisplayName ?? t('practice.theAiDoctor')}
+        personaName={
+          session === null
+            ? t('practice.theAiDoctor')
+            : practiceDoctorName(session.personaDisplayName)
+        }
         sample={analysis?.modelProvider === 'sample'}
         strengths={analysis?.strengths.map(finding('strength')) ?? []}
         summary={analysis?.summary ?? ''}

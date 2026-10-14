@@ -2,7 +2,7 @@ import { LiveRequestError } from '../live-rest';
 import type { CompleteLessonResponse } from '@fieldforce/core';
 import { t } from '@fieldforce/ui/i18n';
 import { dayMonthOfDate } from '../today/territory-day';
-import type { AssignmentRow, EnrolmentRow, OutlineRows, VersionRow } from './live';
+import type { AssignmentRow, CoursePreview, EnrolmentRow, OutlineRows, VersionRow } from './live';
 
 /*
  * `FE-W183`. Every sentence below is read from the catalogue (`learning.*`) when it is asked for,
@@ -96,6 +96,40 @@ export const courseState = (
           : v.title,
     })),
   };
+};
+
+/**
+ * `FE-W193` — the one version a not-yet-started course would start, when there is exactly one. Its
+ * summary and lesson count are shown above "Start this course". With a choice of markets nothing is
+ * previewed: each version may hold different lessons, and one version's numbers under the course's
+ * title would describe a course the rep may not choose.
+ */
+export const previewVersionId = (state: CourseState): string | null =>
+  state.kind === 'can_start' && state.choices.length === 1
+    ? (state.choices[0]?.versionId ?? null)
+    : null;
+
+/** The version's own summary, as the company wrote it, or null when it has none. */
+export const versionSummary = (
+  versions: readonly VersionRow[],
+  versionId: string | null,
+): string | null => {
+  const summary = versions.find((v) => v.id === versionId)?.summary?.trim() ?? '';
+  return summary === '' ? null : summary;
+};
+
+/**
+ * `FE-W193` — "6 lessons · about 30 min", under a course's title before it is started. The length is
+ * shown only when every lesson has an estimate: a sum with gaps would under-state the course.
+ */
+export const courseFacts = (preview: CoursePreview | null): string | null => {
+  if (preview === null || preview.lessons === 0) return null;
+  return [
+    t('learning.courseLessons', { count: preview.lessons }),
+    preview.minutes === null ? null : t('learning.aboutMinutes', { minutes: preview.minutes }),
+  ]
+    .filter((part): part is string => part !== null)
+    .join(' · ');
 };
 
 /**

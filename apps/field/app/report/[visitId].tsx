@@ -17,6 +17,13 @@ import { dayMonthIn, dayMonthOfDate } from '../../src/today/territory-day';
 import { loadProductChoices, toggleProduct } from '../../src/catalogue/products';
 import type { ProductList } from '../../src/catalogue/products';
 import { failureDetail } from '../../src/errors/plain';
+import { queueOwner } from '../../src/sync/async-storage-store';
+import {
+  clearReportDraft,
+  readReportDraft,
+  writeReportDraft,
+} from '../../src/capture/report-draft';
+import { useBack } from '../../src/navigation/back';
 
 /**
  * C6 — the call report binding, for one visit.
@@ -105,6 +112,42 @@ export default function CallReport(): ReactNode {
   const [sending, setSending] = useState(false);
   const [sentNote, setSentNote] = useState<ReportOutcome | null>(null);
   const [failure, setFailure] = useState<ReportFailure | null>(null);
+  const back = useBack();
+
+  /**
+   * `FE-W190`. The draft: what the rep typed and has not sent, kept per rep and visit
+   * (`src/capture/report-draft.ts`). Read once on opening; nothing is written until it has been
+   * read, or an empty screen would overwrite the words it is about to restore. Restored only into
+   * fields the rep has not started typing in.
+   */
+  const userId = queueOwner();
+  const [draftRead, setDraftRead] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void readReportDraft(userId, visitId).then((draft) => {
+      if (!live) return;
+      if (draft !== null) {
+        setSummary((current) => (current === '' ? draft.summary : current));
+        setObjections((current) => (current === '' ? draft.objections : current));
+        setNextStep((current) => (current === '' ? draft.nextStep : current));
+        setChosenProducts((current) => (current.length === 0 ? draft.productIds : current));
+      }
+      setDraftRead(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, [userId, visitId]);
+  useEffect(() => {
+    // Once sent or saved to send, the outbox holds the report and the draft is gone for good.
+    if (!draftRead || sentNote !== null) return;
+    void writeReportDraft(userId, visitId, {
+      summary,
+      objections,
+      nextStep,
+      productIds: chosenProducts,
+    });
+  }, [draftRead, sentNote, userId, visitId, summary, objections, nextStep, chosenProducts]);
 
   const send = (): void => {
     // FE-D12 item 3. A report that was sent, or saved to send by itself, is not sent again. The
@@ -118,9 +161,19 @@ export default function CallReport(): ReactNode {
       visitId,
       summary,
       // `BE-W175`: the ids the rep marked, nothing else. The server checks each one.
-      productIdsDiscussed: [...chosenProducts],
+      // `FE-W190`: and only those on the list the rep can SEE -- a draft kept from an earlier
+      // opening may name a product the company has since withdrawn, and a mark the rep cannot see
+      // must not be sent in their name.
+      productIdsDiscussed: chosenProducts.filter((id) =>
+        productList === null || productList.kind === 'none'
+          ? false
+          : productList.products.some((product) => product.id === id),
+      ),
       objectionsRaised: objections.trim() === '' ? null : objections,
       nextStep: nextStep.trim() === '' ? null : nextStep,
+      // `FE-W196`. Sent for approval. Without it the server stored the report as a draft, and the
+      // managers' approval queue — which lists only submitted reports — never showed it.
+      status: 'submitted' as const,
     };
 
     /**
@@ -139,17 +192,18 @@ export default function CallReport(): ReactNode {
      *   refused — the server said no. `flushOutbox` renders the reason and the remedy on
      *             the queue screen; here the MR is told it needs attention.
      *
-     * **Does this depend on `draft` status working?** No. `call_reports.status` has only
-     * ever been `submitted` in any fixture (MR-16 B4), and nothing here writes `draft`:
-     * `apply_sync_item` defaults a call report with no `supersedesCallReportId` to
-     * `'draft'` on the direct-insert branch, but the copy makes no claim about the report's
-     * STATUS at all — only about whether the SERVER has it. That distinction is why the
-     * replacement is safe while `draft` remains unexercised.
+     * **The report's status is `submitted`, said in the body (`FE-W196`).** `apply_sync_item`
+     * gives a new report with no status `'draft'` on the direct-insert branch, and before
+     * `FE-W196` this body named none — so every report from a phone landed as a draft and never
+     * reached a manager's approval queue. The copy below still makes no claim about approval:
+     * only about whether the SERVER has the report.
      */
     void sendOrQueue(() => createPushClient().createCallReport(body), callReportQueueItem(body))
       .then((outcome) => {
         if (outcome.kind === 'sent') {
           setSentNote('sent');
+          // `FE-W190`. Sent: the draft has done its job.
+          void clearReportDraft(userId, visitId);
           return;
         }
         if (outcome.kind === 'queued') {
@@ -157,6 +211,8 @@ export default function CallReport(): ReactNode {
           // the title must not say it has -- observed on the emulator with no signal, where
           // this banner read "Report sent" over a body saying it had not been sent.
           setSentNote('queued');
+          // `FE-W190`. In the outbox now, which sends it by itself: the draft is not needed.
+          void clearReportDraft(userId, visitId);
           return;
         }
         if (outcome.kind === 'queue_unreadable') {
@@ -185,6 +241,8 @@ export default function CallReport(): ReactNode {
       onDone={() => {
         router.back();
       }}
+      // `FE-W188`. Back keeps the words: they are the draft above.
+      onBack={back}
       dateLabel={dateLabel}
       doctorName={doctorName}
       failure={failure === null ? null : failureText(failure)}

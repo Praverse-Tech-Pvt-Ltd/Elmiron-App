@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import {
@@ -9,12 +9,22 @@ import {
   Display,
   Label,
   Screen,
+  Secondary,
   t,
   useLanguage,
 } from '@fieldforce/ui';
+import { liveTrackingEnabled } from '../../src/features';
+import { useBack } from '../../src/navigation/back';
+import { batteryStepApplies } from '../../src/onboarding/device';
+import { firstRunPosition, useInFirstRun } from '../../src/onboarding/first-run';
+import { locationClaim } from '../../src/onboarding/location-claim';
 import { requestLocationPermission } from '../../src/onboarding/location-permission';
-import { requestLocationAnswers } from '../../src/onboarding/os-permissions';
+import {
+  locationAlreadyGranted,
+  requestLocationAnswers,
+} from '../../src/onboarding/os-permissions';
 import { hasCompletedFirstRun } from '../../src/onboarding/progress';
+import { useLiveTracker } from '../../src/tracking/tracker';
 
 /**
  * A2 — the location rationale, and the only place this app asks for location
@@ -33,6 +43,10 @@ import { hasCompletedFirstRun } from '../../src/onboarding/progress';
  * cannot take a position at any other time, because it never asks the operating
  * system for one.
  *
+ * **`FE-W185`. Unless live location is in the build.** Then that third promise was false for a rep
+ * sharing live location, so the card's words come from `locationClaim`: the same promise where it
+ * holds, and where it does not, exactly when else a position is read.
+ *
  * **"Not now" is the same weight as "Turn location on".** The design says so — "an
  * MR who feels cornered here uninstalls" — and the same rule already governs the
  * microphone and notification screens.
@@ -47,8 +61,33 @@ import { hasCompletedFirstRun } from '../../src/onboarding/progress';
 export default function LocationRationale(): ReactNode {
   useLanguage();
   const router = useRouter();
+  const back = useBack();
   // `FE-W155`. Which answer came back, not its sentence: the words are read at render.
   const [outcome, setOutcome] = useState<'granted' | 'unanswered' | null>(null);
+  /** `FE-W192`. In first run (step line, no Back), or opened from Me (Back, no step line). */
+  const inFirstRun = useInFirstRun();
+  const tracker = useLiveTracker();
+  const claim = locationClaim({
+    liveBuild: liveTrackingEnabled,
+    trackerState: tracker?.state ?? null,
+  });
+
+  /**
+   * `FE-W192`. Location may already be allowed — the screen reached again from Me, or a reinstall
+   * that kept the grant. Asking "Turn location on" then was a question already answered, so the
+   * screen says it is on and offers the one way on.
+   */
+  const [alreadyOn, setAlreadyOn] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void locationAlreadyGranted().then((granted) => {
+      if (live) setAlreadyOn(granted);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  const granted = alreadyOn || outcome === 'granted';
 
   /** On to A3 in first run; back where they came from otherwise. */
   const carryOn = (): void => {
@@ -83,34 +122,43 @@ export default function LocationRationale(): ReactNode {
   };
 
   return (
-    <Screen scrollable>
+    // `FE-W188`. Opened from Me it is a pushed screen with a way back; in first run there is no
+    // "back" to offer — the way on is one of its answers.
+    <Screen scrollable {...(inFirstRun === false ? { onBack: back } : {})}>
+      {inFirstRun === true ? (
+        <Label muted>
+          {t('onboarding.stepOf', firstRunPosition('location', batteryStepApplies()))}
+        </Label>
+      ) : null}
       <Display>{t('onboarding.locationHeadline')}</Display>
       <BodyText muted>{t('onboarding.locationLead')}</BodyText>
 
+      {/* `FE-W189`. Each card's second line is a sentence, so it is set at the prose step. */}
       <Card>
         <BodyText>{t('onboarding.locationOneTap')}</BodyText>
-        <Label muted>{t('onboarding.locationOneTapDetail')}</Label>
+        <Secondary>{t('onboarding.locationOneTapDetail')}</Secondary>
       </Card>
 
       <Card>
         <BodyText>{t('onboarding.locationMileage')}</BodyText>
-        <Label muted>{t('onboarding.locationMileageDetail')}</Label>
+        <Secondary>{t('onboarding.locationMileageDetail')}</Secondary>
       </Card>
 
+      {/* `FE-W185`. When a position is read, worded for this phone: see `locationClaim`. */}
       <Card tone="hero">
-        <BodyText>{t('onboarding.locationOnlyPress')}</BodyText>
-        <Label muted>{t('onboarding.locationOnlyPressDetail')}</Label>
+        <BodyText>{t(claim.title)}</BodyText>
+        <Secondary>{t(claim.detail)}</Secondary>
       </Card>
 
-      {outcome === null ? null : (
+      {granted ? (
+        <Banner detail={t('onboarding.locationOn')} title={t('settings.location')} tone="info" />
+      ) : outcome === 'unanswered' ? (
         <Banner
-          detail={
-            outcome === 'granted' ? t('onboarding.locationOn') : t('onboarding.locationUnanswered')
-          }
+          detail={t('onboarding.locationUnanswered')}
           title={t('settings.location')}
           tone="info"
         />
-      )}
+      ) : null}
 
       <Button
         label={t('onboarding.seeRecorded')}
@@ -120,13 +168,30 @@ export default function LocationRationale(): ReactNode {
         variant="quiet"
       />
 
-      {/*
-        An explicit user request — the single trigger `shouldPromptForLocation` allows. The
-        design lists it before "Not now"; the two stay the same weight.
-      */}
-      <Button label={t('onboarding.turnLocationOn')} onPress={turnOn} variant="secondary" />
+      {granted ? (
+        /*
+          `FE-W192`. Nothing left to answer, so one way on, as the screen's one primary: on to the
+          next step in first run, back to Me otherwise.
+        */
+        <Button
+          label={inFirstRun === true ? t('onboarding.continue') : t('onboarding.done')}
+          onPress={() => {
+            if (inFirstRun === true) router.push('/onboarding/notifications');
+            else back();
+          }}
+        />
+      ) : (
+        <>
+          {/*
+            An explicit user request — the single trigger `shouldPromptForLocation` allows. The
+            design lists it before "Not now"; the two stay the same weight (a permission answer,
+            so neither is a primary — `FE-W192` keeps that rule).
+          */}
+          <Button label={t('onboarding.turnLocationOn')} onPress={turnOn} variant="secondary" />
 
-      <Button label={t('onboarding.notNow')} onPress={carryOn} variant="secondary" />
+          <Button label={t('onboarding.notNow')} onPress={carryOn} variant="secondary" />
+        </>
+      )}
     </Screen>
   );
 }

@@ -12,6 +12,7 @@ import type { ProductQaOutcome } from '../src/product-qa/outcome';
 import { appLiveConnection } from '../src/live-connection';
 import { loadProductChoices } from '../src/catalogue/products';
 import type { ProductChoice } from '../src/catalogue/products';
+import { useBack } from '../src/navigation/back';
 import { usePulledStore } from '../src/sync/pulled-store';
 import { clockIn, dayMonthIn } from '../src/today/territory-day';
 
@@ -29,6 +30,7 @@ export const ProductQa = ({
   ) => ReturnType<ReturnType<typeof createLiveProductQaTransport>>;
 }): ReactNode => {
   useLanguage();
+  const back = useBack();
   const { zone } = usePulledStore();
   const [question, setQuestion] = useState('');
   // `BE-W175`'s catalogue: the company's active products, kept for offline. The picker is drawn only
@@ -123,8 +125,9 @@ export const ProductQa = ({
   const view: ProductQaView =
     result === null ? { kind: 'idle' } : viewOf(result.outcome, result.retry);
 
+  // `FE-W188`. Opened from Me: a pushed screen draws its own way back.
   return (
-    <Screen scrollable>
+    <Screen onBack={back} scrollable>
       <ProductQaScreen
         asking={asking}
         onAsk={() => {

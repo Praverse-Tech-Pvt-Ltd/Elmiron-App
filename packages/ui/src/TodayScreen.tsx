@@ -9,6 +9,7 @@ import { SkeletonCard } from './Skeleton';
 import { Banner } from './Banner';
 import { Button } from './Button';
 import { Card } from './Card';
+import { ListRow } from './ListRow';
 import { Screen } from './Screen';
 import { Spinner } from './Spinner';
 import { SyncQueueIndicator } from './SyncQueueIndicator';
@@ -397,8 +398,18 @@ export const TodayScreen = ({
 
       {after}
 
+      {/*
+        `FE-W191`. A row, not a second green link. It sat under "Add an unplanned visit" as two
+        identical centred quiet buttons (QA screenshot 06), so the page about what is recorded read
+        as one more action. It is a place to read, so it is drawn as one — and it stays on Today,
+        never only in Me: C10/A9 keeps it one tap from home every day.
+      */}
       {onOpenTransparency === undefined ? null : (
-        <Button label={t('today.transparency')} onPress={onOpenTransparency} variant="quiet" />
+        <ListRow
+          detail={t('today.transparencyDetail')}
+          onPress={onOpenTransparency}
+          title={t('today.transparency')}
+        />
       )}
     </Screen>
   );

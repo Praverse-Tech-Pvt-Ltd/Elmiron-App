@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
-import { Label } from './Text';
+import { Secondary } from './Text';
 import { elevationStyle } from './depth';
 
 /**
@@ -213,7 +213,12 @@ export const Button = ({
           </Text>
         </Pressable>
       </View>
-      {note === undefined ? null : <Label muted>{note}</Label>}
+      {/*
+        `FE-W189`. The reason line is a sentence ("You are outside the clinic's geofence."), so it is
+        set at the prose step. Round 1 moved every other sentence off `Label` and left this one —
+        the line §05 relies on to carry a disabled button's meaning, at the smallest size.
+      */}
+      {note === undefined ? null : <Secondary>{note}</Secondary>}
     </View>
   );
 };

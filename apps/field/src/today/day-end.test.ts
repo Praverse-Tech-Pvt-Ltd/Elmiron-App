@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { VisitSchema } from '@fieldforce/core';
 import type { Visit } from '@fieldforce/core';
-import { captureNote, summariseDayEnd } from './day-end';
+import { captureCopy, captureNote, liveCaptureOf, summariseDayEnd } from './day-end';
 
 /**
  * Parsed through the contract schema rather than written as a literal, for the
@@ -93,5 +93,44 @@ describe('the capture note', () => {
     // between every press and not only after the last one.
     expect(captureNote()).toMatch(/only ever reads your position at the moment you press/u);
     expect(captureNote()).toMatch(/it is not reading it now/u);
+  });
+});
+
+/**
+ * `FE-W185`. Day end's confirmation is true in every live-location state. With live location shared
+ * it said "it is not reading it now" (QA screenshot 61).
+ */
+describe('the capture note follows live location', () => {
+  it('reads the tracker: none without one, sharing only while reading, paused otherwise', () => {
+    expect(liveCaptureOf(null)).toBe('none');
+    expect(liveCaptureOf({ state: 'off_company', readingNow: false })).toBe('none');
+    expect(liveCaptureOf({ state: 'off_no_notice', readingNow: false })).toBe('none');
+    expect(liveCaptureOf({ state: 'active', readingNow: true })).toBe('sharing');
+    // Active without the location permission reads nothing: it is said as paused.
+    expect(liveCaptureOf({ state: 'active', readingNow: false })).toBe('paused');
+    expect(liveCaptureOf({ state: 'paused_day_closed', readingNow: false })).toBe('paused');
+    expect(liveCaptureOf({ state: 'paused_outside_hours', readingNow: false })).toBe('paused');
+    // A tracker double with no state at all (the day-end close test) is no live location.
+    expect(liveCaptureOf({})).toBe('none');
+  });
+
+  it('never says "not reading it now" while it is', () => {
+    const sharing = captureCopy('sharing');
+    expect(sharing.title).not.toMatch(/Nothing is being recorded/u);
+    expect(sharing.note).not.toMatch(/not reading it now/u);
+    expect(sharing.note).toMatch(/every few minutes/u);
+    expect(sharing.note).toMatch(/check in or check out/u);
+  });
+
+  it('paused: nothing is read now, and says when it would be', () => {
+    const paused = captureCopy('paused');
+    expect(paused.title).toBe('Nothing is being recorded.');
+    expect(paused.note).toMatch(/paused/u);
+    expect(paused.note).toMatch(/while you share live location/u);
+  });
+
+  it('none: the press-only sentence, unchanged', () => {
+    expect(captureCopy('none').note).toBe(captureNote());
+    expect(captureCopy('none').note).toMatch(/it is not reading it now/u);
   });
 });

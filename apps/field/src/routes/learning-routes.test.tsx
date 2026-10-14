@@ -11,6 +11,7 @@ import type * as ReactModule from 'react';
  * finish is shown only with the server's stamp, and no signal is never drawn as a tick.
  */
 const mockPush = jest.fn();
+const mockBack = jest.fn();
 jest.mock('../live-connection', () => ({ appLiveConnection: () => ({}) }));
 // `FE-W127`: the lesson route imports the player; a text-only lesson never creates one.
 jest.mock('expo-video', () => ({ VideoView: () => null, useVideoPlayer: () => ({}) }));
@@ -23,7 +24,12 @@ jest.mock('expo-router', () => {
   const React = jest.requireActual<typeof ReactModule>('react');
   return {
     Redirect: ({ href }: { href: string }) => mockBodyText({ children: `redirect:${href}` }),
-    useRouter: () => ({ push: mockPush }),
+    useRouter: () => ({
+      push: mockPush,
+      back: mockBack,
+      canGoBack: () => true,
+      replace: jest.fn(),
+    }),
     useLocalSearchParams: () => ({}),
     useFocusEffect: (callback: React.EffectCallback) => {
       mockFocused = () => {
@@ -54,6 +60,7 @@ const backendWith = (over: Partial<LearningBackend>): LearningBackend => ({
     Promise.resolve({ assignments: [], versions: [], enrolments: [] }),
   ),
   course: jest.fn(async () => Promise.resolve({ title: null, versions: [], enrolments: [] })),
+  preview: jest.fn(async () => Promise.resolve({ lessons: 0, minutes: null })),
   outline: jest.fn(async () =>
     Promise.resolve({ modules: [], lessons: [], completedLessonIds: new Set<string>() }),
   ),
@@ -180,7 +187,9 @@ describe('app/learning — W2-F B', () => {
     expect(start).toHaveBeenCalledWith('v1');
     expect(await screen.findByText('1 of 2 lessons finished')).toBeTruthy();
     expect(screen.getByText('Finished · about 5 min')).toBeTruthy();
-    expect(screen.getByText('Not finished')).toBeTruthy();
+    // `FE-W193`. "To do": the server cannot tell an unopened lesson from a half-read one.
+    expect(screen.getByText('To do')).toBeTruthy();
+    expect(screen.queryByText('Not finished')).toBeNull();
     await fireEvent.press(screen.getByText('Shelf life'));
     expect(mockPush).toHaveBeenCalledWith('/learning/lesson/l2?enrolment=e1');
   });
@@ -271,5 +280,83 @@ describe('app/learning — W2-F B', () => {
   it('with the flag OFF (the default), the route goes to Today', async () => {
     await render(<LearningRoute />);
     expect(screen.getByText('redirect:/home')).toBeTruthy();
+  });
+});
+
+/**
+ * `FE-W193`. A course not yet started says what it is before asking the rep to start it: the
+ * version's own summary, its lesson count, and its length when every lesson has an estimate.
+ */
+describe('a course before it is started (FE-W193)', () => {
+  const notStarted = (over: Partial<LearningBackend>, summary: string | null) =>
+    backendWith({
+      course: jest.fn(async () =>
+        Promise.resolve({ title: 'Storage basics', versions: [{ ...V, summary }], enrolments: [] }),
+      ),
+      ...over,
+    });
+
+  it('shows the summary, the lessons and their length, read from THAT version', async () => {
+    const preview = jest.fn(async () => Promise.resolve({ lessons: 6, minutes: 30 }));
+    await render(
+      <Course
+        backend={notStarted({ preview }, 'Keeping stock cold, depot to clinic.')}
+        courseId="c1"
+      />,
+    );
+    expect(await screen.findByText('6 lessons · about 30 min')).toBeTruthy();
+    expect(screen.getByText('Keeping stock cold, depot to clinic.')).toBeTruthy();
+    expect(screen.getByText('Start this course')).toBeTruthy();
+    expect(preview).toHaveBeenCalledWith('v1');
+  });
+
+  it('a lesson without an estimate: the count, never a length that under-counts', async () => {
+    const preview = jest.fn(async () => Promise.resolve({ lessons: 1, minutes: null }));
+    await render(<Course backend={notStarted({ preview }, null)} courseId="c1" />);
+    expect(await screen.findByText('1 lesson')).toBeTruthy();
+    expect(screen.queryByText(/about .* min/u)).toBeNull();
+  });
+
+  it('a preview that does not load leaves the course startable, as before', async () => {
+    const preview = jest.fn(async () => Promise.reject(OFFLINE));
+    await render(<Course backend={notStarted({ preview }, null)} courseId="c1" />);
+    expect(await screen.findByText('Start this course')).toBeTruthy();
+    expect(screen.queryByText(/lessons?$/u)).toBeNull();
+  });
+
+  it('several markets: nothing is previewed — each version may hold different lessons', async () => {
+    const preview = jest.fn(async () => Promise.resolve({ lessons: 6, minutes: 30 }));
+    const backend = backendWith({
+      course: jest.fn(async () =>
+        Promise.resolve({
+          title: 'Storage basics',
+          versions: [
+            { ...V, marketName: 'India' },
+            { ...V, id: 'v2', marketName: 'Nepal' },
+          ],
+          enrolments: [],
+        }),
+      ),
+      preview,
+    });
+    await render(<Course backend={backend} courseId="c1" />);
+    expect(await screen.findByText('Start: Storage basics — India')).toBeTruthy();
+    expect(preview).not.toHaveBeenCalled();
+  });
+});
+
+/** `FE-W188`. Every Learning screen is pushed from Me, so each draws its own way back. */
+describe('the learning screens draw a Back control (FE-W188)', () => {
+  it('on the list, the course and the lesson, Back goes back', async () => {
+    mockBack.mockClear();
+    await render(<LearningList backend={backendWith({})} />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Back' }));
+
+    await render(<Course backend={backendWith({})} courseId="c1" />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Back' }));
+
+    await render(<Lesson backend={backendWith({})} enrolmentId="e1" lessonId="l1" />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Back' }));
+    expect(mockBack).toHaveBeenCalledTimes(3);
   });
 });

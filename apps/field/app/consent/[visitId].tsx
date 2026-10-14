@@ -301,15 +301,34 @@ export default function ConsentRoute(): ReactNode {
         // between: the doctor has answered and the phone is about to change hands.
         // A "thank you" here would be the app addressing the doctor after the
         // decision, which is the moment pressure is cheapest to apply.
-        router.replace(`/visit/${visit.id}`);
+        //
+        // `FE-W188`. BACK to the visit, not a new one: `replace` swapped this screen for a second
+        // copy of the visit on top of the one that opened it, and Back then went from the visit to
+        // the visit -- two presses, the first of which seemed to do nothing (QA 48). `dismissTo`
+        // pops to the visit already underneath, and replaces this screen with it only when none is.
+        router.dismissTo(`/visit/${visit.id}`);
       })();
     },
     [busy, doctor, notice, refresh, router, visit],
   );
 
+  // `FE-W190`. Each state has its own `key`, so each is its own ScrollView. Both used to render a
+  // `Screen` at the same place in the tree, so React kept ONE scroll view and its offset: the
+  // details opened scrolled to where the doctor had been on the question -- the bottom, by the
+  // answers -- and "Back to the question" came back part-way down (QA 25, 26).
   if (showDetails && notice !== null) {
     return (
-      <Screen scrollable>
+      <Screen
+        key="details"
+        scrollable
+        // `FE-W188`. The same as its own "Back to the question": back to the question, not out.
+        // Its word is fixed English like every word the doctor reads here (`FE-W148`), not the
+        // catalogue's.
+        backLabel="Back"
+        onBack={() => {
+          setShowDetails(false);
+        }}
+      >
         <ConsentDetailsScreen
           collected={consentDetails(firstName)}
           fiduciaryNote={fiduciaryNote(organisation, firstName)}
@@ -325,7 +344,7 @@ export default function ConsentRoute(): ReactNode {
   }
 
   return (
-    <Screen scrollable>
+    <Screen key="question" scrollable>
       <ConsentScreen
         askedBy="Your rep"
         /*

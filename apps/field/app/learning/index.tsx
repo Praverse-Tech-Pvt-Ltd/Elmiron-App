@@ -7,6 +7,7 @@ import { learningEnabled } from '../../src/features';
 import { appLearningBackend } from '../../src/learning/backend';
 import type { LearningBackend } from '../../src/learning/live';
 import { failureKind, myCourseItems } from '../../src/learning/view';
+import { useBack } from '../../src/navigation/back';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { dayMonthIn } from '../../src/today/territory-day';
 
@@ -28,6 +29,7 @@ export const LearningList = ({
   readonly backend?: LearningBackend;
 }): ReactNode => {
   const router = useRouter();
+  const back = useBack();
   const { zone } = usePulledStore();
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
@@ -77,8 +79,9 @@ export const LearningList = ({
             })),
           };
 
+  // `FE-W188`. Opened from Me: a pushed screen draws its own way back.
   return (
-    <Screen scrollable>
+    <Screen onBack={back} scrollable>
       <LearningListScreen view={view} />
     </Screen>
   );

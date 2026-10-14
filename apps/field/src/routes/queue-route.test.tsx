@@ -42,6 +42,13 @@ jest.mock('../sync/async-storage-store', () => ({
   loadQueueState: () => mockLoadQueueState(),
 }));
 
+// `FE-W191` / `FE-W188`. The route reads the territory's zone for "Last sent at …" and has a Back
+// control; neither is under test here.
+jest.mock('../sync/pulled-store', () => ({
+  usePulledStore: () => ({ zone: { timeZone: 'Asia/Kolkata', source: 'territory' } }),
+}));
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
+
 import Queue from '../../app/queue';
 
 /**

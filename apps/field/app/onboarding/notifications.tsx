@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import { requestNotificationPermission } from '../../src/onboarding/notification-permission';
-import { BodyText, Button, Display, ListRow, Screen, t, useLanguage } from '@fieldforce/ui';
+import { BodyText, Button, Display, Label, ListRow, Screen, t, useLanguage } from '@fieldforce/ui';
 import { coachingEnabled } from '../../src/features';
 import { capSentence, notificationTypes } from '../../src/onboarding/notifications';
 import {
@@ -10,6 +10,7 @@ import {
   requestNotificationAnswer,
 } from '../../src/onboarding/os-permissions';
 import { batteryStepApplies } from '../../src/onboarding/device';
+import { firstRunPosition } from '../../src/onboarding/first-run';
 
 /**
  * A3 — notifications, asked at sign-in.
@@ -79,6 +80,13 @@ export default function NotificationsRationale(): ReactNode {
 
   return (
     <Screen scrollable>
+      {/*
+        `FE-W192`. Where this sits in first run. Only first run reaches this screen (A2 pushes it,
+        nothing on Me does), so the line is always true here.
+      */}
+      <Label muted>
+        {t('onboarding.stepOf', firstRunPosition('notifications', batteryStepApplies()))}
+      </Label>
       <Display>{t('onboarding.notificationsHeadline')}</Display>
       <BodyText>{capSentence(types.length)}</BodyText>
 

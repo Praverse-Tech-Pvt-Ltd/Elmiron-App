@@ -19,9 +19,10 @@ import { SurfaceContext } from './surface';
  * say what the app will never hold before listing what it will.
  *
  * **The attested text is here verbatim, again.** The face of the consent screen
- * shows it and so does this. `notice` is `ConsentTextVersion.fullText` and
- * `versionLabel` plus `hash` are what make the consent record checkable years
- * later — the design's "Consent notice v2.1" line is that pair, not decoration.
+ * shows it and so does this. `notice` is `ConsentTextVersion.fullText`, and the
+ * design's "Consent notice v2.1" line names its version. `FE-W186`: the line no longer
+ * carries the hash — what makes the record checkable years later is the version id the
+ * record cites and the hash the server keeps beside it, not hex on a doctor's screen.
  *
  * `collected` and `neverCollected` are app-authored, and that is a coupling with
  * no mechanical guard: if the notice text and these lists ever disagree, this
@@ -41,7 +42,7 @@ export interface ConsentDetailsScreenProps {
   readonly collected: readonly ConsentDetailItem[];
   /** The server's `fullText`, verbatim. */
   readonly notice: string;
-  /** "Notice v1.2 · English (India) · a1b2c3d4" — label, language, hash prefix. */
+  /** "Notice version 1.2 · English" — the version and the language. */
   readonly noticeLabel: string;
   /** Who the Data Fiduciary is and where a complaint goes. */
   readonly fiduciaryNote: string;
