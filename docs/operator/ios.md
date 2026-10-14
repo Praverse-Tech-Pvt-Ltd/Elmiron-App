@@ -47,6 +47,35 @@ eas build --platform ios --profile ios-demo
 
 EAS asks for the Apple account on the first iOS build and creates the signing certificate itself.
 
+## Working on an iPhone today, without a Mac or an Apple account: Expo Go
+
+**Expo Go** (free, App Store) runs this app straight from the laptop's development server, so a change
+made on Windows shows on the iPhone within seconds. Every native module the app uses is a stock Expo
+module (plus `react-native-maps`), which Expo Go already contains. Added 15 October 2026.
+
+**Its limits.** The App Store's Expo Go runs only the **current** Expo SDK. It supported SDK 57 (this
+app's) in September 2026, and moves to SDK 58 shortly after that is stable; check the SDK version
+shown in Expo Go's settings first. The app's own name, icon, permission texts and the plugins in
+`apps/field/plugins/` do not apply inside Expo Go, and notifications are limited. It is for working
+on screens and flows, not for a release.
+
+1. On the iPhone, install **Expo Go** and sign in with an Expo account (free). Since September 2026
+   Expo Go opens a development project only when the **same account** is signed in on the laptop.
+2. On the laptop, once: `cd apps/field` then `npx expo login` (the same account).
+3. The iPhone and the laptop on the **same Wi-Fi**. Windows Firewall must let the phone reach
+   Node.js (Metro, port 8081) and Docker (Supabase, port 54321). On this laptop both already have
+   inbound allow rules.
+4. Start the local stack (`pnpm db:start`), then from `apps/field`, with the laptop's address in
+   place of `127.0.0.1`. Values already set in the shell win over `apps/field/.env`:
+
+   ```powershell
+   $env:EXPO_PUBLIC_SUPABASE_URL = 'http://<laptop address>:54321'
+   npx expo start --lan
+   ```
+
+5. Scan the QR code it prints with the iPhone's camera; Expo Go opens the app. Sign in with a test
+   rep (`pnpm key-day` prints who).
+
 ## Not verified — check on a real iPhone first
 
 * That live location keeps sharing while the app is on screen, and stops when it is not.
