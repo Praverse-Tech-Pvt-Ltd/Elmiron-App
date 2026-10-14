@@ -6,6 +6,7 @@ import { Button } from './Button';
 import { Card } from './Card';
 import { Spinner } from './Spinner';
 import { BodyText, Heading, Label, Title } from './Text';
+import { t, useLanguage } from './i18n';
 
 /**
  * FE-D17 — AI Doctor practice: choose a scenario, and see past sessions.
@@ -48,8 +49,8 @@ const styles = StyleSheet.create({
   card: { gap: tokens.space.xs },
 });
 
-export const SAMPLE_PRACTICE_NOTE =
-  'No AI model is connected. The practice doctor, the scenarios and the feedback here are sample data, not real practice.';
+/** The sample-data note on the practice screens — a function, so it is read in the current language. */
+export const samplePracticeNote = (): string => t('practice.sampleNote');
 
 export const PracticeHomeScreen = ({
   sample,
@@ -61,85 +62,87 @@ export const PracticeHomeScreen = ({
   starting = null,
   loading = false,
   failure = null,
-}: PracticeHomeScreenProps): ReactNode => (
-  <View style={styles.stack}>
-    <Title>Practice with the AI Doctor</Title>
-    <BodyText muted>
-      Practise a visit with an AI doctor, then get feedback on how it went. Only you and your
-      company&apos;s admin can see your practice.
-    </BodyText>
+}: PracticeHomeScreenProps): ReactNode => {
+  useLanguage();
+  return (
+    <View style={styles.stack}>
+      <Title>{t('practice.homeTitle')}</Title>
+      <BodyText muted>{t('practice.homeIntro')}</BodyText>
 
-    {sample ? <Banner detail={SAMPLE_PRACTICE_NOTE} title="Sample data" tone="info" /> : null}
+      {sample ? (
+        <Banner detail={samplePracticeNote()} title={t('practice.sampleTitle')} tone="info" />
+      ) : null}
 
-    {failure !== null ? (
-      <Banner detail={failure.detail} title={failure.title} tone="critical" />
-    ) : loading ? (
-      <Spinner label="Getting your practice" />
-    ) : (
-      <>
-        <Heading>Start a practice</Heading>
-        {scenarios.length === 0 ? (
-          <Card>
-            <View style={styles.card}>
-              <BodyText>No practice scenarios yet</BodyText>
-              <Label muted>Your company approves practice scenarios before they appear here.</Label>
-            </View>
-          </Card>
-        ) : (
-          scenarios.map((row) => (
-            <Card key={row.id}>
+      {failure !== null ? (
+        <Banner detail={failure.detail} title={failure.title} tone="critical" />
+      ) : loading ? (
+        <Spinner label={t('practice.loading')} />
+      ) : (
+        <>
+          <Heading>{t('practice.startHeading')}</Heading>
+          {scenarios.length === 0 ? (
+            <Card>
               <View style={styles.card}>
-                <Heading>{row.title}</Heading>
-                <Label muted>{row.personaLine}</Label>
-                <BodyText>{row.objective}</BodyText>
-                <Label muted>{`They will say: “${row.objection}”`}</Label>
-                <Button
-                  label="Start this practice"
-                  loading={starting === row.id}
-                  loadingLabel="Starting"
-                  onPress={() => {
-                    onStart(row.id);
-                  }}
-                  variant="secondary"
-                />
+                <BodyText>{t('practice.noScenarios')}</BodyText>
+                <Label muted>{t('practice.noScenariosDetail')}</Label>
               </View>
             </Card>
-          ))
-        )}
+          ) : (
+            scenarios.map((row) => (
+              <Card key={row.id}>
+                <View style={styles.card}>
+                  <Heading>{row.title}</Heading>
+                  <Label muted>{row.personaLine}</Label>
+                  <BodyText>{row.objective}</BodyText>
+                  <Label muted>{t('practice.theyWillSay', { objection: row.objection })}</Label>
+                  <Button
+                    label={t('practice.start')}
+                    loading={starting === row.id}
+                    loadingLabel={t('practice.starting')}
+                    onPress={() => {
+                      onStart(row.id);
+                    }}
+                    variant="secondary"
+                  />
+                </View>
+              </Card>
+            ))
+          )}
 
-        <Heading>Your practice sessions</Heading>
-        {sessions.length === 0 ? (
-          <Card>
-            <BodyText>No practice sessions yet</BodyText>
-          </Card>
-        ) : (
-          sessions.map((row) => (
-            <Card key={row.sessionId}>
-              <View style={styles.card}>
-                <Heading>{row.title}</Heading>
-                <Label muted>{`${row.personaName} · ${row.stateLabel}`}</Label>
-                {row.analysisId === null ? (
-                  <Button
-                    label="Open the session"
-                    onPress={() => {
-                      onOpenSession(row.sessionId);
-                    }}
-                    variant="quiet"
-                  />
-                ) : (
-                  <Button
-                    label="See the feedback"
-                    onPress={() => {
-                      if (row.analysisId !== null) onOpenAnalysis(row.analysisId);
-                    }}
-                    variant="quiet"
-                  />
-                )}
-              </View>
+          <Heading>{t('practice.sessionsHeading')}</Heading>
+          {sessions.length === 0 ? (
+            <Card>
+              <BodyText>{t('practice.noSessions')}</BodyText>
             </Card>
-          ))
-        )}
-      </>
-    )}
-  </View>
-);
+          ) : (
+            sessions.map((row) => (
+              <Card key={row.sessionId}>
+                <View style={styles.card}>
+                  <Heading>{row.title}</Heading>
+                  <Label muted>{`${row.personaName} · ${row.stateLabel}`}</Label>
+                  {row.analysisId === null ? (
+                    <Button
+                      label={t('practice.openSession')}
+                      onPress={() => {
+                        onOpenSession(row.sessionId);
+                      }}
+                      variant="quiet"
+                    />
+                  ) : (
+                    <Button
+                      label={t('practice.seeFeedback')}
+                      onPress={() => {
+                        if (row.analysisId !== null) onOpenAnalysis(row.analysisId);
+                      }}
+                      variant="quiet"
+                    />
+                  )}
+                </View>
+              </Card>
+            ))
+          )}
+        </>
+      )}
+    </View>
+  );
+};

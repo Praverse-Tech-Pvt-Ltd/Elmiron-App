@@ -8,6 +8,7 @@ import { Card } from './Card';
 import { CitationSpan } from './CitationSpan';
 import type { CitationSpanProps } from './CitationSpan';
 import { Spinner } from './Spinner';
+import { useT } from './i18n';
 
 /**
  * Phase 4 D2 — one analysis, with the evidence for every claim in it.
@@ -119,6 +120,7 @@ export const AnalysisScreen = ({
   failure = null,
   noFindingsNote = null,
 }: AnalysisScreenProps): ReactNode => {
+  const { t } = useT();
   if (failure !== null) {
     return (
       <>
@@ -138,30 +140,28 @@ export const AnalysisScreen = ({
         <Label muted>{consentLabel === null ? whenLabel : `${whenLabel} · ${consentLabel}`}</Label>
       </View>
 
-      {loading ? <Spinner label="Getting this analysis" /> : null}
+      {loading ? <Spinner label={t('analysis.loading')} /> : null}
 
       {statusNote === null ? null : (
         // A refusal is not an error. The contract calls refusing correct behaviour
         // when the model cannot cite without speculating, so it reads as the system
         // declining to guess about the MR rather than as a fault.
-        <Banner detail={statusNote} title="Nothing was written about this visit" tone="info" />
+        <Banner detail={statusNote} title={t('analysis.nothingWritten')} tone="info" />
       )}
 
       {noFindingsNote === null ? null : (
-        <Banner detail={noFindingsNote} title="No findings were returned" tone="info" />
+        <Banner detail={noFindingsNote} title={t('analysis.noFindingsTitle')} tone="info" />
       )}
 
-      <Findings findings={worked} heading="What worked" />
-      <Findings
-        findings={tryThis}
-        heading={tryThis.length === 1 ? 'One thing to try next time' : 'Things to try next time'}
-      />
+      {/* The findings' own words are the model's, not the app's, and are shown as they came. */}
+      <Findings findings={worked} heading={t('analysis.whatWorked')} />
+      <Findings findings={tryThis} heading={t('analysis.tryNext', { count: tryThis.length })} />
 
       {findings.length === 0 ? null : <Label muted>{audioNote}</Label>}
 
       {reply === null ? null : (
         <Card>
-          <Label muted>Your reply</Label>
+          <Label muted>{t('reply.title')}</Label>
           <BodyText>{reply}</BodyText>
         </Card>
       )}
@@ -174,7 +174,7 @@ export const AnalysisScreen = ({
 
       {findings.length === 0 ? null : (
         <Button
-          label={reply === null ? 'Add your reply' : 'Change your reply'}
+          label={reply === null ? t('reply.add') : t('reply.change')}
           onPress={onReply}
           variant="primary"
         />

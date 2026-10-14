@@ -18,14 +18,14 @@
  * TypeScript's NodeNext resolution does.
  */
 
-export { AiAllowanceNotice, SAMPLE_FIGURES_NOTE } from './AiAllowanceNotice';
+export { AiAllowanceNotice, sampleFiguresNote } from './AiAllowanceNotice';
 export type { AiAllowanceNoticeProps, AiAllowanceState } from './AiAllowanceNotice';
-export { AssistantScreen, SAMPLE_REPLY_LABEL } from './AssistantScreen';
+export { AssistantScreen, sampleReplyLabel } from './AssistantScreen';
 export type { AssistantNotice, AssistantScreenProps, AssistantTurn } from './AssistantScreen';
 export {
   PracticeAnalysisScreen,
-  PRACTICE_AI_NOTE,
-  PRACTICE_VISIBILITY_NOTE,
+  practiceAiNote,
+  practiceVisibilityNote,
 } from './PracticeAnalysisScreen';
 export type {
   PracticeAnalysisScreenProps,
@@ -33,7 +33,7 @@ export type {
   PracticeFindingRow,
   PracticeModuleRow,
 } from './PracticeAnalysisScreen';
-export { PracticeHomeScreen, SAMPLE_PRACTICE_NOTE } from './PracticeHomeScreen';
+export { PracticeHomeScreen, samplePracticeNote } from './PracticeHomeScreen';
 export type {
   PracticeHomeScreenProps,
   PracticeScenarioRow,

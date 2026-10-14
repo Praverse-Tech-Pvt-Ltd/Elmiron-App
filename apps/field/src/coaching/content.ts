@@ -1,8 +1,13 @@
+import { t } from '@fieldforce/ui/i18n';
+
 /**
  * Phase 4's MR-facing words.
  *
  * The design's five rules are copy decisions as much as layout ones, and three of
  * them live entirely in this file.
+ *
+ * `FE-W158`. Each is a function now, read at render, so a language change repaints it; the
+ * English is in the catalogue under `coaching.*`, `analysis.*` and `reply.*`.
  */
 
 /**
@@ -18,21 +23,18 @@
  * is made from a recorded consultation, and `appConfig.recordingEnabled` is off. It does not
  * claim the AI key is missing, because the app has no signal for that.
  */
-export const COACHING_UNAVAILABLE = {
-  title: 'Coaching is not available yet',
-  detail:
-    'An analysis is written by an AI model from a recorded consultation. Recording is off in this build, so no analysis can be made.',
-} as const;
+export const coachingUnavailable = (): { readonly title: string; readonly detail: string } => ({
+  title: t('coaching.unavailableTitle'),
+  detail: t('coaching.unavailableDetail'),
+});
 
 /** FE-D16. On every analysis: a model wrote it, not a person. */
-export const AI_PROVENANCE_NOTE = 'Written by an AI model from the transcript, not by a person.';
+export const aiProvenanceNote = (): string => t('analysis.aiProvenance');
 
 /** FE-D16. A completed analysis the server returned with no findings (FE-CR-8). */
-export const NO_FINDINGS_NOTE =
-  'The server returned this analysis with no findings, so there is nothing here to read or reply to.';
+export const noFindingsNote = (): string => t('analysis.noFindings');
 
-export const SEEN_FIRST =
-  "You're seeing this before your manager acts on it. Anything you write goes with it.";
+export const seenFirst = (): string => t('coaching.seenFirst');
 
 /**
  * What happens to the audio behind a quote — the sentence `CitationSpan` requires.
@@ -47,8 +49,8 @@ export const SEEN_FIRST =
  */
 export const retentionNote = (daysLeft: number | null): string =>
   daysLeft === null || daysLeft <= 0
-    ? 'audio deleted at 90 days · transcript kept'
-    : `audio kept ${String(daysLeft)} more days`;
+    ? t('analysis.audioDeleted')
+    : t('analysis.audioKept', { days: daysLeft });
 
 /**
  * Why no quote can be played, and it is not hidden.
@@ -61,8 +63,7 @@ export const retentionNote = (daysLeft: number | null): string =>
  *
  * Removed the day audio capture lands (FE-W4).
  */
-export const NO_AUDIO_NOTE =
-  'The words are from the transcript. This build cannot play audio back — nothing was recorded to play.';
+export const noAudioNote = (): string => t('analysis.noAudio');
 
 /**
  * Rule 5, said out loud on the trend rather than left as an absence.
@@ -71,11 +72,10 @@ export const NO_AUDIO_NOTE =
  * lifted. An MR looking at a chart will assume it is being compared to something;
  * saying whose numbers these are is what stops the assumption.
  */
-export const TREND_NOTE = 'Yours only — nobody else’s, and not a score.';
+export const trendNote = (): string => t('coaching.trendNote');
 
 /** Rule 3. The reply is a first-class object, so its screen says what it is for. */
-export const REPLY_NOTE =
-  'Your manager sees this next to the finding, not underneath it. If you disagree, say so — that is what this is for.';
+export const replyNote = (): string => t('reply.note');
 
 /**
  * The sampling ratio, in words.
@@ -85,4 +85,4 @@ export const REPLY_NOTE =
  * difference between sampling and surveillance, and it is true, so say it."
  */
 export const reviewedNote = (reviewed: number, total: number): string =>
-  `${String(reviewed)} ${reviewed === 1 ? 'visit' : 'visits'} reviewed of ${String(total)}`;
+  t('coaching.reviewed', { count: reviewed, total });

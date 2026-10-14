@@ -9,6 +9,7 @@ import { Card } from './Card';
 import { Spinner } from './Spinner';
 import { BodyText, Heading, Label, Title } from './Text';
 import { TextField } from './TextField';
+import { t, useLanguage } from './i18n';
 
 /**
  * FE-D15 — the rep's assistant.
@@ -53,7 +54,8 @@ export interface AssistantScreenProps {
   readonly sample: boolean;
 }
 
-export const SAMPLE_REPLY_LABEL = 'Sample reply, not from the assistant';
+/** The label on a sample reply — a function, so it is read in the current language. */
+export const sampleReplyLabel = (): string => t('assistant.sampleReply');
 
 const styles = StyleSheet.create({
   stack: { gap: tokens.space.md },
@@ -62,12 +64,13 @@ const styles = StyleSheet.create({
 });
 
 const Turn = ({ turn, sample }: { turn: AssistantTurn; sample: boolean }): ReactNode => {
+  useLanguage();
   if (turn.kind === 'question') {
     return (
       // UX polish. The rep's own words: a flat bubble on their side. "You asked" was printed above
       // every one; alignment and shape already say who spoke, so it is for screen readers only.
       <View
-        accessibilityLabel={`You asked: ${turn.text}`}
+        accessibilityLabel={t('assistant.youAsked', { question: turn.text })}
         style={styles.question}
         testID="assistant-question"
       >
@@ -82,8 +85,8 @@ const Turn = ({ turn, sample }: { turn: AssistantTurn; sample: boolean }): React
       <View testID="assistant-refusal">
         <Card>
           <View style={styles.turn}>
-            <Label muted>{sample ? SAMPLE_REPLY_LABEL : 'The assistant did not answer this'}</Label>
-            {sample ? <Label muted>The assistant did not answer this</Label> : null}
+            <Label muted>{sample ? sampleReplyLabel() : t('assistant.didNotAnswer')}</Label>
+            {sample ? <Label muted>{t('assistant.didNotAnswer')}</Label> : null}
             <BodyText>{turn.text}</BodyText>
           </View>
         </Card>
@@ -96,7 +99,7 @@ const Turn = ({ turn, sample }: { turn: AssistantTurn; sample: boolean }): React
     <View testID="assistant-answer">
       <Card>
         <View style={styles.turn}>
-          <Label muted>{sample ? SAMPLE_REPLY_LABEL : 'Assistant'}</Label>
+          <Label muted>{sample ? sampleReplyLabel() : t('assistant.answerLabel')}</Label>
           <BodyText>{turn.text}</BodyText>
         </View>
       </Card>
@@ -105,32 +108,33 @@ const Turn = ({ turn, sample }: { turn: AssistantTurn; sample: boolean }): React
 };
 
 const NoticeBanner = ({ notice }: { notice: AssistantNotice }): ReactNode => {
+  useLanguage();
   switch (notice.kind) {
     case 'none':
       return null;
     case 'not_available':
       return (
         <Banner
-          detail="No AI model is connected to this app yet, so your question was not answered by anyone."
-          title="The assistant is not available yet"
+          detail={t('assistant.notAvailableDetail')}
+          title={t('assistant.notAvailableTitle')}
           tone="info"
         />
       );
     case 'offline':
       return (
         <Banner
-          action={{ label: 'Send again', onPress: notice.onRetry }}
-          detail="Your question was not sent. Send it again when you have signal."
-          title="You are offline"
+          action={{ label: t('assistant.sendAgain'), onPress: notice.onRetry }}
+          detail={t('assistant.offlineDetail')}
+          title={t('assistant.offlineTitle')}
           tone="offline"
         />
       );
     case 'error':
       return (
         <Banner
-          action={{ label: 'Try again', onPress: notice.onRetry }}
-          detail="Something went wrong on the way, and your question was not answered."
-          title="The assistant could not answer"
+          action={{ label: t('common.tryAgain'), onPress: notice.onRetry }}
+          detail={t('assistant.errorDetail')}
+          title={t('assistant.errorTitle')}
           tone="critical"
         />
       );
@@ -147,21 +151,19 @@ export const AssistantScreen = ({
   allowance,
   sample,
 }: AssistantScreenProps): ReactNode => {
+  useLanguage();
   const atLimit = allowance.kind === 'at_limit';
   const empty = draft.trim().length === 0;
 
   return (
     <View style={styles.stack}>
-      <Title>Ask the assistant</Title>
-      <BodyText muted>
-        Ask how to do something in this app: a process, a screen, a policy. It does not answer
-        product or clinical questions. Do not type anything about a patient.
-      </BodyText>
+      <Title>{t('assistant.title')}</Title>
+      <BodyText muted>{t('assistant.intro')}</BodyText>
 
       {sample ? (
         <Banner
-          detail="No AI model is connected. Every reply on this screen is sample data, not an answer from the assistant."
-          title="Sample data"
+          detail={t('assistant.sampleDetail')}
+          title={t('assistant.sampleTitle')}
           tone="info"
         />
       ) : null}
@@ -171,41 +173,43 @@ export const AssistantScreen = ({
       {turns.length === 0 && !sending ? (
         <Card>
           <View style={styles.turn}>
-            <Heading>No questions yet</Heading>
-            <BodyText muted>
-              Your questions and the replies appear here. Nothing is kept once you leave this
-              screen.
-            </BodyText>
+            <Heading>{t('assistant.emptyTitle')}</Heading>
+            <BodyText muted>{t('assistant.emptyDetail')}</BodyText>
           </View>
         </Card>
       ) : (
         turns.map((turn) => <Turn key={turn.id} sample={sample} turn={turn} />)
       )}
 
-      {sending ? <Spinner label="Waiting for the assistant" /> : null}
+      {sending ? <Spinner label={t('assistant.waiting')} /> : null}
 
       <NoticeBanner notice={notice} />
 
       <TextField
         editable={!sending && !atLimit}
-        label="Your question"
+        label={t('assistant.yourQuestion')}
         onChangeText={onChangeDraft}
         value={draft}
       />
       {atLimit ? (
         <Button
           disabled
-          label="Send"
-          note="Unavailable until your daily allowance resets."
+          label={t('assistant.send')}
+          note={t('assistant.unavailableUntilReset')}
           onPress={onSend}
         />
       ) : empty ? (
-        <Button disabled label="Send" note="Type a question first." onPress={onSend} />
+        <Button
+          disabled
+          label={t('assistant.send')}
+          note={t('assistant.typeFirst')}
+          onPress={onSend}
+        />
       ) : (
         <Button
-          label="Send"
+          label={t('assistant.send')}
           loading={sending}
-          loadingLabel="Sending"
+          loadingLabel={t('assistant.sending')}
           onPress={() => {
             onSend();
           }}

@@ -19,6 +19,13 @@
     "route": "Today's route (the beat plan): the day's planned stops in order, the next stop, and what happened at each",
     "unplanned": "Add an unplanned visit: choose a doctor and clinic, give a reason, and start the visit",
     "map": "The map of the rep's clinics, or of today's stops (only in builds with maps)",
+    "coaching": "Coaching (the tab): the rep's own reviewed visits, AI-written findings and a monthly count. Never a score",
+    "analysis": "One analysis of a visit: what worked, what to try, each with a quote from the transcript",
+    "reply": "The rep's reply to an analysis, which the manager sees beside the finding",
+    "ai": "Shared by the AI screens (assistant, AI Doctor practice): the daily allowance notice, how a reset time is written, and the button that plays a quoted recording in feedback",
+    "assistant": "The assistant: the rep asks how to do something in this app. The answers themselves come from the server and are not in this file",
+    "productQa": "Product questions: answered only from the company's approved material, with the source shown. Answers and source titles come from the server and are not in this file",
+    "practice": "AI Doctor practice: choose a practice scenario, talk to an AI doctor, and read feedback. The doctor's lines and the feedback text come from the server and are not in this file",
     "visit": "The visit screen: one visit from arriving to leaving — check in, check out, the recording bar, and the actions during and after the visit",
     "adverse": "Flag a possible side effect (adverse event), opened from a visit. The guidance about what the report is and what must not be written stays in English and is not in this file",
     "report": "The call report: what the rep writes after a visit (what happened, what the doctor raised, the next step, the products discussed), and what happened when they sent it",
@@ -276,6 +283,289 @@
     },
     "map.noClinic": {
       "note": "In place of a clinic address: this doctor has no clinic recorded"
+    },
+    "coaching.title": {
+      "note": "Screen heading",
+      "max": 24
+    },
+    "coaching.period": {
+      "note": "Heading at the top of the feed"
+    },
+    "coaching.youReplied": {
+      "note": "{time} is a clock time, e.g. 20:10"
+    },
+    "coaching.trendNote": {
+      "note": "Under a small bar chart of the rep's own monthly counts. Must say it is not a score"
+    },
+    "coaching.seenFirstTitle": {
+      "note": "Banner title. The rep sees an analysis before their manager acts on it"
+    },
+    "coaching.reviewed_one": {
+      "note": "{count} visits of {total} were looked at; most never are. Always shows the total"
+    },
+    "coaching.reviewed_other": {
+      "note": "{count} visits of {total} were looked at; most never are. Always shows the total"
+    },
+    "coaching.statusRefused": {
+      "note": "The AI declined to write anything rather than guess. Not an error"
+    },
+    "coaching.serverMismatch": {
+      "note": "{fn} is a server function name, e.g. list_analyses. Do not translate it"
+    },
+    "coaching.loading": {
+      "note": "Spinner label"
+    },
+    "coaching.aiWritten": {
+      "note": "Above AI-written findings, so none reads as a person's note"
+    },
+    "coaching.openIt": {
+      "note": "Button, half the screen width. Opens the analysis",
+      "max": 16
+    },
+    "analysis.consentAgreed": {
+      "note": "After the date, e.g. 'Thu 14 Aug · they agreed to recording'. Lower case"
+    },
+    "analysis.consentNoRecording": {
+      "note": "After the date, e.g. 'Thu 14 Aug · no recording was made'. Lower case"
+    },
+    "analysis.thisVisit": {
+      "note": "Stands in for the doctor's name or the date when they are not known"
+    },
+    "analysis.audioDeleted": {
+      "note": "Small line under a quote from the transcript. Lower case"
+    },
+    "analysis.audioKept": {
+      "note": "Small line under a quote from the transcript. {days} is always 1 or more. Lower case"
+    },
+    "analysis.loading": {
+      "note": "Spinner label"
+    },
+    "analysis.tryNext_one": {
+      "note": "Section heading above the findings to work on"
+    },
+    "analysis.tryNext_other": {
+      "note": "Section heading above the findings to work on"
+    },
+    "analysis.workedWell": {
+      "note": "Card heading",
+      "max": 24
+    },
+    "analysis.oneThingToTry": {
+      "note": "Card heading",
+      "max": 24
+    },
+    "analysis.advisory": {
+      "note": "Small tag on a finding the manager judges. The AI only advises"
+    },
+    "analysis.agree": {
+      "note": "Button, half the screen width, beside Disagree. Same weight as Disagree",
+      "max": 14
+    },
+    "analysis.disagree": {
+      "note": "Button, half the screen width, beside Agree. Same weight as Agree",
+      "max": 14
+    },
+    "analysis.overrideReason": {
+      "note": "Field label: the manager's one-line reason, which is logged"
+    },
+    "analysis.logOverride": {
+      "note": "Button",
+      "max": 28
+    },
+    "common.cancel": {
+      "note": "Button",
+      "max": 12
+    },
+    "reply.title": {
+      "note": "Screen heading, and a label above the rep's reply"
+    },
+    "reply.add": {
+      "note": "Button, sometimes half the screen width",
+      "max": 20
+    },
+    "reply.change": {
+      "note": "Button",
+      "max": 24
+    },
+    "reply.edit": {
+      "note": "Button",
+      "max": 24
+    },
+    "reply.composeLabel": {
+      "note": "Field label"
+    },
+    "reply.thisAnalysis": {
+      "note": "After 'Replying to', when the finding's own words are not known. Lower case"
+    },
+    "reply.stillOnScreen": {
+      "note": "Added after the reason a reply was refused"
+    },
+    "reply.saved": {
+      "note": "Banner title, a completion not a warning",
+      "max": 20
+    },
+    "reply.replyingTo": {
+      "note": "Label above the finding the reply answers"
+    },
+    "reply.fieldLabel": {
+      "note": "Field label"
+    },
+    "reply.saveDraft": {
+      "note": "Button",
+      "max": 24
+    },
+    "reply.saveDraftBlocked": {
+      "note": "Under a disabled button: why it cannot be pressed"
+    },
+    "reply.send": {
+      "note": "Button",
+      "max": 20
+    },
+    "reply.sendBlocked": {
+      "note": "Under a disabled button: why it cannot be pressed"
+    },
+    "reply.sending": {
+      "note": "Button label while the reply is sending",
+      "max": 20
+    },
+    "reply.sendNote": {
+      "note": "Small line under the Send button"
+    },
+    "ai.warningTitle": {
+      "note": "{used} and {limit} are numbers of requests"
+    },
+    "ai.warningResetsAt": {
+      "note": "{time} is ai.resetLabel, e.g. \"18:05 on 14 Oct\""
+    },
+    "ai.limitResetsAt": {
+      "note": "{time} is ai.resetLabel, e.g. \"18:05 on 14 Oct\""
+    },
+    "ai.resetLabel": {
+      "note": "When the daily allowance resets. {time} is a clock time (18:05), {date} a day and month (14 Oct)"
+    },
+    "ai.playRecordingAt": {
+      "note": "Read aloud by a screen reader. {timestamp} is a position in the recording, e.g. 02:14"
+    },
+    "assistant.youAsked": {
+      "note": "Read aloud by a screen reader before the rep's own question. {question} is what the rep typed"
+    },
+    "assistant.answerLabel": {
+      "note": "Small label above an answer from the assistant",
+      "max": 24
+    },
+    "assistant.send": {
+      "note": "Button",
+      "max": 16
+    },
+    "assistant.sending": {
+      "note": "Button, while sending",
+      "max": 16
+    },
+    "assistant.sendAgain": {
+      "note": "Button",
+      "max": 20
+    },
+    "productQa.ask": {
+      "note": "Button",
+      "max": 16
+    },
+    "productQa.asking": {
+      "note": "Button, while asking",
+      "max": 16
+    },
+    "productQa.approvedSources": {
+      "note": "Badge above the list of sources an answer came from",
+      "max": 24
+    },
+    "productQa.showDetails": {
+      "note": "Button. {n} is how many sources"
+    },
+    "productQa.sourceLabel": {
+      "note": "One source of an answer. {title} is a document title, {version} a number, {reference} a reference code — all from the server"
+    },
+    "productQa.sourceLabelSection": {
+      "note": "One source of an answer. {title} is a document title, {version} a number, {section} a section heading, {reference} a reference code — all from the server"
+    },
+    "productQa.anyProduct": {
+      "note": "First choice in the product picker: ask across all products"
+    },
+    "practice.aiBadge": {
+      "note": "Badge at the top of a practice conversation",
+      "max": 20
+    },
+    "practice.send": {
+      "note": "Button",
+      "max": 16
+    },
+    "practice.sending": {
+      "note": "Button, while sending",
+      "max": 16
+    },
+    "practice.sendAgain": {
+      "note": "Button",
+      "max": 20
+    },
+    "practice.ending": {
+      "note": "Button, while ending",
+      "max": 20
+    },
+    "practice.starting": {
+      "note": "Button, while starting",
+      "max": 20
+    },
+    "practice.stanceReceptive": {
+      "note": "How the practice doctor behaves; shown after the doctor's name and specialty, lower case in English"
+    },
+    "practice.stanceSceptical": {
+      "note": "How the practice doctor behaves; shown after the doctor's name and specialty, lower case in English"
+    },
+    "practice.stanceRushed": {
+      "note": "How the practice doctor behaves; shown after the doctor's name and specialty, lower case in English"
+    },
+    "practice.stanceHostile": {
+      "note": "How the practice doctor behaves; shown after the doctor's name and specialty, lower case in English"
+    },
+    "practice.theyWillSay": {
+      "note": "{objection} is the objection the practice doctor will raise, from the server"
+    },
+    "practice.youTurn": {
+      "note": "Label above the rep's line. {n} is the turn number"
+    },
+    "practice.doctorTurn": {
+      "note": "Label above the AI doctor's line. {name} is the practice doctor's name, {n} the turn number"
+    },
+    "practice.theAiDoctor": {
+      "note": "Used inside practice.practiceWith when the doctor's name is not known, so lower case in English"
+    },
+    "practice.practiceWith": {
+      "note": "{name} is the practice doctor's name, or practice.theAiDoctor"
+    },
+    "practice.score": {
+      "note": "{score} is a number from 0 to 100"
+    },
+    "practice.turn": {
+      "note": "Which turn of the conversation a finding is about. {n} is the turn number"
+    },
+    "practice.dimOpening": {
+      "note": "One of seven scored areas of a practice conversation"
+    },
+    "practice.dimProductKnowledge": {
+      "note": "One of seven scored areas of a practice conversation"
+    },
+    "practice.dimScientificAccuracy": {
+      "note": "One of seven scored areas of a practice conversation"
+    },
+    "practice.dimObjectionHandling": {
+      "note": "One of seven scored areas of a practice conversation"
+    },
+    "practice.dimResponseRelevance": {
+      "note": "One of seven scored areas of a practice conversation"
+    },
+    "practice.dimCommunication": {
+      "note": "One of seven scored areas of a practice conversation"
+    },
+    "practice.dimClosing": {
+      "note": "One of seven scored areas of a practice conversation"
     },
     "visit.thisVisit": {
       "note": "Stands in for the doctor's name as the heading when it is not known"

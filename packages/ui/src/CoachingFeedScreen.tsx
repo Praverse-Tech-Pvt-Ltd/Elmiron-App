@@ -7,6 +7,7 @@ import { Button } from './Button';
 import { Card } from './Card';
 import { Spinner } from './Spinner';
 import { StatusGlyph } from './StatusGlyph';
+import { useT } from './i18n';
 
 /**
  * Phase 4 D1 — the MR's coaching feed.
@@ -104,9 +105,6 @@ const styles = StyleSheet.create({
  * target line and no ceiling brought in from outside, because any of those would
  * turn a count into a measurement against a standard.
  */
-/** FE-D16. On every row of model-written findings, so none reads as a person's note. */
-export const AI_WRITTEN_LABEL = 'Written by an AI model, not by a person';
-
 const barHeight = (count: number, highest: number): number =>
   highest === 0 ? 4 : Math.max(4, Math.round((count / highest) * 44));
 
@@ -122,10 +120,11 @@ export const CoachingFeedScreen = ({
   failure = null,
   unavailable = null,
 }: CoachingFeedScreenProps): ReactNode => {
+  const { t } = useT();
   if (failure !== null) {
     return (
       <>
-        <Title>Coaching</Title>
+        <Title>{t('coaching.title')}</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </>
     );
@@ -145,9 +144,9 @@ export const CoachingFeedScreen = ({
         tone: being told this first is the ordinary state of the product, not a
         caution about it.
       */}
-      <Banner detail={seenFirstNote} title="You see it first" tone="info" />
+      <Banner detail={seenFirstNote} title={t('coaching.seenFirstTitle')} tone="info" />
 
-      {loading ? <Spinner label="Getting your coaching" /> : null}
+      {loading ? <Spinner label={t('coaching.loading')} /> : null}
 
       {rows.length === 0 && !loading && unavailable !== null ? (
         <Banner detail={unavailable.detail} title={unavailable.title} tone="info" />
@@ -155,10 +154,8 @@ export const CoachingFeedScreen = ({
 
       {rows.length === 0 && !loading && unavailable === null ? (
         <Card>
-          <BodyText>Nothing has been reviewed yet</BodyText>
-          <Label muted>
-            Most visits never are. When one is, it appears here before your manager acts on it.
-          </Label>
+          <BodyText>{t('coaching.emptyTitle')}</BodyText>
+          <Label muted>{t('coaching.emptyDetail')}</Label>
         </Card>
       ) : null}
 
@@ -170,9 +167,13 @@ export const CoachingFeedScreen = ({
               <Label muted>{row.whenLabel}</Label>
             </View>
 
-            {/* FE-D16. The findings are a model's text, and the row says so before them. */}
+            {/*
+              FE-D16. The findings are a model's text, and the row says so before them, so none
+              reads as a person's note. The findings themselves are the model's words, not the
+              app's, and are shown as they came (`FE-W158`).
+            */}
             {row.statusNote === null && row.findings.length > 0 ? (
-              <Label muted>{AI_WRITTEN_LABEL}</Label>
+              <Label muted>{t('coaching.aiWritten')}</Label>
             ) : null}
 
             {row.statusNote === null ? (
@@ -199,7 +200,7 @@ export const CoachingFeedScreen = ({
               <View style={styles.actions}>
                 <View style={styles.half}>
                   <Button
-                    label="Add your reply"
+                    label={t('reply.add')}
                     onPress={() => {
                       onReply(row.analysisId);
                     }}
@@ -208,7 +209,7 @@ export const CoachingFeedScreen = ({
                 </View>
                 <View style={styles.half}>
                   <Button
-                    label="Open it"
+                    label={t('coaching.openIt')}
                     onPress={() => {
                       onOpen(row.analysisId);
                     }}

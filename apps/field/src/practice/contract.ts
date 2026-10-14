@@ -1,3 +1,5 @@
+import { t } from '@fieldforce/ui/i18n';
+
 /**
  * FE-D17 — a LOCAL MIRROR of the AI Doctor practice contract on `worktree-ai-platform-phase-a`.
  *
@@ -27,15 +29,34 @@ export const PRACTICE_DIMENSIONS = [
 ] as const;
 export type PracticeDimension = (typeof PRACTICE_DIMENSIONS)[number];
 
-/** The operator's names for the seven dimensions (direction of 1 October, item 5). */
+/**
+ * The operator's names for the seven dimensions (direction of 1 October, item 5).
+ *
+ * Getters, not strings: each name is read from the catalogue when it is shown, so it is in the
+ * language the app is in then rather than the one it was in when this module loaded (`FE-W158`).
+ */
 export const DIMENSION_LABELS: Readonly<Record<PracticeDimension, string>> = {
-  opening: 'Opening and pitch',
-  product_knowledge: 'Product knowledge',
-  scientific_accuracy: 'Scientific accuracy',
-  objection_handling: 'Objection handling',
-  response_relevance: 'Relevance of responses',
-  communication: 'Communication quality',
-  closing: 'Closing and follow-up',
+  get opening() {
+    return t('practice.dimOpening');
+  },
+  get product_knowledge() {
+    return t('practice.dimProductKnowledge');
+  },
+  get scientific_accuracy() {
+    return t('practice.dimScientificAccuracy');
+  },
+  get objection_handling() {
+    return t('practice.dimObjectionHandling');
+  },
+  get response_relevance() {
+    return t('practice.dimResponseRelevance');
+  },
+  get communication() {
+    return t('practice.dimCommunication');
+  },
+  get closing() {
+    return t('practice.dimClosing');
+  },
 };
 
 export type PersonaStance = 'receptive' | 'sceptical' | 'rushed' | 'hostile';

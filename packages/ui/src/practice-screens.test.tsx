@@ -2,7 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { PracticeAnalysisScreen } from './PracticeAnalysisScreen';
 import { PracticeHomeScreen } from './PracticeHomeScreen';
-import { PRACTICE_ONLY_NOTE, PracticeSessionScreen } from './PracticeSessionScreen';
+import { PracticeSessionScreen, practiceOnlyNote } from './PracticeSessionScreen';
 
 /**
  * FE-D17 — AI Doctor practice: the home (pick a scenario, see past sessions), the conversation,
@@ -119,7 +119,7 @@ describe('PracticeSessionScreen', () => {
 
   it('always says, beside the box, that this is practice and no real patient or doctor details go in', async () => {
     await render(<PracticeSessionScreen {...base} />);
-    expect(screen.getByText(PRACTICE_ONLY_NOTE)).toBeTruthy();
+    expect(screen.getByText(practiceOnlyNote())).toBeTruthy();
   });
 
   it('shows the conversation, numbered, with the doctor marked as an AI practice doctor', async () => {

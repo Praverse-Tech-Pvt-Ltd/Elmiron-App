@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect } from 'expo-router';
-import { AssistantScreen, Screen } from '@fieldforce/ui';
+import { AssistantScreen, Screen, t, useLanguage } from '@fieldforce/ui';
 import type { AiAllowanceState, AssistantNotice, AssistantTurn } from '@fieldforce/ui';
 import { outcomeFromGateway, outcomeFromThrown } from '../src/assistant/outcome';
 import type { AssistantOutcome } from '../src/assistant/outcome';
@@ -30,18 +30,52 @@ import type { TerritoryZone } from '../src/today/territory-day';
 type NoticeKind = 'none' | 'not_available' | 'offline' | 'error';
 
 const resetLabel = (resetsAt: string | null, zone: TerritoryZone): string | null =>
-  resetsAt === null ? null : `${clockIn(resetsAt, zone)} on ${dayMonthIn(resetsAt, zone)}`;
+  resetsAt === null
+    ? null
+    : t('ai.resetLabel', { time: clockIn(resetsAt, zone), date: dayMonthIn(resetsAt, zone) });
+
+/**
+ * The allowance as the server reported it. The reset INSTANT is kept, not its words, so the label
+ * is written at render, in the language the app is in then.
+ */
+type AllowanceSeen =
+  | { readonly kind: 'not_reported' }
+  | {
+      readonly kind: 'warning';
+      readonly used: number;
+      readonly limit: number;
+      readonly resetsAt: string | null;
+    }
+  | { readonly kind: 'at_limit'; readonly resetsAt: string | null };
+
+const allowanceView = (seen: AllowanceSeen, zone: TerritoryZone): AiAllowanceState => {
+  switch (seen.kind) {
+    case 'not_reported':
+      return seen;
+    case 'warning':
+      return {
+        kind: 'warning',
+        used: seen.used,
+        limit: seen.limit,
+        resetLabel: resetLabel(seen.resetsAt, zone),
+      };
+    case 'at_limit':
+      return { kind: 'at_limit', resetLabel: resetLabel(seen.resetsAt, zone) };
+  }
+};
 
 const Assistant = (): ReactNode => {
+  useLanguage();
   const { zone } = usePulledStore();
   const [turns, setTurns] = useState<readonly AssistantTurn[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState<NoticeKind>('none');
-  const [allowance, setAllowance] = useState<AiAllowanceState>({ kind: 'not_reported' });
+  const [seen, setSeen] = useState<AllowanceSeen>({ kind: 'not_reported' });
   /** The request that did not get an answer, kept so a retry sends exactly it again. */
   const [unanswered, setUnanswered] = useState<ChatRequestBody | null>(null);
   const nextId = useRef(0);
+  const allowance = allowanceView(seen, zone);
 
   const id = (): string => {
     nextId.current += 1;
@@ -53,21 +87,12 @@ const Assistant = (): ReactNode => {
       case 'answer':
       case 'refusal':
         setTurns((current) => [...current, { id: id(), kind: outcome.kind, text: outcome.text }]);
-        setAllowance(
-          outcome.allowance.kind === 'warning'
-            ? {
-                kind: 'warning',
-                used: outcome.allowance.used,
-                limit: outcome.allowance.limit,
-                resetLabel: resetLabel(outcome.allowance.resetsAt, zone),
-              }
-            : { kind: 'not_reported' },
-        );
+        setSeen(outcome.allowance);
         setUnanswered(null);
         setNotice('none');
         return;
       case 'at_limit':
-        setAllowance({ kind: 'at_limit', resetLabel: resetLabel(outcome.resetsAt, zone) });
+        setSeen({ kind: 'at_limit', resetsAt: outcome.resetsAt });
         setUnanswered(null);
         setNotice('none');
         return;
