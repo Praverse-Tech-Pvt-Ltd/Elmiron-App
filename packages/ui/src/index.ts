@@ -187,3 +187,5 @@ export type { EntranceOptions } from './motion';
 export type { TabIconName, TabIconProps } from './TabIcon';
 export { TextField } from './TextField';
 export type { TextFieldProps } from './TextField';
+// `FE-W140`. The string catalogue; also published alone as `@fieldforce/ui/i18n` for node-side code.
+export * from './i18n';

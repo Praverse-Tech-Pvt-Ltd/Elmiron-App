@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { BodyText, Label } from './Text';
 import { BottomSheet } from './BottomSheet';
+import { useT } from './i18n';
 
 /**
  * Phase 1 §05: "opens a bottom sheet, never a dropdown."
@@ -60,9 +61,11 @@ export const Select = ({
   options,
   value,
   onChange,
-  placeholder = 'Choose one',
+  placeholder,
   disabled = false,
 }: SelectProps): ReactNode => {
+  const { t } = useT();
+  const prompt = placeholder ?? t('common.chooseOne');
   const [open, setOpen] = useState(false);
   const chosen = options.find((option) => option.value === value);
 
@@ -73,7 +76,7 @@ export const Select = ({
         accessibilityLabel={label}
         accessibilityRole="button"
         accessibilityState={{ disabled, expanded: open }}
-        accessibilityValue={{ text: chosen?.label ?? placeholder }}
+        accessibilityValue={{ text: chosen?.label ?? prompt }}
         disabled={disabled}
         onPress={() => {
           setOpen(true);
@@ -85,7 +88,7 @@ export const Select = ({
         ]}
       >
         {chosen === undefined ? (
-          <BodyText muted>{placeholder}</BodyText>
+          <BodyText muted>{prompt}</BodyText>
         ) : (
           <BodyText>{chosen.label}</BodyText>
         )}

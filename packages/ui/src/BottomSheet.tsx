@@ -12,6 +12,7 @@ import { tokens } from '@fieldforce/ui-tokens';
 import { Heading } from './Text';
 import { elevationStyle } from './depth';
 import { useEntrance, useReduceMotion } from './motion';
+import { useT } from './i18n';
 
 /**
  * Phase 1 §05: every option list. A handle, 70pt rows, a sticky footer, and a
@@ -73,6 +74,7 @@ export const BottomSheet = ({
   children,
   footer,
 }: BottomSheetProps): ReactNode => {
+  const { t } = useT();
   const { height } = useWindowDimensions();
   const reduceMotion = useReduceMotion();
 
@@ -91,7 +93,7 @@ export const BottomSheet = ({
         a tap anywhere on the sheet closes it, including a tap on a row.
       */}
       <Pressable
-        accessibilityLabel="Close"
+        accessibilityLabel={t('common.close')}
         accessibilityRole="button"
         onPress={onDismiss}
         style={styles.scrim}

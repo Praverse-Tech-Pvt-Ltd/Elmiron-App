@@ -1,0 +1,18 @@
+{
+  "screens": {
+    "common": "Used on many screens"
+  },
+  "keys": {
+    "common.on": {
+      "note": "Beside a switch",
+      "max": 6
+    },
+    "common.off": {
+      "note": "Beside a switch",
+      "max": 6
+    },
+    "common.clearField": {
+      "note": "Spoken by a screen reader; {field} is the field's label"
+    }
+  }
+}

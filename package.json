@@ -24,6 +24,9 @@
     "db:types": "supabase --workdir services/api gen types typescript --local",
     "functions:serve": "supabase --workdir services/api functions serve --no-verify-jwt",
     "key-day": "node services/api/scripts/key-day.mjs",
+    "i18n:export": "node scripts/i18n.mjs export",
+    "i18n:import": "node scripts/i18n.mjs import",
+    "i18n:sync": "node scripts/i18n.mjs sync",
     "ai:live": "pnpm --filter @fieldforce/api exec vitest run tests/bedrock-live.spec.ts tests/ai-live.spec.ts --reporter=verbose"
   },
   "devDependencies": {
