@@ -1,4 +1,6 @@
 import type { ConsentOutcome, ConsentRecord, Doctor, Visit } from '@fieldforce/core';
+import { t } from '@fieldforce/ui/i18n';
+import { localisedDayMonth } from '../today/territory-day';
 
 /**
  * B9 — the doctor profile, from the MR's own visit history.
@@ -128,11 +130,11 @@ export const buildDoctorProfile = (
 export const consentLabel = (outcome: ConsentOutcome | null): string | null => {
   switch (outcome) {
     case 'consented':
-      return 'agreed to recording';
+      return t('doctors.consentAgreed');
     case 'declined':
-      return 'declined recording';
+      return t('doctors.consentDeclined');
     case 'not_asked':
-      return 'not asked';
+      return t('doctors.consentNotAsked');
     case null:
       return null;
   }
@@ -162,6 +164,14 @@ const MONTHS = [
  */
 export const dayMonthFrom = (iso: string): string => {
   const day = Number(iso.slice(8, 10));
+  // `FE-W149`. Named in the app's language; the date itself is still the characters' own.
+  const localised = Number.isFinite(day)
+    ? localisedDayMonth(
+        new Date(Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, day)),
+        'UTC',
+      )
+    : null;
+  if (localised !== null) return localised;
   const month = MONTHS[Number(iso.slice(5, 7)) - 1];
   return month === undefined ? iso.slice(0, 10) : `${String(day)} ${month}`;
 };

@@ -8,6 +8,8 @@ import { Card } from './Card';
 import { CitationSpan } from './CitationSpan';
 import type { CitationSpanProps } from './CitationSpan';
 import { TextField } from './TextField';
+import { useT } from './i18n';
+import type { TextKey } from './i18n';
 
 /**
  * Phase 1 §05: "what happened · the evidence · your reply." In that order, and all
@@ -39,9 +41,9 @@ export interface FindingCardProps {
   readonly onReply: (reply: string) => void;
 }
 
-const TITLES: Record<FindingKind, string> = {
-  'worked-well': 'Worked well',
-  'try-this': 'One thing to try',
+const TITLES: Readonly<Record<FindingKind, TextKey>> = {
+  'worked-well': 'analysis.workedWell',
+  'try-this': 'analysis.oneThingToTry',
 };
 
 const styles = StyleSheet.create({
@@ -67,6 +69,7 @@ export const FindingCard = ({
   reply,
   onReply,
 }: FindingCardProps): ReactNode => {
+  const { t } = useT();
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState(reply ?? '');
 
@@ -74,7 +77,7 @@ export const FindingCard = ({
     <Card>
       <View style={styles.head}>
         <View style={[styles.keel, kind === 'worked-well' ? styles.workedWell : styles.tryThis]} />
-        <Heading>{TITLES[kind]}</Heading>
+        <Heading>{t(TITLES[kind])}</Heading>
       </View>
 
       <BodyText>{summary}</BodyText>
@@ -83,22 +86,18 @@ export const FindingCard = ({
 
       {reply === undefined ? null : (
         <View>
-          <Label muted>Your reply</Label>
+          <Label muted>{t('reply.title')}</Label>
           <BodyText>{reply}</BodyText>
         </View>
       )}
 
       {composing ? (
         <View style={styles.composer}>
-          <TextField
-            label="Your reply — your manager sees this next to the finding"
-            onChangeText={setDraft}
-            value={draft}
-          />
+          <TextField label={t('reply.composeLabel')} onChangeText={setDraft} value={draft} />
           <View style={styles.row}>
             <View style={styles.grow}>
               <Button
-                label="Send reply"
+                label={t('reply.send')}
                 onPress={() => {
                   onReply(draft);
                   setComposing(false);
@@ -106,7 +105,7 @@ export const FindingCard = ({
               />
             </View>
             <Button
-              label="Cancel"
+              label={t('common.cancel')}
               onPress={() => {
                 setDraft(reply ?? '');
                 setComposing(false);
@@ -117,7 +116,7 @@ export const FindingCard = ({
         </View>
       ) : (
         <Button
-          label={reply === undefined ? 'Add your reply' : 'Edit your reply'}
+          label={reply === undefined ? t('reply.add') : t('reply.edit')}
           onPress={() => {
             setComposing(true);
           }}
@@ -126,10 +125,8 @@ export const FindingCard = ({
       )}
 
       <View style={styles.footer}>
-        <Label muted>
-          You are seeing this before your manager acts on it. Your reply goes with it.
-        </Label>
-        <Label muted>Nothing here is a score, and none of it is compared to anyone else.</Label>
+        <Label muted>{t('analysis.seenFirstFooter')}</Label>
+        <Label muted>{t('analysis.notAScore')}</Label>
       </View>
     </Card>
   );

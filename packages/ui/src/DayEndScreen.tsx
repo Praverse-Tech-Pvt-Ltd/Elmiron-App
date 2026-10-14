@@ -10,6 +10,7 @@ import { SyncQueueIndicator } from './SyncQueueIndicator';
 import { TextField } from './TextField';
 import type { SyncQueueState } from './SyncQueueIndicator';
 import { FadeIn } from './FadeIn';
+import { useT } from './i18n';
 
 /**
  * Phase 2 B7 — the day is over and nothing is running.
@@ -157,6 +158,7 @@ export const DayEndScreen = ({
   failure = null,
   workDay = null,
 }: DayEndScreenProps): ReactNode => {
+  const { t } = useT();
   if (failure !== null) {
     return (
       <>
@@ -169,7 +171,7 @@ export const DayEndScreen = ({
   return (
     <>
       <View style={styles.head}>
-        <Title>{`${dayLabel} — that's the day`}</Title>
+        <Title>{t('dayEnd.title', { day: dayLabel })}</Title>
       </View>
 
       {/*
@@ -181,7 +183,7 @@ export const DayEndScreen = ({
       <FadeIn index={0}>
         <Card tone="hero">
           <View style={styles.stopLines}>
-            <Heading>Nothing is being recorded.</Heading>
+            <Heading>{t('dayEnd.nothingRecorded')}</Heading>
             <BodyText>{captureNote}</BodyText>
           </View>
           {firstCaptureLabel === null && lastCaptureLabel === null ? null : (
@@ -197,55 +199,51 @@ export const DayEndScreen = ({
         Under the confirmation, never over it, and non-blocking: a day already
         finished is not made more finished by a spinner in front of it.
       */}
-      {loading ? <Spinner label="Getting your day" /> : null}
+      {loading ? <Spinner label={t('dayEnd.loading')} /> : null}
 
       {/*
         FE-D7 4. The design's "Your Thursday". The route passes "Today", and prefixing that gave
         "Your Today"; the title above already names the day.
       */}
-      <Label muted>Your day</Label>
+      <Label muted>{t('dayEnd.yourDay')}</Label>
 
       <FadeIn index={1}>
         <Card>
-          <Label muted>Visits</Label>
+          <Label muted>{t('dayEnd.visits')}</Label>
           {planned === null || done === null || notMet === null ? (
             // FE-D2 7. Unknown. While loading the spinner above already says so; once loading has
             // finished and the counts are still absent, the day could not be fetched.
             loading ? null : (
-              <BodyText>Not available — the day could not be fetched.</BodyText>
+              <BodyText>{t('dayEnd.visitsUnavailable')}</BodyText>
             )
           ) : (
             <View style={styles.figureRow}>
-              <Figure>{`${String(done + notMet)} of ${String(planned)}`}</Figure>
+              <Figure>{t('common.nOfM', { n: done + notMet, m: planned })}</Figure>
               <Label muted>
                 {planned === 0
-                  ? 'nothing was planned'
+                  ? t('dayEnd.nothingPlanned')
                   : done + notMet === planned
-                    ? 'you went to all of them'
-                    : 'visits attended'}
+                    ? t('dayEnd.allOfThem')
+                    : t('dayEnd.visitsAttended')}
               </Label>
             </View>
           )}
           {notMet === null || notMet === 0 ? null : (
-            <Label muted>
-              {notMet === 1
-                ? 'One doctor was not available. That is recorded against the visit, not against you.'
-                : `${String(notMet)} doctors were not available. That is recorded against those visits, not against you.`}
-            </Label>
+            <Label muted>{t('dayEnd.notMet', { count: notMet })}</Label>
           )}
         </Card>
       </FadeIn>
 
       <FadeIn index={2}>
         <Card>
-          <Label muted>On your claim</Label>
+          <Label muted>{t('dayEnd.onYourClaim')}</Label>
           {distanceLabel === null ? (
             // FE-D3 B4. Null is UNKNOWN: still loading (the spinner above says so) or the mileage
             // fetch failed. A real zero arrives as a figure. This used to read "No distance yet. It
             // appears once you have checked into more than one visit" — a false reason for a
             // fetch that had failed.
             loading ? null : (
-              <BodyText>Distance not available — it could not be fetched.</BodyText>
+              <BodyText>{t('dayEnd.distanceUnavailable')}</BodyText>
             )
           ) : (
             <View style={styles.figureRow}>
@@ -270,7 +268,7 @@ export const DayEndScreen = ({
         */}
         {/* FE-D7 4. Secondary, as B7 draws it: the day is over, and nothing here is the next step. */}
         <Button
-          label="See everything recorded today"
+          label={t('dayEnd.seeEverything')}
           onPress={onOpenTransparency}
           variant="secondary"
         />
@@ -284,10 +282,11 @@ export const DayEndScreen = ({
  * changes the record, not whether the phone is reading a position -- it never was between presses.
  */
 const WorkDayCard = ({ workDay }: { readonly workDay: DayEndWorkDay }): ReactNode => {
+  const { t } = useT();
   const { action, note } = workDay;
   return (
     <Card>
-      <Label muted>Your working day</Label>
+      <Label muted>{t('dayEnd.workingDay')}</Label>
       {workDay.tone === 'refused' ? (
         <Banner
           tone="critical"
@@ -302,8 +301,8 @@ const WorkDayCard = ({ workDay }: { readonly workDay: DayEndWorkDay }): ReactNod
       )}
       {note === null ? null : (
         <TextField
-          help="Optional. Your manager sees it with your day."
-          label="Note for your manager"
+          help={t('dayEnd.noteHelp')}
+          label={t('dayEnd.noteLabel')}
           multiline
           onChangeText={note.onChange}
           value={note.value}
@@ -313,7 +312,7 @@ const WorkDayCard = ({ workDay }: { readonly workDay: DayEndWorkDay }): ReactNod
         <Button
           label={action.label}
           loading={action.busy}
-          loadingLabel="Ending your day"
+          loadingLabel={t('dayEnd.ending')}
           onPress={action.onPress}
         />
       ) : (

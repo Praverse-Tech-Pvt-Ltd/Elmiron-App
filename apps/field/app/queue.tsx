@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { QueueScreen } from '@fieldforce/ui';
-import { QUEUE_UNREADABLE, loadQueueState } from '../src/sync/async-storage-store';
+import { QueueScreen, t, useLanguage } from '@fieldforce/ui';
+import { queueUnreadable, loadQueueState } from '../src/sync/async-storage-store';
 import type { QueueLoad } from '../src/sync/async-storage-store';
 import { flushOutbox } from '../src/sync/outbox';
 import { createPushClient } from '../src/sync/push-client';
@@ -38,7 +38,19 @@ import { useUploadSnapshot } from '../src/sync/use-upload-snapshot';
  * network operation and `packages/ui` has no client, which is the same boundary
  * that keeps the queue's verdicts server-owned.
  */
+/**
+ * `FE-W153`. Why the last press failed, kept as the error's own message (or none) rather than as the
+ * sentence, so "Nothing has been lost" is read at render, in the app's current language.
+ */
+type RetryFailure = { readonly message: string | null };
+
+const retryFailureText = (failure: RetryFailure): string =>
+  failure.message === null
+    ? t('queue.nothingLost')
+    : `${failure.message} ${t('queue.nothingLost')}`;
+
 export default function Queue(): ReactNode {
+  useLanguage();
   // `FE-W44`. The LOAD, not the state. This is the screen an MR opens when they already
   // suspect something is wrong, and an empty list here used to be what an unreadable store
   // looked like -- the most reassuring possible rendering of the least reassuring fact.
@@ -47,7 +59,7 @@ export default function Queue(): ReactNode {
   // the screen said "Everything is sent" about a queue nobody had looked at. It starts as
   // `reading` now, and the screen claims nothing until the read settles.
   const [load, setLoad] = useState<QueueLoad | { readonly kind: 'reading' }>({ kind: 'reading' });
-  const [retryFailed, setRetryFailed] = useState<string | null>(null);
+  const [retryFailed, setRetryFailed] = useState<RetryFailure | null>(null);
   const state = load.kind === 'loaded' ? load.state : emptyQueue;
 
   const refresh = (): void => {
@@ -83,11 +95,7 @@ export default function Queue(): ReactNode {
           )
             .then(refresh)
             .catch((error: unknown) => {
-              setRetryFailed(
-                error instanceof Error
-                  ? `${error.message} Nothing has been lost — everything below is still on this phone.`
-                  : 'Nothing has been lost — everything below is still on this phone.',
-              );
+              setRetryFailed({ message: error instanceof Error ? error.message : null });
             });
         },
       }}
@@ -99,10 +107,10 @@ export default function Queue(): ReactNode {
       // therefore belongs to the screen, as a prop, which is also where it belongs
       // semantically: it is part of the queue's story, not a thing floating above it.
       {...(load.kind === 'unreadable'
-        ? { retryFailure: QUEUE_UNREADABLE }
+        ? { retryFailure: queueUnreadable() }
         : retryFailed === null
           ? {}
-          : { retryFailure: retryFailed })}
+          : { retryFailure: retryFailureText(retryFailed) })}
       onRetry={() => {
         setRetryFailed(null);
         // **MR-28 C2.** This was `void flushOutbox(...).then(refresh)` with no `.catch`.
@@ -121,11 +129,7 @@ export default function Queue(): ReactNode {
         void flushOutbox(createPushClient())
           .then(refresh)
           .catch((error: unknown) => {
-            setRetryFailed(
-              error instanceof Error
-                ? `${error.message} Nothing has been lost — everything below is still on this phone.`
-                : 'Nothing has been lost — everything below is still on this phone.',
-            );
+            setRetryFailed({ message: error instanceof Error ? error.message : null });
           });
       }}
       /*

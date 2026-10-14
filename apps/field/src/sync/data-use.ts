@@ -1,3 +1,4 @@
+import { t } from '@fieldforce/ui/i18n';
 /**
  * `FE-W137` — how much THIS APP has sent over mobile data this month, and when that earns a note.
  *
@@ -71,8 +72,7 @@ export const MONTHLY_NOTE_BYTES = 100 * 1000 * 1000;
 /** `12.4 MB`, `0.3 MB`, `140 MB`. Decimal, matching `MONTHLY_NOTE_BYTES`. */
 export const megabytes = (bytes: number): string => {
   const mb = bytes / (1000 * 1000);
-  if (mb >= 100) return `${String(Math.round(mb))} MB`;
-  return `${mb.toFixed(1)} MB`;
+  return t('common.megabytes', { mb: mb >= 100 ? String(Math.round(mb)) : mb.toFixed(1) });
 };
 
 /**
@@ -89,9 +89,8 @@ export const dataNoteFor = (args: {
   const used = usedThisMonth(args.record, args.serverTime);
   if (used <= MONTHLY_NOTE_BYTES) return null;
   return {
-    title: `This app has sent ${megabytes(used)} over mobile data this month`,
-    detail:
-      'That is its uploads only — not downloads, and not other apps. Nothing has stopped working.',
+    title: t('data.noteTitle', { size: megabytes(used) }),
+    detail: t('data.noteDetail'),
   };
 };
 

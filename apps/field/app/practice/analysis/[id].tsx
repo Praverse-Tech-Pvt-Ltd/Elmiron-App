@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
-import { PracticeAnalysisScreen, Screen } from '@fieldforce/ui';
+import { PracticeAnalysisScreen, Screen, t, useLanguage } from '@fieldforce/ui';
 import { practiceEnabled } from '../../../src/features';
 import {
   DIMENSION_LABELS,
@@ -22,7 +22,18 @@ import { failureDetail } from '../../../src/errors/plain';
  * Every score and sentence is the backend's. A stub analysis (`modelProvider: 'stub'`: all scores
  * zero, every sentence the stub's marker) is shown as "not available", never as scores of zero.
  */
-const score = (value: number): string => `${String(value)} / 100`;
+const score = (value: number): string => t('practice.score', { score: value });
+
+/** Why the feedback could not be shown — its words are written at render (`FE-W158`). */
+type Failure = { readonly kind: 'missing' } | { readonly kind: 'load'; readonly error: unknown };
+
+const failureText = (failure: Failure): { title: string; detail: string } =>
+  failure.kind === 'missing'
+    ? {
+        title: t('practice.feedbackUnavailableTitle'),
+        detail: t('practice.feedbackUnavailableDetail'),
+      }
+    : { title: t('practice.couldNotLoadFeedback'), detail: failureDetail(failure.error) };
 
 const finding =
   (prefix: string) =>
@@ -40,17 +51,18 @@ const finding =
     title: row.title,
     detail: row.detail,
     dimensionLabel: DIMENSION_LABELS[row.dimension],
-    turnLabel: `Turn ${String(row.turnIndex)}`,
+    turnLabel: t('practice.turn', { n: row.turnIndex }),
   });
 
 const PracticeAnalysisView = (): ReactNode => {
+  useLanguage();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [analysis, setAnalysis] = useState<PracticeAnalysis | null>(null);
   const [session, setSession] = useState<PracticeSession | null>(null);
   const [moduleTitles, setModuleTitles] = useState<Readonly<Record<string, string>>>({});
   const [loading, setLoading] = useState(true);
-  const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,10 +74,7 @@ const PracticeAnalysisView = (): ReactNode => {
       .then(async (found) => {
         if (stopped()) return;
         if (found === null) {
-          setFailure({
-            title: 'This feedback is not available to you',
-            detail: 'It does not exist, or it is not about one of your practice sessions.',
-          });
+          setFailure({ kind: 'missing' });
           return;
         }
         setAnalysis(found);
@@ -79,10 +88,7 @@ const PracticeAnalysisView = (): ReactNode => {
       })
       .catch((error: unknown) => {
         if (!stopped()) {
-          setFailure({
-            title: 'Could not load the feedback',
-            detail: failureDetail(error),
-          });
+          setFailure({ kind: 'load', error });
         }
       })
       .finally(() => {
@@ -107,7 +113,7 @@ const PracticeAnalysisView = (): ReactNode => {
                 scoreLabel: score(analysis.dimensionScores[dimension]),
               }))
         }
-        failure={failure}
+        failure={failure === null ? null : failureText(failure)}
         improvements={analysis?.improvements.map(finding('improvement')) ?? []}
         loading={loading}
         // A suggested module with no published title is not shown: an id is not training.
@@ -120,11 +126,11 @@ const PracticeAnalysisView = (): ReactNode => {
           router.push('/learning');
         }}
         overallLabel={analysis === null ? '' : score(analysis.overallScore)}
-        personaName={session?.personaDisplayName ?? 'the AI doctor'}
+        personaName={session?.personaDisplayName ?? t('practice.theAiDoctor')}
         sample={analysis?.modelProvider === 'sample'}
         strengths={analysis?.strengths.map(finding('strength')) ?? []}
         summary={analysis?.summary ?? ''}
-        title={session?.scenarioTitle ?? 'Practice feedback'}
+        title={session?.scenarioTitle ?? t('practice.feedbackTitle')}
       />
     </Screen>
   );

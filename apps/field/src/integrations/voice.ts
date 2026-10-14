@@ -6,6 +6,8 @@
  * `packages/core/src/field/gateway/providers.ts` is the server-side seam). Until then every screen
  * that could take speech takes typing, and says so -- no screen waits on a provider.
  */
+import { t } from '@fieldforce/ui/i18n';
+
 export type SpeechResult =
   | { readonly kind: 'text'; readonly text: string }
   /** No provider: the screen offers typing instead. Never an empty transcript. */
@@ -29,7 +31,8 @@ export const silentTextToSpeech: TextToSpeech = {
   speak: () => Promise.resolve(false),
 };
 
-export const TYPE_INSTEAD = 'Speech-to-text is not available yet. Type your note instead.';
+/** `FE-W152`. A function, so it is read in the app's current language rather than at import. */
+export const typeInstead = (): string => t('voiceNote.typeInstead');
 
 /** What the screen shows for a transcription attempt: the text, or the typing fallback. */
 export const transcriptOrFallback = (
@@ -37,4 +40,4 @@ export const transcriptOrFallback = (
 ): { text: string; fallback: string | null } =>
   result.kind === 'text' && result.text.trim() !== ''
     ? { text: result.text.trim(), fallback: null }
-    : { text: '', fallback: TYPE_INSTEAD };
+    : { text: '', fallback: typeInstead() };

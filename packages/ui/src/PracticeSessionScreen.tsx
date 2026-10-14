@@ -10,7 +10,8 @@ import { Spinner } from './Spinner';
 import { Badge } from './Badge';
 import { BodyText, Heading, Label, Title } from './Text';
 import { TextField } from './TextField';
-import { SAMPLE_PRACTICE_NOTE } from './PracticeHomeScreen';
+import { samplePracticeNote } from './PracticeHomeScreen';
+import { t, useLanguage } from './i18n';
 
 /**
  * FE-D17 — one AI Doctor practice conversation.
@@ -74,6 +75,7 @@ const styles = StyleSheet.create({
 });
 
 const NoticeBanner = ({ notice }: { notice: PracticeNotice }): ReactNode => {
+  useLanguage();
   switch (notice.kind) {
     case 'none':
       return null;
@@ -81,7 +83,7 @@ const NoticeBanner = ({ notice }: { notice: PracticeNotice }): ReactNode => {
       return (
         <Card>
           <View style={styles.turn}>
-            <Label muted>The practice doctor did not answer this</Label>
+            <Label muted>{t('practice.refusedLabel')}</Label>
             <BodyText>{notice.message}</BodyText>
           </View>
         </Card>
@@ -89,44 +91,44 @@ const NoticeBanner = ({ notice }: { notice: PracticeNotice }): ReactNode => {
     case 'not_available':
       return (
         <Banner
-          detail="No AI model is connected to this app yet, so the practice doctor cannot answer."
-          title="AI Doctor practice is not available yet"
+          detail={t('practice.notAvailableDetail')}
+          title={t('practice.notAvailableTitle')}
           tone="info"
         />
       );
     case 'offline':
       return (
         <Banner
-          action={{ label: 'Send again', onPress: notice.onRetry }}
-          detail="Your turn was not sent. Send it again when you have signal."
-          title="You are offline"
+          action={{ label: t('practice.sendAgain'), onPress: notice.onRetry }}
+          detail={t('practice.offlineDetail')}
+          title={t('practice.offlineTitle')}
           tone="offline"
         />
       );
     case 'error':
       return (
         <Banner
-          action={{ label: 'Try again', onPress: notice.onRetry }}
-          detail="Something went wrong on the way. Your session is still open."
-          title="The practice doctor could not answer"
+          action={{ label: t('common.tryAgain'), onPress: notice.onRetry }}
+          detail={t('practice.errorDetail')}
+          title={t('practice.errorTitle')}
           tone="critical"
         />
       );
     case 'action_failed':
       return (
         <Banner
-          action={{ label: 'Try again', onPress: notice.onRetry }}
+          action={{ label: t('common.tryAgain'), onPress: notice.onRetry }}
           detail={
             notice.offline
-              ? 'No signal. Nothing is lost — try again when you have signal.'
+              ? t('practice.actionOffline')
               : notice.action === 'end'
-                ? 'Something went wrong on our side. The session is still open — try again.'
-                : 'Something went wrong on our side. Your practice is saved — try again.'
+                ? t('practice.endFailedDetail')
+                : t('practice.feedbackFailedDetail')
           }
           title={
             notice.action === 'end'
-              ? 'The practice was not ended'
-              : 'Your feedback could not be fetched'
+              ? t('practice.endFailedTitle')
+              : t('practice.feedbackFailedTitle')
           }
           tone={notice.offline ? 'offline' : 'critical'}
         />
@@ -138,8 +140,7 @@ const NoticeBanner = ({ notice }: { notice: PracticeNotice }): ReactNode => {
  * Standing, beside the box the rep types into: this is a rehearsal with an AI, so nothing real
  * belongs in it. Shown on every session, sample or live -- not only when something is wrong.
  */
-export const PRACTICE_ONLY_NOTE =
-  'Practice only — an AI plays the doctor. Do not type any real patient or doctor details.';
+export const practiceOnlyNote = (): string => t('practice.onlyNote');
 
 export const PracticeSessionScreen = ({
   sample,
@@ -161,10 +162,11 @@ export const PracticeSessionScreen = ({
   loading = false,
   failure = null,
 }: PracticeSessionScreenProps): ReactNode => {
+  useLanguage();
   if (failure !== null) {
     return <Banner detail={failure.detail} title={failure.title} tone="critical" />;
   }
-  if (loading) return <Spinner label="Opening the practice session" />;
+  if (loading) return <Spinner label={t('practice.opening')} />;
 
   const atLimit = allowance.kind === 'at_limit';
   const empty = draft.trim().length === 0;
@@ -175,17 +177,19 @@ export const PracticeSessionScreen = ({
         UX polish. Framed as what it is before anything else: a simulation, with an AI. The
         persona's name was the only title, which read like a real doctor's.
       */}
-      <Title>Practice simulation</Title>
-      <Badge label="AI practice" tone="info" />
+      <Title>{t('practice.simulationTitle')}</Title>
+      <Badge label={t('practice.aiBadge')} tone="info" />
       <Heading>{personaName}</Heading>
       <Label muted>{personaLine}</Label>
-      {sample ? <Banner detail={SAMPLE_PRACTICE_NOTE} title="Sample data" tone="info" /> : null}
+      {sample ? (
+        <Banner detail={samplePracticeNote()} title={t('practice.sampleTitle')} tone="info" />
+      ) : null}
 
       <Card>
         <View style={styles.turn}>
-          <Label muted>Your aim</Label>
+          <Label muted>{t('practice.yourAim')}</Label>
           <BodyText>{objective}</BodyText>
-          <Label muted>They will push back with</Label>
+          <Label muted>{t('practice.pushBack')}</Label>
           <BodyText>{objection}</BodyText>
         </View>
       </Card>
@@ -198,8 +202,8 @@ export const PracticeSessionScreen = ({
             <View style={styles.turn}>
               <Label muted>
                 {turn.role === 'rep'
-                  ? `You · turn ${String(turn.turnIndex)}`
-                  : `${personaName}, AI practice doctor · turn ${String(turn.turnIndex)}`}
+                  ? t('practice.youTurn', { n: turn.turnIndex })
+                  : t('practice.doctorTurn', { name: personaName, n: turn.turnIndex })}
               </Label>
               <BodyText>{turn.text}</BodyText>
             </View>
@@ -207,43 +211,53 @@ export const PracticeSessionScreen = ({
         </View>
       ))}
 
-      {sending ? <Spinner label="The practice doctor is answering" /> : null}
+      {sending ? <Spinner label={t('practice.answering')} /> : null}
       <NoticeBanner notice={notice} />
 
       {phase === 'open' ? (
         <>
           <TextField
             editable={!sending && !atLimit}
-            help={PRACTICE_ONLY_NOTE}
-            label="What you say"
+            help={practiceOnlyNote()}
+            label={t('practice.whatYouSay')}
             onChangeText={onChangeDraft}
             value={draft}
           />
           {atLimit ? (
             <Button
               disabled
-              label="Send"
-              note="Unavailable until your daily allowance resets."
+              label={t('practice.send')}
+              note={t('practice.unavailableUntilReset')}
               onPress={onSend}
             />
           ) : empty ? (
-            <Button disabled label="Send" note="Say something first." onPress={onSend} />
+            <Button
+              disabled
+              label={t('practice.send')}
+              note={t('practice.sayFirst')}
+              onPress={onSend}
+            />
           ) : (
-            <Button label="Send" loading={sending} loadingLabel="Sending" onPress={onSend} />
+            <Button
+              label={t('practice.send')}
+              loading={sending}
+              loadingLabel={t('practice.sending')}
+              onPress={onSend}
+            />
           )}
           <Button
-            label="End the practice"
+            label={t('practice.end')}
             loading={busy}
-            loadingLabel="Ending"
+            loadingLabel={t('practice.ending')}
             onPress={onEnd}
             variant="secondary"
           />
         </>
       ) : (
         <Button
-          label="Get my feedback"
+          label={t('practice.getFeedback')}
           loading={busy}
-          loadingLabel="Getting your feedback"
+          loadingLabel={t('practice.gettingFeedback')}
           onPress={onGetFeedback}
         />
       )}

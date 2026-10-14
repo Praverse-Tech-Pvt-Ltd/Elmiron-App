@@ -5,6 +5,8 @@ import { BodyText, Display, Heading, Label } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { StatusGlyph } from './StatusGlyph';
+import { t, useT } from './i18n';
+import type { TextKey } from './i18n';
 
 /**
  * Phase 2 A9 / C3 — "Everything, before you ask."
@@ -67,53 +69,61 @@ const styles = StyleSheet.create({
 
 const MARK = { active: 'success', 'not-yet': 'offline', never: 'critical' } as const;
 
-const NOTE = {
+const NOTE: Readonly<Record<TransparencyState, TextKey | null>> = {
   active: null,
-  'not-yet': 'Not yet — this app cannot do this today.',
+  'not-yet': 'transparency.notYet',
   never: null,
-} as const;
+};
 
 export const TransparencyScreen = ({
   preamble,
   entries,
   neverRecorded,
   onContinue,
-  continueLabel = 'Start my first day',
-}: TransparencyScreenProps): ReactNode => (
-  <>
-    <View style={styles.intro}>
-      <Display>Everything, before you ask.</Display>
-      {/* FE-D12 item 1. The promise that followed ("It never changes without telling you") had
+  continueLabel,
+}: TransparencyScreenProps): ReactNode => {
+  useT();
+  return (
+    <>
+      <View style={styles.intro}>
+        <Display>{t('settings.transparencyDetail')}</Display>
+        {/* FE-D12 item 1. The promise that followed ("It never changes without telling you") had
           nothing behind it, and this screen had gone stale unannounced. The fact stays. */}
-      <Label muted>Open this any time from home.</Label>
-    </View>
-
-    {preamble === undefined ? null : (
-      <Card>
-        <BodyText>{preamble}</BodyText>
-      </Card>
-    )}
-
-    {entries.map((entry) => (
-      <Card key={entry.title}>
-        <View style={styles.row}>
-          <StatusGlyph kind={MARK[entry.state]} large />
-          <View style={styles.rowText}>
-            <BodyText>{entry.title}</BodyText>
-            <Label muted>{entry.detail}</Label>
-            {NOTE[entry.state] === null ? null : <Label muted>{NOTE[entry.state]}</Label>}
-          </View>
-        </View>
-      </Card>
-    ))}
-
-    <Card tone="hero">
-      <View style={styles.neverHead}>
-        <Heading>What we never record</Heading>
+        <Label muted>{t('transparency.openAnyTime')}</Label>
       </View>
-      <BodyText>{neverRecorded}</BodyText>
-    </Card>
 
-    {onContinue === undefined ? null : <Button label={continueLabel} onPress={onContinue} />}
-  </>
-);
+      {preamble === undefined ? null : (
+        <Card>
+          <BodyText>{preamble}</BodyText>
+        </Card>
+      )}
+
+      {entries.map((entry) => {
+        const note = NOTE[entry.state];
+        return (
+          <Card key={entry.title}>
+            <View style={styles.row}>
+              <StatusGlyph kind={MARK[entry.state]} large />
+              <View style={styles.rowText}>
+                <BodyText>{entry.title}</BodyText>
+                <Label muted>{entry.detail}</Label>
+                {note === null ? null : <Label muted>{t(note)}</Label>}
+              </View>
+            </View>
+          </Card>
+        );
+      })}
+
+      <Card tone="hero">
+        <View style={styles.neverHead}>
+          <Heading>{t('transparency.neverHeading')}</Heading>
+        </View>
+        <BodyText>{neverRecorded}</BodyText>
+      </Card>
+
+      {onContinue === undefined ? null : (
+        <Button label={continueLabel ?? t('transparency.startFirstDay')} onPress={onContinue} />
+      )}
+    </>
+  );
+};

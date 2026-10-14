@@ -18,14 +18,14 @@
  * TypeScript's NodeNext resolution does.
  */
 
-export { AiAllowanceNotice, SAMPLE_FIGURES_NOTE } from './AiAllowanceNotice';
+export { AiAllowanceNotice, sampleFiguresNote } from './AiAllowanceNotice';
 export type { AiAllowanceNoticeProps, AiAllowanceState } from './AiAllowanceNotice';
-export { AssistantScreen, SAMPLE_REPLY_LABEL } from './AssistantScreen';
+export { AssistantScreen, sampleReplyLabel } from './AssistantScreen';
 export type { AssistantNotice, AssistantScreenProps, AssistantTurn } from './AssistantScreen';
 export {
   PracticeAnalysisScreen,
-  PRACTICE_AI_NOTE,
-  PRACTICE_VISIBILITY_NOTE,
+  practiceAiNote,
+  practiceVisibilityNote,
 } from './PracticeAnalysisScreen';
 export type {
   PracticeAnalysisScreenProps,
@@ -33,7 +33,7 @@ export type {
   PracticeFindingRow,
   PracticeModuleRow,
 } from './PracticeAnalysisScreen';
-export { PracticeHomeScreen, SAMPLE_PRACTICE_NOTE } from './PracticeHomeScreen';
+export { PracticeHomeScreen, samplePracticeNote } from './PracticeHomeScreen';
 export type {
   PracticeHomeScreenProps,
   PracticeScenarioRow,
@@ -114,7 +114,7 @@ export { Select } from './Select';
 export { SettingsScreen } from './SettingsScreen';
 export { SwitchRow } from './SwitchRow';
 export type { SwitchRowProps } from './SwitchRow';
-export { DataSettingsScreen, WARN_OVER_TITLE, WIFI_ONLY_TITLE } from './DataSettingsScreen';
+export { DataSettingsScreen, warnOverTitle, wifiOnlyTitle } from './DataSettingsScreen';
 export type { DataSettingKey, DataSettingsScreenProps } from './DataSettingsScreen';
 export type { SettingRow, SettingState, SettingsScreenProps } from './SettingsScreen';
 export type { SelectOption, SelectProps } from './Select';
@@ -189,3 +189,5 @@ export type { EntranceOptions } from './motion';
 export type { TabIconName, TabIconProps } from './TabIcon';
 export { TextField } from './TextField';
 export type { TextFieldProps } from './TextField';
+// `FE-W140`. The string catalogue; also published alone as `@fieldforce/ui/i18n` for node-side code.
+export * from './i18n';

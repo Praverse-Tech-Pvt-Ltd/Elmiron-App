@@ -6,6 +6,7 @@ import { BodyText, Label, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { TextField } from './TextField';
+import { useT } from './i18n';
 
 /**
  * W2-C B / `BE-W159` — the rep FLAGS a possible side effect (`BE-C36`, 1 October).
@@ -49,46 +50,60 @@ export const AdverseEventScreen = ({
   identifierNote = null,
   outcome = null,
   failure = null,
-}: AdverseEventScreenProps): ReactNode => (
-  <>
-    <View style={styles.head}>
-      <Title>Flag a possible side effect</Title>
-      <Label muted>{doctorName}</Label>
-    </View>
+}: AdverseEventScreenProps): ReactNode => {
+  // `FE-W157`. The screen's chrome follows the app's language; the guidance in the card does not.
+  const { t } = useT();
+  return (
+    <>
+      <View style={styles.head}>
+        <Title>{t('adverse.title')}</Title>
+        <Label muted>{doctorName}</Label>
+      </View>
 
-    {failure === null ? null : (
-      <Banner detail={failure.detail} title={failure.title} tone="critical" />
-    )}
-
-    <Card>
-      <BodyText>You are flagging it, not assessing it.</BodyText>
-      <Label muted>
-        Write what you were told, in your own words. The safety team decides what it means and will
-        contact the doctor if they need more.
-      </Label>
-      <Label muted>
-        Do not write the patient’s name, phone number, address or any ID number. They are not
-        needed, and they must not leave the clinic through this app.
-      </Label>
-    </Card>
-
-    <TextField
-      help="What the doctor told you about it."
-      label="What happened"
-      onChangeText={onTextChange}
-      value={text}
-    />
-
-    <View style={styles.foot}>
-      {outcome !== null ? (
-        <Banner detail={outcome.detail} title={outcome.title} tone="info" />
-      ) : identifierNote !== null ? (
-        <Button disabled label="Send the flag" note={identifierNote} onPress={onSend} />
-      ) : text.trim() === '' ? (
-        <Button disabled label="Send the flag" note="Write what happened first." onPress={onSend} />
-      ) : (
-        <Button label={sending ? 'Sending…' : 'Send the flag'} loading={sending} onPress={onSend} />
+      {failure === null ? null : (
+        <Banner detail={failure.detail} title={failure.title} tone="critical" />
       )}
-    </View>
-  </>
-);
+
+      {/* FE-W157: regulated wording, English-only like consent — not in the catalogue. */}
+      <Card>
+        <BodyText>You are flagging it, not assessing it.</BodyText>
+        <Label muted>
+          Write what you were told, in your own words. The safety team decides what it means and
+          will contact the doctor if they need more.
+        </Label>
+        <Label muted>
+          Do not write the patient’s name, phone number, address or any ID number. They are not
+          needed, and they must not leave the clinic through this app.
+        </Label>
+      </Card>
+
+      <TextField
+        help={t('adverse.whatHappenedHelp')}
+        label={t('adverse.whatHappened')}
+        onChangeText={onTextChange}
+        value={text}
+      />
+
+      <View style={styles.foot}>
+        {outcome !== null ? (
+          <Banner detail={outcome.detail} title={outcome.title} tone="info" />
+        ) : identifierNote !== null ? (
+          <Button disabled label={t('adverse.send')} note={identifierNote} onPress={onSend} />
+        ) : text.trim() === '' ? (
+          <Button
+            disabled
+            label={t('adverse.send')}
+            note={t('adverse.writeFirst')}
+            onPress={onSend}
+          />
+        ) : (
+          <Button
+            label={sending ? t('adverse.sending') : t('adverse.send')}
+            loading={sending}
+            onPress={onSend}
+          />
+        )}
+      </View>
+    </>
+  );
+};

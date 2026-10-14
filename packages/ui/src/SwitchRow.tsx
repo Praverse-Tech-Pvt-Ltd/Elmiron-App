@@ -4,6 +4,7 @@ import type { StyleProp, ViewStyle } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { BodyText, Label, Secondary } from './Text';
 import { elevationStyle } from './depth';
+import { useT } from './i18n';
 
 /**
  * `FE-W133` — a setting the MR turns on or off: C4's row, title and detail on the left, the switch
@@ -90,26 +91,29 @@ export const SwitchRow = ({
   value,
   onValueChange,
   disabled = false,
-}: SwitchRowProps): ReactNode => (
-  <Pressable
-    accessibilityRole="switch"
-    accessibilityState={{ checked: value, disabled }}
-    accessibilityLabel={detail === undefined ? title : `${title}. ${detail}`}
-    disabled={disabled}
-    onPress={() => {
-      onValueChange(!value);
-    }}
-    style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}
-  >
-    <View style={styles.text}>
-      <BodyText>{title}</BodyText>
-      {detail === undefined ? null : <Secondary>{detail}</Secondary>}
-    </View>
-    <View style={styles.control}>
-      <View style={switchTrackStyle(value)}>
-        <View style={[styles.thumb, value ? null : styles.thumbOff]} />
+}: SwitchRowProps): ReactNode => {
+  const { t } = useT();
+  return (
+    <Pressable
+      accessibilityRole="switch"
+      accessibilityState={{ checked: value, disabled }}
+      accessibilityLabel={detail === undefined ? title : `${title}. ${detail}`}
+      disabled={disabled}
+      onPress={() => {
+        onValueChange(!value);
+      }}
+      style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}
+    >
+      <View style={styles.text}>
+        <BodyText>{title}</BodyText>
+        {detail === undefined ? null : <Secondary>{detail}</Secondary>}
       </View>
-      <Label muted>{value ? 'On' : 'Off'}</Label>
-    </View>
-  </Pressable>
-);
+      <View style={styles.control}>
+        <View style={switchTrackStyle(value)}>
+          <View style={[styles.thumb, value ? null : styles.thumbOff]} />
+        </View>
+        <Label muted>{value ? t('common.on') : t('common.off')}</Label>
+      </View>
+    </Pressable>
+  );
+};

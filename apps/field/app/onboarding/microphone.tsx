@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { PermissionsAndroid } from 'react-native';
 import { useRouter } from 'expo-router';
-import { BodyText, Button, Display, Label, Screen } from '@fieldforce/ui';
+import { BodyText, Button, Display, Label, Screen, t, useLanguage } from '@fieldforce/ui';
 import { RECORD_AUDIO } from '../../src/onboarding/microphone-gate';
 import { markMicrophoneRationaleAnswered } from '../../src/onboarding/progress';
 
@@ -45,6 +45,7 @@ import { markMicrophoneRationaleAnswered } from '../../src/onboarding/progress';
  * do here.
  */
 export default function MicrophoneRationale(): ReactNode {
+  useLanguage();
   const router = useRouter();
 
   /** Remember the answer, whichever it was, then back to the visit. */
@@ -63,26 +64,20 @@ export default function MicrophoneRationale(): ReactNode {
 
   return (
     <Screen scrollable>
-      <Display>Your note, in your own words</Display>
+      <Display>{t('onboarding.micHeadline')}</Display>
 
-      <BodyText>
-        Your note is yours. It records only while you hold the button, and it stops the moment you
-        let go.
-      </BodyText>
+      <BodyText>{t('onboarding.micNote')}</BodyText>
 
       {/*
         A separate block, with its own label. The visual separation is the point: these
         two sentences must not read as one continuous description of "recording".
       */}
-      <Label muted>Recording a consultation is separate</Label>
-      <BodyText>
-        Recording a consultation is a different thing. That needs the doctor to agree, every time,
-        and you will be asked about it there — not here.
-      </BodyText>
+      <Label muted>{t('onboarding.micSeparateLabel')}</Label>
+      <BodyText>{t('onboarding.micSeparate')}</BodyText>
 
       {/* FE-D7 4. The design's labels. Both stay `secondary`, for the reason above. */}
-      <Button label="Turn on the microphone" onPress={allow} variant="secondary" />
-      <Button label="I'll type my reports" onPress={done} variant="secondary" />
+      <Button label={t('onboarding.micTurnOn')} onPress={allow} variant="secondary" />
+      <Button label={t('onboarding.micType')} onPress={done} variant="secondary" />
     </Screen>
   );
 }

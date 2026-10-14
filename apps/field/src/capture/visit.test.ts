@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { CreateCheckInRequestSchema, VisitSchema } from '@fieldforce/core';
 import type { Coordinates, Visit } from '@fieldforce/core';
 import {
-  CHECK_IN_APPROXIMATE,
-  CHECK_IN_OUTSIDE,
   actionLabelFor,
   blockedReason,
+  checkInApproximate,
   checkInCaveat,
+  checkInOutside,
   checkInRequest,
   checkInWarningsFor,
   stageOf,
@@ -337,18 +337,18 @@ describe('W2-B A / BE-C5 — the one line', () => {
   });
 
   it('says "away" for an outside verdict', () => {
-    expect(checkInCaveat(['check_in_outside_geofence'])).toBe(CHECK_IN_OUTSIDE);
+    expect(checkInCaveat(['check_in_outside_geofence'])).toBe(checkInOutside());
   });
 
   it('says "too rough" for a coarse fix — and that wins over outside (BE-C2: the verdict was a coin)', () => {
-    expect(checkInCaveat(['check_in_location_approximate'])).toBe(CHECK_IN_APPROXIMATE);
+    expect(checkInCaveat(['check_in_location_approximate'])).toBe(checkInApproximate());
     expect(checkInCaveat(['check_in_outside_geofence', 'check_in_location_approximate'])).toBe(
-      CHECK_IN_APPROXIMATE,
+      checkInApproximate(),
     );
   });
 
   it('BE-C5: neither line says anything about consequences', () => {
-    for (const line of [CHECK_IN_OUTSIDE, CHECK_IN_APPROXIMATE]) {
+    for (const line of [checkInOutside(), checkInApproximate()]) {
       expect(line).toMatch(/^The clinic could not be confirmed/u);
       expect(line).not.toMatch(/manager|review|pay|flag|report|record/iu);
     }

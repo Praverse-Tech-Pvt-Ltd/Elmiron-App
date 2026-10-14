@@ -1,4 +1,5 @@
 import type { Doctor, Visit } from '@fieldforce/core';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * B8 — the doctor list, ranked and searchable.
@@ -127,10 +128,17 @@ export const buildDoctorRows = (
  */
 export type DoctorFilter = 'all' | 'overdue' | 'on-plan';
 
+/** `FE-W151`. Getters, so each label is read in the language current when it is shown. */
 export const FILTER_LABELS: Readonly<Record<DoctorFilter, string>> = {
-  all: 'All',
-  overdue: 'Not seen 30d',
-  'on-plan': 'On plan',
+  get all() {
+    return t('doctors.filterAll');
+  },
+  get overdue() {
+    return t('doctors.filterOverdue');
+  },
+  get 'on-plan'() {
+    return t('doctors.filterOnPlan');
+  },
 };
 
 const passesFilter = (
@@ -179,11 +187,11 @@ export const rankDoctors = (
  * label returns rather than by trusting that a null was still a null.
  */
 export const lastSeenLabel = (daysSince: number | null): string => {
-  if (daysSince === null) return 'never visited';
-  if (daysSince <= 0) return 'today';
-  if (daysSince === 1) return 'yesterday';
-  if (daysSince < 14) return `${String(daysSince)} days ago`;
+  if (daysSince === null) return t('doctors.neverVisited');
+  if (daysSince <= 0) return t('doctors.seenToday');
+  if (daysSince === 1) return t('doctors.seenYesterday');
+  if (daysSince < 14) return t('doctors.daysAgo', { days: daysSince });
   const weeks = Math.floor(daysSince / 7);
-  if (weeks < 9) return `${String(weeks)} weeks ago`;
-  return `${String(Math.floor(daysSince / 30))} months ago`;
+  if (weeks < 9) return t('doctors.weeksAgo', { weeks });
+  return t('doctors.monthsAgo', { months: Math.floor(daysSince / 30) });
 };

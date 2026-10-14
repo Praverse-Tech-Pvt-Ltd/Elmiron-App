@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Tabs } from 'expo-router';
 import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
-import { elevationStyle, TabBarIcon } from '@fieldforce/ui';
+import { elevationStyle, TabBarIcon, useT } from '@fieldforce/ui';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { coachingEnabled } from '../../src/features';
 
@@ -31,6 +31,8 @@ import { coachingEnabled } from '../../src/features';
  * `packages/ui/src/TabIcon.tsx`.
  */
 export default function TabsLayout(): ReactNode {
+  // `FE-W145`. The four labels follow the app language; the bar re-renders when it changes.
+  const { t } = useT();
   const insets = useSafeAreaInsets();
   return (
     <Tabs
@@ -70,21 +72,21 @@ export default function TabsLayout(): ReactNode {
       <Tabs.Screen
         name="home"
         options={{
-          title: 'Today',
+          title: t('tabs.today'),
           tabBarIcon: ({ focused }) => <TabBarIcon focused={focused} name="today" />,
         }}
       />
       <Tabs.Screen
         name="doctors"
         options={{
-          title: 'Doctors',
+          title: t('tabs.doctors'),
           tabBarIcon: ({ focused }) => <TabBarIcon focused={focused} name="doctors" />,
         }}
       />
       <Tabs.Screen
         name="coaching"
         options={{
-          title: 'Coaching',
+          title: t('tabs.coaching'),
           tabBarIcon: ({ focused }) => <TabBarIcon focused={focused} name="coaching" />,
           // FE-D4 1. Out of the bar unless `coachingEnabled` (off by default): its content is mock
           // AI output nothing real produces. `href: null` is expo-router's way to hide a tab.
@@ -94,7 +96,7 @@ export default function TabsLayout(): ReactNode {
       <Tabs.Screen
         name="me"
         options={{
-          title: 'Me',
+          title: t('tabs.me'),
           tabBarIcon: ({ focused }) => <TabBarIcon focused={focused} name="me" />,
         }}
       />

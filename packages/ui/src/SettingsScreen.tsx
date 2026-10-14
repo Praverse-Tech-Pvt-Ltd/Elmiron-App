@@ -4,6 +4,7 @@ import { tokens } from '@fieldforce/ui-tokens';
 import { Badge } from './Badge';
 import { BodyText, Label, Secondary, Title } from './Text';
 import { Card } from './Card';
+import { useT } from './i18n';
 
 /**
  * C4 — settings.
@@ -19,8 +20,13 @@ import { Card } from './Card';
  * pressable and do what they say; `not-yet` rows are inert, say so, and exist
  * because seeing that WiFi-only is *intended* — and intended to default on — is
  * itself worth something to whoever is reviewing this app.
+ *
+ * `FE-W142` adds two states for the language rows. `chosen` is the option in use: drawn as one,
+ * and not pressable, because pressing it would change nothing. `info` states a fact the rep
+ * cannot change here (which languages the consent notice exists in) without pretending it is a
+ * setting that is coming later.
  */
-export type SettingState = 'available' | 'not-yet';
+export type SettingState = 'available' | 'not-yet' | 'chosen' | 'info';
 
 export interface SettingRow {
   readonly id: string;
@@ -29,6 +35,11 @@ export interface SettingRow {
   readonly state: SettingState;
   /** Present only on `available` rows. */
   readonly onPress?: () => void;
+  /**
+   * `FE-W142`. On a `not-yet` row, what it is waiting for, in place of the generic line — e.g.
+   * "Hindi: waiting for translation (0 of 312 done)". Ignored on every other state.
+   */
+  readonly note?: string;
 }
 
 export interface SettingsScreenProps {
@@ -51,47 +62,51 @@ const styles = StyleSheet.create({
  * anything in this build", an engineer's sentence, under a dashed "offline" glyph. The rule it
  * keeps is unchanged: an unbuilt setting says it does nothing, and cannot be pressed.
  */
-const NOT_YET = 'This setting does nothing yet.';
+export const SettingsScreen = ({ groups, lead }: SettingsScreenProps): ReactNode => {
+  const { t } = useT();
+  return (
+    <>
+      {/* FE-D12 V5. A screen title, like Today's; FE-D7 4 moved the others and missed this one. */}
+      <Title>{t('settings.title')}</Title>
+      {lead}
 
-export const SettingsScreen = ({ groups, lead }: SettingsScreenProps): ReactNode => (
-  <>
-    {/* FE-D12 V5. A screen title, like Today's; FE-D7 4 moved the others and missed this one. */}
-    <Title>Settings</Title>
-    {lead}
-
-    {groups.map((group) => (
-      <View key={group.heading} style={styles.group}>
-        <Label muted>{group.heading}</Label>
-        {group.rows.map((row) => {
-          const press = row.state === 'available' ? row.onPress : undefined;
-          // A destination is a row with a way in (›), not a green tick: a tick read as "done".
-          const body = (
-            <View style={styles.row}>
-              <View style={styles.rowText}>
-                <BodyText>{row.title}</BodyText>
-                <Secondary>{row.detail}</Secondary>
-                {row.state === 'not-yet' ? (
-                  <>
-                    <Badge label="Coming later" tone="neutral" />
-                    <Label muted>{NOT_YET}</Label>
-                  </>
-                ) : null}
+      {groups.map((group) => (
+        <View key={group.heading} style={styles.group}>
+          <Label muted>{group.heading}</Label>
+          {group.rows.map((row) => {
+            const press = row.state === 'available' ? row.onPress : undefined;
+            // A destination is a row with a way in (›), not a green tick: a tick read as "done".
+            const body = (
+              <View style={styles.row}>
+                <View style={styles.rowText}>
+                  <BodyText>{row.title}</BodyText>
+                  {row.detail === '' ? null : <Secondary>{row.detail}</Secondary>}
+                  {row.state === 'not-yet' ? (
+                    <>
+                      <Badge label={t('settings.comingLater')} tone="neutral" />
+                      <Label muted>{row.note ?? t('settings.notYet')}</Label>
+                    </>
+                  ) : null}
+                  {row.state === 'chosen' ? (
+                    <Badge label={t('settings.inUse')} tone="success" />
+                  ) : null}
+                </View>
+                {press === undefined ? null : <BodyText muted>›</BodyText>}
               </View>
-              {press === undefined ? null : <BodyText muted>›</BodyText>}
-            </View>
-          );
+            );
 
-          return press !== undefined ? (
-            <Card key={row.id} onPress={press}>
-              {body}
-            </Card>
-          ) : (
-            <Card key={row.id} tone="quiet">
-              {body}
-            </Card>
-          );
-        })}
-      </View>
-    ))}
-  </>
-);
+            return press !== undefined ? (
+              <Card key={row.id} onPress={press}>
+                {body}
+              </Card>
+            ) : (
+              <Card key={row.id} tone="quiet">
+                {body}
+              </Card>
+            );
+          })}
+        </View>
+      ))}
+    </>
+  );
+};

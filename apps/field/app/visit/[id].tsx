@@ -17,9 +17,10 @@ import {
   useAudioRecorderState,
 } from 'expo-audio';
 import { ApiRequestError } from '@fieldforce/core';
-import { VisitScreen } from '@fieldforce/ui';
+import { VisitScreen, t, useLanguage } from '@fieldforce/ui';
 import { createPushClient } from '../../src/sync/push-client';
 import { takeFix } from '../../src/capture/location';
+import type { FixOutcome } from '../../src/capture/location';
 import {
   actionLabelFor,
   blockedReason,
@@ -51,7 +52,7 @@ import {
 } from '../../src/consent/witnessed';
 import type { WitnessedConsent } from '../../src/consent/witnessed';
 import {
-  QUEUE_UNREADABLE,
+  queueUnreadable,
   loadQueueState,
   onQueueChanged,
 } from '../../src/sync/async-storage-store';
@@ -64,7 +65,7 @@ import { clockIn } from '../../src/today/territory-day';
 import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
 import { RECORD_AUDIO, microphoneRationaleDue } from '../../src/onboarding/microphone-gate';
 import { hasAnsweredMicrophoneRationale } from '../../src/onboarding/progress';
-import { NOT_PERMITTED_DETAIL, failureDetail } from '../../src/errors/plain';
+import { notPermittedDetail, failureDetail } from '../../src/errors/plain';
 
 /**
  * B4 / B5 / B6 — one visit, from arriving to leaving.
@@ -74,20 +75,58 @@ import { NOT_PERMITTED_DETAIL, failureDetail } from '../../src/errors/plain';
  * position after the request returns, which is the client half of the promise the
  * transparency screen makes.
  */
-/** MR-50 E2 / `FE-W64`. Said when a settled pull does not hold the visit asked for. */
-/**
- * W2-C A2. What the rep is told when a check-in or check-out is QUEUED. It is shown only while
- * something for this visit is still waiting: on the emulator it stayed up after the flush had
- * delivered the item, so the screen said "cannot be sent yet" about work the server already held.
- */
-const SAVED_ON_PHONE =
-  'Saved on this phone. It will send by itself when you have signal — nothing is lost.';
+/** A banner's two lines. */
+interface Message {
+  readonly title: string;
+  readonly detail: string;
+}
 
-const VISIT_NOT_ON_PHONE = {
-  title: 'This visit is not on this phone',
-  detail:
-    'It is not in the visit list this phone holds for you, so there is nothing here to check in to.',
-} as const;
+/**
+ * `FE-W150`. A message read when it is SHOWN, not when it was made: the failures below sit in state
+ * until the next press, and a language chosen in between must still reach them.
+ */
+const live = (title: () => string, detail: () => string): Message => ({
+  get title() {
+    return title();
+  },
+  get detail() {
+    return detail();
+  },
+});
+
+/** MR-50 E2 / `FE-W64`. Said when a settled pull does not hold the visit asked for. */
+const VISIT_NOT_ON_PHONE: Message = live(
+  () => t('visit.notOnThisPhone'),
+  () => t('visit.notOnThisPhoneDetail'),
+);
+
+/**
+ * Why the visit could not be advanced — kept as the FACT and worded at render (`FE-W150`), so a
+ * sentence in state never outlives a language change. `no_fix` is a position that could not be
+ * had; `not_sent` is a failure to send.
+ *
+ * `saved_on_phone` — W2-C A2. What the rep is told when a check-in or check-out is QUEUED. It is
+ * shown only while something for this visit is still waiting: on the emulator it stayed up after
+ * the flush had delivered the item, so the screen said "cannot be sent yet" about work the server
+ * already held.
+ */
+type Blocked =
+  | { readonly kind: 'saved_on_phone' }
+  | { readonly kind: 'no_fix'; readonly outcome: Exclude<FixOutcome, { readonly kind: 'fix' }> }
+  | { readonly kind: 'not_sent'; readonly error: unknown };
+
+const blockedText = (blocked: Blocked): string => {
+  switch (blocked.kind) {
+    case 'saved_on_phone':
+      return t('visit.savedOnPhone');
+    case 'no_fix':
+      return blockedReason(blocked.outcome) ?? '';
+    case 'not_sent':
+      return blocked.error instanceof Error
+        ? `${failureDetail(blocked.error)} ${t('visit.notSentYet')}`
+        : t('visit.notSentYet');
+  }
+};
 
 /**
  * MR-53 C1 — what the MR is told once a recording has stopped.
@@ -96,20 +135,25 @@ const VISIT_NOT_ON_PHONE = {
  * be the lie the outbox exists to prevent. The refusal case matters most: `begin_upload` re-checks
  * consent, so "the doctor withdrew while you were recording" arrives here as a server refusal.
  */
-const SENT: Record<SendOutcome['kind'], (message: string) => string> = {
-  sent: () => 'Recording sent. It is no longer on this phone.',
-  queued: () =>
-    'Recording saved on this phone. It will send by itself when you have signal, and is then removed from this phone.',
-  refused: (message) => `The recording was not accepted: ${message}`,
-  queue_unreadable: () =>
-    'Recording saved on this phone, but it could not be put in line to send, so it will not send by itself.',
+const recordingNoticeFor = (outcome: SendOutcome): string => {
+  switch (outcome.kind) {
+    case 'sent':
+      return t('visit.recordingSent');
+    case 'queued':
+      // `FE-W135`. Held by "Send audio on WiFi only": it goes on WiFi, not merely with signal.
+      return outcome.waitingForWifi === true
+        ? t('visit.recordingWaitingForWifi')
+        : t('visit.recordingQueued');
+    case 'refused':
+      return t('visit.recordingRefused', { message: outcome.message });
+    case 'queue_unreadable':
+      return t('visit.recordingQueueUnreadable');
+  }
 };
 
-/** `FE-W135`. Held by "Send audio on WiFi only": it goes on WiFi, not merely with signal. */
-const RECORDING_WAITING_FOR_WIFI =
-  'Recording saved on this phone. It will send by itself when this phone is on WiFi, and is then removed from this phone.';
-
 export default function VisitRoute(): ReactNode {
+  // `FE-W150`. Subscribed, so a language change repaints this screen and every line built below.
+  useLanguage();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
@@ -190,8 +234,8 @@ export default function VisitRoute(): ReactNode {
   }, [visit?.id]);
   const [micGranted, setMicGranted] = useState(false);
   const [recordingStartedAt, setRecordingStartedAt] = useState<string | null>(null);
-  /** MR-53 C1 — what happened to the recording that just stopped. */
-  const [recordingOutcome, setRecordingOutcome] = useState<string | null>(null);
+  /** MR-53 C1 — what happened to the recording that just stopped. Worded at render. */
+  const [recordingOutcome, setRecordingOutcome] = useState<SendOutcome | null>(null);
   // MR-53 C1. Whose folder the recording is kept in, and whose queue it joins.
   //
   // `queueOwner()` rather than `useSession()`: the session module imports `../config`, which
@@ -205,7 +249,7 @@ export default function VisitRoute(): ReactNode {
   // The provider owns loading; a second flag here could disagree with it.
   const loading = status === 'loading';
   const [busy, setBusy] = useState(false);
-  const [blocked, setBlocked] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState<Blocked | null>(null);
   /**
    * MR-50 E1 / `FE-W63`. The write the banner reports, fixed at the press. The stage moves the
    * moment a check-in is queued, so reading it at render named the wrong write.
@@ -217,9 +261,7 @@ export default function VisitRoute(): ReactNode {
    * visit, and nothing ever cleared it — a refused check-in left the rep with a banner and no
    * button. It is shown above the visit now, and cleared when the next action starts.
    */
-  const [actionFailure, setActionFailure] = useState<{ title: string; detail: string } | null>(
-    null,
-  );
+  const [actionFailure, setActionFailure] = useState<Message | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -328,10 +370,12 @@ export default function VisitRoute(): ReactNode {
       // eslint-disable-next-line no-restricted-syntax -- allowlisted above
       setRecordingStartedAt(new Date().toISOString());
     })().catch((error: unknown) => {
-      setActionFailure({
-        title: 'Recording did not start',
-        detail: failureDetail(error),
-      });
+      setActionFailure(
+        live(
+          () => t('visit.recordingDidNotStart'),
+          () => failureDetail(error),
+        ),
+      );
     });
   };
 
@@ -370,11 +414,12 @@ export default function VisitRoute(): ReactNode {
         // What changes is that the MR is told, through the same channel the `.catch` below
         // already uses for exactly this outcome.
         if (visit === null || authorising === null || startedAt === null || userId === null) {
-          setActionFailure({
-            title: 'The recording was not filed',
-            detail:
-              'The visit or the consent it belongs to is not on this phone, so there is nothing to file it against. The audio has been discarded. Sync and record again if the doctor is still willing.',
-          });
+          setActionFailure(
+            live(
+              () => t('visit.recordingNotFiled'),
+              () => t('visit.recordingNotFiledNoVisit'),
+            ),
+          );
           return;
         }
         // **MR-53 C1 — the recording is KEPT, then queued, exactly as a voice note is.**
@@ -387,11 +432,12 @@ export default function VisitRoute(): ReactNode {
         // withdrawal between stopping and sending refuses the upload rather than filing it.
         const uri = recorder.uri;
         if (uri === null) {
-          setActionFailure({
-            title: 'The recording was not filed',
-            detail:
-              'The phone did not finish writing the audio, so there is nothing to send. Nothing was filed.',
-          });
+          setActionFailure(
+            live(
+              () => t('visit.recordingNotFiled'),
+              () => t('visit.recordingNotFiledNoAudio'),
+            ),
+          );
           return;
         }
 
@@ -412,17 +458,15 @@ export default function VisitRoute(): ReactNode {
           () => createPushClient().uploadRecording(body),
           recordingQueueItem(body),
         );
-        setRecordingOutcome(
-          outcome.kind === 'queued' && outcome.waitingForWifi === true
-            ? RECORDING_WAITING_FOR_WIFI
-            : SENT[outcome.kind](outcome.kind === 'refused' ? outcome.message : ''),
-        );
+        setRecordingOutcome(outcome);
       })
       .catch((error: unknown) => {
-        setActionFailure({
-          title: keep ? 'The recording was not filed' : 'Recording did not stop cleanly',
-          detail: failureDetail(error),
-        });
+        setActionFailure(
+          live(
+            () => (keep ? t('visit.recordingNotFiled') : t('visit.recordingDidNotStop')),
+            () => failureDetail(error),
+          ),
+        );
       });
   };
 
@@ -447,9 +491,9 @@ export default function VisitRoute(): ReactNode {
     void (async () => {
       try {
         const outcome = await takeFix();
-        const reason = blockedReason(outcome);
-        if (reason !== null || outcome.kind !== 'fix') {
-          setBlocked(reason);
+        // `blockedReason` has a sentence for every outcome but a fix; it is worded at render.
+        if (outcome.kind !== 'fix') {
+          setBlocked({ kind: 'no_fix', outcome });
           return;
         }
 
@@ -477,7 +521,7 @@ export default function VisitRoute(): ReactNode {
           // `FE-W44`. Neither sent nor queued. Saying nothing here is defect 12's shape
           // again -- the MR presses "I am here", the stage does not move, and they press
           // it a second time.
-          setActionFailure({ title: 'This was NOT saved', detail: QUEUE_UNREADABLE });
+          setActionFailure(live(() => t('visit.notSaved'), queueUnreadable));
           return;
         }
         if (sendResult.kind === 'sent') {
@@ -503,8 +547,14 @@ export default function VisitRoute(): ReactNode {
           return;
         }
         if (sendResult.kind === 'refused') {
-          // The server answered and said no. That is a decision, shown as one.
-          setActionFailure({ title: 'That was refused', detail: sendResult.message });
+          // The server answered and said no. That is a decision, shown as one -- in its own words.
+          const { message } = sendResult;
+          setActionFailure(
+            live(
+              () => t('visit.refused'),
+              () => message,
+            ),
+          );
           return;
         }
         // QUEUED, and the type system now says so: `sent` and `refused` both returned
@@ -518,18 +568,20 @@ export default function VisitRoute(): ReactNode {
         // here and only here: a queued write is the half of `witnessedStage` the outbox
         // owns, and re-pulling would ask an unreachable server a question it cannot answer.
         refreshQueue();
-        setBlocked(SAVED_ON_PHONE);
+        setBlocked({ kind: 'saved_on_phone' });
         return;
       } catch (error: unknown) {
         if (error instanceof ApiRequestError && error.code === 'permission_denied') {
-          setActionFailure({ title: 'That was refused', detail: error.message });
+          const { message } = error;
+          setActionFailure(
+            live(
+              () => t('visit.refused'),
+              () => message,
+            ),
+          );
           return;
         }
-        setBlocked(
-          error instanceof Error
-            ? `${failureDetail(error)} It has not been sent yet.`
-            : 'It has not been sent yet.',
-        );
+        setBlocked({ kind: 'not_sent', error });
       } finally {
         setBusy(false);
       }
@@ -551,19 +603,20 @@ export default function VisitRoute(): ReactNode {
       actionLabel={actionLabelFor(stage)}
       blocked={
         // W2-C A2. The queued-work sentence lasts only while the work is still waiting.
-        blocked === SAVED_ON_PHONE &&
-        !queue.items.some(
-          (item) =>
-            item.entityId === visit?.id &&
-            (item.status === 'queued' || item.status === 'in_flight'),
-        )
+        blocked === null ||
+        (blocked.kind === 'saved_on_phone' &&
+          !queue.items.some(
+            (item) =>
+              item.entityId === visit?.id &&
+              (item.status === 'queued' || item.status === 'in_flight'),
+          ))
           ? null
-          : blocked
+          : blockedText(blocked)
       }
       blockedWrite={blockedWrite}
       busy={busy}
       clinic={clinic === undefined ? null : `${clinic.label}, ${clinic.city}`}
-      doctorName={doctor?.fullName ?? 'This visit'}
+      doctorName={doctor?.fullName ?? t('visit.thisVisit')}
       {...(directions === null
         ? {}
         : {
@@ -586,8 +639,8 @@ export default function VisitRoute(): ReactNode {
             ? SESSION_EXPIRED
             : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
               ? {
-                  title: 'You do not have access to this visit',
-                  detail: NOT_PERMITTED_DETAIL,
+                  title: t('visit.noAccess'),
+                  detail: notPermittedDetail(),
                 }
               : // MR-49 / `FE-W62`. A failed background refresh is not "this screen has no
                 // data". This branch was unconditional, and `VisitScreen` renders ONLY the
@@ -598,8 +651,8 @@ export default function VisitRoute(): ReactNode {
                 // DECISIONS above stay unconditional.
                 visit === null || doctor === null
                 ? {
-                    title: 'Could not load this visit',
-                    detail: 'The app could not reach the server. It will try again.',
+                    title: t('visit.couldNotLoad'),
+                    detail: t('visit.couldNotLoadDetail'),
                   }
                 : null
       }
@@ -648,7 +701,7 @@ export default function VisitRoute(): ReactNode {
       {...(availability.kind === 'allowed' && block === null && !recorderState.isRecording
         ? { onStartRecording: startRecording }
         : {})}
-      recordingNotice={recordingOutcome}
+      recordingNotice={recordingOutcome === null ? null : recordingNoticeFor(recordingOutcome)}
       recordingBlockedReason={
         // `off` and `unknown` say NOTHING: the feature being unbuilt for this build, or a server
         // that could not be asked, are not facts about the doctor and must not be dressed as one.
@@ -688,9 +741,12 @@ export default function VisitRoute(): ReactNode {
         // server's `completed_at` was in the store the whole time.
         visit?.startedAt == null
           ? null
-          : `Checked in ${clockIn(visit.startedAt, zone)}${
-              visit.completedAt == null ? '' : ` · checked out ${clockIn(visit.completedAt, zone)}`
-            }`
+          : visit.completedAt == null
+            ? t('visit.checkedIn', { time: clockIn(visit.startedAt, zone) })
+            : t('visit.checkedInAndOut', {
+                checkedIn: clockIn(visit.startedAt, zone),
+                checkedOut: clockIn(visit.completedAt, zone),
+              })
       }
     />
   );

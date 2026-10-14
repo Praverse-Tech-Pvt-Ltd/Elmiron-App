@@ -1,3 +1,5 @@
+import { t } from '@fieldforce/ui/i18n';
+
 /**
  * The vendor settings intents, in one table, and the rules that stop them crashing
  * the app.
@@ -64,6 +66,8 @@ export interface SettingsIntent {
   /**
    * What the vendor calls the destination. Supporting text only, never the whole
    * button label — "Auto-launch" alone does not tell an MR what will happen.
+   *
+   * `FE-W156`. A getter in the table, so it is read in the language in use when shown.
    */
   readonly destination: string;
   readonly target: IntentTarget;
@@ -97,7 +101,9 @@ const TABLE: readonly SettingsIntent[] = [
   {
     id: 'xiaomi-autostart',
     family: 'xiaomi',
-    destination: 'Autostart',
+    get destination() {
+      return t('onboarding.screenAutostart');
+    },
     target: {
       kind: 'component',
       packageName: 'com.miui.securitycenter',
@@ -107,13 +113,17 @@ const TABLE: readonly SettingsIntent[] = [
   {
     id: 'xiaomi-app-details',
     family: 'xiaomi',
-    destination: 'App info',
+    get destination() {
+      return t('onboarding.screenAppInfo');
+    },
     target: { kind: 'app-settings' },
   },
   {
     id: 'xiaomi-battery',
     family: 'xiaomi',
-    destination: 'Battery optimisation',
+    get destination() {
+      return t('onboarding.screenBatteryOptimisation');
+    },
     target: { kind: 'action', action: BATTERY_OPTIMISATION },
   },
 
@@ -121,7 +131,9 @@ const TABLE: readonly SettingsIntent[] = [
   {
     id: 'oppo-autostart',
     family: 'oppo',
-    destination: 'Auto-launch',
+    get destination() {
+      return t('onboarding.screenAutoLaunch');
+    },
     target: {
       kind: 'component',
       packageName: 'com.coloros.safecenter',
@@ -131,13 +143,17 @@ const TABLE: readonly SettingsIntent[] = [
   {
     id: 'oppo-app-details',
     family: 'oppo',
-    destination: 'App info',
+    get destination() {
+      return t('onboarding.screenAppInfo');
+    },
     target: { kind: 'app-settings' },
   },
   {
     id: 'oppo-battery',
     family: 'oppo',
-    destination: 'Battery optimisation',
+    get destination() {
+      return t('onboarding.screenBatteryOptimisation');
+    },
     target: { kind: 'action', action: BATTERY_OPTIMISATION },
   },
 
@@ -145,7 +161,9 @@ const TABLE: readonly SettingsIntent[] = [
   {
     id: 'vivo-autostart',
     family: 'vivo',
-    destination: 'Auto-start',
+    get destination() {
+      return t('onboarding.screenAutoStartVivo');
+    },
     target: {
       kind: 'component',
       packageName: 'com.vivo.permissionmanager',
@@ -155,13 +173,17 @@ const TABLE: readonly SettingsIntent[] = [
   {
     id: 'vivo-app-details',
     family: 'vivo',
-    destination: 'App info',
+    get destination() {
+      return t('onboarding.screenAppInfo');
+    },
     target: { kind: 'app-settings' },
   },
   {
     id: 'vivo-battery',
     family: 'vivo',
-    destination: 'Battery optimisation',
+    get destination() {
+      return t('onboarding.screenBatteryOptimisation');
+    },
     target: { kind: 'action', action: BATTERY_OPTIMISATION },
   },
 
@@ -173,7 +195,9 @@ const TABLE: readonly SettingsIntent[] = [
   {
     id: 'realme-autostart',
     family: 'realme',
-    destination: 'Auto-launch',
+    get destination() {
+      return t('onboarding.screenAutoLaunch');
+    },
     target: {
       kind: 'component',
       packageName: 'com.coloros.safecenter',
@@ -183,13 +207,17 @@ const TABLE: readonly SettingsIntent[] = [
   {
     id: 'realme-app-details',
     family: 'realme',
-    destination: 'App info',
+    get destination() {
+      return t('onboarding.screenAppInfo');
+    },
     target: { kind: 'app-settings' },
   },
   {
     id: 'realme-battery',
     family: 'realme',
-    destination: 'Battery optimisation',
+    get destination() {
+      return t('onboarding.screenBatteryOptimisation');
+    },
     target: { kind: 'action', action: BATTERY_OPTIMISATION },
   },
 
@@ -199,13 +227,17 @@ const TABLE: readonly SettingsIntent[] = [
   {
     id: 'unknown-app-details',
     family: 'unknown',
-    destination: 'App info',
+    get destination() {
+      return t('onboarding.screenAppInfo');
+    },
     target: { kind: 'app-settings' },
   },
   {
     id: 'unknown-battery',
     family: 'unknown',
-    destination: 'Battery optimisation',
+    get destination() {
+      return t('onboarding.screenBatteryOptimisation');
+    },
     target: { kind: 'action', action: BATTERY_OPTIMISATION },
   },
 ];

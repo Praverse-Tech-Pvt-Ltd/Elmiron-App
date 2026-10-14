@@ -23,6 +23,7 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
 }));
 
+import { CATALOGUES, languageStore } from '@fieldforce/ui/i18n';
 import Me from '../../app/(tabs)/me';
 import { asyncStorageQueueStore, setQueueOwner } from '../sync/async-storage-store';
 import { checkInQueueItem } from '../sync/outbox';
@@ -85,5 +86,37 @@ describe('app/(tabs)/me.tsx — W2-B C, the unsent count follows the queue while
     await waitFor(() => {
       expect(screen.queryByText(/not been sent/u)).toBeNull();
     });
+  });
+});
+
+/**
+ * `FE-W142` — the language rows with the files this build ships: Hindi and Marathi are empty, so
+ * they are shown, say how far the translation has got, and cannot be pressed. The language a
+ * rep cannot read must never be one tap away from replacing the one they can.
+ */
+describe('app/(tabs)/me.tsx — the language rows, with empty translation files', () => {
+  it('shows all three, English in use, the other two waiting and unpressable', async () => {
+    mockSignOut.mockReset();
+    await render(<Me />);
+    const total = Object.keys(CATALOGUES.en).length;
+
+    expect(screen.getByText('English')).toBeTruthy();
+    expect(screen.getByText('In use')).toBeTruthy();
+    expect(
+      screen.getByText(`Hindi: waiting for translation (0 of ${String(total)} done)`),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(`Marathi: waiting for translation (0 of ${String(total)} done)`),
+    ).toBeTruthy();
+
+    await fireEvent.press(screen.getByText('हिन्दी'));
+    await fireEvent.press(screen.getByText('मराठी'));
+    expect(languageStore.current()).toBe('en');
+    expect(screen.getByText('Settings')).toBeTruthy();
+  });
+
+  it('says consent is English only until an approved notice is published', async () => {
+    await render(<Me />);
+    expect(screen.getByText(/consent is in English only/u)).toBeTruthy();
   });
 });

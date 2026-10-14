@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { DataSettingsScreen, Screen } from '@fieldforce/ui';
+import { DataSettingsScreen, Screen, t, useLanguage } from '@fieldforce/ui';
 import type { DataSettingKey } from '@fieldforce/ui';
 import { readDataPrefs, writeDataPref } from '../src/settings/data-prefs';
 import type { DataPrefs } from '../src/settings/data-prefs';
@@ -17,11 +17,13 @@ import { usePulledStore } from '../src/sync/pulled-store';
  * screen shows no figure rather than one for a month the handset's clock chose.
  */
 export default function DataSettings(): ReactNode {
+  useLanguage();
   const { serverTime } = usePulledStore();
   const [prefs, setPrefs] = useState<DataPrefs | null>(null);
   const [record, setRecord] = useState<DataUseRecord | null>(null);
   const [saving, setSaving] = useState(false);
-  const [saveFailure, setSaveFailure] = useState<string | null>(null);
+  // `FE-W155`. Whether the last change failed, not its sentence: the words are read at render.
+  const [saveFailed, setSaveFailed] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -38,13 +40,13 @@ export default function DataSettings(): ReactNode {
   const change = (key: DataSettingKey, next: boolean): void => {
     if (saving || prefs === null) return;
     setSaving(true);
-    setSaveFailure(null);
+    setSaveFailed(false);
     void writeDataPref(key, next)
       .then(() => {
         setPrefs({ ...prefs, [key]: next });
       })
       .catch(() => {
-        setSaveFailure('This phone could not save it. The switch shows what is still in effect.');
+        setSaveFailed(true);
       })
       .finally(() => {
         setSaving(false);
@@ -58,7 +60,7 @@ export default function DataSettings(): ReactNode {
         warnOverMonthly={prefs?.warnOverMonthly ?? null}
         onChange={change}
         saving={saving}
-        saveFailure={saveFailure}
+        saveFailure={saveFailed ? t('dataSettings.saveFailedDetail') : null}
         usedThisMonth={serverTime === null ? null : megabytes(usedThisMonth(record, serverTime))}
       />
     </Screen>

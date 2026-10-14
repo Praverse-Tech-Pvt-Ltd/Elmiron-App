@@ -33,6 +33,7 @@ import { syncQueueReducer } from './reducer';
 import type { SyncQueueState } from './reducer';
 import { countsAsMobileData, deviceUploadConditions, heldForWifi } from './upload-conditions';
 import type { UploadConditions, UploadSnapshot } from './upload-conditions';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * Where the outbox keeps its state.
@@ -672,9 +673,11 @@ export const flushOutbox = async (
       state = syncQueueReducer(state, {
         type: 'attempt_failed',
         ids: [item.id],
+        // `FE-W153`. In the language the app is in when the reason is recorded: it is kept on the
+        // row (`lastError`) and shown as stored.
         error: refusedVisits.has(item.entityId)
-          ? 'Not sent: the server refused the visit this belongs to. See that visit on this screen.'
-          : 'Waiting for its visit to be sent first.',
+          ? t('queue.heldRefusedVisit')
+          : t('queue.heldForVisit'),
       });
       continue;
     }
@@ -694,8 +697,8 @@ export const flushOutbox = async (
           ids: [item.id],
           error:
             plan.blocked === 'unreadable_payload'
-              ? 'This item was written by a different version of the app and cannot be read.'
-              : 'This app cannot send this kind of item yet.',
+              ? t('queue.unreadablePayload')
+              : t('queue.notConvertible'),
         });
         continue;
       }
@@ -792,7 +795,7 @@ export const flushOutbox = async (
       state = syncQueueReducer(state, {
         type: 'attempt_failed',
         ids: [item.id],
-        error: error instanceof Error ? error.message : 'No answer from the server.',
+        error: error instanceof Error ? error.message : t('queue.noAnswer'),
       });
     }
   }

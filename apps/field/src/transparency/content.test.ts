@@ -3,8 +3,8 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import * as content from './content';
 import {
-  NEVER_RECORDED,
   TRANSPARENCY_ENTRIES,
+  neverRecorded,
   neverRecordedFor,
   transparencyEntries,
 } from './content';
@@ -88,7 +88,7 @@ describe('A9 — what this build records (FE-D12 item 1)', () => {
   it('never names a permission this app does not hold', () => {
     // The APK holds no camera, contacts, SMS or call-log permission (aapt2 dump, FE-D12), so it
     // may say it cannot reach them. It holds RECORD_AUDIO, so "never the microphone" would be false.
-    expect(NEVER_RECORDED).not.toMatch(/microphone/i);
+    expect(neverRecorded()).not.toMatch(/microphone/i);
   });
 });
 
@@ -122,7 +122,7 @@ describe('A9 — live location follows the build flag (`FE-W71`)', () => {
 
   it('says nothing about live location when the build has it off', () => {
     expect(liveRow(false)).toBeUndefined();
-    expect(neverRecordedFor({ liveTrackingEnabled: false })).toBe(NEVER_RECORDED);
+    expect(neverRecordedFor({ liveTrackingEnabled: false })).toBe(neverRecorded());
   });
 
   it('says what is recorded, and its conditions, when the build has it on', () => {
@@ -132,7 +132,7 @@ describe('A9 — live location follows the build flag (`FE-W71`)', () => {
     expect(row?.detail).toMatch(/90 days/i);
     // The old sentence -- "only at the moment you press" -- would be false with it on.
     const sentence = neverRecordedFor({ liveTrackingEnabled: true });
-    expect(sentence).not.toBe(NEVER_RECORDED);
+    expect(sentence).not.toBe(neverRecorded());
     expect(sentence).toMatch(/nothing in the background/i);
     expect(sentence).toMatch(/only if you agreed/i);
   });

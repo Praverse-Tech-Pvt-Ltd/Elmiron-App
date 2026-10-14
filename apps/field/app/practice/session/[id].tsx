@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
-import { PracticeSessionScreen, Screen } from '@fieldforce/ui';
+import { PracticeSessionScreen, Screen, t, useLanguage } from '@fieldforce/ui';
 import type { AiAllowanceState, PracticeNotice } from '@fieldforce/ui';
 import { practiceEnabled } from '../../../src/features';
 import type { PracticeSession, TurnRequestBody } from '../../../src/practice/contract';
@@ -24,12 +24,24 @@ import { failureDetail } from '../../../src/errors/plain';
  */
 type NoticeKind = 'none' | 'not_available' | 'offline' | 'error';
 
+/** Why the session could not be shown — its words are written at render (`FE-W158`). */
+type Failure = { readonly kind: 'missing' } | { readonly kind: 'load'; readonly error: unknown };
+
+const failureText = (failure: Failure): { title: string; detail: string } =>
+  failure.kind === 'missing'
+    ? {
+        title: t('practice.sessionUnavailableTitle'),
+        detail: t('practice.sessionUnavailableDetail'),
+      }
+    : { title: t('practice.couldNotOpenSession'), detail: failureDetail(failure.error) };
+
 const PracticeSessionView = (): ReactNode => {
+  useLanguage();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [session, setSession] = useState<PracticeSession | null>(null);
   const [loading, setLoading] = useState(true);
-  const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -47,10 +59,7 @@ const PracticeSessionView = (): ReactNode => {
   const reload = useCallback(async (): Promise<void> => {
     const found = await practiceBackend.readSession(id);
     if (found === null) {
-      setFailure({
-        title: 'This practice session is not available to you',
-        detail: 'It does not exist, or it is not one of yours.',
-      });
+      setFailure({ kind: 'missing' });
       return;
     }
     setSession(found);
@@ -59,10 +68,7 @@ const PracticeSessionView = (): ReactNode => {
   useEffect(() => {
     void reload()
       .catch((error: unknown) => {
-        setFailure({
-          title: 'Could not open the practice session',
-          detail: failureDetail(error),
-        });
+        setFailure({ kind: 'load', error });
       })
       .finally(() => {
         setLoading(false);
@@ -170,7 +176,7 @@ const PracticeSessionView = (): ReactNode => {
         allowance={allowance}
         busy={busy}
         draft={draft}
-        failure={failure}
+        failure={failure === null ? null : failureText(failure)}
         loading={loading}
         notice={screenNotice}
         objection={session?.objection ?? ''}

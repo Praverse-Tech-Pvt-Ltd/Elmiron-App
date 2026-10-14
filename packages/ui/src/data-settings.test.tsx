@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import { SyncQueueItemSchema } from '@fieldforce/core';
 import { tokens } from '@fieldforce/ui-tokens';
-import { DataSettingsScreen, WARN_OVER_TITLE, WIFI_ONLY_TITLE } from './DataSettingsScreen';
+import { DataSettingsScreen, warnOverTitle, wifiOnlyTitle } from './DataSettingsScreen';
 import { QueueScreen, rowStateFor } from './QueueScreen';
 import { SwitchRow, switchTrackStyle } from './SwitchRow';
 
@@ -76,9 +76,9 @@ describe('the Mobile data screen — FE-W139', () => {
     await render(<DataSettingsScreen {...props} />);
     const switches = screen.getAllByRole('switch');
     expect(switches).toHaveLength(2);
-    expect(switches[0]?.props['accessibilityLabel']).toContain(WIFI_ONLY_TITLE);
+    expect(switches[0]?.props['accessibilityLabel']).toContain(wifiOnlyTitle());
     expect(switches[0]?.props['accessibilityState']).toMatchObject({ checked: true });
-    expect(switches[1]?.props['accessibilityLabel']).toContain(WARN_OVER_TITLE);
+    expect(switches[1]?.props['accessibilityLabel']).toContain(warnOverTitle());
     expect(switches[1]?.props['accessibilityState']).toMatchObject({ checked: false });
   });
 

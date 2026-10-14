@@ -19,6 +19,7 @@ import { assertOwned, audioFolder } from '../capture/voice-note-files';
 import type { KeptAudioKind } from '../capture/voice-note-files';
 import type { RecordingUpload, VoiceNoteUpload } from './voice-note-upload';
 import { utf8Length } from './data-use';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * The five writes, through `sync_push` — MR-18 B1. This is what closes `G-WRITE`.
@@ -291,7 +292,7 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
           // Backend's sentence, verbatim. Never reworded -- the queue screen renders
           // exactly this, and `rejectionDetail` is written for support rather than for
           // the MR, so it is the fallback and not the first choice.
-          message: verdict.rejectionDetail ?? 'The server refused this.',
+          message: verdict.rejectionDetail ?? t('queue.serverRefused'),
           sqlState: verdict.sqlState,
           rejectionCode: verdict.rejectionCode,
           deadLettered: verdict.status === 'dead_lettered',
@@ -322,14 +323,18 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
     extra: Record<string, unknown> = {},
   ): Promise<PushAccepted> => {
     const kind: KeptAudioKind = entity === 'recording' ? 'recordings' : 'voice-notes';
-    const noun = entity === 'recording' ? 'recording' : 'voice note';
+    // `FE-W153`. One whole sentence per kind, not a noun spliced into one: a translation may need
+    // to change more than the noun.
+    const recording = entity === 'recording';
     const notes = deps.voiceNotes ?? (await import('./voice-note-device')).deviceVoiceNotes;
 
     // Only the signed-in rep's own folder is opened (MR-50 D). The queue is already per rep
     // (MR-49), so this cannot normally differ; if it does, nothing is read or sent.
     const signedIn = await notes.signedInUserId();
     if (signedIn === null || signedIn !== body.userId) {
-      throw new Error(`This ${noun} belongs to a different sign-in, so it was not sent.`);
+      throw new Error(
+        recording ? t('queue.recordingOtherSignIn') : t('queue.voiceNoteOtherSignIn'),
+      );
     }
     const root = notes.documentRoot();
     const uri = `${audioFolder(root, body.userId, kind)}${encodeURIComponent(body.noteId)}.m4a`;
@@ -350,7 +355,7 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
     if (!notes.fileExists(uri)) {
       // Neither here nor there. Not a server verdict, so it takes the outbox's own path:
       // a failed attempt, visible, and eventually a person's problem.
-      throw new Error(`This ${noun} is no longer on this phone, so it cannot be sent.`);
+      throw new Error(recording ? t('queue.recordingGone') : t('queue.voiceNoteGone'));
     }
 
     const db = await resolveClient<RpcCaller>(deps.client);

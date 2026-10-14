@@ -2,21 +2,55 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Analysis, ConsentRecord } from '@fieldforce/core';
-import { AnalysisScreen, Screen } from '@fieldforce/ui';
+import { AnalysisScreen, Screen, t, useLanguage } from '@fieldforce/ui';
 import type { AnalysisFinding } from '@fieldforce/ui';
 import type { CitationSpanProps } from '@fieldforce/ui';
 import { coachingEnabled } from '../../src/features';
 import {
-  AI_PROVENANCE_NOTE,
-  NO_AUDIO_NOTE,
-  NO_FINDINGS_NOTE,
+  aiProvenanceNote,
+  noAudioNote,
+  noFindingsNote,
   retentionNote,
 } from '../../src/coaching/content';
 import { isWorkedWell, orderedFindings, statusNote, timestampFrom } from '../../src/coaching/feed';
 import { listConsentForVisit, readMyAnalysis } from '../../src/coaching/server';
+import type { ServerRead } from '../../src/coaching/server';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { dayMonthIn } from '../../src/today/territory-day';
 import { failureDetail, refusedDetail } from '../../src/errors/plain';
+
+/**
+ * `FE-W158`. Why the analysis could not be shown, kept as its cause. The title and detail are
+ * built from it at render, so a language chosen after the failure still repaints them.
+ */
+type AnalysisFailure =
+  | {
+      readonly kind: 'read';
+      readonly outcome: Exclude<ServerRead<Analysis | null>, { readonly kind: 'loaded' }>;
+    }
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'thrown'; readonly error: unknown };
+
+const failureWords = (failure: AnalysisFailure): { title: string; detail: string } => {
+  switch (failure.kind) {
+    case 'thrown':
+      return { title: t('analysis.couldNotLoad'), detail: failureDetail(failure.error) };
+    case 'absent':
+      return { title: t('analysis.notAvailable'), detail: t('analysis.notAvailableDetail') };
+    case 'read': {
+      const { outcome } = failure;
+      return outcome.kind === 'refused' && outcome.refusal.code === 'not_permitted'
+        ? { title: t('analysis.noAccess'), detail: refusedDetail(outcome.refusal.sqlState) }
+        : {
+            title: t('analysis.couldNotLoad'),
+            detail:
+              outcome.kind === 'mismatch'
+                ? outcome.detail
+                : refusedDetail(outcome.refusal.sqlState),
+          };
+    }
+  }
+};
 
 /**
  * Phase 4 D2 — one analysis and its evidence.
@@ -31,7 +65,7 @@ import { failureDetail, refusedDetail } from '../../src/errors/plain';
  * reading should stamp it.
  *
  * **No citation gets a play control.** `CitationSpan.onPlay` is omitted for every
- * quote, and `NO_AUDIO_NOTE` says why: this build has no audio capability, so no
+ * quote, and `noAudioNote()` says why: this build has no audio capability, so no
  * recording was ever made. A play button that did nothing would tell the MR a
  * recording of them exists.
  */
@@ -45,6 +79,7 @@ export default function AnalysisRoute(): ReactNode {
 }
 
 function Analysis(): ReactNode {
+  useLanguage();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
@@ -52,7 +87,7 @@ function Analysis(): ReactNode {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [consent, setConsent] = useState<ConsentRecord | null>(null);
   const [loading, setLoading] = useState(true);
-  const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
+  const [failure, setFailure] = useState<AnalysisFailure | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,29 +107,13 @@ function Analysis(): ReactNode {
       .then(async (outcome) => {
         if (stopped()) return;
         if (outcome.kind !== 'loaded') {
-          setFailure(
-            outcome.kind === 'refused' && outcome.refusal.code === 'not_permitted'
-              ? {
-                  title: 'You do not have access to this analysis',
-                  detail: refusedDetail(outcome.refusal.sqlState),
-                }
-              : {
-                  title: 'Could not load this analysis',
-                  detail:
-                    outcome.kind === 'mismatch'
-                      ? outcome.detail
-                      : refusedDetail(outcome.refusal.sqlState),
-                },
-          );
+          setFailure({ kind: 'read', outcome });
           return;
         }
         // The server answers an analysis that is not this MR's with `data: null` — an absence,
         // not an error. It is still not something to show as a blank analysis.
         if (outcome.value === null) {
-          setFailure({
-            title: 'This analysis is not available to you',
-            detail: 'It does not exist, or it is not one of yours.',
-          });
+          setFailure({ kind: 'absent' });
           return;
         }
         const found = outcome.value;
@@ -113,10 +132,7 @@ function Analysis(): ReactNode {
       })
       .catch((error: unknown) => {
         if (stopped()) return;
-        setFailure({
-          title: 'Could not load this analysis',
-          detail: failureDetail(error),
-        });
+        setFailure({ kind: 'thrown', error });
       })
       .finally(() => {
         if (!stopped()) setLoading(false);
@@ -176,16 +192,16 @@ function Analysis(): ReactNode {
   return (
     <Screen scrollable>
       <AnalysisScreen
-        audioNote={NO_AUDIO_NOTE}
+        audioNote={noAudioNote()}
         consentLabel={
           consent === null
             ? null
             : consent.outcome === 'consented'
-              ? 'they agreed to recording'
-              : 'no recording was made'
+              ? t('analysis.consentAgreed')
+              : t('analysis.consentNoRecording')
         }
-        doctorName={doctor?.fullName ?? 'This visit'}
-        failure={failure}
+        doctorName={doctor?.fullName ?? t('analysis.thisVisit')}
+        failure={failure === null ? null : failureWords(failure)}
         findings={findings}
         loading={loading}
         onReply={() => {
@@ -193,15 +209,17 @@ function Analysis(): ReactNode {
         }}
         noFindingsNote={
           analysis !== null && analysis.status === 'completed' && analysis.findings.length === 0
-            ? NO_FINDINGS_NOTE
+            ? noFindingsNote()
             : null
         }
         // FE-D16. AI-written, said plainly. The claims about who opened it first are gone: no
         // server record backs them (FE-CR-9).
-        provenanceNote={AI_PROVENANCE_NOTE}
+        provenanceNote={aiProvenanceNote()}
         reply={analysis?.mrResponse ?? null}
         statusNote={analysis === null ? null : statusNote(analysis)}
-        whenLabel={visit?.startedAt == null ? 'This visit' : dayMonthIn(visit.startedAt, zone)}
+        whenLabel={
+          visit?.startedAt == null ? t('analysis.thisVisit') : dayMonthIn(visit.startedAt, zone)
+        }
       />
     </Screen>
   );

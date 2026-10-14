@@ -10,6 +10,8 @@ import { Screen } from './Screen';
 import { Spinner } from './Spinner';
 import { Stepper } from './Stepper';
 import { TextField } from './TextField';
+import { useT } from './i18n';
+import type { TextKey } from './i18n';
 
 /**
  * Phase 2 C5 — what the MR left behind.
@@ -108,10 +110,11 @@ export interface SamplesScreenProps {
   readonly onDone?: () => void;
 }
 
-const KIND_OPTIONS = [
-  { value: 'sample', label: 'Sample — product' },
-  { value: 'input', label: 'Input — literature or material' },
-] as const;
+/** `FE-W152`. Keys, not words: the labels are read at render, in the app's current language. */
+const KIND_OPTIONS: readonly { readonly value: SampleLineKind; readonly label: TextKey }[] = [
+  { value: 'sample', label: 'samples.kindSample' },
+  { value: 'input', label: 'samples.kindInput' },
+];
 
 const styles = StyleSheet.create({
   head: { gap: 2 },
@@ -150,16 +153,21 @@ export const SamplesScreen = ({
   actionFailure = null,
   onDone,
 }: SamplesScreenProps): ReactNode => {
+  const { t } = useT();
   if (failure !== null) {
     return (
       <Screen>
-        <Title>Leave samples</Title>
+        <Title>{t('samples.title')}</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </Screen>
     );
   }
 
   const removable = lines.length > 1;
+  const kindOptions = KIND_OPTIONS.map((option) => ({
+    value: option.value,
+    label: t(option.label),
+  }));
 
   return (
     <Screen
@@ -173,24 +181,24 @@ export const SamplesScreen = ({
             // FE-D12 item 4. Here, beside the button just pressed. At the top of the form it was
             // off-screen by the time the rep pressed Record, and all they saw was the form clearing.
             <>
-              <Banner detail={saved} title="Recorded" tone="info" />
+              <Banner detail={saved} title={t('samples.recordedTitle')} tone="info" />
               {onDone === undefined ? null : (
-                <Button label="Back to the visit" onPress={onDone} variant="secondary" />
+                <Button label={t('common.backToVisit')} onPress={onDone} variant="secondary" />
               )}
             </>
           )}
           <Button
-            label="Record what I left"
+            label={t('samples.record')}
             loading={busy}
-            loadingLabel="Recording…"
-            note="Signed for on delivery. Saves on this phone if you have no signal."
+            loadingLabel={t('samples.recording')}
+            note={t('samples.recordNote')}
             onPress={onRecord}
           />
         </View>
       }
     >
       <View style={styles.head}>
-        <Title>Leave samples</Title>
+        <Title>{t('samples.title')}</Title>
         <Label muted>{`${doctorName} · ${dateLabel}`}</Label>
       </View>
 
@@ -198,15 +206,15 @@ export const SamplesScreen = ({
         <Banner detail={actionFailure.detail} title={actionFailure.title} tone="critical" />
       )}
 
-      {loading ? <Spinner label="Getting this visit" /> : null}
+      {loading ? <Spinner label={t('samples.loading')} /> : null}
 
       <View style={styles.lines}>
         {lines.map((line) => (
           <Card key={line.id}>
             <TextField
               autoCapitalize="sentences"
-              help="Exactly as it reads on the pack, so your manager can match it."
-              label="What you left"
+              help={t('samples.itemHelp')}
+              label={t('samples.itemLabel')}
               onChangeText={(itemName) => {
                 onChangeLine(line.id, { itemName });
               }}
@@ -215,16 +223,16 @@ export const SamplesScreen = ({
             />
 
             <Select
-              label="Kind"
+              label={t('samples.kindLabel')}
               onChange={(kind) => {
                 onChangeLine(line.id, { kind: kind === 'input' ? 'input' : 'sample' });
               }}
-              options={KIND_OPTIONS}
+              options={kindOptions}
               value={line.kind}
             />
 
             <Stepper
-              label="Packs"
+              label={t('samples.packs')}
               onChange={(quantity) => {
                 onChangeLine(line.id, { quantity });
               }}
@@ -232,9 +240,9 @@ export const SamplesScreen = ({
             />
 
             <TextField
-              help="What your company declares one of these to be worth. Ask your manager if you are not sure — this goes on the record as your declaration."
+              help={t('samples.valueHelp')}
               keyboardType="number-pad"
-              label="Declared value, ₹ each"
+              label={t('samples.valueLabel')}
               onChangeText={(declaredValueInr) => {
                 onChangeLine(line.id, { declaredValueInr });
               }}
@@ -246,7 +254,7 @@ export const SamplesScreen = ({
               // the primary action: §05 keeps a removal out of the reach zone so a
               // resting thumb cannot delete a line the MR just typed.
               <Button
-                label="Remove this item"
+                label={t('samples.remove')}
                 onPress={() => {
                   onRemoveLine(line.id);
                 }}
@@ -257,16 +265,16 @@ export const SamplesScreen = ({
         ))}
       </View>
 
-      <Button label="Add another item" onPress={onAddLine} variant="secondary" />
+      <Button label={t('samples.add')} onPress={onAddLine} variant="secondary" />
 
       <Card>
         {/* Plain words first; the regulation's name stays, for whoever is asked about it. */}
-        <Label muted>Against your company’s sample limit (UCPMP)</Label>
+        <Label muted>{t('samples.capHeading')}</Label>
         {cap === null ? null : (
           <>
             <View style={styles.meter}>
               <Figure>{String(cap.used)}</Figure>
-              <Label muted>{`of ${String(cap.limit)} ${cap.unitLabel}`}</Label>
+              <Label muted>{t('samples.capOf', { limit: cap.limit, unit: cap.unitLabel })}</Label>
             </View>
             <View style={styles.track}>
               <View style={[styles.fill, { width: fillWidth(cap) }]} />

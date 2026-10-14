@@ -6,6 +6,7 @@ import { BodyText, Label, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { TextField } from './TextField';
+import { useT } from './i18n';
 
 /**
  * Phase 4 D3 — the MR's reply, as its own screen.
@@ -71,10 +72,11 @@ export const AnalysisReplyScreen = ({
   failure = null,
   sendFailure = null,
 }: AnalysisReplyScreenProps): ReactNode => {
+  const { t } = useT();
   if (failure !== null) {
     return (
       <>
-        <Title>Your reply</Title>
+        <Title>{t('reply.title')}</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </>
     );
@@ -85,24 +87,25 @@ export const AnalysisReplyScreen = ({
   return (
     <>
       <View style={styles.head}>
-        <Title>Your reply</Title>
-        <Label muted>Goes with the finding, wherever it appears</Label>
+        <Title>{t('reply.title')}</Title>
+        <Label muted>{t('reply.subtitle')}</Label>
       </View>
 
       {sendFailure === null ? null : (
         <Banner detail={sendFailure.detail} title={sendFailure.title} tone="critical" />
       )}
 
-      {saved === null ? null : <Banner detail={saved} title="Saved" tone="info" />}
+      {saved === null ? null : <Banner detail={saved} title={t('reply.saved')} tone="info" />}
 
       <Card>
-        <Label muted>Replying to</Label>
+        <Label muted>{t('reply.replyingTo')}</Label>
+        {/* The finding in the model's own words — data, shown as it came. */}
         <BodyText>{finding}</BodyText>
       </Card>
 
       <TextField
         help={voiceNote}
-        label="What you want to say"
+        label={t('reply.fieldLabel')}
         onChangeText={onChangeText}
         value={value}
       />
@@ -127,22 +130,22 @@ export const AnalysisReplyScreen = ({
         {empty ? (
           <Button
             disabled
-            label="Save as a draft"
-            note="Write something first — a draft needs words to keep."
+            label={t('reply.saveDraft')}
+            note={t('reply.saveDraftBlocked')}
             onPress={onSaveDraft}
             variant="secondary"
           />
         ) : (
-          <Button label="Save as a draft" onPress={onSaveDraft} variant="secondary" />
+          <Button label={t('reply.saveDraft')} onPress={onSaveDraft} variant="secondary" />
         )}
         {empty ? (
-          <Button disabled label="Send reply" note="Write something first." onPress={onSend} />
+          <Button disabled label={t('reply.send')} note={t('reply.sendBlocked')} onPress={onSend} />
         ) : (
           <Button
-            label="Send reply"
+            label={t('reply.send')}
             loading={busy}
-            loadingLabel="Sending…"
-            note="Your manager sees this next to the finding."
+            loadingLabel={t('reply.sending')}
+            note={t('reply.sendNote')}
             onPress={onSend}
           />
         )}

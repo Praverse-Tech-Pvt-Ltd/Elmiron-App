@@ -21,6 +21,7 @@ import { dayIsOpen, dueToSend, refreshAfter, stateOf, trackingLine } from './dec
 import type { LastSend, TrackingLine } from './decide';
 import { appLiveTrackingBackend } from './backend';
 import type { LiveTrackingBackend } from './live';
+import { useLanguage } from '@fieldforce/ui/i18n';
 
 /**
  * `FE-W71` — the live tracker: one per app, mounted at the root, started and stopped by
@@ -98,6 +99,8 @@ const Tracker = ({
   readonly userId: string;
 }): ReactNode => {
   const backend = useMemo(() => injected ?? appLiveTrackingBackend(), [injected]);
+  // `FE-W144`. The status line below is memoised; the language is one of the things it is made of.
+  const language = useLanguage();
   const [status, setStatus] = useState<LiveTrackingStatus | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [foreground, setForeground] = useState(AppState.currentState === 'active');
@@ -272,6 +275,7 @@ const Tracker = ({
       closeDay,
     }),
     [
+      language,
       status,
       state,
       loadFailed,

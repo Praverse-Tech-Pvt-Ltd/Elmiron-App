@@ -6,6 +6,7 @@ import { Banner } from './Banner';
 import { Card } from './Card';
 import { Spinner } from './Spinner';
 import { BodyText, Figure, Heading, Label, Secondary, Title } from './Text';
+import { t, useLanguage } from './i18n';
 
 /**
  * FE-D17 — the feedback on one AI Doctor practice session.
@@ -60,10 +61,9 @@ export interface PracticeAnalysisScreenProps {
   readonly failure?: { readonly title: string; readonly detail: string } | null;
 }
 
-export const PRACTICE_AI_NOTE =
-  'Written by an AI model from your practice conversation, not by a person.';
-export const PRACTICE_VISIBILITY_NOTE =
-  "Only you and your company's admin can see this. Your manager does not see practice scores.";
+/** Functions, not strings, so each is read in the current language (`FE-W158`). */
+export const practiceAiNote = (): string => t('practice.aiNote');
+export const practiceVisibilityNote = (): string => t('practice.visibilityNote');
 
 const styles = StyleSheet.create({
   stack: { gap: tokens.space.md },
@@ -117,35 +117,36 @@ export const PracticeAnalysisScreen = ({
   loading = false,
   failure = null,
 }: PracticeAnalysisScreenProps): ReactNode => {
+  useLanguage();
   if (failure !== null) {
     return <Banner detail={failure.detail} title={failure.title} tone="critical" />;
   }
-  if (loading) return <Spinner label="Getting your feedback" />;
+  if (loading) return <Spinner label={t('practice.gettingFeedback')} />;
 
   return (
     <View style={styles.stack}>
       <Title>{title}</Title>
-      <Label muted>{`Practice with ${personaName}`}</Label>
+      <Label muted>{t('practice.practiceWith', { name: personaName })}</Label>
 
       {notAvailable ? (
         <Banner
-          detail="No AI model is connected to this app yet, so this practice has not been analysed. No score is shown, because none was given."
-          title="Feedback is not available yet"
+          detail={t('practice.feedbackNotAvailableDetail')}
+          title={t('practice.feedbackNotAvailableTitle')}
           tone="info"
         />
       ) : (
         <>
           {sample ? (
             <Banner
-              detail="No AI model is connected. These are fixed sample values, not an assessment of what you said."
-              title="Sample data"
+              detail={t('practice.analysisSampleDetail')}
+              title={t('practice.sampleTitle')}
               tone="info"
             />
           ) : null}
 
           <Card>
             <View style={styles.group}>
-              <Label muted>Overall</Label>
+              <Label muted>{t('practice.overall')}</Label>
               <View style={styles.overall}>
                 <Figure>{overallLabel}</Figure>
               </View>
@@ -153,12 +154,12 @@ export const PracticeAnalysisScreen = ({
             </View>
           </Card>
 
-          <Findings heading="What went well" rows={strengths} />
-          <Findings heading="What to work on" rows={improvements} />
+          <Findings heading={t('practice.wentWell')} rows={strengths} />
+          <Findings heading={t('practice.workOn')} rows={improvements} />
 
           {modules.length === 0 ? null : (
             <View style={styles.group}>
-              <Heading>Suggested training</Heading>
+              <Heading>{t('practice.suggestedTraining')}</Heading>
               {modules.map((row) => (
                 <Card key={row.id}>
                   <View style={styles.group}>
@@ -168,14 +169,18 @@ export const PracticeAnalysisScreen = ({
                 </Card>
               ))}
               {onOpenLearning === undefined ? null : (
-                <Button label="Open Learning" onPress={onOpenLearning} variant="secondary" />
+                <Button
+                  label={t('practice.openLearning')}
+                  onPress={onOpenLearning}
+                  variant="secondary"
+                />
               )}
             </View>
           )}
 
           {/* UX polish: what worked and what to try lead; the numbers follow them. */}
           <View style={styles.group}>
-            <Heading>Scores by area</Heading>
+            <Heading>{t('practice.scoresByArea')}</Heading>
             {dimensions.map((row) => (
               <View key={row.key} style={styles.dimension}>
                 <BodyText>{row.label}</BodyText>
@@ -188,8 +193,8 @@ export const PracticeAnalysisScreen = ({
 
       <Card tone="quiet">
         <View style={styles.group}>
-          <Label muted>{PRACTICE_AI_NOTE}</Label>
-          <Label muted>{PRACTICE_VISIBILITY_NOTE}</Label>
+          <Label muted>{practiceAiNote()}</Label>
+          <Label muted>{practiceVisibilityNote()}</Label>
         </View>
       </Card>
     </View>

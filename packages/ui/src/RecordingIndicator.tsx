@@ -3,6 +3,8 @@ import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { BodyText, Label } from './Text';
 import { StatusGlyph } from './StatusGlyph';
+import { useT } from './i18n';
+import type { TextKey } from './i18n';
 
 /**
  * Phase 1 §05, and Apple's 2.5.14 by name: while audio is being captured, the fact
@@ -28,11 +30,12 @@ export interface RecordingIndicatorProps {
   readonly reason?: string;
 }
 
-const WORDS: Record<RecordingState, string> = {
-  armed: 'Ready to record',
-  recording: 'Recording this visit',
-  paused: 'Paused',
-  saving: 'Saving to this phone',
+/** `FE-W150`. Keys, read at render, so the bar follows a language change. */
+const WORDS: Record<RecordingState, TextKey> = {
+  armed: 'visit.recordingArmed',
+  recording: 'visit.recordingActive',
+  paused: 'visit.recordingPaused',
+  saving: 'visit.recordingSaving',
 };
 
 const styles = StyleSheet.create({
@@ -61,11 +64,17 @@ export const RecordingIndicator = ({
   elapsed,
   reason,
 }: RecordingIndicatorProps): ReactNode => {
-  const words = state === 'paused' && reason !== undefined ? `Paused — ${reason}` : WORDS[state];
+  const { t } = useT();
+  const words =
+    state === 'paused' && reason !== undefined
+      ? t('visit.recordingPausedBecause', { reason })
+      : t(WORDS[state]);
 
   return (
     <View
-      accessibilityLabel={elapsed === undefined ? words : `${words}, ${elapsed}`}
+      accessibilityLabel={
+        elapsed === undefined ? words : t('visit.recordingWithElapsed', { state: words, elapsed })
+      }
       accessibilityLiveRegion="polite"
       accessibilityRole="text"
       accessible

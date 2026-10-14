@@ -1,4 +1,6 @@
 import type { SettingRow } from '@fieldforce/ui';
+import { LANGUAGES, languageStore, t } from '@fieldforce/ui/i18n';
+import type { Language } from '@fieldforce/ui/i18n';
 
 /**
  * C4's entries, transcribed from `docs/design/phase2-first-run-and-the-day.dc.html`.
@@ -42,18 +44,55 @@ export interface SettingsNavigation {
   readonly onOpenLearning?: () => void;
   /** `FE-W71`. Present only when `liveTrackingEnabled`; absent, there is no row. */
   readonly onOpenLiveTracking?: () => void;
+  /** `FE-W142`. Switch the app to a language whose catalogue is complete, and keep it. */
+  readonly onChooseLanguage: (language: Language) => void;
 }
+
+/**
+ * `FE-W142` — one row per language, each named in its own script.
+ *
+ * The one in use is `chosen`. A complete one is `available` and switches the app. An incomplete
+ * one is SHOWN, so the rep and the client can see it is coming and how far the translators have
+ * got, but it is `not-yet` and cannot be pressed: the switch never offers a translation that does
+ * not exist. It becomes pressable the moment its file is full, with no change here.
+ */
+const languageRows = (nav: SettingsNavigation): SettingRow[] =>
+  LANGUAGES.map((language) => {
+    const detail = language.code === 'en' ? '' : language.englishName;
+    if (language.code === languageStore.current()) {
+      return { id: `language-${language.code}`, title: language.name, detail, state: 'chosen' };
+    }
+    if (languageStore.selectable(language.code)) {
+      return {
+        id: `language-${language.code}`,
+        title: language.name,
+        detail,
+        state: 'available',
+        onPress: () => {
+          nav.onChooseLanguage(language.code);
+        },
+      };
+    }
+    const { done, total } = languageStore.progress(language.code);
+    return {
+      id: `language-${language.code}`,
+      title: language.name,
+      detail,
+      state: 'not-yet',
+      note: t('settings.languageWaiting', { language: language.englishName, done, total }),
+    };
+  });
 
 export const settingsGroups = (
   nav: SettingsNavigation,
 ): readonly { heading: string; rows: readonly SettingRow[] }[] => [
   {
-    heading: 'Your work',
+    heading: t('settings.groupWork'),
     rows: [
       {
         id: 'mileage',
-        title: 'Mileage',
-        detail: 'Distance on this month’s claim, day by day.',
+        title: t('settings.mileage'),
+        detail: t('settings.mileageDetail'),
         state: 'available',
         onPress: nav.onOpenMileage,
       },
@@ -62,8 +101,8 @@ export const settingsGroups = (
         // B7. Reachable from Today once the day is done, and from here at any hour,
         // because the question it answers — "is this app still recording me" — is
         // one an MR is allowed to ask on a Sunday.
-        title: 'How today ended',
-        detail: 'What was recorded, what was sent, and what is running now.',
+        title: t('settings.dayEnd'),
+        detail: t('settings.dayEndDetail'),
         state: 'available',
         onPress: nav.onOpenDayEnd,
       },
@@ -72,8 +111,8 @@ export const settingsGroups = (
         : [
             {
               id: 'assistant',
-              title: 'Assistant',
-              detail: 'Ask how to do something in this app.',
+              title: t('settings.assistant'),
+              detail: t('settings.assistantDetail'),
               state: 'available' as const,
               onPress: nav.onOpenAssistant,
             },
@@ -83,8 +122,8 @@ export const settingsGroups = (
         : [
             {
               id: 'practice',
-              title: 'AI Doctor practice',
-              detail: 'Practise a visit with an AI doctor and get feedback.',
+              title: t('settings.practice'),
+              detail: t('settings.practiceDetail'),
               state: 'available' as const,
               onPress: nav.onOpenPractice,
             },
@@ -94,8 +133,8 @@ export const settingsGroups = (
         : [
             {
               id: 'product-qa',
-              title: 'Product questions',
-              detail: 'Answered only from your company’s approved material, with the source shown.',
+              title: t('settings.productQa'),
+              detail: t('settings.productQaDetail'),
               state: 'available' as const,
               onPress: nav.onOpenProductQa,
             },
@@ -105,8 +144,8 @@ export const settingsGroups = (
         : [
             {
               id: 'learning',
-              title: 'Learning',
-              detail: 'The courses assigned to you.',
+              title: t('settings.learning'),
+              detail: t('settings.learningDetail'),
               state: 'available' as const,
               onPress: nav.onOpenLearning,
             },
@@ -114,77 +153,76 @@ export const settingsGroups = (
     ],
   },
   {
-    heading: 'Your data',
+    heading: t('settings.groupData'),
     rows: [
       {
         id: 'wifi-only',
-        title: 'Send audio on WiFi only',
-        detail: 'Recordings wait for WiFi. Everything else still sends.',
+        title: t('settings.wifiOnly'),
+        detail: t('settings.wifiOnlyDetail'),
         state: 'available',
         onPress: nav.onOpenDataSettings,
       },
       {
         id: 'warn-over',
-        title: 'Warn me over 100 MB',
-        detail: 'A note on home, nothing stops working.',
+        title: t('settings.warnOver'),
+        detail: t('settings.warnOverDetail'),
         state: 'available',
         onPress: nav.onOpenDataSettings,
       },
     ],
   },
   {
-    heading: 'Language',
+    heading: t('settings.groupLanguage'),
     rows: [
+      ...languageRows(nav),
       {
-        id: 'app-language',
-        title: 'App language',
-        detail: 'The language you read.',
-        state: 'not-yet',
-      },
-      {
+        // `FE-W148`. Not a setting the rep makes: the DOCTOR chooses, on the consent screen, among
+        // the notices the company has published (`consent_text_versions`, by language). Said as a
+        // fact rather than as "coming later", because nothing here will ever switch it -- an
+        // approved notice in Hindi or Marathi is what makes it appear.
         id: 'consent-language',
-        title: 'Consent screen language',
-        detail: 'What the doctor reads. Set separately from your own.',
-        state: 'not-yet',
+        title: t('settings.consentLanguage'),
+        detail: t('settings.consentLanguageDetail'),
+        state: 'info',
       },
     ],
   },
   {
-    heading: 'This phone',
+    heading: t('settings.groupPhone'),
     rows: [
       ...(nav.onOpenLiveTracking === undefined
         ? []
         : [
             {
               id: 'live-tracking',
-              title: 'Live location',
-              detail: 'The notice, your agreement, and sharing your location during working hours.',
+              title: t('settings.liveLocation'),
+              detail: t('settings.liveLocationDetail'),
               state: 'available' as const,
               onPress: nav.onOpenLiveTracking,
             },
           ]),
       {
         id: 'location',
-        title: 'Location',
-        detail: 'What it is for, and when it is taken.',
+        title: t('settings.location'),
+        detail: t('settings.locationDetail'),
         state: 'available',
         onPress: nav.onOpenLocation,
       },
       {
         id: 'battery',
-        title: 'Battery & autostart',
+        title: t('settings.battery'),
         // C4 draws "All 3 set correctly" here. The done-marks now persist, so the
         // count is finally *available* — it is still absent because this module is a
         // pure list and reading it would make every settings row wait on storage.
         // A row that needs live state should take it as a prop rather than fetch.
-        detail: 'Keep check-ins and mileage working when the phone sleeps.',
+        detail: t('settings.batteryDetail'),
         state: 'available',
         onPress: nav.onOpenBattery,
       },
       {
         id: 'transparency',
-        title: 'What this app records',
-        detail: 'Everything, before you ask.',
+        title: t('settings.transparency'),
+        detail: t('settings.transparencyDetail'),
         state: 'available',
         onPress: nav.onOpenTransparency,
       },

@@ -4098,3 +4098,21 @@ production is the untested answer in a test.**
 What `FE-W135` does instead: the device half is BOUND once at the app root (`bindUploadDevice` in
 `app/_layout.tsx`, the `setQueueOwner` pattern), and a render test binds a fake. Lazy `import()` stays
 fine where every test injects the dependency anyway (`createPushClient({ voiceNotes })`).
+
+## 14 October 2026 — a string exported as a constant is frozen in the language it loaded in (`FE-W144`)
+
+The field app's language can change while it runs (`FE-W141`). `export const SESSION_EXPIRED = {
+title: t('…') }` would call `t()` ONCE, when the module first loads — in English, before the stored
+language is even read — and every screen that shows it would stay English after a switch, with no
+error anywhere. The same holds for a sentence stored in React state (`setUnsent({ title, … })`) and for
+a value inside a `useMemo` whose dependencies do not include the language.
+
+What `FE-W144` does instead: such constants became functions (`queueUnreadable()`,
+`notPermittedDetail()`, `noServerClock()`, `captureNote()`) or objects with getters (`SESSION_EXPIRED`,
+`TRACKING_WORDS`, the pull's "list rebuilt" notice); state keeps the DATA and the sentence is built at
+render; the live tracker's memo lists `language` as a dependency. `language-switch.test.tsx` and
+`routes/language-switch-route.test.tsx` switch language with a screen mounted and look for the new
+words — the only kind of test that catches this, because in English every version reads the same.
+
+**DM Sans has no Devanagari** (`FE-W147`): 0 of U+0900–U+097F in all four shipped faces, read from the
+TTF `cmap`. Hindi and Marathi are drawn by the platform's fallback font; nothing was bundled.

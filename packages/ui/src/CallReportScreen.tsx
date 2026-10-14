@@ -7,6 +7,7 @@ import { Button } from './Button';
 import { Card } from './Card';
 import { Screen } from './Screen';
 import { TextField } from './TextField';
+import { useT } from './i18n';
 
 /**
  * C6 — the call report, written by the MR.
@@ -119,109 +120,110 @@ export const CallReportScreen = ({
   onToggleProduct,
   productsNote = null,
   onDone,
-}: CallReportScreenProps): ReactNode => (
-  <Screen
-    scrollable
-    footer={
-      <View style={styles.foot}>
-        {/*
-          One button, in one of two states. `Button`'s disabled variant requires a
-          reason line — §05 — so the branch exists to supply it; rendering both would
-          put two Send buttons on the screen.
+}: CallReportScreenProps): ReactNode => {
+  const { t } = useT();
+  return (
+    <Screen
+      scrollable
+      footer={
+        <View style={styles.foot}>
+          {/*
+            One button, in one of two states. `Button`'s disabled variant requires a
+            reason line — §05 — so the branch exists to supply it; rendering both would
+            put two Send buttons on the screen.
 
-          FE-D12 item 3. A third state: once the report is sent (or saved to send by itself), the
-          button gives way to that outcome, where the rep's thumb is. It stayed enabled before, and a
-          second press made a second report of the same visit. UX polish: with a way back to the visit.
-        */}
-        {sentNote !== null ? (
-          <>
-            <Banner detail={sentNote.detail} title={sentNote.title} tone="info" />
-            {onDone === undefined ? null : (
-              <Button label="Back to the visit" onPress={onDone} variant="secondary" />
-            )}
-          </>
-        ) : summary.trim() === '' ? (
-          <Button
-            disabled
-            label="Send the report"
-            note="Write what happened first. The other two are optional."
-            onPress={onSend}
-          />
-        ) : (
-          <Button
-            label={sending ? 'Sending…' : 'Send the report'}
-            loading={sending}
-            onPress={onSend}
-          />
-        )}
+            FE-D12 item 3. A third state: once the report is sent (or saved to send by itself), the
+            button gives way to that outcome, where the rep's thumb is. It stayed enabled before, and a
+            second press made a second report of the same visit. UX polish: with a way back to the visit.
+          */}
+          {sentNote !== null ? (
+            <>
+              <Banner detail={sentNote.detail} title={sentNote.title} tone="info" />
+              {onDone === undefined ? null : (
+                <Button label={t('common.backToVisit')} onPress={onDone} variant="secondary" />
+              )}
+            </>
+          ) : summary.trim() === '' ? (
+            <Button
+              disabled
+              label={t('report.send')}
+              note={t('report.sendNote')}
+              onPress={onSend}
+            />
+          ) : (
+            <Button
+              label={sending ? t('report.sending') : t('report.send')}
+              loading={sending}
+              onPress={onSend}
+            />
+          )}
+        </View>
+      }
+    >
+      <View style={styles.head}>
+        <Title>{t('report.title')}</Title>
+        {/* W2-C A3 / `BE-W156`: no dangling "·" when there is no date to put after it. */}
+        <Secondary>{dateLabel === '' ? doctorName : `${doctorName} · ${dateLabel}`}</Secondary>
       </View>
-    }
-  >
-    <View style={styles.head}>
-      <Title>Your report</Title>
-      {/* W2-C A3 / `BE-W156`: no dangling "·" when there is no date to put after it. */}
-      <Secondary>{dateLabel === '' ? doctorName : `${doctorName} · ${dateLabel}`}</Secondary>
-    </View>
 
-    {failure === null ? null : (
-      <Banner detail={failure.detail} title={failure.title} tone="critical" />
-    )}
+      {failure === null ? null : (
+        <Banner detail={failure.detail} title={failure.title} tone="critical" />
+      )}
 
-    <Card>
-      <BodyText>Every word here is yours.</BodyText>
-      <Secondary>
-        Nothing is written for you and nothing is filed until you press Send. Your manager sees what
-        you wrote.
-      </Secondary>
-    </Card>
+      <Card>
+        <BodyText>{t('report.yours')}</BodyText>
+        <Secondary>{t('report.yoursDetail')}</Secondary>
+      </Card>
 
-    <View style={styles.fields}>
-      <TextField
-        help="What happened, in your words."
-        label="What happened"
-        multiline
-        onChangeText={onSummaryChange}
-        value={summary}
-      />
-      <TextField
-        help="Anything they pushed back on. Leave it empty if there was nothing."
-        label="What they raised"
-        multiline
-        onChangeText={onObjectionsChange}
-        value={objections}
-      />
-      <TextField
-        help="What you promised, and when."
-        label="Next step"
-        onChangeText={onNextStepChange}
-        value={nextStep}
-      />
-    </View>
-
-    {products === undefined ? null : (
-      <View style={styles.products}>
-        <Label>Products discussed</Label>
-        <Secondary>Mark each one you talked about. None is fine if none came up.</Secondary>
-        {productsNote === null ? null : <Secondary>{productsNote}</Secondary>}
-        {products.map((product) => {
-          const chosen = chosenProductIds.includes(product.id);
-          return (
-            <Pressable
-              accessibilityLabel={product.label}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: chosen }}
-              key={product.id}
-              onPress={() => {
-                onToggleProduct?.(product.id);
-              }}
-              style={[styles.product, chosen ? styles.productChosen : null]}
-            >
-              <View style={styles.box}>{chosen ? <BodyText>✓</BodyText> : null}</View>
-              <BodyText>{product.label}</BodyText>
-            </Pressable>
-          );
-        })}
+      <View style={styles.fields}>
+        <TextField
+          help={t('report.summaryHelp')}
+          label={t('report.summaryLabel')}
+          multiline
+          onChangeText={onSummaryChange}
+          value={summary}
+        />
+        <TextField
+          help={t('report.objectionsHelp')}
+          label={t('report.objectionsLabel')}
+          multiline
+          onChangeText={onObjectionsChange}
+          value={objections}
+        />
+        <TextField
+          help={t('report.nextStepHelp')}
+          label={t('report.nextStepLabel')}
+          onChangeText={onNextStepChange}
+          value={nextStep}
+        />
       </View>
-    )}
-  </Screen>
-);
+
+      {products === undefined ? null : (
+        <View style={styles.products}>
+          <Label>{t('report.products')}</Label>
+          <Secondary>{t('report.productsHelp')}</Secondary>
+          {productsNote === null ? null : <Secondary>{productsNote}</Secondary>}
+          {products.map((product) => {
+            const chosen = chosenProductIds.includes(product.id);
+            return (
+              <Pressable
+                // The product's own name: data, not catalogue text.
+                accessibilityLabel={product.label}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: chosen }}
+                key={product.id}
+                onPress={() => {
+                  onToggleProduct?.(product.id);
+                }}
+                style={[styles.product, chosen ? styles.productChosen : null]}
+              >
+                <View style={styles.box}>{chosen ? <BodyText>✓</BodyText> : null}</View>
+                <BodyText>{product.label}</BodyText>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+    </Screen>
+  );
+};

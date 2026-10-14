@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { requestNotificationPermission } from '../../src/onboarding/notification-permission';
-import { BodyText, Button, Display, ListRow, Screen } from '@fieldforce/ui';
+import { BodyText, Button, Display, ListRow, Screen, t, useLanguage } from '@fieldforce/ui';
 import { coachingEnabled } from '../../src/features';
 import { capSentence, notificationTypes } from '../../src/onboarding/notifications';
 
@@ -33,6 +33,7 @@ import { capSentence, notificationTypes } from '../../src/onboarding/notificatio
  * do here.
  */
 export default function NotificationsRationale(): ReactNode {
+  useLanguage();
   const router = useRouter();
   const next = (): void => {
     router.push('/onboarding/battery');
@@ -72,7 +73,7 @@ export default function NotificationsRationale(): ReactNode {
 
   return (
     <Screen scrollable>
-      <Display>What we&apos;ll send you</Display>
+      <Display>{t('onboarding.notificationsHeadline')}</Display>
       <BodyText>{capSentence(types.length)}</BodyText>
 
       {types.map((type) => (
@@ -84,8 +85,8 @@ export default function NotificationsRationale(): ReactNode {
         reasons after Android has already asked is the pattern that produces a reflexive
         "deny". (FE-D2: this comment said the caller raised the prompt; nothing did.)
       */}
-      <Button label="Allow notifications" onPress={allow} variant="secondary" />
-      <Button label="Not now" onPress={next} variant="secondary" />
+      <Button label={t('onboarding.allowNotifications')} onPress={allow} variant="secondary" />
+      <Button label={t('onboarding.notNow')} onPress={next} variant="secondary" />
     </Screen>
   );
 }

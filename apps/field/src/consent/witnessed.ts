@@ -1,6 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { SyncQueueItem } from '@fieldforce/core';
 import { queueOwner } from '../sync/async-storage-store';
+// `FE-W150`. What the VISIT screen tells the rep about the answer this phone witnessed. Rep-facing
+// status, not the consent wording the doctor read, so it follows the app language.
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * MR-49 C — `FE-W55`, the third option: **what this phone witnessed, and nothing more.**
@@ -97,11 +100,13 @@ export const witnessedCard = (
   if (witnessed === null || witnessed.outcome === 'not_asked') return null;
   const item = queue.find((candidate) => candidate.id === witnessed.syncItemId);
   if (item?.status === 'failed' || item?.status === 'conflict') return null;
-  const at = `On this phone at ${clock(witnessed.capturedAt)}`;
+  const at = t('visit.witnessedAt', { time: clock(witnessed.capturedAt) });
   return {
     outcome: witnessed.outcome,
     answeredLabel:
-      item?.status === 'queued' || item?.status === 'in_flight' ? `${at} · waiting to send` : at,
+      item?.status === 'queued' || item?.status === 'in_flight'
+        ? t('visit.witnessedWaiting', { at })
+        : at,
   };
 };
 
@@ -126,21 +131,21 @@ export const describeWitnessed = (
   clock: (iso: string) => string,
 ): string => {
   if (witnessed === null) {
-    return 'This phone does not have the doctor’s answer for this visit.';
+    return t('visit.witnessedNone');
   }
   const item = queue.find((candidate) => candidate.id === witnessed.syncItemId);
   const at = clock(witnessed.capturedAt);
   const answer =
     witnessed.outcome === 'consented'
-      ? `The doctor agreed to recording, on this phone at ${at}.`
+      ? t('visit.witnessedAgreed', { at })
       : witnessed.outcome === 'declined'
-        ? `The doctor said no to recording, on this phone at ${at}.`
-        : `Recording was not asked about, on this phone at ${at}.`;
+        ? t('visit.witnessedDeclined', { at })
+        : t('visit.witnessedNotAsked', { at });
   if (item?.status === 'queued' || item?.status === 'in_flight') {
-    return `${answer} Waiting to send.`;
+    return `${answer} ${t('visit.witnessedAnswerWaiting')}`;
   }
   if (item?.status === 'failed' || item?.status === 'conflict') {
-    return `${answer} The server did not accept it — see your upload queue.`;
+    return `${answer} ${t('visit.witnessedAnswerRefused')}`;
   }
   return answer;
 };

@@ -8,6 +8,7 @@ import { ListItem } from './ListItem';
 import { Spinner } from './Spinner';
 import { EmptyState } from './EmptyState';
 import { SkeletonRows } from './Skeleton';
+import { useT } from './i18n';
 
 /**
  * B3 — today's route, as a timeline.
@@ -114,6 +115,7 @@ export const BeatPlanScreen = ({
   statusLine = null,
   notice = null,
 }: BeatPlanScreenProps): ReactNode => {
+  const { t } = useT();
   /** The visit when the stop has one and the caller can open it; otherwise the doctor, as before. */
   const pressFor = (stop: BeatPlanStop): { onPress: () => void } | Record<string, never> => {
     const visitId = stop.visitId ?? null;
@@ -137,7 +139,7 @@ export const BeatPlanScreen = ({
   if (failure !== null) {
     return (
       <>
-        <Title>Today&apos;s route</Title>
+        <Title>{t('route.title')}</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </>
     );
@@ -146,27 +148,24 @@ export const BeatPlanScreen = ({
   return (
     <>
       <View style={styles.head}>
-        <Title>Today&apos;s route</Title>
+        <Title>{t('route.title')}</Title>
         {/*
           "9 planned · 6 done". The design also carries "31.7 km" here; that is
           `daily_mileage()`, server-side and without an endpoint, so it is absent
           rather than computed from positions this app does not take.
         */}
-        <Label muted>{`${String(planned)} planned · ${String(done)} done`}</Label>
+        <Label muted>{t('route.plannedDone', { planned, done })}</Label>
         {statusLine === null ? null : <Label>{statusLine}</Label>}
       </View>
 
-      {loading ? <Spinner label="Getting today's route" /> : null}
+      {loading ? <Spinner label={t('route.loading')} /> : null}
 
       {!loading && notice !== null ? (
         <Banner detail={notice.detail} title={notice.title} tone="info" />
       ) : null}
 
       {!loading && notice === null && stops.length === 0 ? (
-        <EmptyState
-          detail="No beat plan came through. You can still visit anyone in your territory and it'll all be logged."
-          title="No route for today"
-        />
+        <EmptyState detail={t('route.noRouteDetail')} title={t('route.noRouteTitle')} />
       ) : null}
 
       {/* FE-W101. The route's shape while it loads, under the spinner's words — never instead. */}
@@ -176,7 +175,7 @@ export const BeatPlanScreen = ({
         {stops.map((stop) =>
           stop.state === 'current' ? (
             <Card key={stop.id} {...pressFor(stop)}>
-              <Label muted>Next stop</Label>
+              <Label muted>{t('route.nextStop')}</Label>
               <View style={styles.currentLines}>
                 <Heading>{stop.doctorName}</Heading>
                 {stop.clinic === null ? null : <BodyText muted>{stop.clinic}</BodyText>}
@@ -185,7 +184,7 @@ export const BeatPlanScreen = ({
             </Card>
           ) : (
             <ListItem
-              detail={stop.detail === '' ? 'Not started' : stop.detail}
+              detail={stop.detail === '' ? t('route.notStarted') : stop.detail}
               key={stop.id}
               status={STATUS[stop.state]}
               title={stop.doctorName}

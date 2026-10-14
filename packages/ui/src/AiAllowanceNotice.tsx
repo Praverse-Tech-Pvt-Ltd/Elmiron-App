@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
 import { Label } from './Text';
+import { t, useLanguage } from './i18n';
 
 /**
  * FE-D14 — the daily AI-limit warning.
@@ -31,13 +32,15 @@ export interface AiAllowanceNoticeProps {
   readonly sample: boolean;
 }
 
-export const SAMPLE_FIGURES_NOTE = 'Sample data, not from the server.';
+/** The label under sample figures — a function, so it is read in the current language. */
+export const sampleFiguresNote = (): string => t('ai.sampleFigures');
 
 const styles = StyleSheet.create({
   group: { gap: tokens.space.xs },
 });
 
 export const AiAllowanceNotice = ({ allowance, sample }: AiAllowanceNoticeProps): ReactNode => {
+  useLanguage();
   if (allowance.kind === 'not_reported') return null;
 
   const banner =
@@ -45,20 +48,20 @@ export const AiAllowanceNotice = ({ allowance, sample }: AiAllowanceNoticeProps)
       <Banner
         detail={
           allowance.resetLabel === null
-            ? 'The server has not said when the allowance resets.'
-            : `The allowance resets at ${allowance.resetLabel}.`
+            ? t('ai.warningResetUnknown')
+            : t('ai.warningResetsAt', { time: allowance.resetLabel })
         }
-        title={`You have used ${String(allowance.used)} of today's ${String(allowance.limit)} assistant requests.`}
+        title={t('ai.warningTitle', { used: allowance.used, limit: allowance.limit })}
         tone="attention"
       />
     ) : (
       <Banner
         detail={
           allowance.resetLabel === null
-            ? 'The server has not said when it resets.'
-            : `It resets at ${allowance.resetLabel}.`
+            ? t('ai.limitResetUnknown')
+            : t('ai.limitResetsAt', { time: allowance.resetLabel })
         }
-        title="You have reached today's limit. The assistant is unavailable until it resets."
+        title={t('ai.limitTitle')}
         tone="critical"
       />
     );
@@ -66,7 +69,7 @@ export const AiAllowanceNotice = ({ allowance, sample }: AiAllowanceNoticeProps)
   return (
     <View style={styles.group}>
       {banner}
-      {sample ? <Label muted>{SAMPLE_FIGURES_NOTE}</Label> : null}
+      {sample ? <Label muted>{sampleFiguresNote()}</Label> : null}
     </View>
   );
 };

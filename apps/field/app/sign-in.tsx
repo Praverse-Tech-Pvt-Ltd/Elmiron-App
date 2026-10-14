@@ -8,6 +8,7 @@ import {
   PrimaryButton,
   Screen,
   TextField,
+  useT,
 } from '@fieldforce/ui';
 import { useSession } from '../src/session';
 import { failureDetail } from '../src/errors/plain';
@@ -24,6 +25,7 @@ import { failureDetail } from '../src/errors/plain';
 const BRAND_LINE = 'Relief at the root.';
 
 export default function SignIn(): ReactNode {
+  const { t } = useT();
   const { signIn } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -65,10 +67,10 @@ export default function SignIn(): ReactNode {
   */
   const action = (
     <PrimaryButton
-      label={busy ? 'Signing in…' : 'Sign in'}
+      label={busy ? t('signIn.submitting') : t('signIn.submit')}
       onPress={submit}
       disabled={blocked}
-      note={busy ? 'Checking your details.' : 'Enter your email and password.'}
+      note={busy ? t('signIn.checking') : t('signIn.needDetails')}
     />
   );
 
@@ -81,15 +83,15 @@ export default function SignIn(): ReactNode {
         this screen is for.
       */}
       <BrandLine>{BRAND_LINE}</BrandLine>
-      <Heading>Sign in</Heading>
-      <BodyText muted>Use the account your manager set up for you.</BodyText>
+      <Heading>{t('signIn.title')}</Heading>
+      <BodyText muted>{t('signIn.lead')}</BodyText>
 
       {failure === null ? null : (
-        <Banner tone="critical" title="Could not sign in" detail={failure} />
+        <Banner tone="critical" title={t('signIn.failed')} detail={failure} />
       )}
 
       <TextField
-        label="Email"
+        label={t('signIn.email')}
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -97,7 +99,7 @@ export default function SignIn(): ReactNode {
         editable={!busy}
       />
       <TextField
-        label="Password"
+        label={t('signIn.password')}
         value={password}
         onChangeText={setPassword}
         secure

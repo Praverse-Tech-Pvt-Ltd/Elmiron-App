@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
 import { Label } from './Text';
+import { useT } from './i18n';
 
 /**
  * Phase 1 §05: 60pt, a 19pt value, and a label that is always visible.
@@ -103,6 +104,7 @@ export const TextField = ({
   onClear,
   multiline = false,
 }: TextFieldProps): ReactNode => {
+  const { t } = useT();
   const [focused, setFocused] = useState(false);
 
   return (
@@ -146,7 +148,7 @@ export const TextField = ({
         />
         {onClear === undefined || value === '' ? null : (
           <Pressable
-            accessibilityLabel={`Clear ${label}`}
+            accessibilityLabel={t('common.clearField', { field: label })}
             accessibilityRole="button"
             onPress={onClear}
             style={({ pressed }) => [styles.clear, pressed ? styles.clearPressed : null]}

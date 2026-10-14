@@ -106,6 +106,12 @@ export interface ConsentScreenProps {
   readonly languages?: readonly ConsentLanguageOption[];
   readonly language?: string;
   readonly onChangeLanguage?: (code: string) => void;
+  /**
+   * `FE-W148`. Said where the language picker would be, when there is nothing to pick — e.g. "This
+   * notice is in English only". Plain English from the route, never from the app's catalogue: this
+   * screen is the doctor's, and its words are not translated by the app (see `consent/content.ts`).
+   */
+  readonly languageNote?: string | null;
   readonly busy?: boolean;
   /**
    * The notice has been asked for and has not arrived yet.
@@ -262,6 +268,7 @@ export const ConsentScreen = ({
   languages,
   language,
   onChangeLanguage,
+  languageNote = null,
   busy = false,
   loading = false,
   blocked = null,
@@ -287,12 +294,17 @@ export const ConsentScreen = ({
   }
 
   const picker =
-    languages === undefined || languages.length < 2 || onChangeLanguage === undefined ? null : (
+    languages === undefined || languages.length < 2 || onChangeLanguage === undefined ? (
+      languageNote === null ? null : (
+        <Label muted>{languageNote}</Label>
+      )
+    ) : (
       // Offered from what the server actually has. A hard-coded list would offer a
       // doctor a language the server cannot produce a notice in, and the handoff
       // then dead-ends in front of them.
       <Select
         label="Language"
+        placeholder="Choose a language"
         onChange={onChangeLanguage}
         options={languages.map((option) => ({ value: option.code, label: option.label }))}
         {...(language === undefined ? {} : { value: language })}

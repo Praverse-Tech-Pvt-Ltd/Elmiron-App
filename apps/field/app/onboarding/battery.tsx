@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
-import { OemBatteryScreen } from '@fieldforce/ui';
+import { OemBatteryScreen, t, useLanguage } from '@fieldforce/ui';
 import type { SetupStepView } from '@fieldforce/ui';
 import { detectDeviceOem, deviceLauncher } from '../../src/onboarding/device';
 import { batteryStepsDone, saveBatteryStepsDone } from '../../src/onboarding/progress';
@@ -29,13 +29,15 @@ import { contentFor } from '../../src/onboarding/oem-content';
  * through the list, and it is honest only for as long as they are on the screen.
  */
 export default function BatterySetup(): ReactNode {
+  useLanguage();
   const router = useRouter();
   const family = detectDeviceOem();
   const content = contentFor(family);
 
   const [offered, setOffered] = useState<readonly SettingsIntent[]>([]);
   const [done, setDone] = useState<readonly string[]>([]);
-  const [notice, setNotice] = useState<string | null>(null);
+  // `FE-W155`. The shortcut that failed, not its sentence: the words are read at render.
+  const [failedIntent, setFailedIntent] = useState<SettingsIntent | null>(null);
 
   // The ticks survive leaving the screen. They used to live only in component
   // state, so an MR who set all three, walked away and came back was told they had
@@ -67,11 +69,7 @@ export default function BatterySetup(): ReactNode {
     void launchSettings(intent, deviceLauncher).then((outcome) => {
       // Every outcome is a sentence, and none of them is an error. `launchSettings`
       // cannot reject, so there is no `.catch` here to forget.
-      setNotice(
-        outcome === 'opened'
-          ? null
-          : `Could not open ${intent.destination} on this phone. The steps above still work.`,
-      );
+      setFailedIntent(outcome === 'opened' ? null : intent);
     });
   }, []);
 
@@ -88,7 +86,7 @@ export default function BatterySetup(): ReactNode {
         shortcut === undefined
           ? undefined
           : {
-              label: 'Open that settings screen',
+              label: t('onboarding.openSettingsScreen'),
               onPress: () => {
                 open(shortcut);
               },
@@ -102,7 +100,11 @@ export default function BatterySetup(): ReactNode {
       headline={content.headline}
       consequence={content.consequence}
       steps={steps}
-      notice={notice}
+      notice={
+        failedIntent === null
+          ? null
+          : t('onboarding.couldNotOpen', { destination: failedIntent.destination })
+      }
       onToggleDone={(id) => {
         setDone((current) => {
           const next = current.includes(id)

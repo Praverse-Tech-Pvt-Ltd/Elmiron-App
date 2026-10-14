@@ -33,6 +33,9 @@ export const identifiersIn = (text: string): readonly IdentifierKind[] => {
   return [...found];
 };
 
+// FE-W157: regulated wording, English-only like consent — not in the catalogue.
+// It is the patient-identifier rule (`BE-C36`: what must not leave the clinic), so it stays in the
+// same words as the guidance on the screen above the field, which is English-only for the same reason.
 const NAMES: Record<IdentifierKind, string> = {
   phone: 'a phone number',
   email: 'an email address',
@@ -47,6 +50,7 @@ export const identifierNote = (kinds: readonly IdentifierKind[]): string | null 
     listed.length === 1
       ? listed[0]
       : `${listed.slice(0, -1).join(', ')} and ${listed[listed.length - 1] ?? ''}`;
+  // FE-W157: regulated wording, English-only like consent — not in the catalogue.
   return `This looks like it contains ${what ?? ''}. Take it out before sending — the safety team does not need it.`;
 };
 

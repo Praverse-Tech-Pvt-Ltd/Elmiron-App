@@ -24,6 +24,7 @@ import type {
 import { resolveClient } from '../capture/client';
 import type { RpcCaller } from '../capture/client';
 import type { PullCursorStore } from './pull-cursor';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * FE-W22 — the first client in this product to receive a real server response.
@@ -150,12 +151,15 @@ export const noticeFor = (completeness: SyncCompleteness): PullNotice | null => 
     completeness.omits.includes('delete') || completeness.omits.includes('out_of_scope');
   if (!omitsRemovals) return null;
 
+  // `FE-W144`. Getters: the notice is kept in the store until the next pull, and must read in
+  // whatever language the app is in when Today draws it, not the one it was in when it arrived.
   return {
-    title: 'Your list has been rebuilt',
-    body:
-      'This was a full refresh, so anything that was removed since you last synced has ' +
-      'simply gone rather than being marked as removed. Everything below is what the ' +
-      'server has for you right now.',
+    get title() {
+      return t('today.listRebuilt');
+    },
+    get body() {
+      return t('today.listRebuiltBody');
+    },
   };
 };
 
@@ -451,6 +455,4 @@ export const doctorWithAddresses = (
  * cannot appear for that reason.
  */
 export const removalWording = (reason: 'deleted' | 'out_of_scope'): string =>
-  reason === 'deleted'
-    ? 'This record was removed on the server.'
-    : 'This is no longer yours. It has moved to another territory.';
+  reason === 'deleted' ? t('today.removedOnServer') : t('today.movedTerritory');

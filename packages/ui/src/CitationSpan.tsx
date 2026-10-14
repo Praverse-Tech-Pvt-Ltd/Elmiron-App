@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { BodyText, Label } from './Text';
+import { useT } from './i18n';
 
 /**
  * Phase 1 §05: "the atom of contestability · every finding has one."
@@ -63,6 +64,7 @@ export const CitationSpan = ({
   playing = false,
   onPlay,
 }: CitationSpanProps): ReactNode => {
+  const { t } = useT();
   const body = (
     <>
       <View style={styles.head}>
@@ -81,7 +83,7 @@ export const CitationSpan = ({
 
   return (
     <Pressable
-      accessibilityLabel={`Play the recording at ${timestamp}`}
+      accessibilityLabel={t('ai.playRecordingAt', { timestamp })}
       accessibilityRole="button"
       accessibilityState={{ busy: playing }}
       onPress={onPlay}

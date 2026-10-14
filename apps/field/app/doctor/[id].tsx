@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useLocalSearchParams } from 'expo-router';
-import { DoctorProfileScreen, Screen } from '@fieldforce/ui';
+import { DoctorProfileScreen, Screen, t, useLanguage } from '@fieldforce/ui';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { lastSeenLabel } from '../../src/doctors/list';
@@ -8,7 +8,7 @@ import { availabilityFrom, availabilitySentence } from '../../src/doctors/availa
 import { buildDoctorProfile, consentLabel } from '../../src/doctors/profile';
 import { dayMonthIn } from '../../src/today/territory-day';
 import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
-import { NOT_PERMITTED_DETAIL, refusedDetail } from '../../src/errors/plain';
+import { notPermittedDetail, refusedDetail } from '../../src/errors/plain';
 
 /** B9 shows three. More than that is a history screen, which this is not. */
 const VISITS_SHOWN = 3;
@@ -18,10 +18,10 @@ const VISITS_SHOWN = 3;
  * screen is exactly where prescriber profiling would creep in, so the absence is
  * stated.
  */
-const BOUNDARY =
-  'Nothing here about what they prescribe, and nothing about their patients. Neither is recorded anywhere in this app.';
+const boundary = (): string => t('doctors.boundary');
 
 export default function DoctorProfile(): ReactNode {
+  useLanguage();
   const { id } = useLocalSearchParams<{ id: string }>();
   // MR-14 B2. The doctor and their visits come from the store the pull maintains.
   const { store, status, zone, serverTime, failure: pullFailure } = usePulledStore();
@@ -52,23 +52,23 @@ export default function DoctorProfile(): ReactNode {
         ? SESSION_EXPIRED
         : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
           ? {
-              title: 'You do not have access to this doctor',
-              detail: NOT_PERMITTED_DETAIL,
+              title: t('doctors.noAccessDoctor'),
+              detail: notPermittedDetail(),
             }
           : {
-              title: 'Could not load this doctor',
+              title: t('doctors.couldNotLoadDoctor'),
               detail:
                 pullFailure.kind === 'refused'
                   ? refusedDetail(pullFailure.refusal.sqlState)
-                  : 'The app could not reach the server. It will try again.',
+                  : t('doctors.unreachableDoctor'),
             }
       : status !== 'loading' && doctor === undefined
         ? {
             // Not found is not a denial. Saying "you do not have access" about a doctor who
             // simply is not in the list would be the app inventing a decision the server
             // never made.
-            title: 'That doctor is not in your list',
-            detail: 'They may belong to another territory, or have been made inactive.',
+            title: t('doctors.notFoundTitle'),
+            detail: t('doctors.notFoundDetail'),
           }
         : null;
 
@@ -83,11 +83,11 @@ export default function DoctorProfile(): ReactNode {
             zone,
           ),
         )}
-        boundary={BOUNDARY}
+        boundary={boundary()}
         detail={profile?.detail ?? ''}
         failure={failure}
         loading={status === 'loading'}
-        name={profile?.name ?? 'Doctor'}
+        name={profile?.name ?? t('doctors.nameFallback')}
         recentVisits={(profile?.recentVisits ?? []).slice(0, VISITS_SHOWN).map((visit) => ({
           id: visit.visitId,
           // MR-25 C1. `dayMonthFrom` slices characters out of the ISO string, which reads
@@ -96,7 +96,8 @@ export default function DoctorProfile(): ReactNode {
           // same day in IST, and one completed at 19:00Z is the NEXT day and rendered as the
           // previous one. MR-24's B1 checked "9 Sep" here and it happened to be correct.
           dateLabel: dayMonthIn(visit.completedAt, zone),
-          durationLabel: visit.minutes === null ? null : `${String(visit.minutes)} min`,
+          durationLabel:
+            visit.minutes === null ? null : t('doctors.visitMinutes', { minutes: visit.minutes }),
           consentLabel: consentLabel(visit.consent),
         }))}
         sinceLabel={

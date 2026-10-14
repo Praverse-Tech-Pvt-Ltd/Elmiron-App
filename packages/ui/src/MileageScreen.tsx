@@ -6,6 +6,7 @@ import { BodyText, Figure, Label, Title } from './Text';
 import { Card } from './Card';
 import { ListItem } from './ListItem';
 import { Spinner } from './Spinner';
+import { useT } from './i18n';
 
 /**
  * C2 — mileage and expenses.
@@ -61,10 +62,11 @@ export const MileageScreen = ({
   loading = false,
   failure = null,
 }: MileageScreenProps): ReactNode => {
+  const { t } = useT();
   if (failure !== null) {
     return (
       <>
-        <Title>Mileage</Title>
+        <Title>{t('settings.mileage')}</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </>
     );
@@ -72,21 +74,18 @@ export const MileageScreen = ({
 
   return (
     <>
-      <Title>Mileage</Title>
+      <Title>{t('settings.mileage')}</Title>
 
-      {loading ? <Spinner label="Getting your mileage" /> : null}
+      {loading ? <Spinner label={t('mileage.loading')} /> : null}
 
       <Card>
-        <Label muted>This month, on your claim</Label>
+        <Label muted>{t('mileage.onClaim')}</Label>
         {totalLabel === null ? null : (
           <View style={styles.total}>
             <Figure>{totalLabel}</Figure>
           </View>
         )}
-        <Label muted>
-          Measured in straight lines between the visits you checked into, so it counts less than the
-          roads you actually rode.
-        </Label>
+        <Label muted>{t('mileage.straightLines')}</Label>
       </Card>
 
       <Card tone="quiet">
@@ -95,8 +94,8 @@ export const MileageScreen = ({
 
       {days.length === 0 && !loading ? (
         <Card>
-          <BodyText>No mileage yet</BodyText>
-          <Label muted>Distance appears once you have checked into more than one visit.</Label>
+          <BodyText>{t('mileage.none')}</BodyText>
+          <Label muted>{t('mileage.noneDetail')}</Label>
         </Card>
       ) : null}
 
@@ -104,7 +103,7 @@ export const MileageScreen = ({
         {days.map((day) => (
           <ListItem
             // W2-B B3. "1 check-ins" on the emulator, 5 October: the count was pluralised blind.
-            detail={`${day.distanceLabel} · ${String(day.checkInCount)} ${day.checkInCount === 1 ? 'check-in' : 'check-ins'}`}
+            detail={t('mileage.dayRow', { distance: day.distanceLabel, count: day.checkInCount })}
             key={day.id}
             // Every row is a day that happened. There is no verdict on it here —
             // approval is the manager's, and this screen is the MR's record.
