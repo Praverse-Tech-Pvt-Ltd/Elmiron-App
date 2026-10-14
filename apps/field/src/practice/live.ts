@@ -132,6 +132,13 @@ export const createLivePracticeBackend = (connection: LiveConnection): PracticeB
       repText: body.repText,
     }),
 
+  spokenTurn: (body) =>
+    postGateway(connection, {
+      feature: 'ai_doctor',
+      sessionId: body.sessionId,
+      repAudio: body.repAudio,
+    }),
+
   end: async (sessionId) => {
     await callRpc(connection, 'end_sim_session', { p_session_id: sessionId });
   },

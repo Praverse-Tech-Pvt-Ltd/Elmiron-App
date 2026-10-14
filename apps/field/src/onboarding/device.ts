@@ -117,3 +117,10 @@ export const linkingLauncher: SettingsLauncher = {
  */
 export const deviceLauncher: SettingsLauncher =
   Platform.OS === 'android' ? linkingLauncher : nullLauncher;
+
+/**
+ * `FE-W161`. Whether the battery-and-autostart step means anything on this phone. Battery saver
+ * exemptions and autostart are Android phone-maker settings; iOS has neither, so on an iPhone first
+ * run skips the step and Me has no row for it.
+ */
+export const batteryStepApplies = (): boolean => Platform.OS === 'android';

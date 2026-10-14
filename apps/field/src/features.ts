@@ -47,6 +47,16 @@ export const assistantEnabled: boolean = process.env.EXPO_PUBLIC_ASSISTANT === '
 export const practiceEnabled: boolean = process.env.EXPO_PUBLIC_PRACTICE === 'true';
 
 /**
+ * `FE-W163` — AI Doctor practice BY VOICE, hands-free: the rep speaks, pauses, and the doctor answers
+ * out loud. Only with practice on. Off, the session screen is exactly the typed one. The rep's voice is
+ * their own, in a practice with an AI — not a doctor and not a visit, so it is not the consultation
+ * recording that stays off (D-15). It needs the AI service's speech models; without the key the
+ * screen says so and typing carries on.
+ */
+export const practiceVoiceEnabled: boolean =
+  practiceEnabled && process.env.EXPO_PUBLIC_PRACTICE_VOICE === 'true';
+
+/**
  * W2-C C / `BE-W160` — Product Q&A, on the REAL transport.
  *
  * **Off by default.** Unlike the two above there is no sample behind it: on, it asks the real

@@ -44,6 +44,9 @@ export type {
   PracticeNotice,
   PracticeSessionScreenProps,
   PracticeTurnRow,
+  PracticeVoice,
+  PracticeVoicePause,
+  PracticeVoicePhase,
 } from './PracticeSessionScreen';
 export { AnalysisReplyScreen } from './AnalysisReplyScreen';
 export type { AnalysisReplyScreenProps } from './AnalysisReplyScreen';

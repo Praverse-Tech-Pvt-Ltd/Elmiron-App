@@ -9,6 +9,7 @@ import {
   learningEnabled,
   liveTrackingEnabled,
 } from '../../src/features';
+import { batteryStepApplies } from '../../src/onboarding/device';
 import { useSession } from '../../src/session';
 import { settingsGroups } from '../../src/settings/content';
 import { chooseAppLanguage } from '../../src/settings/language-pref';
@@ -92,9 +93,13 @@ export default function Me(): ReactNode {
           onOpenDayEnd: () => {
             router.push('/day-end');
           },
-          onOpenBattery: () => {
-            router.push('/onboarding/battery');
-          },
+          ...(batteryStepApplies()
+            ? {
+                onOpenBattery: () => {
+                  router.push('/onboarding/battery');
+                },
+              }
+            : {}),
           onOpenTransparency: () => {
             router.push('/transparency');
           },

@@ -27,6 +27,11 @@ const FORBIDDEN = [
   'isAndroidBackgroundLocationEnabled',
   'startLocationUpdatesAsync',
   'startGeofencingAsync',
+  // `FE-W161` — the iOS ways: the "Always" usage strings, expo-location's iOS background option,
+  // and any background mode at all (none is needed; `plugins/ios-release.cjs` refuses `location`).
+  'NSLocationAlways',
+  'isIosBackgroundLocationEnabled',
+  'UIBackgroundModes',
 ] as const;
 
 const sourceFiles = (dir: string): string[] =>

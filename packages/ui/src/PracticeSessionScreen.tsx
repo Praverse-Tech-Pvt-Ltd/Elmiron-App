@@ -45,6 +45,125 @@ export type PracticeNotice =
       readonly onRetry: () => void;
     };
 
+/**
+ * `FE-W163` — the hands-free voice conversation, as the screen shows it. The loop itself (microphone,
+ * pause detection, playback) is the app's; this only draws where it is and offers start / stop.
+ */
+export type PracticeVoicePhase =
+  'off' | 'starting' | 'listening' | 'hearing' | 'thinking' | 'speaking' | 'paused';
+
+export type PracticeVoicePause =
+  | 'nothing_said'
+  | 'mic_denied'
+  | 'not_heard'
+  | 'no_voice'
+  | 'offline'
+  | 'error'
+  | 'interrupted'
+  | 'refused'
+  | 'at_limit';
+
+export interface PracticeVoice {
+  readonly phase: PracticeVoicePhase;
+  readonly pause: PracticeVoicePause | null;
+  readonly onStart: () => void;
+  readonly onStop: () => void;
+}
+
+const pauseText = (pause: PracticeVoicePause | null): string => {
+  switch (pause) {
+    case 'nothing_said':
+      return t('practice.voicePauseNothingSaid');
+    case 'mic_denied':
+      return t('practice.voicePauseMicDenied');
+    case 'not_heard':
+      return t('practice.voicePauseNotHeard');
+    case 'no_voice':
+      return t('practice.voicePauseNoVoice');
+    case 'offline':
+      return t('practice.voicePauseOffline');
+    case 'interrupted':
+      return t('practice.voicePauseInterrupted');
+    case 'refused':
+      return t('practice.voicePauseRefused');
+    case 'at_limit':
+      return t('practice.voicePauseAtLimit');
+    case 'error':
+    case null:
+      return t('practice.voicePauseError');
+  }
+};
+
+/** Whether the voice loop is in the middle of a turn (typing waits until it is not). */
+export const voiceBusy = (voice: PracticeVoice | null | undefined): boolean =>
+  voice !== null && voice !== undefined && voice.phase !== 'off' && voice.phase !== 'paused';
+
+const VoiceCard = ({
+  voice,
+  personaName,
+  atLimit,
+}: {
+  readonly voice: PracticeVoice;
+  readonly personaName: string;
+  readonly atLimit: boolean;
+}): ReactNode => {
+  useLanguage();
+  const stop = (
+    <Button label={t('practice.voiceStop')} onPress={voice.onStop} variant="secondary" />
+  );
+  return (
+    <Card>
+      <View style={styles.turn}>
+        <Label muted>{t('practice.voiceTitle')}</Label>
+        {voice.phase === 'off' ? (
+          <>
+            <BodyText>{t('practice.voiceIntro')}</BodyText>
+            {atLimit ? (
+              <Button
+                disabled
+                label={t('practice.voiceStart')}
+                note={t('practice.unavailableUntilReset')}
+                onPress={voice.onStart}
+              />
+            ) : (
+              <Button label={t('practice.voiceStart')} onPress={voice.onStart} />
+            )}
+          </>
+        ) : voice.phase === 'starting' ? (
+          <Spinner label={t('practice.voiceStarting')} />
+        ) : voice.phase === 'listening' || voice.phase === 'hearing' ? (
+          <>
+            <BodyText>
+              {voice.phase === 'listening'
+                ? t('practice.voiceListening')
+                : t('practice.voiceHearing')}
+            </BodyText>
+            {stop}
+          </>
+        ) : voice.phase === 'thinking' ? (
+          <>
+            <Spinner label={t('practice.answering')} />
+            {stop}
+          </>
+        ) : voice.phase === 'speaking' ? (
+          <>
+            <BodyText>{t('practice.voiceSpeaking', { name: personaName })}</BodyText>
+            {stop}
+          </>
+        ) : (
+          <>
+            <BodyText>{pauseText(voice.pause)}</BodyText>
+            {voice.pause === 'no_voice' || voice.pause === 'mic_denied' || atLimit ? null : (
+              <Button label={t('practice.voiceResume')} onPress={voice.onStart} />
+            )}
+            {stop}
+          </>
+        )}
+      </View>
+    </Card>
+  );
+};
+
 export interface PracticeSessionScreenProps {
   readonly sample: boolean;
   readonly personaName: string;
@@ -66,6 +185,8 @@ export interface PracticeSessionScreenProps {
   readonly allowance: AiAllowanceState;
   readonly loading?: boolean;
   readonly failure?: { readonly title: string; readonly detail: string } | null;
+  /** `FE-W163`. Present when the build has voice practice; absent, the screen is as before. */
+  readonly voice?: PracticeVoice | null;
 }
 
 const styles = StyleSheet.create({
@@ -161,6 +282,7 @@ export const PracticeSessionScreen = ({
   allowance,
   loading = false,
   failure = null,
+  voice = null,
 }: PracticeSessionScreenProps): ReactNode => {
   useLanguage();
   if (failure !== null) {
@@ -170,6 +292,7 @@ export const PracticeSessionScreen = ({
 
   const atLimit = allowance.kind === 'at_limit';
   const empty = draft.trim().length === 0;
+  const talking = voiceBusy(voice);
 
   return (
     <View style={styles.stack}>
@@ -216,8 +339,11 @@ export const PracticeSessionScreen = ({
 
       {phase === 'open' ? (
         <>
+          {voice === null ? null : (
+            <VoiceCard atLimit={atLimit} personaName={personaName} voice={voice} />
+          )}
           <TextField
-            editable={!sending && !atLimit}
+            editable={!sending && !atLimit && !talking}
             help={practiceOnlyNote()}
             label={t('practice.whatYouSay')}
             onChangeText={onChangeDraft}
@@ -230,7 +356,7 @@ export const PracticeSessionScreen = ({
               note={t('practice.unavailableUntilReset')}
               onPress={onSend}
             />
-          ) : empty ? (
+          ) : empty || talking ? (
             <Button
               disabled
               label={t('practice.send')}

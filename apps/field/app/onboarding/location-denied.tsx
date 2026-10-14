@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { Linking, PermissionsAndroid } from 'react-native';
+import { Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { BodyText, Button, Display, Label, Screen, t, useLanguage } from '@fieldforce/ui';
 import { requestLocationPermission } from '../../src/onboarding/location-permission';
+import { requestLocationAnswers } from '../../src/onboarding/os-permissions';
 import { hasCompletedFirstRun } from '../../src/onboarding/progress';
 
 /**
@@ -60,7 +61,7 @@ export default function LocationDenied(): ReactNode {
   const turnBackOn = (): void => {
     setNote(null);
     void requestLocationPermission({
-      requestMultiple: (permissions) => PermissionsAndroid.requestMultiple(permissions),
+      requestMultiple: requestLocationAnswers,
     }).then((answer) => {
       switch (answer) {
         case 'granted':

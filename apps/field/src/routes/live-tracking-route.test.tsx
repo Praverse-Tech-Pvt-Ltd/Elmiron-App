@@ -68,6 +68,30 @@ describe('app/live-tracking.tsx', () => {
     expect(screen.queryByText('DRAFT — not approved by your company')).toBeNull();
   });
 
+  it('FE-W162: a Markdown notice is laid out — headings, joined paragraphs, bullets, no markers', async () => {
+    const body = [
+      '## Location sharing',
+      '',
+      'This is a **separate** notice from any',
+      'other you have agreed to.',
+      '',
+      '* **Only during your working hours**.',
+      '',
+      '---',
+      '',
+      '**[ ] I have read this notice.**',
+    ].join('\n');
+    const shown = status({ notice: { id: NOTICE, versionLabel: 'v1', body, isDraft: false } });
+    await render(<LiveTrackingScreen tracker={tracker({ status: shown })} />);
+    expect(screen.getByText('Location sharing')).toBeTruthy();
+    expect(
+      screen.getByText('This is a separate notice from any other you have agreed to.'),
+    ).toBeTruthy();
+    expect(screen.getByText('•  Only during your working hours.')).toBeTruthy();
+    expect(screen.getByText('I have read this notice.')).toBeTruthy();
+    expect(screen.queryByText(/\*\*|##|---|\[ \]/u)).toBeNull();
+  });
+
   it('agreeing sends the version that was shown', async () => {
     const t = tracker();
     await render(<LiveTrackingScreen tracker={t} />);

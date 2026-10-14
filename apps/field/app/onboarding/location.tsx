@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { PermissionsAndroid } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   Banner,
@@ -14,6 +13,7 @@ import {
   useLanguage,
 } from '@fieldforce/ui';
 import { requestLocationPermission } from '../../src/onboarding/location-permission';
+import { requestLocationAnswers } from '../../src/onboarding/os-permissions';
 import { hasCompletedFirstRun } from '../../src/onboarding/progress';
 
 /**
@@ -60,7 +60,7 @@ export default function LocationRationale(): ReactNode {
 
   const turnOn = (): void => {
     void requestLocationPermission({
-      requestMultiple: (permissions) => PermissionsAndroid.requestMultiple(permissions),
+      requestMultiple: requestLocationAnswers,
     }).then(async (answer) => {
       switch (answer) {
         case 'granted':

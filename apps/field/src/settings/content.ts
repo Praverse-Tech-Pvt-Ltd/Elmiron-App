@@ -26,7 +26,8 @@ import type { Language } from '@fieldforce/ui/i18n';
 export interface SettingsNavigation {
   readonly onOpenMileage: () => void;
   readonly onOpenDayEnd: () => void;
-  readonly onOpenBattery: () => void;
+  /** `FE-W161`. Present only where the step applies (Android); absent, there is no battery row. */
+  readonly onOpenBattery?: () => void;
   readonly onOpenTransparency: () => void;
   readonly onOpenLocation: () => void;
   /** `FE-W139`. The Mobile data screen, behind both "Your data" rows. */
@@ -208,17 +209,21 @@ export const settingsGroups = (
         state: 'available',
         onPress: nav.onOpenLocation,
       },
-      {
-        id: 'battery',
-        title: t('settings.battery'),
-        // C4 draws "All 3 set correctly" here. The done-marks now persist, so the
-        // count is finally *available* — it is still absent because this module is a
-        // pure list and reading it would make every settings row wait on storage.
-        // A row that needs live state should take it as a prop rather than fetch.
-        detail: t('settings.batteryDetail'),
-        state: 'available',
-        onPress: nav.onOpenBattery,
-      },
+      ...(nav.onOpenBattery === undefined
+        ? []
+        : [
+            {
+              id: 'battery',
+              title: t('settings.battery'),
+              // C4 draws "All 3 set correctly" here. The done-marks now persist, so the
+              // count is finally *available* — it is still absent because this module is a
+              // pure list and reading it would make every settings row wait on storage.
+              // A row that needs live state should take it as a prop rather than fetch.
+              detail: t('settings.batteryDetail'),
+              state: 'available' as const,
+              onPress: nav.onOpenBattery,
+            },
+          ]),
       {
         id: 'transparency',
         title: t('settings.transparency'),

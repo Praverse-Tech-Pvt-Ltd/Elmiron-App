@@ -54,6 +54,10 @@ from `OPENAI_MODEL` in `packages/core/src/field/gateway/prompt-contract.ts`. **O
 shut down on 14 January 2027** (its deprecations page, entry dated 14 October 2026): enough for the
 pilot's start, not for a long pilot — `BE-W207`.
 
+**Voice practice** (`BE-W214`, `FE-W163`) also uses `gpt-4o-mini-transcribe` (the rep's spoken turn) and
+`gpt-4o-mini-tts` (the doctor's voice): the key's OpenAI project must allow both. Without them, the
+phone says voice is not available and typing carries on.
+
 ## B. Production — later, only when the owner says so
 
 Nothing below has been done, and nothing in `pnpm key-day` touches production.

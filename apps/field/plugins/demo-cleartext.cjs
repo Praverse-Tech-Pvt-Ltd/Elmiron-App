@@ -11,6 +11,10 @@
 //     `cleartextTrafficPermitted="false"` explicitly, so every other host stays blocked.
 //   - The release config guard (`src/api-target.ts`) is not touched: it governs the API address,
 //     and a LAN address already passes it.
+//   - `FE-W161` iOS: the same hosts get an App Transport Security exception, and the build may use
+//     the local network (iOS 14+ asks the user once, with `NSLocalNetworkUsageDescription`). ATS
+//     exception domains name hostnames; a bare IP address is covered by `NSAllowsLocalNetworking`,
+//     so both are set. NOT YET SEEN ON AN IPHONE: no iOS build has been made (no Apple account).
 //
 // CommonJS, because Expo's config loader `require`s plugins and `apps/field` is `"type": "module"`.
 // `expo/config-plugins` ships inside the installed `expo` package: no new dependency.
@@ -70,6 +74,28 @@ const networkSecurityConfigXml = (hosts) =>
   ].join('\n');
 
 /**
+ * `FE-W161`. The iOS side: http to exactly these hosts, and the local network, for a demo build.
+ *
+ * @param {Record<string, unknown> | undefined} infoPlist
+ * @param {readonly string[]} hosts
+ * @returns {Record<string, unknown>}
+ */
+const demoInfoPlist = (infoPlist, hosts) => ({
+  ...(infoPlist ?? {}),
+  NSAppTransportSecurity: {
+    NSAllowsLocalNetworking: true,
+    NSExceptionDomains: Object.fromEntries(
+      hosts.map((host) => [
+        host,
+        { NSExceptionAllowsInsecureHTTPLoads: true, NSIncludesSubdomains: false },
+      ]),
+    ),
+  },
+  NSLocalNetworkUsageDescription:
+    'This demo build reaches the test server on this Wi-Fi network, and nothing else on it.',
+});
+
+/**
  * The plugin. No hosts: the very same config back, untouched.
  *
  * @param {import('expo/config').ExpoConfig} config
@@ -78,7 +104,12 @@ const networkSecurityConfigXml = (hosts) =>
 const withDemoCleartext = (config, hosts) => {
   if (hosts.length === 0) return config;
 
-  const withResource = withDangerousMod(config, [
+  const withIos = {
+    ...config,
+    ios: { ...(config.ios ?? {}), infoPlist: demoInfoPlist(config.ios?.infoPlist, hosts) },
+  };
+
+  const withResource = withDangerousMod(withIos, [
     'android',
     (modConfig) => {
       const dir = path.join(
@@ -102,4 +133,10 @@ const withDemoCleartext = (config, hosts) => {
   });
 };
 
-module.exports = { VARIABLE, demoCleartextHosts, networkSecurityConfigXml, withDemoCleartext };
+module.exports = {
+  VARIABLE,
+  demoCleartextHosts,
+  demoInfoPlist,
+  networkSecurityConfigXml,
+  withDemoCleartext,
+};

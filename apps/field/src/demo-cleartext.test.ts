@@ -112,3 +112,32 @@ describe('app.config.ts — the demo build says it is one', () => {
     expect(Object.keys(out.mods?.android ?? {}).sort()).toEqual(['dangerous', 'manifest']);
   });
 });
+
+describe('FE-W161 — the iOS side of a demo build', () => {
+  const { demoInfoPlist } = plugin;
+
+  it('allows http to exactly the hosts given, and the local network, keeping existing keys', () => {
+    const plist = demoInfoPlist({ ITSAppUsesNonExemptEncryption: false }, ['192.168.1.7']) as {
+      ITSAppUsesNonExemptEncryption: boolean;
+      NSAppTransportSecurity: {
+        NSAllowsLocalNetworking: boolean;
+        NSExceptionDomains: Record<string, unknown>;
+        NSAllowsArbitraryLoads?: boolean;
+      };
+      NSLocalNetworkUsageDescription: string;
+    };
+    expect(plist.ITSAppUsesNonExemptEncryption).toBe(false);
+    expect(plist.NSAppTransportSecurity.NSAllowsLocalNetworking).toBe(true);
+    expect(Object.keys(plist.NSAppTransportSecurity.NSExceptionDomains)).toEqual(['192.168.1.7']);
+    // Never the blanket switch: every other host keeps App Transport Security.
+    expect(plist.NSAppTransportSecurity.NSAllowsArbitraryLoads).toBeUndefined();
+    expect(plist.NSLocalNetworkUsageDescription).toMatch(/demo/u);
+  });
+
+  it("with hosts, the iOS config carries the exception; without, app.json's plist is untouched", () => {
+    const withHosts = withDemoCleartext(base(), ['192.168.1.7']);
+    expect(withHosts.ios?.infoPlist?.['NSAppTransportSecurity']).toBeDefined();
+    const without = withDemoCleartext(base(), []);
+    expect(without.ios).toBeUndefined();
+  });
+});

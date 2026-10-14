@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react';
-import { PermissionsAndroid } from 'react-native';
 import { useRouter } from 'expo-router';
 import { BodyText, Button, Display, Label, Screen, t, useLanguage } from '@fieldforce/ui';
-import { RECORD_AUDIO } from '../../src/onboarding/microphone-gate';
+import { requestMicrophoneAnswer } from '../../src/onboarding/os-microphone';
 import { markMicrophoneRationaleAnswered } from '../../src/onboarding/progress';
 
 /**
@@ -57,7 +56,7 @@ export default function MicrophoneRationale(): ReactNode {
   };
 
   const allow = (): void => {
-    void PermissionsAndroid.request(RECORD_AUDIO)
+    void requestMicrophoneAnswer()
       .catch(() => 'denied')
       .then(done);
   };

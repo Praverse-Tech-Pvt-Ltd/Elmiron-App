@@ -149,6 +149,16 @@ export interface TurnRequestBody {
   readonly history: readonly { readonly role: 'rep' | 'doctor'; readonly text: string }[];
 }
 
+/**
+ * `FE-W163` — a spoken turn: the rep's recording in place of typed text. The gateway hears it,
+ * takes the turn as the words it heard, and answers with the doctor's reply as speech too.
+ */
+export interface SpokenTurnBody {
+  readonly feature: 'ai_doctor';
+  readonly sessionId: string;
+  readonly repAudio: { readonly base64: string; readonly mimeType: 'audio/mp4' };
+}
+
 export interface CoachRequestBody {
   readonly feature: 'ai_coach';
   readonly sessionId: string;

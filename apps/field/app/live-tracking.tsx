@@ -15,6 +15,7 @@ import {
 } from '@fieldforce/ui';
 import type { TextKey } from '@fieldforce/ui';
 import { liveTrackingEnabled } from '../src/features';
+import { noticeBlocks } from '../src/tracking/notice-blocks';
 import { useLiveTracker } from '../src/tracking/tracker';
 import type { LiveTracker } from '../src/tracking/tracker';
 
@@ -86,7 +87,15 @@ export const LiveTrackingScreen = ({ tracker }: { readonly tracker: LiveTracker 
           ) : null}
           {/* FE-W155: the published notice — legal wording, English-only like consent — not in the catalogue. */}
           <Heading>{notice.versionLabel}</Heading>
-          <BodyText>{notice.body}</BodyText>
+          {/* `FE-W162`: laid out as written (headings, paragraphs, bullets), every word kept. */}
+          {noticeBlocks(notice.body).flatMap((block, index) => {
+            const key = `${String(index)}:${block.kind}`;
+            if (block.kind === 'heading') return [<Heading key={key}>{block.text}</Heading>];
+            if (block.kind === 'paragraph') return [<BodyText key={key}>{block.text}</BodyText>];
+            return block.items.map((item, at) => (
+              <BodyText key={`${key}:${String(at)}`}>{`•  ${item}`}</BodyText>
+            ));
+          })}
         </Card>
       )}
 

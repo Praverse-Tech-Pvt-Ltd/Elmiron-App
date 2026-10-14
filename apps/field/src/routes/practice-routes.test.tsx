@@ -22,7 +22,25 @@ jest.mock('../features', () => ({
   },
   coachingEnabled: false,
   assistantEnabled: false,
+  get practiceVoiceEnabled() {
+    return mockVoiceEnabled;
+  },
 }));
+// `FE-W163`. The device loop (expo-audio, native) does not load under jest: it is replaced by one
+// that hands the screen's `send` to the test, so the test can play the part of the microphone.
+let mockVoiceEnabled = false;
+let mockVoiceSend: ((base64: string) => Promise<unknown>) | null = null;
+jest.mock('../practice/voice-device', () => ({
+  useVoiceConversation: (send: (base64: string) => Promise<unknown>) => {
+    mockVoiceSend = send;
+    return { phase: 'off', pause: null, start: () => undefined, stop: () => undefined };
+  },
+}));
+let mockSpokenResponse: { status: number; body: unknown } = {
+  status: 503,
+  body: { code: 'voice_unavailable' },
+};
+const mockSpoken: unknown[] = [];
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
@@ -50,6 +68,10 @@ jest.mock('../practice/transport', () => {
     turn: (body) => {
       mockTurns.push(body);
       return sample.turn(body);
+    },
+    spokenTurn: (body) => {
+      mockSpoken.push(body);
+      return Promise.resolve(mockSpokenResponse);
     },
     end: (sessionId) => {
       if (mockEndFailures > 0) {
@@ -94,6 +116,10 @@ const startSession = async (): Promise<string> => {
 
 beforeEach(() => {
   mockPracticeEnabled = true;
+  mockVoiceEnabled = false;
+  mockVoiceSend = null;
+  mockSpoken.length = 0;
+  mockSpokenResponse = { status: 503, body: { code: 'voice_unavailable' } };
   mockStubAnalysis = false;
   mockPush.mockReset();
   mockReplace.mockReset();
@@ -261,5 +287,48 @@ describe('FE-D17 — the feedback', () => {
     await render(<PracticeAnalysis />);
 
     expect(await screen.findByText('This feedback is not available to you')).toBeTruthy();
+  });
+});
+
+describe('FE-W163 — practice by voice', () => {
+  it('off: no voice card, the typed screen as before', async () => {
+    mockParams = { id: await startSession() };
+    await render(<PracticeSession />);
+    await screen.findByText('Dr Sample Rao');
+    expect(screen.queryByText('Talk to the doctor')).toBeNull();
+  });
+
+  it('on: a spoken turn sends the session and the recording only; a reply with speech plays', async () => {
+    mockVoiceEnabled = true;
+    const sessionId = await startSession();
+    mockParams = { id: sessionId };
+    await render(<PracticeSession />);
+    expect(await screen.findByText('Talk to the doctor')).toBeTruthy();
+
+    mockSpokenResponse = {
+      status: 200,
+      body: {
+        kind: 'replied',
+        reply: 'Go on.',
+        repText: 'Good morning, Doctor.',
+        doctorAudio: { base64: 'AAAA', mimeType: 'audio/mpeg' },
+      },
+    };
+    await expect(mockVoiceSend?.('QUJD')).resolves.toEqual({ next: 'speak', audio: 'AAAA' });
+    expect(mockSpoken).toEqual([
+      { feature: 'ai_doctor', sessionId, repAudio: { base64: 'QUJD', mimeType: 'audio/mp4' } },
+    ]);
+    expect(JSON.stringify(mockSpoken)).not.toMatch(/Asha|Deshpande|55555555-5555-4555-8555/u);
+  });
+
+  it('on: without the speech service the loop pauses and says to type; silence just listens again', async () => {
+    mockVoiceEnabled = true;
+    mockParams = { id: await startSession() };
+    await render(<PracticeSession />);
+    await screen.findByText('Talk to the doctor');
+
+    await expect(mockVoiceSend?.('QUJD')).resolves.toEqual({ next: 'pause', pause: 'no_voice' });
+    mockSpokenResponse = { status: 200, body: { kind: 'no_speech' } };
+    await expect(mockVoiceSend?.('QUJD')).resolves.toEqual({ next: 'listen' });
   });
 });

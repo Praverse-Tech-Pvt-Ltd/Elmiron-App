@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { Linking, PermissionsAndroid } from 'react-native';
+import { Linking, PermissionsAndroid, Platform } from 'react-native';
 import type { ReactNode } from 'react';
 import type * as ReactModule from 'react';
 import type * as UiModule from '@fieldforce/ui';
@@ -35,6 +35,9 @@ jest.mock('../session', () => ({ useSession: () => ({ status: 'signed-in' }) }))
 // A2 must not read a position: `takeFix` is how this screen used to ask, and it took a fix.
 const mockTakeFix = jest.fn();
 jest.mock('../capture/location', () => ({ takeFix: () => mockTakeFix() }));
+// `FE-W161`. iOS is asked through expo-location; Android never reaches it.
+const mockIosRequest = jest.fn<() => Promise<{ granted: boolean; canAskAgain: boolean }>>();
+jest.mock('expo-location', () => ({ requestForegroundPermissionsAsync: () => mockIosRequest() }));
 
 import Index from '../../app/index';
 import LocationRationale from '../../app/onboarding/location';
@@ -54,6 +57,8 @@ const spyOnOpenSettings = () => jest.spyOn(Linking, 'openSettings');
 let openSettings: ReturnType<typeof spyOnOpenSettings>;
 
 beforeEach(() => {
+  // These are Android's rules, asked with `PermissionsAndroid`; the iOS block below sets its own.
+  jest.replaceProperty(Platform, 'OS', 'android');
   mockFirstRunDone = false;
   requestMultiple = spyOnRequestMultiple();
   openSettings = spyOnOpenSettings().mockResolvedValue(undefined);
@@ -68,6 +73,7 @@ afterEach(() => {
   mockPush.mockReset();
   mockBack.mockReset();
   mockTakeFix.mockReset();
+  mockIosRequest.mockReset();
 });
 
 describe('first run order — A2 is the second screen', () => {
@@ -180,5 +186,34 @@ describe('S4 — reached on a denial', () => {
     });
     expect(requestMultiple).not.toHaveBeenCalled();
     expect(openSettings).not.toHaveBeenCalled();
+  });
+});
+
+describe('FE-W161 — on an iPhone, the same screens ask iOS', () => {
+  beforeEach(() => {
+    jest.replaceProperty(Platform, 'OS', 'ios');
+  });
+
+  it('A2 asks iOS for "While Using" location, never PermissionsAndroid; granted goes on to A3', async () => {
+    mockIosRequest.mockResolvedValue({ granted: true, canAskAgain: true });
+    await render(<LocationRationale />);
+    await fireEvent.press(screen.getByText('Turn location on'));
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/onboarding/notifications');
+    });
+    expect(mockIosRequest).toHaveBeenCalledTimes(1);
+    expect(requestMultiple).not.toHaveBeenCalled();
+  });
+
+  it('S4 after an iOS "Don\'t Allow" opens Settings, since iOS will not ask twice', async () => {
+    mockIosRequest.mockResolvedValue({ granted: false, canAskAgain: false });
+    await render(<LocationDenied />);
+    await fireEvent.press(screen.getByText('Turn location back on'));
+
+    await waitFor(() => {
+      expect(openSettings).toHaveBeenCalledTimes(1);
+    });
+    expect(requestMultiple).not.toHaveBeenCalled();
   });
 });

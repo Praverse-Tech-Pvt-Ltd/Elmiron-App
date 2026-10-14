@@ -1,0 +1,31 @@
+{
+  "cli": {
+    "appVersionSource": "local"
+  },
+  "build": {
+    "ios-simulator": {
+      "distribution": "internal",
+      "ios": { "simulator": true },
+      "env": {
+        "EXPO_PUBLIC_LEARNING": "true",
+        "EXPO_PUBLIC_LESSON_TUTOR": "true",
+        "EXPO_PUBLIC_ASSISTANT": "true",
+        "EXPO_PUBLIC_PRODUCT_QA": "true",
+        "EXPO_PUBLIC_PRACTICE": "true",
+        "EXPO_PUBLIC_PRACTICE_VOICE": "true",
+        "EXPO_PUBLIC_LIVE_TRACKING": "true",
+        "EXPO_PUBLIC_APP_JWT_AUDIENCE": "authenticated",
+        "EXPO_PUBLIC_APP_SITE_URL": "http://127.0.0.1:3000",
+        "EXPO_PUBLIC_APP_DEEP_LINK_SCHEME": "com.praversetech.fieldforce",
+        "EXPO_PUBLIC_APP_ADDITIONAL_REDIRECT_URLS": "com.praversetech.fieldforce://auth-callback"
+      }
+    },
+    "ios-demo": {
+      "extends": "ios-simulator",
+      "ios": { "simulator": false }
+    },
+    "ios-production": {
+      "distribution": "store"
+    }
+  }
+}
