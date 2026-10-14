@@ -865,7 +865,7 @@ const main = async (argv) => {
         if (clip !== null && first !== undefined) {
           first.video = { path: clip.clip, line: first.line };
           first.poster = { path: clip.poster, line: first.line };
-          videoNote = `its first lesson, "${first.title}", carries a ${String(TEST_CLIP_SECONDS)} s TEST clip (test pattern and tone) with a poster`;
+          videoNote = `its first lesson, "${first.title}", carries a TEST clip of ${String(TEST_CLIP_SECONDS)} s (test pattern and tone) with a poster`;
         } else {
           videoNote =
             'ffmpeg is not on PATH, so it has no video — install it (winget install Gyan.FFmpeg), open a new terminal, and run pnpm key-day --fresh';
