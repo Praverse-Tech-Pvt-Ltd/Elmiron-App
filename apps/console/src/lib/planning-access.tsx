@@ -8,6 +8,7 @@ import { browserClient } from './supabase';
 import { Body, Card, Heading, Label, MissingNote, Pill } from './ui';
 import { grantRefusal, grantStateLabel } from './planning-text';
 import { btn } from './theme-css';
+import { dayLabel } from './india-date';
 
 /**
  * `BE-W171` — the client half of `/planning/access`. The browser sends ids only; the names in the
@@ -81,7 +82,7 @@ export const PlanningAccess = ({
           return;
         }
         const row = PlanningGrantSchema.parse(data);
-        setOutcome({ kind: 'done', message: `Granted from ${row.valid_from}.` });
+        setOutcome({ kind: 'done', message: `Granted from ${dayLabel(row.valid_from)}.` });
         setReason('');
         router.refresh();
       });
@@ -216,8 +217,9 @@ const GrantLine = ({
     <tr>
       <td>{row.manager}</td>
       <td>{row.territory}</td>
-      <td>
-        {row.from} – {row.until ?? 'no end'}
+      {/* `FE-W166`: "14 Oct 2026 – 20 Oct 2026", not two ISO dates. */}
+      <td className="ff-nowrap">
+        {dayLabel(row.from)} – {row.until === null ? 'no end date' : dayLabel(row.until)}
       </td>
       <td>{row.reason}</td>
       <td>

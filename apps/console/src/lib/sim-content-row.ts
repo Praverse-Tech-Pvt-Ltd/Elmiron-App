@@ -1,4 +1,5 @@
 import type { SimPersona, SimScenario } from '@fieldforce/core';
+import { stanceLabel } from './labels';
 
 /**
  * W1-F B4 — the row a persona and a scenario both become, and the two functions that build it.
@@ -40,7 +41,8 @@ export const simPersonaRow = (p: SimPersona): SimContentRow => ({
   title: p.displayName,
   detail: [
     ['Specialty', p.specialty],
-    ['How they behave', p.stance],
+    // `FE-W165`: "Sceptical", "In a hurry" — never the stored `sceptical`, `rushed`.
+    ['How they behave', stanceLabel(p.stance)],
     ['Brief', p.brief],
   ],
   authorship: p.authorship,

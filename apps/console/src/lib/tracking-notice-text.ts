@@ -1,5 +1,6 @@
 import type { CompanyNoticeVersion, NoticeVersionStatus } from '@fieldforce/core';
 import type { Refusal } from './tracking-text';
+import { indiaDateTime } from './india-date';
 
 /**
  * `FE-W91` / `BE-W201` — what the live-tracking notice screen says, in the admin's words.
@@ -19,10 +20,6 @@ export const BODY_MAX = 20_000;
 /** `live_tracking_notice_approvals.attestation`: 3–500. */
 export const ATTESTATION_MIN = 3;
 export const ATTESTATION_MAX = 500;
-
-/** Where the engineering draft lives, for an admin who wants to start from it. */
-export const DRAFT_DOC_URL =
-  'https://github.com/Praverse-Tech-Pvt-Ltd/Elmiron-App/blob/main/docs/operator/live-tracking-notice-DRAFT.md';
 
 /** The consequence an approver must know BEFORE pressing Approve. */
 export const REACCEPT_NOTE =
@@ -67,7 +64,7 @@ export const approvalAffordance = (version: CompanyNoticeVersion): ApprovalAffor
 export const proposalProblem = (label: string, body: string): string | null => {
   const l = label.trim();
   const b = body.trim();
-  if (l.length === 0) return 'Give this version a label, for example “v1 — 2026-10”.';
+  if (l.length === 0) return 'Give this version a label, for example “v1 — October 2026”.';
   if (l.length > LABEL_MAX) return `A label is at most ${String(LABEL_MAX)} characters.`;
   if (b.length < BODY_MIN) {
     return `Paste the full text of the notice — at least ${String(BODY_MIN)} characters.`;
@@ -94,17 +91,8 @@ export const attestationProblem = (attestation: string): string | null => {
   return null;
 };
 
-/** India time, to the minute: the console's operators are in India. */
-export const when = (iso: string): string =>
-  new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Kolkata',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).format(new Date(iso));
+/** India time, to the minute: the console's operators are in India. `FE-W166`: the shared helper. */
+export const when = (iso: string): string => indiaDateTime(iso);
 
 /** Every refusal the notice functions and the tables make, in plain words, each with its remedy. */
 export const noticeRefusal = ({ code, message }: Refusal): string => {
@@ -115,7 +103,7 @@ export const noticeRefusal = ({ code, message }: Refusal): string => {
     return 'You loaded this version, so you cannot approve it. Ask a second admin to approve it. Nothing was changed.';
   }
   if (/engineering draft cannot be approved/u.test(message)) {
-    return 'The engineering draft cannot be approved. Load your company’s own text below, then ask a second admin to approve it.';
+    return 'The built-in draft cannot be approved. Load your company’s own text below, then ask a second admin to approve it.';
   }
   if (/only an active admin of the notice's own company/u.test(message)) {
     return 'Only an active admin of this company approves its notice. Nothing was changed.';

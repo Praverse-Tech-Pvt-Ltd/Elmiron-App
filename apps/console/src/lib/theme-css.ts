@@ -113,6 +113,10 @@ body.ff-body {
   box-shadow: inset 0 1px 0 ${alpha(c.onAccent, 0.16)}, var(--ff-shadow-xs);
 }
 .ff-brand-mark-lg { width: 40px; height: 40px; border-radius: ${px(r.well)}; }
+/* FE-W170: the brand row, the phone's Menu button (hidden until 640px) and the list it opens. */
+.ff-nav-head { display: flex; align-items: center; justify-content: space-between; gap: ${px(s.sm)}; }
+.ff-nav-toggle { display: none; }
+.ff-nav-menu { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: ${px(s.xs)}; }
 .ff-nav-items { display: flex; flex-direction: column; gap: ${px(s.xs / 2)}; }
 .ff-nav-group { display: flex; flex-direction: column; gap: 2px; }
 .ff-nav-group + .ff-nav-group { margin-top: ${px(s.sm)}; }
@@ -192,11 +196,28 @@ a.ff-crumb:hover { color: var(--ff-text-primary); }
 .ff-row { display: flex; gap: ${px(s.sm)}; align-items: center; flex-wrap: wrap; }
 .ff-row-tight { gap: ${px(s.xs + 2)}; }
 .ff-prewrap { white-space: pre-wrap; }
+.ff-row-baseline { align-items: baseline; }
+.ff-strong { font-weight: 600; }
+.ff-status { display: inline-flex; }
+.ff-page-gap { margin-bottom: ${px(s.lg)}; }
+/* FE-W168: a paragraph in a wide card keeps a reading measure; tables and fields keep the width. */
+.ff-card > .ff-text { max-width: 96ch; }
+/* FE-W171: an address is one line. Broken at its hyphens ("keyday-39c801-rep-" / "1@…") it read as
+   two addresses; whole, it widens its column a little, and a narrow screen scrolls the table. */
+.ff-email, .ff-one-line { white-space: nowrap; }
+/* FE-W171: a form inside a table cell keeps the 560px measure every other form has. */
+.ff-form-measure { max-width: 560px; }
+.ff-header-form { margin-top: ${px(s.sm)}; }
+ul.ff-plain-list {
+  margin: 0; padding-left: ${px(s.md + 2)}; display: flex; flex-direction: column; gap: 2px;
+  color: var(--ff-text-secondary); ${typeRule(t.secondary)};
+}
 td > .ff-note, td > .ff-btn + .ff-note { margin-top: ${px(s.sm)}; }
-.ff-columns { display: flex; flex-wrap: wrap; gap: ${px(s.md)}; align-items: stretch; }
+.ff-columns { display: flex; flex-wrap: wrap; gap: ${px(s.md)}; align-items: flex-start; }
 .ff-columns > * { flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: ${px(s.md)}; }
-.ff-columns > .ff-col-wide { flex-grow: 1.4; }
-.ff-columns > * > .ff-card { flex: 1; }
+.ff-columns > .ff-col-wide { flex: 2 1 520px; }
+/* FE-W168: no card is stretched to its neighbour's height. A short panel beside a long table used to
+   become a tall white slab, the length of the table, with nothing in it. */
 .ff-split { display: flex; gap: ${px(s.lg)}; align-items: flex-start; }
 .ff-split > .ff-split-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: ${px(s.md)}; }
 .ff-split > .ff-split-side {
@@ -234,6 +255,9 @@ main code {
 /* ---------------------------------------------------------------- surfaces */
 
 .ff-card {
+  /* FE-W170: the card contains its own absolutely placed bits (a visually hidden header label), so
+     a table that scrolls inside it never pushes them past the page's right edge. */
+  position: relative;
   background: var(--ff-surface); border-radius: var(--ff-radius-card);
   padding: ${px(s.lg)}; display: flex; flex-direction: column; gap: ${px(s.sm + s.xs)};
   min-width: 0; box-shadow: var(--ff-shadow-sm), 0 0 0 1px var(--ff-edge);
@@ -256,7 +280,15 @@ main .ff-card > input:not([type='checkbox']):not([type='radio']):not([type='hidd
 main code.ff-secret {
   font-size: ${px(t.heading.size)}; letter-spacing: 0.04em; padding: 2px ${px(s.sm)}; user-select: all;
 }
-.ff-cell-actions { min-width: 260px; }
+.ff-cell-actions { min-width: 300px; }
+.ff-cell-actions > .ff-row { align-items: flex-start; }
+/* FE-W168: column widths for a table whose short columns wrapped to four lines beside a long one. */
+main th.ff-w-sm { width: 18%; }
+main th.ff-w-md { width: 26%; }
+/* FE-W171: a territory's depth in the tree, as indentation the stylesheet owns. */
+main td.ff-indent-1 { padding-left: ${px(s.md + 24)}; }
+main td.ff-indent-2 { padding-left: ${px(s.md + 48)}; }
+main td.ff-indent-3 { padding-left: ${px(s.md + 72)}; }
 
 /* A day's route: numbered stops, each on its own quiet row. */
 .ff-route { margin: 0; padding: 0; list-style: none; counter-reset: stop; display: flex; flex-direction: column; gap: ${px(s.sm)}; }
@@ -270,14 +302,40 @@ main code.ff-secret {
   border-radius: 50%; background: var(--ff-accent); color: var(--ff-on-accent);
   ${typeRule(t.label)}; font-variant-numeric: tabular-nums;
 }
-.ff-route-stop { flex: 1; min-width: 0; display: flex; gap: ${px(s.sm)}; align-items: center; flex-wrap: wrap; }
-.ff-route-name { min-width: 220px; font-weight: 600; }
+/* FE-W171: each stop is the same grid -- name, clinic, then the three buttons -- so the clinic
+   pickers line up down the route whatever length each doctor's name is. */
+.ff-route-stop {
+  flex: 1; min-width: 0; display: grid; gap: ${px(s.sm)}; align-items: center;
+  grid-template-columns: minmax(160px, 1fr) minmax(200px, 1.4fr) auto;
+}
+.ff-route-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.ff-route-actions { display: flex; gap: ${px(s.xs + 2)}; flex-wrap: wrap; }
 
 .ff-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: ${px(s.sm + s.xs)}; }
+.ff-stats-1 { grid-template-columns: minmax(0, 1fr); }
+.ff-stats-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ff-stats-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ff-stats-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .ff-stat {
   display: flex; flex-direction: column; gap: ${px(s.xs)}; min-width: 0;
   padding: ${px(s.md)}; border-radius: var(--ff-radius-well);
   background: var(--ff-background); box-shadow: inset 0 0 0 1px var(--ff-edge);
+}
+.ff-stat-attention { background: var(--ff-attention-fill); box-shadow: inset 0 0 0 1px ${alpha(c.attention, 0.16)}; }
+.ff-stat-attention .ff-label, .ff-stat-attention .ff-figure, .ff-stat-attention .ff-text { color: var(--ff-attention); }
+
+/* ---------------------------------------------------------------- the notice, as written */
+
+/* FE-W167: the live location notice laid out as headings, paragraphs and lists. */
+.ff-notice { display: flex; flex-direction: column; gap: ${px(s.sm)}; max-width: 80ch; }
+.ff-notice h3 { margin: ${px(s.sm)} 0 0; ${typeRule(t.heading)}; color: var(--ff-text-primary); }
+.ff-notice h3:first-child { margin-top: 0; }
+.ff-notice ul { margin: 0; padding-left: ${px(s.lg)}; display: flex; flex-direction: column; gap: ${px(s.xs)}; }
+.ff-notice li { ${typeRule(t.body)}; color: var(--ff-text-primary); }
+/* A blank the company has not filled is marked, so an approver cannot miss it. */
+mark.ff-blank {
+  background: var(--ff-attention-fill); color: var(--ff-attention); border-radius: ${px(r.sm)};
+  padding: 0 ${px(s.xs)}; box-shadow: inset 0 0 0 1px ${alpha(c.attention, 0.2)};
 }
 
 /* ---------------------------------------------------------------- notes and pills */
@@ -411,6 +469,9 @@ main label:has(> input[type='checkbox']), main label:has(> input[type='radio']) 
 }
 .ff-field { display: flex; flex-direction: column; gap: ${px(s.xs + 2)}; min-width: 0; }
 .ff-filters { display: flex; gap: ${px(s.md)}; flex-wrap: wrap; align-items: flex-end; }
+/* FE-W168: a filter row's button sits on the fields' baseline, not at the top of the row. */
+.ff-filters > .ff-btn, .ff-filters > label { align-self: flex-end; }
+.ff-filters > label { min-height: 38px; }
 
 main details { border-radius: var(--ff-radius-well); }
 main summary {
@@ -474,6 +535,7 @@ input[type='checkbox']:focus-visible, input[type='radio']:focus-visible {
 
 @media (max-width: 1100px) {
   .ff-nav { width: 72px; padding-left: ${px(s.sm + s.xs / 2)}; padding-right: ${px(s.sm + s.xs / 2)}; align-items: stretch; }
+  .ff-nav-head { justify-content: center; }
   .ff-brand { justify-content: center; padding-left: 0; padding-right: 0; }
   .ff-nav-text, .ff-user-email { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
   .ff-nav-title { height: 1px; padding: 0; margin: ${px(s.sm)} ${px(s.xs)}; background: var(--ff-edge-strong); font-size: 0; overflow: hidden; }
@@ -482,7 +544,22 @@ input[type='checkbox']:focus-visible, input[type='radio']:focus-visible {
   .ff-user { padding: ${px(s.xs + 2)}; align-items: center; background: transparent; box-shadow: none; }
   .ff-user .ff-btn { padding: 0; width: 36px; align-self: center; }
   .ff-topbar, .ff-main { padding-left: ${px(s.lg)}; padding-right: ${px(s.lg)}; }
-  .ff-card { overflow-x: auto; }
+  /*
+    FE-W170: a table wider than its card scrolls inside the card, and now SAYS so: a soft shadow at
+    an edge that has more beyond it, covered again when the content reaches that edge (the
+    background-attachment "local" cover over a "scroll" shadow). Every table gets it, with no
+    wrapper in any page. The shadow is the ink at 20% -- never text, so no new contrast pair.
+  */
+  .ff-card {
+    overflow-x: auto;
+    background:
+      linear-gradient(to right, var(--ff-surface) 30%, ${alpha(c.surface, 0)}) left center / 40px 100% no-repeat local,
+      linear-gradient(to left, var(--ff-surface) 30%, ${alpha(c.surface, 0)}) right center / 40px 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%, ${alpha(c.textPrimary, 0.2)}, ${alpha(c.textPrimary, 0)}) left center / 18px 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%, ${alpha(c.textPrimary, 0.2)}, ${alpha(c.textPrimary, 0)}) right center / 18px 100% no-repeat scroll,
+      var(--ff-surface);
+  }
+  .ff-stats-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   main th { position: static; }
   main th, main td { padding-left: ${px(s.sm + s.xs)}; padding-right: ${px(s.sm + s.xs)}; }
   .ff-split { flex-direction: column; }
@@ -494,6 +571,47 @@ input[type='checkbox']:focus-visible, input[type='radio']:focus-visible {
 @media (max-width: 640px) {
   .ff-topbar, .ff-main { padding-left: ${px(s.md)}; padding-right: ${px(s.md)}; }
   .ff-card { padding: ${px(s.md)}; }
+
+  /*
+    FE-W170: no rail on a phone. The 72px rail left about 300px for the page; the sidebar becomes a
+    bar across the top -- the mark, the role, and a Menu button -- and the page gets the full width.
+    The list it opens has its words back, since there is room for them across the screen.
+  */
+  .ff-shell { flex-direction: column; }
+  .ff-nav {
+    position: sticky; top: 0; z-index: 30; width: 100%; height: auto; max-height: 100vh;
+    padding: ${px(s.sm)} ${px(s.md)}; gap: 0; border-right: 0; border-bottom: 1px solid var(--ff-edge);
+  }
+  .ff-nav-head { justify-content: space-between; min-height: 40px; }
+  .ff-brand { justify-content: flex-start; padding: 0; }
+  .ff-nav-toggle {
+    display: inline-flex; align-items: center; gap: ${px(s.xs + 2)}; min-height: 40px;
+    padding: 0 ${px(s.sm + s.xs)}; border-radius: var(--ff-radius-control);
+    border: 1px solid var(--ff-border); background: var(--ff-surface); color: var(--ff-text-primary);
+    font: inherit; ${typeRule(t.control)}; cursor: pointer; box-shadow: var(--ff-shadow-xs);
+  }
+  .ff-nav-toggle:focus-visible { outline: 2px solid var(--ff-accent); outline-offset: 2px; }
+  .ff-nav-menu { display: none; }
+  .ff-nav[data-open='true'] .ff-nav-menu {
+    display: flex; overflow-y: auto; max-height: calc(100vh - 64px); padding: ${px(s.sm)} 0 ${px(s.xs)};
+  }
+  .ff-nav-text { position: static; width: auto; height: auto; overflow: visible; clip: auto; white-space: normal; }
+  .ff-user-email { position: static; width: auto; height: auto; clip: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ff-nav-title {
+    height: auto; margin: 0; padding: ${px(s.xs)} ${px(s.sm + s.xs / 2)}; background: transparent;
+    font-size: ${px(t.label.size - 1.5)}; overflow: visible;
+  }
+  .ff-nav-group + .ff-nav-group { margin-top: ${px(s.sm)}; }
+  .ff-nav-link { justify-content: flex-start; min-height: 40px; padding: ${px(s.xs + 1)} ${px(s.sm + s.xs / 2)}; }
+  .ff-nav-foot { padding-top: ${px(s.sm)}; }
+  .ff-user { padding: ${px(s.sm + s.xs)}; align-items: stretch; background: var(--ff-surface); box-shadow: var(--ff-shadow-xs), inset 0 0 0 1px var(--ff-edge); }
+  .ff-user .ff-btn { width: auto; padding: 0 ${px(s.md - 2)}; align-self: stretch; }
+  .ff-topbar { position: static; }
+  .ff-topbar:empty { display: none; }
+  .ff-stats-3, .ff-stats-4 { grid-template-columns: minmax(0, 1fr); }
+  .ff-route-stop { grid-template-columns: minmax(0, 1fr); }
+  /* A column is never squeezed below a short phrase; a wider table scrolls inside its card. */
+  main td { min-width: 112px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

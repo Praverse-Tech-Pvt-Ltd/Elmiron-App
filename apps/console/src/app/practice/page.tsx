@@ -2,7 +2,8 @@ import type { ReactNode } from 'react';
 import { SimPersonaSchema, SimScenarioSchema } from '@fieldforce/core';
 import type { SimPersona, SimScenario } from '@fieldforce/core';
 import { signedIn } from '../../lib/session';
-import { Body, MissingNote, Title } from '../../lib/ui';
+import { Body, MissingNote, Page, PageHeader, RoleNote } from '../../lib/ui';
+import { callerRole } from '../../lib/role';
 import { simPersonaRow, simScenarioRow, type SimContentRow } from '../../lib/sim-content-row';
 import { PracticeContent } from '../../lib/sim-content-list';
 
@@ -29,6 +30,8 @@ import { PracticeContent } from '../../lib/sim-content-list';
  */
 
 export const dynamic = 'force-dynamic';
+
+export const metadata = { title: 'Practice doctors' };
 
 const PERSONA_COLUMNS =
   'id, organisation_id, display_name, specialty, stance, brief, status, authorship, ' +
@@ -99,7 +102,8 @@ export default async function PracticeAuthoring(): Promise<ReactNode> {
     );
   }
 
-  const [personaRes, scenarioRes, productRes, marketRes] = await Promise.all([
+  const [role, personaRes, scenarioRes, productRes, marketRes] = await Promise.all([
+    callerRole(),
     session.db.from('sim_personas').select(PERSONA_COLUMNS).order('created_at'),
     session.db.from('sim_scenarios').select(SCENARIO_COLUMNS).order('created_at'),
     session.db.from('products').select('id, brand_name').order('brand_name'),
@@ -140,17 +144,27 @@ export default async function PracticeAuthoring(): Promise<ReactNode> {
     ),
   ];
 
+  // `FE-W164`: writing and approving are an admin's. An unknown role keeps the forms, as before.
+  const canAuthor = role === null || role === 'admin';
+
   return (
-    <div className="ff-page ff-page-medium">
-      <div className="ff-page-header-text">
-        <Title>Practice doctors and scenarios</Title>
+    <Page>
+      <PageHeader title="Practice doctors and scenarios">
         <Body muted>
           A rep can only practise against a scenario that reads approved. You cannot approve
           something you wrote or submitted — a second admin must.
         </Body>
-      </div>
+      </PageHeader>
+
+      {canAuthor ? null : (
+        <RoleNote>
+          Only an admin writes and approves practice doctors and scenarios. Those your reps can
+          practise against are listed below.
+        </RoleNote>
+      )}
 
       <PracticeContent
+        canAuthor={canAuthor}
         rows={rows}
         approvedPersonas={personas
           .filter((p) => p.status === 'approved')
@@ -159,6 +173,6 @@ export default async function PracticeAuthoring(): Promise<ReactNode> {
         markets={markets}
         viewerUserId={session.userId}
       />
-    </div>
+    </Page>
   );
 }

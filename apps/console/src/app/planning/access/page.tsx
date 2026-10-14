@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { PlanningGrantSchema, grantState } from '@fieldforce/core';
 import { signedIn } from '../../../lib/session';
-import { Body, MissingNote, Title } from '../../../lib/ui';
+import { Body, MissingNote, Page, PageHeader, RoleNote } from '../../../lib/ui';
+import { callerRole } from '../../../lib/role';
 import { PlanningAccess } from '../../../lib/planning-access';
 import type { GrantRow, Option } from '../../../lib/planning-access';
 import { indiaToday } from '../../../lib/india-date';
@@ -13,8 +14,13 @@ import { indiaToday } from '../../../lib/india-date';
  *
  * Reads are RLS: an admin sees their company's grants, a manager only the grants made for them. The
  * two writes are `grant_planning_access` and `revoke_planning_access`, which each check again.
+ *
+ * `FE-W164`: the role comes from `callerRole()` like every other page's, and a manager's note is the
+ * one info-tone `RoleNote` — the grants made for them are still listed below it.
  */
 export const dynamic = 'force-dynamic';
+
+export const metadata = { title: 'Planning access' };
 
 export default async function PlanningAccessPage(): Promise<ReactNode> {
   const session = await signedIn();
@@ -26,8 +32,8 @@ export default async function PlanningAccessPage(): Promise<ReactNode> {
     );
   }
 
-  const [me, grants, revocations, people, territories] = await Promise.all([
-    session.db.from('user_profiles').select('role').eq('id', session.userId).maybeSingle(),
+  const [role, grants, revocations, people, territories] = await Promise.all([
+    callerRole(),
     session.db
       .from('planning_territory_grants')
       .select(
@@ -39,7 +45,7 @@ export default async function PlanningAccessPage(): Promise<ReactNode> {
     session.db.from('territories').select('id, name').order('name'),
   ]);
 
-  const isAdmin = me.data?.role === 'admin';
+  const isAdmin = role === 'admin';
   const today = indiaToday();
   const revoked = new Set((revocations.data ?? []).map((r) => String(r.grant_id)));
   const nameOf = new Map((people.data ?? []).map((p) => [String(p.id), String(p.full_name)]));
@@ -66,19 +72,18 @@ export default async function PlanningAccessPage(): Promise<ReactNode> {
   }));
 
   return (
-    <div className="ff-page ff-page-medium">
-      <div className="ff-page-header-text">
-        <Title>Planning access</Title>
+    <Page>
+      <PageHeader title="Planning access">
         <Body muted>
           A field manager plans the reps in their own territory. To let them plan somewhere else —
           covering a colleague, say — grant them that territory for a set of days, with a reason.
           The grant covers the territory and everything beneath it, and can be revoked at any time.
         </Body>
-      </div>
+      </PageHeader>
       {isAdmin ? null : (
-        <MissingNote>
+        <RoleNote>
           Only an admin grants planning access. Any grant made for you is listed below.
-        </MissingNote>
+        </RoleNote>
       )}
       <PlanningAccess
         canGrant={isAdmin}
@@ -87,6 +92,6 @@ export default async function PlanningAccessPage(): Promise<ReactNode> {
         territories={territoryOptions}
         today={today}
       />
-    </div>
+    </Page>
   );
 }

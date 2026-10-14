@@ -2,7 +2,8 @@ import type { ReactNode } from 'react';
 import { KnowledgeDocumentVersionSchema } from '@fieldforce/core';
 import type { KnowledgeDocumentVersion } from '@fieldforce/core';
 import { signedIn } from '../../lib/session';
-import { Body, MissingNote, Title } from '../../lib/ui';
+import { Body, Heading, MissingNote, Page, PageHeader, RoleNote } from '../../lib/ui';
+import { callerRole } from '../../lib/role';
 import { KnowledgeReviewList } from '../../lib/knowledge-review-list';
 
 /**
@@ -29,9 +30,16 @@ import { KnowledgeReviewList } from '../../lib/knowledge-review-list';
  *   whatever is there, including nothing.
  * * It shows no score and no count per author. `C27` keeps scores off every manager surface, and a
  *   "drafts rejected per person" figure is a score with a different name.
+ *
+ * `FE-W164`: a manager is told the queue is an admin's (RLS shows them approved versions only, so
+ * this page could only ever be empty for them). `FE-W165`: an empty queue says so in one plain
+ * sentence, in the info tone — it cited decision numbers before. `FE-W168`: "Drafts not yet
+ * submitted" is a section heading, not a second page title.
  */
 
 export const dynamic = 'force-dynamic';
+
+export const metadata = { title: 'Knowledge' };
 
 /** Joined alongside the version so the screen can say "India" and "Probexa", not two uuids. */
 interface Row {
@@ -45,6 +53,26 @@ export default async function KnowledgeReviewQueue(): Promise<ReactNode> {
   // Handled rather than asserted, for the same reason the coaching queue handles it: a page that
   // throws on a signed-out render is worse than one that says nothing loaded.
   const session = await signedIn();
+  const role = session === null ? null : await callerRole();
+  const header = (
+    <PageHeader title="Knowledge awaiting your approval">
+      <Body muted>
+        Nothing here is answerable to a rep until you approve it. You cannot approve a version you
+        wrote or submitted — a second admin must.
+      </Body>
+    </PageHeader>
+  );
+  if (role !== null && role !== 'admin') {
+    return (
+      <Page>
+        {header}
+        <RoleNote>
+          Only an admin reviews and approves knowledge. Reps are answered only from versions an
+          admin has approved.
+        </RoleNote>
+      </Page>
+    );
+  }
 
   let rows: readonly Row[] | null = null;
   if (session !== null) {
@@ -116,14 +144,8 @@ export default async function KnowledgeReviewQueue(): Promise<ReactNode> {
   const drafts = rows?.filter((row) => row.version.status === 'draft') ?? [];
 
   return (
-    <div className="ff-page ff-page-medium">
-      <div className="ff-page-header-text">
-        <Title>Knowledge awaiting your approval</Title>
-        <Body muted>
-          Nothing here is answerable to a rep until you approve it. You cannot approve a version you
-          wrote or submitted — a second admin must.
-        </Body>
-      </div>
+    <Page>
+      {header}
 
       {rows === null ? (
         <MissingNote tone="critical">
@@ -131,11 +153,7 @@ export default async function KnowledgeReviewQueue(): Promise<ReactNode> {
           again is the first thing to try.
         </MissingNote>
       ) : rows.length === 0 ? (
-        <MissingNote>
-          No versions are in review. This is the expected state today: no approved product content
-          exists yet (decision #7, the product catalogue), and no AI drafting exists yet (decisions
-          #4 and #5). An empty queue here is not a fault.
-        </MissingNote>
+        <MissingNote tone="info">Nothing is waiting for review.</MissingNote>
       ) : (
         <>
           {inReview.length === 0 ? (
@@ -145,7 +163,7 @@ export default async function KnowledgeReviewQueue(): Promise<ReactNode> {
           )}
           {drafts.length === 0 ? null : (
             <>
-              <Title>Drafts not yet submitted</Title>
+              <Heading>Drafts not yet submitted</Heading>
               <Body muted>
                 A draft is not reviewed until its author submits it. Submitting freezes the text:
                 what the second admin reads is what reps will be answered from.
@@ -155,6 +173,6 @@ export default async function KnowledgeReviewQueue(): Promise<ReactNode> {
           )}
         </>
       )}
-    </div>
+    </Page>
   );
 }

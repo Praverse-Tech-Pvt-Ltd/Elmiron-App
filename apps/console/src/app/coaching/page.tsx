@@ -1,8 +1,19 @@
 import type { ReactNode } from 'react';
 import { signedIn } from '../../lib/session';
 import { btn } from '../../lib/theme-css';
-import { Body, Card, Figure, Label, MissingNote, Pill, Title } from '../../lib/ui';
+import {
+  Body,
+  Card,
+  Columns,
+  Figure,
+  Label,
+  MissingNote,
+  Page,
+  PageHeader,
+  Pill,
+} from '../../lib/ui';
 import { consentSignal, queueRows } from '../../lib/queue';
+import { plural } from '../../lib/plural';
 
 /**
  * Phase 4 E1 — the coaching queue.
@@ -21,6 +32,11 @@ import { consentSignal, queueRows } from '../../lib/queue';
  *
  * **No ranking, and no shape that could hold one.** Rows sort by MR id, which is
  * arbitrary on purpose — §3.6's scoring ban was never part of either reversal.
+ *
+ * `FE-W165`/`FE-W168`: the page speaks to the manager ("Coaching points that came up more than
+ * once"), an unreadable name is "Unknown rep" rather than eight characters of an id, an empty consent
+ * figure is "—" rather than "0% across 0", and the card that promised a list "in a later version",
+ * with the signed-in address inside it, is gone — the address is already at the foot of the sidebar.
  */
 /**
  * MR-52 A2 — the reason every read here carries into the audit trail.
@@ -32,6 +48,8 @@ import { consentSignal, queueRows } from '../../lib/queue';
 const READ_REASON = 'console coaching queue — queue render';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata = { title: 'Coaching queue' };
 
 /** "02:14" from a millisecond offset, for a citation on a table row. */
 const stamp = (startMs: number): string => {
@@ -52,9 +70,8 @@ export default async function CoachingQueue(): Promise<ReactNode> {
 
   const rows = analyses === null ? [] : queueRows(analyses.data);
 
-  // UX polish. The MR column showed the first eight characters of a UUID, so a manager could not
-  // tell which rep a row was about. Names are read as the signed-in manager, under the same RLS;
-  // a name that cannot be read falls back to the short id rather than hiding the row.
+  // UX polish. Names are read as the signed-in manager, under the same RLS. `FE-W165`: a name that
+  // cannot be read is "Unknown rep" — the row stays, but nobody is asked to read an id.
   const mrIds = [...new Set(rows.map((row) => row.mrId))];
   const names = new Map<string, string>();
   if (session !== null && mrIds.length > 0) {
@@ -66,17 +83,16 @@ export default async function CoachingQueue(): Promise<ReactNode> {
   const consent = consents === null ? null : consentSignal(consents.data);
 
   return (
-    <div className="ff-page">
-      <div className="ff-page-header-text">
-        <Title>Coaching queue</Title>
+    <Page>
+      <PageHeader title="Coaching queue">
         <Body muted>
-          Patterns that recurred across recent visits. Everyone else is not listed — that is the
-          point.
+          Coaching points that came up more than once in a rep’s recent visits. A rep with no
+          repeated point is not listed.
         </Body>
-      </div>
+      </PageHeader>
 
       <MissingNote>
-        <strong>Everything below is advisory and often wrong. You decide.</strong> Each MR has
+        <strong>Everything below is advisory and often wrong. You decide.</strong> Each rep has
         already read their own analysis and may have replied to it. Disagreeing with a finding is a
         normal action, not an escalation, and nothing happens to anyone unless you act.
       </MissingNote>
@@ -92,19 +108,19 @@ export default async function CoachingQueue(): Promise<ReactNode> {
         <table>
           <thead>
             <tr>
-              <th>MR</th>
+              <th>Rep</th>
               <th>Pattern across recent visits</th>
               <th>Seen in</th>
               <th>Their reply</th>
-              <th />
+              <th>
+                <span className="ff-visually-hidden">Open</span>
+              </th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr key={`${row.mrId}-${row.category}`}>
-                <td>
-                  {names.get(row.mrId) ?? <span className="ff-mono">{row.mrId.slice(0, 8)}</span>}
-                </td>
+                <td>{names.get(row.mrId) ?? 'Unknown rep'}</td>
                 <td>
                   <div>{row.pattern}</div>
                   {/*
@@ -121,7 +137,7 @@ export default async function CoachingQueue(): Promise<ReactNode> {
                   </Label>
                 </td>
                 <td className="ff-nowrap">
-                  {row.occurrences.length} of {row.reviewed} reviewed
+                  {row.occurrences.length} of {plural(row.reviewed, 'visit', 'visits')} reviewed
                 </td>
                 <td>
                   {row.replied ? <Pill tone="success">Replied</Pill> : <Body muted>Not yet</Body>}
@@ -139,7 +155,7 @@ export default async function CoachingQueue(): Promise<ReactNode> {
             {rows.length === 0 ? (
               <tr>
                 <td className="ff-empty" colSpan={5}>
-                  <Body muted>Nothing has recurred. There is no queue.</Body>
+                  <Body muted>Nothing has come up more than once. There is no queue.</Body>
                 </td>
               </tr>
             ) : null}
@@ -147,17 +163,24 @@ export default async function CoachingQueue(): Promise<ReactNode> {
         </table>
       </Card>
 
-      <div className="ff-columns">
+      <Columns>
         <div>
           <Card>
             <Label>Consent rate — a data-quality signal, not a performance one</Label>
             {consent === null ? (
               <MissingNote tone="critical">The consent ledger could not be reached.</MissingNote>
+            ) : consent.total === 0 ? (
+              <>
+                <Figure>—</Figure>
+                <Body muted>No answered visits yet.</Body>
+              </>
             ) : (
               <>
-                <div className="ff-row" style={{ alignItems: 'baseline' }}>
+                <div className="ff-row ff-row-baseline">
                   <Figure>{`${String(consent.rate)}%`}</Figure>
-                  <Body muted>{`across ${String(consent.total)} answered visits`}</Body>
+                  <Body
+                    muted
+                  >{`across ${plural(consent.total, 'answered visit', 'answered visits')}`}</Body>
                 </div>
                 {/*
                   `manager.ts` puts this in the contract: a consent anomaly always
@@ -170,7 +193,7 @@ export default async function CoachingQueue(): Promise<ReactNode> {
                   <Body muted>Nobody is at 100% over a meaningful number of visits.</Body>
                 ) : (
                   <MissingNote>
-                    {`${String(consent.perfect.length)} MR at 100%. Look at that as a possible fraud signal, not a win — a doctor who always says yes may be a doctor who was never asked.`}
+                    {`${plural(consent.perfect.length, 'rep is', 'reps are')} at 100%. Look at that as a possible fraud signal, not a win — a doctor who always says yes may be a doctor who was never asked.`}
                   </MissingNote>
                 )}
               </>
@@ -180,21 +203,13 @@ export default async function CoachingQueue(): Promise<ReactNode> {
         <div>
           <Card>
             <Label>Your overrides</Label>
-            {/*
-              UX polish: the same fact, in a manager's words. It read "Not built. There is a POST
-              that records an override and no path that lists them back" -- an engineer's note on
-              the landing page of the product.
-            */}
-            <MissingNote tone="info">
-              A list of the overrides you have logged will appear here in a later version. Each one
-              you log is already recorded.
-            </MissingNote>
             <Body muted>
-              {`Every override is logged and feeds the weekly rubric accuracy report. Signed in as ${session?.email ?? 'nobody — this page is not signed in'}.`}
+              When you disagree with a finding, log it from the analysis’s review page. Every
+              override is kept, and is used to check how often the findings are right.
             </Body>
           </Card>
         </div>
-      </div>
-    </div>
+      </Columns>
+    </Page>
   );
 }

@@ -1,12 +1,11 @@
 import type { ReactNode } from 'react';
 import { TeamWorkDaySchema, WORK_DAY_RPC } from '@fieldforce/core';
-import { tokens } from '@fieldforce/ui-tokens';
 import { signedIn } from '../../lib/session';
-import { Body, MissingNote, Title } from '../../lib/ui';
+import { Body, MissingNote, Page, PageHeader } from '../../lib/ui';
 import { TeamDays } from '../../lib/team-days';
 import { teamDaysRefusal } from '../../lib/team-days-text';
 import { btn } from '../../lib/theme-css';
-import { indiaToday } from '../../lib/india-date';
+import { dayLabel, indiaToday } from '../../lib/india-date';
 
 /**
  * `BE-W191` — the team's working days on one date: who started, who ended, what each day held.
@@ -16,8 +15,12 @@ import { indiaToday } from '../../lib/india-date';
  * has not started is a row saying so, not an absence. The figures are the server's snapshot, taken
  * when the rep ended the day. Reopening an ended day is `reopen_work_day`, which checks again and
  * keeps the undone close with the reason.
+ *
+ * `FE-W166`: the day is written "14 Oct 2026" in the sentence; the picker keeps its own format.
  */
 export const dynamic = 'force-dynamic';
+
+export const metadata = { title: 'The team’s day' };
 
 const isDate = (value: string | undefined): value is string =>
   value !== undefined && /^\d{4}-\d{2}-\d{2}$/u.test(value);
@@ -43,14 +46,13 @@ export default async function TeamDaysPage({
 
   const result = await session.db.rpc(WORK_DAY_RPC.teamWorkDays, { p_on: day });
   const header = (
-    <div className="ff-page-header-text">
-      <Title>The team’s day</Title>
+    <PageHeader title="The team’s day">
       <Body muted>
-        Each rep’s working day on {day}: started with their first check-in or when they started it,
-        ended when they pressed End my day. An ended day refuses further check-ins until you reopen
-        it, and the reason you give is kept with it.
+        Each rep’s working day on {dayLabel(day)}: started with their first check-in or when they
+        started it, ended when they pressed End my day. An ended day refuses further check-ins until
+        you reopen it, and the reason you give is kept with it.
       </Body>
-      <form className="ff-row" method="get" style={{ marginTop: tokens.space.sm }}>
+      <form className="ff-row ff-header-form" method="get">
         <label className="ff-label" htmlFor="days-date">
           Day
         </label>
@@ -59,23 +61,23 @@ export default async function TeamDaysPage({
           Show
         </button>
       </form>
-    </div>
+    </PageHeader>
   );
 
   if (result.error !== null) {
     return (
-      <div className="ff-page ff-page-medium">
+      <Page>
         {header}
         <MissingNote tone="critical">{teamDaysRefusal(result.error)}</MissingNote>
-      </div>
+      </Page>
     );
   }
 
   const days = ((result.data ?? []) as unknown[]).map((row) => TeamWorkDaySchema.parse(row));
   return (
-    <div className="ff-page ff-page-medium">
+    <Page>
       {header}
       <TeamDays days={days} />
-    </div>
+    </Page>
   );
 }

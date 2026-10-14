@@ -249,7 +249,7 @@ describe('retention alerts', () => {
       }),
     );
     expect(alerts[0]?.tone).toBe('critical');
-    expect(alerts.map((a) => a.text).join(' ')).toMatch(/3 of your company’s audio/u);
-    expect(alerts.map((a) => a.text).join(' ')).toMatch(/never run/u);
+    expect(alerts.map((a) => a.text).join(' ')).toMatch(/has not run yet/u);
+    expect(alerts.map((a) => a.text).join(' ')).toMatch(/3 audio files past the purge date/u);
   });
 });

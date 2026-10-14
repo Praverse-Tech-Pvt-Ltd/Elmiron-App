@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { AI_RPC, promptDraftRow } from '@fieldforce/core';
 import type { AiPromptVersion, GatewayFeature } from '@fieldforce/core';
 import { browserClient } from './supabase';
-import { Body, Title } from './ui';
+import { Body, Heading } from './ui';
 import { PromptDraftForm, PromptReview } from './prompt-review';
 
 /**
@@ -19,12 +19,18 @@ import { PromptDraftForm, PromptReview } from './prompt-review';
  * so an insert cannot smuggle in an approved prompt. `submit/approve/reject_ai_prompt_version` hold
  * four eyes and the attestation requirement in their own bodies. **Nothing here can grant what they
  * would refuse.**
+ *
+ * `FE-W164`: `canAuthor` is false for a manager, who is not offered the draft form. `FE-W168`: the
+ * list's title is a section heading, not a second page title. `FE-W165`: the empty state says what
+ * happens in words, not as the error code a request would get.
  */
 
 export interface PromptListProps {
   readonly versions: readonly AiPromptVersion[];
   readonly features: readonly GatewayFeature[];
   readonly viewerUserId: string;
+  /** Whether to draw the draft form. The insert policy decides either way. */
+  readonly canAuthor?: boolean;
 }
 
 const callRpc = async (fn: string, args: Record<string, unknown>): Promise<void> => {
@@ -32,7 +38,12 @@ const callRpc = async (fn: string, args: Record<string, unknown>): Promise<void>
   if (error !== null) throw new Error(error.message);
 };
 
-export const PromptList = ({ versions, features, viewerUserId }: PromptListProps): ReactNode => {
+export const PromptList = ({
+  versions,
+  features,
+  viewerUserId,
+  canAuthor = true,
+}: PromptListProps): ReactNode => {
   const router = useRouter();
   const refresh = (): void => {
     router.refresh();
@@ -40,33 +51,34 @@ export const PromptList = ({ versions, features, viewerUserId }: PromptListProps
 
   return (
     <div className="ff-stack ff-stack-lg">
-      <PromptDraftForm
-        features={features}
-        onCreate={async (input) => {
-          const supabase = browserClient();
-          const { data: user } = await supabase.auth.getUser();
-          const id = user.user?.id;
-          if (id === undefined) throw new Error('No session. Sign in again.');
-          // `version_number` is not sent: the insert trigger computes it and overwrites anything
-          // supplied. `organisation_id` and `status` are left to the column default and the
-          // trigger, which is what makes "born a draft" true regardless of this file.
-          //
-          // W2-E A (`BE-W164`): the columns come from `promptDraftRow`, which derives
-          // `output_schema_name` from the feature. This insert used to send feature and text only,
-          // and every flow refuses a prompt without its schema name — so nothing approved here ran.
-          const { error } = await supabase
-            .from('ai_prompt_versions')
-            .insert({ ...promptDraftRow(input), created_by_user_id: id });
-          if (error !== null) throw new Error(error.message);
-          refresh();
-        }}
-      />
+      {canAuthor ? (
+        <PromptDraftForm
+          features={features}
+          onCreate={async (input) => {
+            const supabase = browserClient();
+            const { data: user } = await supabase.auth.getUser();
+            const id = user.user?.id;
+            if (id === undefined) throw new Error('No session. Sign in again.');
+            // `version_number` is not sent: the insert trigger computes it and overwrites anything
+            // supplied. `organisation_id` and `status` are left to the column default and the
+            // trigger, which is what makes "born a draft" true regardless of this file.
+            //
+            // W2-E A (`BE-W164`): the columns come from `promptDraftRow`, which derives
+            // `output_schema_name` from the feature. This insert used to send feature and text only,
+            // and every flow refuses a prompt without its schema name — so nothing approved here ran.
+            const { error } = await supabase
+              .from('ai_prompt_versions')
+              .insert({ ...promptDraftRow(input), created_by_user_id: id });
+            if (error !== null) throw new Error(error.message);
+            refresh();
+          }}
+        />
+      ) : null}
 
-      <Title>Prompts</Title>
+      <Heading>Prompts</Heading>
       {versions.length === 0 ? (
         <Body muted>
-          None yet. A feature with no approved prompt refuses every request with
-          `ai_feature_disabled`, whatever its flag says.
+          None yet. A feature with no approved prompt answers nobody, even when it is switched on.
         </Body>
       ) : (
         versions.map((version) => (

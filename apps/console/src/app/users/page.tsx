@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { ADMIN_RPC, AdminUserListSchema, TerritoryTreeSchema } from '@fieldforce/core';
 import { signedIn } from '../../lib/session';
-import { Body, MissingNote, Title } from '../../lib/ui';
+import { Body, MissingNote, Page, PageHeader, RoleNote } from '../../lib/ui';
+import { callerRole } from '../../lib/role';
 import { UsersAdmin } from '../../lib/users-admin';
 import { adminRefusal } from '../../lib/admin-text';
 
@@ -17,6 +18,11 @@ import { adminRefusal } from '../../lib/admin-text';
  */
 export const dynamic = 'force-dynamic';
 
+export const metadata = { title: 'Users & roles' };
+
+const ONLY_ADMINS =
+  'Only an active admin manages users. Nothing here is hidden from you by mistake.';
+
 const READ_REASON = 'console users & roles screen render';
 
 export default async function UsersPage(): Promise<ReactNode> {
@@ -29,32 +35,42 @@ export default async function UsersPage(): Promise<ReactNode> {
     );
   }
 
-  const [list, tree] = await Promise.all([
-    session.db.rpc(ADMIN_RPC.listUsers, { p_reason: READ_REASON }),
-    session.db.rpc(ADMIN_RPC.territoryTree),
-  ]);
-
   const header = (
-    <div className="ff-page-header-text">
-      <Title>Users &amp; roles</Title>
+    <PageHeader title="Users & roles">
       <Body muted>
         Everyone who signs in to the app or this console. Accounts are created confirmed, with a
         temporary password shown once. Nobody is ever deleted — a person who leaves is deactivated,
         and their records stay theirs.
       </Body>
-    </div>
+    </PageHeader>
   );
+
+  // `FE-W164`: a manager is told once; the audited list read is not asked for.
+  const role = await callerRole();
+  if (role !== null && role !== 'admin') {
+    return (
+      <Page>
+        {header}
+        <RoleNote>{ONLY_ADMINS}</RoleNote>
+      </Page>
+    );
+  }
+
+  const [list, tree] = await Promise.all([
+    session.db.rpc(ADMIN_RPC.listUsers, { p_reason: READ_REASON }),
+    session.db.rpc(ADMIN_RPC.territoryTree),
+  ]);
 
   if (list.error !== null) {
     return (
-      <div className="ff-page">
+      <Page>
         {header}
-        <MissingNote tone={list.error.code === '42501' ? 'info' : 'critical'}>
-          {list.error.code === '42501'
-            ? 'Only an active admin manages users. Nothing here is hidden from you by mistake.'
-            : adminRefusal(list.error)}
-        </MissingNote>
-      </div>
+        {list.error.code === '42501' ? (
+          <RoleNote>{ONLY_ADMINS}</RoleNote>
+        ) : (
+          <MissingNote tone="critical">{adminRefusal(list.error)}</MissingNote>
+        )}
+      </Page>
     );
   }
 
@@ -62,18 +78,18 @@ export default async function UsersPage(): Promise<ReactNode> {
   const territories = TerritoryTreeSchema.safeParse(tree.data);
   if (!parsed.success) {
     return (
-      <div className="ff-page">
+      <Page>
         {header}
         <MissingNote tone="critical">
           The user list came back in a shape this console does not recognise, so it is not shown.
           The console and the database are probably on different versions.
         </MissingNote>
-      </div>
+      </Page>
     );
   }
 
   return (
-    <div className="ff-page">
+    <Page>
       {header}
       {territories.success ? null : (
         <MissingNote tone="critical">
@@ -87,6 +103,6 @@ export default async function UsersPage(): Promise<ReactNode> {
         pending={parsed.data.pending}
         territories={territories.success ? territories.data.territories : []}
       />
-    </div>
+    </Page>
   );
 }

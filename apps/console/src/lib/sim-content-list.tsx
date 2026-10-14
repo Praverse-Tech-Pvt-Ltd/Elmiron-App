@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { SIMULATION_RPC } from '@fieldforce/core';
 import { browserClient } from './supabase';
-import { Body, Title } from './ui';
+import { Body, Heading } from './ui';
 import { PersonaDraftForm, ScenarioDraftForm, SimContentReview } from './sim-content';
 import type { SimContentRow } from './sim-content-row';
 
@@ -23,6 +23,9 @@ import type { SimContentRow } from './sim-content-row';
  *
  * `router.refresh()` after each write re-runs the server read, so a row moves between the lists
  * without a reload and without this file keeping a second copy of the truth.
+ *
+ * `FE-W164`: `canAuthor` is false for a manager, who is not offered the two draft forms the
+ * database would refuse. `FE-W168`: the list's title is a section heading, not a second page title.
  */
 
 export interface PracticeContentProps {
@@ -31,6 +34,8 @@ export interface PracticeContentProps {
   readonly products: readonly { readonly id: string; readonly brandName: string }[];
   readonly markets: readonly { readonly id: string; readonly name: string }[];
   readonly viewerUserId: string;
+  /** Whether to draw the two draft forms. The insert policies decide either way. */
+  readonly canAuthor?: boolean;
 }
 
 const callRpc = async (fn: string, args: Record<string, unknown>): Promise<void> => {
@@ -57,6 +62,7 @@ export const PracticeContent = ({
   products,
   markets,
   viewerUserId,
+  canAuthor = true,
 }: PracticeContentProps): ReactNode => {
   const router = useRouter();
   const refresh = (): void => {
@@ -65,36 +71,42 @@ export const PracticeContent = ({
 
   return (
     <div className="ff-stack ff-stack-lg">
-      <PersonaDraftForm
-        onCreate={async (input) => {
-          await insertRow('sim_personas', {
-            display_name: input.displayName,
-            specialty: input.specialty,
-            stance: input.stance,
-            brief: input.brief,
-          });
-          refresh();
-        }}
-      />
+      {canAuthor ? (
+        <>
+          <PersonaDraftForm
+            onCreate={async (input) => {
+              await insertRow('sim_personas', {
+                display_name: input.displayName,
+                specialty: input.specialty,
+                stance: input.stance,
+                brief: input.brief,
+              });
+              refresh();
+            }}
+          />
 
-      <ScenarioDraftForm
-        personas={approvedPersonas}
-        products={products}
-        markets={markets}
-        onCreate={async (input) => {
-          await insertRow('sim_scenarios', {
-            persona_id: input.personaId,
-            title: input.title,
-            objective: input.objective,
-            objection: input.objection,
-            product_id: input.productId,
-            market_id: input.marketId,
-          });
-          refresh();
-        }}
-      />
+          <ScenarioDraftForm
+            personas={approvedPersonas}
+            products={products}
+            markets={markets}
+            onCreate={async (input) => {
+              await insertRow('sim_scenarios', {
+                persona_id: input.personaId,
+                title: input.title,
+                objective: input.objective,
+                objection: input.objection,
+                product_id: input.productId,
+                market_id: input.marketId,
+              });
+              refresh();
+            }}
+          />
+        </>
+      ) : null}
 
-      <Title>Everything drafted so far</Title>
+      <Heading>
+        {canAuthor ? 'Everything drafted so far' : 'Practice doctors and scenarios'}
+      </Heading>
       {rows.length === 0 ? (
         <Body muted>
           Nothing yet. A rep cannot start a practice session until at least one scenario here reads

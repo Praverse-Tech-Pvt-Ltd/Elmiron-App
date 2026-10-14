@@ -14,7 +14,7 @@ describe('FE-W72 — live tracking text', () => {
     { seconds: 59, label: 'under a minute ago' },
     { seconds: 60, label: '1 min ago' },
     { seconds: 3_660, label: '1 h 1 min ago' },
-    { seconds: 2 * 86_400, label: '2 day(s) ago' },
+    { seconds: 2 * 86_400, label: '2 days ago' },
   ])('an age of $seconds s reads "$label"', ({ seconds, label }) => {
     expect(ageLabel(seconds)).toBe(label);
   });

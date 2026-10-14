@@ -125,7 +125,7 @@ describe('B1 — drafting a persona', () => {
   it('offers no status at all: a persona is born a draft, never approved', () => {
     render(<PersonaDraftForm onCreate={vi.fn()} />);
     expect(screen.queryByLabelText('Status')).toBeNull();
-    expect(screen.getByText(/Saved as a DRAFT/)).toBeTruthy();
+    expect(screen.getByText(/Saved as a draft/)).toBeTruthy();
   });
 
   it('warns that the name is shown to the rep and must not be a real doctor', () => {
@@ -204,7 +204,7 @@ describe('B2 — drafting a scenario', () => {
     render(
       <ScenarioDraftForm personas={[]} products={PRODUCTS} markets={MARKETS} onCreate={vi.fn()} />,
     );
-    expect(screen.getByText(/needs an APPROVED practice doctor first/)).toBeTruthy();
+    expect(screen.getByText(/needs an approved practice doctor first/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Save draft' })).toBeNull();
   });
 });

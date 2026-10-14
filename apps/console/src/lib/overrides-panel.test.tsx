@@ -42,7 +42,7 @@ describe('FE-W12 — the overrides already logged render on the review screen', 
     expect(
       screen.getByText('The doctor asked for the figure by message; deferring was right.'),
     ).toBeTruthy();
-    expect(screen.getByText('2026-09-22 06:15 UTC · one finding')).toBeTruthy();
+    expect(screen.getByText('22 Sep 2026, 11:45 · one finding')).toBeTruthy();
   });
 
   it('says the history could not be loaded when the read fails — never "none logged"', async () => {

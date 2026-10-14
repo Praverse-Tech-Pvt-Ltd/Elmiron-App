@@ -13,8 +13,10 @@ import { serverClient } from './lib/supabase';
  * PostgREST rather than against this redirect.
  */
 export const config = {
-  // Everything except Next's own assets. `_next/*` and favicon are served without a session.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  // Everything except Next's own assets. `_next/*`, the favicon and `FE-W169`'s tab icon
+  // (`app/icon.svg`) are served without a session — otherwise the sign-in page's own tab icon would
+  // be redirected to the sign-in page.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|icon.svg).*)'],
 };
 
 export const middleware = async (request: NextRequest): Promise<NextResponse> => {

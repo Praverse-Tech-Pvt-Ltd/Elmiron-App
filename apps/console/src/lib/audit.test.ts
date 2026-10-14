@@ -30,11 +30,12 @@ const response = (over: Partial<ListAuditLogResponse> = {}): ListAuditLogRespons
 });
 
 describe('FE-W13 — the audit panel does not claim to show attempts', () => {
-  it('says SUCCESSFUL in the heading, because a refused read is not in the trail', () => {
+  it('says every row SUCCEEDED, because a refused read is not in the trail', () => {
     // `BE-W102`: all seven read paths audit-then-return inside one transaction, so a refusal
-    // leaves nothing behind. The heading is asserted here rather than typed into JSX so that
-    // the claim the screen makes is the claim this test constrains.
-    expect(AUDIT_HEADING).toMatch(/successful/iu);
+    // leaves nothing behind. `FE-W165` moved the claim from the heading ("Successful reads", over
+    // rows that were mostly creations) into the caveat, where it is asserted here.
+    expect(AUDIT_HEADING).toBe('Recent activity');
+    expect(AUDIT_CAVEAT).toMatch(/succeeded/iu);
     expect(AUDIT_CAVEAT).toMatch(/refused read is not recorded/iu);
   });
 
@@ -62,18 +63,27 @@ describe('FE-W13 — the audit panel does not claim to show attempts', () => {
 });
 
 describe('FE-W13 — the rows say what the server recorded', () => {
-  it('puts the action in the reader’s words rather than the column’s', () => {
-    expect(auditRows(response())[0]?.what).toBe('read consent_records');
+  it('puts the action and the record in the reader’s words rather than the column’s', () => {
+    expect(auditRows(response())[0]?.what).toBe('Read · Consent record');
   });
 
-  it('shows a null role and a null reason as NOT RECORDED, not as blank', () => {
+  it('shows a null reason as an absence, not as a blank', () => {
     // A blank cell reads as "nothing happened". A null means "not recorded", and on `reason`
     // in particular that is informative: the read paths require one, so its absence says the
     // row came from a trigger rather than from a person.
     const rows = auditRows(response({ data: [{ ...ENTRY, actorRole: null, reason: null }] }));
 
-    expect(rows[0]?.actorRole).toBe('not recorded');
-    expect(rows[0]?.reason).toBe('not recorded');
+    expect(rows[0]?.actorRole).toBeNull();
+    expect(rows[0]?.reason).toBe('—');
+  });
+
+  it('names the screen that was opened in place of the console’s own read reason', () => {
+    const rows = auditRows(
+      response({
+        data: [{ ...ENTRY, reason: 'console admin screen — compliance panel render' }],
+      }),
+    );
+    expect(rows[0]?.reason).toBe('Opened Consent versions');
   });
 
   it('carries the reason through verbatim', () => {
@@ -83,8 +93,10 @@ describe('FE-W13 — the rows say what the server recorded', () => {
 
 describe('FE-W13 — a scoped page is distinguishable from an empty one', () => {
   it('explains hidden system rows, and counts them from the server', () => {
-    expect(hiddenRowsNote(response({ systemRowsHidden: 4 }))).toMatch(/^4 row\(s\)/u);
-    expect(hiddenRowsNote(response({ systemRowsHidden: 4 }))).toMatch(/no actor/iu);
+    expect(hiddenRowsNote(response({ systemRowsHidden: 4 }))).toBe(
+      '4 entries made by the system itself, not by a person, are not shown: they belong to no company.',
+    );
+    expect(hiddenRowsNote(response({ systemRowsHidden: 1 }))).toMatch(/^1 entry .* is not shown/u);
   });
 
   it('says nothing when nothing was hidden — so the note means something when it appears', () => {

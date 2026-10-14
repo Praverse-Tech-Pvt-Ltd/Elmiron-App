@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
+import { dayLabel } from '../src/lib/india-date';
 
 /**
  * `BE-W171` / `BE-C78` — manager planning through the console, against the real database.
@@ -102,17 +103,17 @@ test('a manager plans a rep’s day, and an unchanged re-save writes nothing', a
   await signIn(page, world.manager);
   await page.goto(`/planning?rep=${world.rep.userId}&date=${FUTURE}`);
   await expect(
-    page.getByRole('heading', { name: `Route for ${FUTURE} — no plan yet` }),
+    page.getByRole('heading', { name: `Route for ${dayLabel(FUTURE)} — no plan yet` }),
   ).toBeVisible();
 
   await page.getByLabel('Doctor to add').selectOption({ label: doctorName });
   await page.getByRole('button', { name: 'Add to route' }).click();
   await page.getByRole('button', { name: 'Save plan' }).click();
-  await expect(page.getByText(/^Saved as version 1: 1 visit\(s\) added/u)).toBeVisible();
+  await expect(page.getByText(/^Saved as version 1: 1 visit added/u)).toBeVisible();
 
   await page.reload();
   await expect(
-    page.getByRole('heading', { name: `Route for ${FUTURE} — version 1` }),
+    page.getByRole('heading', { name: `Route for ${dayLabel(FUTURE)} — version 1` }),
   ).toBeVisible();
   const row = page.getByRole('row', { name: new RegExp(doctorName, 'u') });
   await expect(row.getByText('Planned')).toBeVisible();
@@ -155,12 +156,11 @@ test('a rep’s own visit appears as UNPLANNED, with its reason, and the manager
   expect(await firstField(visit, 'origin')).toBe('unplanned');
 
   await signIn(page, world.manager);
-  // The rep's today, as the page reports it, is the day the visit is on.
+  // The rep's today, as the page reports it, is the day the visit is on. `FE-W166`: the sentence
+  // says "14 Oct 2026"; the machine value is beside it as `data-rep-today`.
   await page.goto(`/planning?rep=${world.rep.userId}`);
-  const today = (await page.getByText(/’s today is \d{4}-\d{2}-\d{2}/u).textContent())?.match(
-    /\d{4}-\d{2}-\d{2}/u,
-  )?.[0];
-  expect(today).toBeDefined();
+  const today = await page.locator('[data-rep-today]').getAttribute('data-rep-today');
+  expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
   await page.goto(`/planning?rep=${world.rep.userId}&date=${String(today)}`);
 
   const row = page.getByRole('row', { name: /Reason: Doctor called me in/u });
@@ -176,7 +176,7 @@ test('an admin is told planning is the manager’s, and grants then revokes plan
   await page.goto('/planning');
   await expect(
     page.getByText(
-      'Only a field manager plans a rep’s day. Admins grant planning access instead. Nothing was saved.',
+      'Only a field manager plans a rep’s day. As an admin, you can let a manager plan another territory from Planning access.',
     ),
   ).toBeVisible();
 

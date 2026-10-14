@@ -50,13 +50,12 @@ const clock = (seconds: number): string => {
  * with its length ("length not measured" when the loader had no ffprobe). Nothing is invented.
  */
 export const videoLessonsLine = (videos: readonly VideoLesson[]): string =>
-  videos.length === 0
-    ? 'None'
-    : videos
-        .map(
-          (v) => `${v.lesson} (${v.seconds === null ? 'length not measured' : clock(v.seconds)})`,
-        )
-        .join(' · ');
+  videos.length === 0 ? 'None' : videos.map(videoLessonLabel).join(' · ');
+
+/** `FE-W171` — one lesson's video, for the list behind the Videos summary: "Welcome (3:05)". */
+export function videoLessonLabel(v: VideoLesson): string {
+  return `${v.lesson} (${v.seconds === null ? 'length not measured' : clock(v.seconds)})`;
+}
 
 /** The total running time of a version's videos, for the column's figure; null when none is measured. */
 export const videoTotal = (videos: readonly VideoLesson[]): string | null => {

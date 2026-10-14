@@ -1,7 +1,18 @@
 import type { ReactNode } from 'react';
 import { LIVE_TRACKING_RPC, LiveTrackingNoticesSchema } from '@fieldforce/core';
 import { signedIn } from '../../../lib/session';
-import { Body, Card, Heading, MissingNote, Pill, Title } from '../../../lib/ui';
+import {
+  Body,
+  Card,
+  Heading,
+  MissingNote,
+  Page,
+  PageHeader,
+  Pill,
+  RoleNote,
+} from '../../../lib/ui';
+import { callerRole } from '../../../lib/role';
+import { plural } from '../../../lib/plural';
 import { NoticeText, NoticeVersionCard, ProposeNotice } from '../../../lib/tracking-notice';
 import { REACCEPT_NOTE, noticeRefusal, when } from '../../../lib/tracking-notice-text';
 
@@ -12,27 +23,35 @@ import { REACCEPT_NOTE, noticeRefusal, when } from '../../../lib/tracking-notice
  * **Admin only, by the database.** `live_tracking_notices` refuses anybody else `42501`, and the
  * page says so in words rather than drawing an empty list — an empty list would claim the company
  * has no versions. Which notice is "in force" is the server's answer (`current_live_tracking_notice`:
- * the latest approval, else the engineering draft); nothing here recomputes it.
+ * the latest approval, else the built-in draft); nothing here recomputes it.
+ *
+ * `FE-W164`: a manager is told once, in the info tone, and nothing is asked of the server.
+ * `FE-W165`: "built-in draft" in place of "engineering DRAFT", and no repository link. `FE-W167`:
+ * the notice in force is shown once, laid out; the version cards keep their copies folded away.
  */
 export const dynamic = 'force-dynamic';
+
+export const metadata = { title: 'Live location notice' };
+
+const ONLY_ADMINS =
+  'Only an admin loads or approves the live location notice. Ask an admin of your company.';
 
 export default async function TrackingNotice(): Promise<ReactNode> {
   const session = await signedIn();
   const header = (
-    <div className="ff-page-header-text">
-      <Title>Live location notice</Title>
+    <PageHeader title="Live location notice">
       <Body muted>
         The notice each rep reads and accepts before their location is shared during working hours.
         One admin loads your company’s text; a different admin approves it.{' '}
         <a href="/tracking">Back to live location</a>.
       </Body>
-    </div>
+    </PageHeader>
   );
   const page = (children: ReactNode): ReactNode => (
-    <div className="ff-page ff-page-medium">
+    <Page>
       {header}
       {children}
-    </div>
+    </Page>
   );
 
   if (session === null) {
@@ -43,9 +62,18 @@ export default async function TrackingNotice(): Promise<ReactNode> {
     );
   }
 
+  const role = await callerRole();
+  if (role !== null && role !== 'admin') return page(<RoleNote>{ONLY_ADMINS}</RoleNote>);
+
   const result = await session.db.rpc(LIVE_TRACKING_RPC.notices);
   if (result.error !== null) {
-    return page(<MissingNote tone="critical">{noticeRefusal(result.error)}</MissingNote>);
+    return page(
+      result.error.code === '42501' ? (
+        <RoleNote>{ONLY_ADMINS}</RoleNote>
+      ) : (
+        <MissingNote tone="critical">{noticeRefusal(result.error)}</MissingNote>
+      ),
+    );
   }
   const { current, versions } = LiveTrackingNoticesSchema.parse(result.data);
   const waiting = versions.filter((v) => v.status === 'waiting').length;
@@ -58,7 +86,7 @@ export default async function TrackingNotice(): Promise<ReactNode> {
         <div className="ff-row">
           <Heading>In force now{current === null ? '' : `: ${current.versionLabel}`}</Heading>
           {current === null ? null : current.isDraft ? (
-            <Pill tone="attention">Engineering draft — not approved</Pill>
+            <Pill tone="attention">Built-in draft — not approved</Pill>
           ) : (
             <Pill tone="success">Your company’s, approved</Pill>
           )}
@@ -68,8 +96,8 @@ export default async function TrackingNotice(): Promise<ReactNode> {
         ) : current.isDraft ? (
           <>
             <MissingNote>
-              Your company has not approved its own notice, so reps are shown the engineering DRAFT,
-              labelled as a draft, with its blanks. Load your company’s text below and have a second
+              Your company has not approved its own notice, so reps are shown the built-in draft,
+              marked as a draft, with its blanks. Load your company’s text below and have a second
               admin approve it.
             </MissingNote>
             <NoticeText body={current.body} />
@@ -93,7 +121,7 @@ export default async function TrackingNotice(): Promise<ReactNode> {
         <Body muted>
           {waiting === 0
             ? 'No version is waiting for a second admin.'
-            : `${String(waiting)} version(s) waiting for a second admin.`}
+            : `${plural(waiting, 'version is', 'versions are')} waiting for a second admin.`}
         </Body>
         {versions.map((v) => (
           <NoticeVersionCard key={v.id} version={v} />

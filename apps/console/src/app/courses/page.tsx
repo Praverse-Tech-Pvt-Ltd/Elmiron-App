@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { signedIn } from '../../lib/session';
-import { Body, MissingNote, Title } from '../../lib/ui';
+import { Body, MissingNote, Page, PageHeader, RoleNote } from '../../lib/ui';
+import { callerRole } from '../../lib/role';
 import { CoursePublishing } from '../../lib/course-publishing';
 import type { CourseVersionRow } from '../../lib/course-publishing';
 import type { CourseVersionStatus, VideoLesson } from '../../lib/course-publishing-text';
@@ -12,8 +13,14 @@ import type { CourseVersionStatus, VideoLesson } from '../../lib/course-publishi
  *
  * Courses publish in ONE step by design: whether a course needs a second admin's approval is the
  * operator's open question Q-21, and it is not decided here.
+ *
+ * `FE-W164`: a manager reads the list and is told once that publishing is an admin's, with no
+ * Publish or Retire button to press into a refusal. `FE-W165`: the description no longer names a
+ * file in the repository.
  */
 export const dynamic = 'force-dynamic';
+
+export const metadata = { title: 'Courses' };
 
 const STATUSES: readonly CourseVersionStatus[] = ['draft', 'published', 'retired'];
 const asStatus = (value: unknown): CourseVersionStatus =>
@@ -29,7 +36,8 @@ export default async function Courses(): Promise<ReactNode> {
     );
   }
 
-  const [courses, versions, lessons] = await Promise.all([
+  const [role, courses, versions, lessons] = await Promise.all([
+    callerRole(),
     session.db.from('courses').select('id, title'),
     session.db
       .from('course_versions')
@@ -66,18 +74,26 @@ export default async function Courses(): Promise<ReactNode> {
     videos: videosOf.get(String(v.id)) ?? [],
   }));
 
+  // An unknown role is offered the buttons, as before; the function decides.
+  const canChange = role === null || role === 'admin';
+
   return (
-    <div className="ff-page ff-page-medium">
-      <div className="ff-page-header-text">
-        <Title>Courses</Title>
+    <Page>
+      <PageHeader title="Courses">
         <Body muted>
           Publish a loaded course version so it can be assigned and taken in the app; retire one
           that should no longer be started. Publishing a new version retires the previous one for
-          the same market. Only admins can publish or retire. A lesson&apos;s video is loaded with
-          its course (docs/operator/lesson-videos.md) and is frozen with the version, like its text.
+          the same market. A lesson’s video is loaded with its course and is frozen with the
+          version, like its text.
         </Body>
-      </div>
-      <CoursePublishing rows={rows} />
-    </div>
+      </PageHeader>
+      {canChange ? null : (
+        <RoleNote>
+          Only an admin publishes or retires a course. You can see every version and where it
+          stands.
+        </RoleNote>
+      )}
+      <CoursePublishing canChange={canChange} rows={rows} />
+    </Page>
   );
 }

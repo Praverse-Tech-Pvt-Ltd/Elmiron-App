@@ -92,7 +92,7 @@ export const OverrideForm = ({ analysisId, findingId }: OverrideFormProps): Reac
   return (
     <Card>
       <MissingNote>
-        <strong>This finding is advisory.</strong> Nothing happens to the MR unless you act, and no
+        <strong>This finding is advisory.</strong> Nothing happens to the rep unless you act, and no
         score is being kept.
       </MissingNote>
 
@@ -100,7 +100,7 @@ export const OverrideForm = ({ analysisId, findingId }: OverrideFormProps): Reac
         <>
           <Heading>Override logged</Heading>
           <Body muted>
-            The MR is told you overrode it, and your reason. The rubric owner sees it in the weekly
+            The rep is told you overrode it, and your reason. The rubric owner sees it in the weekly
             accuracy report. The finding itself is unchanged — the analysis they read stays as they
             read it.
           </Body>
