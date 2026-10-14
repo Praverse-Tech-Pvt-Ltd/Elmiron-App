@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { MileageDay } from '@fieldforce/core';
-import { MileageScreen, Screen } from '@fieldforce/ui';
+import { MileageScreen, Screen, t, useLanguage } from '@fieldforce/ui';
 import { totalDistanceMetres, travelDateLabel } from '../src/capture/mileage';
 import { listMileage } from '../src/capture/visits';
 import { usePulledStore } from '../src/sync/pulled-store';
@@ -21,19 +21,43 @@ import { failureDetail, refusedDetail } from '../src/errors/plain';
  * calendar — that is a question about *which month the MR is looking at*, not a
  * claim about when anything happened, so the device is the right source.
  */
-const KM = (metres: number): string => `${(metres / 1000).toFixed(1)} km`;
+const KM = (metres: number): string => t('common.km', { km: (metres / 1000).toFixed(1) });
 
 /**
  * Why there is no rupee figure. Shown to the MR rather than kept in a comment,
- * because they came to this screen for that number.
+ * because they came to this screen for that number. A function, so it is read in the
+ * language in use when it is shown (`FE-W155`).
  */
-const RATE_NOTE =
-  'Your rate per kilometre is set by your company, and this app has not been given it. Distance here is what your claim is calculated from; the amount comes from payroll.';
+const rateNote = (): string => t('mileage.rateNote');
+
+/**
+ * `FE-W155`. What went wrong, kept as a fact rather than as sentences: the words are built at
+ * render, so a language change repaints a failure already on screen.
+ */
+type Failure =
+  | { readonly kind: 'no-clock' }
+  | { readonly kind: 'refused'; readonly denied: boolean; readonly sqlState: string | null }
+  | { readonly kind: 'unreachable'; readonly error: unknown };
+
+const failureText = (failure: Failure): { title: string; detail: string } => {
+  switch (failure.kind) {
+    case 'no-clock':
+      return { title: t('mileage.whichMonth'), detail: noServerClock() };
+    case 'refused':
+      return {
+        title: failure.denied ? t('mileage.noAccess') : t('mileage.couldNotLoad'),
+        detail: refusedDetail(failure.sqlState),
+      };
+    case 'unreachable':
+      return { title: t('mileage.couldNotLoad'), detail: failureDetail(failure.error) };
+  }
+};
 
 export default function Mileage(): ReactNode {
   const [days, setDays] = useState<readonly MileageDay[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
+  useLanguage();
+  const [failure, setFailure] = useState<Failure | null>(null);
   // `FE-W42` C1. The instant and the zone both come from the server.
   const { serverTime, zone } = usePulledStore();
 
@@ -49,7 +73,7 @@ export default function Mileage(): ReactNode {
      * With no server clock this screen asks for nothing rather than guessing a month.
      */
     if (serverTime === null) {
-      setFailure({ title: 'Could not tell which month to show', detail: noServerClock() });
+      setFailure({ kind: 'no-clock' });
       setLoading(false);
       return;
     }
@@ -63,24 +87,15 @@ export default function Mileage(): ReactNode {
           setDays(outcome.days);
           return;
         }
-        setFailure(
-          outcome.refusal.code === 'not_permitted'
-            ? {
-                title: 'You do not have access to this mileage',
-                detail: refusedDetail(outcome.refusal.sqlState),
-              }
-            : {
-                title: 'Could not load your mileage',
-                detail: refusedDetail(outcome.refusal.sqlState),
-              },
-        );
+        setFailure({
+          kind: 'refused',
+          denied: outcome.refusal.code === 'not_permitted',
+          sqlState: outcome.refusal.sqlState,
+        });
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        setFailure({
-          title: 'Could not load your mileage',
-          detail: failureDetail(error),
-        });
+        setFailure({ kind: 'unreachable', error });
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -99,9 +114,9 @@ export default function Mileage(): ReactNode {
           distanceLabel: KM(day.distanceMetres),
           checkInCount: day.checkInCount,
         }))}
-        failure={failure}
+        failure={failure === null ? null : failureText(failure)}
         loading={loading}
-        rateNote={RATE_NOTE}
+        rateNote={rateNote()}
         // FE-D3 B5. Null until the server has answered. `?? 0` showed "0.0 km" while loading.
         totalLabel={days === null ? null : KM(totalDistanceMetres(days))}
       />

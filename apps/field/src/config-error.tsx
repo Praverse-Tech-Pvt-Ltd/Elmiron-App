@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Banner, BodyText, Heading, Screen } from '@fieldforce/ui';
+import { Banner, BodyText, Heading, Screen, t, useLanguage } from '@fieldforce/ui';
 
 /**
  * FE-D2 2 — what a release build with no real API address shows INSTEAD of the app.
@@ -12,17 +12,20 @@ import { Banner, BodyText, Heading, Screen } from '@fieldforce/ui';
  *
  * Nothing behind this mounts — no session, no pull, no outbox — so nothing is recorded or sent
  * while it is on screen, and it says so.
+ *
+ * `FE-W156`. The rep's sentences are in the catalogue; `reason` is the build's own, for whoever
+ * made it, and stays exactly as the build wrote it.
  */
-export const ConfigurationError = ({ reason }: { readonly reason: string }): ReactNode => (
-  <SafeAreaProvider>
-    <StatusBar style="dark" />
-    <Screen scrollable>
-      <Heading>This copy of the app is not set up</Heading>
-      <BodyText>
-        It was built without the address of the server, so it cannot sign you in or send anything.
-        Nothing is being recorded. Tell whoever gave you this app; it needs to be built again.
-      </BodyText>
-      <Banner detail={reason} title="Configuration error" tone="critical" />
-    </Screen>
-  </SafeAreaProvider>
-);
+export const ConfigurationError = ({ reason }: { readonly reason: string }): ReactNode => {
+  useLanguage();
+  return (
+    <SafeAreaProvider>
+      <StatusBar style="dark" />
+      <Screen scrollable>
+        <Heading>{t('onboarding.notSetUp')}</Heading>
+        <BodyText>{t('onboarding.notSetUpDetail')}</BodyText>
+        <Banner detail={reason} title={t('onboarding.configError')} tone="critical" />
+      </Screen>
+    </SafeAreaProvider>
+  );
+};

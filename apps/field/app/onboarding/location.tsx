@@ -2,7 +2,17 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { PermissionsAndroid } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Banner, BodyText, Button, Card, Display, Label, Screen } from '@fieldforce/ui';
+import {
+  Banner,
+  BodyText,
+  Button,
+  Card,
+  Display,
+  Label,
+  Screen,
+  t,
+  useLanguage,
+} from '@fieldforce/ui';
 import { requestLocationPermission } from '../../src/onboarding/location-permission';
 import { hasCompletedFirstRun } from '../../src/onboarding/progress';
 
@@ -35,8 +45,10 @@ import { hasCompletedFirstRun } from '../../src/onboarding/progress';
  * `takeFix`, which took a fix at onboarding. See `location-permission.ts`.
  */
 export default function LocationRationale(): ReactNode {
+  useLanguage();
   const router = useRouter();
-  const [outcome, setOutcome] = useState<string | null>(null);
+  // `FE-W155`. Which answer came back, not its sentence: the words are read at render.
+  const [outcome, setOutcome] = useState<'granted' | 'unanswered' | null>(null);
 
   /** On to A3 in first run; back where they came from otherwise. */
   const carryOn = (): void => {
@@ -53,7 +65,7 @@ export default function LocationRationale(): ReactNode {
       switch (answer) {
         case 'granted':
           if (await hasCompletedFirstRun()) {
-            setOutcome('Location is on. Your check-ins will record where you were.');
+            setOutcome('granted');
           } else {
             router.push('/onboarding/notifications');
           }
@@ -64,9 +76,7 @@ export default function LocationRationale(): ReactNode {
           router.push('/onboarding/location-denied');
           return;
         case 'unanswered':
-          setOutcome(
-            'The phone did not show the question. Nothing has changed; you can try again, or carry on — everything works without location.',
-          );
+          setOutcome('unanswered');
           return;
       }
     });
@@ -74,37 +84,36 @@ export default function LocationRationale(): ReactNode {
 
   return (
     <Screen scrollable>
-      <Display>Stop filling in where you were.</Display>
-      <BodyText muted>Turn location on and two things stop being your job.</BodyText>
+      <Display>{t('onboarding.locationHeadline')}</Display>
+      <BodyText muted>{t('onboarding.locationLead')}</BodyText>
 
       <Card>
-        <BodyText>Check in with one tap</BodyText>
-        <Label muted>
-          Press the button and where you were is recorded with it. No writing the clinic name into a
-          form in the waiting room.
-        </Label>
+        <BodyText>{t('onboarding.locationOneTap')}</BodyText>
+        <Label muted>{t('onboarding.locationOneTapDetail')}</Label>
       </Card>
 
       <Card>
-        <BodyText>Mileage adds itself up</BodyText>
-        <Label muted>
-          Distance between the visits you checked into goes onto your claim. It is measured in
-          straight lines, so it under-counts real roads rather than over-counting them.
-        </Label>
+        <BodyText>{t('onboarding.locationMileage')}</BodyText>
+        <Label muted>{t('onboarding.locationMileageDetail')}</Label>
       </Card>
 
       <Card tone="hero">
-        <BodyText>Only when you press check in or check out</BodyText>
-        <Label muted>
-          Not in the background, not while you walk, not after your shift. This app never asks your
-          phone for a position at any other moment.
-        </Label>
+        <BodyText>{t('onboarding.locationOnlyPress')}</BodyText>
+        <Label muted>{t('onboarding.locationOnlyPressDetail')}</Label>
       </Card>
 
-      {outcome === null ? null : <Banner detail={outcome} title="Location" tone="info" />}
+      {outcome === null ? null : (
+        <Banner
+          detail={
+            outcome === 'granted' ? t('onboarding.locationOn') : t('onboarding.locationUnanswered')
+          }
+          title={t('settings.location')}
+          tone="info"
+        />
+      )}
 
       <Button
-        label="See exactly what's recorded"
+        label={t('onboarding.seeRecorded')}
         onPress={() => {
           router.push('/transparency');
         }}
@@ -115,9 +124,9 @@ export default function LocationRationale(): ReactNode {
         An explicit user request — the single trigger `shouldPromptForLocation` allows. The
         design lists it before "Not now"; the two stay the same weight.
       */}
-      <Button label="Turn location on" onPress={turnOn} variant="secondary" />
+      <Button label={t('onboarding.turnLocationOn')} onPress={turnOn} variant="secondary" />
 
-      <Button label="Not now" onPress={carryOn} variant="secondary" />
+      <Button label={t('onboarding.notNow')} onPress={carryOn} variant="secondary" />
     </Screen>
   );
 }

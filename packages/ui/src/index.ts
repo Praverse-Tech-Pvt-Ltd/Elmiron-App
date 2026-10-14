@@ -112,7 +112,7 @@ export { Select } from './Select';
 export { SettingsScreen } from './SettingsScreen';
 export { SwitchRow } from './SwitchRow';
 export type { SwitchRowProps } from './SwitchRow';
-export { DataSettingsScreen, WARN_OVER_TITLE, WIFI_ONLY_TITLE } from './DataSettingsScreen';
+export { DataSettingsScreen, warnOverTitle, wifiOnlyTitle } from './DataSettingsScreen';
 export type { DataSettingKey, DataSettingsScreenProps } from './DataSettingsScreen';
 export type { SettingRow, SettingState, SettingsScreenProps } from './SettingsScreen';
 export type { SelectOption, SelectProps } from './Select';

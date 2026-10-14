@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { AppState } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { t } from '@fieldforce/ui/i18n';
 import { pushEnabled } from '../features';
 import { useSession } from '../session';
 import { setBeforeSignOut } from './before-sign-out';
@@ -59,7 +60,8 @@ const appDeps = async (): Promise<PushDeps> => {
       deviceToken: async () => String((await Notifications.getDevicePushTokenAsync()).data),
       ensureChannel: async () => {
         await Notifications.setNotificationChannelAsync('default', {
-          name: 'Updates from your company',
+          // `FE-W156`. Read when the channel is (re)created, which is on every registration.
+          name: t('onboarding.pushChannel'),
           importance: Notifications.AndroidImportance.DEFAULT,
         });
       },

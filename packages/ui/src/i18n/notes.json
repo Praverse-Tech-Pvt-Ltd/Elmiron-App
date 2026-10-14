@@ -25,7 +25,12 @@
     "samples": "Leave samples: the samples and materials the rep left at a visit, how many, and their declared value, with a note about the UCPMP sample limit",
     "voiceNote": "The rep's own voice note after a visit: hold a button to record, then save it. Nobody else is in the recording",
     "queue": "Saved on this phone: the list of the rep's work waiting to send, what is stuck, and why the server refused something",
-    "stepper": "The minus / plus count control (for example, how many packs on Leave samples). Read aloud by a screen reader"
+    "stepper": "The minus / plus count control (for example, how many packs on Leave samples). Read aloud by a screen reader",
+    "mileage": "Mileage — distance on this month's claim, day by day",
+    "dataSettings": "Mobile data — the WiFi-only and 100 MB settings",
+    "transparency": "What this app records — the list of what is and is never recorded",
+    "liveTracking": "Live location — the screen around the company's notice (the notice itself is not translated here)",
+    "onboarding": "First run (location, notifications, battery & autostart, microphone) and the start-up error screen"
   },
   "keys": {
     "tabs.today": {
@@ -598,6 +603,88 @@
     },
     "stepper.more": {
       "note": "Read aloud for the plus button. {label} is the control's own label, like \"Packs\""
+    },
+    "mileage.dayRow_one": {
+      "note": "{distance} is like 41.3 km; {count} is the number of check-ins that day"
+    },
+    "mileage.dayRow_other": {
+      "note": "{distance} is like 41.3 km; {count} is the number of check-ins that day"
+    },
+    "transparency.neverRecorded": {
+      "note": "A promise about privacy. Keep it exact; do not soften it"
+    },
+    "transparency.neverRecordedLive": {
+      "note": "A promise about privacy. Keep it exact; do not soften it"
+    },
+    "liveTracking.draftTitle": {
+      "note": "A warning above an unapproved notice; keep DRAFT prominent"
+    },
+    "liveTracking.agree": {
+      "note": "Button. The rep agrees to the company's live location notice, which is shown in English"
+    },
+    "onboarding.notNow": {
+      "note": "Button",
+      "max": 24
+    },
+    "onboarding.continue": {
+      "note": "Button",
+      "max": 24
+    },
+    "onboarding.stepDone": {
+      "note": "A small toggle on a setup step, when it is marked done",
+      "max": 16
+    },
+    "onboarding.markDone": {
+      "note": "A small toggle on a setup step",
+      "max": 16
+    },
+    "onboarding.whatYouWillSee": {
+      "note": "{text} is what the phone's own settings screen says"
+    },
+    "onboarding.stepState": {
+      "note": "Spoken by a screen reader; {step} is the step, {state} is Done or Mark done"
+    },
+    "onboarding.couldNotOpen": {
+      "note": "{destination} is the name of a phone settings screen, e.g. App info"
+    },
+    "onboarding.screenAutostart": {
+      "note": "The name Xiaomi phones give this settings screen; use the name the phone shows in this language"
+    },
+    "onboarding.screenAutoLaunch": {
+      "note": "The name Oppo and Realme phones give this settings screen; use the name the phone shows in this language"
+    },
+    "onboarding.screenAutoStartVivo": {
+      "note": "The name Vivo phones give this settings screen; use the name the phone shows in this language"
+    },
+    "onboarding.screenAppInfo": {
+      "note": "The Android settings screen for one app; use the name the phone shows in this language"
+    },
+    "onboarding.screenBatteryOptimisation": {
+      "note": "The Android settings screen; use the name the phone shows in this language"
+    },
+    "onboarding.deniedBody": {
+      "note": "14 minutes and ₹600 are the design's estimates; keep the numbers"
+    },
+    "onboarding.capOne": {
+      "note": "{cap} is the number of notifications a day"
+    },
+    "onboarding.capTwo": {
+      "note": "{cap} is the number of notifications a day"
+    },
+    "onboarding.capThree": {
+      "note": "{cap} is the number of notifications a day"
+    },
+    "onboarding.capFour": {
+      "note": "{cap} is the number of notifications a day"
+    },
+    "onboarding.capMany": {
+      "note": "{cap} is the number of notifications a day, more than four"
+    },
+    "onboarding.pushChannel": {
+      "note": "The name of this app's notifications, shown in the phone's own settings"
+    },
+    "onboarding.configError": {
+      "note": "Title of a red banner; the detail under it is technical text left in English"
     }
   }
 }

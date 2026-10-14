@@ -6,6 +6,7 @@ import { Card } from './Card';
 import { Spinner } from './Spinner';
 import { SwitchRow } from './SwitchRow';
 import { BodyText, Label, Secondary, Title } from './Text';
+import { t, useT } from './i18n';
 
 /**
  * `FE-W139` — C4's two "Your data" settings, as switches that govern something.
@@ -36,8 +37,9 @@ export interface DataSettingsScreenProps {
   readonly usedThisMonth: string | null;
 }
 
-export const WIFI_ONLY_TITLE = 'Send audio on WiFi only';
-export const WARN_OVER_TITLE = 'Warn me over 100 MB';
+/** `FE-W155`. Functions, not constants, so each is read in the language in use when shown. */
+export const wifiOnlyTitle = (): string => t('settings.wifiOnly');
+export const warnOverTitle = (): string => t('settings.warnOver');
 
 const styles = StyleSheet.create({
   group: { gap: tokens.space.sm },
@@ -50,57 +52,52 @@ export const DataSettingsScreen = ({
   saving = false,
   saveFailure = null,
   usedThisMonth,
-}: DataSettingsScreenProps): ReactNode => (
-  <>
-    <Title>Mobile data</Title>
+}: DataSettingsScreenProps): ReactNode => {
+  useT();
+  return (
+    <>
+      <Title>{t('dataSettings.title')}</Title>
 
-    {saveFailure === null ? null : (
-      <Banner tone="attention" title="That change was not saved" detail={saveFailure} />
-    )}
+      {saveFailure === null ? null : (
+        <Banner tone="attention" title={t('dataSettings.notSaved')} detail={saveFailure} />
+      )}
 
-    {wifiOnlyAudio === null || warnOverMonthly === null ? (
-      <Spinner label="Reading your settings" />
-    ) : (
-      <>
-        <View style={styles.group}>
-          <SwitchRow
-            title={WIFI_ONLY_TITLE}
-            detail="Recordings wait for WiFi. Everything else still sends."
-            value={wifiOnlyAudio}
-            disabled={saving}
-            onValueChange={(next) => {
-              onChange('wifiOnlyAudio', next);
-            }}
-          />
-          <Secondary>
-            Voice notes and visit recordings wait while this phone is on mobile data, or cannot tell
-            which network it is on. They stay safe on this phone, and you can still send them from
-            the list of things waiting to send.
-          </Secondary>
-        </View>
+      {wifiOnlyAudio === null || warnOverMonthly === null ? (
+        <Spinner label={t('dataSettings.reading')} />
+      ) : (
+        <>
+          <View style={styles.group}>
+            <SwitchRow
+              title={wifiOnlyTitle()}
+              detail={t('settings.wifiOnlyDetail')}
+              value={wifiOnlyAudio}
+              disabled={saving}
+              onValueChange={(next) => {
+                onChange('wifiOnlyAudio', next);
+              }}
+            />
+            <Secondary>{t('dataSettings.wifiOnlyExplain')}</Secondary>
+          </View>
 
-        <View style={styles.group}>
-          <SwitchRow
-            title={WARN_OVER_TITLE}
-            detail="A note on home, nothing stops working."
-            value={warnOverMonthly}
-            disabled={saving}
-            onValueChange={(next) => {
-              onChange('warnOverMonthly', next);
-            }}
-          />
-          <Secondary>
-            Counts what this app uploads over mobile data each month, by India’s date: your audio
-            and the work you send. Downloads, other apps and the phone’s own use are not counted, so
-            your plan’s total will be higher.
-          </Secondary>
-        </View>
-      </>
-    )}
+          <View style={styles.group}>
+            <SwitchRow
+              title={warnOverTitle()}
+              detail={t('settings.warnOverDetail')}
+              value={warnOverMonthly}
+              disabled={saving}
+              onValueChange={(next) => {
+                onChange('warnOverMonthly', next);
+              }}
+            />
+            <Secondary>{t('dataSettings.warnOverExplain')}</Secondary>
+          </View>
+        </>
+      )}
 
-    <Card tone="quiet">
-      <Label muted>This app’s uploads over mobile data this month</Label>
-      <BodyText>{usedThisMonth ?? 'Shown once this phone has synced today.'}</BodyText>
-    </Card>
-  </>
-);
+      <Card tone="quiet">
+        <Label muted>{t('dataSettings.usedLabel')}</Label>
+        <BodyText>{usedThisMonth ?? t('dataSettings.usedUnknown')}</BodyText>
+      </Card>
+    </>
+  );
+};

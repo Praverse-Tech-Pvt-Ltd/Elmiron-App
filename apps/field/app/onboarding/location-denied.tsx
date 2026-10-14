@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Linking, PermissionsAndroid } from 'react-native';
 import { useRouter } from 'expo-router';
-import { BodyText, Button, Display, Label, Screen } from '@fieldforce/ui';
+import { BodyText, Button, Display, Label, Screen, t, useLanguage } from '@fieldforce/ui';
 import { requestLocationPermission } from '../../src/onboarding/location-permission';
 import { hasCompletedFirstRun } from '../../src/onboarding/progress';
 
@@ -44,8 +44,10 @@ import { hasCompletedFirstRun } from '../../src/onboarding/progress';
  * than a lever.
  */
 export default function LocationDenied(): ReactNode {
+  useLanguage();
   const router = useRouter();
-  const [note, setNote] = useState<string | null>(null);
+  // `FE-W155`. Which answer came back, not its sentence: the words are read at render.
+  const [note, setNote] = useState<'denied' | 'unanswered' | null>(null);
 
   /** On to A3 in first run; back where they came from otherwise. */
   const carryOn = (): void => {
@@ -69,10 +71,10 @@ export default function LocationDenied(): ReactNode {
           void Linking.openSettings();
           return;
         case 'denied':
-          setNote('Location is still off. You can carry on by hand — everything works.');
+          setNote('denied');
           return;
         case 'unanswered':
-          setNote('The phone did not show the question. Nothing has changed.');
+          setNote('unanswered');
           return;
       }
     });
@@ -80,12 +82,9 @@ export default function LocationDenied(): ReactNode {
 
   return (
     <Screen scrollable>
-      <Display>Location is off, so you&apos;re doing this by hand</Display>
+      <Display>{t('onboarding.deniedHeadline')}</Display>
 
-      <BodyText>
-        Check-ins need a tap each and mileage won&apos;t add itself up. That&apos;s about 14 minutes
-        a day and roughly ₹600 a month you&apos;d claim manually.
-      </BodyText>
+      <BodyText>{t('onboarding.deniedBody')}</BodyText>
 
       {/*
         THE NUMBERS ARE THE DESIGN'S ESTIMATES AND ARE LABELLED AS SUCH.
@@ -98,12 +97,16 @@ export default function LocationDenied(): ReactNode {
 
         Remove this line only when someone has actually measured it.
       */}
-      <Label muted>Estimates from the product design, not measured from your visits.</Label>
+      <Label muted>{t('onboarding.deniedEstimate')}</Label>
 
-      {note === null ? null : <Label muted>{note}</Label>}
+      {note === null ? null : (
+        <Label muted>
+          {note === 'denied' ? t('onboarding.stillOff') : t('onboarding.unanswered')}
+        </Label>
+      )}
 
-      <Button label="Turn location back on" variant="secondary" onPress={turnBackOn} />
-      <Button label="Carry on by hand" variant="secondary" onPress={carryOn} />
+      <Button label={t('onboarding.turnBackOn')} variant="secondary" onPress={turnBackOn} />
+      <Button label={t('onboarding.byHand')} variant="secondary" onPress={carryOn} />
     </Screen>
   );
 }
