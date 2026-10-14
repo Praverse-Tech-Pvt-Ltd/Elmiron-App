@@ -178,3 +178,22 @@ const LANGUAGE_NAMES: Readonly<Record<string, string>> = {
 };
 
 export const languageName = (tag: string): string => LANGUAGE_NAMES[tag] ?? tag;
+
+/**
+ * `FE-W148` — said plainly when the only notice this company has published is English.
+ *
+ * **The app does not translate consent, and never will.** The notice a doctor agrees to is
+ * `consent_text_versions.full_text`: versioned, hashed, immutable, and published only by the
+ * operator (`services/api/scripts/seed-reference-data.mjs`; no app role can write the table). A
+ * Hindi or Marathi notice exists when, and only when, the operator publishes one in that language
+ * after it has been approved — and the record then names that version and its language, checked by
+ * the server (`45001`). Until then this screen is English-only, and says so rather than leaving a
+ * doctor to wonder whether they were offered a choice.
+ *
+ * This sentence and everything else in this file stay English whatever the app language is: they
+ * frame a legal notice, so they are not in the translators' catalogue (`FE-W140`).
+ */
+export const singleLanguageNote = (languages: readonly string[]): string | null =>
+  languages.length === 1 && languages[0] === 'en-IN'
+    ? 'This notice is in English only. No Hindi or Marathi version has been approved yet.'
+    : null;

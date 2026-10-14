@@ -423,6 +423,8 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       consent[6],
       consent[7],
       'Exactly what is collected, in full',
+      // `FE-W148`. The shipped day has one notice, in English, so the screen says so plainly.
+      'This notice is in English only. No Hindi or Marathi version has been approved yet.',
       "No, don't record",
       "Yes, that's fine",
       'Give the phone back',

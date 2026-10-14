@@ -18,6 +18,7 @@ import {
   consentDetails,
   fiduciaryNote,
   NEVER_COLLECTED,
+  singleLanguageNote,
 } from '../../src/consent/content';
 import {
   activeNoticeFor,
@@ -388,6 +389,10 @@ export default function ConsentRoute(): ReactNode {
         summary={copy.summary}
         variant={CONSENT_VARIANT}
         languages={languageOptionsFrom(versions)}
+        // `FE-W148`. With one notice language there is no picker; say it is English only, plainly.
+        languageNote={singleLanguageNote(
+          languageOptionsFrom(versions).map((option) => option.code),
+        )}
         {...(language === null ? {} : { language })}
       />
     </Screen>
