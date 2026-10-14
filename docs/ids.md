@@ -443,3 +443,14 @@ bootstrap rows are not restated here; the first file that cites each is the poin
 | `FE-W146` | frontend | `docs/operator/translations.md`: the translators' round trip, the rules the import enforces, what is not in the catalogue and why, and the list of screens still to move |
 | `FE-W147` | frontend | Devanagari is drawn by the platform's fallback font: DM Sans (all four shipped faces) has no Devanagari glyphs — 0 of U+0900–U+097F, measured from the TTF cmap — so no font was bundled; not yet checked on a handset |
 | `FE-W148` | frontend | consent stays out of the app catalogue: the doctor-facing consent words never call `t()` (a test refuses it), a non-English notice can only be a published `consent_text_versions` row (operator-only, versioned, hashed, immutable) and the record carries that version and its language (`45001` checks it); with only an English notice the consent screen says "This notice is in English only. No Hindi or Marathi version has been approved yet." |
+| `FE-W149` | frontend | month (and weekday) names follow the app language: `hi`/`mr` read them from `Intl.DateTimeFormat` with `hi-IN`/`mr-IN` in the territory's zone (React Native 0.86 builds Hermes with `HERMES_ENABLE_INTL`, backed by Android's ICU, minSdk 24), English keeps the app's own "Sep" table; a locale the runtime does not resolve falls back to the English names rather than a guess |
+| `FE-W150` | frontend | the visit screen moved to the catalogue (`app/visit/[id].tsx`, `VisitScreen`, and the helpers that word it) |
+| `FE-W151` | frontend | the Doctors tab and a doctor's profile moved to the catalogue |
+| `FE-W152` | frontend | call report, samples and voice note moved to the catalogue |
+| `FE-W153` | frontend | the outbox (queue) screen moved to the catalogue |
+| `FE-W154` | frontend | today's route (beat plan), unplanned visit and the map moved to the catalogue |
+| `FE-W155` | frontend | mileage, the Mobile data screen, What this app records and the Live location screen moved to the catalogue; the live-location privacy notice itself stays as the operator published it |
+| `FE-W156` | frontend | the first-run (onboarding) screens moved to the catalogue |
+| `FE-W157` | frontend | the adverse-event screen moved to the catalogue except its regulated wording, which stays English-only like consent and is listed in `docs/operator/translations.md` |
+| `FE-W158` | frontend | coaching, analysis and reply, the assistant, product questions and practice moved to the catalogue |
+| `FE-W159` | frontend | `docs/operator/translations.md` brought up to date for the second pass: every rep-facing screen but Learning is on the catalogue |
