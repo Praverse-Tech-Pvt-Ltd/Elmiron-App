@@ -1,18 +1,53 @@
 {
   "screens": {
-    "common": "Used on many screens"
+    "common": "Used on many screens",
+    "tabs": "The tab bar at the bottom of every main screen",
+    "signIn": "Sign-in screen",
+    "today": "Today (the home tab)",
+    "home": "Home, for a manager or administrator",
+    "pending": "Today — unplanned visits waiting to sync",
+    "sync": "The sync line on Today and Day end, and the sign-out warning",
+    "data": "Today — the mobile data note",
+    "tracking": "The live location line on Today and Me",
+    "day": "Banners about the day and the time zone, on several screens",
+    "dayEnd": "Day end (how today ended)",
+    "settings": "Me — the settings list",
+    "me": "Me — sign out and warnings",
+    "errors": "Error messages, on many screens",
+    "remedy": "What to do when the server refuses something, on many screens"
   },
   "keys": {
-    "common.on": {
-      "note": "Beside a switch",
-      "max": 6
+    "tabs.today": { "note": "Tab label, under an icon", "max": 12 },
+    "tabs.doctors": { "note": "Tab label, under an icon", "max": 12 },
+    "tabs.coaching": { "note": "Tab label, under an icon", "max": 12 },
+    "tabs.me": { "note": "Tab label, under an icon. The rep's own page", "max": 12 },
+    "common.on": { "note": "Beside a switch", "max": 6 },
+    "common.off": { "note": "Beside a switch", "max": 6 },
+    "common.clearField": { "note": "Spoken by a screen reader; {field} is the field's label" },
+    "common.nOfM": { "note": "A large figure, e.g. 3 of 8 (visits)", "max": 16 },
+    "common.km": { "note": "A distance, e.g. 12.4 km" },
+    "common.megabytes": { "note": "A size, e.g. 140 MB" },
+    "settings.comingLater": { "note": "A small badge", "max": 20 },
+    "settings.inUse": { "note": "A small badge on the language in use", "max": 16 },
+    "settings.languageWaiting": {
+      "note": "{language} is Hindi or Marathi, in English; {done} and {total} are numbers"
     },
-    "common.off": {
-      "note": "Beside a switch",
-      "max": 6
+    "sync.waitingNoSignal": { "note": "One line on a narrow strip; {count} is a number" },
+    "sync.unreadableMeta": { "note": "Small text at the end of the sync line", "max": 30 },
+    "today.startVisit": { "note": "Main button; {doctor} is the doctor's name" },
+    "today.continueVisit": { "note": "Main button; {doctor} is the doctor's name" },
+    "today.seeRoute": {
+      "note": "A small link at the corner of a card; keep the › at the end",
+      "max": 28
     },
-    "common.clearField": {
-      "note": "Spoken by a screen reader; {field} is the field's label"
-    }
+    "today.lastSyncOtherDay": { "note": "{date} is like 14 Oct; {time} is like 18:05" },
+    "pending.unplanned": { "note": "{reason} is what the rep typed" },
+    "dayEnd.title": { "note": "Screen title; {day} is the word for Today" },
+    "dayEnd.endMyDay": { "note": "Button", "max": 24 },
+    "tracking.lastRefused": { "note": "{reason} is one of the tracking.refused… sentences" },
+    "remedy.figures": { "note": "{figures} is technical text from the server, left as it is" },
+    "errors.reference": { "note": "{code} is a five-character error code" },
+    "home.teamDetail": { "note": "Placeholder row; FE-W6 is an internal reference, keep it" },
+    "home.adminDetail": { "note": "Placeholder row; FE-W6 is an internal reference, keep it" }
   }
 }

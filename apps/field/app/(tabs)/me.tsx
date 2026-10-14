@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
-import { Banner, Button, Screen, SettingsScreen } from '@fieldforce/ui';
+import { Banner, Button, Screen, SettingsScreen, useT } from '@fieldforce/ui';
 import {
   assistantEnabled,
   practiceEnabled,
@@ -11,8 +11,9 @@ import {
 } from '../../src/features';
 import { useSession } from '../../src/session';
 import { settingsGroups } from '../../src/settings/content';
+import { chooseAppLanguage } from '../../src/settings/language-pref';
 import {
-  QUEUE_UNREADABLE,
+  queueUnreadable,
   loadQueueState,
   onQueueChanged,
 } from '../../src/sync/async-storage-store';
@@ -24,15 +25,23 @@ import { LiveTrackingStatusLine } from '../../src/tracking/status-line';
  * `src/settings/content.ts` next to the note explaining what is missing and why.
  */
 export default function Me(): ReactNode {
+  // `FE-W142`. Subscribed: choosing a language below repaints this screen, the rows included.
+  const { t } = useT();
   const router = useRouter();
   const { signOut } = useSession();
   const [signOutFailed, setSignOutFailed] = useState(false);
+  /** `FE-W142`. The language took effect but the phone could not keep it; it lasts until restart. */
+  const [languageUnsaved, setLanguageUnsaved] = useState(false);
   /**
    * MR-49 / `FE-W61`. What this MR has not sent, read BEFORE they sign out. Their queue now
    * stays under their account when they do; this is where they are told so, rather than the
    * work being kept -- or, before MR-49, handed to the next person -- without a word.
    */
-  const [unsent, setUnsent] = useState<{ title: string; detail: string } | null>(null);
+  const [unsent, setUnsent] = useState<
+    | { readonly kind: 'unreadable' }
+    | { readonly kind: 'items'; readonly items: readonly { readonly status: string }[] }
+    | null
+  >(null);
   useEffect(() => {
     let live = true;
     // W2-B C / `BE-W151`. Re-read on every change to the queue, not once per mount: on the emulator
@@ -40,10 +49,12 @@ export default function Me(): ReactNode {
     const read = (): void => {
       void loadQueueState().then((load) => {
         if (!live) return;
+        // `FE-W142`. The queue is kept, not its sentence, so the warning is worded at render time in
+        // whatever language the app is in by then.
         setUnsent(
           load.kind === 'unreadable'
-            ? { title: 'This app could not read your queue', detail: QUEUE_UNREADABLE }
-            : unsentBeforeSignOut(load.state.items),
+            ? { kind: 'unreadable' }
+            : { kind: 'items', items: load.state.items },
         );
       });
     };
@@ -54,6 +65,13 @@ export default function Me(): ReactNode {
       stop();
     };
   }, []);
+
+  const unsentWarning =
+    unsent === null
+      ? null
+      : unsent.kind === 'unreadable'
+        ? { title: t('me.queueUnreadable'), detail: queueUnreadable() }
+        : unsentBeforeSignOut(unsent.items);
 
   return (
     <Screen scrollable>
@@ -86,6 +104,13 @@ export default function Me(): ReactNode {
           // `FE-W139`. Both "Your data" rows open the one Mobile data screen.
           onOpenDataSettings: () => {
             router.push('/data-settings');
+          },
+          // `FE-W142`. Only a complete language is offered, so a refusal here would be a defect in
+          // the row, not something to tell the rep; an unsaved choice is said, under the rows.
+          onChooseLanguage: (language) => {
+            void chooseAppLanguage(language).then((outcome) => {
+              setLanguageUnsaved(outcome === 'unsaved');
+            });
           },
           // FE-D15 / W2-G A. Only with the assistant flag on; off, the row does not exist.
           ...(assistantEnabled
@@ -136,20 +161,28 @@ export default function Me(): ReactNode {
         an MR looks at most — and the one that ends their session was the same
         weight as the one that starts their work.
       */}
-      {unsent === null ? null : (
-        <Banner tone="attention" title={unsent.title} detail={unsent.detail} />
+      {languageUnsaved ? (
+        <Banner
+          tone="attention"
+          title={t('me.languageUnsaved')}
+          detail={t('me.languageUnsavedDetail')}
+        />
+      ) : null}
+
+      {unsentWarning === null ? null : (
+        <Banner tone="attention" title={unsentWarning.title} detail={unsentWarning.detail} />
       )}
 
       {signOutFailed ? (
         <Banner
           tone="critical"
-          title="You are still signed in"
-          detail="Sign out did not go through. Try again — and if you are handing this phone to somebody else, do not until it does."
+          title={t('me.stillSignedIn')}
+          detail={t('me.stillSignedInDetail')}
         />
       ) : null}
 
       <Button
-        label="Sign out"
+        label={t('me.signOut')}
         onPress={() => {
           setSignOutFailed(false);
           // **MR-28 C2.** This was `void signOut();` — outcome discarded, no failure path.

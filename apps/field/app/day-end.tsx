@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import uuid from 'expo-modules-core/src/uuid';
-import { DayEndScreen, Screen } from '@fieldforce/ui';
+import { DayEndScreen, Screen, t, useLanguage } from '@fieldforce/ui';
 import type { DayEndWorkDay } from '@fieldforce/ui';
 import { totalDistanceMetres } from '../src/capture/mileage';
 import { visitsAsWitnessed } from '../src/capture/visit';
 import { listMileage } from '../src/capture/visits';
 import {
-  QUEUE_UNREADABLE,
+  queueUnreadable,
   loadQueueState,
   onQueueChanged,
   queueOwner,
@@ -18,13 +18,13 @@ import { enqueueFirst, flushOutbox, workDayQueueItem } from '../src/sync/outbox'
 import { createPushClient } from '../src/sync/push-client';
 import { usePulledStore } from '../src/sync/pulled-store';
 import { visitsFromStore } from '../src/sync/selectors';
-import { NO_SERVER_CLOCK } from '../src/today/server-window';
+import { noServerClock } from '../src/today/server-window';
 import { indicatorStateFor } from '../src/sync/indicator';
 import { heldAudioIds } from '../src/sync/upload-conditions';
 import { useUploadSnapshot } from '../src/sync/use-upload-snapshot';
 import { emptyQueue } from '../src/sync/reducer';
 import type { QueueLoad } from '../src/sync/async-storage-store';
-import { CAPTURE_NOTE, summariseDayEnd, workDayCopy } from '../src/today/day-end';
+import { captureNote, summariseDayEnd, workDayCopy } from '../src/today/day-end';
 import { onDay } from '../src/today/plan';
 import { clockIn } from '../src/today/territory-day';
 import { endDayBlocker, workDayRequest, workDayStatus } from '../src/today/work-day';
@@ -61,13 +61,14 @@ import { useLiveTracker } from '../src/tracking/tracker';
  * the pull brings the server's stamp and the card says that instead. A refusal (a visit still
  * checked in, 45016) is shown on the card with its remedy, and the button is offered again.
  */
-const KM = (metres: number): string => `${(metres / 1000).toFixed(1)} km`;
+const km = (metres: number): string => t('common.km', { km: (metres / 1000).toFixed(1) });
 
 /** The same refusal `MileageScreen` makes, on the screen that shows the day's total. */
-const RATE_NOTE =
-  'Distance only. Your rate per kilometre is set by your company and this app has not been given it, so the amount comes from payroll rather than from here.';
+const rateNote = (): string => t('dayEnd.rateNote');
 
 export default function DayEnd(): ReactNode {
+  // `FE-W145`. Subscribed, so a language change repaints this screen and every line built below.
+  useLanguage();
   const router = useRouter();
   const [distanceMetres, setDistanceMetres] = useState<number | null>(null);
   const [distanceLoading, setDistanceLoading] = useState(true);
@@ -114,7 +115,7 @@ export default function DayEnd(): ReactNode {
      * it is the right day, and when it is absent there is no honest day to substitute.
      */
     if (today === null) {
-      setNoDay({ title: 'Could not confirm which day this is', detail: NO_SERVER_CLOCK });
+      setNoDay({ title: t('dayEnd.noDay'), detail: noServerClock() });
       setDistanceLoading(false);
       return;
     }
@@ -173,7 +174,7 @@ export default function DayEnd(): ReactNode {
     (shown === null
       ? null
       : {
-          title: 'Your day was not ended',
+          title: t('dayEnd.notEnded'),
           detail: [shown.explanation ?? shown.fallback, shown.remedy]
             .filter((line): line is string => line !== null && line !== '')
             .join(' '),
@@ -207,7 +208,7 @@ export default function DayEnd(): ReactNode {
     void (async () => {
       const queued = await enqueueFirst(workDayQueueItem(body));
       if (queued.kind === 'queue_unreadable') {
-        setNotSaved({ title: 'Your day was NOT ended', detail: QUEUE_UNREADABLE });
+        setNotSaved({ title: t('dayEnd.notEndedUnsaved'), detail: queueUnreadable() });
         setEnding(false);
         return;
       }
@@ -231,7 +232,7 @@ export default function DayEnd(): ReactNode {
           tone: copy.tone,
           note: copy.offerEnd ? { value: note, onChange: setNote } : null,
           action: copy.offerEnd
-            ? { label: 'End my day', onPress: endDay, busy: ending, blockedBy }
+            ? { label: t('dayEnd.endMyDay'), onPress: endDay, busy: ending, blockedBy }
             : null,
         };
   // Only a refusal says something different from "not loaded", so only a refusal is a failure
@@ -240,7 +241,7 @@ export default function DayEnd(): ReactNode {
     noDay ??
     (pullFailure?.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
       ? {
-          title: 'You do not have access to this day',
+          title: t('dayEnd.noAccess'),
           detail: refusedDetail(pullFailure.refusal.sqlState),
         }
       : null);
@@ -248,9 +249,9 @@ export default function DayEnd(): ReactNode {
   return (
     <Screen scrollable>
       <DayEndScreen
-        captureNote={CAPTURE_NOTE}
-        dayLabel="Today"
-        distanceLabel={distanceMetres === null ? null : KM(distanceMetres)}
+        captureNote={captureNote()}
+        dayLabel={t('dayEnd.today')}
+        distanceLabel={distanceMetres === null ? null : km(distanceMetres)}
         // FE-D2 7. Null, not 0, when there is no summary: still loading, or the fetch failed. The
         // comment above always said a failure leaves "the totals absent"; `?? 0` made them present.
         done={summary?.done ?? null}
@@ -259,12 +260,12 @@ export default function DayEnd(): ReactNode {
         firstCaptureLabel={
           summary?.firstCaptureAt == null
             ? null
-            : `First check-in ${clockIn(summary.firstCaptureAt, zone)}`
+            : t('dayEnd.firstCheckIn', { time: clockIn(summary.firstCaptureAt, zone) })
         }
         lastCaptureLabel={
           summary?.lastCaptureAt == null
             ? null
-            : `Last check-out ${clockIn(summary.lastCaptureAt, zone)}`
+            : t('dayEnd.lastCheckOut', { time: clockIn(summary.lastCaptureAt, zone) })
         }
         loading={status === 'loading' || distanceLoading}
         onOpenQueue={() => {
@@ -274,7 +275,7 @@ export default function DayEnd(): ReactNode {
           router.push('/transparency');
         }}
         planned={summary?.planned ?? null}
-        rateNote={RATE_NOTE}
+        rateNote={rateNote()}
         sync={indicatorStateFor(queue, zone, heldAudioIds(items, uploadSnapshot).length)}
         workDay={workDay}
       />

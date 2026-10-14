@@ -7,7 +7,7 @@ import { CallReportScreen } from '@fieldforce/ui';
 // like every other visit screen, instead of `createClientForScenario().listVisits()/listDoctors()`
 // from the mock at :4010. The WRITE was converted in MR-18.
 import { createPushClient } from '../../src/sync/push-client';
-import { QUEUE_UNREADABLE } from '../../src/sync/async-storage-store';
+import { queueUnreadable } from '../../src/sync/async-storage-store';
 import { callReportQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
@@ -135,7 +135,7 @@ export default function CallReport(): ReactNode {
           // report is on neither. The `queued` branch above would have told them it was
           // saved on the phone; it is not, and that is the one sentence an MR acts on by
           // closing the screen.
-          setFailure({ title: 'This was NOT saved', detail: QUEUE_UNREADABLE });
+          setFailure({ title: 'This was NOT saved', detail: queueUnreadable() });
           return;
         }
         setFailure({ title: 'That was refused', detail: outcome.message });

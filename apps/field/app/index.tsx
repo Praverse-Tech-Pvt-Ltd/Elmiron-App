@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect } from 'expo-router';
-import { Screen, Spinner } from '@fieldforce/ui';
+import { Screen, Spinner, useT } from '@fieldforce/ui';
 import { useSession } from '../src/session';
 import { hasCompletedFirstRun } from '../src/onboarding/progress';
 
@@ -11,6 +11,7 @@ import { hasCompletedFirstRun } from '../src/onboarding/progress';
  * flashing at an MR who is already signed in.
  */
 export default function Index(): ReactNode {
+  const { t } = useT();
   const { status } = useSession();
   const [firstRunDone, setFirstRunDone] = useState<boolean | null>(null);
 
@@ -29,7 +30,7 @@ export default function Index(): ReactNode {
   if (status === 'loading' || firstRunDone === null) {
     return (
       <Screen>
-        <Spinner label="Restoring your session" />
+        <Spinner label={t('signIn.restoring')} />
       </Screen>
     );
   }

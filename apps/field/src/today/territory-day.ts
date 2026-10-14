@@ -1,3 +1,4 @@
+import { t } from '@fieldforce/ui/i18n';
 /**
  * Which day is it, and what time does that timestamp say — MR-15 A2.
  *
@@ -218,7 +219,4 @@ export const territoryToday = (serverTime: string, zone: TerritoryZone): string 
  * rather than a boolean so the caller cannot render a warning without its reason.
  */
 export const zoneCaveat = (zone: TerritoryZone): string | null =>
-  zone.source === 'territory'
-    ? null
-    : 'Dates and times are shown in UTC. This app could not get your territory’s timezone, ' +
-      'so a day here may not be the day you worked — in India it runs 5 hours 30 minutes behind.';
+  zone.source === 'territory' ? null : t('day.zoneCaveat');

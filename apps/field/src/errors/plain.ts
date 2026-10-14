@@ -1,4 +1,5 @@
 import { refusalForSqlState } from '@fieldforce/core';
+import { t } from '@fieldforce/ui/i18n';
 import { remedyForSqlState } from '../sync/explanation';
 
 /**
@@ -16,14 +17,14 @@ export const refusedDetail = (sqlState: string | null | undefined): string => {
   const state = sqlState?.trim() ?? '';
   const remedy = remedyForSqlState(state === '' ? null : state);
   if (remedy !== null) return remedy;
-  const reference = state === '' ? '' : ` Reference: ${state}.`;
+  const reference = state === '' ? '' : ` ${t('errors.reference', { code: state })}`;
   switch (refusalForSqlState(state).code) {
     case 'not_authenticated':
-      return `Your sign-in has expired. Sign out and sign in again from Me.${reference}`;
+      return `${t('errors.signInExpired')}${reference}`;
     case 'not_permitted':
-      return `Your account can’t open this. If you think it should, tell your manager.${reference}`;
+      return `${t('errors.notPermitted')}${reference}`;
     default:
-      return `This was turned down. If it keeps happening, tell your manager.${reference}`;
+      return `${t('errors.turnedDown')}${reference}`;
   }
 };
 
@@ -31,10 +32,9 @@ export const refusedDetail = (sqlState: string | null | undefined): string => {
 export const failureDetail = (error: unknown): string => {
   const message = error instanceof Error ? error.message : '';
   return /network|fetch|timed? ?out|abort|offline/iu.test(message)
-    ? 'No signal, or the server did not answer. Check your connection and try again.'
-    : 'Something went wrong on our side. Try again — if it keeps happening, tell your manager.';
+    ? t('errors.noSignal')
+    : t('errors.ourSide');
 };
 
 /** For the rare screen that names the account rather than the request. */
-export const NOT_PERMITTED_DETAIL =
-  'Your account can’t open this. If you think it should, tell your manager.';
+export const notPermittedDetail = (): string => t('errors.notPermitted');

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { VisitSchema } from '@fieldforce/core';
 import type { Visit } from '@fieldforce/core';
-import { CAPTURE_NOTE, summariseDayEnd } from './day-end';
+import { captureNote, summariseDayEnd } from './day-end';
 
 /**
  * Parsed through the contract schema rather than written as a literal, for the
@@ -91,7 +91,7 @@ describe('the capture note', () => {
     // The screen's load-bearing sentence. Written as a standing fact because under
     // fe-w3-spec §4a it is one: there is no background location, so this is true
     // between every press and not only after the last one.
-    expect(CAPTURE_NOTE).toMatch(/only ever reads your position at the moment you press/u);
-    expect(CAPTURE_NOTE).toMatch(/it is not reading it now/u);
+    expect(captureNote()).toMatch(/only ever reads your position at the moment you press/u);
+    expect(captureNote()).toMatch(/it is not reading it now/u);
   });
 });

@@ -13,7 +13,7 @@ import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { FILTER_LABELS, buildDoctorRows, lastSeenLabel, rankDoctors } from '../../src/doctors/list';
 import type { DoctorFilter } from '../../src/doctors/list';
 import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
-import { NOT_PERMITTED_DETAIL, refusedDetail } from '../../src/errors/plain';
+import { notPermittedDetail, refusedDetail } from '../../src/errors/plain';
 
 /**
  * B8 — the doctor list, searchable.
@@ -102,7 +102,7 @@ export default function Doctors(): ReactNode {
         : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
           ? {
               title: 'You do not have access to this list',
-              detail: NOT_PERMITTED_DETAIL,
+              detail: notPermittedDetail(),
             }
           : // W2-C A2 / `BE-W155`. **A failed refresh is not "no doctors".** This branch was
             // unconditional and the list renders ONLY the banner when given a failure, so offline

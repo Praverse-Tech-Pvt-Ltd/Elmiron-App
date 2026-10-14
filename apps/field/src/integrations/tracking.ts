@@ -1,3 +1,5 @@
+import { t } from '@fieldforce/ui/i18n';
+import type { TextKey } from '@fieldforce/ui/i18n';
 /**
  * Live tracking — the decision of WHETHER the phone may track, with no tracking SDK at all.
  *
@@ -40,11 +42,25 @@ export const trackingState = (input: TrackingInputs): TrackingState => {
 };
 
 /** What the rep is told, for every state -- tracking is never silent. */
-export const TRACKING_WORDS: Readonly<Record<TrackingState, string>> = {
-  off_company: 'Live location is off for your company.',
-  off_no_notice: 'Live location is off until you read and accept the notice.',
-  paused_outside_hours: 'Live location is paused outside your working hours.',
-  paused_day_closed: 'Live location is paused: your working day is not open.',
-  paused_background: 'Live location is paused while the app is not on screen.',
-  active: 'Your live location is being shared with your company during working hours.',
+const TRACKING_KEYS: Readonly<Record<TrackingState, TextKey>> = {
+  off_company: 'tracking.offCompany',
+  off_no_notice: 'tracking.offNoNotice',
+  paused_outside_hours: 'tracking.pausedOutsideHours',
+  paused_day_closed: 'tracking.pausedDayClosed',
+  paused_background: 'tracking.pausedBackground',
+  active: 'tracking.active',
 };
+
+/**
+ * `FE-W144`. Read through getters, so each line is in the app's language at the moment it is shown
+ * rather than the one it was in when this module loaded.
+ */
+export const TRACKING_WORDS: Readonly<Record<TrackingState, string>> = Object.defineProperties(
+  {} as Record<TrackingState, string>,
+  Object.fromEntries(
+    (Object.keys(TRACKING_KEYS) as TrackingState[]).map((state) => [
+      state,
+      { enumerable: true, get: () => t(TRACKING_KEYS[state]) },
+    ]),
+  ),
+);

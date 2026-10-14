@@ -13,6 +13,7 @@ import { Screen } from './Screen';
 import { Spinner } from './Spinner';
 import { SyncQueueIndicator } from './SyncQueueIndicator';
 import type { SyncQueueState } from './SyncQueueIndicator';
+import { useT } from './i18n';
 
 /**
  * Phase 2 B1 — "the screen everything is judged on".
@@ -214,6 +215,7 @@ export const TodayScreen = ({
   onRetry,
   after = null,
 }: TodayScreenProps): ReactNode => {
+  const { t } = useT();
   if (failure !== null) {
     return (
       <Screen>
@@ -221,7 +223,9 @@ export const TodayScreen = ({
           detail={failure.detail}
           title={failure.title}
           tone="critical"
-          {...(onRetry === undefined ? {} : { action: { label: 'Try again', onPress: onRetry } })}
+          {...(onRetry === undefined
+            ? {}
+            : { action: { label: t('common.tryAgain'), onPress: onRetry } })}
         />
       </Screen>
     );
@@ -235,19 +239,19 @@ export const TodayScreen = ({
     next === null
       ? null
       : next.inProgress === true
-        ? `Continue the visit to ${next.doctorName}`
-        : `Start the visit to ${next.doctorName}`;
+        ? t('today.continueVisit', { doctor: next.doctorName })
+        : t('today.startVisit', { doctor: next.doctorName });
   const footer = (
     <>
       {next === null && planned === 0 && onFindDoctor !== undefined ? (
-        <Button label="Find a doctor" onPress={onFindDoctor} variant="secondary" />
+        <Button label={t('today.findDoctor')} onPress={onFindDoctor} variant="secondary" />
       ) : null}
       {next === null && planned > 0 && stillOnPlan === 0 && onOpenDayEnd !== undefined ? (
-        <Button label="How today ended" onPress={onOpenDayEnd} variant="secondary" />
+        <Button label={t('today.howTodayEnded')} onPress={onOpenDayEnd} variant="secondary" />
       ) : null}
       {onAddUnplannedVisit === undefined ? null : (
         <Button
-          label="Add an unplanned visit"
+          label={t('today.addUnplanned')}
           onPress={onAddUnplannedVisit}
           variant={next === null ? 'secondary' : 'quiet'}
         />
@@ -274,7 +278,7 @@ export const TodayScreen = ({
         MR is standing in a waiting room, and a screen that blocks until the network
         answers is a visit they do not log.
       */}
-      {loading ? <Spinner label="Getting today's plan" /> : null}
+      {loading ? <Spinner label={t('today.loading')} /> : null}
 
       {/*
         B6/B8. Rendered only when the server actually said something. `notices` is empty on
@@ -311,14 +315,8 @@ export const TodayScreen = ({
               // MR-49 D1 / `FE-W60`. The plan is not done: stops on it have no visit yet. Said as
               // a count and a way to the route, never as "everyone on the plan".
               <Card>
-                <BodyText>
-                  {stillOnPlan === 1
-                    ? '1 more stop on today’s plan'
-                    : `${String(stillOnPlan)} more stops on today’s plan`}
-                </BodyText>
-                <Label muted>
-                  No visit has started for them yet. See today’s route for who is left.
-                </Label>
+                <BodyText>{t('today.stopsLeft', { count: stillOnPlan })}</BodyText>
+                <Label muted>{t('today.stopsLeftDetail')}</Label>
               </Card>
             ) : (
               // FE-W102. Both ends of the day as designed states, words unchanged: no plan is
@@ -326,15 +324,13 @@ export const TodayScreen = ({
               <EmptyState
                 detail={
                   planned === 0
-                    ? "No beat plan came through. You can still visit anyone in your territory and it'll all be logged."
+                    ? t('today.noPlanDetail')
                     : notMet === 0
-                      ? 'You went to every visit on the plan.'
-                      : notMet === 1
-                        ? 'You went to every visit on the plan. One doctor was not available.'
-                        : `You went to every visit on the plan. ${String(notMet)} doctors were not available.`
+                      ? t('today.everyoneDetail')
+                      : t('today.everyoneNotMet', { count: notMet })
                 }
                 kind={planned === 0 ? 'neutral' : 'success'}
-                title={planned === 0 ? 'Nothing planned for today' : "That's everyone on the plan"}
+                title={planned === 0 ? t('today.noPlan') : t('today.everyone')}
               />
             )
           ) : (
@@ -342,7 +338,9 @@ export const TodayScreen = ({
               tone="hero"
               {...(onStartNextVisit === undefined ? {} : { onPress: onStartNextVisit })}
             >
-              <Label>{next.inProgress === true ? 'In progress' : 'Next visit'}</Label>
+              <Label>
+                {next.inProgress === true ? t('today.inProgress') : t('today.nextVisit')}
+              </Label>
               <View style={styles.heroLines}>
                 {/*
                   FE-W102. B1 sets the doctor at 29/600, tracked in: the next visit is the largest
@@ -356,7 +354,7 @@ export const TodayScreen = ({
                   // because silence here reads as "this visit has no clinic" -- and the one
                   // thing this screen must never do is present an absence as a fact. Never a
                   // wrong address, never an empty one dressed up as an answer.
-                  <BodyText>Address still syncing</BodyText>
+                  <BodyText>{t('today.addressSyncing')}</BodyText>
                 ) : null}
                 {next.scheduledLabel === null ? null : <BodyText>{next.scheduledLabel}</BodyText>}
               </View>
@@ -369,12 +367,12 @@ export const TodayScreen = ({
         <FadeIn index={1}>
           <Card {...(routePress === undefined ? {} : { onPress: routePress })}>
             <View style={styles.progressLink}>
-              <Label muted>Today</Label>
-              {routeOpen ? <Label muted>See today’s route ›</Label> : null}
+              <Label muted>{t('today.progressLabel')}</Label>
+              {routeOpen ? <Label muted>{t('today.seeRoute')}</Label> : null}
             </View>
             <View style={styles.progress}>
-              <Figure>{`${String(done + notMet)} of ${String(planned)}`}</Figure>
-              <Secondary>visits attended</Secondary>
+              <Figure>{t('common.nOfM', { n: done + notMet, m: planned })}</Figure>
+              <Secondary>{t('today.visitsAttended')}</Secondary>
             </View>
             {/* FE-W102. B1's strip: the figure above, drawn. Decorative — the words carry it. */}
             {planned > 0 ? (
@@ -395,11 +393,7 @@ export const TodayScreen = ({
       {after}
 
       {onOpenTransparency === undefined ? null : (
-        <Button
-          label="What this app records about me"
-          onPress={onOpenTransparency}
-          variant="quiet"
-        />
+        <Button label={t('today.transparency')} onPress={onOpenTransparency} variant="quiet" />
       )}
     </Screen>
   );

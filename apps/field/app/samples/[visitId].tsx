@@ -8,7 +8,7 @@ import uuid from 'expo-modules-core/src/uuid';
 import { SamplesScreen } from '@fieldforce/ui';
 import type { SampleLine, SampleLinePatch } from '@fieldforce/ui';
 import { createPushClient } from '../../src/sync/push-client';
-import { QUEUE_UNREADABLE } from '../../src/sync/async-storage-store';
+import { queueUnreadable } from '../../src/sync/async-storage-store';
 import { unavailableReason } from '../../src/capture/preconditions';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
@@ -21,7 +21,7 @@ import {
 } from '../../src/capture/samples';
 import { sampleQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { SESSION_EXPIRED, refusalTextFor, sessionExpired } from '../../src/sync/explanation';
-import { NOT_PERMITTED_DETAIL } from '../../src/errors/plain';
+import { notPermittedDetail } from '../../src/errors/plain';
 
 /**
  * C5 — the samples binding.
@@ -131,7 +131,7 @@ export default function SamplesRoute(): ReactNode {
         : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
           ? {
               title: 'You do not have access to this visit',
-              detail: NOT_PERMITTED_DETAIL,
+              detail: notPermittedDetail(),
             }
           : lacksWhatItNeeds
             ? {
@@ -209,7 +209,7 @@ export default function SamplesRoute(): ReactNode {
           // `FE-W44`. Counting this as `sent` is what the `else` did, and it would have
           // told the MR their samples were recorded when they are on neither the server
           // nor the phone. It stays on screen with the line still in it.
-          remaining.push({ ...line, error: QUEUE_UNREADABLE });
+          remaining.push({ ...line, error: queueUnreadable() });
           continue;
         }
         if (outcome.kind === 'queued') queued += 1;

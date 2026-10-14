@@ -9,7 +9,7 @@ import {
   identifiersIn,
 } from '../../src/capture/adverse-event';
 import { createPushClient } from '../../src/sync/push-client';
-import { QUEUE_UNREADABLE } from '../../src/sync/async-storage-store';
+import { queueUnreadable } from '../../src/sync/async-storage-store';
 import { adverseEventQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
@@ -72,7 +72,7 @@ export default function AdverseEventFlag(): ReactNode {
           return;
         }
         if (result.kind === 'queue_unreadable') {
-          setFailure({ title: 'This was NOT saved', detail: QUEUE_UNREADABLE });
+          setFailure({ title: 'This was NOT saved', detail: queueUnreadable() });
           return;
         }
         setFailure({ title: 'That was refused', detail: result.message });

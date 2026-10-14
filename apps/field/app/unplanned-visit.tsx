@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import uuid from 'expo-modules-core/src/uuid';
 import { Banner, BodyText, Button, Label, Screen, Select, TextField, Title } from '@fieldforce/ui';
 import { createPushClient } from '../src/sync/push-client';
-import { QUEUE_UNREADABLE, loadQueueState } from '../src/sync/async-storage-store';
+import { queueUnreadable, loadQueueState } from '../src/sync/async-storage-store';
 import { enqueueFirst, flushOutbox, unplannedVisitQueueItem } from '../src/sync/outbox';
 import { usePulledStore } from '../src/sync/pulled-store';
 import { doctorsFromStore } from '../src/sync/selectors';
@@ -43,7 +43,7 @@ export default function UnplannedVisit(): ReactNode {
     void (async () => {
       const queued = await enqueueFirst(unplannedVisitQueueItem(body));
       if (queued.kind === 'queue_unreadable') {
-        setFailure({ title: 'This visit was NOT saved', detail: QUEUE_UNREADABLE });
+        setFailure({ title: 'This visit was NOT saved', detail: queueUnreadable() });
         setBusy(false);
         return;
       }

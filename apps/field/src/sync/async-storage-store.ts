@@ -4,6 +4,7 @@ import type { SyncQueueItem } from '@fieldforce/core';
 import { emptyQueue } from './reducer';
 import type { SyncQueueState } from './reducer';
 import type { SyncQueueStore } from './store';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * `SyncQueueStore`, on AsyncStorage.
@@ -197,8 +198,7 @@ export const loadQueueState = async (): Promise<QueueLoad> => {
  * in the shape `FE-W39` settled: it names the missing thing and claims nothing either way
  * about whether the work was sent, because that is exactly what is unknown.
  */
-export const QUEUE_UNREADABLE =
-  'This app could not read your queue, so it cannot tell you what has been sent. Nothing has been lost from the server — but nothing on this screen is confirmed either. Tell your manager if it persists.';
+export const queueUnreadable = (): string => t('sync.queueUnreadable');
 
 /** Test seam. */
 export const clearQueue = async (): Promise<void> => {

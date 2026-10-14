@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { QueueScreen } from '@fieldforce/ui';
-import { QUEUE_UNREADABLE, loadQueueState } from '../src/sync/async-storage-store';
+import { queueUnreadable, loadQueueState } from '../src/sync/async-storage-store';
 import type { QueueLoad } from '../src/sync/async-storage-store';
 import { flushOutbox } from '../src/sync/outbox';
 import { createPushClient } from '../src/sync/push-client';
@@ -99,7 +99,7 @@ export default function Queue(): ReactNode {
       // therefore belongs to the screen, as a prop, which is also where it belongs
       // semantically: it is part of the queue's story, not a thing floating above it.
       {...(load.kind === 'unreadable'
-        ? { retryFailure: QUEUE_UNREADABLE }
+        ? { retryFailure: queueUnreadable() }
         : retryFailed === null
           ? {}
           : { retryFailure: retryFailed })}

@@ -1,6 +1,8 @@
 import type { LiveTrackingStatus, PingRefusal, PingVerdict } from '@fieldforce/core';
 import { TRACKING_WORDS, trackingState } from '../integrations/tracking';
 import type { TrackingInputs, TrackingState } from '../integrations/tracking';
+import { t } from '@fieldforce/ui/i18n';
+import type { TextKey } from '@fieldforce/ui/i18n';
 
 /**
  * `FE-W71` — the tracker's decisions, pure, so they are tested without a phone.
@@ -84,16 +86,15 @@ export interface TrackingLine {
   readonly tone: 'attention' | 'info';
 }
 
-const REFUSED_WORDS: Readonly<Record<PingRefusal, string>> = {
-  company_off: 'Your company has switched live location off.',
-  no_acceptance: 'Your company needs you to accept the live location notice first.',
-  outside_working_hours: 'Your working hours have ended, so your company did not keep it.',
-  recorded_in_future: 'This phone’s clock is ahead of your company’s, so it was not kept.',
-  too_old: 'It was too old to count as live by the time it arrived, so it was not kept.',
-  implausible_accuracy:
-    'The phone could not tell where you were precisely enough, so it was not kept.',
-  too_frequent: 'It came too soon after the one before, so it was not kept.',
-  day_ended: 'You have ended your working day, so your company did not keep it.',
+const REFUSED_WORDS: Readonly<Record<PingRefusal, TextKey>> = {
+  company_off: 'tracking.refusedCompanyOff',
+  no_acceptance: 'tracking.refusedNoAcceptance',
+  outside_working_hours: 'tracking.refusedOutsideHours',
+  recorded_in_future: 'tracking.refusedInFuture',
+  too_old: 'tracking.refusedTooOld',
+  implausible_accuracy: 'tracking.refusedAccuracy',
+  too_frequent: 'tracking.refusedTooFrequent',
+  day_ended: 'tracking.refusedDayEnded',
 };
 
 /**
@@ -111,11 +112,11 @@ export const trackingLine = (input: {
   if (input.status === null) {
     return input.loadFailed
       ? {
-          title: 'Live location is off: this app could not ask your company’s server about it.',
-          detail: 'It will ask again when you come back to the app.',
+          title: t('tracking.loadFailed'),
+          detail: t('tracking.loadFailedDetail'),
           tone: 'info',
         }
-      : { title: 'Checking live location…', detail: null, tone: 'info' };
+      : { title: t('tracking.checking'), detail: null, tone: 'info' };
   }
 
   const noticeChanged =
@@ -125,7 +126,7 @@ export const trackingLine = (input: {
   if (input.state === 'off_no_notice' && noticeChanged) {
     return {
       title: TRACKING_WORDS.off_no_notice,
-      detail: 'The notice has changed since you accepted it. Read the new version to share again.',
+      detail: t('tracking.noticeChanged'),
       tone: 'info',
     };
   }
@@ -136,14 +137,16 @@ export const trackingLine = (input: {
 
   if (input.permissionDenied) {
     return {
-      title: 'Live location cannot run: location is not allowed for this app.',
-      detail: 'Allow location for this app in your phone’s settings, or stop sharing for today.',
+      title: t('tracking.permissionDenied'),
+      detail: t('tracking.permissionDeniedDetail'),
       tone: 'attention',
     };
   }
 
   const until =
-    input.status.shiftEnd === null ? '' : ` Until ${input.status.shiftEnd.slice(0, 5)}.`;
+    input.status.shiftEnd === null
+      ? ''
+      : ` ${t('tracking.until', { time: input.status.shiftEnd.slice(0, 5) })}`;
   const last = input.lastSend;
   return {
     title: `${TRACKING_WORDS.active}${until}`,
@@ -151,8 +154,8 @@ export const trackingLine = (input: {
       last === null || last.kind === 'kept'
         ? null
         : last.kind === 'failed'
-          ? 'Your last position did not reach your company. It is not kept to send later.'
-          : `Your last position: ${REFUSED_WORDS[last.reason]}`,
+          ? t('tracking.lastFailed')
+          : t('tracking.lastRefused', { reason: t(REFUSED_WORDS[last.reason]) }),
     tone: 'attention',
   };
 };

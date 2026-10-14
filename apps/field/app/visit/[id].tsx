@@ -51,7 +51,7 @@ import {
 } from '../../src/consent/witnessed';
 import type { WitnessedConsent } from '../../src/consent/witnessed';
 import {
-  QUEUE_UNREADABLE,
+  queueUnreadable,
   loadQueueState,
   onQueueChanged,
 } from '../../src/sync/async-storage-store';
@@ -64,7 +64,7 @@ import { clockIn } from '../../src/today/territory-day';
 import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
 import { RECORD_AUDIO, microphoneRationaleDue } from '../../src/onboarding/microphone-gate';
 import { hasAnsweredMicrophoneRationale } from '../../src/onboarding/progress';
-import { NOT_PERMITTED_DETAIL, failureDetail } from '../../src/errors/plain';
+import { notPermittedDetail, failureDetail } from '../../src/errors/plain';
 
 /**
  * B4 / B5 / B6 — one visit, from arriving to leaving.
@@ -477,7 +477,7 @@ export default function VisitRoute(): ReactNode {
           // `FE-W44`. Neither sent nor queued. Saying nothing here is defect 12's shape
           // again -- the MR presses "I am here", the stage does not move, and they press
           // it a second time.
-          setActionFailure({ title: 'This was NOT saved', detail: QUEUE_UNREADABLE });
+          setActionFailure({ title: 'This was NOT saved', detail: queueUnreadable() });
           return;
         }
         if (sendResult.kind === 'sent') {
@@ -587,7 +587,7 @@ export default function VisitRoute(): ReactNode {
             : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
               ? {
                   title: 'You do not have access to this visit',
-                  detail: NOT_PERMITTED_DETAIL,
+                  detail: notPermittedDetail(),
                 }
               : // MR-49 / `FE-W62`. A failed background refresh is not "this screen has no
                 // data". This branch was unconditional, and `VisitScreen` renders ONLY the

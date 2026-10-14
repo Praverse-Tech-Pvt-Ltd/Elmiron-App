@@ -3,6 +3,7 @@ import type { QueueLoad } from './async-storage-store';
 import { clockIn } from '../today/territory-day';
 import type { TerritoryZone } from '../today/territory-day';
 import { summarise } from './reducer';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * The queue, as the one line B1 puts on every screen.
@@ -89,11 +90,7 @@ export const unsentBeforeSignOut = (
   ).length;
   if (count === 0) return null;
   return {
-    title:
-      count === 1
-        ? '1 thing has not been sent yet'
-        : `${String(count)} things have not been sent yet`,
-    detail:
-      'They stay on this phone under your account and send the next time you sign in here. Nobody else who signs in on this phone will see or send them.',
+    title: t('sync.unsentBeforeSignOut', { count }),
+    detail: t('sync.unsentBeforeSignOutDetail'),
   };
 };

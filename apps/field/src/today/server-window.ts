@@ -1,5 +1,6 @@
 import { dayIn } from './territory-day';
 import type { TerritoryZone } from './territory-day';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * `FE-W42` — the day, month and month-window a screen asks the server for, reckoned in the
@@ -72,5 +73,4 @@ export const recentMonthsIn = (
  * simply never completed a pull. Exported so the three screens that can hit this state say
  * one sentence between them rather than three that drift.
  */
-export const NO_SERVER_CLOCK =
-  'This app has not been able to ask the server what day it is, so it cannot tell which period to show you. It will try again when you come back to it.';
+export const noServerClock = (): string => t('day.noServerClock');

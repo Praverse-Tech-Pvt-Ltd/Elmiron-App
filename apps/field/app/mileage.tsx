@@ -5,7 +5,7 @@ import { MileageScreen, Screen } from '@fieldforce/ui';
 import { totalDistanceMetres, travelDateLabel } from '../src/capture/mileage';
 import { listMileage } from '../src/capture/visits';
 import { usePulledStore } from '../src/sync/pulled-store';
-import { NO_SERVER_CLOCK, monthWindowIn } from '../src/today/server-window';
+import { noServerClock, monthWindowIn } from '../src/today/server-window';
 import { failureDetail, refusedDetail } from '../src/errors/plain';
 
 /**
@@ -49,7 +49,7 @@ export default function Mileage(): ReactNode {
      * With no server clock this screen asks for nothing rather than guessing a month.
      */
     if (serverTime === null) {
-      setFailure({ title: 'Could not tell which month to show', detail: NO_SERVER_CLOCK });
+      setFailure({ title: 'Could not tell which month to show', detail: noServerClock() });
       setLoading(false);
       return;
     }

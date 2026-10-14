@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Banner } from '@fieldforce/ui';
+import { Banner, useT } from '@fieldforce/ui';
 import { useLiveTracker } from './tracker';
 
 /**
@@ -8,6 +8,7 @@ import { useLiveTracker } from './tracker';
  * tracking off or the user is not a rep — when there is nothing to be silent about.
  */
 export const LiveTrackingStatusLine = ({ onOpen }: { readonly onOpen: () => void }): ReactNode => {
+  const { t } = useT();
   const tracker = useLiveTracker();
   if (tracker === null) return null;
   const { line } = tracker;
@@ -16,7 +17,7 @@ export const LiveTrackingStatusLine = ({ onOpen }: { readonly onOpen: () => void
       tone={line.tone}
       title={line.title}
       {...(line.detail === null ? {} : { detail: line.detail })}
-      action={{ label: 'Live location', onPress: onOpen }}
+      action={{ label: t('tracking.open'), onPress: onOpen }}
     />
   );
 };
