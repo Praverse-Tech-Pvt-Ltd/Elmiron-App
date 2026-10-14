@@ -15,6 +15,10 @@
     "me": "Me — sign out and warnings",
     "errors": "Error messages, on many screens",
     "remedy": "What to do when the server refuses something, on many screens",
+    "doctors": "The Doctors tab (the searchable list of the rep's doctors) and one doctor's profile (the rep's own visit history with them)",
+    "route": "Today's route (the beat plan): the day's planned stops in order, the next stop, and what happened at each",
+    "unplanned": "Add an unplanned visit: choose a doctor and clinic, give a reason, and start the visit",
+    "map": "The map of the rep's clinics, or of today's stops (only in builds with maps)",
     "visit": "The visit screen: one visit from arriving to leaving — check in, check out, the recording bar, and the actions during and after the visit",
     "adverse": "Flag a possible side effect (adverse event), opened from a visit. The guidance about what the report is and what must not be written stays in English and is not in this file"
   },
@@ -111,6 +115,157 @@
     },
     "home.adminDetail": {
       "note": "Placeholder row; FE-W6 is an internal reference, keep it"
+    },
+    "doctors.searchLabel": {
+      "note": "Label of the search box on the doctor list"
+    },
+    "doctors.emptyFilterAndSearch": {
+      "note": "{filter} is the name of the chosen filter chip; {query} is what the rep typed"
+    },
+    "doctors.emptyFilter": {
+      "note": "{filter} is the name of the chosen filter chip"
+    },
+    "doctors.overdue": {
+      "note": "Badge on a doctor not seen for 30 days or more",
+      "max": 14
+    },
+    "doctors.countShown": {
+      "note": "{shown} rows on screen after searching, {total} doctors in all"
+    },
+    "doctors.filterAll": {
+      "note": "Filter chip: every doctor",
+      "max": 14
+    },
+    "doctors.filterOverdue": {
+      "note": "Filter chip: doctors not seen in 30 days. 'd' is days",
+      "max": 14
+    },
+    "doctors.filterOnPlan": {
+      "note": "Filter chip: doctors on today's beat plan",
+      "max": 14
+    },
+    "doctors.neverVisited": {
+      "note": "Under a doctor's name, lower case: the rep has never visited them"
+    },
+    "doctors.seenToday": {
+      "note": "Under a doctor's name, lower case: last visited today"
+    },
+    "doctors.seenYesterday": {
+      "note": "Under a doctor's name, lower case: last visited yesterday"
+    },
+    "doctors.daysAgo": {
+      "note": "Last visit, lower case. {days} is always 2 to 13"
+    },
+    "doctors.weeksAgo": {
+      "note": "Last visit, lower case. {weeks} is always 2 to 8"
+    },
+    "doctors.monthsAgo": {
+      "note": "Last visit, lower case. {months} is always 2 or more"
+    },
+    "doctors.lastSeenOn": {
+      "note": "Lower case. {date} is a date such as '9 Sep'"
+    },
+    "doctors.boundary": {
+      "note": "A promise printed on every doctor profile (decision C14): the app records nothing about prescribing or patients. Keep the meaning exact — it must not soften or add anything"
+    },
+    "doctors.nameFallback": {
+      "note": "Shown as the heading while the doctor's name has not loaded"
+    },
+    "doctors.notInYourList": {
+      "note": "Shown in place of a doctor's name when the plan names a doctor this phone does not hold"
+    },
+    "doctors.visitMinutes": {
+      "note": "How long a visit lasted. {minutes} is a whole number of minutes",
+      "max": 16
+    },
+    "doctors.bestTime": {
+      "note": "Card heading over a sentence such as 'Tuesdays and Thursdays, 09:00–13:00 — from your last 5 visits.'"
+    },
+    "doctors.consentAgreed": {
+      "note": "Lower case, after a visit's duration: the doctor agreed to the visit being recorded"
+    },
+    "doctors.consentDeclined": {
+      "note": "Lower case: the doctor declined recording. Not a failure"
+    },
+    "doctors.consentNotAsked": {
+      "note": "Lower case: the rep did not ask about recording. Never a fault"
+    },
+    "doctors.availability": {
+      "note": "{days} is a list of weekdays such as 'Tuesdays and Thursdays'; {window} a clock range such as '09:00–13:00'; {visits} is 3 to 5"
+    },
+    "doctors.daysAnd": {
+      "note": "Joins the last weekday onto a list: {list} is 'Mondays, Tuesdays', {last} is 'Fridays'"
+    },
+    "route.title": {
+      "note": "Screen title",
+      "max": 24
+    },
+    "route.plannedDone": {
+      "note": "Header under the title: how many stops are planned and how many are done"
+    },
+    "route.nextStop": {
+      "note": "Small heading on the card of the stop to walk to next",
+      "max": 20
+    },
+    "route.notStarted": {
+      "note": "On a stop the rep has not begun yet"
+    },
+    "route.timeOnPhone": {
+      "note": "{time} is a clock time such as '10:04' this phone recorded and the server has not confirmed yet"
+    },
+    "route.stopMinutes": {
+      "note": "How long the visit at this stop lasted. {minutes} is a whole number",
+      "max": 16
+    },
+    "route.stopCancelled": {
+      "note": "Lower case: this stop was called off. A normal event, not an error"
+    },
+    "route.stopNotMet": {
+      "note": "Lower case: the rep went and the doctor was not available. Must not blame anyone"
+    },
+    "route.statusSubmitted": {
+      "note": "The plan's state: the rep sent it, no manager has decided. Must never suggest it was approved"
+    },
+    "route.statusApproved": {
+      "note": "The plan's state: a manager approved it"
+    },
+    "route.statusDraft": {
+      "note": "The plan's state: written, not yet sent to the manager"
+    },
+    "route.statusRejected": {
+      "note": "The plan's state: the manager sent it back"
+    },
+    "unplanned.doctorLabel": {
+      "note": "Field label",
+      "max": 20
+    },
+    "unplanned.clinicLabel": {
+      "note": "Field label",
+      "max": 20
+    },
+    "unplanned.reasonLabel": {
+      "note": "Field label",
+      "max": 20
+    },
+    "unplanned.start": {
+      "note": "Main button",
+      "max": 28
+    },
+    "unplanned.starting": {
+      "note": "Main button while the visit is being made",
+      "max": 28
+    },
+    "unplanned.notSavedTitle": {
+      "note": "NOT is in capitals for emphasis: nothing was kept on the phone"
+    },
+    "unplanned.problemReasonLong": {
+      "note": "{max} is the most characters a reason may have (500)"
+    },
+    "map.noLocation": {
+      "note": "Heading over the clinics that have no position recorded, so are not on the map"
+    },
+    "map.noClinic": {
+      "note": "In place of a clinic address: this doctor has no clinic recorded"
     },
     "visit.thisVisit": {
       "note": "Stands in for the doctor's name as the heading when it is not known"

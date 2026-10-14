@@ -1,5 +1,6 @@
 import { clockIn, dayIn } from '../today/territory-day';
 import type { TerritoryZone } from '../today/territory-day';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * B9's "Best time to catch him" and B3's "Best window".
@@ -70,7 +71,10 @@ const hourOf = (iso: string, zone: TerritoryZone): number => Number(clockIn(iso,
 const listDays = (days: readonly string[]): string =>
   days.length <= 1
     ? (days[0] ?? '')
-    : `${days.slice(0, -1).join(', ')} and ${days[days.length - 1] ?? ''}`;
+    : t('doctors.daysAnd', {
+        list: days.slice(0, -1).join(', '),
+        last: days[days.length - 1] ?? '',
+      });
 
 const pad = (hour: number): string => `${String(hour).padStart(2, '0')}:00`;
 
@@ -119,4 +123,8 @@ export const availabilityFrom = (
 export const availabilitySentence = (availability: Availability | null): string | null =>
   availability === null
     ? null
-    : `${availability.days}, ${availability.window} — from your last ${String(availability.fromVisits)} visits.`;
+    : t('doctors.availability', {
+        days: availability.days,
+        window: availability.window,
+        visits: availability.fromVisits,
+      });

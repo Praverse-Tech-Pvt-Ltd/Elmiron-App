@@ -1,4 +1,5 @@
 import type { Doctor, Visit } from '@fieldforce/core';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * The day, reduced to what B1 puts on screen.
@@ -176,7 +177,7 @@ const nextVisitFrom = (visit: Visit, doctor: Doctor | undefined): NextVisit => {
   const clinic = clinicFor(doctor, visit.clinicAddressId);
   return {
     visitId: visit.id,
-    doctorName: doctor?.fullName ?? 'Doctor not in your list',
+    doctorName: doctor?.fullName ?? t('doctors.notInYourList'),
     clinic: clinic.label,
     clinicPending: clinic.pending,
     scheduledFor: visit.scheduledFor,

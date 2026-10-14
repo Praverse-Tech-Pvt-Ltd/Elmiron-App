@@ -7,6 +7,7 @@ import { Button } from './Button';
 import { Card } from './Card';
 import { ListItem } from './ListItem';
 import { Spinner } from './Spinner';
+import { useT } from './i18n';
 
 /**
  * B9 — the doctor profile.
@@ -79,6 +80,7 @@ export const DoctorProfileScreen = ({
   loading = false,
   failure = null,
 }: DoctorProfileScreenProps): ReactNode => {
+  const { t } = useT();
   if (failure !== null) {
     return <Banner detail={failure.detail} title={failure.title} tone="critical" />;
   }
@@ -90,17 +92,17 @@ export const DoctorProfileScreen = ({
         <Label muted>{detail}</Label>
       </View>
 
-      {loading ? <Spinner label="Getting this doctor's history" /> : null}
+      {loading ? <Spinner label={t('doctors.loadingHistory')} /> : null}
 
       <Card>
-        <Label muted>Since your last visit</Label>
+        <Label muted>{t('doctors.sinceLastVisit')}</Label>
         {sinceLabel !== null ? null : !loading && recentVisits.length === 0 ? (
           // FE-D3 B3. Only a SETTLED history with no completed visit is "not visited". This used to
           // show for every null `sinceLabel`: while loading, and when the rep HAD visited but
           // there was no server clock to say how long ago.
-          <BodyText>You have not visited this doctor yet.</BodyText>
+          <BodyText>{t('doctors.notVisitedYet')}</BodyText>
         ) : (
-          <BodyText>When you last visited is not known yet.</BodyText>
+          <BodyText>{t('doctors.lastVisitUnknown')}</BodyText>
         )}
         {sinceLabel === null ? null : (
           <View style={styles.since}>
@@ -111,14 +113,14 @@ export const DoctorProfileScreen = ({
 
       {availability === null ? null : (
         <Card>
-          <Label muted>Best time to catch them</Label>
+          <Label muted>{t('doctors.bestTime')}</Label>
           <BodyText>{availability}</BodyText>
         </Card>
       )}
 
       {recentVisits.length === 0 ? null : (
         <>
-          <Label muted>Your last visits</Label>
+          <Label muted>{t('doctors.lastVisits')}</Label>
           <View style={styles.rows}>
             {recentVisits.map((visit) => (
               <ListItem
@@ -145,7 +147,7 @@ export const DoctorProfileScreen = ({
       </Card>
 
       {onAddToToday === undefined ? null : (
-        <Button label="Add to today" onPress={onAddToToday} variant="primary" />
+        <Button label={t('doctors.addToToday')} onPress={onAddToToday} variant="primary" />
       )}
     </>
   );

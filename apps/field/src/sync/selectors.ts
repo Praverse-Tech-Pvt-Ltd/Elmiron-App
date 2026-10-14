@@ -1,6 +1,7 @@
 import type { Doctor, SyncQueueItem, Visit } from '@fieldforce/core';
 import { doctorWithAddresses } from './pull';
 import type { LocalStore } from './pull';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * The pulled store, in the shapes the screens already take — MR-14 B2.
@@ -165,8 +166,7 @@ export const pendingVisits = (
             : 'waiting';
       const problem =
         state === 'refused'
-          ? (queue.rejections[item.id]?.explanation ??
-            'The server refused this visit. Open the queue screen to see why and what to do.')
+          ? (queue.rejections[item.id]?.explanation ?? t('unplanned.serverRefused'))
           : null;
       return [{ visit, state, problem }];
     });

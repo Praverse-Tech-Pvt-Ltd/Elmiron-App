@@ -1,4 +1,5 @@
 import type { ConsentOutcome, ConsentRecord, Doctor, Visit } from '@fieldforce/core';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * B9 — the doctor profile, from the MR's own visit history.
@@ -128,11 +129,11 @@ export const buildDoctorProfile = (
 export const consentLabel = (outcome: ConsentOutcome | null): string | null => {
   switch (outcome) {
     case 'consented':
-      return 'agreed to recording';
+      return t('doctors.consentAgreed');
     case 'declined':
-      return 'declined recording';
+      return t('doctors.consentDeclined');
     case 'not_asked':
-      return 'not asked';
+      return t('doctors.consentNotAsked');
     case null:
       return null;
   }

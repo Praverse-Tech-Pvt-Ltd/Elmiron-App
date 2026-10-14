@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
-import { BeatPlanScreen, Button, Screen } from '@fieldforce/ui';
+import { BeatPlanScreen, Button, Screen, t, useLanguage } from '@fieldforce/ui';
 import type { SyncQueueItem } from '@fieldforce/core';
 import { visitsAsWitnessed, withPhoneTimes } from '../src/capture/visit';
 import { mapsEnabled } from '../src/features';
@@ -40,32 +40,31 @@ import type { RouteStop } from '../src/today/route';
  * binds them to the component and nothing else.
  */
 
-const SYNCING = {
-  title: 'Your stops are still syncing',
-  detail:
-    'Your plan for today arrived. Its stops have not yet — they will appear here when they do.',
-};
+// `FE-W154`. Functions, not constants, so each notice is read in the language current when shown.
+const syncing = (): { title: string; detail: string } => ({
+  title: t('route.syncingTitle'),
+  detail: t('route.syncingDetail'),
+});
 
 /**
  * FE-D3 B2. The plan arrived and its stops did not, and the last sync FAILED. It used to show
  * SYNCING above, which told the rep the stops were on their way when nothing was arriving.
  */
-const STOPS_UNREACHABLE = {
-  title: 'Your stops could not be loaded',
-  detail:
-    'Your plan for today arrived, but the last sync did not finish before its stops came through. They are not on this phone yet.',
-};
+const stopsUnreachable = (): { title: string; detail: string } => ({
+  title: t('route.stopsUnreachableTitle'),
+  detail: t('route.stopsUnreachableDetail'),
+});
 
-const NO_STOPS = {
-  title: 'This plan has no stops',
-  detail: 'Your plan for today came through with no doctors on it.',
-};
+const noStops = (): { title: string; detail: string } => ({
+  title: t('route.noStopsTitle'),
+  detail: t('route.noStopsDetail'),
+});
 
-const UNREACHABLE = {
-  title: 'Your route could not be loaded',
+const unreachable = (): { title: string; detail: string } => ({
+  title: t('route.unreachableTitle'),
   // Not "refused": the store has no answer to report, and a refusal would invent a decision.
-  detail: 'The last sync did not finish, so this screen cannot tell which plan is today’s.',
-};
+  detail: t('route.unreachableDetail'),
+});
 
 /**
  * A stop's line — attendance, the time it began, and how long it took.
@@ -82,12 +81,14 @@ const stopDetail = (stop: RouteStop, zone: TerritoryZone, fromPhone: boolean): s
     // be the phone's — the consent card's wording — never shown as though the server confirmed it.
     stop.startedAt === null
       ? null
-      : `${clockIn(stop.startedAt, zone)}${fromPhone ? ' on this phone' : ''}`,
-    stop.minutes === null ? null : `${String(stop.minutes)} min`,
-    stop.state === 'cancelled' ? 'cancelled' : null,
+      : fromPhone
+        ? t('route.timeOnPhone', { time: clockIn(stop.startedAt, zone) })
+        : clockIn(stop.startedAt, zone),
+    stop.minutes === null ? null : t('route.stopMinutes', { minutes: stop.minutes }),
+    stop.state === 'cancelled' ? t('route.stopCancelled') : null,
     // Attendance, stated plainly. "doctor not available" says what happened without saying
     // whose fault it was, which is the whole of the C5 decision.
-    stop.state === 'not_met' ? 'doctor not available' : null,
+    stop.state === 'not_met' ? t('route.stopNotMet') : null,
   ]
     .filter((part): part is string => part !== null)
     .join(' · ');
@@ -103,17 +104,18 @@ const statusLineOf = (view: BeatPlanView): string | null =>
 const noticeOf = (view: BeatPlanView): { title: string; detail: string } | null => {
   switch (view.kind) {
     case 'syncing':
-      return SYNCING;
+      return syncing();
     case 'stops-unreachable':
-      return STOPS_UNREACHABLE;
+      return stopsUnreachable();
     case 'no-stops':
-      return NO_STOPS;
+      return noStops();
     default:
       return null;
   }
 };
 
 export default function BeatPlanRoute(): ReactNode {
+  useLanguage();
   const router = useRouter();
   const { store, status, today, zone } = usePulledStore();
 
@@ -152,7 +154,7 @@ export default function BeatPlanRoute(): ReactNode {
     <Screen scrollable>
       <BeatPlanScreen
         done={route?.done ?? 0}
-        failure={view.kind === 'unreachable' ? UNREACHABLE : null}
+        failure={view.kind === 'unreachable' ? unreachable() : null}
         loading={view.kind === 'loading'}
         notice={noticeOf(view)}
         onOpenDoctor={(doctorId) => {
@@ -180,7 +182,7 @@ export default function BeatPlanRoute(): ReactNode {
       {/* `FE-W85`. Only in a maps build, and only when there is a route to show. */}
       {mapsEnabled && route !== null ? (
         <Button
-          label="See today on a map"
+          label={t('route.seeOnMap')}
           variant="secondary"
           onPress={() => {
             router.push('/map?show=today');

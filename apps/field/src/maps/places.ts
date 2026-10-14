@@ -1,5 +1,6 @@
 import type { ClinicAddress, Doctor, Visit } from '@fieldforce/core';
 import type { RouteStop } from '../today/route';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * `FE-W85` — what the map shows, decided without a map.
@@ -48,7 +49,8 @@ export interface MapPlan {
   readonly region: MapRegion | null;
 }
 
-export const NO_LOCATION = 'No location on file';
+/** `FE-W154`. A function, so the heading is read in the language current when it is shown. */
+export const noLocation = (): string => t('map.noLocation');
 
 const usable = (address: ClinicAddress): { latitude: number; longitude: number } | null => {
   const c = address.coordinates;
@@ -115,7 +117,7 @@ export const doctorPlaces = (doctors: readonly Doctor[]): MapPlan => {
         title: doctor.fullName,
         detail:
           doctor.clinicAddresses.length === 0
-            ? 'No clinic on file'
+            ? t('map.noClinic')
             : doctor.clinicAddresses.map(clinicLine).join(' · '),
       });
   }
@@ -162,7 +164,7 @@ export const todayPlaces = (
         doctorId: stop.doctorId,
         visitId: stop.visitId,
         title,
-        detail: address === undefined ? 'No clinic on file' : clinicLine(address),
+        detail: address === undefined ? t('map.noClinic') : clinicLine(address),
       });
     }
   });

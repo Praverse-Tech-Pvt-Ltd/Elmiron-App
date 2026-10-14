@@ -1,4 +1,5 @@
 import type { CreateVisitRequest, Doctor } from '@fieldforce/core';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * `BE-W176` / `BE-C78` — a visit the rep makes without a plan.
@@ -42,11 +43,20 @@ export const draftProblem = (
   return null;
 };
 
+/** `FE-W154`. Getters, so each sentence is read in the language current when it is shown. */
 export const PROBLEM_WORDS: Readonly<Record<DraftProblem, string>> = {
-  no_doctor: 'Choose the doctor you are visiting.',
-  clinic_not_doctors: 'Choose one of this doctor’s clinics.',
-  reason_too_short: 'Say why you are making this visit — a few words is enough.',
-  reason_too_long: `Keep the reason under ${String(REASON_MAX)} characters.`,
+  get no_doctor() {
+    return t('unplanned.problemNoDoctor');
+  },
+  get clinic_not_doctors() {
+    return t('unplanned.problemClinic');
+  },
+  get reason_too_short() {
+    return t('unplanned.problemReasonShort');
+  },
+  get reason_too_long() {
+    return t('unplanned.problemReasonLong', { max: REASON_MAX });
+  },
 };
 
 /**
