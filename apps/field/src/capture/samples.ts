@@ -1,6 +1,7 @@
 import { CreateSampleAndInputRequestSchema } from '@fieldforce/core';
 import type { CreateSampleAndInputRequest } from '@fieldforce/core';
 import type { SampleLine } from '@fieldforce/ui';
+import { t } from '@fieldforce/ui/i18n';
 import { dayMonthFrom } from '../doctors/profile';
 
 /**
@@ -51,13 +52,13 @@ export const parseDeclaredValue = (typed: string): number | null => {
  */
 export const lineError = (line: SampleLine): string | null => {
   if (line.itemName.trim() === '') {
-    return 'Name what you left, as it reads on the pack — "Elmiron 100 mg, 30s".';
+    return t('samples.errorName');
   }
   if (!Number.isInteger(line.quantity) || line.quantity < 1) {
-    return 'Use the plus key to set how many you left. It cannot be fewer than one.';
+    return t('samples.errorQuantity');
   }
   if (parseDeclaredValue(line.declaredValueInr) === null) {
-    return 'Put the declared value of one pack in rupees — digits only, like 240 or 240.50.';
+    return t('samples.errorValue');
   }
   return null;
 };
@@ -119,9 +120,12 @@ export const sampleRequest = (draft: SampleRequestDraft): CreateSampleAndInputRe
  * it is not holding. The wording says who *is* responsible, because "this app does
  * not check" on its own leaves the MR with a warning and no idea what to do with
  * it.
+ *
+ * `FE-W152`. A function, read at render: a constant would keep the language it was imported in. It is
+ * the app's own statement about what it does not check, not the regulation's wording, so it is in
+ * the catalogue.
  */
-export const CAP_NOTE =
-  'This app does not count your samples against the UCPMP cap — nothing in it has been given your limit or your month to date. Keep your own count, and check with your manager before you go near it.';
+export const capNote = (): string => t('samples.capNote');
 
 /**
  * MR-49 B / `FE-W58` (1). **The date an MR confirms on a samples record is the visit's day, from
@@ -137,4 +141,8 @@ export const CAP_NOTE =
  * falling back to the schedule, which is the copy this replaces.
  */
 export const samplesDateLabel = (visit: { readonly visitDay: string | null } | null): string =>
-  visit === null ? 'today' : visit.visitDay === null ? 'this visit' : dayMonthFrom(visit.visitDay);
+  visit === null
+    ? t('samples.dateToday')
+    : visit.visitDay === null
+      ? t('samples.dateThisVisit')
+      : dayMonthFrom(visit.visitDay);

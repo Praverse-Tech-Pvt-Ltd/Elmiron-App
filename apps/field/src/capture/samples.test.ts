@@ -3,7 +3,7 @@ import { CreateSampleAndInputRequestSchema } from '@fieldforce/core';
 import type { SampleLine } from '@fieldforce/ui';
 import {
   blankLine,
-  CAP_NOTE,
+  capNote,
   errorsFor,
   lineError,
   parseDeclaredValue,
@@ -94,8 +94,8 @@ describe('the cap note', () => {
   it('says the app is not counting, and who to ask instead', () => {
     // Guarding the file's central claim: this must never quietly become a sentence
     // that implies the app is holding the UCPMP line.
-    expect(CAP_NOTE).toMatch(/does not count/u);
-    expect(CAP_NOTE).toMatch(/manager/u);
+    expect(capNote()).toMatch(/does not count/u);
+    expect(capNote()).toMatch(/manager/u);
   });
 });
 

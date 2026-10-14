@@ -20,7 +20,12 @@
     "unplanned": "Add an unplanned visit: choose a doctor and clinic, give a reason, and start the visit",
     "map": "The map of the rep's clinics, or of today's stops (only in builds with maps)",
     "visit": "The visit screen: one visit from arriving to leaving — check in, check out, the recording bar, and the actions during and after the visit",
-    "adverse": "Flag a possible side effect (adverse event), opened from a visit. The guidance about what the report is and what must not be written stays in English and is not in this file"
+    "adverse": "Flag a possible side effect (adverse event), opened from a visit. The guidance about what the report is and what must not be written stays in English and is not in this file",
+    "report": "The call report: what the rep writes after a visit (what happened, what the doctor raised, the next step, the products discussed), and what happened when they sent it",
+    "samples": "Leave samples: the samples and materials the rep left at a visit, how many, and their declared value, with a note about the UCPMP sample limit",
+    "voiceNote": "The rep's own voice note after a visit: hold a button to record, then save it. Nobody else is in the recording",
+    "queue": "Saved on this phone: the list of the rep's work waiting to send, what is stuck, and why the server refused something",
+    "stepper": "The minus / plus count control (for example, how many packs on Leave samples). Read aloud by a screen reader"
   },
   "keys": {
     "tabs.today": {
@@ -401,6 +406,198 @@
     "adverse.whatHappened": {
       "note": "Field label",
       "max": 24
+    },
+    "common.backToVisit": {
+      "note": "Button after something was sent or saved",
+      "max": 32
+    },
+    "report.thisVisit": {
+      "note": "Stands in for the doctor's name when the phone does not have it"
+    },
+    "report.keepOpen": {
+      "note": "Follows a sentence saying what went wrong"
+    },
+    "report.send": {
+      "note": "Main button",
+      "max": 32
+    },
+    "report.sending": {
+      "note": "Main button while sending",
+      "max": 32
+    },
+    "report.summaryLabel": {
+      "note": "Text box label"
+    },
+    "report.objectionsLabel": {
+      "note": "Text box label: what the doctor objected to or pushed back on"
+    },
+    "report.nextStepLabel": {
+      "note": "Text box label"
+    },
+    "samples.thisVisit": {
+      "note": "Stands in for the doctor's name when the phone does not have it"
+    },
+    "samples.recordedDetail": {
+      "note": "{n} is how many lines were sent, a number"
+    },
+    "samples.queuedDetail": {
+      "note": "{n} is how many lines were saved, a number"
+    },
+    "samples.errorName": {
+      "note": "Keep the example pack name \"Elmiron 100 mg, 30s\" exactly as written: it is a product name"
+    },
+    "samples.errorQuantity": {
+      "note": "The plus key is the + button beside the count"
+    },
+    "samples.capNote": {
+      "note": "UCPMP is the Indian code on pharmaceutical marketing practices; keep the name UCPMP"
+    },
+    "samples.dateToday": {
+      "note": "After the doctor's name and a dot, in place of a date: \"Dr Rao · today\""
+    },
+    "samples.dateThisVisit": {
+      "note": "After the doctor's name and a dot, in place of a date: \"Dr Rao · this visit\""
+    },
+    "samples.kindSample": {
+      "note": "Choice: a sample of a medicine"
+    },
+    "samples.kindInput": {
+      "note": "Choice: printed literature or other material, not a medicine"
+    },
+    "samples.record": {
+      "note": "Main button",
+      "max": 32
+    },
+    "samples.recording": {
+      "note": "Main button while sending",
+      "max": 32
+    },
+    "samples.packs": {
+      "note": "Label above the count; also read in \"One more Packs\"",
+      "max": 20
+    },
+    "samples.valueLabel": {
+      "note": "Text box label; ₹ is rupees, the value of one pack"
+    },
+    "samples.capHeading": {
+      "note": "UCPMP is the Indian code on pharmaceutical marketing practices; keep the name UCPMP"
+    },
+    "samples.capOf": {
+      "note": "After a big number: \"6 of 12 packs\". {unit} is already in the reader's language"
+    },
+    "voiceNote.refused": {
+      "note": "{message} is the server's own sentence and is not translated here"
+    },
+    "voiceNote.subject": {
+      "note": "{doctor} is the doctor's name, or \"this visit\""
+    },
+    "voiceNote.thisVisit": {
+      "note": "Stands in for the doctor's name, inside \"Your note · this visit\""
+    },
+    "voiceNote.statusBlocked": {
+      "note": "Small line under the timer, lower case on purpose"
+    },
+    "voiceNote.statusRecording": {
+      "note": "Small line under the timer, lower case on purpose"
+    },
+    "voiceNote.statusRecorded": {
+      "note": "Small line under the timer, lower case on purpose"
+    },
+    "voiceNote.statusIdle": {
+      "note": "Small line under the timer, lower case on purpose"
+    },
+    "voiceNote.holdLabel": {
+      "note": "Read aloud by a screen reader for the hold button"
+    },
+    "voiceNote.holding": {
+      "note": "On the hold button while the finger is on it",
+      "max": 28
+    },
+    "voiceNote.hold": {
+      "note": "On the hold button",
+      "max": 28
+    },
+    "voiceNote.save": {
+      "note": "Button",
+      "max": 32
+    },
+    "voiceNote.startAgain": {
+      "note": "Button: throw this recording away and record again",
+      "max": 32
+    },
+    "queue.stateSent": {
+      "note": "Status of one item",
+      "max": 24
+    },
+    "queue.stateWaiting": {
+      "note": "Status of one item",
+      "max": 24
+    },
+    "queue.stateWaitingWifi": {
+      "note": "Status of one item",
+      "max": 24
+    },
+    "queue.stateWaitingLong": {
+      "note": "Status of one item: tried several times, still trying",
+      "max": 24
+    },
+    "queue.stateRefused": {
+      "note": "Status of one item: the server said no",
+      "max": 24
+    },
+    "queue.stateNeedsAttention": {
+      "note": "Status of one item: a person has to look at it before it can go",
+      "max": 24
+    },
+    "queue.entityVisit": {
+      "note": "A kind of saved work. Also used inside a sentence, in lower case for English"
+    },
+    "queue.entityConsentRecord": {
+      "note": "A kind of saved work: the doctor's answer to being recorded"
+    },
+    "queue.entitySampleAndInput": {
+      "note": "A kind of saved work: the samples left at a visit"
+    },
+    "queue.entityAdverseEvent": {
+      "note": "A kind of saved work: the rep flagged a possible side effect"
+    },
+    "queue.entityWorkDay": {
+      "note": "A kind of saved work: starting or ending the working day"
+    },
+    "queue.listAnd": {
+      "note": "Joins the last item of a list: \"call report, check-in and voice note\". {rest} already holds the earlier items, separated by commas"
+    },
+    "queue.stuck": {
+      "note": "{things} is a list of kinds of work, for example \"call report and voice note\""
+    },
+    "queue.wentThrough": {
+      "note": "{things} is a list of kinds of work, for example \"check-in and check-out\""
+    },
+    "queue.tryAgainNow": {
+      "note": "Button",
+      "max": 24
+    },
+    "queue.tellHelpDesk": {
+      "note": "Button",
+      "max": 24
+    },
+    "queue.sendNowSize": {
+      "note": "Button. {size} is a size like \"2.1 MB\""
+    },
+    "queue.serverRecorded": {
+      "note": "{time} is the server's own timestamp, shown as the server sent it"
+    },
+    "queue.reference": {
+      "note": "{code} is a code for support, not translated"
+    },
+    "queue.serverRefused": {
+      "note": "Used only when the server gave no reason of its own"
+    },
+    "stepper.fewer": {
+      "note": "Read aloud for the minus button. {label} is the control's own label, like \"Packs\""
+    },
+    "stepper.more": {
+      "note": "Read aloud for the plus button. {label} is the control's own label, like \"Packs\""
     }
   }
 }

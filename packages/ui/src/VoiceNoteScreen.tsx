@@ -6,6 +6,7 @@ import { Banner } from './Banner';
 import { BodyText, Display, Figure, Heading, Label, Statement } from './Text';
 import { Button } from './Button';
 import { SurfaceContext } from './surface';
+import { useT } from './i18n';
 
 /**
  * Phase 3 D7 — the MR's own voice note.
@@ -117,10 +118,11 @@ export const VoiceNoteScreen = ({
   failure = null,
   actionFailure = null,
 }: VoiceNoteScreenProps): ReactNode => {
+  const { t } = useT();
   if (failure !== null) {
     return (
       <>
-        <Heading>Your note</Heading>
+        <Heading>{t('voiceNote.heading')}</Heading>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </>
     );
@@ -147,21 +149,21 @@ export const VoiceNoteScreen = ({
             <Figure>{elapsed}</Figure>
             <Label>
               {blocked !== null
-                ? 'nothing is being recorded'
+                ? t('voiceNote.statusBlocked')
                 : recording
-                  ? 'keep holding · release to finish'
+                  ? t('voiceNote.statusRecording')
                   : // FE-D12 V4. A captured, unsaved note is what `onSave` means. "hold the button
                     // to start" under "00:04" told the rep nothing had been recorded.
                     onSave !== undefined
-                    ? 'recorded · save it, or start again'
-                    : 'hold the button to start'}
+                    ? t('voiceNote.statusRecorded')
+                    : t('voiceNote.statusIdle')}
             </Label>
           </View>
 
           {blocked === null ? (
             <>
               <Pressable
-                accessibilityLabel="Hold to record your note"
+                accessibilityLabel={t('voiceNote.holdLabel')}
                 accessibilityRole="button"
                 accessibilityState={{ busy: recording }}
                 onPressIn={onHoldStart}
@@ -174,19 +176,23 @@ export const VoiceNoteScreen = ({
                 */}
                 <SurfaceContext.Provider value="paper">
                   {recording ? <View style={styles.dot} /> : null}
-                  <BodyText>{recording ? 'Holding — recording' : 'Hold to record'}</BodyText>
+                  <BodyText>{recording ? t('voiceNote.holding') : t('voiceNote.hold')}</BodyText>
                 </SurfaceContext.Provider>
               </Pressable>
 
               {onSave === undefined ? null : (
-                <Button label="Save this note" loading={busy} onPress={onSave} />
+                <Button label={t('voiceNote.save')} loading={busy} onPress={onSave} />
               )}
-              <Button label="Start again" onPress={onStartAgain} variant="secondary" />
+              <Button
+                label={t('voiceNote.startAgain')}
+                onPress={onStartAgain}
+                variant="secondary"
+              />
             </>
           ) : (
             // Not `critical`: a microphone the MR has not granted is a condition with
             // a remedy, not a failure of theirs. §02.
-            <Banner detail={blocked} title="No note can be recorded yet" tone="attention" />
+            <Banner detail={blocked} title={t('voiceNote.blockedTitle')} tone="attention" />
           )}
         </View>
       </SurfaceContext.Provider>

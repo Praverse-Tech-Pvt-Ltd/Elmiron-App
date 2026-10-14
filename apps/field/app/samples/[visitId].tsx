@@ -5,7 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 // the server-side idempotency key, so a handover sent twice from a doorway with
 // one bar is one handover.
 import uuid from 'expo-modules-core/src/uuid';
-import { SamplesScreen } from '@fieldforce/ui';
+import { SamplesScreen, t, useLanguage } from '@fieldforce/ui';
 import type { SampleLine, SampleLinePatch } from '@fieldforce/ui';
 import { createPushClient } from '../../src/sync/push-client';
 import { queueUnreadable } from '../../src/sync/async-storage-store';
@@ -14,13 +14,15 @@ import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import {
   blankLine,
-  CAP_NOTE,
+  capNote,
   errorsFor,
+  lineError,
   sampleRequest,
   samplesDateLabel,
 } from '../../src/capture/samples';
 import { sampleQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { SESSION_EXPIRED, refusalTextFor, sessionExpired } from '../../src/sync/explanation';
+import type { InTheMomentRefusal } from '../../src/sync/explanation';
 import { notPermittedDetail } from '../../src/errors/plain';
 
 /**
@@ -36,15 +38,48 @@ import { notPermittedDetail } from '../../src/errors/plain';
  * which the idempotency key cannot protect against because it would be a different
  * key.
  *
+ * **`FE-W152`. A line's problem is kept as what went wrong, not as its sentence** (`LineProblem`),
+ * and the sentence is built at render -- so it is in the app's current language, and a language
+ * change repaints it. The same for what Record says once everything landed (`saved`).
+ *
  * `occurredAt` is the device clock. Unlike a check-in there is no fix to date this
  * from, and the contract pairs `occurredAt` with a server `receivedAt` exactly so
  * the two may differ.
  */
+type LineProblem =
+  /** It fails `lineError`; the sentence is that function's, for the line as it now reads. */
+  | { readonly kind: 'invalid' }
+  /** The server answered and said no about this line only. */
+  | { readonly kind: 'refused'; readonly refusal: InTheMomentRefusal }
+  /** `FE-W44`. On neither the server nor the phone. */
+  | { readonly kind: 'queue_unreadable' };
+
+const problemText = (line: SampleLine, problem: LineProblem): string | null =>
+  problem.kind === 'invalid'
+    ? lineError(line)
+    : problem.kind === 'refused'
+      ? refusalTextFor(problem.refusal)
+      : queueUnreadable();
+
+/** The problems with `id`'s gone; the same object when it had none, so nothing re-renders. */
+const withoutLine = (
+  problems: Readonly<Record<string, LineProblem>>,
+  id: string,
+): Readonly<Record<string, LineProblem>> =>
+  id in problems
+    ? Object.fromEntries(Object.entries(problems).filter(([lineId]) => lineId !== id))
+    : problems;
+
 export default function SamplesRoute(): ReactNode {
+  useLanguage();
   const { visitId } = useLocalSearchParams<{ visitId: string }>();
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState<string | null>(null);
+  const [saved, setSaved] = useState<{ readonly sent: number; readonly queued: number } | null>(
+    null,
+  );
   const [lines, setLines] = useState<readonly SampleLine[]>([blankLine('line-1')]);
+  /** What is wrong with each line that has something wrong, by line id. */
+  const [problems, setProblems] = useState<Readonly<Record<string, LineProblem>>>({});
   /**
    * FE-D2 6. Why the last press could not go ahead. It used to be `failure`, which replaces the
    * form, and nothing cleared it: a doctor who synced a second later still left the rep with a
@@ -74,6 +109,8 @@ export default function SamplesRoute(): ReactNode {
   const loading = status === 'loading';
 
   const changeLine = (id: string, patch: SampleLinePatch): void => {
+    // An edited line's problem goes with the edit, as its `error` always did.
+    setProblems((current) => withoutLine(current, id));
     setLines((current) =>
       current.map((line) => {
         if (line.id !== id) return line;
@@ -130,13 +167,13 @@ export default function SamplesRoute(): ReactNode {
         ? SESSION_EXPIRED
         : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
           ? {
-              title: 'You do not have access to this visit',
+              title: t('samples.noAccessTitle'),
               detail: notPermittedDetail(),
             }
           : lacksWhatItNeeds
             ? {
-                title: 'Could not load this visit',
-                detail: 'The app could not reach the server. It will try again.',
+                title: t('samples.loadFailedTitle'),
+                detail: t('samples.loadFailedDetail'),
               }
             : null;
 
@@ -154,12 +191,12 @@ export default function SamplesRoute(): ReactNode {
 
     const errors = errorsFor(lines);
     if (Object.keys(errors).length > 0) {
-      setLines((current) =>
-        current.map((line) => ({
-          ...line,
-          ...(line.id in errors ? { error: errors[line.id] } : {}),
-        })),
-      );
+      setProblems((current) => ({
+        ...current,
+        ...Object.fromEntries(
+          Object.keys(errors).map((id): [string, LineProblem] => [id, { kind: 'invalid' }]),
+        ),
+      }));
       return;
     }
 
@@ -176,6 +213,7 @@ export default function SamplesRoute(): ReactNode {
       // eslint-disable-next-line no-restricted-syntax -- allowlisted above
       const occurredAt = new Date().toISOString();
       const remaining: SampleLine[] = [];
+      const remainingProblems: Record<string, LineProblem> = {};
       let sent = 0;
       let queued = 0;
 
@@ -202,14 +240,16 @@ export default function SamplesRoute(): ReactNode {
           // over the UCPMP cap for 83aa5660-470b-4c82-aa90-000b5347cb1c this month" -- a
           // doctor UUID and no numbers -- while the cap, the month-to-date total, this
           // entry and the period all sat in a DETAIL that `sync_push` discarded.
-          remaining.push({ ...line, error: refusalTextFor(outcome) });
+          remaining.push(line);
+          remainingProblems[line.id] = { kind: 'refused', refusal: outcome };
           continue;
         }
         if (outcome.kind === 'queue_unreadable') {
           // `FE-W44`. Counting this as `sent` is what the `else` did, and it would have
           // told the MR their samples were recorded when they are on neither the server
           // nor the phone. It stays on screen with the line still in it.
-          remaining.push({ ...line, error: queueUnreadable() });
+          remaining.push(line);
+          remainingProblems[line.id] = { kind: 'queue_unreadable' };
           continue;
         }
         if (outcome.kind === 'queued') queued += 1;
@@ -220,16 +260,14 @@ export default function SamplesRoute(): ReactNode {
 
       if (remaining.length > 0) {
         setLines(remaining);
+        setProblems(remainingProblems);
         setSaved(null);
         return;
       }
 
       setLines([blankLine(uuid.v4())]);
-      setSaved(
-        queued === 0
-          ? `${String(sent)} recorded against this visit.`
-          : `${String(queued)} saved on this phone. They will send by themselves when you have signal — nothing is lost.`,
-      );
+      setProblems({});
+      setSaved({ sent, queued });
     })();
   };
 
@@ -239,7 +277,7 @@ export default function SamplesRoute(): ReactNode {
         router.back();
       }}
       busy={busy}
-      capNote={CAP_NOTE}
+      capNote={capNote()}
       dateLabel={
         // MR-24 DEFECT 6, fixed. TWO bugs in one expression. `visits.received_at` is
         // server bookkeeping -- when the ROW ARRIVED -- not when the visit is; it headed a
@@ -256,10 +294,14 @@ export default function SamplesRoute(): ReactNode {
         // `samplesDateLabel`.
         samplesDateLabel(visit)
       }
-      doctorName={doctor?.fullName ?? 'This visit'}
+      doctorName={doctor?.fullName ?? t('samples.thisVisit')}
       failure={shownFailure}
       actionFailure={actionFailure}
-      lines={lines}
+      lines={lines.map((line) => {
+        const problem = problems[line.id];
+        const error = problem === undefined ? null : problemText(line, problem);
+        return error === null ? line : { ...line, error };
+      })}
       loading={loading}
       onAddLine={() => {
         setLines((current) => [...current, blankLine(uuid.v4())]);
@@ -268,8 +310,15 @@ export default function SamplesRoute(): ReactNode {
       onRecord={record}
       onRemoveLine={(id) => {
         setLines((current) => current.filter((line) => line.id !== id));
+        setProblems((current) => withoutLine(current, id));
       }}
-      saved={saved}
+      saved={
+        saved === null
+          ? null
+          : saved.queued === 0
+            ? t('samples.recordedDetail', { n: saved.sent })
+            : t('samples.queuedDetail', { n: saved.queued })
+      }
     />
   );
 }

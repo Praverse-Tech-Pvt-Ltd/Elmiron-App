@@ -9,9 +9,9 @@ import {
 import { trackingState, TRACKING_WORDS } from './tracking';
 import type { TrackingInputs } from './tracking';
 import {
-  TYPE_INSTEAD,
   silentTextToSpeech,
   transcriptOrFallback,
+  typeInstead,
   unavailableSpeechToText,
 } from './voice';
 
@@ -66,7 +66,7 @@ describe('notifications — event model, preferences, deep links, mock adapter',
 describe('voice — interfaces and the text fallback', () => {
   it('with no provider, nothing is transcribed and the screen offers typing', async () => {
     const result = await unavailableSpeechToText.transcribe('file:///note.m4a');
-    expect(transcriptOrFallback(result)).toEqual({ text: '', fallback: TYPE_INSTEAD });
+    expect(transcriptOrFallback(result)).toEqual({ text: '', fallback: typeInstead() });
     expect(await silentTextToSpeech.speak('hello')).toBe(false);
   });
 
@@ -75,7 +75,7 @@ describe('voice — interfaces and the text fallback', () => {
       text: 'Discussed dosing.',
       fallback: null,
     });
-    expect(transcriptOrFallback({ kind: 'text', text: '  ' }).fallback).toBe(TYPE_INSTEAD);
+    expect(transcriptOrFallback({ kind: 'text', text: '  ' }).fallback).toBe(typeInstead());
   });
 });
 
