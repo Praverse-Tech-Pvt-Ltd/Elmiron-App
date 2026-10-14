@@ -253,14 +253,17 @@ describe.skipIf(!reachable)('BE-W208 — writing a lesson video (the draft, as a
         [lessonB],
       ),
     ).toBe('23514');
-    // A rep cannot write the column at all.
-    expect(
-      await sqlstateAs(
-        world.users.puneMr,
+    // A rep cannot write the column at all: the admin-only write policy hides the row from the
+    // update (a draft is not even readable to a rep), so nothing changes.
+    const repUpdated = await inRolledBackTransaction(async (db) => {
+      await asUser(db, world.users.puneMr);
+      const r = await db.query(
         `update public.lessons set video_object_path = $2 where id = $1 returning id`,
         [lessonA, clipPath],
-      ),
-    ).not.toBe(null);
+      );
+      return r.rowCount;
+    });
+    expect(repUpdated).toBe(0);
 
     await asCommitted(admin, async (db) => {
       await db.query(
