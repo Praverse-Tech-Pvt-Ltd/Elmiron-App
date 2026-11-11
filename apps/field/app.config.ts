@@ -4,12 +4,14 @@ import releaseSigning from './plugins/release-signing.cjs';
 import androidRelease from './plugins/android-release.cjs';
 import iosRelease from './plugins/ios-release.cjs';
 import mapsPush from './plugins/maps-push.cjs';
+import screenOffTracking from './plugins/screen-off-tracking.cjs';
 
 const { demoCleartextHosts, withDemoCleartext } = demoCleartext;
 const { withReleaseSigning } = releaseSigning;
 const { withAndroidRelease } = androidRelease;
 const { withIosRelease } = iosRelease;
 const { withMapsAndPush } = mapsPush;
+const { withScreenOffTracking } = screenOffTracking;
 
 /**
  * The display name is configuration, not a constant.
@@ -55,11 +57,15 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       withIosRelease(
         withAndroidRelease(
           withMapsAndPush(
-            {
-              ...config,
-              name: demoHosts.length === 0 ? name : `${name} (demo)`,
-              slug: config.slug ?? 'field-force',
-            },
+            // `FE-W207`: the foreground-service permissions, only in a screen-off build.
+            withScreenOffTracking(
+              {
+                ...config,
+                name: demoHosts.length === 0 ? name : `${name} (demo)`,
+                slug: config.slug ?? 'field-force',
+              },
+              process.env,
+            ),
             process.env,
           ),
           process.env,

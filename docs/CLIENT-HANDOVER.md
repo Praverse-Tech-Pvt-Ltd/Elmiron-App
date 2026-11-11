@@ -67,7 +67,7 @@ you decide. **Needs your input**: built, waiting on data, a key or a sign-off fr
 | "What this app records" | Ready | The wording needs your privacy/legal sign-off (section 5) |
 | Language: English, Hindi, Marathi | Needs your input | English today; Hindi and Marathi appear the moment your translators' file is complete |
 | Learning (courses, lessons, lesson videos) | Off by choice | One build setting. Course content needs your medical/regulatory approval |
-| Live location during working hours | Off by choice | Needs your approved privacy notice (Q-12); foreground only, never in the background |
+| Live location during working hours | Off by choice | Needs your approved privacy notice (Q-12). Two modes: **on screen only**, or (Android, `FE-W207`) **also with the screen off**, through a foreground service with a "Sharing your location" notification on the phone the whole time. Neither asks for Android's background-location permission. Your notice must say which mode you choose |
 | Assistant (how to use the app) | Off by choice | AI. Needs the AI key in production |
 | Product questions | Off by choice | AI. Answers only from your approved material (Q-9) |
 | AI Doctor practice, with feedback, typed or spoken | Off by choice | AI. Voice has not yet been heard on a real phone |
@@ -86,7 +86,7 @@ you decide. **Needs your input**: built, waiting on data, a key or a sign-off fr
 | Call reports: read and approve, one or several at once | managers | Ready |
 | Team exceptions and visit coverage, never ranked | managers | Ready |
 | Side-effect flags: the list with deadlines, and each report read with a reason (audited) | admins | Ready |
-| Live location: reps' latest positions, the company switch | managers, admins | Ready; the map view needs an optional Google key |
+| Live location: every rep's newest position on a map, the chosen rep's day as a route with its straight-line distance, refreshed every minute; the company switch | managers, admins | Ready. The map uses OpenStreetMap with no key (`FE-W208`); a commercial tile service can be set for heavy use |
 | The team's day: who started and ended, reopening a day | managers, admins | Ready |
 | Course assignments; publishing and retiring courses | managers assign; admins publish | Ready. Course files are loaded by an operator script |
 | Knowledge, practice doctors, AI prompts, practice feedback: write and approve | admins | Ready. **Approvals need a second admin** (Q-14) |
@@ -99,8 +99,11 @@ you decide. **Needs your input**: built, waiting on data, a key or a sign-off fr
 
 - **Recordings and voice notes** are deleted 90 days after the server receives them, together with the
   file itself, by a scheduled job that is watched hourly. Consultation recording is switched off.
-- **Live location**, when you switch it on, is read only during working hours, only while the app is on
-  screen, only after the rep has accepted your notice, and is deleted after 90 days.
+- **Live location**, when you switch it on, is read only during working hours, only after the rep has
+  accepted your notice and started sharing for the day, and is deleted after 90 days. By default only
+  while the app is on screen; in a build with the screen-off mode, also with the screen off, while a
+  notification on the phone says so. It stops at day end, at the end of working hours, when the rep
+  withdraws, or when the company switches it off. The server refuses any position outside those rules.
 - **Call reports, visits and samples** have no automatic deletion period yet; set one with us if your
   policy requires it.
 - **Every company's data is separated in the database itself** (row-level security, forced on every

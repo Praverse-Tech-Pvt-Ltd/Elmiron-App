@@ -99,6 +99,27 @@ export const lessonTutorEnabled: boolean =
 export const liveTrackingEnabled: boolean = process.env.EXPO_PUBLIC_LIVE_TRACKING === 'true';
 
 /**
+ * `FE-W207` — live location keeps going when the screen is off (Android).
+ *
+ * **Off by default, and only with live tracking on.** On, a rep who has accepted the notice and
+ * started sharing for the day is tracked through an Android LOCATION FOREGROUND SERVICE: a persistent
+ * "Sharing your location" notification is on the phone for as long as it runs, and positions keep
+ * arriving with the screen off or another app open. It is started only while the app is on screen
+ * (Android's rule for a while-in-use service), so it needs no background-location permission:
+ * `ACCESS_BACKGROUND_LOCATION` stays blocked in the manifest. It stops on day end, on withdrawal, on
+ * sign-out, when the server says the hours ended or the company switched off, or when the app is
+ * swiped away. iPhone keeps the on-screen watcher.
+ *
+ * Turn it on (`EXPO_PUBLIC_LIVE_TRACKING_SCREEN_OFF=true`) only once the company's live location
+ * notice says that sharing continues with the screen off (`docs/operator/live-tracking-notice-DRAFT.md`).
+ */
+export const liveTrackingScreenOffEnabled: boolean =
+  liveTrackingEnabled &&
+  process.env.EXPO_PUBLIC_LIVE_TRACKING_SCREEN_OFF === 'true' &&
+  // Expo inlines the platform at build time; an iPhone build keeps the on-screen watcher and its words.
+  process.env.EXPO_OS !== 'ios';
+
+/**
  * `FE-W85` — maps: the doctors' clinics and today's stops on a map, from the doctors list and the beat
  * plan.
  *

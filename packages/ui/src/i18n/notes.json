@@ -1218,6 +1218,29 @@
     },
     "home.signedInAs": {
       "note": "{role} is a role this app does not recognise, written exactly as the server issued it, for support to read. Managers and administrators see home.signedInAsManager / home.signedInAsAdmin instead"
+    },
+    "dayEnd.captureNoteSharingScreenOff": {
+      "note": "Replaces dayEnd.captureNoteSharing in a build where live location continues with the screen off (Android). Must stay exactly true: the notification is shown the whole time"
+    },
+    "tracking.serviceTitle": {
+      "note": "Title of the Android notification that stays on the phone while live location is shared with the screen off",
+      "max": 40
+    },
+    "tracking.serviceBody": {
+      "note": "Body of the same notification. \"Open the app to stop\": sharing is stopped from the app, not from the notification",
+      "max": 90
+    },
+    "transparency.neverRecordedLiveScreenOff": {
+      "note": "Replaces transparency.neverRecordedLive in a build where live location continues with the screen off. Keep every condition"
+    },
+    "transparency.liveLocationDetailScreenOff": {
+      "note": "Replaces transparency.liveLocationDetail in a build where live location continues with the screen off. Keep every condition"
+    },
+    "onboarding.locationWithLiveDetailScreenOff": {
+      "note": "Replaces onboarding.locationWithLiveDetail in a build where live location continues with the screen off. Keep every condition"
+    },
+    "onboarding.locationSharingNowDetailScreenOff": {
+      "note": "Replaces onboarding.locationSharingNowDetail in a build where live location continues with the screen off. \"Live location\" is the name of the screen where sharing is stopped"
     }
   }
 }
