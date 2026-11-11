@@ -31,6 +31,11 @@ check-in and check-out, which record your location at those two moments as they 
 * **It starts only when you start it** from the app, and the app shows **"Location sharing ON until
   [time]"** for as long as it runs. Your phone also shows a notification you can see at all times
   while it is on.
+* `[[ CHOOSE ONE — must match the build, FE-W207 ]]`
+  **(a) on-screen build:** "Your location is shared only while the app is open on your screen."
+  **(b) screen-off build (Android):** "Once you start it, your location keeps being shared when the
+  screen is off or you use another app, for as long as the notification 'Sharing your location' is on
+  your phone. Closing the app from your recent apps, ending your day, or withdrawing stops it."
 * **It stops automatically at the end of your working hours.** If your phone fails to stop it, the
   Company's system **refuses to store** any location recorded outside your working hours.
 
