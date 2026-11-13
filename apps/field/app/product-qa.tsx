@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect } from 'expo-router';
-import { ProductQaScreen, Screen } from '@fieldforce/ui';
+import { ProductQaScreen, Screen, t, useLanguage } from '@fieldforce/ui';
 import type { ProductQaView } from '@fieldforce/ui';
 import { productQaEnabled } from '../src/features';
 import { productQaRequestBody } from '../src/product-qa/contract';
@@ -12,6 +12,7 @@ import type { ProductQaOutcome } from '../src/product-qa/outcome';
 import { appLiveConnection } from '../src/live-connection';
 import { loadProductChoices } from '../src/catalogue/products';
 import type { ProductChoice } from '../src/catalogue/products';
+import { useBack } from '../src/navigation/back';
 import { usePulledStore } from '../src/sync/pulled-store';
 import { clockIn, dayMonthIn } from '../src/today/territory-day';
 
@@ -28,6 +29,8 @@ export const ProductQa = ({
     body: ProductQaRequestBody,
   ) => ReturnType<ReturnType<typeof createLiveProductQaTransport>>;
 }): ReactNode => {
+  useLanguage();
+  const back = useBack();
   const { zone } = usePulledStore();
   const [question, setQuestion] = useState('');
   // `BE-W175`'s catalogue: the company's active products, kept for offline. The picker is drawn only
@@ -44,18 +47,23 @@ export const ProductQa = ({
     };
   }, []);
   const [asking, setAsking] = useState(false);
-  const [view, setView] = useState<ProductQaView>({ kind: 'idle' });
+  // The outcome is kept, not its words: the view is written at render, in the current language.
+  const [result, setResult] = useState<{
+    readonly outcome: ProductQaOutcome;
+    readonly retry: () => void;
+  } | null>(null);
 
   const ask = (body: ProductQaRequestBody): void => {
     setAsking(true);
     void transport(body)
       .then(productQaOutcome, productQaOutcomeFromThrown)
       .then((outcome: ProductQaOutcome) => {
-        setView(
-          viewOf(outcome, () => {
+        setResult({
+          outcome,
+          retry: () => {
             ask(body);
-          }),
-        );
+          },
+        });
       })
       .finally(() => {
         setAsking(false);
@@ -69,14 +77,26 @@ export const ProductQa = ({
           kind: 'answer',
           text: outcome.text,
           sources: outcome.sources.map((source) => ({
-            label: `${source.documentTitle}, version ${String(source.versionNumber)}${
-              source.heading === null ? '' : ` — ${source.heading}`
-            } (${source.sourceReference})`,
+            label:
+              source.heading === null
+                ? t('productQa.sourceLabel', {
+                    title: source.documentTitle,
+                    version: source.versionNumber,
+                    reference: source.sourceReference,
+                  })
+                : t('productQa.sourceLabelSection', {
+                    title: source.documentTitle,
+                    version: source.versionNumber,
+                    section: source.heading,
+                    reference: source.sourceReference,
+                  }),
             detail: [
-              `Document: ${source.documentTitle}`,
-              `Approved version ${String(source.versionNumber)}`,
-              ...(source.heading === null ? [] : [`Section: ${source.heading}`]),
-              `Reference: ${source.sourceReference}`,
+              t('productQa.detailDocument', { title: source.documentTitle }),
+              t('productQa.detailVersion', { version: source.versionNumber }),
+              ...(source.heading === null
+                ? []
+                : [t('productQa.detailSection', { section: source.heading })]),
+              t('productQa.detailReference', { reference: source.sourceReference }),
             ],
           })),
         };
@@ -91,7 +111,10 @@ export const ProductQa = ({
           resetLabel:
             outcome.resetsAt === null
               ? null
-              : `${clockIn(outcome.resetsAt, zone)} on ${dayMonthIn(outcome.resetsAt, zone)}`,
+              : t('ai.resetLabel', {
+                  time: clockIn(outcome.resetsAt, zone),
+                  date: dayMonthIn(outcome.resetsAt, zone),
+                }),
         };
       case 'offline':
       case 'error':
@@ -99,8 +122,12 @@ export const ProductQa = ({
     }
   };
 
+  const view: ProductQaView =
+    result === null ? { kind: 'idle' } : viewOf(result.outcome, result.retry);
+
+  // `FE-W188`. Opened from Me: a pushed screen draws its own way back.
   return (
-    <Screen scrollable>
+    <Screen onBack={back} scrollable>
       <ProductQaScreen
         asking={asking}
         onAsk={() => {

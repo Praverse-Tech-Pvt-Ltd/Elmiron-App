@@ -2,13 +2,18 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useRouter } from 'expo-router';
 import {
+  Banner,
   BodyText,
-  Heading,
   ListRow,
   PendingSyncSection,
   Screen,
   TodayScreen,
+  Title,
+  t,
+  useLanguage,
 } from '@fieldforce/ui';
+import { heldAudioIds } from '../../src/sync/upload-conditions';
+import { useDataNote, useUploadSnapshot } from '../../src/sync/use-upload-snapshot';
 import { useSession } from '../../src/session';
 import { loadQueueState, onQueueChanged, queueOwner } from '../../src/sync/async-storage-store';
 import { indicatorStateFor } from '../../src/sync/indicator';
@@ -22,8 +27,9 @@ import { clockIn, dayMonthIn } from '../../src/today/territory-day';
 import type { TerritoryZone } from '../../src/today/territory-day';
 import type { DayOrigin, PullFailure } from '../../src/sync/pulled-store';
 import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
-import { NOT_PERMITTED_DETAIL, refusedDetail } from '../../src/errors/plain';
+import { notPermittedDetail, refusedDetail } from '../../src/errors/plain';
 import { LiveTrackingStatusLine } from '../../src/tracking/status-line';
+import { removalWording } from '../../src/sync/pull';
 
 /**
  * **`FE-W40` B5. Why there is no day — and an EXPIRED anchor gets its own sentence.**
@@ -39,11 +45,14 @@ import { LiveTrackingStatusLine } from '../../src/tracking/status-line';
  */
 const dayDetail = (origin: DayOrigin, zone: TerritoryZone, failure: PullFailure): string => {
   if (origin.kind === 'expired') {
-    return `Your last sync was ${dayMonthIn(origin.asOf, zone)} at ${clockIn(origin.asOf, zone)}, which was a different day. This app shows a day only once the server has confirmed it.`;
+    return t('today.lastSyncOtherDay', {
+      date: dayMonthIn(origin.asOf, zone),
+      time: clockIn(origin.asOf, zone),
+    });
   }
   return failure.kind === 'refused'
     ? refusedDetail(failure.refusal.sqlState)
-    : 'The app could not reach the server. It will try again when you come back to it.';
+    : t('today.unreachable');
 };
 
 /**
@@ -54,12 +63,28 @@ const dayDetail = (origin: DayOrigin, zone: TerritoryZone, failure: PullFailure)
  * if the API ever returns something this app should not show, that is a backend bug
  * to report rather than something to filter away here.
  */
+/**
+ * `FE-W182`. The role in words for the two roles this shell is shown to. It printed the token's
+ * own value — "Signed in as field_manager" — on a client's phone. A role this app does not know is
+ * still named exactly as the server issued it: that line is how support sees which role it was.
+ */
+const signedInLine = (role: string | null): string => {
+  switch (role) {
+    case 'field_manager':
+      return t('home.signedInAsManager');
+    case 'admin':
+      return t('home.signedInAsAdmin');
+    default:
+      return t('home.signedInAs', { role: role ?? t('home.unknownRole') });
+  }
+};
+
 const destinationsFor = (role: string): readonly { title: string; detail: string }[] => {
   switch (role) {
     case 'field_manager':
-      return [{ title: 'Team', detail: 'Exceptions and approvals — FE-W6' }];
+      return [{ title: t('home.team'), detail: t('home.teamDetail') }];
     default:
-      return [{ title: 'Administration', detail: 'Master data — FE-W6' }];
+      return [{ title: t('home.admin'), detail: t('home.adminDetail') }];
   }
 };
 
@@ -72,6 +97,8 @@ const destinationsFor = (role: string): readonly { title: string; detail: string
  * they do not do.
  */
 const MrToday = (): ReactNode => {
+  // `FE-W145`. Subscribed, so a language change repaints Today and every line built below.
+  useLanguage();
   const router = useRouter();
   // `FE-W44`. The LOAD, not the state: an unreadable queue is not an empty one, and
   // "Everything sent" over a queue this app could not read is the worst thing it says.
@@ -90,7 +117,12 @@ const MrToday = (): ReactNode => {
     today,
     dayOrigin,
     refresh,
+    serverTime,
   } = usePulledStore();
+  // `FE-W136`. What WiFi-only is holding right now, so the sync line can say "waiting for WiFi".
+  const uploadSnapshot = useUploadSnapshot();
+  // `FE-W138`. The month's note, when the MR asked for it and this app's uploads passed 100 MB.
+  const dataNote = useDataNote(serverTime);
 
   useEffect(() => {
     // B2. The queue is read on every visit to this screen rather than once, because
@@ -156,9 +188,9 @@ const MrToday = (): ReactNode => {
     // B8. `removalWording` says "no longer yours" for out_of_scope and never
     // "deleted" -- false for a reassignment, and dangerously so for consent.
     ...removals.map((removal) => ({
-      title:
-        removal.reason === 'out_of_scope' ? 'One of your records moved' : 'A record was removed',
-      body: removal.message,
+      title: removal.reason === 'out_of_scope' ? t('today.recordMoved') : t('today.recordRemoved'),
+      // `FE-W144`. Worded now, from the reason, so it follows a language change.
+      body: removalWording(removal.reason),
     })),
   ];
 
@@ -196,12 +228,12 @@ const MrToday = (): ReactNode => {
         ? SESSION_EXPIRED
         : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
           ? {
-              title: 'You do not have access to this plan',
-              detail: NOT_PERMITTED_DETAIL,
+              title: t('today.noAccess'),
+              detail: notPermittedDetail(),
             }
           : nothingToShow
             ? {
-                title: 'Could not load your day',
+                title: t('today.couldNotLoad'),
                 detail: dayDetail(dayOrigin, zone, pullFailure),
               }
             : null;
@@ -221,7 +253,7 @@ const MrToday = (): ReactNode => {
     const clinic = doctor?.clinicAddresses.find((c) => c.id === entry.visit.clinicAddressId);
     return {
       id: entry.visit.id,
-      doctorName: doctor?.fullName ?? 'A doctor not on this phone',
+      doctorName: doctor?.fullName ?? t('today.doctorNotOnPhone'),
       clinic: clinic === undefined ? null : `${clinic.label}, ${clinic.city}`,
       reason: entry.visit.unplannedReason ?? '',
       state: entry.state,
@@ -231,11 +263,13 @@ const MrToday = (): ReactNode => {
 
   return (
     <TodayScreen
-      dayLabel="Today"
-      startedLabel={startedAt === null ? null : `Started ${clockIn(startedAt, zone)}`}
+      dayLabel={t('today.title')}
+      startedLabel={
+        startedAt === null ? null : t('today.started', { time: clockIn(startedAt, zone) })
+      }
       dayAsOfLabel={
         dayOrigin.kind === 'anchored'
-          ? `Your day as of ${clockIn(dayOrigin.asOf, zone)} — not confirmed since`
+          ? t('today.dayAsOf', { time: clockIn(dayOrigin.asOf, zone) })
           : null
       }
       planned={summary?.planned ?? 0}
@@ -255,14 +289,22 @@ const MrToday = (): ReactNode => {
               scheduledLabel: next.inProgress
                 ? next.startedAt === null
                   ? null
-                  : `Checked in ${clockIn(next.startedAt, zone)}`
+                  : t('today.checkedIn', { time: clockIn(next.startedAt, zone) })
                 : next.scheduledFor === null
                   ? null
-                  : `Scheduled ${clockIn(next.scheduledFor, zone)}`,
+                  : t('today.scheduled', { time: clockIn(next.scheduledFor, zone) }),
               inProgress: next.inProgress,
             }
       }
-      sync={queue === null ? null : indicatorStateFor(queue, zone)}
+      sync={
+        queue === null
+          ? null
+          : indicatorStateFor(
+              queue,
+              zone,
+              queue.kind === 'loaded' ? heldAudioIds(queue.state.items, uploadSnapshot).length : 0,
+            )
+      }
       onOpenQueue={() => {
         router.push('/queue');
       }}
@@ -294,6 +336,23 @@ const MrToday = (): ReactNode => {
       onRetry={refresh}
       after={
         <>
+          {/*
+            `FE-W138`. "A note on home, nothing stops working." Attention, never critical: going over
+            is the MR's information, not a failure. The way out is the setting itself.
+          */}
+          {dataNote === null ? null : (
+            <Banner
+              tone="attention"
+              title={dataNote.title}
+              detail={dataNote.detail}
+              action={{
+                label: t('today.dataSettings'),
+                onPress: () => {
+                  router.push('/data-settings');
+                },
+              }}
+            />
+          )}
           {/* `FE-W71`. Live location says what it is doing; nothing when the build has it off. */}
           <LiveTrackingStatusLine
             onOpen={() => {
@@ -313,6 +372,7 @@ const MrToday = (): ReactNode => {
 };
 
 export default function Home(): ReactNode {
+  useLanguage();
   const { status, role } = useSession();
 
   if (status === 'signed-out') return <Redirect href="/sign-in" />;
@@ -322,8 +382,9 @@ export default function Home(): ReactNode {
 
   return (
     <Screen scrollable>
-      <Heading>Today</Heading>
-      <BodyText muted>Signed in as {role ?? 'unknown role'}</BodyText>
+      {/* `FE-W178`. A screen's title is `Title`, as on every other tab; `Heading` is a card's. */}
+      <Title>{t('today.title')}</Title>
+      <BodyText muted>{signedInLine(role)}</BodyText>
       {destinationsFor(role ?? 'mr').map((destination) => (
         <ListRow key={destination.title} title={destination.title} detail={destination.detail} />
       ))}

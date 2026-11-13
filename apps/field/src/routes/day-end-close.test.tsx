@@ -199,6 +199,8 @@ describe('FE-W80 — End my day', () => {
 
     expect(await screen.findByText('Your day was not ended')).toBeTruthy();
     expect(screen.getByText(/Check out of it, then end your day again/u)).toBeTruthy();
+    // `FE-W197`. The remedy alone: the server's own sentence stays on the queue screen.
+    expect(screen.queryByText(/work_day_has_open_visit/u)).toBeNull();
     expect(screen.getByRole('button', { name: 'End my day' })).toBeTruthy();
   });
 

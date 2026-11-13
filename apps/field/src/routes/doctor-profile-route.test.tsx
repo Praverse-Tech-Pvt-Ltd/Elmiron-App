@@ -16,6 +16,8 @@ import { DoctorSchema, VisitSchema } from '@fieldforce/core';
 const mockStore = jest.fn();
 jest.mock('../sync/pulled-store', () => ({ usePulledStore: () => mockStore() }));
 jest.mock('expo-router', () => ({
+  // `FE-W188`. The screen's Back control reads the router; nothing here presses it.
+  useRouter: () => ({ back: jest.fn(), canGoBack: () => true, replace: jest.fn() }),
   useLocalSearchParams: () => ({ id: '33333333-3333-4333-8333-333333333301' }),
 }));
 
@@ -86,7 +88,7 @@ describe('FE-D3 B3 — "not visited yet" only when it is true', () => {
     mockStore.mockReturnValue(pulled({ status: 'loading' }));
     await render(<DoctorProfile />);
 
-    expect(screen.getByText("Getting this doctor's history")).toBeTruthy();
+    expect(screen.getByText('Getting this doctor’s history')).toBeTruthy();
     expect(screen.queryByText(NEVER)).toBeNull();
   });
 
@@ -114,5 +116,69 @@ describe('FE-D3 B3 — "not visited yet" only when it is true', () => {
 
     expect(screen.queryByText(NEVER)).toBeNull();
     expect(screen.queryByText(UNKNOWN)).toBeNull();
+  });
+});
+
+/**
+ * `FE-W190`, QA 21. Checked in with the doctor for the first time, the profile said "You have not
+ * visited this doctor yet": it counts finished visits only. And "today" stood in the large figure
+ * in lower case, a word written for the middle of a list row.
+ */
+describe('FE-W190 — the profile during a visit, and its figure', () => {
+  const inProgress = VisitSchema.parse({
+    ...completedVisit,
+    id: '44444444-4444-4444-8444-444444444402',
+    status: 'in_progress',
+    startedAt: '2026-09-20T05:30:00.000Z',
+    completedAt: null,
+    visitDay: '2026-09-20',
+  });
+
+  it('a first visit in progress says so, not "not visited yet"', async () => {
+    mockStore.mockReturnValue(pulled({ visits: [inProgress] }));
+    await render(<DoctorProfile />);
+
+    expect(
+      await screen.findByText('You are with this doctor now. This is your first visit.'),
+    ).toBeTruthy();
+    expect(screen.queryByText(NEVER)).toBeNull();
+  });
+
+  it('a visit in progress after earlier ones says so above when the last one was', async () => {
+    mockStore.mockReturnValue(pulled({ visits: [completedVisit, inProgress] }));
+    await render(<DoctorProfile />);
+
+    expect(await screen.findByText('You are with this doctor now.')).toBeTruthy();
+    expect(screen.queryByText(NEVER)).toBeNull();
+  });
+
+  it('starts the figure with a capital', async () => {
+    const earlierToday = VisitSchema.parse({
+      ...completedVisit,
+      startedAt: '2026-09-20T04:00:00.000Z',
+      completedAt: '2026-09-20T04:20:00.000Z',
+      visitDay: '2026-09-20',
+    });
+    mockStore.mockReturnValue(pulled({ visits: [earlierToday] }));
+    await render(<DoctorProfile />);
+
+    expect(screen.getByText('Today')).toBeTruthy();
+    expect(screen.queryByText('today')).toBeNull();
+  });
+});
+
+/** `FE-W198` — a visit's length as a person says it: "8 h 4 min", never "484 min". */
+describe('FE-W198 — the profile’s visit durations', () => {
+  it('an hour or more is hours and minutes', async () => {
+    const long = VisitSchema.parse({
+      ...completedVisit,
+      startedAt: '2026-09-10T05:00:00.000Z',
+      completedAt: '2026-09-10T13:04:00.000Z',
+    });
+    mockStore.mockReturnValue(pulled({ visits: [long] }));
+    await render(<DoctorProfile />);
+
+    expect(screen.getByText(/8 h 4 min/u)).toBeTruthy();
+    expect(screen.queryByText(/484 min/u)).toBeNull();
   });
 });

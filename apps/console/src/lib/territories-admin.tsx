@@ -5,15 +5,19 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { ADMIN_RPC, territoryLevel } from '@fieldforce/core';
 import type { TerritoryNode } from '@fieldforce/core';
-import { tokens } from '@fieldforce/ui-tokens';
 import { browserClient } from './supabase';
 import { Body, Card, Heading, Label, MissingNote } from './ui';
 import { adminRefusal, clock, hoursSource, treeOrder, weekdaysLabel } from './admin-text';
+import { timeZoneLabel } from './labels';
 import { btn } from './theme-css';
 
 /**
  * `FE-W76` — the client half of `/territories`. Every write is an RPC as the signed-in admin; the
  * level rules, the code rules and the hours rules are the database's, named by `adminRefusal`.
+ *
+ * `FE-W171`: the Add fields have visible labels (a placeholder vanishes as you type) and the form's
+ * usual 560px measure; a territory's depth is indentation the stylesheet owns rather than an inline
+ * `paddingLeft`; the time zone reads "India time (IST)" in the table.
  */
 
 type Outcome =
@@ -68,27 +72,28 @@ const AddTerritory = ({
   const [code, setCode] = useState(parent === null ? '' : `${parent.code}-`);
   const level = territoryLevel(parent === null ? 1 : parent.depth + 1);
   return (
-    <div className="ff-cell-stack">
-      <Label>
-        New {level}
-        {parent === null ? '' : ` beneath ${parent.code}`}
-      </Label>
-      <input
-        aria-label={`Name of the new ${level}`}
-        placeholder="Name"
-        value={name}
-        onChange={(e) => {
-          setName(e.target.value);
-        }}
-      />
-      <input
-        aria-label={`Code of the new ${level}`}
-        placeholder="Code (unique across the whole system)"
-        value={code}
-        onChange={(e) => {
-          setCode(e.target.value.toUpperCase());
-        }}
-      />
+    <div className="ff-cell-stack ff-form-measure">
+      {parent === null ? null : <Label>{`New ${level} beneath ${parent.code}`}</Label>}
+      <label className="ff-field">
+        <span className="ff-label">Name</span>
+        <input
+          aria-label={`Name of the new ${level}`}
+          value={name}
+          onChange={(e) => {
+            setName(e.target.value);
+          }}
+        />
+      </label>
+      <label className="ff-field">
+        <span className="ff-label">Code — unique across the whole system</span>
+        <input
+          aria-label={`Code of the new ${level}`}
+          value={code}
+          onChange={(e) => {
+            setCode(e.target.value.toUpperCase());
+          }}
+        />
+      </label>
       <Refused outcome={outcome} />
       <button
         type="button"
@@ -127,8 +132,8 @@ const Hours = ({
   const [grace, setGrace] = useState(String(base?.graceMinutes ?? 15));
   const [days, setDays] = useState<readonly number[]>(base?.activeWeekdays ?? [1, 2, 3, 4, 5, 6]);
   return (
-    <div className="ff-cell-stack">
-      <Label>Working hours for {node.code}</Label>
+    <div className="ff-cell-stack ff-form-measure">
+      <Label>Working hours for {node.code}: start and end</Label>
       <div className="ff-row ff-row-tight">
         <input
           aria-label={`Start of day in ${node.code}`}
@@ -147,6 +152,7 @@ const Hours = ({
           }}
         />
       </div>
+      <Label>Time zone</Label>
       <input
         aria-label={`Time zone of ${node.code}`}
         value={zone}
@@ -229,7 +235,7 @@ const Rename = ({
   const { outcome, write } = useWrite();
   const [name, setName] = useState(node.name);
   return (
-    <div className="ff-cell-stack">
+    <div className="ff-cell-stack ff-form-measure">
       <Label>Rename {node.code} (the code does not change)</Label>
       <input
         aria-label={`New name of ${node.code}`}
@@ -273,7 +279,7 @@ const Line = ({
   const canAdd = node.depth < 3 && node.reps === 0;
   return (
     <tr>
-      <td style={{ paddingLeft: tokens.space.md + indent * 24 }}>
+      <td className={indent === 0 ? undefined : `ff-indent-${String(Math.min(indent, 3))}`}>
         <span className="ff-muted">{territoryLevel(node.depth)}</span>
         <br />
         <strong>{node.code}</strong> — {node.name}
@@ -285,7 +291,7 @@ const Line = ({
       <td>
         {node.hours === null
           ? '—'
-          : `${clock(node.hours.shiftStart)}–${clock(node.hours.shiftEnd)} · ${weekdaysLabel(node.hours.activeWeekdays)} · ${node.hours.timezone}`}
+          : `${clock(node.hours.shiftStart)}–${clock(node.hours.shiftEnd)} · ${weekdaysLabel(node.hours.activeWeekdays)} · ${timeZoneLabel(node.hours.timezone)}`}
         <br />
         <span className="ff-muted">{hoursSource(node, codeOf)}</span>
       </td>

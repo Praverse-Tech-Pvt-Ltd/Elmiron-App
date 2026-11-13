@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
-import { GROUPS, currentHref } from './nav';
+import { GROUPS, currentHref } from './nav-items';
 
 /**
  * `FE-W121` — the top bar: where this page sits in the console, as a breadcrumb.

@@ -1,5 +1,6 @@
 import type { AdminUser, Role, RetentionOverview, TerritoryNode } from '@fieldforce/core';
 import { territoryLevel } from '@fieldforce/core';
+import { plural } from './plural';
 
 /**
  * `FE-W75`–`FE-W78` — what the four admin screens say, in an admin's words.
@@ -69,7 +70,7 @@ const RULES: readonly (readonly [RegExp, string])[] = [
   ],
   [
     /account_unconfirmed/u,
-    'The sign-in account is not confirmed, so it could not sign in. It must be confirmed in the Supabase dashboard (or cancelled and created again here) before it can be finished.',
+    'The sign-in account is not confirmed, so it cannot sign in. Cancel this creation and create the user again here.',
   ],
   [/self_role_change/u, 'You cannot change your own role. Another admin must.'],
   [/self_deactivate/u, 'You cannot deactivate yourself. Another admin must.'],
@@ -238,7 +239,8 @@ export const hoursSource = (
 };
 
 /**
- * What the retention screen must say first, if anything. The database's `stalled` is the verdict
+ * What the retention screen must say first, if anything. `FE-W165`/`FE-W166`: in an admin's words —
+ * no deployment or workflow names, and the count agreeing with its noun. The database's `stalled` is the verdict
  * that also refuses new uploads, so it is the critical one; overdue audio without a stall is the
  * worker being behind, not stopped.
  */
@@ -256,13 +258,13 @@ export const retentionAlerts = (
   if (overdue > 0) {
     out.push({
       tone: 'attention',
-      text: `${String(overdue)} of your company’s audio object(s) are past their purge date and not yet destroyed.`,
+      text: `Your company has ${plural(overdue, 'audio file', 'audio files')} past the purge date, not yet destroyed.`,
     });
   }
   if (overview.worker.lastRunAt === null) {
     out.push({
       tone: 'attention',
-      text: 'The retention worker has never run against this database. On a deployment, the scheduled “Audio retention” workflow runs it hourly.',
+      text: 'The retention worker has not run yet. Once the service is live it runs every hour; until its first run, nothing has been destroyed on schedule.',
     });
   } else if (overview.runs[0]?.outcome === 'failed') {
     out.push({ tone: 'attention', text: 'The most recent run failed on at least one object.' });

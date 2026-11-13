@@ -96,7 +96,10 @@ export interface ConsentScreenProps {
    * see the note at the top of this file.
    */
   readonly notice: string;
-  /** "Notice v1.2 · English (India)" — what the record will point at. */
+  /**
+   * "Notice version 1.2 · English" — which notice this is, in words. `FE-W186`: never a hash; the
+   * record cites the version, and its hash is checked in the ledger, not read by a doctor.
+   */
   readonly noticeLabel: string;
   readonly onAnswer: (answer: ConsentAnswer) => void;
   /** The exit that is not a decision. Records nothing. */
@@ -106,6 +109,12 @@ export interface ConsentScreenProps {
   readonly languages?: readonly ConsentLanguageOption[];
   readonly language?: string;
   readonly onChangeLanguage?: (code: string) => void;
+  /**
+   * `FE-W148`. Said where the language picker would be, when there is nothing to pick — e.g. "This
+   * notice is in English only". Plain English from the route, never from the app's catalogue: this
+   * screen is the doctor's, and its words are not translated by the app (see `consent/content.ts`).
+   */
+  readonly languageNote?: string | null;
   readonly busy?: boolean;
   /**
    * The notice has been asked for and has not arrived yet.
@@ -137,7 +146,7 @@ const styles = StyleSheet.create({
     backgroundColor: tokens.color.surface,
     borderRadius: tokens.radius.well,
     padding: tokens.space.md,
-    gap: 2,
+    gap: tokens.space.xxs,
   },
   panels: { gap: tokens.space.sm },
   panel: {
@@ -163,13 +172,13 @@ const styles = StyleSheet.create({
     borderBottomColor: tokens.color.offlineEdge,
     alignSelf: 'flex-start',
   },
+  detailsLabelPressed: { borderBottomColor: tokens.color.textPrimary },
   answers: { gap: tokens.space.sm },
   handBack: {
     minHeight: tokens.target.secondary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pressed: { opacity: 0.6 },
 });
 
 /**
@@ -234,14 +243,16 @@ const Notice = ({
   <View style={styles.notice}>
     <Statement>{notice}</Statement>
     <Label muted>{noticeLabel}</Label>
-    <Pressable
-      accessibilityRole="button"
-      onPress={onOpenDetails}
-      style={({ pressed }) => [styles.details, pressed ? styles.pressed : null]}
-    >
-      <View style={styles.detailsLabel}>
-        <BodyText muted>Exactly what is collected, in full</BodyText>
-      </View>
+    {/*
+      `FE-W184`. Presses as "Give the phone back" does: the words and their rule go from muted to
+      ink. It faded to 60% instead, which §05 forbids and which lightened the quietest words here.
+    */}
+    <Pressable accessibilityRole="button" onPress={onOpenDetails} style={styles.details}>
+      {({ pressed }) => (
+        <View style={[styles.detailsLabel, pressed ? styles.detailsLabelPressed : null]}>
+          <BodyText muted={handBackMuted(pressed)}>Exactly what is collected, in full</BodyText>
+        </View>
+      )}
     </Pressable>
   </View>
 );
@@ -262,6 +273,7 @@ export const ConsentScreen = ({
   languages,
   language,
   onChangeLanguage,
+  languageNote = null,
   busy = false,
   loading = false,
   blocked = null,
@@ -287,12 +299,18 @@ export const ConsentScreen = ({
   }
 
   const picker =
-    languages === undefined || languages.length < 2 || onChangeLanguage === undefined ? null : (
+    languages === undefined || languages.length < 2 || onChangeLanguage === undefined ? (
+      languageNote === null ? null : (
+        // `FE-W189`. Two sentences, so the prose step, not a field's label.
+        <Secondary>{languageNote}</Secondary>
+      )
+    ) : (
       // Offered from what the server actually has. A hard-coded list would offer a
       // doctor a language the server cannot produce a notice in, and the handoff
       // then dead-ends in front of them.
       <Select
         label="Language"
+        placeholder="Choose a language"
         onChange={onChangeLanguage}
         options={languages.map((option) => ({ value: option.code, label: option.label }))}
         {...(language === undefined ? {} : { value: language })}

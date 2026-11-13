@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { tokens } from '@fieldforce/ui-tokens';
+import { StyleSheet, Text, View } from 'react-native';
+import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
 import { Badge } from './Badge';
 import { BodyText, Display, Figure, Heading, Label, Secondary } from './Text';
@@ -9,6 +9,8 @@ import { Card } from './Card';
 import { RecordingIndicator } from './RecordingIndicator';
 import { Screen } from './Screen';
 import { Spinner } from './Spinner';
+import { useT } from './i18n';
+import type { TextKey } from './i18n';
 
 /**
  * Phase 2 B4 → B5 → B6, on one screen.
@@ -126,6 +128,13 @@ export interface VisitScreenProps {
    * banner that IS.
    */
   readonly recordingNotice?: string | null;
+  /**
+   * `FE-W186`. Consultation recording is switched off — for this build or this company — so a
+   * doctor's "yes" starts nothing. Said under the answer, in plain words, so the rep never speaks
+   * as though audio were being kept. Absent or false, the line is not drawn: a screen that may
+   * record (the control is offered) or that could not ask the server must not claim it is off.
+   */
+  readonly recordingOff?: boolean;
   /** D7. Offered on every visit, consent or not — a voice note has no third party. */
   readonly onRecordVoiceNote?: () => void;
   /**
@@ -164,23 +173,78 @@ export interface VisitScreenProps {
    * or record. The caller clears it when the next action starts.
    */
   readonly actionFailure?: { readonly title: string; readonly detail: string } | null;
+  /** `FE-W188`. The screen's Back control (`Screen`'s `onBack`). */
+  readonly onBack?: () => void;
 }
 
 const styles = StyleSheet.create({
   head: { gap: tokens.space.xs },
   foot: { gap: tokens.space.sm },
-  steps: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.space.xs },
-  // The quiet button's own horizontal padding is taken back, so its label starts on the same
-  // edge as the doctor's name and clinic above it.
-  directions: { alignSelf: 'flex-start', marginLeft: -tokens.space.lg },
+  /**
+   * `FE-W190`. Four cells in one row, whose widths never depend on their state. The chips sized to
+   * their words, so each "✓" a finished step gained widened its chip and pushed "Report" onto a
+   * second line part-way through a visit (QA 19, 39).
+   *
+   * `FE-W198`. Four EQUAL cells were the next defect: at 360dp each is 79pt, and "With the doctor"
+   * wrapped to two lines while "Report" sat in a cell twice its width (15 October re-check). Each
+   * cell now starts at its own words plus a tick slot every state reserves (`tickSlot`), and the
+   * row's spare width is shared out equally -- so a cell is as wide as its label needs, and still
+   * no wider when its step is done. The label is "With doctor", and the side padding is `xxs`.
+   */
+  steps: { flexDirection: 'row', gap: tokens.space.xs },
+  step: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: tokens.space.xxs,
+    borderRadius: tokens.radius.well,
+    borderWidth: 1,
+    paddingHorizontal: tokens.space.xxs,
+    paddingVertical: tokens.space.xs,
+  },
+  // The accent's own wash, not `infoFill`: the blue was the one colour on the visit from outside
+  // its palette. A finished step and the step the rep is on share the wash; the current one is
+  // told apart by its accent edge, a finished one by its tick.
+  stepDone: { backgroundColor: tokens.color.successFill, borderColor: tokens.color.successFill },
+  stepNow: { backgroundColor: tokens.color.successFill, borderColor: tokens.color.accent },
+  stepLater: { backgroundColor: tokens.color.background, borderColor: tokens.color.hairline },
+  stepText: {
+    fontSize: tokens.typography.label.size,
+    lineHeight: tokens.typography.label.lineHeight,
+    fontWeight: '600',
+    fontFamily: fontFamilyFor('600'),
+    textAlign: 'center',
+    flexShrink: 1,
+  },
+  // `FE-W198`. Room for the tick in every state, so finishing a step never widens its cell.
+  tickSlot: { width: 7, alignItems: 'center' },
+  // A tick drawn in Views (two strokes of a turned box), never a font glyph: `TabIcon`'s reason.
+  tick: {
+    width: 5,
+    height: 9,
+    borderRightWidth: 2,
+    borderBottomWidth: 2,
+    borderColor: tokens.color.accent,
+    transform: [{ rotate: '45deg' }],
+    marginBottom: 2,
+  },
+  // `FE-W180`. Pulled left by the screen's gutter and no further, so the pressed fill reaches the
+  // screen's edge and stops there. It was pulled back by the button's whole 24pt padding to line
+  // the label up with the name above — which, against a 16pt gutter, drew the pressed fill 8pt off
+  // the screen. The label now sits 8pt inside the name's edge.
+  directions: { alignSelf: 'flex-start', marginLeft: -tokens.space.md },
   figureRow: { flexDirection: 'row', alignItems: 'baseline', gap: tokens.space.sm },
 });
 
-const STAGE_WORDS = {
-  before: 'Not started',
-  during: 'You are checked in',
-  after: 'Visit finished',
-} as const;
+// `FE-W150`. Keys, read at render, so a language change repaints the stage line.
+const STAGE_WORDS: Record<VisitScreenProps['stage'], TextKey> = {
+  before: 'visit.stageBefore',
+  during: 'visit.stageDuring',
+  after: 'visit.stageAfter',
+};
 
 /**
  * The same three stages, for a write the server has not acknowledged yet.
@@ -193,11 +257,43 @@ const STAGE_WORDS = {
  * `before` has no pending form and never will: nothing has been queued in that state, so
  * there is nothing to be pending about. It is present so the lookup is total.
  */
-const STAGE_WORDS_PENDING = {
-  before: 'Not started',
-  during: 'Checked in — waiting to send',
-  after: 'Visit finished — waiting to send',
-} as const;
+const STAGE_WORDS_PENDING: Record<VisitScreenProps['stage'], TextKey> = {
+  before: 'visit.stageBefore',
+  during: 'visit.stageDuringPending',
+  after: 'visit.stageAfterPending',
+};
+
+type StepState = 'done' | 'now' | 'later';
+
+/** `FE-W190`. One step of the visit, drawn at a width its state cannot change. */
+const StepCell = ({
+  label,
+  state,
+  spoken,
+}: {
+  readonly label: string;
+  readonly state: StepState;
+  readonly spoken: string;
+}): ReactNode => (
+  <View
+    accessible
+    accessibilityLabel={spoken}
+    style={[
+      styles.step,
+      state === 'done' ? styles.stepDone : state === 'now' ? styles.stepNow : styles.stepLater,
+    ]}
+  >
+    <View style={styles.tickSlot}>{state === 'done' ? <View style={styles.tick} /> : null}</View>
+    <Text
+      style={[
+        styles.stepText,
+        { color: state === 'later' ? tokens.color.textSecondary : tokens.color.accent },
+      ]}
+    >
+      {label}
+    </Text>
+  </View>
+);
 
 export const VisitScreen = ({
   doctorName,
@@ -219,6 +315,7 @@ export const VisitScreen = ({
   onStartRecording,
   recordingBlockedReason = null,
   recordingNotice = null,
+  recordingOff = false,
   onRecordVoiceNote,
   onFlagAdverseEvent,
   recording,
@@ -226,10 +323,14 @@ export const VisitScreen = ({
   loading = false,
   failure = null,
   actionFailure = null,
+  onBack,
 }: VisitScreenProps): ReactNode => {
+  const { t } = useT();
+  // `FE-W188`. Spread rather than passed, so an absent handler stays absent.
+  const back = onBack === undefined ? {} : { onBack };
   if (failure !== null) {
     return (
-      <Screen>
+      <Screen {...back}>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </Screen>
     );
@@ -238,14 +339,31 @@ export const VisitScreen = ({
   // UX polish. Where the rep is in the visit, as four steps they can see at once. Derived only
   // from the stage this screen already has -- the report step reads "next" after check-out and
   // claims nothing about whether one was filed, which this screen is not told.
-  const steps: readonly { readonly label: string; readonly state: 'done' | 'now' | 'later' }[] = [
-    { label: 'Check in', state: stage === 'before' ? 'now' : 'done' },
+  const steps: readonly {
+    readonly key: TextKey;
+    readonly label: string;
+    readonly state: StepState;
+  }[] = [
     {
-      label: 'With the doctor',
+      key: 'visit.stepCheckIn',
+      label: t('visit.stepCheckIn'),
+      state: stage === 'before' ? 'now' : 'done',
+    },
+    {
+      key: 'visit.stepWithDoctor',
+      label: t('visit.stepWithDoctor'),
       state: stage === 'during' ? 'now' : stage === 'after' ? 'done' : 'later',
     },
-    { label: 'Check out', state: stage === 'after' ? 'done' : 'later' },
-    { label: 'Report', state: stage === 'after' ? 'now' : 'later' },
+    {
+      key: 'visit.stepCheckOut',
+      label: t('visit.stepCheckOut'),
+      state: stage === 'after' ? 'done' : 'later',
+    },
+    {
+      key: 'visit.stepReport',
+      label: t('visit.stepReport'),
+      state: stage === 'after' ? 'now' : 'later',
+    },
   ];
 
   // Only the action the rep is here for is pinned: the stage's own step, or the report after it.
@@ -253,11 +371,11 @@ export const VisitScreen = ({
     actionLabel === null && !(stage === 'after' && onWriteReport !== undefined) ? null : (
       <>
         {stage === 'after' && onWriteReport !== undefined ? (
-          <Button label="Write your report" onPress={onWriteReport} />
+          <Button label={t('visit.writeReport')} onPress={onWriteReport} />
         ) : null}
         {actionLabel === null ? null : (
           <Button
-            label={busy ? 'Finding your position…' : actionLabel}
+            label={busy ? t('visit.findingPosition') : actionLabel}
             loading={busy}
             onPress={onAction}
           />
@@ -274,7 +392,7 @@ export const VisitScreen = ({
   ].some(Boolean);
 
   return (
-    <Screen scrollable footer={footer}>
+    <Screen scrollable footer={footer} {...back}>
       {recording === undefined ? null : (
         <>
           {/*
@@ -284,14 +402,18 @@ export const VisitScreen = ({
           <RecordingIndicator elapsed={recording.elapsed} state="recording" />
           <Label muted>{recording.label}</Label>
           <View style={styles.foot}>
-            <Button label="Stop recording" onPress={recording.onStop} variant="secondary" />
+            <Button
+              label={t('visit.stopRecording')}
+              onPress={recording.onStop}
+              variant="secondary"
+            />
             {/*
               `destructive`, and §05 puts a destructive control outside the reach
               zone deliberately — a resting thumb must not be able to destroy a
               recording the doctor agreed to.
             */}
             <Button
-              label="Stop and delete it"
+              label={t('visit.stopAndDelete')}
               onPress={recording.onStopAndDelete}
               variant="destructive"
             />
@@ -304,23 +426,30 @@ export const VisitScreen = ({
         {clinic === null ? null : <Secondary>{clinic}</Secondary>}
         {unplanned === null ? null : (
           <>
-            <Badge label="Unplanned" tone="info" />
+            <Badge label={t('visit.unplanned')} tone="info" />
             <Secondary>{unplanned.reason}</Secondary>
           </>
         )}
         {onOpenDirections === undefined ? null : (
           <View style={styles.directions}>
-            <Button label="Directions" onPress={onOpenDirections} variant="quiet" />
+            <Button label={t('visit.directions')} onPress={onOpenDirections} variant="quiet" />
           </View>
         )}
       </View>
 
-      <View accessibilityLabel="Visit progress" accessible style={styles.steps}>
+      <View accessibilityLabel={t('visit.progress')} style={styles.steps}>
         {steps.map((step) => (
-          <Badge
-            key={step.label}
-            label={step.state === 'done' ? `✓ ${step.label}` : step.label}
-            tone={step.state === 'done' ? 'success' : step.state === 'now' ? 'info' : 'neutral'}
+          <StepCell
+            key={step.key}
+            label={step.label}
+            spoken={
+              step.state === 'done'
+                ? t('visit.stepDone', { step: step.label })
+                : step.state === 'now'
+                  ? t('visit.stepNow', { step: step.label })
+                  : step.label
+            }
+            state={step.state}
           />
         ))}
       </View>
@@ -329,14 +458,23 @@ export const VisitScreen = ({
         <Banner detail={actionFailure.detail} title={actionFailure.title} tone="critical" />
       )}
 
-      {loading ? <Spinner label="Getting this visit" /> : null}
+      {loading ? <Spinner label={t('visit.loading')} /> : null}
 
       <Card tone={stage === 'during' ? 'hero' : 'default'}>
-        <Label muted>{(stagePending ? STAGE_WORDS_PENDING : STAGE_WORDS)[stage]}</Label>
+        {/*
+          `FE-W190`. One line where there were two saying the same thing: a confirmed check-in with
+          its time reads "Checked in 15:29", not "You are checked in" above it. The stage's own
+          words stay whenever they add something — "waiting to send", "Visit finished", or a
+          check-in whose time has not arrived yet.
+        */}
+        {stage === 'during' && !stagePending && startedLabel !== null ? null : (
+          <Label muted>{t((stagePending ? STAGE_WORDS_PENDING : STAGE_WORDS)[stage])}</Label>
+        )}
         {durationLabel === null ? null : (
           <View style={styles.figureRow}>
             <Figure>{durationLabel}</Figure>
-            <Label muted>with the doctor</Label>
+            {/* `FE-W178`. A figure's caption is `Secondary`, as Today's "visits attended" is. */}
+            <Secondary>{t('visit.withTheDoctor')}</Secondary>
           </View>
         )}
         {startedLabel === null ? null : <BodyText>{startedLabel}</BodyText>}
@@ -355,19 +493,14 @@ export const VisitScreen = ({
         <Card>
           <BodyText>
             {/* W2-B B1. "He agreed" assumed the doctor's gender; the app does not know it. */}
-            {consent.outcome === 'declined'
-              ? 'Noted — no recording.'
-              : 'The doctor agreed to a recording.'}
+            {consent.outcome === 'declined' ? t('visit.consentDeclined') : t('visit.consentAgreed')}
           </BodyText>
           {consent.answeredLabel == null ? null : <Label muted>{consent.answeredLabel}</Label>}
-          {consent.outcome === 'consented' ? (
-            // The MR must not be left believing audio is being captured. Recording
-            // is FE-W4 and nothing in this build can capture it; a screen that
-            // implied otherwise would have them speak as though it were.
-            <Label muted>
-              Recording is not in this build, so nothing is being captured. The doctor’s answer is
-              on the record either way.
-            </Label>
+          {consent.outcome === 'consented' && recording === undefined && recordingOff ? (
+            // The MR must not be left believing audio is being captured. `FE-W186`: said as what
+            // it is, recording switched off, and not as "not in this build", which is the
+            // developers' word for it. A sentence, so `Secondary` (`FE-W189`).
+            <Secondary>{t('visit.recordingSwitchedOff')}</Secondary>
           ) : null}
         </Card>
       )}
@@ -392,40 +525,58 @@ export const VisitScreen = ({
           */
           title={
             (blockedWrite ?? (stage === 'before' ? 'check-in' : 'check-out')) === 'check-in'
-              ? 'This check-in cannot be sent yet'
-              : 'This check-out cannot be sent yet'
+              ? t('visit.checkInNotSent')
+              : t('visit.checkOutNotSent')
           }
           tone="attention"
         />
       )}
 
       {recordingNotice === null ? null : (
-        <Banner detail={recordingNotice} title="The recording" tone="info" />
+        <Banner detail={recordingNotice} title={t('visit.recordingTitle')} tone="info" />
       )}
       {stage === 'during' && recording === undefined && recordingBlockedReason !== null ? (
         // The reason instead of the control. §02 keeps `attention` for a
         // condition with a remedy — a doctor who said no is not a failure.
-        <Banner detail={recordingBlockedReason} title="No recording can be made" tone="attention" />
+        <Banner detail={recordingBlockedReason} title={t('visit.noRecording')} tone="attention" />
       ) : null}
 
       {duringActions ? (
         <View style={styles.foot}>
-          <Heading>{stage === 'during' ? 'During this visit' : 'After this visit'}</Heading>
+          <Heading>
+            {stage === 'during' ? t('visit.duringThisVisit') : t('visit.afterThisVisit')}
+          </Heading>
           {stage === 'during' && consent?.outcome === 'unasked' && consent.onAsk !== undefined ? (
-            <Button label="Ask about recording" onPress={consent.onAsk} variant="secondary" />
+            <Button
+              label={t('visit.askAboutRecording')}
+              onPress={consent.onAsk}
+              variant="secondary"
+            />
           ) : null}
           {stage === 'during' && recording === undefined && onStartRecording !== undefined ? (
-            <Button label="Record this visit" onPress={onStartRecording} variant="secondary" />
+            <Button
+              label={t('visit.recordThisVisit')}
+              onPress={onStartRecording}
+              variant="secondary"
+            />
           ) : null}
           {stage === 'during' && onRecordSamples !== undefined ? (
-            <Button label="Record what you left" onPress={onRecordSamples} variant="secondary" />
+            <Button
+              label={t('visit.recordSamples')}
+              onPress={onRecordSamples}
+              variant="secondary"
+            />
           ) : null}
           {stage !== 'before' && onRecordVoiceNote !== undefined ? (
-            <Button label="Record a voice note" onPress={onRecordVoiceNote} variant="secondary" />
+            <Button
+              label={t('visit.recordVoiceNote')}
+              onPress={onRecordVoiceNote}
+              variant="secondary"
+            />
           ) : null}
           {stage !== 'before' && onFlagAdverseEvent !== undefined ? (
             <Button
-              label="Flag a possible side effect"
+              label={t('visit.flagSideEffect')}
               onPress={onFlagAdverseEvent}
               variant="secondary"
             />

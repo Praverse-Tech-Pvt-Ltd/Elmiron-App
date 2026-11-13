@@ -12,8 +12,11 @@ jest.mock('../live-connection', () => ({ appLiveConnection: () => ({}) }));
 jest.mock('../sync/pulled-store', () => ({
   usePulledStore: () => ({ zone: { timeZone: 'Asia/Kolkata', source: 'territory' } }),
 }));
+const mockBack = jest.fn();
 jest.mock('expo-router', () => ({
   Redirect: ({ href }: { href: string }) => mockBodyText({ children: `redirect:${href}` }),
+  // `FE-W188`: the screen draws a Back control, which reads the router.
+  useRouter: () => ({ back: mockBack, canGoBack: () => true, replace: jest.fn() }),
 }));
 
 import ProductQaRoute, { ProductQa } from '../../app/product-qa';
@@ -83,5 +86,11 @@ describe('app/product-qa.tsx — W2-C C', () => {
   it('with the flag OFF (the default), the route goes to Today', async () => {
     await render(<ProductQaRoute />);
     expect(screen.getByText('redirect:/home')).toBeTruthy();
+  });
+
+  it('FE-W188: opened from Me, it draws its own Back control', async () => {
+    await render(<ProductQa transport={jest.fn() as never} />);
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+    expect(mockBack).toHaveBeenCalledTimes(1);
   });
 });

@@ -167,3 +167,28 @@ describe('FE-W44 — the queue could not be read', () => {
     });
   });
 });
+
+describe('FE-W136 — audio held for WiFi', () => {
+  const note = item({ id: '15151515-1515-4515-8515-151515151511', entity: 'voice_note' });
+  const recording = item({ id: '15151515-1515-4515-8515-151515151512', entity: 'recording' });
+
+  it('says "waiting for WiFi" when held audio is all that is waiting', () => {
+    const state = { ...emptyQueue, items: [note, recording] };
+    expect(indicatorStateFor({ kind: 'loaded', state }, IST, 2)).toEqual({
+      kind: 'wifi',
+      count: 2,
+    });
+  });
+
+  it('stays "waiting" when other work is waiting too, and when nothing is held', () => {
+    const mixed = { ...emptyQueue, items: [note, item()] };
+    expect(indicatorStateFor({ kind: 'loaded', state: mixed }, IST, 1).kind).toBe('waiting');
+    const alone = { ...emptyQueue, items: [note] };
+    expect(indicatorStateFor({ kind: 'loaded', state: alone }, IST).kind).toBe('waiting');
+  });
+
+  it('a failure still outranks it', () => {
+    const state = { ...emptyQueue, items: [note, item({ status: 'failed', attemptCount: 2 })] };
+    expect(indicatorStateFor({ kind: 'loaded', state }, IST, 1).kind).toBe('failed');
+  });
+});

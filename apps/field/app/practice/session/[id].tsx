@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
-import { PracticeSessionScreen, Screen } from '@fieldforce/ui';
-import type { AiAllowanceState, PracticeNotice } from '@fieldforce/ui';
-import { practiceEnabled } from '../../../src/features';
+import { PracticeSessionScreen, Screen, t, useLanguage } from '@fieldforce/ui';
+import type { AiAllowanceState, PracticeNotice, PracticeVoice } from '@fieldforce/ui';
+import { practiceEnabled, practiceVoiceEnabled } from '../../../src/features';
 import type { PracticeSession, TurnRequestBody } from '../../../src/practice/contract';
 import {
   coachOutcome,
@@ -13,7 +13,12 @@ import {
   turnRequestBody,
 } from '../../../src/practice/flow';
 import { practiceBackend } from '../../../src/practice/transport';
+import { spokenTurnBody, spokenTurnOutcome } from '../../../src/practice/voice';
+import { useVoiceConversation } from '../../../src/practice/voice-device';
+import type { VoiceNext } from '../../../src/practice/voice-device';
+import { practiceDoctorName } from '../../../src/practice/labels';
 import { failureDetail } from '../../../src/errors/plain';
+import { useBack } from '../../../src/navigation/back';
 
 /**
  * FE-D17 — one AI Doctor practice conversation.
@@ -24,12 +29,45 @@ import { failureDetail } from '../../../src/errors/plain';
  */
 type NoticeKind = 'none' | 'not_available' | 'offline' | 'error';
 
+/** Why the session could not be shown — its words are written at render (`FE-W158`). */
+type Failure = { readonly kind: 'missing' } | { readonly kind: 'load'; readonly error: unknown };
+
+const failureText = (failure: Failure): { title: string; detail: string } =>
+  failure.kind === 'missing'
+    ? {
+        title: t('practice.sessionUnavailableTitle'),
+        detail: t('practice.sessionUnavailableDetail'),
+      }
+    : { title: t('practice.couldNotOpenSession'), detail: failureDetail(failure.error) };
+
+/**
+ * `FE-W163`. The microphone loop exists only in a build with voice practice: the recorder is created
+ * here, so a build without it never opens one.
+ */
+const VoiceBinding = ({
+  send,
+  children,
+}: {
+  readonly send: (base64: string) => Promise<VoiceNext>;
+  readonly children: (voice: PracticeVoice) => ReactNode;
+}): ReactNode => {
+  const conversation = useVoiceConversation(send);
+  return children({
+    phase: conversation.phase,
+    pause: conversation.pause,
+    onStart: conversation.start,
+    onStop: conversation.stop,
+  });
+};
+
 const PracticeSessionView = (): ReactNode => {
+  useLanguage();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const back = useBack();
   const [session, setSession] = useState<PracticeSession | null>(null);
   const [loading, setLoading] = useState(true);
-  const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -47,10 +85,7 @@ const PracticeSessionView = (): ReactNode => {
   const reload = useCallback(async (): Promise<void> => {
     const found = await practiceBackend.readSession(id);
     if (found === null) {
-      setFailure({
-        title: 'This practice session is not available to you',
-        detail: 'It does not exist, or it is not one of yours.',
-      });
+      setFailure({ kind: 'missing' });
       return;
     }
     setSession(found);
@@ -59,10 +94,7 @@ const PracticeSessionView = (): ReactNode => {
   useEffect(() => {
     void reload()
       .catch((error: unknown) => {
-        setFailure({
-          title: 'Could not open the practice session',
-          detail: failureDetail(error),
-        });
+        setFailure({ kind: 'load', error });
       })
       .finally(() => {
         setLoading(false);
@@ -104,6 +136,46 @@ const PracticeSessionView = (): ReactNode => {
       .finally(() => {
         setSending(false);
       });
+  };
+
+  /**
+   * `FE-W163`. One spoken turn: the gateway hears it and answers. The heard words are stored as the
+   * turn, so the session is re-read and the transcript appears as the rep's turn, numbered.
+   */
+  const sendSpoken = async (base64: string): Promise<VoiceNext> => {
+    if (session === null) return { next: 'pause', pause: 'error' };
+    if (allowance.kind === 'at_limit') return { next: 'pause', pause: 'at_limit' };
+    setNotice('none');
+    setRefusal(null);
+    const outcome = await practiceBackend
+      .spokenTurn(spokenTurnBody(session, base64))
+      .then(spokenTurnOutcome, outcomeFromThrown);
+    switch (outcome.kind) {
+      case 'replied':
+        await reload().catch(() => undefined);
+        return outcome.audio === null
+          ? { next: 'listen' }
+          : { next: 'speak', audio: outcome.audio };
+      case 'no_speech':
+        return { next: 'listen' };
+      case 'refused':
+        setRefusal(outcome.message);
+        return { next: 'pause', pause: 'refused' };
+      case 'not_heard':
+        return { next: 'pause', pause: 'not_heard' };
+      case 'voice_unavailable':
+        return { next: 'pause', pause: 'no_voice' };
+      case 'not_available':
+        setNotice('not_available');
+        return { next: 'pause', pause: 'no_voice' };
+      case 'at_limit':
+        setAllowance({ kind: 'at_limit', resetLabel: null });
+        return { next: 'pause', pause: 'at_limit' };
+      case 'offline':
+        return { next: 'pause', pause: 'offline' };
+      case 'error':
+        return { next: 'pause', pause: 'error' };
+    }
   };
 
   const endSession = (): void => {
@@ -164,13 +236,22 @@ const PracticeSessionView = (): ReactNode => {
             }
           : { kind: notice };
 
-  return (
-    <Screen followLatest scrollable>
+  /**
+   * `FE-W193`. Follow the newest turn only once there IS a turn. `Screen` starts a conversation at
+   * the bottom, so a session with no turns yet opened scrolled past its own header — the title, the
+   * aim and the objection — to the empty box at the end (QA screenshots 66–67). With a first turn the
+   * conversation follows as before.
+   */
+  const following = (session?.turns.length ?? 0) > 0;
+
+  // `FE-W188`. A pushed screen draws its own way back.
+  const sessionScreen = (voice: PracticeVoice | null): ReactNode => (
+    <Screen followLatest={following} onBack={back} scrollable>
       <PracticeSessionScreen
         allowance={allowance}
         busy={busy}
         draft={draft}
-        failure={failure}
+        failure={failure === null ? null : failureText(failure)}
         loading={loading}
         notice={screenNotice}
         objection={session?.objection ?? ''}
@@ -186,13 +267,20 @@ const PracticeSessionView = (): ReactNode => {
           sendTurn(body);
         }}
         personaLine={session?.scenarioTitle ?? ''}
-        personaName={session?.personaDisplayName ?? ''}
+        personaName={practiceDoctorName(session?.personaDisplayName ?? '')}
         phase={session?.state === 'ended' ? 'ended' : 'open'}
         sample={false}
         sending={sending}
         turns={session?.turns ?? []}
+        voice={voice}
       />
     </Screen>
+  );
+
+  return practiceVoiceEnabled ? (
+    <VoiceBinding send={sendSpoken}>{sessionScreen}</VoiceBinding>
+  ) : (
+    sessionScreen(null)
   );
 };
 

@@ -14,6 +14,8 @@ import {
 import { SessionProvider } from '../src/session';
 import { AuthGate } from '../src/auth-gate';
 import { OutboxFlusher } from '../src/sync/flusher';
+import { bindUploadDevice } from '../src/sync/upload-conditions';
+import { deviceUpload } from '../src/sync/upload-conditions-device';
 import { PulledStoreProvider } from '../src/sync/pulled-store';
 import { LiveTrackingProvider } from '../src/tracking/tracker';
 import { PushProvider } from '../src/push/push-provider';
@@ -21,6 +23,7 @@ import { ZoneCaveatBanner } from '../src/today/ZoneCaveatBanner';
 import { ReduceMotionContext } from '@fieldforce/ui';
 import { tokens } from '@fieldforce/ui-tokens';
 import { useReduceMotion } from '../src/reduce-motion';
+import { loadAppLanguage } from '../src/settings/language-pref';
 
 /**
  * The four faces Phase 1's scale actually asks for.
@@ -52,6 +55,13 @@ const FACES = {
  * short enough that a hang is a blink rather than a broken app.
  */
 const FONT_DEADLINE_MS = 3_000;
+
+/**
+ * `FE-W135`. The phone's network and the WiFi-only switch, given to the outbox and the screens that
+ * say what is waiting. Bound here, once, because this is the app's root -- as the flusher and the
+ * store are mounted here -- and a binding made on any one screen would leave the others guessing.
+ */
+bindUploadDevice(deviceUpload);
 
 /**
  * `BE-W150` (closed 9 October). There is no start-up gate here any more. FE-D2 2 stopped a release
@@ -99,7 +109,20 @@ function App(): ReactNode {
     };
   }, []);
 
-  if (!fontsLoaded && fontError === null && !waitedLongEnough) return null;
+  /**
+   * `FE-W142`. The phone's chosen language, read before the first paint so a Hindi reader is never
+   * shown a screen of English first. Under the same deadline as the faces: a storage read that
+   * never answers costs a blink, and the app then paints in English (`loadAppLanguage` never
+   * throws; a failed read is English).
+   */
+  const [languageRead, setLanguageRead] = useState(false);
+  useEffect(() => {
+    void loadAppLanguage().finally(() => {
+      setLanguageRead(true);
+    });
+  }, []);
+
+  if (!waitedLongEnough && (!languageRead || (!fontsLoaded && fontError === null))) return null;
 
   return (
     <SafeAreaProvider>

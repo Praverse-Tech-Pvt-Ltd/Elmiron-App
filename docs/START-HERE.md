@@ -335,7 +335,8 @@ work is on any critical path.**
 * **Production access and credentials** — Supabase, AWS, the release key: the operator and the AWS
   account owner. None of them belong in the repository, a log or a chat.
 * **The patient app** — a separate project.
-* **iOS** — out of scope; the app is Android only (`apps/field/app.json`).
+* **iOS** — the code is prepared (`FE-W161`) but no iOS build exists: it needs an Apple Developer
+  account and an Expo account. What is ready and what the day needs: `docs/operator/ios.md`.
 * **Design** — the design system lives in `packages/ui` and `docs/design/`.
 
 **Who to ask:** the operator for decisions and inputs (`docs/operator-inputs.md` lists each open one);

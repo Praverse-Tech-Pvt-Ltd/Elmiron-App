@@ -131,9 +131,11 @@ begin
   if (v_status ->> 'dueAt') is null then
     raise exception 'MR-52 D4: the status function reports no deadline';
   end if;
-  -- A deadline in the past would mean this migration ships the alarm already ringing.
-  if (v_status ->> 'overdue')::boolean then
-    raise exception 'MR-52 D4: the proposed deadline is already past: %', v_status;
-  end if;
+  -- BE-W218 (11 Nov 2026). This block once also refused to apply when the deadline was already
+  -- past. That compared the WALL CLOCK at apply time, so after 2026-10-31 the migration could not
+  -- be applied to an empty database at all: `pnpm db:reset`, CI's database job and a first
+  -- production deploy all died here. A migration must replay the same way on any day. Whether
+  -- the deadline is past is the ALARM's job -- `be_w106_decision_status()` above and CI's
+  -- `check:decision-debt` -- and it still rings there.
 end;
 $$;

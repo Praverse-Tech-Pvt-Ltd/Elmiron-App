@@ -8,10 +8,16 @@ import { browserClient } from './supabase';
 import { Body, Card, Heading, Label, MissingNote } from './ui';
 import { assignRefusal, courseOptionLabel } from './course-assignment-text';
 import { btn } from './theme-css';
+import { dayLabel } from './india-date';
 
 /**
  * W2-G B — the client half of `/learning`: pick a course and a person, assign. The write is the
  * `assign_course` RPC and nothing else; what it refuses is said in words, never as a failed form.
+ *
+ * `FE-W171`: the person picker starts empty ("Choose a person…") with reps first, so nobody is
+ * assigned a course because their name happened to sort to the top; the due date is a date picker,
+ * which submits the same `YYYY-MM-DD` the free-text box asked people to type; the Due column reads
+ * "20 Oct 2026".
  */
 export interface AssignableCourse {
   readonly id: string;
@@ -47,7 +53,9 @@ export const CourseAssignment = ({
 }): ReactNode => {
   const router = useRouter();
   const [courseId, setCourseId] = useState(courses[0]?.id ?? '');
-  const [personId, setPersonId] = useState(people[0]?.id ?? '');
+  const [personId, setPersonId] = useState('');
+  const reps = people.filter((p) => p.role === 'mr');
+  const others = people.filter((p) => p.role !== 'mr');
   const [dueOn, setDueOn] = useState('');
   const [state, setState] = useState<State>({ kind: 'idle' });
 
@@ -108,24 +116,37 @@ export const CourseAssignment = ({
             setPersonId(e.target.value);
           }}
         >
-          {people.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
+          <option value="">Choose a person…</option>
+          {reps.length === 0 ? null : (
+            <optgroup label="Reps">
+              {reps.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {others.length === 0 ? null : (
+            <optgroup label="Managers and admins">
+              {others.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
 
-        <Label>Due date (optional, YYYY-MM-DD)</Label>
+        <Label>Due date (optional)</Label>
         <input
           aria-label="Due date"
+          type="date"
           value={dueOn}
           onChange={(e) => {
             setDueOn(e.target.value.trim());
           }}
         />
-        {dueValid ? null : (
-          <MissingNote>Write the date as YYYY-MM-DD, or leave it empty.</MissingNote>
-        )}
+        {dueValid ? null : <MissingNote>Choose a date, or leave it empty.</MissingNote>}
 
         {state.kind === 'done' ? <Body>{state.message}</Body> : null}
         {state.kind === 'refused' ? (
@@ -155,7 +176,7 @@ export const CourseAssignment = ({
                 <tr key={row.id}>
                   <td>{row.course}</td>
                   <td>{row.person}</td>
-                  <td className="ff-nowrap">{row.dueOn ?? '—'}</td>
+                  <td className="ff-nowrap">{row.dueOn === null ? '—' : dayLabel(row.dueOn)}</td>
                 </tr>
               ))}
             </tbody>

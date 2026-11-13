@@ -9,6 +9,7 @@ import type {
   PracticeSession,
   PracticeSessionSummary,
   StartSessionResponse,
+  SpokenTurnBody,
   TurnRequestBody,
 } from './contract';
 
@@ -30,6 +31,8 @@ export interface PracticeBackend {
   listMySessions(): Promise<readonly PracticeSessionSummary[]>;
   /** POST to the `ai-gateway`, feature `ai_doctor`. */
   turn(body: TurnRequestBody): Promise<GatewayResponse>;
+  /** `FE-W163`. POST to the `ai-gateway`, feature `ai_doctor`, with the rep's recording. */
+  spokenTurn(body: SpokenTurnBody): Promise<GatewayResponse>;
   end(sessionId: string): Promise<void>;
   /** POST to the `ai-gateway`, feature `ai_coach`. */
   analyse(body: CoachRequestBody): Promise<GatewayResponse>;

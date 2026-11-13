@@ -24,6 +24,8 @@ jest.mock('../sync/push-client', () => ({
 const mockStore = jest.fn();
 jest.mock('../sync/pulled-store', () => ({ usePulledStore: () => mockStore() }));
 jest.mock('expo-router', () => ({
+  // `FE-W188`. The screen's Back control reads the router; nothing here presses it.
+  useRouter: () => ({ back: jest.fn(), canGoBack: () => true, replace: jest.fn() }),
   useLocalSearchParams: () => ({ visitId: '44444444-4444-4444-8444-444444444401' }),
 }));
 

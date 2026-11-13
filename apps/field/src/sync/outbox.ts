@@ -31,6 +31,9 @@ import { recordingUploadFrom, voiceNoteUploadFrom } from './voice-note-upload';
 import type { RecordingUpload, VoiceNoteUpload } from './voice-note-upload';
 import { syncQueueReducer } from './reducer';
 import type { SyncQueueState } from './reducer';
+import { countsAsMobileData, deviceUploadConditions, heldForWifi } from './upload-conditions';
+import type { UploadConditions, UploadSnapshot } from './upload-conditions';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * Where the outbox keeps its state.
@@ -61,6 +64,28 @@ export interface QueuePersistence {
 export const devicePersistence: QueuePersistence = {
   read: loadQueueState,
   write: (state) => asyncStorageQueueStore.save(state),
+};
+
+/**
+ * `FE-W209`. **One read-then-write on a queue at a time.**
+ *
+ * Every writer here reads the whole queue, changes it and writes the whole queue back. Two of them
+ * interleaved lose a row: a flush read the queue, spent seconds sending, and wrote its copy back --
+ * over a voice note the rep had saved in between. The audio file stayed on the phone with no queue
+ * row, so nothing would ever send it. `FE-W135` made that easy to hit: every recording saved off
+ * WiFi is now queued at once, and a flush also starts whenever the phone joins WiFi.
+ *
+ * Keyed by the store, so a test's in-memory queue and the device's never wait on each other. A
+ * failure inside one section does not poison the next.
+ */
+const queueLocks = new WeakMap<QueuePersistence, Promise<unknown>>();
+const withQueueLock = <T>(store: QueuePersistence, run: () => Promise<T>): Promise<T> => {
+  const next = (queueLocks.get(store) ?? Promise.resolve()).then(run, run);
+  queueLocks.set(
+    store,
+    next.catch(() => undefined),
+  );
+  return next;
 };
 
 /**
@@ -119,8 +144,14 @@ export type SendOutcome =
        */
       readonly detail: string | null;
     }
-  /** No answer. The work is on disk and will go later. */
-  | { readonly kind: 'queued' }
+  /**
+   * No answer. The work is on disk and will go later.
+   *
+   * `FE-W135`. `waitingForWifi` when it was not even TRIED: it is audio, "Send audio on WiFi only"
+   * is on, and the phone is not on WiFi. Then "when you have signal" is the wrong promise -- it goes
+   * when the phone is on WiFi, or when the MR sends it from the queue screen.
+   */
+  | { readonly kind: 'queued'; readonly waitingForWifi?: true }
   /**
    * `FE-W44`. The server did not answer AND the queue could not be read, so the work is
    * **not** on disk and will **not** go later. Separate from `queued` because they are
@@ -400,9 +431,18 @@ export const sendOrQueue = async (
   send: () => Promise<unknown>,
   item: SyncQueueItem,
   store: QueuePersistence = devicePersistence,
+  conditions: UploadConditions = deviceUploadConditions,
 ): Promise<SendOutcome> => {
+  const snapshot = await conditions.read();
+  if (heldForWifi(item.entity, snapshot)) {
+    // `FE-W135`. Not attempted, so not a failure and not a retry: on disk, where the flush will
+    // send it once the phone is on WiFi.
+    const queued = await enqueueFirst(item, store);
+    return queued.kind === 'queued' ? { kind: 'queued', waitingForWifi: true } : queued;
+  }
   try {
     const response = await send();
+    await countUse(conditions, snapshot, response);
     return { kind: 'sent', warnings: serverWarnings(response) };
   } catch (error: unknown) {
     // **Both refusal classes, and MR-24 found out the expensive way what happens with
@@ -434,16 +474,11 @@ export const sendOrQueue = async (
       };
     }
 
-    const load = await store.read();
-    if (load.kind === 'unreadable') {
-      // `FE-W44`. Writing here would replace whatever is on disk with a queue holding only
-      // this item. The work is not queued, and saying so is the only honest answer — a
-      // `queued` verdict would tell the MR their write is safe on a device that just lost
-      // the rest of them.
-      return { kind: 'queue_unreadable' };
-    }
-    await store.write(syncQueueReducer(load.state, { type: 'enqueued', item }));
-    return { kind: 'queued' };
+    // `FE-W44`. An unreadable queue is never written over: that would replace whatever is on
+    // disk with a queue holding only this item. The work is not queued, and saying so is the only
+    // honest answer — a `queued` verdict would tell the MR their write is safe on a device that
+    // just lost the rest of them.
+    return enqueueFirst(item, store);
   }
 };
 
@@ -459,10 +494,12 @@ export const enqueueFirst = async (
   item: SyncQueueItem,
   store: QueuePersistence = devicePersistence,
 ): Promise<{ readonly kind: 'queued' } | { readonly kind: 'queue_unreadable' }> => {
-  const load = await store.read();
-  if (load.kind === 'unreadable') return { kind: 'queue_unreadable' };
-  await store.write(syncQueueReducer(load.state, { type: 'enqueued', item }));
-  return { kind: 'queued' };
+  return withQueueLock(store, async () => {
+    const load = await store.read();
+    if (load.kind === 'unreadable') return { kind: 'queue_unreadable' } as const;
+    await store.write(syncQueueReducer(load.state, { type: 'enqueued', item }));
+    return { kind: 'queued' } as const;
+  });
 };
 
 /**
@@ -477,6 +514,25 @@ const serverReceivedAt = (response: unknown): string | null => {
   if (typeof response !== 'object' || response === null) return null;
   const value = (response as { receivedAt?: unknown }).receivedAt;
   return typeof value === 'string' ? value : null;
+};
+
+/**
+ * `FE-W137`. Count an accepted send toward the month's mobile-data uploads, when the phone was not
+ * on WiFi as it went. The bytes are the sender's own figure (`PushAccepted.bytesSent`) and the month
+ * is the SERVER's (`receivedAt`); a response carrying neither counts nothing. Never throws -- a
+ * count is a note, and it must not cost the verdict.
+ */
+const countUse = async (
+  conditions: UploadConditions,
+  snapshot: UploadSnapshot,
+  response: unknown,
+): Promise<void> => {
+  if (!countsAsMobileData(snapshot.connection)) return;
+  if (typeof response !== 'object' || response === null) return;
+  const bytes = (response as { bytesSent?: unknown }).bytesSent;
+  const serverTime = serverReceivedAt(response);
+  if (typeof bytes !== 'number' || bytes <= 0 || serverTime === null) return;
+  await conditions.recordUse({ bytes, serverTime }).catch(() => undefined);
 };
 
 /**
@@ -555,6 +611,12 @@ export interface FlushResult {
    * previous user's next flush resends whatever this one did not record.
    */
   readonly ownerChanged?: boolean;
+  /**
+   * `FE-W135`. Audio left on the phone, untried, because "Send audio on WiFi only" is on and the
+   * phone was not on WiFi. Present only when there was some. Their attempt counts are untouched: a
+   * recording waiting for WiFi has not failed, and must never drift toward "Still trying".
+   */
+  readonly heldForWifi?: number;
 }
 
 /**
@@ -564,10 +626,37 @@ export interface FlushResult {
  * rest, because the reducer already treats each item's verdict as isolated, and an
  * MR whose second check-in is refused should still have their third one sent.
  */
-export const flushOutbox = async (
+export const flushOutbox = (
   client: OutboxWriteClient,
   store: QueuePersistence = devicePersistence,
   owner: () => string | null = queueOwner,
+  conditions: UploadConditions = deviceUploadConditions,
+): Promise<FlushResult> => {
+  // `FE-W209`. **One flush of a queue at a time; a second waits its turn.** A flush starts on
+  // mount, on foreground, on joining WiFi, on "Send now" and after an unplanned visit, and nothing
+  // stopped two running together: both read the same `queued` rows and both sent them. For audio
+  // that was two upload sessions for one recording, and whichever verdict was written last won --
+  // so a row the server had accepted could end up shown as failed. Waiting, not skipping: the
+  // caller that enqueued a row and then flushed must have ITS row looked at, and the run that was
+  // already going read the queue before that row existed.
+  const next = (flushTurns.get(store) ?? Promise.resolve()).then(
+    () => flushOnce(client, store, owner, conditions),
+    () => flushOnce(client, store, owner, conditions),
+  );
+  flushTurns.set(
+    store,
+    next.catch(() => undefined),
+  );
+  return next;
+};
+
+const flushTurns = new WeakMap<QueuePersistence, Promise<unknown>>();
+
+const flushOnce = async (
+  client: OutboxWriteClient,
+  store: QueuePersistence,
+  owner: () => string | null,
+  conditions: UploadConditions,
 ): Promise<FlushResult> => {
   const startedFor = owner();
   const load = await store.read();
@@ -577,8 +666,19 @@ export const flushOutbox = async (
     return { attempted: 0, sent: 0, stillQueued: 0, unreadable: true };
   }
   let state = load.state;
-  const queued = state.items.filter((item) => item.status === 'queued');
-  if (queued.length === 0) return { attempted: 0, sent: 0, stillQueued: 0 };
+  const waiting = state.items.filter((item) => item.status === 'queued');
+  if (waiting.length === 0) return { attempted: 0, sent: 0, stillQueued: 0 };
+
+  // `FE-W135`. Read once per flush: the network the sends below go out on, and the MR's switch.
+  // Held audio is left out BEFORE the batch starts, so it is never marked in flight, never given a
+  // failed attempt, and never reaches the sender -- it is simply not part of this run.
+  const snapshot = await conditions.read();
+  const held = waiting.filter((item) => heldForWifi(item.entity, snapshot)).length;
+  const queued = waiting.filter((item) => !heldForWifi(item.entity, snapshot));
+  if (queued.length === 0) {
+    return { attempted: 0, sent: 0, stillQueued: waiting.length, heldForWifi: held };
+  }
+  const withHeld = held === 0 ? {} : { heldForWifi: held };
 
   state = syncQueueReducer(state, {
     type: 'batch_started',
@@ -604,7 +704,13 @@ export const flushOutbox = async (
     // MR-49 / `FE-W61`. The client sends under whoever is signed in NOW. If that is no longer
     // the user whose queue this is, stop before sending another of their items as someone else.
     if (owner() !== startedFor) {
-      return { attempted: sent, sent, stillQueued: queued.length - sent, ownerChanged: true };
+      return {
+        attempted: sent,
+        sent,
+        stillQueued: queued.length - sent,
+        ownerChanged: true,
+        ...withHeld,
+      };
     }
     if (item.entity !== 'visit' && visitsNotYetAccepted.has(item.entityId)) {
       // Held, with nothing sent. A refused visit is said to be the reason, so the rep acts on the
@@ -612,9 +718,11 @@ export const flushOutbox = async (
       state = syncQueueReducer(state, {
         type: 'attempt_failed',
         ids: [item.id],
+        // `FE-W153`. In the language the app is in when the reason is recorded: it is kept on the
+        // row (`lastError`) and shown as stored.
         error: refusedVisits.has(item.entityId)
-          ? 'Not sent: the server refused the visit this belongs to. See that visit on this screen.'
-          : 'Waiting for its visit to be sent first.',
+          ? t('queue.heldRefusedVisit')
+          : t('queue.heldForVisit'),
       });
       continue;
     }
@@ -634,12 +742,13 @@ export const flushOutbox = async (
           ids: [item.id],
           error:
             plan.blocked === 'unreadable_payload'
-              ? 'This item was written by a different version of the app and cannot be read.'
-              : 'This app cannot send this kind of item yet.',
+              ? t('queue.unreadablePayload')
+              : t('queue.notConvertible'),
         });
         continue;
       }
       const response = await plan.send();
+      await countUse(conditions, snapshot, response);
       // Accepted (or already the server's): what waits on this visit may go.
       if (item.entity === 'visit') visitsNotYetAccepted.delete(item.entityId);
       state = syncQueueReducer(state, {
@@ -731,17 +840,39 @@ export const flushOutbox = async (
       state = syncQueueReducer(state, {
         type: 'attempt_failed',
         ids: [item.id],
-        error: error instanceof Error ? error.message : 'No answer from the server.',
+        error: error instanceof Error ? error.message : t('queue.noAnswer'),
       });
     }
   }
 
-  await store.write(state);
-  return {
-    attempted: queued.length,
-    sent,
-    stillQueued: state.items.filter((item) => item.status === 'queued').length,
-  };
+  // `FE-W209`. **Written back over what is on disk NOW, not over what this run read at its top.**
+  // The sends above took time, and anything enqueued meanwhile is on disk and not in `state`:
+  // writing `state` as it stands would delete it. So, inside the same lock every enqueue takes,
+  // the queue is read again and every row this run never saw is kept.
+  const verdicts = state;
+  return withQueueLock(store, async () => {
+    // MR-49 / `FE-W61`, once more at the last moment: `store` reads and writes the queue of whoever
+    // is signed in NOW. If that changed during the final send, this run's verdicts belong to the
+    // previous user's queue and are not written into the new one. Writes are idempotent by id.
+    if (owner() !== startedFor) {
+      return { attempted: sent, sent, stillQueued: queued.length - sent, ownerChanged: true };
+    }
+    const latest = await store.read();
+    if (latest.kind === 'unreadable') {
+      return { attempted: queued.length, sent, stillQueued: 0, unreadable: true };
+    }
+    const seen = new Set(load.state.items.map((item) => item.id));
+    const merged = latest.state.items
+      .filter((item) => !seen.has(item.id))
+      .reduce((next, item) => syncQueueReducer(next, { type: 'enqueued', item }), verdicts);
+    await store.write(merged);
+    return {
+      attempted: queued.length,
+      sent,
+      stillQueued: merged.items.filter((item) => item.status === 'queued').length,
+      ...withHeld,
+    };
+  });
 };
 
 /**
@@ -951,7 +1082,11 @@ const CreateSampleAndInputRequestFrom = (
 const CreateCallReportRequestFrom = (item: SyncQueueItem): CreateCallReportRequest | null => {
   if (!payloadIs(item, 'call_report')) return null;
   const parsed = CreateCallReportRequestSchema.safeParse(item.payload);
-  return parsed.success ? parsed.data : null;
+  if (!parsed.success) return null;
+  // `FE-W196`. A row queued by a build from before the status was sent has none. It was queued by
+  // "Send the report" all the same — the phone has no other way to make one — so it goes as
+  // `submitted`, not as the server's default `'draft'` that no manager is ever shown.
+  return { ...parsed.data, status: parsed.data.status ?? 'submitted' };
 };
 
 /** The same, for an unplanned visit: parsed by the contract, so it carries its reason or stays queued. */

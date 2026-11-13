@@ -2,18 +2,19 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import uuid from 'expo-modules-core/src/uuid';
-import { AdverseEventScreen, Screen } from '@fieldforce/ui';
+import { AdverseEventScreen, t, useLanguage } from '@fieldforce/ui';
 import {
   adverseEventRequest,
   identifierNote,
   identifiersIn,
 } from '../../src/capture/adverse-event';
 import { createPushClient } from '../../src/sync/push-client';
-import { QUEUE_UNREADABLE } from '../../src/sync/async-storage-store';
+import { queueUnreadable } from '../../src/sync/async-storage-store';
 import { adverseEventQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
-import { failureDetail } from '../../src/errors/plain';
+import { failureDetail, refusedDetail } from '../../src/errors/plain';
+import { useBack } from '../../src/navigation/back';
 
 /**
  * W2-C B / `BE-W159` — the rep flags a possible side effect, from the visit (`BE-C36`).
@@ -23,15 +24,46 @@ import { failureDetail } from '../../src/errors/plain';
  * else: no severity, no assessment, no patient. The decisions live in `src/capture/adverse-event.ts`
  * and `AdverseEventScreen`; this file binds them, exactly as `app/report/[visitId].tsx` does.
  */
+/** A banner's two lines. */
+interface Message {
+  readonly title: string;
+  readonly detail: string;
+}
+
+/**
+ * `FE-W157`. A message read when it is SHOWN, not when the press happened: these sit in state until
+ * the screen closes, and a language chosen in between must still reach them.
+ */
+const live = (title: () => string, detail: () => string): Message => ({
+  get title() {
+    return title();
+  },
+  get detail() {
+    return detail();
+  },
+});
+
+// FE-W157: regulated wording, English-only like consent — not in the catalogue.
+// What the rep is told about their reporting obligation once the flag is sent or kept: these say
+// what the report now is and that nothing more is owed, so they stay in the approved English.
+const SENT_DETAIL = 'The safety team has it. You do not need to do anything else.';
+// FE-W157: regulated wording, English-only like consent — not in the catalogue.
+const SAVED_DETAIL =
+  'Saved on this phone. It will send by itself when you have signal — you do not have to write it again.';
+
 export default function AdverseEventFlag(): ReactNode {
+  // `FE-W157`. Subscribed, so a language change repaints this screen's own lines.
+  useLanguage();
   const { visitId } = useLocalSearchParams<{ visitId: string }>();
+  // `FE-W188`. The screen's Back control.
+  const back = useBack();
   const { store } = usePulledStore();
   const visit = visitsFromStore(store).find((candidate) => candidate.id === visitId);
   const doctor = doctorsFromStore(store).find((candidate) => candidate.id === visit?.doctorId);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
-  const [outcome, setOutcome] = useState<{ title: string; detail: string } | null>(null);
-  const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
+  const [outcome, setOutcome] = useState<Message | null>(null);
+  const [failure, setFailure] = useState<Message | null>(null);
   const withheld = identifierNote(identifiersIn(text));
 
   const send = (): void => {
@@ -56,53 +88,66 @@ export default function AdverseEventFlag(): ReactNode {
     )
       .then((result) => {
         if (result.kind === 'sent') {
-          setOutcome({
-            title: 'Flag sent',
-            detail: 'The safety team has it. You do not need to do anything else.',
-          });
+          setOutcome(
+            live(
+              () => t('adverse.sent'),
+              () => SENT_DETAIL,
+            ),
+          );
           return;
         }
         if (result.kind === 'queued') {
           // Not "sent": the server has not taken it, and the statutory clock has not started.
-          setOutcome({
-            title: 'Flag saved',
-            detail:
-              'Saved on this phone. It will send by itself when you have signal — you do not have to write it again.',
-          });
+          setOutcome(
+            live(
+              () => t('adverse.saved'),
+              () => SAVED_DETAIL,
+            ),
+          );
           return;
         }
         if (result.kind === 'queue_unreadable') {
-          setFailure({ title: 'This was NOT saved', detail: QUEUE_UNREADABLE });
+          setFailure(live(() => t('adverse.notSaved'), queueUnreadable));
           return;
         }
-        setFailure({ title: 'That was refused', detail: result.message });
+        // `FE-W197`. The remedy for the SQLSTATE. This showed the server's own words, which are
+        // written for support and name ids -- not something a rep can act on.
+        const { sqlState } = result;
+        setFailure(
+          live(
+            () => t('adverse.refused'),
+            () => refusedDetail(sqlState),
+          ),
+        );
       })
       .catch((error: unknown) => {
-        setFailure({
-          title: 'Not saved',
-          detail:
-            error instanceof Error
-              ? `${failureDetail(error)} Keep this screen open — the flag is not saved yet.`
-              : 'Keep this screen open — the flag is not saved yet.',
-        });
+        setFailure(
+          live(
+            () => t('adverse.notSavedYet'),
+            () =>
+              error instanceof Error
+                ? `${failureDetail(error)} ${t('adverse.keepOpen')}`
+                : t('adverse.keepOpen'),
+          ),
+        );
       })
       .finally(() => {
         setSending(false);
       });
   };
 
+  // `FE-W190`. `AdverseEventScreen` draws its own `Screen`, so Send can be pinned in its footer.
   return (
-    <Screen scrollable>
-      <AdverseEventScreen
-        doctorName={doctor?.fullName ?? 'This visit'}
-        failure={failure}
-        identifierNote={withheld}
-        onSend={send}
-        onTextChange={setText}
-        outcome={outcome}
-        sending={sending}
-        text={text}
-      />
-    </Screen>
+    <AdverseEventScreen
+      doctorName={doctor?.fullName ?? t('adverse.thisVisit')}
+      failure={failure}
+      identifierNote={withheld}
+      onBack={back}
+      onSend={send}
+      onTextChange={setText}
+      outcome={outcome}
+      sending={sending}
+      text={text}
+    />
   );
 }

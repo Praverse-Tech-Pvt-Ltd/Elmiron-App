@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { ConsentDetailsScreen } from './ConsentDetailsScreen';
 
 const NOTICE = 'I agree that this conversation may be audio recorded.';
@@ -13,7 +14,7 @@ const props = {
     { title: 'Date, time and duration' },
   ],
   notice: NOTICE,
-  noticeLabel: 'Notice v1.2 · English · a1b2c3d4',
+  noticeLabel: 'Notice version 1.2 · English',
   fiduciaryNote: 'Elmiron India Pvt Ltd is the Data Fiduciary for this recording.',
   onBack: (): void => undefined,
 };
@@ -41,7 +42,7 @@ describe('D3 — the legal layer', () => {
     // together they are what lets an audit reconstruct what was agreed to.
     await render(<ConsentDetailsScreen {...props} />);
     expect(screen.getByText(NOTICE)).toBeTruthy();
-    expect(screen.getByText('Notice v1.2 · English · a1b2c3d4')).toBeTruthy();
+    expect(screen.getByText('Notice version 1.2 · English')).toBeTruthy();
   });
 
   it('names the Data Fiduciary and where a complaint goes', async () => {
@@ -58,5 +59,33 @@ describe('D3 — the legal layer', () => {
     expect(screen.queryByText("Yes, that's fine")).toBeNull();
     await fireEvent.press(screen.getByText('Back to the question'));
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * `FE-W198`. Two rules under "Never collected", a gap apart: its own bottom border and the list's
+ * first top border (15 October re-check, screenshot 06b). One rule between rows, everywhere.
+ */
+describe('FE-W198 — one rule between rows', () => {
+  const rowStyle = (text: string): Record<string, unknown> =>
+    Object.assign(
+      {},
+      StyleSheet.flatten(
+        screen.getByText(text).parent?.props['style'] as Parameters<typeof StyleSheet.flatten>[0],
+      ),
+    );
+
+  it('"Never collected" draws no rule below it; the list’s first row draws the one between', async () => {
+    await render(<ConsentDetailsScreen {...props} />);
+    expect(rowStyle('Never collected')['borderBottomWidth']).toBeUndefined();
+    expect(rowStyle('Audio of this conversation')['borderTopWidth']).toBe(1);
+    expect(rowStyle('Audio of this conversation')['borderBottomWidth']).toBeUndefined();
+    // The last row closes the list.
+    expect(rowStyle('Date, time and duration')['borderBottomWidth']).toBe(1);
+  });
+
+  it('with nothing else listed, "Never collected" closes it itself', async () => {
+    await render(<ConsentDetailsScreen {...props} collected={[]} />);
+    expect(rowStyle('Never collected')['borderBottomWidth']).toBe(1);
   });
 });

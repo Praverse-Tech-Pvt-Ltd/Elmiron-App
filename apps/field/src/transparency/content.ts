@@ -1,4 +1,6 @@
-import type { TransparencyEntry } from '@fieldforce/ui';
+import type { TransparencyEntry, TransparencyState } from '@fieldforce/ui';
+import { t } from '@fieldforce/ui/i18n';
+import type { TextKey } from '@fieldforce/ui/i18n';
 
 /**
  * A9 — "Everything, before you ask." The design's structure and voice
@@ -24,9 +26,26 @@ import type { TransparencyEntry } from '@fieldforce/ui';
  * list now says what is recorded.
  *
  * Copy is factually accurate but needs privacy/legal review; no owner named.
+ *
+ * **`FE-W155`. The words are in the catalogue, read when shown.** Each row's `title` and `detail`
+ * are getters, so a row built once (`TRANSPARENCY_ENTRIES`) still reads the language in use.
  */
-export const NEVER_RECORDED =
-  'Your calls, messages, contacts, camera or other apps: this app has no permission to reach them. And nothing in the background: your position is read only at the moment you press check in or check out.';
+const entry = (
+  titleKey: TextKey,
+  detailKey: TextKey,
+  state: TransparencyState,
+): TransparencyEntry => ({
+  get title(): string {
+    return t(titleKey);
+  },
+  get detail(): string {
+    return t(detailKey);
+  },
+  state,
+});
+
+/** The "what we never record" sentence for a build without live tracking. */
+export const neverRecorded = (): string => t('transparency.neverRecorded');
 
 /**
  * `FE-W71`. With live tracking in the build, "nothing in the background" is still true -- there is
@@ -34,54 +53,36 @@ export const NEVER_RECORDED =
  * the rep shares live location, a position is read every few minutes with the app on screen. So the
  * sentence the build shows follows the build, as the recordings row does.
  */
-export const NEVER_RECORDED_WITH_LIVE_TRACKING =
-  'Your calls, messages, contacts, camera or other apps: this app has no permission to reach them. And nothing in the background: your position is read when you press check in or check out, and, only if you agreed to share live location, every few minutes during your working hours while the app is on your screen.';
+export const neverRecordedWithLiveTracking = (): string => t('transparency.neverRecordedLive');
 
 export const neverRecordedFor = (build: { readonly liveTrackingEnabled: boolean }): string =>
-  build.liveTrackingEnabled ? NEVER_RECORDED_WITH_LIVE_TRACKING : NEVER_RECORDED;
+  build.liveTrackingEnabled ? neverRecordedWithLiveTracking() : neverRecorded();
 
 export const transparencyEntries = (build: {
   readonly recordingEnabled: boolean;
   /** `FE-W71`. Absent is off, which is every build that does not set `EXPO_PUBLIC_LIVE_TRACKING`. */
   readonly liveTrackingEnabled?: boolean;
 }): readonly TransparencyEntry[] => [
-  {
-    title: 'Where you are, when you check in or out',
-    detail:
-      'One position each time you press check in or check out, and how far that was from the clinic. Never in the background, never between visits.',
-    state: 'active',
-  },
+  // `FE-W185`. "Never between visits" is false while the rep shares live location, so a build with
+  // live location says only what stays true; the live row below says when else it is read.
+  entry(
+    'transparency.checkInLocation',
+    build.liveTrackingEnabled === true
+      ? 'transparency.checkInLocationDetailLive'
+      : 'transparency.checkInLocationDetail',
+    'active',
+  ),
   ...(build.liveTrackingEnabled === true
-    ? [
-        {
-          title: 'Where you are during working hours — only if you agree',
-          detail:
-            'Only after you accept the live location notice and start sharing for the day, only in your working hours, and only while the app is on your screen: your position about every 5 minutes. Kept 90 days from when your company received it, then deleted. Withdraw any time from Me.',
-          state: 'active' as const,
-        },
-      ]
+    ? [entry('transparency.liveLocation', 'transparency.liveLocationDetail', 'active')]
     : []),
-  {
-    title: 'Which doctors you saw, and when',
-    detail: 'Check-in and check-out times.',
-    state: 'active',
-  },
-  {
-    title: 'Your voice notes',
-    detail:
-      'Only while you hold the button. Marked for deletion 90 days after they reach your company.',
-    state: 'active',
-  },
-  {
-    title: 'Your reports, and what you left',
-    detail: 'The call reports you send and the samples you record, in your words.',
-    state: 'active',
-  },
-  {
-    title: 'Recordings — only if a doctor agrees',
-    detail: 'Only after the doctor agrees on screen, each time.',
-    state: build.recordingEnabled ? 'active' : 'not-yet',
-  },
+  entry('transparency.visits', 'transparency.visitsDetail', 'active'),
+  entry('transparency.voiceNotes', 'transparency.voiceNotesDetail', 'active'),
+  entry('transparency.reports', 'transparency.reportsDetail', 'active'),
+  entry(
+    'transparency.recordings',
+    'transparency.recordingsDetail',
+    build.recordingEnabled ? 'active' : 'not-yet',
+  ),
 ];
 
 /** This build: consultation recording is off unless the build sets it (`config.ts:34`). */

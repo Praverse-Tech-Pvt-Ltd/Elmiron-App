@@ -7,7 +7,10 @@ import {
 } from '@fieldforce/core';
 import type { TeamRep, TrackingTrail } from '@fieldforce/core';
 import { signedIn } from '../../lib/session';
-import { Body, Card, Heading, MissingNote, Pill, Title } from '../../lib/ui';
+import { Body, Card, Heading, MissingNote, Page, PageHeader, Pill, RoleNote } from '../../lib/ui';
+import { dayLabel } from '../../lib/india-date';
+import { timeZoneLabel } from '../../lib/labels';
+import { plural } from '../../lib/plural';
 import { TrackingSwitch } from '../../lib/tracking-switch';
 import {
   accuracyLabel,
@@ -31,8 +34,13 @@ import {
  *
  * `FE-W87`: when `NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY` is set, the chosen rep's newest position is also
  * shown in a Google Maps Embed frame (no library, no new dependency). Unset, nothing changes.
+ *
+ * `FE-W165`/`FE-W166`: "on"/"off" in sentence case, the built-in draft named as that, days as
+ * "14 Oct 2026", the rep's zone as "India time (IST)", and counts that agree ("1 position").
  */
 export const dynamic = 'force-dynamic';
+
+export const metadata = { title: 'Live location' };
 
 const MapLink = ({ latitude, longitude }: { latitude: number; longitude: number }): ReactNode => (
   <a href={googleMapsUrl(latitude, longitude)} rel="noopener noreferrer" target="_blank">
@@ -77,14 +85,15 @@ const Trail = ({ trail }: { trail: TrackingTrail }): ReactNode => {
   return (
     <Card>
       <Heading>
-        {trail.fullName} — {trail.day}
+        {trail.fullName} — {dayLabel(trail.day)}
       </Heading>
       {newest === undefined ? null : (
         <EmbeddedMap latitude={newest.latitude} longitude={newest.longitude} />
       )}
       <Body muted>
-        Every position kept for this rep on {trail.day}, oldest first, on the rep’s clock (
-        {trail.timeZone}). Positions are deleted 90 days after the server received them.
+        Every position kept for this rep on {dayLabel(trail.day)}, oldest first, on the rep’s clock
+        ({timeZoneLabel(trail.timeZone)}). Positions are deleted 90 days after the server received
+        them.
       </Body>
       {trail.points.length === 0 ? (
         <MissingNote tone="info">No position was kept for this rep on this day.</MissingNote>
@@ -132,20 +141,19 @@ export default async function Tracking({
   }
 
   const header = (
-    <div className="ff-page-header-text">
-      <Title>Live location</Title>
+    <PageHeader title="Live location">
       <Body muted>
         Where your reps were, during their working hours, after each accepted the live location
         notice and started sharing for the day. The newest position of each rep you may see, and
         today’s positions for the rep you choose.
       </Body>
-    </div>
+    </PageHeader>
   );
   const page = (children: ReactNode): ReactNode => (
-    <div className="ff-page ff-page-medium">
+    <Page>
       {header}
       {children}
-    </div>
+    </Page>
   );
 
   const overviewResult = await session.db.rpc(LIVE_TRACKING_RPC.overview);
@@ -172,16 +180,16 @@ export default async function Tracking({
           noticeIsDraft={overview.notice?.isDraft ?? true}
         />
       ) : (
-        <MissingNote tone={overview.companyEnabled ? 'info' : 'attention'}>
-          Live location is {overview.companyEnabled ? 'ON' : 'OFF'} for your company. Only an admin
+        <RoleNote>
+          Live location is {overview.companyEnabled ? 'on' : 'off'} for your company. Only an admin
           changes it.
-        </MissingNote>
+        </RoleNote>
       )}
 
       {overview.notice?.isDraft === true ? (
         <MissingNote>
-          The notice your reps accept is the engineering DRAFT (“{overview.notice.versionLabel}”),
-          shown to them labelled as a draft. Your company has not loaded and approved its own.
+          Your reps are shown the built-in draft notice (“{overview.notice.versionLabel}”), marked
+          as a draft: your company has not yet loaded and approved its own.
         </MissingNote>
       ) : null}
 
@@ -197,9 +205,10 @@ export default async function Tracking({
       <Card>
         <Heading>Your reps</Heading>
         <Body muted>
-          A position is taken about every {Math.round(overview.intervalSeconds / 60)} minute(s)
-          while a rep shares. “No position yet” is also what a rep who has not agreed, or has not
-          started today, looks like.
+          A position is taken about every{' '}
+          {plural(Math.round(overview.intervalSeconds / 60), 'minute', 'minutes')} while a rep
+          shares. “No position yet” is also what a rep who has not agreed, or has not started today,
+          looks like.
         </Body>
         {overview.reps.length === 0 ? (
           <MissingNote tone="info">
@@ -233,7 +242,7 @@ export default async function Tracking({
                   </td>
                   <td>
                     <a href={`/tracking?rep=${rep.mrId}`}>
-                      {rep.pingsToday} position(s) — see the list
+                      {plural(rep.pingsToday, 'position', 'positions')}
                     </a>
                   </td>
                 </tr>

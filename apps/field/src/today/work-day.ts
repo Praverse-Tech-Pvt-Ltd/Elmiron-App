@@ -7,6 +7,7 @@ import type {
   WorkDayRequest,
 } from '@fieldforce/core';
 import type { LocalStore } from '../sync/pull';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * `FE-W80` / `BE-W190` — the rep's WORKING DAY, read from the pulled store and the phone's queue.
@@ -128,9 +129,7 @@ export const isDayOpen = (status: WorkDayStatus): boolean => status.kind === 'op
 export const endDayBlocker = (visitsToday: readonly Visit[]): string | null => {
   const open = visitsToday.filter((visit) => visit.status === 'in_progress').length;
   if (open === 0) return null;
-  return open === 1
-    ? 'A visit is still checked in. Check out of it first, then end your day.'
-    : `${String(open)} visits are still checked in. Check out of them first, then end your day.`;
+  return t('dayEnd.openVisits', { count: open });
 };
 
 /**

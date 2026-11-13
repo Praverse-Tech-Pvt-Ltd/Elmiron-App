@@ -19,6 +19,9 @@ import {
   parsePracticeDrafts,
   readDraftPrompt,
   refuseRemote,
+  TEST_CLIP,
+  TEST_CLIP_SECONDS,
+  testClipArgs,
   testNoticeBody,
 } from '../scripts/key-day.mjs';
 import { checkCatalogue } from '../scripts/load-catalogue.mjs';
@@ -194,5 +197,24 @@ describe('the command line', () => {
       }),
     ).toEqual({ name: 'Wi-Fi', address: '192.168.1.15' });
     expect(likelyLanAddress({ 'vEthernet (WSL)': [v4('172.20.0.1')] })).toBeNull();
+  });
+});
+
+describe('BE-W212 — the TEST clip', () => {
+  it('is encoded the way a real clip is, short, and kept in the git-ignored state folder', () => {
+    const args = testClipArgs('out.mp4');
+    const after = (flag: string): string | undefined => args[args.indexOf(flag) + 1];
+    expect(args.filter((a) => a === 'lavfi')).toHaveLength(2);
+    const seconds = `duration=${String(TEST_CLIP_SECONDS)}`;
+    expect(args.find((a) => a.startsWith('testsrc='))).toContain(seconds);
+    expect(args.find((a) => a.startsWith('sine='))).toContain(seconds);
+    expect(after('-c:v')).toBe('libx264');
+    expect(after('-profile:v')).toBe('high');
+    expect(after('-pix_fmt')).toBe('yuv420p');
+    expect(after('-c:a')).toBe('aac');
+    expect(after('-movflags')).toBe('+faststart');
+    expect(args.at(-1)).toBe('out.mp4');
+    expect(TEST_CLIP_SECONDS).toBeLessThanOrEqual(15);
+    expect(TEST_CLIP.replace(/\\/gu, '/')).toMatch(/services\/api\/\.key-day\/test-clip\.mp4$/u);
   });
 });

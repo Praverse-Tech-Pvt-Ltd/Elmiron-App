@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { signedIn } from '../../lib/session';
-import { Body, MissingNote, Title } from '../../lib/ui';
+import { Body, MissingNote, Page, PageHeader } from '../../lib/ui';
 import { CourseAssignment } from '../../lib/course-assignment';
 import type { AssignableCourse, AssignedRow, Person } from '../../lib/course-assignment';
 
@@ -16,6 +16,8 @@ import type { AssignableCourse, AssignedRow, Person } from '../../lib/course-ass
  * shown in words (`course-assignment-text.ts`).
  */
 export const dynamic = 'force-dynamic';
+
+export const metadata = { title: 'Course assignments' };
 
 export default async function Learning(): Promise<ReactNode> {
   const session = await signedIn();
@@ -59,16 +61,15 @@ export default async function Learning(): Promise<ReactNode> {
   }));
 
   return (
-    <div className="ff-page ff-page-medium">
-      <div className="ff-page-header-text">
-        <Title>Course assignments</Title>
+    <Page>
+      <PageHeader title="Course assignments">
         <Body muted>
           Give someone in your team a course to take in the app. Only a course with a published
           version can be assigned. Admins and field managers can assign; each only to people they
           can see.
         </Body>
-      </div>
+      </PageHeader>
       <CourseAssignment assigned={rows} courses={assignable} people={team} />
-    </div>
+    </Page>
   );
 }

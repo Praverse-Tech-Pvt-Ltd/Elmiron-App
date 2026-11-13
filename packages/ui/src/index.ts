@@ -18,14 +18,14 @@
  * TypeScript's NodeNext resolution does.
  */
 
-export { AiAllowanceNotice, SAMPLE_FIGURES_NOTE } from './AiAllowanceNotice';
+export { AiAllowanceNotice, sampleFiguresNote } from './AiAllowanceNotice';
 export type { AiAllowanceNoticeProps, AiAllowanceState } from './AiAllowanceNotice';
-export { AssistantScreen, SAMPLE_REPLY_LABEL } from './AssistantScreen';
+export { AssistantScreen, sampleReplyLabel } from './AssistantScreen';
 export type { AssistantNotice, AssistantScreenProps, AssistantTurn } from './AssistantScreen';
 export {
   PracticeAnalysisScreen,
-  PRACTICE_AI_NOTE,
-  PRACTICE_VISIBILITY_NOTE,
+  practiceAiNote,
+  practiceVisibilityNote,
 } from './PracticeAnalysisScreen';
 export type {
   PracticeAnalysisScreenProps,
@@ -33,7 +33,7 @@ export type {
   PracticeFindingRow,
   PracticeModuleRow,
 } from './PracticeAnalysisScreen';
-export { PracticeHomeScreen, SAMPLE_PRACTICE_NOTE } from './PracticeHomeScreen';
+export { PracticeHomeScreen, samplePracticeNote } from './PracticeHomeScreen';
 export type {
   PracticeHomeScreenProps,
   PracticeScenarioRow,
@@ -44,6 +44,9 @@ export type {
   PracticeNotice,
   PracticeSessionScreenProps,
   PracticeTurnRow,
+  PracticeVoice,
+  PracticeVoicePause,
+  PracticeVoicePhase,
 } from './PracticeSessionScreen';
 export { AnalysisReplyScreen } from './AnalysisReplyScreen';
 export type { AnalysisReplyScreenProps } from './AnalysisReplyScreen';
@@ -67,6 +70,8 @@ export { ProductQaScreen } from './ProductQaScreen';
 export type { ProductQaScreenProps, ProductQaView } from './ProductQaScreen';
 export { CourseScreen, LearningListScreen, LessonScreen } from './LearningScreens';
 export type { CourseView, LearningListView, LessonView } from './LearningScreens';
+export { LessonVideoFrame } from './LessonVideoFrame';
+export type { LessonVideoFrameView } from './LessonVideoFrame';
 export { AdverseEventScreen } from './AdverseEventScreen';
 export type { AdverseEventScreenProps } from './AdverseEventScreen';
 export { CallReportScreen } from './CallReportScreen';
@@ -110,6 +115,10 @@ export { RecordingIndicator } from './RecordingIndicator';
 export type { RecordingIndicatorProps, RecordingState } from './RecordingIndicator';
 export { Select } from './Select';
 export { SettingsScreen } from './SettingsScreen';
+export { SwitchRow } from './SwitchRow';
+export type { SwitchRowProps } from './SwitchRow';
+export { DataSettingsScreen, warnOverTitle, wifiOnlyTitle } from './DataSettingsScreen';
+export type { DataSettingKey, DataSettingsScreenProps } from './DataSettingsScreen';
 export type { SettingRow, SettingState, SettingsScreenProps } from './SettingsScreen';
 export type { SelectOption, SelectProps } from './Select';
 export { STATUS_COLOR, STATUS_FILL, StatusGlyph } from './StatusGlyph';
@@ -118,7 +127,18 @@ export { SyncQueueIndicator } from './SyncQueueIndicator';
 export type { SyncQueueIndicatorProps, SyncQueueState } from './SyncQueueIndicator';
 export { TOAST_DURATION_MS, Toast } from './Toast';
 export type { ToastAction, ToastProps } from './Toast';
-export { BodyText, Display, Figure, Heading, Label, Secondary, Statement, Title } from './Text';
+export {
+  BodyText,
+  Display,
+  Figure,
+  Heading,
+  Label,
+  MAX_FONT_SCALE,
+  Secondary,
+  Statement,
+  TapLabel,
+  Title,
+} from './Text';
 export { Badge } from './Badge';
 export type { BadgeProps, BadgeTone } from './Badge';
 export type { TextProps } from './Text';
@@ -126,10 +146,12 @@ export { ListRow } from './ListRow';
 export type { ListRowProps } from './ListRow';
 export { MileageScreen } from './MileageScreen';
 export type { MileageDayRow, MileageScreenProps } from './MileageScreen';
+export { NoticeText } from './NoticeText';
+export type { NoticeTextBlock, NoticeTextProps } from './NoticeText';
 export { OemBatteryScreen } from './OemBatteryScreen';
 export type { OemBatteryScreenProps } from './OemBatteryScreen';
 export { PrimaryButton } from './PrimaryButton';
-export { LONG_RETRY_AFTER_ATTEMPTS, QueueScreen, rowStateFor } from './QueueScreen';
+export { LONG_RETRY_AFTER_ATTEMPTS, QueueScreen, entityWords, rowStateFor } from './QueueScreen';
 export type {
   QueueRowState,
   QueueScreenItem,
@@ -167,7 +189,7 @@ export type { VoiceNoteScreenProps } from './VoiceNoteScreen';
 export type { VisitScreenProps } from './VisitScreen';
 export { TodayScreen } from './TodayScreen';
 export type { TodayNextVisit, TodayScreenProps } from './TodayScreen';
-export { TabBarIcon, TabIcon } from './TabIcon';
+export { TabBarIcon, TabBarLabel, TabIcon } from './TabIcon';
 export { EmptyState } from './EmptyState';
 export type { EmptyStateKind, EmptyStateProps } from './EmptyState';
 export { FadeIn } from './FadeIn';
@@ -180,6 +202,11 @@ export { elevationStyle } from './depth';
 export type { ElevationName } from './depth';
 export { ReduceMotionContext, useEntrance, usePulse, useReduceMotion } from './motion';
 export type { EntranceOptions } from './motion';
-export type { TabIconName, TabIconProps } from './TabIcon';
+export type { TabBarLabelProps, TabIconName, TabIconProps } from './TabIcon';
 export { TextField } from './TextField';
 export type { TextFieldProps } from './TextField';
+// `FE-W192`. Sign-in's password, with "Show password".
+export { PasswordField } from './PasswordField';
+export type { PasswordFieldProps } from './PasswordField';
+// `FE-W140`. The string catalogue; also published alone as `@fieldforce/ui/i18n` for node-side code.
+export * from './i18n';

@@ -2,6 +2,8 @@ import { refusalForSqlState } from '@fieldforce/core';
 import type { RefusalCode, SyncRejectionCode } from '@fieldforce/core';
 import type { RejectionRecord } from './reducer';
 import type { PullFailure } from './pulled-store';
+import { t } from '@fieldforce/ui/i18n';
+import type { TextKey } from '@fieldforce/ui/i18n';
 
 /**
  * What the MR is shown about a refusal.
@@ -47,52 +49,25 @@ export type RejectionAction =
  * for `null`, and inventing a remedy for it would send the MR to do the wrong thing with no
  * way to tell. Absence here renders the honest fallback instead.
  */
-const REMEDIES: Partial<Readonly<Record<RefusalCode, string>>> = {
-  // 45001. The notice moved under them between reading and capturing. The remedy is a
-  // thing the MR can actually carry out, and it is NOT "ask again" on its own -- they must
-  // re-read the current text first, or they would be attesting to a notice they never saw.
-  consent_notice_superseded:
-    'The consent wording changed while you were with the doctor. Open consent again, read the current notice aloud, and ask once more.',
-  // 45007. The device clock is ahead of the server. Telling an MR to repeat a consent
-  // conversation because their phone thinks it is Thursday would be useless and slightly
-  // insulting -- the remedy is the phone, not the doctor.
-  consent_captured_in_future:
-    "This phone's clock is ahead of the server, so the consent looks like it happened in the future. Turn on automatic date and time in Settings, then send again.",
-  // 45008. It was valid when taken and arrived too late to accept on the device's word.
-  // Distinct from 45001 precisely because the remedy differs.
-  consent_too_old_to_accept:
-    'This consent was captured too long ago to be accepted now. Connect and sync sooner after a visit — your manager can tell you the limit for your territory.',
-  // MR-54 `BE-W96`, 45009. The same phone-clock remedy as 45007 and deliberately a separate
-  // sentence: a rep whose RECORDING was refused must not be told their consent was. What is
-  // on the phone is fine, which is worth saying -- they have just recorded a consultation.
-  recording_in_future:
-    "This phone's clock is ahead of the server, so the recording looks like it happened in the future. Turn on automatic date and time in Settings, then send again — the recording itself is fine.",
-  // 45010. It will not become acceptable by waiting, so the sentence must not imply it
-  // might. The recording stays on the phone; what changes is only that it cannot be filed.
-  recording_too_old_to_accept:
-    'This recording was made too long ago to be accepted now, and waiting will not change that. Connect and sync sooner after a visit — your manager can tell you the limit for your territory.',
-  // `BE-W173`, 45013. The same phone-clock remedy, about a check-in or check-out -- never "consent".
-  field_event_in_future:
-    "This phone's clock is ahead of the server, so the check-in or check-out looks like it happened in the future. Turn on automatic date and time in Settings, then send again — the visit itself is fine.",
-  // `BE-W173`, 45014. The times are out of order; the remedy is the same clock.
-  check_out_before_check_in:
-    "The check-out is timed before the check-in, so the phone's clock changed during the visit. Turn on automatic date and time in Settings, then send again.",
-  // `BE-W190`, 45015. The day was ended; reopening it is the manager's, never the rep's.
-  work_day_closed:
-    'You ended your working day for this date, so nothing more can be checked in on it. If this visit really happened that day, ask your manager to reopen the day — then send again.',
-  // `BE-W190`, 45016. The remedy is a step the rep can take now.
-  work_day_has_open_visit: 'A visit is still checked in. Check out of it, then end your day again.',
-  // 45004. Not actionable by the MR: the remedy is to stop and speak to a manager, which is
-  // somebody else's decision rather than a next step the app can offer.
-  ucpmp_sample_cap_exceeded:
-    'This would go past the UCPMP limit for this doctor this month. Do not hand anything else over — speak to your manager first.',
-  // 45003. Somebody else's misconfiguration OR a genuine out-of-hours capture; the sentence
-  // Backend sends says which, and this says what to do about either.
-  outside_shift_window:
-    'This was recorded outside your territory’s working hours. If the hours are wrong, your manager can change them.',
-  // 45002. Nothing the MR can do at all.
-  shift_window_not_configured:
-    'Your territory has no working hours set, so nothing can be recorded against it yet. Your manager or an administrator has to set them.',
+const REMEDIES: Partial<Readonly<Record<RefusalCode, TextKey>>> = {
+  consent_notice_superseded: 'remedy.consentNoticeSuperseded',
+  consent_captured_in_future: 'remedy.consentCapturedInFuture',
+  consent_too_old_to_accept: 'remedy.consentTooOld',
+  recording_in_future: 'remedy.recordingInFuture',
+  recording_too_old_to_accept: 'remedy.recordingTooOld',
+  field_event_in_future: 'remedy.fieldEventInFuture',
+  check_out_before_check_in: 'remedy.checkOutBeforeCheckIn',
+  work_day_closed: 'remedy.workDayClosed',
+  work_day_has_open_visit: 'remedy.workDayHasOpenVisit',
+  ucpmp_sample_cap_exceeded: 'remedy.ucpmpSampleCapExceeded',
+  outside_shift_window: 'remedy.outsideShiftWindow',
+  shift_window_not_configured: 'remedy.shiftWindowNotConfigured',
+};
+
+/** `FE-W144`. A remedy in the app's language, read when it is shown rather than at import. */
+const remedyText = (code: RefusalCode): string | null => {
+  const key = REMEDIES[code];
+  return key === undefined ? null : t(key);
 };
 
 export interface RejectionPresentation {
@@ -134,8 +109,7 @@ export interface RejectionPresentation {
   readonly receivedAt: string | null;
 }
 
-const FALLBACK =
-  'The server refused this without a reason the app can show. Report the code below to support.';
+const fallbackText = (): string => t('remedy.fallback');
 
 /**
  * A dead letter always needs a person — attempts are exhausted, so retrying is not a
@@ -161,7 +135,7 @@ const RETRYABLE: ReadonlySet<SyncRejectionCode> = new Set<SyncRejectionCode>([
  * `REMEDIES` makes by having no `unrecognised` entry.
  */
 export const remedyForSqlState = (sqlState: string | null): string | null =>
-  REMEDIES[refusalForSqlState(sqlState).code] ?? null;
+  remedyText(refusalForSqlState(sqlState).code);
 
 /** What `sendOrQueue` hands a screen that was refused in the moment. */
 export interface InTheMomentRefusal {
@@ -200,7 +174,7 @@ export const refusalTextFor = (refusal: InTheMomentRefusal): string => {
   // interpolated into the same empty parentheses on a screen.
   const figures = refusal.detail?.trim();
   if (figures === undefined || figures === '') return lead;
-  return `${lead}\n\nFigures from the server: ${figures}.`;
+  return `${lead}\n\n${t('remedy.figures', { figures })}`;
 };
 
 export const presentRejection = (record: RejectionRecord): RejectionPresentation => {
@@ -212,9 +186,9 @@ export const presentRejection = (record: RejectionRecord): RejectionPresentation
   return {
     code: record.code,
     refusalCode: refusal.code,
-    remedy: REMEDIES[refusal.code] ?? null,
+    remedy: remedyText(refusal.code),
     explanation: record.explanation,
-    fallback: record.explanation === null ? FALLBACK : null,
+    fallback: record.explanation === null ? fallbackText() : null,
     /**
      * MR-31 B3. **Stated positively, and the null case is load-bearing rather than
      * decorative.**
@@ -251,7 +225,13 @@ export const presentRejection = (record: RejectionRecord): RejectionPresentation
 export const sessionExpired = (failure: PullFailure | null): boolean =>
   failure !== null && failure.kind === 'refused' && failure.refusal.code === 'not_authenticated';
 
-export const SESSION_EXPIRED = {
-  title: 'Your sign-in has expired',
-  detail: 'Sign out and sign in again from Me to bring this up to date.',
-} as const;
+export const SESSION_EXPIRED: { readonly title: string; readonly detail: string } = {
+  // `FE-W144`. Getters, so every screen that hands this object to a banner reads it in the app's
+  // current language at render time, not in whatever language it was at import.
+  get title() {
+    return t('errors.sessionExpiredTitle');
+  },
+  get detail() {
+    return t('errors.sessionExpiredDetail');
+  },
+};

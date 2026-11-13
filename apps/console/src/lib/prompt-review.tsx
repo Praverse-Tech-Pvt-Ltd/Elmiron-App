@@ -12,6 +12,7 @@ import {
 import type { AiPromptVersion, GatewayFeature, PromptModelConfig } from '@fieldforce/core';
 import { Body, Card, Heading, Label, MissingNote, StatusPill } from './ui';
 import { approvalAffordance, submitAffordance } from './knowledge-review';
+import { featureLabel } from './labels';
 import { btn } from './theme-css';
 
 /**
@@ -51,8 +52,10 @@ export const PROMPT_REGULATED_CAUTION =
   'regulated promotional content and must come from an approved label, never from a model and ' +
   'never from this box.';
 
+// `FE-W165`: sentence case, and no schema names, repository paths or SQLSTATE-style codes anywhere a
+// person reads them. The checks are unchanged; only what the screen says about them.
 export const PROMPT_DRAFT_NOTE =
-  'Saved as a DRAFT. No model is given this text until a SECOND admin approves it.';
+  'Saved as a draft. No model is given this text until a second admin approves it.';
 
 export const PROMPT_ONE_APPROVED_NOTE =
   'One approved prompt per feature. Approving this retires nothing automatically — retire the old ' +
@@ -99,7 +102,7 @@ const runAction = (
  */
 export const PROMPT_LIMITS_NOTE =
   'Both limits are required. The approver signs them with the text, and they cannot change after ' +
-  'submission. The drafts in docs/ai-platform/drafts propose numbers for each feature.';
+  'submission.';
 
 /** `''` while empty: `Number('')` is 0, which would read an empty box as a real temperature. */
 const limitsFrom = (temperature: string, maxTokens: string): PromptModelConfig | null => {
@@ -128,8 +131,8 @@ export const versionSettings = (version: AiPromptVersion): string => {
     : null;
   parts.push(
     expected !== null && version.outputSchemaName === expected
-      ? `output checked against ${expected}`
-      : 'the gateway will REFUSE this version: its output check is not the one this feature needs',
+      ? 'answers checked against the format this feature expects'
+      : 'this version will be refused when it runs: its answer check is not the one this feature needs',
   );
   return parts.join(' · ');
 };
@@ -168,14 +171,14 @@ export const PromptDraftForm = ({ features, onCreate }: PromptDraftProps): React
       >
         {features.map((f) => (
           <option key={f} value={f}>
-            {f}
+            {featureLabel(f)}
           </option>
         ))}
       </select>
       {feature !== '' ? (
         <Body muted>
-          Answered by {GATEWAY_MODEL_LABEL[GATEWAY_MODEL[feature]]} — fixed for this feature. Output
-          checked against {GATEWAY_OUTPUT_SCHEMA_NAME[feature]}.
+          Answered by {GATEWAY_MODEL_LABEL[GATEWAY_MODEL[feature]]} — fixed for this feature. Every
+          answer is checked against the format this feature expects.
         </Body>
       ) : null}
 
@@ -263,7 +266,7 @@ export const PromptReview = ({
   return (
     <Card>
       <Heading>
-        {version.feature} — version {version.versionNumber}
+        {featureLabel(version.feature)} — version {version.versionNumber}
       </Heading>
       <div className="ff-row ff-row-tight">
         <StatusPill status={version.status} />
@@ -278,7 +281,7 @@ export const PromptReview = ({
 
       {/* W2-E A3: what the approver signs besides the words. Read from the ROW, so a version
           written before W2-E — or by hand — shows what it actually carries, including nothing. */}
-      <Label>Limits and output check</Label>
+      <Label>Limits and answer check</Label>
       <Body>{versionSettings(version)}</Body>
 
       {version.status === 'approved' ? <Body muted>{PROMPT_ONE_APPROVED_NOTE}</Body> : null}

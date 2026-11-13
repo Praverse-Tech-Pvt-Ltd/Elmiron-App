@@ -55,8 +55,10 @@ export const Card = ({ children }: { readonly children: ReactNode }): ReactNode 
 /**
  * `FE-W120` — the page frame every screen uses: one width, one rhythm between blocks.
  *
- * `width` is the reading measure the page asked for before, kept per page: 1320 for the tables,
- * 1100 for the live-location list, 900 for a single record.
+ * `width` is the page's measure. `FE-W168`: every list page now uses the default, 1320 — they used to
+ * flip between 1320 and 1100 as you moved through the sidebar, and each page hand-rolled its own
+ * header. Paragraphs keep a reading measure of their own (`theme-css.ts`); `narrow` is for a single
+ * record that failed to load.
  */
 export const Page = ({
   children,
@@ -111,25 +113,54 @@ export const Columns = ({ children }: { readonly children: ReactNode }): ReactNo
   <div className="ff-columns">{children}</div>
 );
 
-/** A labelled figure — a count the database returned, on a tile. */
+/**
+ * A labelled figure — a count the database returned, on a tile.
+ *
+ * `FE-W168`: `tone="attention"` draws the tile in the attention fill. `retention.ts` has always
+ * marked a non-zero "Past their date" as the one figure that is a broken promise, and nothing drew
+ * the mark; now it shows. The pair is the attention pill's, already in `requiredContrastPairs`.
+ *
+ * `FE-W204`: `tone="critical"` for a figure that is a missed legal deadline — side-effect flags
+ * past their statutory date. The critical pill's pair, likewise already checked.
+ */
 export const Stat = ({
   label,
   children,
   note,
+  tone = 'neutral',
 }: {
   readonly label: ReactNode;
   readonly children: ReactNode;
   readonly note?: ReactNode;
+  readonly tone?: 'neutral' | 'attention' | 'critical';
 }): ReactNode => (
-  <div className="ff-stat">
+  <div
+    className={cx(
+      'ff-stat',
+      tone === 'attention' && 'ff-stat-attention',
+      tone === 'critical' && 'ff-stat-critical',
+    )}
+  >
     <Label>{label}</Label>
     <Figure>{children}</Figure>
     {note === undefined ? null : <Body muted>{note}</Body>}
   </div>
 );
 
-export const Stats = ({ children }: { readonly children: ReactNode }): ReactNode => (
-  <div className="ff-stats">{children}</div>
+/**
+ * The tiles' grid. `FE-W168`: `columns` fixes how many sit in a row, so three figures never wrap
+ * two-and-one with an orphan below; `1` stacks them, for a narrow side panel.
+ */
+export const Stats = ({
+  children,
+  columns,
+}: {
+  readonly children: ReactNode;
+  readonly columns?: 1 | 2 | 3 | 4;
+}): ReactNode => (
+  <div className={cx('ff-stats', columns !== undefined && `ff-stats-${String(columns)}`)}>
+    {children}
+  </div>
 );
 
 type Tone = 'success' | 'neutral' | 'attention' | 'info' | 'critical';
@@ -180,6 +211,18 @@ export const MissingNote = ({
 );
 
 /**
+ * `FE-W164` — the one note a page shows when the signed-in role cannot use it, or part of it.
+ *
+ * Pages said this in three tones: red as if something had failed, amber as if something needed
+ * doing, blue elsewhere. Being a manager on an admin's page is neither a failure nor a task, so it
+ * is always the info tone, and always this component, and the page skips the form the database
+ * would refuse instead of drawing it under the note.
+ */
+export const RoleNote = ({ children }: { readonly children: ReactNode }): ReactNode => (
+  <MissingNote tone="info">{children}</MissingNote>
+);
+
+/**
  * UX polish. A content version's status in words, with the tone that says whether anything is
  * waiting: "In review" is the one that needs a person, so it is the one in the attention tone.
  * The raw enum (`in_review`) stays on the element as `data-status` for anything that needs the
@@ -198,7 +241,7 @@ const STATUS_WORDS: Readonly<Record<string, { readonly label: string; readonly t
 export const StatusPill = ({ status }: { readonly status: string }): ReactNode => {
   const known = STATUS_WORDS[status];
   return (
-    <span data-status={status} style={{ display: 'inline-flex' }}>
+    <span className="ff-status" data-status={status}>
       <Pill tone={known?.tone ?? 'neutral'}>{known?.label ?? status.replace(/_/gu, ' ')}</Pill>
     </span>
   );

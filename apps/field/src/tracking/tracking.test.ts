@@ -99,6 +99,31 @@ describe('live tracking — never silent', () => {
     ).toMatch(/clock/);
   });
 
+  /**
+   * `FE-W186`. "It came too soon after the one before, so it was not kept." is the app's own
+   * spacing, not a lost position: the one before it was kept. And the line under "being shared"
+   * is always there, so the screen does not jump each time a position's verdict changes.
+   */
+  it('FE-W186: a routine refusal reads as the kept position before it, and the line never vanishes', () => {
+    const tooSoon = trackingLine({
+      ...base,
+      state: 'active',
+      lastSend: { kind: 'refused', reason: 'too_frequent' },
+    }).detail;
+    expect(tooSoon).toBe('Your last position reached your company.');
+    expect(tooSoon).not.toMatch(/too soon/u);
+    expect(trackingLine({ ...base, state: 'active', lastSend: { kind: 'kept' } }).detail).toBe(
+      'Your last position reached your company.',
+    );
+    expect(trackingLine({ ...base, state: 'active', lastSend: null }).detail).toMatch(/first/u);
+  });
+
+  it('FE-W185: paused for the day names the rep’s own Start, not "your working day is not open"', () => {
+    const line = trackingLine({ ...base, state: 'paused_day_closed' }).title;
+    expect(line).toMatch(/start sharing for today/u);
+    expect(line).not.toMatch(/working day/u);
+  });
+
   it('a changed notice is named, not just "off"', () => {
     const changed = { ...on, accepted: false, acceptedNoticeVersionId: NOTICE };
     expect(trackingLine({ ...base, status: changed, state: 'off_no_notice' }).detail).toMatch(

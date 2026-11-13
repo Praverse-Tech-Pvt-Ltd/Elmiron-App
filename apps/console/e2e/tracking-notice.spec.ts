@@ -65,7 +65,7 @@ test('one admin loads the notice, a second approves it, and it is in force', asy
   await author.getByRole('link', { name: /load and approve your company’s own/u }).click();
   await author.waitForURL(/\/tracking\/notice/u);
 
-  await expect(author.getByText('Engineering draft — not approved')).toBeVisible();
+  await expect(author.getByText('Built-in draft — not approved')).toBeVisible();
   await expect(author.getByText(/every rep must read and accept it again/u).first()).toBeVisible();
 
   const load = author.getByRole('button', { name: 'Load this version' });
@@ -82,7 +82,7 @@ test('one admin loads the notice, a second approves it, and it is in force', asy
   await expect(mine.getByText(/You loaded this version, so you cannot approve it/u)).toBeVisible();
   await expect(mine.getByRole('button', { name: /Approve/u })).toHaveCount(0);
   // Loading changed nothing reps see.
-  await expect(author.getByText('Engineering draft — not approved')).toBeVisible();
+  await expect(author.getByText('Built-in draft — not approved')).toBeVisible();
 
   // The same label again is refused in words.
   await author.getByLabel('Version label').fill(label);

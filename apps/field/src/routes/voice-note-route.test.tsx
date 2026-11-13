@@ -38,6 +38,7 @@ jest.mock('../capture/voice-note-fs', () => ({
 }));
 
 const mockRequestPermissions = jest.fn<() => Promise<{ granted: boolean }>>();
+const mockGetPermissions = jest.fn<() => Promise<{ granted: boolean }>>();
 const mockRecorder = {
   uri: null as string | null,
   prepareToRecordAsync: jest.fn(() => Promise.resolve()),
@@ -46,7 +47,10 @@ const mockRecorder = {
 };
 const mockRecorderState = { isRecording: false, durationMillis: 0 };
 jest.mock('expo-audio', () => ({
-  AudioModule: { requestRecordingPermissionsAsync: () => mockRequestPermissions() },
+  AudioModule: {
+    requestRecordingPermissionsAsync: () => mockRequestPermissions(),
+    getRecordingPermissionsAsync: () => mockGetPermissions(),
+  },
   RecordingPresets: { HIGH_QUALITY: {} },
   setAudioModeAsync: () => Promise.resolve(),
   useAudioRecorder: () => mockRecorder,
@@ -54,6 +58,8 @@ jest.mock('expo-audio', () => ({
 }));
 
 jest.mock('expo-router', () => ({
+  // `FE-W188`. The screen's Back control reads the router; nothing here presses it.
+  useRouter: () => ({ back: jest.fn(), canGoBack: () => true, replace: jest.fn() }),
   useLocalSearchParams: () => ({ visitId: VISIT }),
 }));
 jest.mock('../session', () => ({
@@ -71,7 +77,20 @@ jest.mock('../sync/push-client', () => {
 });
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState, Linking } from 'react-native';
 import { setQueueOwner } from '../sync/async-storage-store';
+import { bindUploadDevice } from '../sync/upload-conditions';
+
+// `FE-W135`. The phone's network, as WiFi-only sees it -- bound as `app/_layout.tsx` binds the real
+// one. On WiFi unless a test says otherwise, so the cases are about sending; the WiFi-only case
+// below sets mobile data.
+let connection: 'wifi' | 'mobile' = 'wifi';
+bindUploadDevice({
+  read: () => Promise.resolve({ connection, wifiOnlyAudio: true }),
+  recordUse: () => Promise.resolve(),
+  onConnectionChange: () => () => undefined,
+  heldAudioBytes: () => null,
+});
 import type * as PushClient from '../sync/push-client';
 
 type PushClientModule = typeof PushClient;
@@ -116,9 +135,12 @@ beforeEach(async () => {
   mockFiles.clear();
   mockRequestPermissions.mockReset();
   mockRequestPermissions.mockResolvedValue({ granted: true });
+  mockGetPermissions.mockReset();
+  mockGetPermissions.mockResolvedValue({ granted: false });
   mockRecorder.uri = null;
   mockRecorderState.isRecording = false;
   mockStore.mockReturnValue(pulled([visit]));
+  connection = 'wifi';
 });
 
 /** Render mid-recording, release the hold, and wait until a note is captured. */
@@ -134,6 +156,61 @@ const recordOne = async (id: string) => {
   await screen.findByText('Save this note');
   return view;
 };
+
+/**
+ * `FE-W198` — the microphone banner is about the rep's own note, and leads to Settings.
+ *
+ * It said "Turn it on in Settings if you want to record with the doctor's agreement" -- the
+ * consultation recording's sentence, on the screen onboarding calls "yours". And it named Settings
+ * with no way there (15 October re-check, screenshot 08a).
+ */
+describe('FE-W198 — the microphone is off', () => {
+  it('says so about the rep’s own note, never the doctor’s agreement', async () => {
+    mockRequestPermissions.mockResolvedValue({ granted: false });
+    await render(<VoiceNoteRoute />);
+    expect(
+      await screen.findByText(
+        'The microphone is off for this app. Turn it on in Settings to record your note.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/agreement/u)).toBeNull();
+  });
+
+  it('"Open Settings" opens this app’s settings', async () => {
+    const openSettings = jest.spyOn(Linking, 'openSettings').mockResolvedValue(undefined);
+    mockRequestPermissions.mockResolvedValue({ granted: false });
+    await render(<VoiceNoteRoute />);
+    await fireEvent.press(await screen.findByText('Open Settings'));
+    expect(openSettings).toHaveBeenCalledTimes(1);
+    openSettings.mockRestore();
+  });
+
+  it('back from Settings with it on, the banner goes and recording is offered', async () => {
+    const listeners: ((state: string) => void)[] = [];
+    const listen = jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, handler) => {
+      listeners.push(handler as (state: string) => void);
+      return { remove: () => undefined };
+    });
+    mockRequestPermissions.mockResolvedValue({ granted: false });
+    mockGetPermissions.mockResolvedValue({ granted: true });
+    await render(<VoiceNoteRoute />);
+    await screen.findByText('Open Settings');
+
+    for (const listener of listeners) listener('active');
+
+    await waitFor(() => {
+      expect(screen.queryByText('Open Settings')).toBeNull();
+    });
+    expect(mockGetPermissions).toHaveBeenCalled();
+    listen.mockRestore();
+  });
+
+  it('POSITIVE CONTROL: with the microphone on there is no banner and no Settings action', async () => {
+    await render(<VoiceNoteRoute />);
+    await screen.findByLabelText('Hold to record your note');
+    expect(screen.queryByText('Open Settings')).toBeNull();
+  });
+});
 
 describe('each failure carries its own remedy', () => {
   it('a MICROPHONE failure says so', async () => {
@@ -166,6 +243,23 @@ describe('FE-W54 — Save keeps the note, from a REAL visit', () => {
     const kept = [...mockFiles];
     expect(kept).toHaveLength(1);
     expect(kept[0]).toMatch(new RegExp(`^${DOC}voice-notes/${REP_A}/[0-9a-f-]+\\.m4a$`, 'u'));
+  });
+});
+
+describe('FE-W135 — on mobile data, with WiFi-only on (the default)', () => {
+  it('keeps and queues the note WITHOUT trying, and says it goes on WiFi', async () => {
+    connection = 'mobile';
+    mockUpload.mockResolvedValue({ receivedAt: '2026-09-22T10:05:00Z' });
+    await recordOne('wifi');
+    await fireEvent.press(screen.getByText('Save this note'));
+    await screen.findByText(/It will send by itself when this phone is on WiFi/u);
+    expect(mockUpload).not.toHaveBeenCalled();
+    expect(screen.queryByText(/when you have signal/u)).toBeNull();
+
+    const keys = await AsyncStorage.getAllKeys();
+    const raw = await AsyncStorage.getItem(keys.find((k) => k.includes(REP_A)) ?? '');
+    const items = (JSON.parse(raw ?? '{}') as { items?: { entity: string }[] }).items ?? [];
+    expect(items.map((i) => i.entity)).toEqual(['voice_note']);
   });
 });
 
@@ -207,7 +301,11 @@ describe('MR-51 D — Save sends the note it kept', () => {
     );
     await recordOne('seven');
     await fireEvent.press(screen.getByText('Save this note'));
-    await screen.findByText(/the server refused to take it: visit is not yours/u);
+    // `FE-W197`. The remedy for 42501 and its reference -- never the server's own sentence.
+    await screen.findByText(
+      /the server refused to take it: Your account can’t open this\..*Reference: 42501\./u,
+    );
+    expect(screen.queryByText(/visit is not yours/u)).toBeNull();
     expect(screen.queryByText(/It will send by itself/u)).toBeNull();
   });
 });

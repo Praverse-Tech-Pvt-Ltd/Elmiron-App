@@ -1,4 +1,5 @@
 import type { BeatPlan, ConsentOutcome, ConsentRecord, Doctor, Visit } from '@fieldforce/core';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * B3 — the beat plan as a timeline.
@@ -131,7 +132,7 @@ export const buildDayRoute = (
     return {
       doctorId: entry.doctorId,
       visitId: visit?.id ?? null,
-      doctorName: doctor?.fullName ?? 'Doctor not in your list',
+      doctorName: doctor?.fullName ?? t('doctors.notInYourList'),
       clinic: clinicOf(doctor, entry.clinicAddressId),
       state: stateOf(visit),
       startedAt: visit?.startedAt ?? null,

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Heading, Label, Statement } from './Text';
+import { BodyText, Heading, Label, Secondary, Statement } from './Text';
 import { Button } from './Button';
 import { SurfaceContext } from './surface';
 
@@ -19,9 +19,10 @@ import { SurfaceContext } from './surface';
  * say what the app will never hold before listing what it will.
  *
  * **The attested text is here verbatim, again.** The face of the consent screen
- * shows it and so does this. `notice` is `ConsentTextVersion.fullText` and
- * `versionLabel` plus `hash` are what make the consent record checkable years
- * later — the design's "Consent notice v2.1" line is that pair, not decoration.
+ * shows it and so does this. `notice` is `ConsentTextVersion.fullText`, and the
+ * design's "Consent notice v2.1" line names its version. `FE-W186`: the line no longer
+ * carries the hash — what makes the record checkable years later is the version id the
+ * record cites and the hash the server keeps beside it, not hex on a doctor's screen.
  *
  * `collected` and `neverCollected` are app-authored, and that is a coupling with
  * no mechanical guard: if the notice text and these lists ever disagree, this
@@ -41,7 +42,7 @@ export interface ConsentDetailsScreenProps {
   readonly collected: readonly ConsentDetailItem[];
   /** The server's `fullText`, verbatim. */
   readonly notice: string;
-  /** "Notice v1.2 · English (India) · a1b2c3d4" — label, language, hash prefix. */
+  /** "Notice version 1.2 · English" — the version and the language. */
   readonly noticeLabel: string;
   /** Who the Data Fiduciary is and where a complaint goes. */
   readonly fiduciaryNote: string;
@@ -60,7 +61,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: tokens.color.offlineEdge,
     paddingVertical: tokens.space.sm,
-    gap: 2,
+    gap: tokens.space.xxs,
   },
   last: { borderBottomWidth: 1, borderBottomColor: tokens.color.offlineEdge },
   notice: { gap: tokens.space.xs },
@@ -83,14 +84,22 @@ export const ConsentDetailsScreen = ({
         §01 bans a muted white — so this leads by position and by being the only
         item with no siblings above it, rather than by colour.
       */}
-      <View style={[styles.row, styles.last]}>
+      {/*
+        `FE-W198`. One rule between this row and the list, not two: it carried a bottom border and
+        the list's first row a top one, a gap apart (15 October re-check, screenshot 06b). Each row
+        draws the rule above it; only the last row of all draws the one below.
+      */}
+      <View style={[styles.row, collected.length === 0 ? styles.last : null]}>
         <BodyText>Never collected</BodyText>
         <Statement>{neverCollected}</Statement>
       </View>
 
       <View style={styles.rows}>
-        {collected.map((item) => (
-          <View key={item.title} style={styles.row}>
+        {collected.map((item, index) => (
+          <View
+            key={item.title}
+            style={[styles.row, index === collected.length - 1 ? styles.last : null]}
+          >
             <BodyText>{item.title}</BodyText>
             {item.detail === undefined ? null : <Statement>{item.detail}</Statement>}
           </View>
@@ -103,7 +112,8 @@ export const ConsentDetailsScreen = ({
         <Label>{noticeLabel}</Label>
       </View>
 
-      <Label>{fiduciaryNote}</Label>
+      {/* `FE-W178`. A sentence, so the prose step. White on the hero, as every role is here. */}
+      <Secondary>{fiduciaryNote}</Secondary>
 
       <Button label="Back to the question" onPress={onBack} variant="secondary" />
     </View>

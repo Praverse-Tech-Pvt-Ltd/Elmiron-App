@@ -16,6 +16,9 @@ const brand = Cormorant_Garamond({
   variable: '--ff-font-brand',
 });
 
+/** `FE-W169`: the tab says where you are, like every other page ("Sign in · Field Force"). */
+export const metadata = { title: 'Sign in' };
+
 export default function SignInLayout({ children }: { readonly children: ReactNode }): ReactNode {
   return <div className={`${brand.variable} ff-signin`}>{children}</div>;
 }

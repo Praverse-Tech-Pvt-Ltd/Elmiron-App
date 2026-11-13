@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { ConsentRecordSchema, DoctorSchema, VisitSchema } from '@fieldforce/core';
 import type { ConsentRecord, Doctor, Visit } from '@fieldforce/core';
 import { buildDoctorProfile, consentLabel, dayMonthFrom } from './profile';
+import type { TerritoryZone } from '../today/territory-day';
 
 const NOW = Date.parse('2026-08-10T12:00:00+05:30');
+const ZONE: TerritoryZone = { timeZone: 'Asia/Kolkata', source: 'territory' };
 const DOC = '33333333-3333-4333-8333-333333333301';
 const OTHER = '33333333-3333-4333-8333-333333333302';
 
@@ -78,7 +80,7 @@ const C2 = '88888888-8888-4888-8888-888888888802';
 
 describe('the MR’s own history with this doctor', () => {
   it('measures the visit from the server’s start and finish', () => {
-    const profile = buildDoctorProfile(doctor(), [visit(V1)], [], NOW);
+    const profile = buildDoctorProfile(doctor(), [visit(V1)], [], NOW, ZONE);
     expect(profile.recentVisits[0]?.minutes).toBe(9);
   });
 
@@ -95,6 +97,7 @@ describe('the MR’s own history with this doctor', () => {
       ],
       [],
       NOW,
+      ZONE,
     );
     expect(profile.recentVisits[0]?.minutes).toBeNull();
   });
@@ -108,6 +111,7 @@ describe('the MR’s own history with this doctor', () => {
       ],
       [],
       NOW,
+      ZONE,
     );
     expect(profile.recentVisits.map((entry) => entry.visitId)).toEqual([V2, V1]);
   });
@@ -116,7 +120,7 @@ describe('the MR’s own history with this doctor', () => {
     // The route filters by doctorId server-side; this makes the screen safe if that
     // filter is ever dropped, because showing one doctor's history on another's
     // profile is a data-leak shaped bug.
-    const profile = buildDoctorProfile(doctor(), [visit(V1, { doctorId: OTHER })], [], NOW);
+    const profile = buildDoctorProfile(doctor(), [visit(V1, { doctorId: OTHER })], [], NOW, ZONE);
     expect(profile.recentVisits).toEqual([]);
     expect(profile.daysSince).toBeNull();
   });
@@ -127,14 +131,39 @@ describe('the MR’s own history with this doctor', () => {
       [visit(V1, { status: 'planned', completedAt: null })],
       [],
       NOW,
+      ZONE,
     );
     expect(profile.daysSince).toBeNull();
   });
 });
 
+/** `FE-W199` — the profile's "last seen" counts the territory's calendar days, as the list does. */
+describe('FE-W199 — since your last visit, in calendar days', () => {
+  const daysSince = (completedAt: string, now: string): number | null =>
+    buildDoctorProfile(
+      doctor(),
+      [visit(V1, { startedAt: completedAt, completedAt })],
+      [],
+      Date.parse(now),
+      ZONE,
+    ).daysSince;
+
+  it('23:38, read at 02:20 the next morning, is one day', () => {
+    expect(daysSince('2026-10-13T23:38:00+05:30', '2026-10-14T02:20:00+05:30')).toBe(1);
+  });
+
+  it('the same day is zero, and India’s day decides where UTC’s differs', () => {
+    expect(daysSince('2026-10-14T19:00:00Z', '2026-10-15T10:00:00Z')).toBe(0);
+  });
+
+  it('no server clock is still no age', () => {
+    expect(buildDoctorProfile(doctor(), [visit(V1)], [], null, ZONE).daysSince).toBeNull();
+  });
+});
+
 describe('what the doctor said about recording', () => {
   it('attaches the outcome to the visit it belongs to', () => {
-    const profile = buildDoctorProfile(doctor(), [visit(V1)], [consent(C1, V1)], NOW);
+    const profile = buildDoctorProfile(doctor(), [visit(V1)], [consent(C1, V1)], NOW, ZONE);
     expect(profile.recentVisits[0]?.consent).toBe('declined');
   });
 
@@ -153,12 +182,13 @@ describe('what the doctor said about recording', () => {
         }),
       ],
       NOW,
+      ZONE,
     );
     expect(profile.recentVisits[0]?.consent).toBe('declined');
   });
 
   it('leaves it absent when nothing was recorded', () => {
-    const profile = buildDoctorProfile(doctor(), [visit(V1)], [], NOW);
+    const profile = buildDoctorProfile(doctor(), [visit(V1)], [], NOW, ZONE);
     expect(profile.recentVisits[0]?.consent).toBeNull();
     expect(consentLabel(null)).toBeNull();
   });
@@ -177,7 +207,7 @@ describe('the profile carries nothing about the doctor’s practice', () => {
     // C14 is the design's own boundary, and this asserts it structurally rather than
     // trusting a comment: if somebody adds a prescribing field to the profile, the
     // key set changes and this fails.
-    const profile = buildDoctorProfile(doctor(), [visit(V1)], [consent(C1, V1)], NOW);
+    const profile = buildDoctorProfile(doctor(), [visit(V1)], [consent(C1, V1)], NOW, ZONE);
     expect(Object.keys(profile).sort()).toEqual([
       'daysSince',
       'detail',

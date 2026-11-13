@@ -199,6 +199,10 @@ export const createSamplePracticeBackend = (): PracticeBackend => {
       });
     },
 
+    // `FE-W163`. The sample has no ears: a spoken turn is the gateway's "voice needs the AI service".
+    spokenTurn: (): Promise<GatewayResponse> =>
+      Promise.resolve({ status: 503, body: { code: 'voice_unavailable' } }),
+
     end: (sessionId) => {
       const stored = sessions.get(sessionId);
       if (stored !== undefined) stored.state = 'ended';

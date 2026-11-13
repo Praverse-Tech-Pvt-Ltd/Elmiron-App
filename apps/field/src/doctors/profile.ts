@@ -1,4 +1,7 @@
 import type { ConsentOutcome, ConsentRecord, Doctor, Visit } from '@fieldforce/core';
+import { t } from '@fieldforce/ui/i18n';
+import { calendarDaysBetween, localisedDayMonth } from '../today/territory-day';
+import type { TerritoryZone } from '../today/territory-day';
 
 /**
  * B9 — the doctor profile, from the MR's own visit history.
@@ -48,7 +51,6 @@ export interface DoctorProfile {
 }
 
 const MS_PER_MINUTE = 60 * 1000;
-const MS_PER_DAY = 24 * 60 * MS_PER_MINUTE;
 
 const minutesBetween = (startedAt: string | null, completedAt: string | null): number | null => {
   if (startedAt === null || completedAt === null) return null;
@@ -69,6 +71,8 @@ export const buildDoctorProfile = (
   consents: readonly ConsentRecord[],
   /** The SERVER's instant in epoch ms, or null when none is known — see `buildDoctorRows`. */
   now: number | null,
+  /** `FE-W199`. The territory's zone, whose calendar days "last seen" counts. */
+  zone: TerritoryZone,
 ): DoctorProfile => {
   // Consent is looked up per visit rather than per doctor: a withdrawal supersedes
   // an earlier row without touching it, so the *latest* row for a visit is the one
@@ -107,7 +111,8 @@ export const buildDoctorProfile = (
     daysSince:
       latest === undefined || now === null
         ? null
-        : Math.floor((now - new Date(latest.completedAt).getTime()) / MS_PER_DAY),
+        : // `FE-W199`. Calendar days in the territory, not elapsed 24-hour periods.
+          calendarDaysBetween(latest.completedAt, now, zone),
     recentVisits: completed.map((visit) => ({
       visitId: visit.id,
       completedAt: visit.completedAt,
@@ -119,6 +124,14 @@ export const buildDoctorProfile = (
 };
 
 /**
+ * `FE-W190`. The profile's large figure is a line on its own, so it starts with a capital: the
+ * list's "today", written for under a doctor's name, read as a lower-case word in the 40pt figure
+ * (QA 21). A typographic change only; a script without case (Devanagari) is left as it is.
+ */
+export const sentenceCase = (label: string): string =>
+  label.length === 0 ? label : `${label.charAt(0).toLocaleUpperCase()}${label.slice(1)}`;
+
+/**
  * The words for a consent outcome, from the doctor's side of it.
  *
  * `not_asked` is not a failure and is never rendered as one — the contract's own
@@ -128,11 +141,11 @@ export const buildDoctorProfile = (
 export const consentLabel = (outcome: ConsentOutcome | null): string | null => {
   switch (outcome) {
     case 'consented':
-      return 'agreed to recording';
+      return t('doctors.consentAgreed');
     case 'declined':
-      return 'declined recording';
+      return t('doctors.consentDeclined');
     case 'not_asked':
-      return 'not asked';
+      return t('doctors.consentNotAsked');
     case null:
       return null;
   }
@@ -162,6 +175,14 @@ const MONTHS = [
  */
 export const dayMonthFrom = (iso: string): string => {
   const day = Number(iso.slice(8, 10));
+  // `FE-W149`. Named in the app's language; the date itself is still the characters' own.
+  const localised = Number.isFinite(day)
+    ? localisedDayMonth(
+        new Date(Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, day)),
+        'UTC',
+      )
+    : null;
+  if (localised !== null) return localised;
   const month = MONTHS[Number(iso.slice(5, 7)) - 1];
   return month === undefined ? iso.slice(0, 10) : `${String(day)} ${month}`;
 };

@@ -47,6 +47,16 @@ export const assistantEnabled: boolean = process.env.EXPO_PUBLIC_ASSISTANT === '
 export const practiceEnabled: boolean = process.env.EXPO_PUBLIC_PRACTICE === 'true';
 
 /**
+ * `FE-W163` — AI Doctor practice BY VOICE, hands-free: the rep speaks, pauses, and the doctor answers
+ * out loud. Only with practice on. Off, the session screen is exactly the typed one. The rep's voice is
+ * their own, in a practice with an AI — not a doctor and not a visit, so it is not the consultation
+ * recording that stays off (D-15). It needs the AI service's speech models; without the key the
+ * screen says so and typing carries on.
+ */
+export const practiceVoiceEnabled: boolean =
+  practiceEnabled && process.env.EXPO_PUBLIC_PRACTICE_VOICE === 'true';
+
+/**
  * W2-C C / `BE-W160` — Product Q&A, on the REAL transport.
  *
  * **Off by default.** Unlike the two above there is no sample behind it: on, it asks the real
@@ -110,3 +120,29 @@ export const mapsEnabled: boolean = process.env.EXPO_PUBLIC_MAPS === 'true';
  * asked: `src/push/push-provider.tsx` is a passthrough.
  */
 export const pushEnabled: boolean = process.env.EXPO_PUBLIC_PUSH === 'true';
+
+/** A build-time value that is set, or null — unset and empty are the same: nothing configured. */
+const configured = (value: string | undefined): string | null => {
+  const trimmed = value?.trim() ?? '';
+  return trimmed === '' ? null : trimmed;
+};
+
+/**
+ * `FE-W195` — the company's help desk, for "Tell the help desk" on Saved on this phone (the queue).
+ *
+ * **Unset by default, and unset means the button does not exist** — the queue screen's rule since
+ * S3: "absent until there is a help desk to tell". A button that opens nothing is the cruellest
+ * thing to put on the screen a rep opens when work will not send.
+ *
+ * `EXPO_PUBLIC_SUPPORT_EMAIL` — an address. When set, the button opens the phone's mail app with a
+ * message to it that already carries the queue's reference codes, so the help desk can look the
+ * work up without the rep copying anything.
+ * `EXPO_PUBLIC_SUPPORT_PHONE` — a number, dialled as given (include the country code, e.g.
+ * `+912012345678`). Used only when no address is set: a call cannot carry the codes, which the screen
+ * still shows.
+ *
+ * Both are inlined into the APK like every `EXPO_PUBLIC_*` value — a help-desk address is public by
+ * nature, so nothing secret may go here. Read with dot access, for the reason at the top.
+ */
+export const supportEmail: string | null = configured(process.env.EXPO_PUBLIC_SUPPORT_EMAIL);
+export const supportPhone: string | null = configured(process.env.EXPO_PUBLIC_SUPPORT_PHONE);

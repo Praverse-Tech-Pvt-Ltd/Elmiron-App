@@ -38,11 +38,32 @@ jest.mock('../sync/push-client', () => ({
 }));
 const mockReplace = jest.fn();
 const mockBack = jest.fn();
+// `FE-W188`. An answer returns with `dismissTo`, to the visit already underneath.
+const mockDismissTo = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), replace: mockReplace, back: mockBack }),
+  useRouter: () => ({
+    push: jest.fn(),
+    replace: mockReplace,
+    back: mockBack,
+    dismissTo: mockDismissTo,
+  }),
   useLocalSearchParams: () => ({ visitId: '44444444-4444-4444-8444-444444444401' }),
 }));
 
+/**
+ * `FE-W148`. A COMPLETE stand-in Hindi app catalogue, so one case below can switch the APP to
+ * Hindi and show the consent screen does not follow it. Every other case runs in English, where
+ * this file is never read.
+ */
+jest.mock('../../../../packages/ui/src/i18n/hi.json', () => {
+  const english = jest.requireActual<Record<string, string>>(
+    '../../../../packages/ui/src/i18n/en.json',
+  );
+  return Object.fromEntries(Object.entries(english).map(([key, value]) => [key, `हि ${value}`]));
+});
+
+import { act } from '@testing-library/react-native';
+import { languageStore } from '@fieldforce/ui/i18n';
 import { SyncPushRefusal } from '../sync/push-client';
 import ConsentRoute from '../../app/consent/[visitId]';
 
@@ -125,6 +146,7 @@ const loaded = (): void => {
   mockCreateConsentRecord.mockClear();
   mockReplace.mockClear();
   mockBack.mockClear();
+  mockDismissTo.mockClear();
 };
 
 describe('app/consent/[visitId].tsx — the handoff', () => {
@@ -132,7 +154,9 @@ describe('app/consent/[visitId].tsx — the handoff', () => {
     loaded();
     await render(<ConsentRoute />);
     expect(await screen.findByText(notice.fullText)).toBeTruthy();
-    expect(screen.getByText('Notice v1.2 · English · a1b2c3d4')).toBeTruthy();
+    // `FE-W186`. Which notice, in words; the hash stays in the ledger.
+    expect(screen.getByText('Notice version 1.2 · English')).toBeTruthy();
+    expect(screen.queryByText(/a1b2c3d4/u)).toBeNull();
   });
 
   it('does NOT name the rep, because the token does not carry a name', async () => {
@@ -199,6 +223,23 @@ describe('app/consent/[visitId].tsx — the handoff', () => {
 
     expect(mockCreateConsentRecord).not.toHaveBeenCalled();
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('FE-W188: the details’ Back returns to the question, never out of it', async () => {
+    loaded();
+    await render(<ConsentRoute />);
+    await screen.findByText(notice.fullText);
+    // The question itself draws no Back: its way out is "Give the phone back", which records
+    // nothing, and a second exit beside it would be one the doctor did not choose.
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+
+    await fireEvent.press(screen.getByText('Exactly what is collected, in full'));
+    expect(await screen.findByText('Exactly what is collected')).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+
+    expect(await screen.findByText("Yes, that's fine")).toBeTruthy();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockCreateConsentRecord).not.toHaveBeenCalled();
   });
 
   // ---------------------------------------------------------------------------------------
@@ -316,6 +357,7 @@ describe('app/consent/[visitId].tsx — the handoff', () => {
     // The MR-facing REMEDY, not backend's sentence for support.
     expect(await screen.findByText(/read the current notice aloud/i)).toBeTruthy();
     // A refusal must not send them back as though it worked.
+    expect(mockDismissTo).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
@@ -329,9 +371,13 @@ describe('app/consent/[visitId].tsx — the handoff', () => {
     await screen.findByText(notice.fullText);
     await fireEvent.press(screen.getByText("Yes, that's fine"));
 
+    // `FE-W188`. To the visit that opened this screen -- dismissed back to, never a second copy
+    // pushed or replaced on top of it, which left two visits and a Back that seemed to do nothing.
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledTimes(1);
+      expect(mockDismissTo).toHaveBeenCalledWith(`/visit/${visit.id}`);
     });
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
     expect(screen.queryByText(/read the current notice aloud/i)).toBeNull();
   });
 
@@ -377,5 +423,75 @@ describe('app/consent/[visitId].tsx — the handoff', () => {
     // text the company has already replaced.
     expect(screen.getByLabelText('Language')).toBeTruthy();
     expect(screen.queryByText('मराठी')).toBeNull();
+  });
+});
+
+/**
+ * `FE-W148` — consent text in another language comes only from a published, versioned notice, and
+ * the record names the notice and the language that were on the screen.
+ */
+describe('app/consent/[visitId].tsx — consent language (`FE-W148`)', () => {
+  const hindi = PulledConsentTextVersionSchema.parse({
+    ...notice,
+    id: '44444444-4444-4444-8444-4444444444ee',
+    versionLabel: 'v1.2-hi',
+    language: 'hi-IN',
+    fullText: 'मैं सहमत हूँ कि इस बातचीत की ऑडियो रिकॉर्डिंग की जा सकती है।',
+    hash: 'b'.repeat(64),
+    precedence: 1,
+  });
+
+  it('with only an English notice, says plainly that consent is English only', async () => {
+    loaded();
+    await render(<ConsentRoute />);
+    await screen.findByText(notice.fullText);
+    expect(
+      screen.getByText(
+        'This notice is in English only. No Hindi or Marathi version has been approved yet.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByLabelText('Language')).toBeNull();
+  });
+
+  it('with a published Hindi notice, offers it, and records THAT version and its language', async () => {
+    mockStore.mockReturnValue(pulled([visit], [doctor], [notice, hindi]));
+    mockCreateConsentRecord.mockClear();
+    mockCreateConsentRecord.mockResolvedValue({});
+    await render(<ConsentRoute />);
+    await screen.findByText(notice.fullText);
+    expect(screen.queryByText(/English only/u)).toBeNull();
+
+    await fireEvent.press(screen.getByLabelText('Language'));
+    await fireEvent.press(await screen.findByText('हिंदी'));
+
+    // The notice on screen is the server's Hindi row, verbatim, with its own version and language.
+    expect(await screen.findByText(hindi.fullText)).toBeTruthy();
+    expect(screen.getByText('Notice version 1.2 · हिंदी')).toBeTruthy();
+
+    await fireEvent.press(screen.getByText("Yes, that's fine"));
+    expect(mockCreateConsentRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        consentTextVersionId: hindi.id,
+        displayedLanguage: 'hi-IN',
+      }),
+    );
+  });
+
+  it('does not follow the APP language: the doctor-facing words stay as published', async () => {
+    loaded();
+    await act(() => {
+      expect(languageStore.choose('hi')).toBe(true);
+    });
+    try {
+      await render(<ConsentRoute />);
+      expect(await screen.findByText(notice.fullText)).toBeTruthy();
+      expect(screen.getByText('May we record this conversation?')).toBeTruthy();
+      expect(screen.getByText("Yes, that's fine")).toBeTruthy();
+      expect(screen.queryByText(/^हि /u)).toBeNull();
+    } finally {
+      await act(() => {
+        languageStore.choose('en');
+      });
+    }
   });
 });

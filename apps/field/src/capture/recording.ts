@@ -3,6 +3,7 @@ import type {
   CreateRecordingRequest,
   CreateVoiceNoteRequest,
 } from '@fieldforce/core';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * Phase 3 D6 and D7 — the rules around the microphone, away from the renderer.
@@ -58,11 +59,11 @@ export const authorisingConsent = (records: readonly ConsentRecord[]): ConsentRe
 export const blockReason = (block: RecordingBlock): string => {
   switch (block.kind) {
     case 'never_asked':
-      return 'Ask the doctor first. Nothing can be recorded until they have answered on this phone.';
+      return t('visit.askDoctorFirstOnPhone');
     case 'refused':
-      return 'The doctor said no. Nothing will be recorded, and that is the end of it — carry on with the visit.';
+      return t('visit.doctorSaidNo');
     case 'no_microphone':
-      return 'The microphone is off for this app. Turn it on in Settings if you want to record with the doctor’s agreement.';
+      return t('visit.microphoneOff');
   }
 };
 
@@ -133,4 +134,4 @@ export const elapsedLabel = (seconds: number): string => {
  * records: nothing here knows a doctor's pronouns either.
  */
 export const recordingLabel = (agreedAtClock: string): string =>
-  `Recording · agreed at ${agreedAtClock}`;
+  t('visit.recordingAgreedAt', { time: agreedAtClock });

@@ -18,6 +18,8 @@ import type { RpcCaller } from '../capture/client';
 import { assertOwned, audioFolder } from '../capture/voice-note-files';
 import type { KeptAudioKind } from '../capture/voice-note-files';
 import type { RecordingUpload, VoiceNoteUpload } from './voice-note-upload';
+import { utf8Length } from './data-use';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * The five writes, through `sync_push` — MR-18 B1. This is what closes `G-WRITE`.
@@ -110,6 +112,13 @@ export interface PushAccepted {
   readonly receivedAt: string;
   /** W2-B A / `BE-W147`. What the server said beside "accepted" — the ones this build knows. */
   readonly warnings: readonly SyncWarning[];
+  /**
+   * `FE-W137`. What this send put on the wire, in bytes: the request bodies, and for audio the
+   * file itself. Headers are not included. The outbox counts it toward the month's mobile-data
+   * uploads when the phone was not on WiFi. Optional so an older caller's fake stays valid; absent
+   * counts as nothing.
+   */
+  readonly bytesSent?: number;
 }
 
 /**
@@ -231,10 +240,9 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
     payload: object,
   ): Promise<PushAccepted> => {
     const db = await resolveClient<RpcCaller>(deps.client);
-    const { data, error } = await db.rpc('sync_push', {
-      p_batch_id: newBatchId(),
-      p_items: [{ id, entity, entityId, payload }],
-    });
+    const args = { p_batch_id: newBatchId(), p_items: [{ id, entity, entityId, payload }] };
+    const bytesSent = utf8Length(JSON.stringify(args));
+    const { data, error } = await db.rpc('sync_push', args);
 
     if (error !== null) {
       // A transport-level failure, or an RPC that never ran. NOT a refusal: the server has
@@ -257,7 +265,11 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
       // since `20260813000200`; this arm returned the clock alone, so `stale_beat_plan` and — from
       // `BE-C5` — "the clinic could not be confirmed" died here, one function after the wire.
       case 'accepted':
-        return { receivedAt: response.serverTime, warnings: knownSyncWarnings(verdict.warnings) };
+        return {
+          receivedAt: response.serverTime,
+          warnings: knownSyncWarnings(verdict.warnings),
+          bytesSent,
+        };
       // **A duplicate is a SUCCESS, not a failure.** It means this exact item is already
       // recorded -- the write landed and the acknowledgement did not. Treating it as an
       // error would dead-letter work the server already holds, and asking the MR to do
@@ -269,14 +281,18 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
       // The duplicate carries the warnings `sync_items` stored on the first landing, which is how a
       // rep whose answer was lost at the clinic door is still told.
       case 'duplicate':
-        return { receivedAt: response.serverTime, warnings: knownSyncWarnings(verdict.warnings) };
+        return {
+          receivedAt: response.serverTime,
+          warnings: knownSyncWarnings(verdict.warnings),
+          bytesSent,
+        };
       case 'rejected':
       case 'dead_lettered':
         throw new SyncPushRefusal({
           // Backend's sentence, verbatim. Never reworded -- the queue screen renders
           // exactly this, and `rejectionDetail` is written for support rather than for
           // the MR, so it is the fallback and not the first choice.
-          message: verdict.rejectionDetail ?? 'The server refused this.',
+          message: verdict.rejectionDetail ?? t('queue.serverRefused'),
           sqlState: verdict.sqlState,
           rejectionCode: verdict.rejectionCode,
           deadLettered: verdict.status === 'dead_lettered',
@@ -307,14 +323,18 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
     extra: Record<string, unknown> = {},
   ): Promise<PushAccepted> => {
     const kind: KeptAudioKind = entity === 'recording' ? 'recordings' : 'voice-notes';
-    const noun = entity === 'recording' ? 'recording' : 'voice note';
+    // `FE-W153`. One whole sentence per kind, not a noun spliced into one: a translation may need
+    // to change more than the noun.
+    const recording = entity === 'recording';
     const notes = deps.voiceNotes ?? (await import('./voice-note-device')).deviceVoiceNotes;
 
     // Only the signed-in rep's own folder is opened (MR-50 D). The queue is already per rep
     // (MR-49), so this cannot normally differ; if it does, nothing is read or sent.
     const signedIn = await notes.signedInUserId();
     if (signedIn === null || signedIn !== body.userId) {
-      throw new Error(`This ${noun} belongs to a different sign-in, so it was not sent.`);
+      throw new Error(
+        recording ? t('queue.recordingOtherSignIn') : t('queue.voiceNoteOtherSignIn'),
+      );
     }
     const root = notes.documentRoot();
     const uri = `${audioFolder(root, body.userId, kind)}${encodeURIComponent(body.noteId)}.m4a`;
@@ -335,19 +355,20 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
     if (!notes.fileExists(uri)) {
       // Neither here nor there. Not a server verdict, so it takes the outbox's own path:
       // a failed attempt, visible, and eventually a person's problem.
-      throw new Error(`This ${noun} is no longer on this phone, so it cannot be sent.`);
+      throw new Error(recording ? t('queue.recordingGone') : t('queue.voiceNoteGone'));
     }
 
     const db = await resolveClient<RpcCaller>(deps.client);
     const size = notes.fileSize(uri);
-    const began = await db.rpc('begin_upload', {
+    const beginArgs = {
       p_visit_id: body.visitId,
       // The kind decides which rules apply: for a recording, `begin_upload` refuses unless a
       // standing consent exists. That check is the server's, and is never repeated here.
       p_kind: entity,
       p_size_bytes: size,
       p_duration_seconds: body.durationSeconds,
-    });
+    };
+    const began = await db.rpc('begin_upload', beginArgs);
     if (began.error !== null) throw refusalOrSilence(began.error);
     const grant = grantFrom(began.data);
 
@@ -371,7 +392,11 @@ export const createPushClient = (deps: PushClientDeps = {}): OutboxWriteClient =
       // The server has it. A copy that could not be deleted is tidied by the next save's
       // listing, not reported as a failed send.
     }
-    return accepted;
+    // `FE-W137`. The file, plus the two requests that framed it.
+    return {
+      ...accepted,
+      bytesSent: size + utf8Length(JSON.stringify(beginArgs)) + (accepted.bytesSent ?? 0),
+    };
   };
 
   return {

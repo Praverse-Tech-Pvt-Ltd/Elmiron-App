@@ -5,6 +5,8 @@
  * the company switch is on, which positions were kept. This file only names times, ages and
  * refusals. Pure, and outside the `'use client'` files, so it is tested without a renderer.
  */
+import { plural } from './plural';
+
 export interface Refusal {
   readonly code?: string | null;
   readonly message: string;
@@ -29,7 +31,7 @@ export const ageLabel = (seconds: number): string => {
   if (minutes < 60) return `${String(minutes)} min ago`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${String(hours)} h ${String(minutes % 60)} min ago`;
-  return `${String(Math.floor(hours / 24))} day(s) ago`;
+  return `${plural(Math.floor(hours / 24), 'day', 'days')} ago`;
 };
 
 export const accuracyLabel = (metres: number | null): string =>

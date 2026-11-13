@@ -1,19 +1,23 @@
 import type { SettingRow } from '@fieldforce/ui';
+import { LANGUAGES, languageStore, t } from '@fieldforce/ui/i18n';
+import type { Language } from '@fieldforce/ui/i18n';
+import type { DataPrefs } from './data-prefs';
 
 /**
  * C4's entries, transcribed from `docs/design/phase2-first-run-and-the-day.dc.html`.
  *
  * **What is deliberately missing: the data-usage figures.** C4 opens with "84 MB of
- * your plan · Audio 52 MB · Everything else 20 MB". Nothing in this app measures
- * network usage and nothing in the contract reports it, so those numbers have no
- * source. They are also the numbers most likely to be believed — an MR deciding
+ * your plan · Audio 52 MB · Everything else 20 MB". Nothing in this app measures the
+ * phone's network usage and nothing in the contract reports it, so those numbers have
+ * no source. They are also the numbers most likely to be believed — an MR deciding
  * whether to turn WiFi-only on reads them first — which makes them the worst
- * candidates for a plausible-looking guess.
+ * candidates for a plausible-looking guess. `FE-W137` measures ONE narrower thing —
+ * this app's own uploads over mobile data — and the Mobile data screen shows it under
+ * that name, never as "your plan".
  *
- * **Why WiFi-only is listed even though it does nothing yet.** The design's note is
- * that it ships *on*, because "audio is 62% of the bill and the MR didn't choose to
- * generate it". That default is a commitment worth recording before the upload path
- * is written, so the row is here and marked honestly rather than left out.
+ * **WiFi-only and the 100 MB note now govern something** (`FE-W135`–`FE-W139`), so both
+ * rows are `available` and open the Mobile data screen. WiFi-only ships *on*, as the
+ * design said: "audio is 62% of the bill and the MR didn't choose to generate it".
  *
  * **Consent language is separate from app language on purpose** — the design calls
  * that a product decision as much as a design one. The consent screen is what the
@@ -23,9 +27,12 @@ import type { SettingRow } from '@fieldforce/ui';
 export interface SettingsNavigation {
   readonly onOpenMileage: () => void;
   readonly onOpenDayEnd: () => void;
-  readonly onOpenBattery: () => void;
+  /** `FE-W161`. Present only where the step applies (Android); absent, there is no battery row. */
+  readonly onOpenBattery?: () => void;
   readonly onOpenTransparency: () => void;
   readonly onOpenLocation: () => void;
+  /** `FE-W139`. The Mobile data screen, behind both "Your data" rows. */
+  readonly onOpenDataSettings: () => void;
   /**
    * FE-D15. Present only when `assistantEnabled`. Absent, there is no assistant row, so a
    * build with the flag off carries no trace of it.
@@ -39,18 +46,65 @@ export interface SettingsNavigation {
   readonly onOpenLearning?: () => void;
   /** `FE-W71`. Present only when `liveTrackingEnabled`; absent, there is no row. */
   readonly onOpenLiveTracking?: () => void;
+  /** `FE-W142`. Switch the app to a language whose catalogue is complete, and keep it. */
+  readonly onChooseLanguage: (language: Language) => void;
 }
+
+/**
+ * `FE-W142` — one row per language, each named in its own script.
+ *
+ * The one in use is `chosen`. A complete one is `available` and switches the app. An incomplete
+ * one is SHOWN, so the rep and the client can see it is coming and how far the translators have
+ * got, but it is `not-yet` and cannot be pressed: the switch never offers a translation that does
+ * not exist. It becomes pressable the moment its file is full, with no change here.
+ */
+const languageRows = (nav: SettingsNavigation): SettingRow[] =>
+  LANGUAGES.map((language) => {
+    const detail = language.code === 'en' ? '' : language.englishName;
+    if (language.code === languageStore.current()) {
+      return { id: `language-${language.code}`, title: language.name, detail, state: 'chosen' };
+    }
+    if (languageStore.selectable(language.code)) {
+      return {
+        id: `language-${language.code}`,
+        title: language.name,
+        detail,
+        state: 'available',
+        onPress: () => {
+          nav.onChooseLanguage(language.code);
+        },
+      };
+    }
+    const { done, total } = languageStore.progress(language.code);
+    return {
+      id: `language-${language.code}`,
+      title: language.name,
+      detail,
+      state: 'not-yet',
+      note: t('settings.languageWaiting', { language: language.englishName, done, total }),
+    };
+  });
+
+/**
+ * `FE-W192`. What a row's setting is set to, in words, or nothing while it is still being read off
+ * the phone — a row never shows a guessed position, as `DataSettingsScreen` never draws a guessed
+ * switch.
+ */
+const onOff = (value: boolean | undefined): { value?: string } =>
+  value === undefined ? {} : { value: value ? t('common.on') : t('common.off') };
 
 export const settingsGroups = (
   nav: SettingsNavigation,
+  /** `FE-W192`. The two "Your data" switches as this phone has them; absent until read. */
+  state: { readonly dataPrefs?: DataPrefs | null } = {},
 ): readonly { heading: string; rows: readonly SettingRow[] }[] => [
   {
-    heading: 'Your work',
+    heading: t('settings.groupWork'),
     rows: [
       {
         id: 'mileage',
-        title: 'Mileage',
-        detail: 'Distance on this month’s claim, day by day.',
+        title: t('settings.mileage'),
+        detail: t('settings.mileageDetail'),
         state: 'available',
         onPress: nav.onOpenMileage,
       },
@@ -59,8 +113,8 @@ export const settingsGroups = (
         // B7. Reachable from Today once the day is done, and from here at any hour,
         // because the question it answers — "is this app still recording me" — is
         // one an MR is allowed to ask on a Sunday.
-        title: 'How today ended',
-        detail: 'What was recorded, what was sent, and what is running now.',
+        title: t('settings.dayEnd'),
+        detail: t('settings.dayEndDetail'),
         state: 'available',
         onPress: nav.onOpenDayEnd,
       },
@@ -69,8 +123,8 @@ export const settingsGroups = (
         : [
             {
               id: 'assistant',
-              title: 'Assistant',
-              detail: 'Ask how to do something in this app.',
+              title: t('settings.assistant'),
+              detail: t('settings.assistantDetail'),
               state: 'available' as const,
               onPress: nav.onOpenAssistant,
             },
@@ -80,8 +134,8 @@ export const settingsGroups = (
         : [
             {
               id: 'practice',
-              title: 'AI Doctor practice',
-              detail: 'Practise a visit with an AI doctor and get feedback.',
+              title: t('settings.practice'),
+              detail: t('settings.practiceDetail'),
               state: 'available' as const,
               onPress: nav.onOpenPractice,
             },
@@ -91,8 +145,8 @@ export const settingsGroups = (
         : [
             {
               id: 'product-qa',
-              title: 'Product questions',
-              detail: 'Answered only from your company’s approved material, with the source shown.',
+              title: t('settings.productQa'),
+              detail: t('settings.productQaDetail'),
               state: 'available' as const,
               onPress: nav.onOpenProductQa,
             },
@@ -102,8 +156,8 @@ export const settingsGroups = (
         : [
             {
               id: 'learning',
-              title: 'Learning',
-              detail: 'The courses assigned to you.',
+              title: t('settings.learning'),
+              detail: t('settings.learningDetail'),
               state: 'available' as const,
               onPress: nav.onOpenLearning,
             },
@@ -111,75 +165,82 @@ export const settingsGroups = (
     ],
   },
   {
-    heading: 'Your data',
+    heading: t('settings.groupData'),
     rows: [
       {
         id: 'wifi-only',
-        title: 'Send audio on WiFi only',
-        detail: 'Recordings wait for WiFi. Everything else still sends.',
-        state: 'not-yet',
+        title: t('settings.wifiOnly'),
+        detail: t('settings.wifiOnlyDetail'),
+        state: 'available',
+        onPress: nav.onOpenDataSettings,
+        ...onOff(state.dataPrefs?.wifiOnlyAudio),
       },
       {
         id: 'warn-over',
-        title: 'Warn me over 100 MB',
-        detail: 'A note on home, nothing stops working.',
-        state: 'not-yet',
+        title: t('settings.warnOver'),
+        detail: t('settings.warnOverDetail'),
+        state: 'available',
+        onPress: nav.onOpenDataSettings,
+        ...onOff(state.dataPrefs?.warnOverMonthly),
       },
     ],
   },
   {
-    heading: 'Language',
+    heading: t('settings.groupLanguage'),
     rows: [
+      ...languageRows(nav),
       {
-        id: 'app-language',
-        title: 'App language',
-        detail: 'The language you read.',
-        state: 'not-yet',
-      },
-      {
+        // `FE-W148`. Not a setting the rep makes: the DOCTOR chooses, on the consent screen, among
+        // the notices the company has published (`consent_text_versions`, by language). Said as a
+        // fact rather than as "coming later", because nothing here will ever switch it -- an
+        // approved notice in Hindi or Marathi is what makes it appear.
         id: 'consent-language',
-        title: 'Consent screen language',
-        detail: 'What the doctor reads. Set separately from your own.',
-        state: 'not-yet',
+        title: t('settings.consentLanguage'),
+        detail: t('settings.consentLanguageDetail'),
+        state: 'info',
       },
     ],
   },
   {
-    heading: 'This phone',
+    heading: t('settings.groupPhone'),
     rows: [
       ...(nav.onOpenLiveTracking === undefined
         ? []
         : [
             {
               id: 'live-tracking',
-              title: 'Live location',
-              detail: 'The notice, your agreement, and sharing your location during working hours.',
+              title: t('settings.liveLocation'),
+              detail: t('settings.liveLocationDetail'),
               state: 'available' as const,
               onPress: nav.onOpenLiveTracking,
             },
           ]),
       {
         id: 'location',
-        title: 'Location',
-        detail: 'What it is for, and when it is taken.',
+        title: t('settings.location'),
+        detail: t('settings.locationDetail'),
         state: 'available',
         onPress: nav.onOpenLocation,
       },
-      {
-        id: 'battery',
-        title: 'Battery & autostart',
-        // C4 draws "All 3 set correctly" here. The done-marks now persist, so the
-        // count is finally *available* — it is still absent because this module is a
-        // pure list and reading it would make every settings row wait on storage.
-        // A row that needs live state should take it as a prop rather than fetch.
-        detail: 'Keep check-ins and mileage working when the phone sleeps.',
-        state: 'available',
-        onPress: nav.onOpenBattery,
-      },
+      ...(nav.onOpenBattery === undefined
+        ? []
+        : [
+            {
+              id: 'battery',
+              title: t('settings.battery'),
+              // C4 draws "All 3 set correctly" here. The done-marks now persist, so the
+              // count is finally *available* — it is still absent because this module is a
+              // pure list and reading it would make every settings row wait on storage.
+              // A row that needs live state should take it as a prop rather than fetch.
+              detail: t('settings.batteryDetail'),
+              state: 'available' as const,
+              onPress: nav.onOpenBattery,
+            },
+          ]),
       {
         id: 'transparency',
-        title: 'What this app records',
-        detail: 'Everything, before you ask.',
+        title: t('settings.transparency'),
+        detail: t('settings.transparencyDetail'),
         state: 'available',
         onPress: nav.onOpenTransparency,
       },

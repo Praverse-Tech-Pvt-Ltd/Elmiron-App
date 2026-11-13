@@ -40,7 +40,7 @@ describe('FE-D7 4 — how the screen reads', () => {
 
   it('titles the screen at the design’s 27px day-screen title, not the section heading', async () => {
     await render(<DayEndScreen {...props} dayLabel="Today" />);
-    const title = StyleSheet.flatten(screen.getByText("Today — that's the day").props['style']) as {
+    const title = StyleSheet.flatten(screen.getByText('Today at a glance').props['style']) as {
       fontSize?: number;
     };
     expect(title.fontSize).toBe(tokens.typography.title.size);
@@ -215,5 +215,61 @@ describe('FE-W80 — the working day and "End my day"', () => {
     expect(screen.getByText('Your day was not ended')).toBeTruthy();
     expect(screen.getByText(/Check out of it, then end your day again/u)).toBeTruthy();
     expect(screen.getByText('End my day')).toBeTruthy();
+  });
+});
+
+/**
+ * `FE-W185`. The confirmation's heading is the caller's when the caller knows better: while live
+ * location is shared, "Nothing is being recorded." is false, and the route says what is.
+ */
+describe('FE-W185 — the confirmation follows what live location is doing', () => {
+  it('draws the heading the caller gives, in place of "Nothing is being recorded."', async () => {
+    await render(
+      <DayEndScreen
+        {...props}
+        captureTitle="Your live location is being shared."
+        captureNote="While you share it, this app reads your position every few minutes."
+      />,
+    );
+    expect(screen.getByText('Your live location is being shared.')).toBeTruthy();
+    expect(screen.queryByText('Nothing is being recorded.')).toBeNull();
+  });
+
+  it('POSITIVE CONTROL: with no heading given, it is "Nothing is being recorded."', async () => {
+    await render(<DayEndScreen {...props} />);
+    expect(screen.getByText('Nothing is being recorded.')).toBeTruthy();
+  });
+});
+
+/**
+ * `FE-W191`. The note goes with "End my day", so it is the last thing in the scroll — directly
+ * above the pinned button — not separated from it by the sync line.
+ */
+describe('FE-W191 — the note and End my day read as one act', () => {
+  it('puts the working day’s note after the sync line, next to the pinned button', async () => {
+    await render(
+      <DayEndScreen
+        {...props}
+        workDay={{
+          title: 'Your day is open — started 09:12',
+          detail: null,
+          tone: 'plain',
+          note: { value: '', onChange: noop },
+          action: { label: 'End my day', onPress: noop, busy: false, blockedBy: null },
+        }}
+      />,
+    );
+    const order = screen
+      .getAllByText(/Note for your manager|Everything sent|End my day/u)
+      .map((node) => String(node.props['children']));
+    const syncLine = order.findIndex((text) => text.startsWith('Everything sent'));
+    expect(syncLine).toBeGreaterThanOrEqual(0);
+    expect(syncLine).toBeLessThan(order.indexOf('Note for your manager'));
+    expect(order.indexOf('Note for your manager')).toBeLessThan(order.indexOf('End my day'));
+    expect(
+      screen.getByText(
+        'Optional. It goes to your manager with your day when you press End my day.',
+      ),
+    ).toBeTruthy();
   });
 });

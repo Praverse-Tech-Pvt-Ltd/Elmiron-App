@@ -22,10 +22,29 @@ jest.mock('../features', () => ({
   },
   coachingEnabled: false,
   assistantEnabled: false,
+  get practiceVoiceEnabled() {
+    return mockVoiceEnabled;
+  },
 }));
+// `FE-W163`. The device loop (expo-audio, native) does not load under jest: it is replaced by one
+// that hands the screen's `send` to the test, so the test can play the part of the microphone.
+let mockVoiceEnabled = false;
+let mockVoiceSend: ((base64: string) => Promise<unknown>) | null = null;
+jest.mock('../practice/voice-device', () => ({
+  useVoiceConversation: (send: (base64: string) => Promise<unknown>) => {
+    mockVoiceSend = send;
+    return { phase: 'off', pause: null, start: () => undefined, stop: () => undefined };
+  },
+}));
+let mockSpokenResponse: { status: number; body: unknown } = {
+  status: 503,
+  body: { code: 'voice_unavailable' },
+};
+const mockSpoken: unknown[] = [];
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+const mockBack = jest.fn();
 let mockParams: Record<string, string> = {};
 jest.mock('expo-router', () => ({
   Redirect: ({ href }: { href: string }) => {
@@ -33,7 +52,12 @@ jest.mock('expo-router', () => ({
     const ui = jest.requireActual<typeof UiModule>('@fieldforce/ui');
     return React.createElement(ui.BodyText, null, `redirect:${href}`);
   },
-  useRouter: () => ({ push: mockPush, replace: mockReplace, back: jest.fn() }),
+  useRouter: () => ({
+    push: mockPush,
+    replace: mockReplace,
+    back: mockBack,
+    canGoBack: () => true,
+  }),
   useLocalSearchParams: () => mockParams,
 }));
 
@@ -50,6 +74,10 @@ jest.mock('../practice/transport', () => {
     turn: (body) => {
       mockTurns.push(body);
       return sample.turn(body);
+    },
+    spokenTurn: (body) => {
+      mockSpoken.push(body);
+      return Promise.resolve(mockSpokenResponse);
     },
     end: (sessionId) => {
       if (mockEndFailures > 0) {
@@ -94,6 +122,10 @@ const startSession = async (): Promise<string> => {
 
 beforeEach(() => {
   mockPracticeEnabled = true;
+  mockVoiceEnabled = false;
+  mockVoiceSend = null;
+  mockSpoken.length = 0;
+  mockSpokenResponse = { status: 503, body: { code: 'voice_unavailable' } };
   mockStubAnalysis = false;
   mockPush.mockReset();
   mockReplace.mockReset();
@@ -261,5 +293,102 @@ describe('FE-D17 — the feedback', () => {
     await render(<PracticeAnalysis />);
 
     expect(await screen.findByText('This feedback is not available to you')).toBeTruthy();
+  });
+});
+
+describe('FE-W163 — practice by voice', () => {
+  it('off: no voice card, the typed screen as before', async () => {
+    mockParams = { id: await startSession() };
+    await render(<PracticeSession />);
+    await screen.findByText('Dr Sample Rao');
+    expect(screen.queryByText('Talk to the doctor')).toBeNull();
+  });
+
+  it('on: a spoken turn sends the session and the recording only; a reply with speech plays', async () => {
+    mockVoiceEnabled = true;
+    const sessionId = await startSession();
+    mockParams = { id: sessionId };
+    await render(<PracticeSession />);
+    expect(await screen.findByText('Talk to the doctor')).toBeTruthy();
+
+    mockSpokenResponse = {
+      status: 200,
+      body: {
+        kind: 'replied',
+        reply: 'Go on.',
+        repText: 'Good morning, Doctor.',
+        doctorAudio: { base64: 'AAAA', mimeType: 'audio/mpeg' },
+      },
+    };
+    await expect(mockVoiceSend?.('QUJD')).resolves.toEqual({ next: 'speak', audio: 'AAAA' });
+    expect(mockSpoken).toEqual([
+      { feature: 'ai_doctor', sessionId, repAudio: { base64: 'QUJD', mimeType: 'audio/mp4' } },
+    ]);
+    expect(JSON.stringify(mockSpoken)).not.toMatch(/Asha|Deshpande|55555555-5555-4555-8555/u);
+  });
+
+  it('on: without the speech service the loop pauses and says to type; silence just listens again', async () => {
+    mockVoiceEnabled = true;
+    mockParams = { id: await startSession() };
+    await render(<PracticeSession />);
+    await screen.findByText('Talk to the doctor');
+
+    await expect(mockVoiceSend?.('QUJD')).resolves.toEqual({ next: 'pause', pause: 'no_voice' });
+    mockSpokenResponse = { status: 200, body: { kind: 'no_speech' } };
+    await expect(mockVoiceSend?.('QUJD')).resolves.toEqual({ next: 'listen' });
+  });
+});
+
+/**
+ * `FE-W193` — the practice screens' own words: a session says when it started (two practices of one
+ * scenario were identical rows), a stance is a label with a capital, and a session with no turns
+ * opens at its header instead of following an empty conversation to its bottom. `FE-W188`: each
+ * practice screen draws its own Back control.
+ */
+describe('FE-W193 — practice rows, labels and the first paint', () => {
+  /** The scroll view: the one ancestor with a content container. */
+  const scrollerAbove = (text: string) => {
+    let node = screen.getByText(text).parent;
+    while (node !== null && node.props['contentContainerStyle'] === undefined) node = node.parent;
+    if (node === null) throw new Error('no scroll view above the text');
+    return node;
+  };
+
+  it('a past session says when it started, in the territory’s clock; a stance has a capital', async () => {
+    await startSession();
+    await render(<PracticeHome />);
+    // The sample's start, 05:30 UTC, is 11:00 in Asia/Kolkata.
+    expect((await screen.findAllByText('Started 1 Oct at 11:00')).length).toBeGreaterThan(0);
+    expect(screen.getByText('Dr Sample Rao · Urology · Sceptical')).toBeTruthy();
+    expect(screen.getByText('Dr Sample Iyer · General practice · In a hurry')).toBeTruthy();
+  });
+
+  it('a session with no turns opens at its header; a first turn starts following', async () => {
+    mockParams = { id: await startSession() };
+    await render(<PracticeSession />);
+    await screen.findByText('Dr Sample Rao');
+    expect(scrollerAbove('Practice simulation').props['onContentSizeChange']).toBeUndefined();
+
+    await fireEvent.changeText(screen.getByLabelText('What you say'), 'Good morning, Doctor.');
+    await fireEvent.press(screen.getByText('Send'));
+    await screen.findByText(/^Sample reply from the practice doctor/u);
+    expect(scrollerAbove('Practice simulation').props['onContentSizeChange']).toBeDefined();
+  });
+
+  it('FE-W188: home, session and feedback each draw a Back control that goes back', async () => {
+    mockBack.mockClear();
+    await render(<PracticeHome />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Back' }));
+
+    mockParams = { id: await startSession() };
+    await render(<PracticeSession />);
+    await screen.findByText('Dr Sample Rao');
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+
+    mockParams = { id: '00000000-0000-4000-8000-000000000000' };
+    await render(<PracticeAnalysis />);
+    await screen.findByText('This feedback is not available to you');
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+    expect(mockBack).toHaveBeenCalledTimes(3);
   });
 });

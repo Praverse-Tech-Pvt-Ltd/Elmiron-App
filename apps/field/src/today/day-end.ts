@@ -2,6 +2,7 @@ import type { Visit } from '@fieldforce/core';
 import { clockIn } from './territory-day';
 import type { TerritoryZone } from './territory-day';
 import type { WorkDayStatus } from './work-day';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * B7's day, reduced to what the screen puts on it.
@@ -69,17 +70,63 @@ export const summariseDayEnd = (visits: readonly Visit[]): DayEnd => {
 };
 
 /**
+ * `FE-W185` — what live location is doing, as far as Day end's sentence is concerned.
+ *
+ * - `none`: live location is not part of this rep's day — the build has it off, the company has it
+ *   off, or the rep has not accepted the notice. A position is read on a press and at no other time.
+ * - `sharing`: the phone is reading positions for live location right now.
+ * - `paused`: the rep has accepted it and it is paused — outside working hours, not started (or
+ *   stopped) for today, or the app is off screen. Nothing is read now; it is read again when sharing
+ *   resumes.
+ */
+export type LiveCapture = 'none' | 'sharing' | 'paused';
+
+const PAUSED: ReadonlySet<string> = new Set([
+  'paused_outside_hours',
+  'paused_day_closed',
+  'paused_background',
+]);
+
+export const liveCaptureOf = (
+  tracker: { readonly state?: string; readonly readingNow?: boolean } | null,
+): LiveCapture => {
+  if (tracker === null) return 'none';
+  if (tracker.readingNow === true) return 'sharing';
+  // `active` without the location permission reads nothing: it is said as paused, which it is.
+  if (tracker.state === 'active' || PAUSED.has(tracker.state ?? '')) return 'paused';
+  return 'none';
+};
+
+/**
  * The standing truth about when this app reads a position.
  *
- * Present tense and unconditional, because under `fe-w3-spec.md` §4a it is
- * unconditional: there is no background location in this app, so between one press
- * and the next nothing is read. B7 draws this as a thing that happened at 18:22.
- * Writing it that way would imply the rest of the day was different, which would
- * teach the MR the app tracks them continuously — the exact belief the
- * transparency screen exists to correct.
+ * Present tense, because under `fe-w3-spec.md` §4a it is a standing fact: there is no background
+ * location in this app, so between one press and the next nothing is read. B7 draws this as a thing
+ * that happened at 18:22. Writing it that way would imply the rest of the day was different, which
+ * would teach the MR the app tracks them continuously — the exact belief the transparency screen
+ * exists to correct.
+ *
+ * **`FE-W185`. And it must be true in every state, which it was not.** With live location shared
+ * (`FE-W71`), "it has not been reading it between visits, it is not reading it now" was false on the
+ * screen whose whole claim is that its words are the honest ones (QA screenshot 61). The heading and
+ * the sentence now follow what live location is actually doing; while it is shared they say plainly
+ * when a position is read.
  */
-export const CAPTURE_NOTE =
-  'This app only ever reads your position at the moment you press check in or check out. It has not been reading it between visits, it is not reading it now, and it will not until you press again.';
+export const captureCopy = (
+  live: LiveCapture,
+): { readonly title: string; readonly note: string } => {
+  switch (live) {
+    case 'none':
+      return { title: t('dayEnd.nothingRecorded'), note: t('dayEnd.captureNote') };
+    case 'paused':
+      return { title: t('dayEnd.nothingRecorded'), note: t('dayEnd.captureNotePaused') };
+    case 'sharing':
+      return { title: t('dayEnd.liveSharingTitle'), note: t('dayEnd.captureNoteSharing') };
+  }
+};
+
+/** The sentence alone. With no live location in the picture, the press-only sentence. */
+export const captureNote = (live: LiveCapture = 'none'): string => captureCopy(live).note;
 
 /**
  * `FE-W80` — what the working-day card says, for every state the server and this phone can be in.
@@ -97,8 +144,7 @@ export interface WorkDayCopy {
 }
 
 /** What a check-in on an ended day meets -- said before the press, not discovered after it. */
-const AFTER_END =
-  'When you end it, the server keeps your day as it stands and refuses further check-ins for today unless your manager reopens it.';
+const afterEnd = (): string => t('dayEnd.afterEnd');
 
 export const workDayCopy = (
   status: WorkDayStatus,
@@ -112,15 +158,16 @@ export const workDayCopy = (
     case 'closed': {
       const { day } = status;
       const totals = day.totals;
-      const attended =
-        totals === null
-          ? null
-          : `${String(totals.visitsCompleted + totals.visitsNotMet)} of ${String(totals.visitsTotal)} visits attended`;
       return {
-        title: `Day ended at ${clockIn(day.closedAt ?? day.updatedAt, zone)}`,
+        title: t('dayEnd.endedAt', { time: clockIn(day.closedAt ?? day.updatedAt, zone) }),
         detail: [
-          attended === null ? 'The server has your day.' : `The server has your day: ${attended}.`,
-          'Further check-ins for today are refused unless your manager reopens the day.',
+          totals === null
+            ? t('dayEnd.serverHasDay')
+            : t('dayEnd.serverHasDayAttended', {
+                attended: totals.visitsCompleted + totals.visitsNotMet,
+                total: totals.visitsTotal,
+              }),
+          t('dayEnd.furtherRefused'),
         ].join(' '),
         tone: 'done',
         offerEnd: false,
@@ -129,15 +176,14 @@ export const workDayCopy = (
     case 'ending':
       return status.sent
         ? {
-            title: 'Ending your day — the server has it',
-            detail: 'Its confirmation arrives with your next sync.',
+            title: t('dayEnd.endingSent'),
+            detail: t('dayEnd.endingSentDetail'),
             tone: 'waiting',
             offerEnd: false,
           }
         : {
-            title: 'Ended on this phone — waiting to send',
-            detail:
-              'It sends by itself when you have signal, after anything else still waiting. Nothing is lost.',
+            title: t('dayEnd.endingQueued'),
+            detail: t('dayEnd.endingQueuedDetail'),
             tone: 'waiting',
             offerEnd: false,
           };
@@ -146,17 +192,16 @@ export const workDayCopy = (
       const { day } = status;
       const title =
         day === null
-          ? 'Your day is started on this phone — waiting to send'
-          : `Your day is open — started ${clockIn(day.openedAt, zone)}`;
-      const reopened =
-        day !== null && day.reopenCount > 0 ? 'Your manager reopened this day. ' : '';
-      return { title, detail: `${reopened}${AFTER_END}`, tone: 'plain', offerEnd: true };
+          ? t('dayEnd.startedOnPhone')
+          : t('dayEnd.openSince', { time: clockIn(day.openedAt, zone) });
+      const reopened = day !== null && day.reopenCount > 0 ? `${t('dayEnd.reopened')} ` : '';
+      return { title, detail: `${reopened}${afterEnd()}`, tone: 'plain', offerEnd: true };
     }
     case 'not_started':
       if (refusal !== null) return { ...refusal, tone: 'refused', offerEnd: true };
       return {
-        title: 'Your day has not started',
-        detail: `It starts with your first check-in. ${AFTER_END}`,
+        title: t('dayEnd.notStarted'),
+        detail: `${t('dayEnd.startsWithCheckIn')} ${afterEnd()}`,
         tone: 'plain',
         offerEnd: true,
       };

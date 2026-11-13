@@ -2,7 +2,8 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { PracticeAnalysisScreen } from './PracticeAnalysisScreen';
 import { PracticeHomeScreen } from './PracticeHomeScreen';
-import { PRACTICE_ONLY_NOTE, PracticeSessionScreen } from './PracticeSessionScreen';
+import { PracticeSessionScreen, practiceOnlyNote } from './PracticeSessionScreen';
+import type { PracticeVoice } from './PracticeSessionScreen';
 
 /**
  * FE-D17 — AI Doctor practice: the home (pick a scenario, see past sessions), the conversation,
@@ -119,7 +120,7 @@ describe('PracticeSessionScreen', () => {
 
   it('always says, beside the box, that this is practice and no real patient or doctor details go in', async () => {
     await render(<PracticeSessionScreen {...base} />);
-    expect(screen.getByText(PRACTICE_ONLY_NOTE)).toBeTruthy();
+    expect(screen.getByText(practiceOnlyNote())).toBeTruthy();
   });
 
   it('shows the conversation, numbered, with the doctor marked as an AI practice doctor', async () => {
@@ -271,5 +272,71 @@ describe('PracticeAnalysisScreen', () => {
       />,
     );
     expect(screen.getByText('Could not load feedback')).toBeTruthy();
+  });
+});
+
+describe('FE-W163 — the voice card on the practice session', () => {
+  const base = {
+    sample: false,
+    personaName: 'Dr Sample Rao',
+    personaLine: 'Urology · sceptical',
+    objective: 'Introduce the product.',
+    objection: 'The price is too high.',
+    turns: [],
+    draft: '',
+    onChangeDraft: () => undefined,
+    onSend: () => undefined,
+    sending: false,
+    phase: 'open' as const,
+    onEnd: () => undefined,
+    onGetFeedback: () => undefined,
+    busy: false,
+    notice: { kind: 'none' } as const,
+    allowance: { kind: 'not_reported' } as const,
+  };
+  const voice = (over: Partial<PracticeVoice> = {}): PracticeVoice => ({
+    phase: 'off',
+    pause: null,
+    onStart: jest.fn(),
+    onStop: jest.fn(),
+    ...over,
+  });
+
+  it('absent: no voice card at all — the typed screen as before', async () => {
+    await render(<PracticeSessionScreen {...base} />);
+    expect(screen.queryByText('Talk to the doctor')).toBeNull();
+  });
+
+  it('off: says what happens to the voice, and starts on a tap', async () => {
+    const v = voice();
+    await render(<PracticeSessionScreen {...base} voice={v} />);
+    expect(screen.getByText(/is not kept/u)).toBeTruthy();
+    await fireEvent.press(screen.getByText('Talk to the doctor'));
+    expect(v.onStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('listening, then the doctor speaking: each says so, and can be stopped', async () => {
+    const v = voice({ phase: 'listening' });
+    const { rerender } = await render(<PracticeSessionScreen {...base} voice={v} />);
+    expect(screen.getByText('Listening — speak when you are ready')).toBeTruthy();
+    await rerender(<PracticeSessionScreen {...base} voice={{ ...v, phase: 'speaking' }} />);
+    expect(screen.getByText('Dr Sample Rao is speaking')).toBeTruthy();
+    await fireEvent.press(screen.getByText('Stop voice'));
+    expect(v.onStop).toHaveBeenCalledTimes(1);
+  });
+
+  it('paused with no speech service: says to type, and offers no "carry on"', async () => {
+    await render(
+      <PracticeSessionScreen {...base} voice={voice({ phase: 'paused', pause: 'no_voice' })} />,
+    );
+    expect(screen.getByText(/Type your turn instead/u)).toBeTruthy();
+    expect(screen.queryByText('Carry on talking')).toBeNull();
+  });
+
+  it('paused because nothing was heard: one tap carries on', async () => {
+    const v = voice({ phase: 'paused', pause: 'nothing_said' });
+    await render(<PracticeSessionScreen {...base} voice={v} />);
+    await fireEvent.press(screen.getByText('Carry on talking'));
+    expect(v.onStart).toHaveBeenCalledTimes(1);
   });
 });

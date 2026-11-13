@@ -6,6 +6,8 @@ import { presentRejection } from '../sync/explanation';
 import { emptyQueue, syncQueueReducer } from '../sync/reducer';
 import type { SyncEvent } from '../sync/events';
 import type { SyncQueueState } from '../sync/reducer';
+import { bindUploadDevice } from '../sync/upload-conditions';
+import type { UploadConditions } from '../sync/upload-conditions';
 
 // The route now reads the outbox off disk and can retry it, so it pulls in the API
 // client — whose module validates EXPO_PUBLIC_* at load and throws under jest.
@@ -14,10 +16,12 @@ jest.mock('../api', () => ({ createClientForScenario: () => ({}) }));
 // MR-28 C2. The retry path, so a flush that REJECTS can be driven. `createPushClient`
 // reaches the config too, and `flushOutbox` is the thing under test rather than the thing
 // being stubbed out.
-const mockFlush = jest.fn<() => Promise<unknown>>();
+const mockFlush = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 jest.mock('../sync/outbox', () => ({
   ...jest.requireActual<Record<string, unknown>>('../sync/outbox'),
-  flushOutbox: () => mockFlush(),
+  // `FE-W136`. The arguments are passed through, so "Send now" can be checked for the
+  // conditions it flushes under.
+  flushOutbox: (...args: unknown[]) => mockFlush(...args),
 }));
 jest.mock('../sync/push-client', () => ({
   ...jest.requireActual<Record<string, unknown>>('../sync/push-client'),
@@ -37,6 +41,13 @@ jest.mock('../sync/async-storage-store', () => ({
   ...jest.requireActual<Record<string, unknown>>('../sync/async-storage-store'),
   loadQueueState: () => mockLoadQueueState(),
 }));
+
+// `FE-W191` / `FE-W188`. The route reads the territory's zone for "Last sent at …" and has a Back
+// control; neither is under test here.
+jest.mock('../sync/pulled-store', () => ({
+  usePulledStore: () => ({ zone: { timeZone: 'Asia/Kolkata', source: 'territory' } }),
+}));
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 
 import Queue from '../../app/queue';
 
@@ -259,5 +270,68 @@ describe('FE-W44 — an unreadable queue is not an empty queue', () => {
     await render(<Queue />);
 
     expect(screen.queryByText(/could not read your queue/iu)).toBeNull();
+  });
+});
+
+/**
+ * `FE-W136` — audio WiFi-only is holding: the rows say so, and "Send now" states its cost and
+ * flushes with audio allowed over this network, this once.
+ */
+describe('FE-W136 — audio waiting for WiFi', () => {
+  const heldNote = SyncQueueItemSchema.parse({
+    ...parsed,
+    id: '15151515-1515-4515-8515-151515151509',
+    entity: 'voice_note',
+  });
+  const onMobile = {
+    read: () => Promise.resolve({ connection: 'mobile' as const, wifiOnlyAudio: true }),
+    recordUse: () => Promise.resolve(),
+    onConnectionChange: () => () => undefined,
+    heldAudioBytes: () => 400_000,
+  };
+
+  it('names the wait, the size, and sends with audio allowed when asked', async () => {
+    bindUploadDevice(onMobile);
+    try {
+      mockLoadQueueState.mockResolvedValue({
+        kind: 'loaded',
+        state: syncQueueReducer(emptyQueue, { type: 'enqueued', item: heldNote }),
+      });
+      mockFlush.mockReset();
+      mockFlush.mockResolvedValue({ attempted: 1, sent: 1, stillQueued: 0 });
+      await render(<Queue />);
+
+      expect(await screen.findByText('Waiting for WiFi')).toBeTruthy();
+      await fireEvent.press(screen.getByText('Send now on mobile data — uses 0.4 MB'));
+
+      await waitFor(() => {
+        expect(mockFlush).toHaveBeenCalledTimes(1);
+      });
+      const conditions = mockFlush.mock.calls[0]?.[3] as UploadConditions;
+      await expect(conditions.read()).resolves.toEqual({
+        connection: 'mobile',
+        wifiOnlyAudio: false,
+      });
+    } finally {
+      bindUploadDevice(null);
+    }
+  });
+
+  it('on WiFi there is nothing held, and no such button', async () => {
+    bindUploadDevice({
+      ...onMobile,
+      read: () => Promise.resolve({ connection: 'wifi' as const, wifiOnlyAudio: true }),
+    });
+    try {
+      mockLoadQueueState.mockResolvedValue({
+        kind: 'loaded',
+        state: syncQueueReducer(emptyQueue, { type: 'enqueued', item: heldNote }),
+      });
+      await render(<Queue />);
+      expect(await screen.findByText('Waiting to send')).toBeTruthy();
+      expect(screen.queryByText(/Send now on mobile data/u)).toBeNull();
+    } finally {
+      bindUploadDevice(null);
+    }
   });
 });

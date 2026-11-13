@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Banner, TopInset } from '@fieldforce/ui';
+import { Banner, TopInset, useT } from '@fieldforce/ui';
 import { useSession } from '../session';
 import { usePulledStore } from '../sync/pulled-store';
 import { zoneCaveat } from './territory-day';
@@ -37,6 +37,7 @@ import { zoneCaveat } from './territory-day';
  * above it.
  */
 export const ZoneCaveatBanner = (): ReactNode => {
+  const { t } = useT();
   const { zone } = usePulledStore();
   const { status } = useSession();
   const caveat = zoneCaveat(zone);
@@ -50,7 +51,7 @@ export const ZoneCaveatBanner = (): ReactNode => {
   // work is not saved".
   return (
     <TopInset>
-      <Banner tone="attention" title="Times may be wrong" detail={caveat} />
+      <Banner tone="attention" title={t('day.zoneCaveatTitle')} detail={caveat} />
     </TopInset>
   );
 };

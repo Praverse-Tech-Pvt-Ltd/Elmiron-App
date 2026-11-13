@@ -84,7 +84,7 @@ describe('AssistantScreen — every state is distinct', () => {
 
     expect(
       screen.getByText(
-        "You have reached today's limit. The assistant is unavailable until it resets.",
+        'You have reached today’s limit. The assistant is unavailable until it resets.',
       ),
     ).toBeTruthy();
     await fireEvent.press(screen.getByText('Send'));
@@ -102,7 +102,7 @@ describe('AssistantScreen — every state is distinct', () => {
       />,
     );
 
-    expect(screen.getByText("You have used 80 of today's 100 assistant requests.")).toBeTruthy();
+    expect(screen.getByText('You have used 80 of today’s 100 assistant requests.')).toBeTruthy();
     await fireEvent.press(screen.getByText('Send'));
     expect(onSend).toHaveBeenCalledTimes(1);
   });

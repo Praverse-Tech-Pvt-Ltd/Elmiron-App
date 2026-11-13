@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { t } from '@fieldforce/ui/i18n';
 import { pushEnabled } from '../features';
 import { useSession } from '../session';
 import { setBeforeSignOut } from './before-sign-out';
@@ -59,7 +60,8 @@ const appDeps = async (): Promise<PushDeps> => {
       deviceToken: async () => String((await Notifications.getDevicePushTokenAsync()).data),
       ensureChannel: async () => {
         await Notifications.setNotificationChannelAsync('default', {
-          name: 'Updates from your company',
+          // `FE-W156`. Read when the channel is (re)created, which is on every registration.
+          name: t('onboarding.pushChannel'),
           importance: Notifications.AndroidImportance.DEFAULT,
         });
       },
@@ -67,8 +69,16 @@ const appDeps = async (): Promise<PushDeps> => {
   };
 };
 
+/**
+ * `FE-W161` — **Android only, even with the flag on.** The server sends through Firebase Cloud
+ * Messaging and accepts only Android tokens (`device_push_tokens.platform`); an iPhone's device token
+ * is an APNs token, which it would refuse. iOS push needs an APNs key from an Apple Developer account
+ * and a migration that admits iOS tokens — neither exists yet — so on an iPhone this is a passthrough.
+ */
+const pushOnThisPhone = (): boolean => pushEnabled && Platform.OS === 'android';
+
 export const PushProvider = ({ children }: { readonly children: ReactNode }): ReactNode =>
-  pushEnabled ? <WithPush>{children}</WithPush> : children;
+  pushOnThisPhone() ? <WithPush>{children}</WithPush> : children;
 
 const WithPush = ({ children }: { readonly children: ReactNode }): ReactNode => {
   const router = useRouter();

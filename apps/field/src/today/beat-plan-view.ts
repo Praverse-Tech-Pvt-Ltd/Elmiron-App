@@ -7,6 +7,7 @@ import type {
 } from '@fieldforce/core';
 import { buildDayRoute } from './route';
 import type { DayRoute } from './route';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * `BE-W89`, client half — MR-45 B. What the beat-plan screen shows, decided here so it can be
@@ -58,13 +59,13 @@ import type { DayRoute } from './route';
 export const planStatusLine = (status: BeatPlanStatus): string => {
   switch (status) {
     case 'submitted':
-      return 'Submitted — not yet approved';
+      return t('route.statusSubmitted');
     case 'approved':
-      return 'Approved by your manager';
+      return t('route.statusApproved');
     case 'draft':
-      return 'Draft — not submitted yet';
+      return t('route.statusDraft');
     case 'rejected':
-      return 'Not approved — your manager sent it back';
+      return t('route.statusRejected');
     default: {
       // The same guard the other status switches in this app carry: a new member fails the
       // build naming the member, rather than as a missing return.

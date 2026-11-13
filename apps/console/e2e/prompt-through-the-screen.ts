@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import type { GatewayFeature } from '@fieldforce/core';
+import { featureLabel } from '../src/lib/labels';
 
 /**
  * W1-G E1 — create and approve an `ai_doctor` prompt **through the screen**, as two admins.
@@ -32,7 +33,7 @@ export const approvePromptThroughTheScreen = async (
 
   const card = (page: Page) =>
     page.locator('section', {
-      has: page.getByRole('heading', { name: `${feature} — version 1` }),
+      has: page.getByRole('heading', { name: `${featureLabel(feature)} — version 1` }),
     });
 
   await expect(card(author)).toBeVisible();

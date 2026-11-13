@@ -8,7 +8,6 @@ import type { CompanyNoticeVersion } from '@fieldforce/core';
 import { browserClient } from './supabase';
 import { Body, Card, Heading, Label, MissingNote, Pill } from './ui';
 import {
-  DRAFT_DOC_URL,
   REACCEPT_NOTE,
   approvalAffordance,
   attestationProblem,
@@ -20,12 +19,19 @@ import {
   when,
 } from './tracking-notice-text';
 import { btn } from './theme-css';
+import { blankPieces, noticeBlocks } from './notice-blocks';
 
 /**
  * `FE-W91` — the client half of `/tracking/notice`: loading the company's own live location notice,
  * and a SECOND admin approving it. Every rule is the database's: `propose_live_tracking_notice` and
  * `approve_live_tracking_notice` refuse anybody who is not an admin, and the approvals trigger
  * refuses the author whatever this file draws. What is drawn is only the server's answer, in words.
+ *
+ * `FE-W167`: the notice is laid out as its author wrote it (`notice-blocks.ts`) — headings,
+ * paragraphs and lists, with every `[[ … ]]` blank marked — instead of raw Markdown in a pre-wrapped
+ * box. A version's text is shown in full only while it waits for approval, where an approver must
+ * read it; the version in force and the ones it replaced keep theirs behind "Read the text", so the
+ * page does not print the same notice twice. `FE-W165`: no repository path or link in the copy.
  */
 type Outcome =
   | { readonly kind: 'idle' }
@@ -40,9 +46,46 @@ const OutcomeNote = ({ outcome }: { readonly outcome: Outcome }): ReactNode =>
     <MissingNote tone="critical">{outcome.message}</MissingNote>
   ) : null;
 
-/** The full text, with its line breaks. An approver approving a truncated text did not read it. */
+/** One block's words, with each `[[ … ]]` blank marked so it cannot be read past. */
+const Words = ({ text }: { readonly text: string }): ReactNode =>
+  blankPieces(text).map((piece, i) =>
+    piece.blank ? (
+      <mark className="ff-blank" key={i}>
+        {piece.text}
+      </mark>
+    ) : (
+      piece.text
+    ),
+  );
+
+/**
+ * The full text, laid out. An approver approving a truncated text did not read it, so nothing is
+ * cut: the box scrolls instead.
+ */
 export const NoticeText = ({ body }: { readonly body: string }): ReactNode => (
-  <div className="ff-well ff-prewrap ff-notice-text">{body}</div>
+  <div className="ff-well ff-notice-text">
+    <div className="ff-notice">
+      {noticeBlocks(body).map((block, i) =>
+        block.kind === 'heading' ? (
+          <h3 key={i}>
+            <Words text={block.text} />
+          </h3>
+        ) : block.kind === 'bullets' ? (
+          <ul key={i}>
+            {block.items.map((item, j) => (
+              <li key={j}>
+                <Words text={item} />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="ff-text" key={i}>
+            <Words text={block.text} />
+          </p>
+        ),
+      )}
+    </div>
+  </div>
 );
 
 export const ProposeNotice = (): ReactNode => {
@@ -77,12 +120,9 @@ export const ProposeNotice = (): ReactNode => {
     <Card>
       <Heading>Load a new version</Heading>
       <Body muted>
-        Paste your company’s full, approved-by-legal text. It is shown to nobody until a second
-        admin approves it. The engineering draft is{' '}
-        <a href={DRAFT_DOC_URL} rel="noopener noreferrer" target="_blank">
-          docs/operator/live-tracking-notice-DRAFT.md
-        </a>{' '}
-        — its [[ BLANK ]] items are decisions for your company to fill, not wording.
+        Paste your company’s full text, as approved by your legal team. Nobody sees it until a
+        second admin approves it. If you start from the built-in draft, fill in every [[ BLANK ]]
+        first: each one is a decision for your company to make, not wording to keep.
       </Body>
       <Label>Version label</Label>
       <input
@@ -167,7 +207,14 @@ export const NoticeVersionCard = ({
               version.attestation === null ? '.' : ` — “${version.attestation}”.`
             }`}
       </Body>
-      <NoticeText body={version.body} />
+      {version.status === 'waiting' ? (
+        <NoticeText body={version.body} />
+      ) : (
+        <details>
+          <summary>Read the text</summary>
+          <NoticeText body={version.body} />
+        </details>
+      )}
 
       {affordance.kind === 'waiting_for_another' ? (
         <MissingNote>{affordance.reason}</MissingNote>

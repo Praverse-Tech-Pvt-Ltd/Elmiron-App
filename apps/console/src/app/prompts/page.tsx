@@ -2,7 +2,8 @@ import type { ReactNode } from 'react';
 import { AiPromptVersionSchema, GATEWAY_FEATURES } from '@fieldforce/core';
 import type { AiPromptVersion, GatewayFeature } from '@fieldforce/core';
 import { signedIn } from '../../lib/session';
-import { Body, MissingNote, Title } from '../../lib/ui';
+import { Body, MissingNote, Page, PageHeader, RoleNote } from '../../lib/ui';
+import { callerRole } from '../../lib/role';
 import { PromptList } from '../../lib/prompt-review-list';
 
 /**
@@ -17,6 +18,8 @@ import { PromptList } from '../../lib/prompt-review-list';
  */
 
 export const dynamic = 'force-dynamic';
+
+export const metadata = { title: 'AI prompts' };
 
 /**
  * The features a prompt can currently do anything for: exactly the ones with a gateway path.
@@ -69,6 +72,27 @@ export default async function Prompts(): Promise<ReactNode> {
     );
   }
 
+  const header = (
+    <PageHeader title="What the AI is told to do">
+      <Body muted>
+        These are the instructions a model is given before it answers anything. You cannot approve a
+        prompt you wrote or submitted — a second admin must.
+      </Body>
+    </PageHeader>
+  );
+
+  // `FE-W164`: RLS shows a manager no prompt at all, so they are told whose screen this is instead
+  // of being offered a form the insert policy would refuse.
+  const role = await callerRole();
+  if (role !== null && role !== 'admin') {
+    return (
+      <Page>
+        {header}
+        <RoleNote>Only an admin writes and approves the instructions the AI is given.</RoleNote>
+      </Page>
+    );
+  }
+
   // RLS decides what comes back: `ai_prompt_versions_admin_select` admits an admin to their own
   // organisation's rows and nobody else to any. Nothing is filtered here to hide a row.
   const { data } = await session.db
@@ -83,16 +107,9 @@ export default async function Prompts(): Promise<ReactNode> {
   });
 
   return (
-    <div className="ff-page ff-page-medium">
-      <div className="ff-page-header-text">
-        <Title>What the AI is told to do</Title>
-        <Body muted>
-          These are the instructions a model is given before it answers anything. You cannot approve
-          a prompt you wrote or submitted — a second admin must.
-        </Body>
-      </div>
-
+    <Page>
+      {header}
       <PromptList versions={versions} features={OFFERED_FEATURES} viewerUserId={session.userId} />
-    </div>
+    </Page>
   );
 }

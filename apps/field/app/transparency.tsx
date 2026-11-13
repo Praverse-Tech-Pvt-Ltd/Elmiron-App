@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
-import { Screen, TransparencyScreen } from '@fieldforce/ui';
+import { Screen, TransparencyScreen, t, useLanguage } from '@fieldforce/ui';
 import { hasCompletedFirstRun, markFirstRunComplete } from '../src/onboarding/progress';
 import { liveTrackingEnabled } from '../src/features';
+import { useBack } from '../src/navigation/back';
+import { batteryStepApplies } from '../src/onboarding/device';
+import { firstRunPosition } from '../src/onboarding/first-run';
 import { neverRecordedFor, transparencyEntries } from '../src/transparency/content';
 
 /**
@@ -23,7 +26,9 @@ import { neverRecordedFor, transparencyEntries } from '../src/transparency/conte
  * handset.
  */
 export default function Transparency(): ReactNode {
+  useLanguage();
   const router = useRouter();
+  const back = useBack();
   const [inFirstRun, setInFirstRun] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -40,22 +45,16 @@ export default function Transparency(): ReactNode {
    * FE-D12 item 1. The recordings row follows the build's recording flag. `../src/config` is
    * imported on use, as `recording-permission.ts` does: it throws at import on a misconfigured
    * build, and a flag that cannot be read is OFF. This build ships with recording off.
+   *
+   * `FE-W155`. The flag is what is kept, not the rows: they are built at render, so their words
+   * follow the language in use.
    */
-  const [entries, setEntries] = useState(
-    transparencyEntries({ recordingEnabled: false, liveTrackingEnabled }),
-  );
+  const [recordingEnabled, setRecordingEnabled] = useState(false);
   useEffect(() => {
     let live = true;
     void import('../src/config')
       .then(({ appConfig }) => {
-        if (live) {
-          setEntries(
-            transparencyEntries({
-              recordingEnabled: appConfig.recordingEnabled,
-              liveTrackingEnabled,
-            }),
-          );
-        }
+        if (live) setRecordingEnabled(appConfig.recordingEnabled);
       })
       .catch(() => undefined);
     return () => {
@@ -64,9 +63,19 @@ export default function Transparency(): ReactNode {
   }, []);
 
   return (
-    <Screen scrollable>
+    // `FE-W188`. Reached from Today, Me or a first-run screen opened from Me, it is a pushed screen
+    // and has a way back. Ending first run it has none: "Start my first day" is the way on.
+    <Screen scrollable {...(inFirstRun === false ? { onBack: back } : {})}>
       <TransparencyScreen
-        entries={entries}
+        {...(inFirstRun === true
+          ? {
+              stepLine: t(
+                'onboarding.stepOf',
+                firstRunPosition('transparency', batteryStepApplies()),
+              ),
+            }
+          : {})}
+        entries={transparencyEntries({ recordingEnabled, liveTrackingEnabled })}
         // `FE-W71`. With live tracking in the build, the sentence about location says so.
         neverRecorded={neverRecordedFor({ liveTrackingEnabled })}
         {...(inFirstRun === true

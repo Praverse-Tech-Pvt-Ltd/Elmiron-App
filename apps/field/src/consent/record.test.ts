@@ -7,6 +7,7 @@ import {
   consentRequest,
   languageOptionsFrom,
   noticeLabelFor,
+  noticeVersionOf,
   offerableVersions,
   outcomeFor,
 } from './record';
@@ -70,11 +71,25 @@ describe('the language options come from the server, not from a list in the app'
   });
 });
 
-describe('the notice label is checkable', () => {
-  it('carries the version, the language and a hash prefix', () => {
-    // The label can be reused between notices; the hash cannot. That is why it is
-    // on the face of the screen rather than buried in an audit table.
-    expect(noticeLabelFor(version())).toBe('Notice v1.2 · English · a1b2c3d4');
+/**
+ * `FE-W186`. The doctor reads which notice it is, in words: a version number and the language.
+ * The hash stays in the ledger, where it is checked; on the face of the screen it read as an error.
+ */
+describe('the notice label is readable', () => {
+  it('carries the version number and the language, and no hash', () => {
+    expect(noticeLabelFor(version())).toBe('Notice version 1.2 · English');
+    expect(noticeLabelFor(version())).not.toMatch(/a1b2c3d4/u);
+  });
+
+  it('takes the number out of an operator label that carries more than one', () => {
+    // The shipped day's and the key day's labels, as the seed writes them.
+    expect(noticeVersionOf('DEMO v1 99a1dbfe')).toBe('1');
+    expect(noticeVersionOf('TEST Key-day v1 39c801')).toBe('1');
+    expect(noticeVersionOf('v1.2-hi')).toBe('1.2');
+  });
+
+  it('shows a label with no version number as written, never an invented one', () => {
+    expect(noticeVersionOf('Spring notice')).toBe('Spring notice');
   });
 });
 

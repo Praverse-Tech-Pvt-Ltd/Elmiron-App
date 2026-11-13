@@ -7,6 +7,7 @@ import { Button } from './Button';
 import { Card } from './Card';
 import { Spinner } from './Spinner';
 import { StatusGlyph } from './StatusGlyph';
+import { useT } from './i18n';
 
 /**
  * Phase 4 D1 — the MR's coaching feed.
@@ -79,15 +80,33 @@ export interface CoachingFeedScreenProps {
   readonly unavailable?: { readonly title: string; readonly detail: string } | null;
 }
 
+/** The tallest bar, in points. The others are drawn against it. */
+const BAR_MAX = 44;
+
 const styles = StyleSheet.create({
-  head: { gap: 2 },
+  head: { gap: tokens.space.xxs },
   rows: { gap: tokens.space.sm },
-  rowHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  rowHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: tokens.space.sm,
+  },
+  // `FE-W179`. The doctor's name takes the room and wraps; the date beside it keeps its width.
+  rowName: { flex: 1 },
   finding: { flexDirection: 'row', gap: tokens.space.sm, alignItems: 'flex-start' },
   findingText: { flex: 1 },
   actions: { flexDirection: 'row', gap: tokens.space.sm },
   half: { flex: 1 },
-  bars: { flexDirection: 'row', alignItems: 'flex-end', gap: tokens.space.sm, height: 64 },
+  // `FE-W184`. Sized from what it holds — the tallest bar, the gap, and a month's label line —
+  // and a minimum, not a height: it was a fixed 64 for 66 of content, and a larger font size
+  // makes the label line taller still.
+  bars: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: tokens.space.sm,
+    minHeight: BAR_MAX + tokens.space.xs + tokens.typography.label.lineHeight,
+  },
   bar: { flex: 1, alignItems: 'center', gap: tokens.space.xs },
   fill: {
     width: '100%',
@@ -104,11 +123,8 @@ const styles = StyleSheet.create({
  * target line and no ceiling brought in from outside, because any of those would
  * turn a count into a measurement against a standard.
  */
-/** FE-D16. On every row of model-written findings, so none reads as a person's note. */
-export const AI_WRITTEN_LABEL = 'Written by an AI model, not by a person';
-
 const barHeight = (count: number, highest: number): number =>
-  highest === 0 ? 4 : Math.max(4, Math.round((count / highest) * 44));
+  highest === 0 ? 4 : Math.max(4, Math.round((count / highest) * BAR_MAX));
 
 export const CoachingFeedScreen = ({
   periodLabel,
@@ -122,10 +138,11 @@ export const CoachingFeedScreen = ({
   failure = null,
   unavailable = null,
 }: CoachingFeedScreenProps): ReactNode => {
+  const { t } = useT();
   if (failure !== null) {
     return (
       <>
-        <Title>Coaching</Title>
+        <Title>{t('coaching.title')}</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </>
     );
@@ -145,9 +162,9 @@ export const CoachingFeedScreen = ({
         tone: being told this first is the ordinary state of the product, not a
         caution about it.
       */}
-      <Banner detail={seenFirstNote} title="You see it first" tone="info" />
+      <Banner detail={seenFirstNote} title={t('coaching.seenFirstTitle')} tone="info" />
 
-      {loading ? <Spinner label="Getting your coaching" /> : null}
+      {loading ? <Spinner label={t('coaching.loading')} /> : null}
 
       {rows.length === 0 && !loading && unavailable !== null ? (
         <Banner detail={unavailable.detail} title={unavailable.title} tone="info" />
@@ -155,10 +172,8 @@ export const CoachingFeedScreen = ({
 
       {rows.length === 0 && !loading && unavailable === null ? (
         <Card>
-          <BodyText>Nothing has been reviewed yet</BodyText>
-          <Label muted>
-            Most visits never are. When one is, it appears here before your manager acts on it.
-          </Label>
+          <BodyText>{t('coaching.emptyTitle')}</BodyText>
+          <Label muted>{t('coaching.emptyDetail')}</Label>
         </Card>
       ) : null}
 
@@ -166,13 +181,19 @@ export const CoachingFeedScreen = ({
         {rows.map((row) => (
           <Card key={row.analysisId}>
             <View style={styles.rowHead}>
-              <Heading>{row.doctorName}</Heading>
+              <View style={styles.rowName}>
+                <Heading>{row.doctorName}</Heading>
+              </View>
               <Label muted>{row.whenLabel}</Label>
             </View>
 
-            {/* FE-D16. The findings are a model's text, and the row says so before them. */}
+            {/*
+              FE-D16. The findings are a model's text, and the row says so before them, so none
+              reads as a person's note. The findings themselves are the model's words, not the
+              app's, and are shown as they came (`FE-W158`).
+            */}
             {row.statusNote === null && row.findings.length > 0 ? (
-              <Label muted>{AI_WRITTEN_LABEL}</Label>
+              <Label muted>{t('coaching.aiWritten')}</Label>
             ) : null}
 
             {row.statusNote === null ? (
@@ -183,7 +204,10 @@ export const CoachingFeedScreen = ({
                     `success` for what worked, `attention` for what to try; neither
                     is `critical`, because a coaching note is not a failure.
                   */}
-                  <StatusGlyph kind={finding.workedWell ? 'success' : 'attention'} />
+                  <StatusGlyph
+                    kind={finding.workedWell ? 'success' : 'attention'}
+                    lineHeight={tokens.typography.body.lineHeight}
+                  />
                   <View style={styles.findingText}>
                     <BodyText>{finding.summary}</BodyText>
                   </View>
@@ -199,7 +223,7 @@ export const CoachingFeedScreen = ({
               <View style={styles.actions}>
                 <View style={styles.half}>
                   <Button
-                    label="Add your reply"
+                    label={t('reply.add')}
                     onPress={() => {
                       onReply(row.analysisId);
                     }}
@@ -208,7 +232,7 @@ export const CoachingFeedScreen = ({
                 </View>
                 <View style={styles.half}>
                   <Button
-                    label="Open it"
+                    label={t('coaching.openIt')}
                     onPress={() => {
                       onOpen(row.analysisId);
                     }}

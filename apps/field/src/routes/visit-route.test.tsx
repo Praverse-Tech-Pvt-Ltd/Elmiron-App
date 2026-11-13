@@ -1,7 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DoctorSchema, VisitSchema } from '@fieldforce/core';
+import { ApiRequestError, DoctorSchema, VisitSchema } from '@fieldforce/core';
 
 /**
  * MR-28 B4 — defect 12, found by driving the samples cycle on the emulator.
@@ -79,7 +79,7 @@ import { setQueueOwner } from '../sync/async-storage-store';
 import { SyncPushRefusal } from '../sync/push-client';
 import type { OutboxWriteClient } from '../sync/push-client';
 import { flushOutbox } from '../sync/outbox';
-import { CHECK_IN_APPROXIMATE, CHECK_IN_OUTSIDE } from '../capture/visit';
+import { checkInApproximate, checkInOutside } from '../capture/visit';
 import { recordWitnessedConsent } from '../consent/witnessed';
 import VisitRoute from '../../app/visit/[id]';
 
@@ -308,6 +308,94 @@ describe('app/visit/[id].tsx — FE-D2 6, a refused press does not take the scre
 });
 
 /**
+ * `FE-W197` — a refusal reads as its remedy, never as the server's sentence.
+ *
+ * The 15 October emulator check was refused at check-out and the screen read the server's own
+ * words: *"check-out at 2026-10-14 20:51:59.263+00 is outside the configured shift window for
+ * territory 4db000a6-…"* — a UTC timestamp and a territory id, written for support. The SQLSTATE
+ * (`45003`) already had a remedy a rep can act on; the screen did not use it.
+ */
+describe('app/visit/[id].tsx — FE-W197, a refusal is said as its remedy', () => {
+  const SERVER_SENTENCE =
+    'check-in at 2026-10-14 20:51:59.263+00 is outside the configured shift window for territory 4db000a6-0000-4000-8000-000000000001';
+
+  it('45003: the shift-window remedy, and none of the server’s sentence', async () => {
+    await AsyncStorage.clear();
+    loaded();
+    mockCreateCheckIn.mockRejectedValue(
+      new SyncPushRefusal({
+        message: SERVER_SENTENCE,
+        sqlState: '45003',
+        rejectionCode: 'outside_shift_window',
+        deadLettered: false,
+      }),
+    );
+    await render(<VisitRoute />);
+    await screen.findByText(/Dr Asha Deshpande/u);
+
+    await fireEvent.press(screen.getByText('I am here — check in'));
+
+    expect(await screen.findByText('That was refused')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'This was recorded outside your territory’s working hours. If the hours are wrong, your manager can change them.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/configured shift window/u)).toBeNull();
+    expect(screen.queryByText(/4db000a6/u)).toBeNull();
+    expect(screen.queryByText(/20:51:59/u)).toBeNull();
+  });
+
+  it('a code with no remedy: a plain sentence and its reference, still not the server’s', async () => {
+    await AsyncStorage.clear();
+    loaded();
+    mockCreateCheckIn.mockRejectedValue(
+      new SyncPushRefusal({
+        message: 'visit 55555555-5555-4555-8555-555555555501 failed check visits_geo_ck',
+        sqlState: '23514',
+        rejectionCode: null,
+        deadLettered: false,
+      }),
+    );
+    await render(<VisitRoute />);
+    await screen.findByText(/Dr Asha Deshpande/u);
+
+    await fireEvent.press(screen.getByText('I am here — check in'));
+
+    expect(await screen.findByText(/This was turned down\..*Reference: 23514\./u)).toBeTruthy();
+    expect(screen.queryByText(/visits_geo_ck/u)).toBeNull();
+  });
+
+  it('permission_denied: the account sentence, not the server’s', async () => {
+    await AsyncStorage.clear();
+    loaded();
+    // The press's own catch: a REST refusal thrown before the write. Raised from the position
+    // read because that is the first awaited call inside the press.
+    const { takeFix } = jest.requireMock<{ takeFix: jest.Mock<() => Promise<unknown>> }>(
+      '../capture/location',
+    );
+    takeFix.mockRejectedValueOnce(
+      new ApiRequestError(403, {
+        code: 'permission_denied',
+        message: 'visit 55555555-5555-4555-8555-555555555501 is not yours',
+        requestId: 'req-fe-w197',
+        fieldErrors: null,
+      }),
+    );
+    await render(<VisitRoute />);
+    await screen.findByText(/Dr Asha Deshpande/u);
+
+    await fireEvent.press(screen.getByText('I am here — check in'));
+
+    expect(await screen.findByText('That was refused')).toBeTruthy();
+    expect(
+      screen.getByText('Your account can’t open this. If you think it should, tell your manager.'),
+    ).toBeTruthy();
+    expect(screen.queryByText(/is not yours/u)).toBeNull();
+  });
+});
+
+/**
  * W2-B A / `BE-W147` — `BE-C5`: the rep is TOLD when the clinic could not be confirmed.
  *
  * On 5 October the emulator checked in 13,353 km from the clinic, the server stored `outside`, and the
@@ -334,7 +422,7 @@ describe('app/visit/[id].tsx — BE-C5, a check-in the clinic could not confirm 
       warnings: ['check_in_outside_geofence'],
     });
     await pressCheckIn();
-    expect(await screen.findByText(CHECK_IN_OUTSIDE)).toBeTruthy();
+    expect(await screen.findByText(checkInOutside())).toBeTruthy();
   });
 
   it('SENT: an ordinary check-in shows NO line', async () => {
@@ -346,8 +434,8 @@ describe('app/visit/[id].tsx — BE-C5, a check-in the clinic could not confirm 
     await waitFor(() => {
       expect(mockRefresh).toHaveBeenCalled();
     });
-    expect(screen.queryByText(CHECK_IN_OUTSIDE)).toBeNull();
-    expect(screen.queryByText(CHECK_IN_APPROXIMATE)).toBeNull();
+    expect(screen.queryByText(checkInOutside())).toBeNull();
+    expect(screen.queryByText(checkInApproximate())).toBeNull();
   });
 
   it('SENT: a coarse fix says "too rough", not "away" — BE-C2, the verdict was a coin', async () => {
@@ -358,8 +446,8 @@ describe('app/visit/[id].tsx — BE-C5, a check-in the clinic could not confirm 
       warnings: ['check_in_outside_geofence', 'check_in_location_approximate'],
     });
     await pressCheckIn();
-    expect(await screen.findByText(CHECK_IN_APPROXIMATE)).toBeTruthy();
-    expect(screen.queryByText(CHECK_IN_OUTSIDE)).toBeNull();
+    expect(await screen.findByText(checkInApproximate())).toBeTruthy();
+    expect(screen.queryByText(checkInOutside())).toBeNull();
   });
 
   const flushWith = async (answer: unknown): Promise<void> => {
@@ -376,14 +464,14 @@ describe('app/visit/[id].tsx — BE-C5, a check-in the clinic could not confirm 
     mockCreateCheckIn.mockRejectedValue(new Error('Network request failed'));
     await pressCheckIn();
     await screen.findByText(/Saved on this phone/u);
-    expect(screen.queryByText(CHECK_IN_OUTSIDE)).toBeNull();
+    expect(screen.queryByText(checkInOutside())).toBeNull();
 
     await flushWith({
       receivedAt: '2026-09-11T12:05:00+05:30',
       warnings: ['check_in_outside_geofence'],
     });
     await render(<VisitRoute />);
-    expect(await screen.findByText(CHECK_IN_OUTSIDE)).toBeTruthy();
+    expect(await screen.findByText(checkInOutside())).toBeTruthy();
   });
 
   it('QUEUED: an ordinary flushed check-in shows NO line', async () => {
@@ -398,8 +486,8 @@ describe('app/visit/[id].tsx — BE-C5, a check-in the clinic could not confirm 
     // Wait for the queue to be read (the stage moves to `during` from it), so the absence below is
     // an answer and not "too early".
     await screen.findByText('Leaving — check out');
-    expect(screen.queryByText(CHECK_IN_OUTSIDE)).toBeNull();
-    expect(screen.queryByText(CHECK_IN_APPROXIMATE)).toBeNull();
+    expect(screen.queryByText(checkInOutside())).toBeNull();
+    expect(screen.queryByText(checkInApproximate())).toBeNull();
   });
 });
 

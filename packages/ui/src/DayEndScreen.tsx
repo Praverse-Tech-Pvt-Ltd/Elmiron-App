@@ -2,14 +2,16 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Figure, Heading, Label, Title } from './Text';
+import { BodyText, Figure, Heading, Label, Secondary, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
+import { Screen } from './Screen';
 import { Spinner } from './Spinner';
 import { SyncQueueIndicator } from './SyncQueueIndicator';
 import { TextField } from './TextField';
 import type { SyncQueueState } from './SyncQueueIndicator';
 import { FadeIn } from './FadeIn';
+import { useT } from './i18n';
 
 /**
  * Phase 2 B7 — the day is over and nothing is running.
@@ -66,7 +68,8 @@ export interface DayEndWorkDay {
   readonly note: { readonly value: string; readonly onChange: (value: string) => void } | null;
   /**
    * "End my day". Null when there is nothing to press. `blockedBy` is the reason it cannot be
-   * pressed yet -- a disabled button always says why.
+   * pressed yet -- a disabled button always says why. `FE-W180`: drawn in the screen's pinned
+   * footer, not in the card.
    */
   readonly action: {
     readonly label: string;
@@ -92,6 +95,13 @@ export interface DayEndScreenProps {
    * it is a claim the MR has to take on trust.
    */
   readonly captureNote: string;
+  /**
+   * `FE-W185`. The heading above `captureNote` — "Nothing is being recorded." unless the caller
+   * knows better. While live location is shared that heading is false, and the caller says so.
+   */
+  readonly captureTitle?: string;
+  /** `FE-W188`. The screen's Back control (`Screen`'s `onBack`). */
+  readonly onBack?: () => void;
   /**
    * FE-D2 7. **Null means UNKNOWN, and unknown is not zero.** The day is still loading, or it
    * could not be fetched. It used to arrive as 0, and `done + notMet === planned` read 0 of 0 as
@@ -132,12 +142,10 @@ export interface DayEndScreenProps {
 }
 
 const styles = StyleSheet.create({
-  head: { gap: 2 },
+  head: { gap: tokens.space.xxs },
   stopLines: { gap: tokens.space.xs },
   figureRow: { flexDirection: 'row', alignItems: 'baseline', gap: tokens.space.sm },
-  stamps: { gap: 2 },
-  spacer: { flex: 1, minHeight: tokens.space.md },
-  foot: { gap: tokens.space.sm },
+  stamps: { gap: tokens.space.xxs },
 });
 
 export const DayEndScreen = ({
@@ -145,6 +153,8 @@ export const DayEndScreen = ({
   firstCaptureLabel,
   lastCaptureLabel,
   captureNote,
+  captureTitle,
+  onBack,
   planned,
   notMet,
   done,
@@ -157,19 +167,46 @@ export const DayEndScreen = ({
   failure = null,
   workDay = null,
 }: DayEndScreenProps): ReactNode => {
+  const { t } = useT();
+  const back = onBack === undefined ? {} : { onBack };
   if (failure !== null) {
     return (
-      <>
+      <Screen scrollable {...back}>
         <Title>{dayLabel}</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
-      </>
+      </Screen>
     );
   }
 
-  return (
+  const action = workDay?.action ?? null;
+  /*
+    `FE-W180`. The screen's actions are PINNED in its footer, in the reach zone and above the
+    keyboard while the note is being written, as Today's and the visit's are. They sat after a
+    `flex: 1` spacer, which does nothing inside a scroll view — "End my day" was at the bottom of
+    the working-day card and "See everything" at the end of the scroll. The primary comes last,
+    nearest the thumb, as on Today.
+  */
+  const footer = (
     <>
+      {/* FE-D7 4. Secondary, as B7 draws it: the day is over, and nothing here is the next step. */}
+      <Button label={t('dayEnd.seeEverything')} onPress={onOpenTransparency} variant="secondary" />
+      {action === null ? null : action.blockedBy === null ? (
+        <Button
+          label={action.label}
+          loading={action.busy}
+          loadingLabel={t('dayEnd.ending')}
+          onPress={action.onPress}
+        />
+      ) : (
+        <Button disabled label={action.label} note={action.blockedBy} onPress={action.onPress} />
+      )}
+    </>
+  );
+
+  return (
+    <Screen scrollable footer={footer} {...back}>
       <View style={styles.head}>
-        <Title>{`${dayLabel} — that's the day`}</Title>
+        <Title>{t('dayEnd.title', { day: dayLabel })}</Title>
       </View>
 
       {/*
@@ -181,7 +218,7 @@ export const DayEndScreen = ({
       <FadeIn index={0}>
         <Card tone="hero">
           <View style={styles.stopLines}>
-            <Heading>Nothing is being recorded.</Heading>
+            <Heading>{captureTitle ?? t('dayEnd.nothingRecorded')}</Heading>
             <BodyText>{captureNote}</BodyText>
           </View>
           {firstCaptureLabel === null && lastCaptureLabel === null ? null : (
@@ -197,97 +234,89 @@ export const DayEndScreen = ({
         Under the confirmation, never over it, and non-blocking: a day already
         finished is not made more finished by a spinner in front of it.
       */}
-      {loading ? <Spinner label="Getting your day" /> : null}
+      {loading ? <Spinner label={t('dayEnd.loading')} /> : null}
 
       {/*
         FE-D7 4. The design's "Your Thursday". The route passes "Today", and prefixing that gave
         "Your Today"; the title above already names the day.
       */}
-      <Label muted>Your day</Label>
+      <Label muted>{t('dayEnd.yourDay')}</Label>
 
       <FadeIn index={1}>
         <Card>
-          <Label muted>Visits</Label>
+          <Label muted>{t('dayEnd.visits')}</Label>
           {planned === null || done === null || notMet === null ? (
             // FE-D2 7. Unknown. While loading the spinner above already says so; once loading has
             // finished and the counts are still absent, the day could not be fetched.
             loading ? null : (
-              <BodyText>Not available — the day could not be fetched.</BodyText>
+              <BodyText>{t('dayEnd.visitsUnavailable')}</BodyText>
             )
           ) : (
             <View style={styles.figureRow}>
-              <Figure>{`${String(done + notMet)} of ${String(planned)}`}</Figure>
-              <Label muted>
+              <Figure>{t('common.nOfM', { n: done + notMet, m: planned })}</Figure>
+              {/* `FE-W178`. A figure's caption is `Secondary`, as Today's "visits attended" is. */}
+              <Secondary>
                 {planned === 0
-                  ? 'nothing was planned'
+                  ? t('dayEnd.nothingPlanned')
                   : done + notMet === planned
-                    ? 'you went to all of them'
-                    : 'visits attended'}
-              </Label>
+                    ? t('dayEnd.allOfThem')
+                    : t('dayEnd.visitsAttended')}
+              </Secondary>
             </View>
           )}
+          {/* `FE-W189`. Sentences, so the prose step — round 1 left these two at `Label`. */}
           {notMet === null || notMet === 0 ? null : (
-            <Label muted>
-              {notMet === 1
-                ? 'One doctor was not available. That is recorded against the visit, not against you.'
-                : `${String(notMet)} doctors were not available. That is recorded against those visits, not against you.`}
-            </Label>
+            <Secondary>{t('dayEnd.notMet', { count: notMet })}</Secondary>
           )}
         </Card>
       </FadeIn>
 
       <FadeIn index={2}>
         <Card>
-          <Label muted>On your claim</Label>
+          <Label muted>{t('dayEnd.onYourClaim')}</Label>
           {distanceLabel === null ? (
             // FE-D3 B4. Null is UNKNOWN: still loading (the spinner above says so) or the mileage
             // fetch failed. A real zero arrives as a figure. This used to read "No distance yet. It
             // appears once you have checked into more than one visit" — a false reason for a
             // fetch that had failed.
             loading ? null : (
-              <BodyText>Distance not available — it could not be fetched.</BodyText>
+              <BodyText>{t('dayEnd.distanceUnavailable')}</BodyText>
             )
           ) : (
             <View style={styles.figureRow}>
               <Figure>{distanceLabel}</Figure>
             </View>
           )}
-          <Label muted>{rateNote}</Label>
+          <Secondary>{rateNote}</Secondary>
         </Card>
       </FadeIn>
 
-      {workDay === null ? null : <WorkDayCard workDay={workDay} />}
-
       <SyncQueueIndicator onPress={onOpenQueue} state={sync} />
 
-      <View style={styles.spacer} />
-
-      <View style={styles.foot}>
-        {/*
-          `FE-W80`. Ending the day now has a record behind it (`BE-W190`), and its button lives
-          in the working-day card above, beside what it does. This one is still not a "start
-          day tomorrow" button: capture is per press, so that would switch on nothing.
-        */}
-        {/* FE-D7 4. Secondary, as B7 draws it: the day is over, and nothing here is the next step. */}
-        <Button
-          label="See everything recorded today"
-          onPress={onOpenTransparency}
-          variant="secondary"
-        />
-      </View>
-    </>
+      {/*
+        `FE-W191`. The working day's card is LAST, so its note sits directly above the pinned "End my
+        day" it is sent with: the field and the button read as one act, not as a note at one end of
+        the scroll and its button at the other. The sync line used to sit between them.
+      */}
+      {workDay === null ? null : <WorkDayCard workDay={workDay} />}
+    </Screen>
   );
 };
 
 /**
  * The working day's card. Under the totals, never above the stop confirmation (C11): ending the day
  * changes the record, not whether the phone is reading a position -- it never was between presses.
+ *
+ * `FE-W80` gave ending the day a record (`BE-W190`). Its button is the screen's pinned primary
+ * (`FE-W180`); this card says where the day stands and holds the note that goes with it. There is
+ * still no "start day tomorrow" button: capture is per press, so that would switch on nothing.
  */
 const WorkDayCard = ({ workDay }: { readonly workDay: DayEndWorkDay }): ReactNode => {
-  const { action, note } = workDay;
+  const { t } = useT();
+  const { note } = workDay;
   return (
     <Card>
-      <Label muted>Your working day</Label>
+      <Label muted>{t('dayEnd.workingDay')}</Label>
       {workDay.tone === 'refused' ? (
         <Banner
           tone="critical"
@@ -302,22 +331,12 @@ const WorkDayCard = ({ workDay }: { readonly workDay: DayEndWorkDay }): ReactNod
       )}
       {note === null ? null : (
         <TextField
-          help="Optional. Your manager sees it with your day."
-          label="Note for your manager"
+          help={t('dayEnd.noteHelp')}
+          label={t('dayEnd.noteLabel')}
           multiline
           onChangeText={note.onChange}
           value={note.value}
         />
-      )}
-      {action === null ? null : action.blockedBy === null ? (
-        <Button
-          label={action.label}
-          loading={action.busy}
-          loadingLabel="Ending your day"
-          onPress={action.onPress}
-        />
-      ) : (
-        <Button disabled label={action.label} note={action.blockedBy} onPress={action.onPress} />
       )}
     </Card>
   );

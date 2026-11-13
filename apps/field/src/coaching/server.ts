@@ -5,6 +5,7 @@ import {
   refusalForSqlState,
 } from '@fieldforce/core';
 import type { Analysis, ConsentRecord, Refusal } from '@fieldforce/core';
+import { t } from '@fieldforce/ui/i18n';
 import { resolveClient } from '../capture/client';
 import type { RpcCaller } from '../capture/client';
 
@@ -44,9 +45,13 @@ const read = async <T>(
   if (error !== null) return { kind: 'refused', refusal: refusalForSqlState(error.code) };
   const parsed = schema.safeParse(data);
   if (!parsed.success) {
+    // `FE-W158`. A getter, so a screen holding this outcome reads the sentence in the language
+    // in use when it renders, not the one in use when the answer arrived. `fn` is a name, kept.
     return {
       kind: 'mismatch',
-      detail: `The server's answer to ${fn} is not the shape this app expects.`,
+      get detail(): string {
+        return t('coaching.serverMismatch', { fn });
+      },
     };
   }
   return { kind: 'loaded', value: parsed.data.data };

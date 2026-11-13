@@ -21,6 +21,7 @@ import { dayIsOpen, dueToSend, refreshAfter, stateOf, trackingLine } from './dec
 import type { LastSend, TrackingLine } from './decide';
 import { appLiveTrackingBackend } from './backend';
 import type { LiveTrackingBackend } from './live';
+import { useLanguage } from '@fieldforce/ui/i18n';
 
 /**
  * `FE-W71` — the live tracker: one per app, mounted at the root, started and stopped by
@@ -46,6 +47,13 @@ export interface LiveTracker {
   readonly state: TrackingState;
   readonly line: TrackingLine;
   readonly dayOpen: boolean;
+  /**
+   * `FE-W185`. The phone is reading positions for live location right now: the state is `active`
+   * AND location is allowed, so the watcher is running. A screen that says what this app is
+   * reading (Day end, first run's location screen) asks this, not `state` alone — `active` without
+   * the permission reads nothing.
+   */
+  readonly readingNow: boolean;
   readonly busy: boolean;
   readonly refresh: () => void;
   readonly accept: (noticeVersionId: string) => Promise<AcceptOutcome>;
@@ -98,6 +106,8 @@ const Tracker = ({
   readonly userId: string;
 }): ReactNode => {
   const backend = useMemo(() => injected ?? appLiveTrackingBackend(), [injected]);
+  // `FE-W144`. The status line below is memoised; the language is one of the things it is made of.
+  const language = useLanguage();
   const [status, setStatus] = useState<LiveTrackingStatus | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [foreground, setForeground] = useState(AppState.currentState === 'active');
@@ -264,6 +274,7 @@ const Tracker = ({
       state,
       line: trackingLine({ state, status, loadFailed, permissionDenied, lastSend }),
       dayOpen: dayIsOpen(status, openedDay),
+      readingNow: state === 'active' && !permissionDenied,
       busy,
       refresh,
       accept,
@@ -272,6 +283,7 @@ const Tracker = ({
       closeDay,
     }),
     [
+      language,
       status,
       state,
       loadFailed,

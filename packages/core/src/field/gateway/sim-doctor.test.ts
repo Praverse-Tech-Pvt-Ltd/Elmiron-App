@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { SIM_COACH_DIMENSIONS, SIM_COACH_OUTPUT_SCHEMA_NAME } from '../simulation.js';
-import { analyseSimSession } from './sim-doctor.js';
+import {
+  SIM_COACH_DIMENSIONS,
+  SIM_COACH_OUTPUT_SCHEMA_NAME,
+  SIM_DOCTOR_TURN_OUTPUT_SCHEMA_NAME,
+} from '../simulation.js';
+import { analyseSimSession, takeDoctorTurn } from './sim-doctor.js';
 import type { ControlPlaneRpc, LlmGenerateRequest, LlmProvider } from './providers.js';
 
 /**
@@ -316,5 +320,123 @@ describe('ai_coach — the model is told the shape it is held to (W2-E B, BE-W16
     expect(out.kind).toBe('failed');
     expect(stored(r)).toEqual([]);
     expect(completionOf(r)['p_error_code']).toBe('schema_mismatch');
+  });
+});
+
+/**
+ * `BE-W220` — a SPOKEN doctor turn. Hearing the rep sends their audio to a vendor, so it must sit
+ * behind the same gate as the model: `ai_begin_request` (the feature switch, the daily allowance,
+ * the request log) first, the audio second. Before this it was transcribed by the gateway before the
+ * turn began, and none of the three stood in its way.
+ */
+describe('ai_doctor — a spoken turn is heard only inside an admitted request (BE-W220)', () => {
+  const events: string[] = [];
+  const doctorRpc = (opts: { beginRefuses?: string } = {}): ControlPlaneRpc => ({
+    call: (fn) => {
+      events.push(fn);
+      if (fn === 'sim_session_context') {
+        return Promise.resolve({
+          sessionId: SESSION_ID,
+          state: 'open',
+          personaBrief: 'A busy urologist.',
+          personaStance: 'skeptical',
+          objective: 'Explain storage',
+          objection: 'No room in my fridge',
+          turns: [],
+        });
+      }
+      if (fn === 'ai_begin_request') {
+        if (opts.beginRefuses !== undefined) {
+          return Promise.reject(Object.assign(new Error('refused'), { code: opts.beginRefuses }));
+        }
+        return Promise.resolve({
+          requestId: REQUEST_ID,
+          feature: 'ai_doctor',
+          startedAt: '2026-10-01T10:00:00+00:00',
+          promptVersionId: '55555555-5555-4555-8555-555555555555',
+          promptVersionNumber: 1,
+          systemPrompt: 'You are a practice doctor.',
+          outputSchemaName: SIM_DOCTOR_TURN_OUTPUT_SCHEMA_NAME,
+          modelConfig: { temperature: 0 },
+          requestsUsedToday: 1,
+          dailyLimit: 100,
+          allowanceWarning: false,
+          allowanceResetsAt: '2026-10-01T18:30:00+00:00',
+        });
+      }
+      throw new Error(`unexpected rpc ${fn}`);
+    },
+  });
+  const closes: Record<string, unknown>[] = [];
+  const doctorWriter: ControlPlaneRpc = {
+    call: (fn, args) => {
+      events.push(`writer:${fn}`);
+      if (fn === 'ai_gateway_complete_request') closes.push({ ...args });
+      return Promise.resolve({ requestId: REQUEST_ID });
+    },
+  };
+  const neverAsked: LlmProvider = {
+    generate: () => {
+      events.push('model');
+      return Promise.reject(new Error('the model must not be asked'));
+    },
+  };
+  const spokenTurn = (rpc: ControlPlaneRpc, hearRepText: () => Promise<string>) => {
+    events.length = 0;
+    closes.length = 0;
+    return takeDoctorTurn({
+      rpc,
+      writer: doctorWriter,
+      provider: neverAsked,
+      sessionId: SESSION_ID,
+      repText: '',
+      hearRepText,
+    });
+  };
+
+  it('the request is opened BEFORE the rep is heard', async () => {
+    await spokenTurn(doctorRpc(), () => {
+      events.push('hear');
+      return Promise.resolve('');
+    });
+    expect(events.slice(0, 3)).toEqual(['sim_session_context', 'ai_begin_request', 'hear']);
+  });
+
+  it('a refused request (switched off, allowance spent) never hears the rep', async () => {
+    let heard = 0;
+    await expect(
+      spokenTurn(doctorRpc({ beginRefuses: '45010' }), () => {
+        heard += 1;
+        return Promise.resolve('hello');
+      }),
+    ).rejects.toMatchObject({ code: '45010' });
+    expect(heard).toBe(0);
+  });
+
+  it('silence closes the request as no_speech: counted, no model, no stored turn', async () => {
+    const out = await spokenTurn(doctorRpc(), () => Promise.resolve('   '));
+    expect(out.kind).toBe('failed');
+    expect(closes).toHaveLength(1);
+    expect(closes[0]).toMatchObject({ p_status: 'failed', p_error_code: 'no_speech' });
+    expect(events).not.toContain('model');
+  });
+
+  it('a vendor failure closes the request with the vendor code, and is rethrown', async () => {
+    const failure = Object.assign(new Error('insufficient_quota'), { code: 'insufficient_quota' });
+    await expect(spokenTurn(doctorRpc(), () => Promise.reject(failure))).rejects.toBe(failure);
+    expect(closes).toHaveLength(1);
+    expect(closes[0]).toMatchObject({
+      p_status: 'failed',
+      p_error_code: 'speech_insufficient_quota',
+    });
+  });
+
+  it('POSITIVE CONTROL: words that were heard go on to the patient-detail guardrail', async () => {
+    const out = await spokenTurn(doctorRpc(), () =>
+      Promise.resolve('my patient Ramesh Kumar, phone 9876543210, has this'),
+    );
+    expect(out.kind).toBe('patient_specific');
+    expect(closes[0]).toMatchObject({ p_status: 'blocked' });
+    expect(events).not.toContain('model');
   });
 });

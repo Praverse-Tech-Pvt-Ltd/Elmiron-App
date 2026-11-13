@@ -1,14 +1,23 @@
 import { useCallback, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { CourseScreen, Screen } from '@fieldforce/ui';
+import { CourseScreen, Screen, t, useLanguage } from '@fieldforce/ui';
 import type { CourseView } from '@fieldforce/ui';
 import { learningEnabled } from '../../src/features';
 import { appLearningBackend } from '../../src/learning/backend';
-import type { LearningBackend, OutlineRows } from '../../src/learning/live';
-import { courseState, failureKind, outlineSections } from '../../src/learning/view';
+import type { CoursePreview, LearningBackend, OutlineRows } from '../../src/learning/live';
+import {
+  courseFacts,
+  courseState,
+  failureKind,
+  outlineSections,
+  previewVersionId,
+  versionSummary,
+} from '../../src/learning/view';
+import { useBack } from '../../src/navigation/back';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { dayMonthIn } from '../../src/today/territory-day';
+import { durationLabel } from '../../src/today/duration';
 
 /**
  * W2-F B — one course: start it (pinning a version), or its lessons once started. Which version is
@@ -22,6 +31,8 @@ type Loaded =
       readonly kind: 'loaded';
       readonly course: Awaited<ReturnType<LearningBackend['course']>>;
       readonly outline: OutlineRows | null;
+      /** `FE-W193`. The one startable version's lesson count and length, before it is started. */
+      readonly preview: CoursePreview | null;
     };
 
 export const Course = ({
@@ -31,7 +42,10 @@ export const Course = ({
   readonly courseId: string;
   readonly backend?: LearningBackend;
 }): ReactNode => {
+  // `FE-W183`. The screen's own words follow the app's language; a language change repaints it.
+  useLanguage();
   const router = useRouter();
+  const back = useBack();
   const { zone } = usePulledStore();
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
@@ -52,7 +66,12 @@ export const Course = ({
             state.kind === 'started'
               ? await backend.outline(state.versionId, state.enrolmentId)
               : null;
-          if (live) setLoaded({ kind: 'loaded', course, outline });
+          // `FE-W193`. A preview that does not load leaves the page as it was — title and button —
+          // rather than failing a course the rep can still start.
+          const versionId = previewVersionId(state);
+          const preview =
+            versionId === null ? null : await backend.preview(versionId).catch(() => null);
+          if (live) setLoaded({ kind: 'loaded', course, outline, preview });
         })
         .catch((error: unknown) => {
           if (live) setLoaded({ kind: 'failed', failure: failureKind(error) });
@@ -75,8 +94,8 @@ export const Course = ({
         setStarting(false);
         setNotice(
           failureKind(error) === 'offline'
-            ? 'No signal, so the course was not started. Try again when you have signal.'
-            : 'The server did not start this course. Try again; if it keeps happening, tell your manager.',
+            ? t('learning.startOffline')
+            : t('learning.startRefused'),
         );
       },
     );
@@ -101,6 +120,8 @@ export const Course = ({
       return {
         kind: 'can_start',
         title,
+        summary: versionSummary(versions, previewVersionId(state)),
+        facts: courseFacts(loaded.preview),
         starting,
         notice,
         choices: (state.kind === 'can_start' ? state.choices : []).map((choice) => ({
@@ -124,8 +145,14 @@ export const Course = ({
           id: lesson.id,
           title: lesson.title,
           detail: [
-            lesson.done ? 'Finished' : 'Not finished',
-            lesson.minutes === null ? null : `about ${String(lesson.minutes)} min`,
+            // `FE-W193`. "To do", not "Not finished": the server records a finish and nothing
+            // else, so an unopened lesson and a half-read one look the same — and "Not finished"
+            // told the rep they had started lessons they had never opened.
+            lesson.done ? t('learning.lessonDone') : t('learning.lessonNotDone'),
+            lesson.minutes === null
+              ? null
+              : // `FE-W198`. Hours and minutes past the hour, as the beat plan says them.
+                t('learning.aboutDuration', { duration: durationLabel(lesson.minutes) }),
           ]
             .filter((part): part is string => part !== null)
             .join(' · '),
@@ -137,8 +164,9 @@ export const Course = ({
     };
   };
 
+  // `FE-W188`. A pushed screen draws its own way back.
   return (
-    <Screen scrollable>
+    <Screen onBack={back} scrollable>
       <CourseScreen view={viewOf()} />
     </Screen>
   );

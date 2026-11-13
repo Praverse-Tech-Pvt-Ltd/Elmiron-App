@@ -15,6 +15,7 @@ import { AnalysisSchema } from '@fieldforce/core';
 const mockGetAnalysis = jest.fn<() => Promise<unknown>>();
 const mockRespond = jest.fn<(id: string, response: string) => Promise<unknown>>();
 const mockReplace = jest.fn();
+const mockDismissTo = jest.fn();
 
 // FE-D16 — the route reads and sends through the REAL functions now (`src/coaching/server.ts`).
 // The load is wrapped in the module's outcome shape; a rejection is still a rejection.
@@ -24,7 +25,7 @@ jest.mock('../coaching/server', () => ({
 }));
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ analysisId: '55555555-5555-4555-8555-555555555511' }),
-  useRouter: () => ({ replace: mockReplace, push: jest.fn() }),
+  useRouter: () => ({ replace: mockReplace, dismissTo: mockDismissTo, push: jest.fn() }),
 }));
 // FE-D4 1 — corrected. Reply now sits behind `coachingEnabled`, OFF by default, where the route
 // redirects to Today (`coaching-flag.test.tsx`). This suite tests the reply screen itself, i.e.
@@ -83,6 +84,7 @@ beforeEach(() => {
   mockGetAnalysis.mockReset();
   mockRespond.mockReset();
   mockReplace.mockReset();
+  mockDismissTo.mockReset();
   mockGetAnalysis.mockResolvedValue(ANALYSIS);
 });
 
@@ -96,6 +98,7 @@ describe('FE-D2 5 — a send failure keeps the reply', () => {
     expect(screen.getByDisplayValue(WROTE)).toBeTruthy();
     expect(screen.getByText('Send reply')).toBeTruthy();
     expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockDismissTo).not.toHaveBeenCalled();
   });
 
   it('editing the reply clears the send failure', async () => {
@@ -113,7 +116,10 @@ describe('FE-D2 5 — a send failure keeps the reply', () => {
     await writeAndSend();
 
     expect(mockRespond).toHaveBeenCalledWith(ANALYSIS.id, WROTE);
-    expect(mockReplace).toHaveBeenCalledWith(`/analysis/${ANALYSIS.id}`);
+    // `FE-W188`. Back to the ONE analysis: `dismissTo` returns to it when it is underneath, where
+    // `replace` stacked a second copy and Back went from the analysis to the same analysis.
+    expect(mockDismissTo).toHaveBeenCalledWith(`/analysis/${ANALYSIS.id}`);
+    expect(mockReplace).not.toHaveBeenCalled();
     expect(screen.queryByText('Your reply was not sent')).toBeNull();
   });
 

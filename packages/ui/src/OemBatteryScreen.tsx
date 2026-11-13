@@ -5,6 +5,7 @@ import { PrimaryButton } from './PrimaryButton';
 import { Screen } from './Screen';
 import { SetupStepList } from './SetupStepList';
 import type { SetupStepView } from './SetupStepList';
+import { t, useT } from './i18n';
 
 /**
  * Screens A5-A8: the per-OEM battery setup, one component, four sets of words.
@@ -60,9 +61,11 @@ export interface OemBatteryScreenProps {
   readonly onWatchVideo?: () => void;
   readonly onContinue: () => void;
   readonly continueLabel?: string;
+  /** `FE-W192`. "Step 3 of 4", in first run only. */
+  readonly stepLine?: string;
+  /** `FE-W188`. Opened from Me, the screen has a way back; in first run it has none. */
+  readonly onBack?: () => void;
 }
-
-const VIDEO_PENDING_LABEL = '20-second video — not recorded yet';
 
 export const OemBatteryScreen = ({
   skin,
@@ -75,49 +78,56 @@ export const OemBatteryScreen = ({
   showPendingVideo = false,
   onWatchVideo,
   onContinue,
-  continueLabel = 'Continue',
-}: OemBatteryScreenProps): ReactNode => (
-  <Screen scrollable>
-    <Label muted>{skin}</Label>
-    <Display>{headline}</Display>
+  continueLabel,
+  stepLine,
+  onBack,
+}: OemBatteryScreenProps): ReactNode => {
+  useT();
+  return (
+    <Screen scrollable {...(onBack === undefined ? {} : { onBack })}>
+      {stepLine === undefined ? null : <Label muted>{stepLine}</Label>}
+      {/* `FE-W192`. The generic screen names no skin, rather than an "Android" eyebrow. */}
+      {skin === '' ? null : <Label muted>{skin}</Label>}
+      <Display>{headline}</Display>
 
-    {/*
+      {/*
       The consequence is body text, not a warning banner. It is a true statement about
       the MR's day, and dressing it as an alert on a first-run screen is how an app
       teaches people that its alerts mean nothing — the rule stated on `BannerTone`.
     */}
-    <BodyText>{consequence}</BodyText>
+      <BodyText>{consequence}</BodyText>
 
-    <SetupStepList steps={steps} onToggleDone={onToggleDone} />
+      <SetupStepList steps={steps} onToggleDone={onToggleDone} />
 
-    {notice === null ? null : <Banner tone="info" title={notice} />}
+      {notice === null ? null : <Banner tone="info" title={notice} />}
 
-    {/*
+      {/*
       FE-D12 item 5. Hidden until a video exists. The disabled placeholder below was the largest
       thing on the screen in a walkthrough, apologising for a missing asset. The path is kept
       whole: `videoAvailable` renders the working button, and `showPendingVideo` brings the
       disabled placeholder back.
     */}
-    {!videoAvailable && !showPendingVideo ? null : (
-      <PrimaryButton
-        label={videoAvailable ? 'Show me a 20-second video' : VIDEO_PENDING_LABEL}
-        disabled={!videoAvailable}
-        // The label already carries the fact; the reason line carries what happens
-        // next, so the disabled control is not a dead end. §05 requires the line and
-        // this one earns its place rather than repeating the label.
-        note="It will appear here once it has been recorded. The steps above work without it."
-        onPress={() => {
-          onWatchVideo?.();
-        }}
-      />
-    )}
+      {!videoAvailable && !showPendingVideo ? null : (
+        <PrimaryButton
+          label={videoAvailable ? t('onboarding.videoShow') : t('onboarding.videoPending')}
+          disabled={!videoAvailable}
+          // The label already carries the fact; the reason line carries what happens
+          // next, so the disabled control is not a dead end. §05 requires the line and
+          // this one earns its place rather than repeating the label.
+          note={t('onboarding.videoNote')}
+          onPress={() => {
+            onWatchVideo?.();
+          }}
+        />
+      )}
 
-    {/*
+      {/*
       Always enabled. The MR may leave this screen with nothing marked done and
       nothing opened — these settings are a recommendation the app cannot enforce, and
       trapping someone on an onboarding screen until they satisfy it is the coercive
       shape S4 exists to avoid.
     */}
-    <PrimaryButton label={continueLabel} onPress={onContinue} />
-  </Screen>
-);
+      <PrimaryButton label={continueLabel ?? t('onboarding.continue')} onPress={onContinue} />
+    </Screen>
+  );
+};

@@ -3,11 +3,23 @@ import { noteFolder } from '../capture/voice-note-files';
 import { flushOutbox, voiceNoteQueueItem } from './outbox';
 import type { QueuePersistence } from './outbox';
 import { SyncPushRefusal, createPushClient } from './push-client';
+import { utf8Length } from './data-use';
 import type { OutboxWriteClient, VoiceNoteDeps } from './push-client';
 import { emptyQueue, syncQueueReducer } from './reducer';
 import type { SyncQueueState } from './reducer';
 import { voiceNoteUploadFrom } from './voice-note-upload';
 import type { VoiceNoteUpload } from './voice-note-upload';
+import type { UploadConditions } from './upload-conditions';
+
+/**
+ * `FE-W135`. Audio now waits for WiFi by default ("Send audio on WiFi only" ships on), so a test
+ * about how audio is SENT says the phone is on WiFi. The gate itself is tested in
+ * `upload-gating.test.ts`.
+ */
+const onWifi: UploadConditions = {
+  read: () => Promise.resolve({ connection: 'wifi', wifiOnlyAudio: true }),
+  recordUse: () => Promise.resolve(),
+};
 
 /**
  * MR-51 D1 — `FE-W29`: a kept voice note goes to the server as an ordinary sync item.
@@ -144,6 +156,22 @@ describe('MR-51 D1 — a kept voice note is uploaded, then finalised, then forgo
     expect(accepted.receivedAt).toBe('2026-09-22T10:05:00.000+00:00');
   });
 
+  it('FE-W137: says it sent the file plus both request bodies, byte for byte', async () => {
+    const w = world();
+    const accepted = await w.client.uploadVoiceNote(note);
+    const begin = w.rpc.mock.calls.find(([fn]) => fn === 'begin_upload')?.[1];
+    const push = w.rpc.mock.calls.find(([fn]) => fn === 'sync_push')?.[1];
+    expect(accepted.bytesSent).toBe(
+      5 + utf8Length(JSON.stringify(begin)) + utf8Length(JSON.stringify(push)),
+    );
+  });
+
+  it('FE-W137: a note the server already held sent nothing, and says so', async () => {
+    const w = world({ storedAt: '2026-09-22T10:04:00.000+00:00' });
+    const accepted = await w.client.uploadVoiceNote(note);
+    expect(accepted.bytesSent ?? 0).toBe(0);
+  });
+
   it('deletes the phone copy only AFTER the server accepted it', async () => {
     const w = world();
     await w.client.uploadVoiceNote(note);
@@ -238,8 +266,8 @@ describe('MR-51 D1 — the queue row', () => {
     const uploadVoiceNote = vi.fn(() => Promise.resolve({ receivedAt: '2026-09-22T10:05:00Z' }));
     const client = { uploadVoiceNote } as unknown as OutboxWriteClient;
 
-    const first = await flushOutbox(client, store, () => REP);
-    const second = await flushOutbox(client, store, () => REP);
+    const first = await flushOutbox(client, store, () => REP, onWifi);
+    const second = await flushOutbox(client, store, () => REP, onWifi);
 
     expect(uploadVoiceNote).toHaveBeenCalledTimes(1);
     expect(uploadVoiceNote).toHaveBeenCalledWith(note);

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { AppState, Linking } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import uuid from 'expo-modules-core/src/uuid';
 import {
@@ -9,8 +10,9 @@ import {
   useAudioRecorder,
   useAudioRecorderState,
 } from 'expo-audio';
-import { Screen, VoiceNoteScreen } from '@fieldforce/ui';
-import { blockReason, elapsedLabel } from '../../src/capture/recording';
+import { VoiceNoteScreen, t, useLanguage } from '@fieldforce/ui';
+import type { TextKey } from '@fieldforce/ui';
+import { elapsedLabel } from '../../src/capture/recording';
 import {
   discardNote,
   keepNote,
@@ -25,7 +27,8 @@ import type { SendOutcome } from '../../src/sync/outbox';
 import { createPushClient } from '../../src/sync/push-client';
 import { usePulledStore } from '../../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
-import { failureDetail } from '../../src/errors/plain';
+import { failureDetail, refusedDetail } from '../../src/errors/plain';
+import { useBack } from '../../src/navigation/back';
 
 /**
  * Phase 3 D7 — the voice note, with a real microphone behind it.
@@ -57,30 +60,67 @@ import { failureDetail } from '../../src/errors/plain';
  * phone's copy is deleted only once the server has accepted it (`push-client.ts`). The screen says
  * which of those happened, and only that.
  * ---
+ * **`FE-W152`.** Every sentence here is read at render, in the app's current language: state holds
+ * what HAPPENED (`SaveResult`, `ActionProblem`), never the words for it.
+ * ---
  */
-const VISIT_NOT_HERE = {
-  title: 'This note cannot be saved',
-  detail:
-    'This visit is not on this phone, so there is nothing to save the note against. Nothing you record here is kept.',
-} as const;
-
-/** What Save says, per outcome. Each sentence claims only what that outcome established. */
-const SAVED: Record<SendOutcome['kind'], (message: string) => string> = {
-  sent: () => 'Sent. The note has reached the company, so it is no longer kept on this phone.',
-  queued: () =>
-    'Saved on this phone. It will send by itself when you have signal, and is then removed from this phone.',
-  refused: (message) => `Saved on this phone, but the server refused to take it: ${message}`,
-  queue_unreadable: () =>
-    'Saved on this phone, but it could not be put in line to send, so it will not send by itself.',
+/** Getters, so the banner reads the app's current language whenever it is drawn. */
+const VISIT_NOT_HERE: { readonly title: string; readonly detail: string } = {
+  get title() {
+    return t('voiceNote.notHereTitle');
+  },
+  get detail() {
+    return t('voiceNote.notHereDetail');
+  },
 };
 
+/**
+ * What Save established. `wifi` is `FE-W135`: not tried, because "Send audio on WiFi only" is on and
+ * the phone is not on WiFi -- so "when you have signal" would be the wrong promise. Neutral: the MR
+ * chose this.
+ */
+type SaveResult =
+  | { readonly kind: Exclude<SendOutcome['kind'], 'refused'> | 'wifi' }
+  | { readonly kind: 'refused'; readonly sqlState: string | null };
+
+/** What Save says, per outcome. Each sentence claims only what that outcome established. */
+const savedText = (result: SaveResult): string => {
+  switch (result.kind) {
+    case 'sent':
+      return t('voiceNote.sent');
+    case 'queued':
+      return t('voiceNote.queued');
+    case 'refused':
+      // `FE-W197`. The remedy for the SQLSTATE, inside ours. This printed the server's sentence
+      // verbatim, which names ids ("visit … is not yours") and tells a rep nothing to do.
+      return t('voiceNote.refused', { message: refusedDetail(result.sqlState) });
+    case 'queue_unreadable':
+      return t('voiceNote.queueUnreadable');
+    case 'wifi':
+      return t('voiceNote.waitingForWifi');
+  }
+};
+
+/** A press that failed: which one (its title), and the error, worded by `failureDetail` at render. */
+type ActionProblem =
+  | { readonly kind: 'visit_not_here' }
+  | { readonly kind: 'failed'; readonly title: TextKey; readonly error: unknown };
+
+const problemText = (problem: ActionProblem): { title: string; detail: string } =>
+  problem.kind === 'visit_not_here'
+    ? VISIT_NOT_HERE
+    : { title: t(problem.title), detail: failureDetail(problem.error) };
+
 export default function VoiceNoteRoute(): ReactNode {
+  useLanguage();
   const { visitId } = useLocalSearchParams<{ visitId: string }>();
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const state = useAudioRecorderState(recorder);
   const { session } = useSession();
   const userId = session?.user.id ?? null;
   const { store, status } = usePulledStore();
+  // `FE-W188`. The screen's Back control. Leaving still deletes an unsaved note (below).
+  const back = useBack();
 
   const visit = visitsFromStore(store).find((candidate) => candidate.id === visitId) ?? null;
   const doctor =
@@ -94,20 +134,18 @@ export default function VoiceNoteRoute(): ReactNode {
     seconds: number;
     recordedAt: string;
   } | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
+  const [saved, setSaved] = useState<SaveResult | null>(null);
   const [busy, setBusy] = useState(false);
   // The microphone could not be opened. Not a press: with no microphone there is nothing to give
   // back, so this one still replaces the screen.
-  const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
+  const [failure, setFailure] = useState<ActionProblem | null>(null);
   /**
    * FE-D2 6. What the last press produced when it failed: recording did not start, did not save,
    * the note was not kept. It used to go into `failure`, which replaces the recorder, and nothing
    * cleared it — after "Your note was not saved" there was no "Start again". It is shown above
    * the recorder now and cleared by the next start, stop, save or "Start again".
    */
-  const [actionFailure, setActionFailure] = useState<{ title: string; detail: string } | null>(
-    null,
-  );
+  const [actionFailure, setActionFailure] = useState<ActionProblem | null>(null);
   /** MR-52 C2: how many notes from before the upload existed were removed on opening. */
   const [removed, setRemoved] = useState(0);
 
@@ -157,10 +195,7 @@ export default function VoiceNoteRoute(): ReactNode {
       }
     })().catch((error: unknown) => {
       if (stopped()) return;
-      setFailure({
-        title: 'Could not open the microphone',
-        detail: failureDetail(error),
-      });
+      setFailure({ kind: 'failed', title: 'voiceNote.microphoneFailed', error });
     });
 
     return () => {
@@ -170,6 +205,30 @@ export default function VoiceNoteRoute(): ReactNode {
       unsaved.current = null;
     };
   }, [userId]);
+
+  /**
+   * `FE-W198`. Back from Settings with the microphone turned on, the screen offers recording without
+   * being reopened: the permission is read again whenever the app returns to the foreground while
+   * it is off. Read, never requested -- Android will not show its prompt a second time.
+   */
+  useEffect(() => {
+    if (granted !== false) return undefined;
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') return;
+      void AudioModule.getRecordingPermissionsAsync()
+        .then(async (permission) => {
+          if (!permission.granted) return;
+          await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+          setGranted(true);
+        })
+        .catch(() => {
+          // Still off, as far as this screen can tell: the banner and its way to Settings stay.
+        });
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, [granted]);
 
   // "Not on this phone" is a claim about the store, so only a settled pull may make it.
   const visitMissing = status !== 'loading' && visit === null;
@@ -191,10 +250,7 @@ export default function VoiceNoteRoute(): ReactNode {
       await recorder.prepareToRecordAsync();
       recorder.record();
     })().catch((error: unknown) => {
-      setActionFailure({
-        title: 'Recording did not start',
-        detail: failureDetail(error),
-      });
+      setActionFailure({ kind: 'failed', title: 'voiceNote.startFailed', error });
     });
   };
 
@@ -216,10 +272,7 @@ export default function VoiceNoteRoute(): ReactNode {
         }
       })
       .catch((error: unknown) => {
-        setActionFailure({
-          title: 'Recording did not save',
-          detail: failureDetail(error),
-        });
+        setActionFailure({ kind: 'failed', title: 'voiceNote.stopFailed', error });
       });
   };
 
@@ -227,7 +280,7 @@ export default function VoiceNoteRoute(): ReactNode {
     if (busy || captured === null) return;
     setActionFailure(null);
     if (visit === null || userId === null) {
-      setActionFailure(VISIT_NOT_HERE);
+      setActionFailure({ kind: 'visit_not_here' });
       return;
     }
     setBusy(true);
@@ -249,51 +302,68 @@ export default function VoiceNoteRoute(): ReactNode {
           () => createPushClient().uploadVoiceNote(body),
           voiceNoteQueueItem(body),
         );
-        setSaved(SAVED[outcome.kind](outcome.kind === 'refused' ? outcome.message : ''));
+        setSaved(
+          outcome.kind === 'queued' && outcome.waitingForWifi === true
+            ? { kind: 'wifi' }
+            : outcome.kind === 'refused'
+              ? { kind: 'refused', sqlState: outcome.sqlState }
+              : { kind: outcome.kind },
+        );
       })
       .catch((error: unknown) => {
-        setActionFailure({
-          title: 'Your note was not saved',
-          detail: failureDetail(error),
-        });
+        setActionFailure({ kind: 'failed', title: 'voiceNote.saveFailed', error });
       })
       .finally(() => {
         setBusy(false);
       });
   };
 
+  // `FE-W198`. The voice note's own sentence. This borrowed the consultation recording's, which
+  // says to record "with the doctor's agreement" -- but a voice note is the rep's own note, with no
+  // doctor in it, and onboarding says exactly that.
   const blocked =
     granted === false
-      ? blockReason({ kind: 'no_microphone' })
+      ? t('voiceNote.microphoneOff')
       : granted === null
-        ? 'Asking for the microphone…'
+        ? t('voiceNote.askingMicrophone')
         : null;
 
+  // `FE-W190`. `VoiceNoteScreen` draws its own `Screen` now, so its controls can sit in the footer.
   return (
-    <Screen scrollable>
-      <VoiceNoteScreen
-        blocked={blocked}
-        busy={busy}
-        elapsed={elapsedLabel(
-          state.isRecording ? state.durationMillis / 1000 : (captured?.seconds ?? 0),
-        )}
-        failure={failure ?? (visitMissing ? VISIT_NOT_HERE : null)}
-        actionFailure={actionFailure}
-        hint="Try covering — what they asked, what you promised, what to do next time."
-        onHoldEnd={stop}
-        onHoldStart={start}
-        onStartAgain={forget}
-        prompt="What should I put in the report?"
-        recording={state.isRecording}
-        saved={
-          saved ??
-          (removed === 0
+    <VoiceNoteScreen
+      onBack={back}
+      blocked={blocked}
+      {...(granted === false
+        ? {
+            // `FE-W198`. The sentence says Settings, so the banner goes there, as onboarding's do.
+            onOpenSettings: () => {
+              void Linking.openSettings();
+            },
+          }
+        : {})}
+      busy={busy}
+      elapsed={elapsedLabel(
+        state.isRecording ? state.durationMillis / 1000 : (captured?.seconds ?? 0),
+      )}
+      failure={failure !== null ? problemText(failure) : visitMissing ? VISIT_NOT_HERE : null}
+      actionFailure={actionFailure === null ? null : problemText(actionFailure)}
+      hint={t('voiceNote.hint')}
+      onHoldEnd={stop}
+      onHoldStart={start}
+      onStartAgain={forget}
+      prompt={t('voiceNote.prompt')}
+      recording={state.isRecording}
+      saved={
+        saved !== null
+          ? savedText(saved)
+          : removed === 0
             ? null
-            : `${String(removed)} older note${removed === 1 ? '' : 's'} could not be sent — they were saved before sending existed, so the visit was not recorded with them. They have been removed from this phone.`)
-        }
-        subject={`Your note · ${doctor?.fullName ?? 'this visit'}`}
-        {...(captured === null || saved !== null ? {} : { onSave: save })}
-      />
-    </Screen>
+            : t('voiceNote.olderRemoved', { count: removed })
+      }
+      subject={t('voiceNote.subject', {
+        doctor: doctor?.fullName ?? t('voiceNote.thisVisit'),
+      })}
+      {...(captured === null || saved !== null ? {} : { onSave: save })}
+    />
   );
 }

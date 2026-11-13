@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Label } from './Text';
+import { BodyText, Label, Secondary } from './Text';
 import { StatusGlyph } from './StatusGlyph';
 import type { StatusKind } from './StatusGlyph';
 import { elevationStyle } from './depth';
@@ -46,8 +46,10 @@ const styles = StyleSheet.create({
     // so a white row on warm paper has an edge without an outline.
     ...elevationStyle('hairline'),
   },
-  text: { flex: 1, gap: 2 },
-  detail: { flexDirection: 'row', alignItems: 'center', gap: tokens.space.xs },
+  text: { flex: 1, gap: tokens.space.xxs },
+  // `FE-W179`. Top-aligned, the glyph on the detail's first line: "09:20 · consented · synced" in
+  // Hindi, or at a large font size, wraps — and a centred glyph then floated beside the middle.
+  detail: { flexDirection: 'row', alignItems: 'flex-start', gap: tokens.space.xs },
   pressed: { backgroundColor: tokens.color.wash },
   selected: { backgroundColor: tokens.color.successFill },
   // FE-D7 2. Each ground presses to its own darker step, as the design's `style-active` does. The
@@ -104,8 +106,9 @@ export const ListItem = ({
       <View style={styles.text}>
         <BodyText>{title}</BodyText>
         <View style={styles.detail}>
-          <StatusGlyph kind={status} />
-          <Label muted>{detail}</Label>
+          <StatusGlyph kind={status} lineHeight={tokens.typography.secondary.lineHeight} />
+          {/* `FE-W178`. The state in words is a line of prose, at the prose step. */}
+          <Secondary>{detail}</Secondary>
         </View>
       </View>
       {meta === undefined ? null : <Label muted>{meta}</Label>}

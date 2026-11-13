@@ -2,11 +2,13 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
 import demoCleartext from './plugins/demo-cleartext.cjs';
 import releaseSigning from './plugins/release-signing.cjs';
 import androidRelease from './plugins/android-release.cjs';
+import iosRelease from './plugins/ios-release.cjs';
 import mapsPush from './plugins/maps-push.cjs';
 
 const { demoCleartextHosts, withDemoCleartext } = demoCleartext;
 const { withReleaseSigning } = releaseSigning;
 const { withAndroidRelease } = androidRelease;
+const { withIosRelease } = iosRelease;
 const { withMapsAndPush } = mapsPush;
 
 /**
@@ -46,15 +48,20 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   // `FE-W85` / `FE-W86`: the Maps key and the Firebase file, from the build environment, only when
   // `EXPO_PUBLIC_MAPS` / `EXPO_PUBLIC_PUSH` are on -- refused here when a flag is on and its input is
   // missing. See `plugins/maps-push.cjs`.
+  // `FE-W161`: the iOS build number (`FIELD_IOS_BUILD_NUMBER`), and a refusal of any background
+  // location in the iOS config. See `plugins/ios-release.cjs`.
   return withReleaseSigning(
     withDemoCleartext(
-      withAndroidRelease(
-        withMapsAndPush(
-          {
-            ...config,
-            name: demoHosts.length === 0 ? name : `${name} (demo)`,
-            slug: config.slug ?? 'field-force',
-          },
+      withIosRelease(
+        withAndroidRelease(
+          withMapsAndPush(
+            {
+              ...config,
+              name: demoHosts.length === 0 ? name : `${name} (demo)`,
+              slug: config.slug ?? 'field-force',
+            },
+            process.env,
+          ),
           process.env,
         ),
         process.env,

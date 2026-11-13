@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
-import { Banner, BodyText, Heading, ListRow, Screen, Title } from '@fieldforce/ui';
+import { Banner, BodyText, Heading, ListRow, Screen, Title, t, useLanguage } from '@fieldforce/ui';
 import { visitsAsWitnessed } from '../src/capture/visit';
 import { mapsEnabled } from '../src/features';
 import { ClinicMap } from '../src/maps/clinic-map';
-import { NO_LOCATION, doctorPlaces, placeLink, todayPlaces } from '../src/maps/places';
+import { doctorPlaces, noLocation, placeLink, todayPlaces } from '../src/maps/places';
 import type { MapPlan } from '../src/maps/places';
+import { useBack } from '../src/navigation/back';
 import { usePulledStore } from '../src/sync/pulled-store';
 import { doctorsFromStore, visitsFromStore } from '../src/sync/selectors';
 import { beatPlanView } from '../src/today/beat-plan-view';
@@ -23,50 +24,56 @@ export const MapScreen = ({
   heading,
   empty,
   onOpen,
+  onBack,
 }: {
   readonly plan: MapPlan;
   readonly heading: string;
   readonly empty: string;
   readonly onOpen: (link: string) => void;
-}): ReactNode => (
-  <Screen scrollable>
-    <Title>{heading}</Title>
-    {plan.region === null ? (
-      <Banner tone="info" title={empty} />
-    ) : (
-      <ClinicMap
-        pins={plan.pins}
-        region={plan.region}
-        onOpen={(pin) => {
-          onOpen(placeLink(pin));
-        }}
-      />
-    )}
-    {plan.missing.length === 0 ? null : (
-      <>
-        <Heading>{NO_LOCATION}</Heading>
-        <BodyText muted>
-          These clinics have no position recorded, so they are not on the map. Nothing is guessed.
-        </BodyText>
-        {plan.missing.map((place) => (
-          <ListRow
-            key={place.key}
-            title={place.title}
-            detail={place.detail}
-            onPress={() => {
-              onOpen(placeLink(place));
-            }}
-          />
-        ))}
-      </>
-    )}
-  </Screen>
-);
+  /** `FE-W188`. The screen's Back control. */
+  readonly onBack?: () => void;
+}): ReactNode => {
+  useLanguage();
+  return (
+    <Screen scrollable {...(onBack === undefined ? {} : { onBack })}>
+      <Title>{heading}</Title>
+      {plan.region === null ? (
+        <Banner tone="info" title={empty} />
+      ) : (
+        <ClinicMap
+          pins={plan.pins}
+          region={plan.region}
+          onOpen={(pin) => {
+            onOpen(placeLink(pin));
+          }}
+        />
+      )}
+      {plan.missing.length === 0 ? null : (
+        <>
+          <Heading>{noLocation()}</Heading>
+          <BodyText muted>{t('map.noLocationDetail')}</BodyText>
+          {plan.missing.map((place) => (
+            <ListRow
+              key={place.key}
+              title={place.title}
+              detail={place.detail}
+              onPress={() => {
+                onOpen(placeLink(place));
+              }}
+            />
+          ))}
+        </>
+      )}
+    </Screen>
+  );
+};
 
 export default function MapRoute(): ReactNode {
+  useLanguage();
   const router = useRouter();
   const { show } = useLocalSearchParams<{ show?: string }>();
   const { store, status, today } = usePulledStore();
+  const back = useBack();
   if (!mapsEnabled) return <Redirect href="/home" />;
 
   const doctors = doctorsFromStore(store);
@@ -91,17 +98,18 @@ export default function MapRoute(): ReactNode {
   return (
     <MapScreen
       plan={plan}
-      heading={forToday ? 'Today on the map' : 'Your doctors on the map'}
+      heading={forToday ? t('map.titleToday') : t('map.titleDoctors')}
       empty={
         status === 'loading'
-          ? 'Loading…'
+          ? t('map.loading')
           : forToday
-            ? 'No stop today has a location on file.'
-            : 'No clinic has a location on file.'
+            ? t('map.emptyToday')
+            : t('map.emptyDoctors')
       }
       onOpen={(link) => {
         router.push(link);
       }}
+      onBack={back}
     />
   );
 }

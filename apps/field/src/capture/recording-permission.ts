@@ -1,5 +1,7 @@
 import { RecordingPermissionSchema } from '@fieldforce/core';
 import type { RecordingPermission } from '@fieldforce/core';
+import { t } from '@fieldforce/ui/i18n';
+import type { TextKey } from '@fieldforce/ui/i18n';
 import { resolveClient } from './client';
 import type { RpcCaller } from './client';
 
@@ -47,14 +49,11 @@ export type RecordingAvailability =
  * distinction between them is the point. `withdrawn` gets its own, because "the doctor said no" is
  * false of somebody who agreed and then changed their mind.
  */
-const SENTENCE: Record<string, string> = {
-  never_asked: 'Ask the doctor first. Nothing can be recorded until they have answered.',
-  declined:
-    'The doctor said no. Nothing will be recorded, and that is the end of it — carry on with the visit.',
-  withdrawn:
-    'The doctor agreed and then changed their mind. Nothing more can be recorded for this visit.',
-  quarantined:
-    'This visit is being checked after a problem with the server’s records. Recording is off until somebody clears it.',
+const SENTENCE: Partial<Record<string, TextKey>> = {
+  never_asked: 'visit.askDoctorFirst',
+  declined: 'visit.doctorSaidNo',
+  withdrawn: 'visit.doctorWithdrew',
+  quarantined: 'visit.recordingQuarantined',
 };
 
 export const availabilityFrom = (permission: RecordingPermission): RecordingAvailability => {
@@ -71,10 +70,18 @@ export const availabilityFrom = (permission: RecordingPermission): RecordingAvai
   }
   // `feature_off` and `not_your_visit` are both silences: one is a build-time decision, the other
   // is a question this rep may not ask, and neither is something to tell them about the doctor.
-  const sentence = SENTENCE[permission.reason];
-  return sentence === undefined
+  const key = SENTENCE[permission.reason];
+  // `FE-W150`. The sentence is a getter: the visit screen holds this answer in state, and a
+  // language chosen after it arrived must still reach it.
+  return key === undefined
     ? { kind: 'off' }
-    : { kind: 'blocked', why: permission.reason, sentence };
+    : {
+        kind: 'blocked',
+        why: permission.reason,
+        get sentence() {
+          return t(key);
+        },
+      };
 };
 
 /**

@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { PermissionsAndroid, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { requestNotificationPermission } from '../../src/onboarding/notification-permission';
-import { BodyText, Button, Display, ListRow, Screen } from '@fieldforce/ui';
+import { BodyText, Button, Display, Label, ListRow, Screen, t, useLanguage } from '@fieldforce/ui';
 import { coachingEnabled } from '../../src/features';
 import { capSentence, notificationTypes } from '../../src/onboarding/notifications';
+import {
+  notificationApiLevel,
+  requestNotificationAnswer,
+} from '../../src/onboarding/os-permissions';
+import { batteryStepApplies } from '../../src/onboarding/device';
+import { firstRunPosition } from '../../src/onboarding/first-run';
 
 /**
  * A3 — notifications, asked at sign-in.
@@ -33,9 +38,12 @@ import { capSentence, notificationTypes } from '../../src/onboarding/notificatio
  * do here.
  */
 export default function NotificationsRationale(): ReactNode {
+  useLanguage();
   const router = useRouter();
+  // `FE-W161`. Battery saver and autostart are Android phone-maker settings; an iPhone has neither,
+  // so first run goes straight on to what the app records.
   const next = (): void => {
-    router.push('/onboarding/battery');
+    router.push(batteryStepApplies() ? '/onboarding/battery' : '/transparency');
   };
 
   /**
@@ -65,14 +73,21 @@ export default function NotificationsRationale(): ReactNode {
    */
   const allow = (): void => {
     void requestNotificationPermission({
-      apiLevel: typeof Platform.Version === 'number' ? Platform.Version : 0,
-      request: (permission) => PermissionsAndroid.request(permission),
+      apiLevel: notificationApiLevel(),
+      request: requestNotificationAnswer,
     }).then(next);
   };
 
   return (
     <Screen scrollable>
-      <Display>What we&apos;ll send you</Display>
+      {/*
+        `FE-W192`. Where this sits in first run. Only first run reaches this screen (A2 pushes it,
+        nothing on Me does), so the line is always true here.
+      */}
+      <Label muted>
+        {t('onboarding.stepOf', firstRunPosition('notifications', batteryStepApplies()))}
+      </Label>
+      <Display>{t('onboarding.notificationsHeadline')}</Display>
       <BodyText>{capSentence(types.length)}</BodyText>
 
       {types.map((type) => (
@@ -84,8 +99,8 @@ export default function NotificationsRationale(): ReactNode {
         reasons after Android has already asked is the pattern that produces a reflexive
         "deny". (FE-D2: this comment said the caller raised the prompt; nothing did.)
       */}
-      <Button label="Allow notifications" onPress={allow} variant="secondary" />
-      <Button label="Not now" onPress={next} variant="secondary" />
+      <Button label={t('onboarding.allowNotifications')} onPress={allow} variant="secondary" />
+      <Button label={t('onboarding.notNow')} onPress={next} variant="secondary" />
     </Screen>
   );
 }

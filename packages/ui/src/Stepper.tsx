@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
-import { Figure, Label } from './Text';
+import { Figure, Label, MAX_FONT_SCALE, Secondary } from './Text';
+import { useT } from './i18n';
 
 /**
  * A quantity control sized for a doorway.
@@ -80,6 +81,7 @@ export const Stepper = ({
   maxNote,
   disabled = false,
 }: StepperProps): ReactNode => {
+  const { t } = useT();
   const atMin = value <= min;
   const atMax = max !== undefined && value >= max;
 
@@ -103,7 +105,10 @@ export const Stepper = ({
         inert ? styles.keyDisabled : null,
       ]}
     >
-      <Text style={styles.glyph}>{glyph}</Text>
+      {/* `FE-W179`. The key is a fixed 66pt: the sign grows with the font size, up to the cap. */}
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.glyph}>
+        {glyph}
+      </Text>
     </Pressable>
   );
 
@@ -111,7 +116,7 @@ export const Stepper = ({
     <View style={styles.group}>
       <Label muted>{label}</Label>
       <View style={styles.row}>
-        {key(MINUS, `One fewer ${label}`, disabled || atMin, value - 1)}
+        {key(MINUS, t('stepper.fewer', { label }), disabled || atMin, value - 1)}
         {/*
           The count is announced as text as well as drawn, because `Figure` is the
           only thing on the row carrying the value and a screen reader landing on
@@ -120,9 +125,10 @@ export const Stepper = ({
         <View accessibilityLabel={`${label}: ${String(value)}`} accessible style={styles.value}>
           <Figure>{String(value)}</Figure>
         </View>
-        {key(PLUS, `One more ${label}`, disabled || atMax, value + 1)}
+        {key(PLUS, t('stepper.more', { label }), disabled || atMax, value + 1)}
       </View>
-      {atMax && maxNote !== undefined ? <Label muted>{maxNote}</Label> : null}
+      {/* `FE-W189`. Why the plus key stopped is a sentence, so it is set at the prose step. */}
+      {atMax && maxNote !== undefined ? <Secondary>{maxNote}</Secondary> : null}
     </View>
   );
 };

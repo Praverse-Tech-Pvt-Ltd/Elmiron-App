@@ -58,12 +58,13 @@ test('a prompt can be written and approved without anybody touching SQL', async 
   // W2-E A (`BE-W164`): every feature with a gateway path is offered — `mr_chat` and `lms_tutor`
   // were not, so two features could not be authored at all.
   const featureBox = author.getByLabel('Which feature this prompt is for');
+  // `FE-W165`: offered by the names the field app uses; the values sent are unchanged.
   await expect(featureBox.locator('option')).toHaveText([
-    'product_qa',
-    'mr_chat',
-    'lms_tutor',
-    'ai_doctor',
-    'ai_coach',
+    'Product questions',
+    'Assistant',
+    'Lesson tutor',
+    'AI Doctor practice',
+    'Practice feedback',
   ]);
   await featureBox.selectOption('ai_doctor');
   await author.getByLabel('The instructions the model is given').fill(promptText);
@@ -92,13 +93,13 @@ test('a prompt can be written and approved without anybody touching SQL', async 
 
   // Version 1: the seeder no longer writes one. The number comes from the insert trigger's max+1,
   // computed by the database and never by this form.
-  const card = cardFor(author, 'ai_doctor — version 1');
+  const card = cardFor(author, 'AI Doctor practice — version 1');
   await expect(card).toBeVisible();
   await expect(card.getByText('Draft', { exact: true })).toBeVisible();
   // What the approver will sign besides the words, read back from the stored row.
   await expect(
     card.getByText(
-      'Temperature 0.7 · longest answer 300 tokens · output checked against SimDoctorTurnOutputSchema',
+      'Temperature 0.7 · longest answer 300 tokens · answers checked against the format this feature expects',
     ),
   ).toBeVisible();
 
@@ -116,7 +117,7 @@ test('a prompt can be written and approved without anybody touching SQL', async 
   await signIn(approver, world.approverAdmin);
   await approver.goto('/prompts');
 
-  const approverCard = cardFor(approver, 'ai_doctor — version 1');
+  const approverCard = cardFor(approver, 'AI Doctor practice — version 1');
   const approve = approverCard.getByRole('button', { name: 'Approve' });
   await expect(approve).toBeDisabled();
   await approverCard

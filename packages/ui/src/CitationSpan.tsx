@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Label } from './Text';
+import { BodyText, Label, Secondary } from './Text';
+import { useT } from './i18n';
 
 /**
  * Phase 1 §05: "the atom of contestability · every finding has one."
@@ -63,11 +64,16 @@ export const CitationSpan = ({
   playing = false,
   onPlay,
 }: CitationSpanProps): ReactNode => {
+  const { t } = useT();
   const body = (
     <>
       <View style={styles.head}>
         <View style={styles.meta}>
-          <Label muted>{`${timestamp} · ${retention}`}</Label>
+          {/*
+            `FE-W189`. The retention is a sentence ("audio kept 61 more days"), so the line is set at
+            the prose step. The playing position beside it is a time, and stays a `Label`.
+          */}
+          <Secondary>{`${timestamp} · ${retention}`}</Secondary>
         </View>
         {playing && position !== undefined ? <Label muted>{position}</Label> : null}
       </View>
@@ -81,7 +87,7 @@ export const CitationSpan = ({
 
   return (
     <Pressable
-      accessibilityLabel={`Play the recording at ${timestamp}`}
+      accessibilityLabel={t('ai.playRecordingAt', { timestamp })}
       accessibilityRole="button"
       accessibilityState={{ busy: playing }}
       onPress={onPlay}

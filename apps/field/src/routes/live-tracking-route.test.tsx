@@ -1,6 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { LiveTrackingStatus } from '@fieldforce/core';
+import { tokens } from '@fieldforce/ui-tokens';
 
 /**
  * `FE-W71` — the live location screen. The DRAFT notice is labelled as one; agreeing sends the
@@ -19,6 +20,13 @@ import { LiveTrackingScreen } from '../../app/live-tracking';
 import type { LiveTracker } from '../tracking/tracker';
 
 const NOTICE = '4e86b49c-05fc-4bd8-9f75-16e22a64309a';
+
+/** A host element's style, merged — apps/field may not import `StyleSheet` (components live in ui). */
+const flat = (style: unknown): Record<string, unknown> =>
+  Object.assign({}, ...([] as unknown[]).concat(style).flat(5).filter(Boolean)) as Record<
+    string,
+    unknown
+  >;
 
 const status = (over: Partial<LiveTrackingStatus> = {}): LiveTrackingStatus => ({
   companyEnabled: true,
@@ -43,6 +51,7 @@ const tracker = (over: Partial<LiveTracker> = {}): LiveTracker => ({
     tone: 'info',
   },
   dayOpen: false,
+  readingNow: false,
   busy: false,
   refresh: jest.fn(),
   accept: jest.fn<LiveTracker['accept']>().mockResolvedValue('accepted'),
@@ -66,6 +75,32 @@ describe('app/live-tracking.tsx', () => {
     });
     await render(<LiveTrackingScreen tracker={tracker({ status: approved })} />);
     expect(screen.queryByText('DRAFT — not approved by your company')).toBeNull();
+  });
+
+  it('FE-W162: a Markdown notice is laid out — headings, joined paragraphs, bullets, no markers', async () => {
+    const body = [
+      '## Location sharing',
+      '',
+      'This is a **separate** notice from any',
+      'other you have agreed to.',
+      '',
+      '* **Only during your working hours**.',
+      '',
+      '---',
+      '',
+      '**[ ] I have read this notice.**',
+    ].join('\n');
+    const shown = status({ notice: { id: NOTICE, versionLabel: 'v1', body, isDraft: false } });
+    await render(<LiveTrackingScreen tracker={tracker({ status: shown })} />);
+    expect(screen.getByText('Location sharing')).toBeTruthy();
+    expect(
+      screen.getByText('This is a separate notice from any other you have agreed to.'),
+    ).toBeTruthy();
+    // `FE-W191`: a bullet hangs — the mark and the words are drawn side by side, not as one string.
+    expect(screen.getByText('Only during your working hours.')).toBeTruthy();
+    expect(screen.getByText('•')).toBeTruthy();
+    expect(screen.getByText('I have read this notice.')).toBeTruthy();
+    expect(screen.queryByText(/\*\*|##|---|\[ \]/u)).toBeNull();
   });
 
   it('agreeing sends the version that was shown', async () => {
@@ -97,5 +132,32 @@ describe('app/live-tracking.tsx', () => {
     });
     await render(<LiveTrackingScreen tracker={t} />);
     expect(screen.getByText('Your company has live location switched off.')).toBeTruthy();
+  });
+  it('FE-W191: Start and Stop are the same primary button, so the screen does not jump', async () => {
+    const accepted = status({ accepted: true, acceptedNoticeVersionId: NOTICE });
+    const { rerender } = await render(
+      <LiveTrackingScreen tracker={tracker({ status: accepted, dayOpen: false })} />,
+    );
+    const fill = (label: string): unknown =>
+      flat(screen.getByRole('button', { name: label }).props['style'])['backgroundColor'];
+    const started = fill('Start sharing for today');
+    await rerender(<LiveTrackingScreen tracker={tracker({ status: accepted, dayOpen: true })} />);
+    expect(fill('Stop sharing for today')).toBe(started);
+    expect(started).toBe(tokens.color.accent);
+  });
+
+  it('FE-W191: an accepted notice is said as done, in the success pill', async () => {
+    const accepted = status({ accepted: true, acceptedNoticeVersionId: NOTICE });
+    await render(<LiveTrackingScreen tracker={tracker({ status: accepted })} />);
+    // The Badge names itself for a screen reader; its fill is the success wash.
+    const pill = screen.getByLabelText('You have accepted this notice.');
+    expect(flat(pill.props['style'])['backgroundColor']).toBe(tokens.color.successFill);
+  });
+
+  it('FE-W188: draws the Back control when given one', async () => {
+    const onBack = jest.fn();
+    await render(<LiveTrackingScreen onBack={onBack} tracker={tracker()} />);
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+    expect(onBack).toHaveBeenCalledTimes(1);
   });
 });

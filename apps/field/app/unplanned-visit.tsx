@@ -2,12 +2,26 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import uuid from 'expo-modules-core/src/uuid';
-import { Banner, BodyText, Button, Label, Screen, Select, TextField, Title } from '@fieldforce/ui';
+import {
+  Banner,
+  BodyText,
+  Button,
+  Screen,
+  Secondary,
+  Select,
+  TextField,
+  Title,
+  t,
+  useLanguage,
+} from '@fieldforce/ui';
 import { createPushClient } from '../src/sync/push-client';
-import { QUEUE_UNREADABLE, loadQueueState } from '../src/sync/async-storage-store';
+import { queueUnreadable, loadQueueState } from '../src/sync/async-storage-store';
 import { enqueueFirst, flushOutbox, unplannedVisitQueueItem } from '../src/sync/outbox';
+import { useBack } from '../src/navigation/back';
+import { refusedDetail } from '../src/errors/plain';
 import { usePulledStore } from '../src/sync/pulled-store';
 import { doctorsFromStore } from '../src/sync/selectors';
+import { todaysPlan } from '../src/today/beat-plan-view';
 import { PROBLEM_WORDS, draftProblem, unplannedVisitRequest } from '../src/visits/unplanned';
 
 /**
@@ -19,15 +33,55 @@ import { PROBLEM_WORDS, draftProblem, unplannedVisitRequest } from '../src/visit
  * the check-in, report and check-out that follow are queued against the same id -- the outbox holds
  * them until the visit itself is accepted.
  */
+/**
+ * `FE-W154`. What went wrong, kept as a fact rather than as a sentence: a sentence held in state is
+ * frozen in the language it was written in. The words are built from this at render.
+ */
+type Failure =
+  | { readonly kind: 'not_saved' }
+  /** `sqlState` is the server's verdict code; `undefined` when the queue holds no verdict for it. */
+  | { readonly kind: 'not_accepted'; readonly sqlState: string | null | undefined };
+
+const failureWords = (failure: Failure): { title: string; detail: string } =>
+  failure.kind === 'not_saved'
+    ? { title: t('unplanned.notSavedTitle'), detail: queueUnreadable() }
+    : {
+        title: t('unplanned.notAcceptedTitle'),
+        // `FE-W197`. The remedy for the verdict's SQLSTATE. This showed the queue row's `lastError`
+        // -- the server's own sentence, written for support -- as it came.
+        detail:
+          failure.sqlState === undefined
+            ? t('unplanned.notAcceptedDetail')
+            : refusedDetail(failure.sqlState),
+      };
+
 export default function UnplannedVisit(): ReactNode {
+  useLanguage();
   const router = useRouter();
-  const { store, refresh } = usePulledStore();
-  const doctors = doctorsFromStore(store);
+  const back = useBack();
+  const { store, today, refresh } = usePulledStore();
+  const everyDoctor = doctorsFromStore(store);
+  /**
+   * `FE-W191`. Only doctors who are NOT on today's plan. The sheet listed every doctor on the
+   * phone, today's planned stops included (QA screenshot 52), under a screen whose first line says
+   * it is "for a doctor who is not on today's plan" — and a planned doctor visited from here would
+   * be an unplanned visit to a planned stop, counted twice. A planned stop is opened from Today or
+   * the route. With no plan on the phone yet, nobody is excluded.
+   */
+  const plan = todaysPlan([...store.beat_plan.values()], today);
+  const planned = new Set(
+    plan === null
+      ? []
+      : [...store.beat_plan_entry.values()]
+          .filter((entry) => entry.beatPlanId === plan.id)
+          .map((entry) => entry.doctorId),
+  );
+  const doctors = everyDoctor.filter((d) => !planned.has(d.id));
   const [doctorId, setDoctorId] = useState('');
   const [clinicAddressId, setClinicAddressId] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
 
   const doctor = doctors.find((d) => d.id === doctorId) ?? null;
   const draft = { doctorId, clinicAddressId, reason };
@@ -43,7 +97,7 @@ export default function UnplannedVisit(): ReactNode {
     void (async () => {
       const queued = await enqueueFirst(unplannedVisitQueueItem(body));
       if (queued.kind === 'queue_unreadable') {
-        setFailure({ title: 'This visit was NOT saved', detail: QUEUE_UNREADABLE });
+        setFailure({ kind: 'not_saved' });
         setBusy(false);
         return;
       }
@@ -56,10 +110,8 @@ export default function UnplannedVisit(): ReactNode {
       const mine =
         after.kind === 'loaded' ? after.state.items.find((item) => item.id === body.id) : undefined;
       if (mine?.status === 'failed') {
-        setFailure({
-          title: 'This visit was not accepted',
-          detail: mine.lastError ?? 'It is on the queue screen with the reason.',
-        });
+        const verdict = after.kind === 'loaded' ? after.state.rejections[mine.id] : undefined;
+        setFailure({ kind: 'not_accepted', sqlState: verdict?.sqlState });
         setBusy(false);
         return;
       }
@@ -69,34 +121,31 @@ export default function UnplannedVisit(): ReactNode {
   };
 
   return (
-    <Screen scrollable>
-      <Title>Add an unplanned visit</Title>
-      <BodyText muted>
-        For a doctor who is not on today’s plan. You do not need anyone’s approval; your manager
-        sees it afterwards, with your reason.
-      </BodyText>
-      {failure === null ? null : (
-        <Banner detail={failure.detail} title={failure.title} tone="critical" />
-      )}
-      {doctors.length === 0 ? (
-        <Label muted>
-          This phone has no doctors yet. Connect once so your doctor list arrives.
-        </Label>
+    <Screen onBack={back} scrollable>
+      <Title>{t('unplanned.title')}</Title>
+      <BodyText muted>{t('unplanned.intro')}</BodyText>
+      {failure === null ? null : <Banner {...failureWords(failure)} tone="critical" />}
+      {/* `FE-W189`. Sentences, so the prose step. */}
+      {everyDoctor.length === 0 ? (
+        <Secondary>{t('unplanned.noDoctors')}</Secondary>
+      ) : doctors.length === 0 ? (
+        <Secondary>{t('unplanned.allPlanned')}</Secondary>
       ) : null}
       <Select
-        label="Doctor"
+        filterLabel={t('unplanned.findDoctor')}
+        label={t('unplanned.doctorLabel')}
         onChange={(value) => {
           setDoctorId(value);
           const chosen = doctors.find((d) => d.id === value);
           setClinicAddressId(chosen?.clinicAddresses[0]?.id ?? null);
         }}
         options={doctors.map((d) => ({ value: d.id, label: d.fullName }))}
-        placeholder="Choose the doctor"
+        placeholder={t('unplanned.doctorPlaceholder')}
         value={doctorId}
       />
       {doctor === null || doctor.clinicAddresses.length === 0 ? null : (
         <Select
-          label="Clinic"
+          label={t('unplanned.clinicLabel')}
           onChange={setClinicAddressId}
           options={doctor.clinicAddresses.map((c) => ({
             value: c.id,
@@ -106,15 +155,24 @@ export default function UnplannedVisit(): ReactNode {
         />
       )}
       <TextField
-        help="Why this visit, in a few words — for example, the doctor called you in."
-        label="Reason"
+        help={t('unplanned.reasonHelp')}
+        label={t('unplanned.reasonLabel')}
         onChangeText={setReason}
         value={reason}
       />
       {problem === null ? (
-        <Button label={busy ? 'Starting…' : 'Start this visit'} loading={busy} onPress={start} />
+        <Button
+          label={busy ? t('unplanned.starting') : t('unplanned.start')}
+          loading={busy}
+          onPress={start}
+        />
       ) : (
-        <Button disabled label="Start this visit" note={PROBLEM_WORDS[problem]} onPress={start} />
+        <Button
+          disabled
+          label={t('unplanned.start')}
+          note={PROBLEM_WORDS[problem]}
+          onPress={start}
+        />
       )}
     </Screen>
   );

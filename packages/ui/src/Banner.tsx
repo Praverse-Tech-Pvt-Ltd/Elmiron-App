@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Label } from './Text';
+import { BodyText, Secondary } from './Text';
 import { Button } from './Button';
 import { StatusGlyph, STATUS_COLOR, STATUS_FILL } from './StatusGlyph';
 import { elevationStyle } from './depth';
+import { SurfaceContext } from './surface';
 
 /**
  * Phase 1 §05: in flow, and it persists until the thing it reports is resolved.
@@ -53,15 +54,30 @@ const styles = StyleSheet.create({
     borderRadius: tokens.radius.well,
     borderLeftWidth: 4,
     padding: tokens.space.md,
-    gap: tokens.space.xs,
   },
-  head: { flexDirection: 'row', alignItems: 'center', gap: tokens.space.sm },
-  title: { flex: 1 },
+  // `FE-W179`. Top-aligned, with the glyph centred on the title's first line: a title that wraps
+  // used to float the glyph at the middle of the paragraph.
+  head: { flexDirection: 'row', alignItems: 'flex-start', gap: tokens.space.sm },
+  // `FE-W189`. The title, the detail and the action are one column beside the glyph.
+  words: { flex: 1, gap: tokens.space.xs },
   offline: { borderStyle: 'dashed', borderWidth: 1, borderLeftWidth: 4 },
   // FE-W101. `info` is the one banner on the white card ground rather than a tint; the row shadow
   // gives it the same edge on the page a card has. The tinted tones need none.
   raised: elevationStyle('hairline'),
-  action: { alignSelf: 'flex-start' },
+  /**
+   * `FE-W198`. The action's LABEL in the words' column, and no extra floor under it. The quiet
+   * button keeps its 24pt side padding and its 52pt height (the tap floor, untouched), so its label
+   * sat 24pt inside the title's edge and its empty lower half added to the banner's own padding
+   * (15 October re-check, screenshot 03b). Pulled back by exactly that padding -- the pressed fill
+   * still lands inside the banner, over the glyph's column -- and up into the banner's bottom
+   * padding, which its own empty space now stands in for.
+   */
+  action: {
+    alignSelf: 'flex-start',
+    marginLeft: -tokens.space.lg,
+    marginTop: -tokens.space.xs,
+    marginBottom: -tokens.space.md,
+  },
 });
 
 export const Banner = ({ tone, title, detail, action }: BannerProps): ReactNode => (
@@ -80,17 +96,32 @@ export const Banner = ({ tone, title, detail, action }: BannerProps): ReactNode 
       tone === 'info' ? styles.raised : null,
     ]}
   >
-    <View style={styles.head}>
-      <StatusGlyph kind={KIND[tone]} />
-      <View style={styles.title}>
-        <BodyText>{title}</BodyText>
+    {/*
+      `FE-W176`. A banner's words always sit on the banner's own light fill, so they take paper ink
+      whatever surface the banner is placed on — as `Card` does for its content. Inside the voice
+      note's dark card the microphone banner inherited the hero's white and drew white on
+      `attentionFill`, invisible, on every first open.
+    */}
+    <SurfaceContext.Provider value="paper">
+      {/*
+        `FE-W189`. The detail and the action start under the TITLE, not under the glyph: the QA pass
+        (screenshots 15, 36) showed the detail's lines and "Live location" running back to the
+        banner's edge, so the glyph sat in a notch of its own paragraph and the action read as
+        belonging to the card rather than to this banner.
+      */}
+      <View style={styles.head}>
+        <StatusGlyph kind={KIND[tone]} lineHeight={tokens.typography.body.lineHeight} />
+        <View style={styles.words}>
+          <BodyText>{title}</BodyText>
+          {/* `FE-W178`. The detail is a sentence, so it is set at the prose step, not `Label`. */}
+          {detail === undefined ? null : <Secondary>{detail}</Secondary>}
+          {action === undefined ? null : (
+            <View style={styles.action}>
+              <Button label={action.label} onPress={action.onPress} variant="quiet" />
+            </View>
+          )}
+        </View>
       </View>
-    </View>
-    {detail === undefined ? null : <Label muted>{detail}</Label>}
-    {action === undefined ? null : (
-      <View style={styles.action}>
-        <Button label={action.label} onPress={action.onPress} variant="quiet" />
-      </View>
-    )}
+    </SurfaceContext.Provider>
   </View>
 );

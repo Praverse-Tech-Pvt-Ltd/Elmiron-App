@@ -1,3 +1,4 @@
+import { languageStore, t } from '@fieldforce/ui/i18n';
 /**
  * Which day is it, and what time does that timestamp say — MR-15 A2.
  *
@@ -104,6 +105,30 @@ export const dayIn = (iso: string, zone: TerritoryZone): string => {
   return `${parts['year'] ?? ''}-${parts['month'] ?? ''}-${parts['day'] ?? ''}`;
 };
 
+/** Epoch ms of a `YYYY-MM-DD` at UTC midnight -- a day number, never read in local time. */
+const dayNumber = (day: string): number => {
+  const [year = 0, month = 1, date = 1] = day.split('-').map(Number);
+  return Date.UTC(year, month - 1, date);
+};
+
+/**
+ * `FE-W199` — how many calendar days, in the territory, lie between an instant and now.
+ *
+ * "Last seen" counted elapsed 24-hour periods, so a visit completed at 23:38 and read at 02:20 the
+ * next morning said "today", and one at 09:00 read at 08:00 two days later said "yesterday". A rep
+ * means the DAY: this compares `dayIn` of both instants, as `Date.UTC` day numbers so the device's
+ * own zone and its daylight changes play no part.
+ */
+export const calendarDaysBetween = (
+  earlierIso: string,
+  nowMs: number,
+  zone: TerritoryZone,
+): number =>
+  Math.round(
+    (dayNumber(dayIn(new Date(nowMs).toISOString(), zone)) - dayNumber(dayIn(earlierIso, zone))) /
+      (24 * 60 * 60 * 1000),
+  );
+
 /**
  * The month names the screens already render.
  *
@@ -129,6 +154,46 @@ const MONTHS = [
 ] as const;
 
 /**
+ * `FE-W149` — a date in the app's language, or null for English (which keeps `MONTHS` above).
+ *
+ * Hindi and Marathi take their month names from `Intl.DateTimeFormat`, in the territory's zone:
+ * React Native 0.86 builds Hermes with `HERMES_ENABLE_INTL`, whose Android half is backed by the
+ * platform's ICU (minSdk 24), and Android's ICU carries `hi` and `mr`. `-u-nu-latn` keeps the
+ * digits Latin, as every clock time and count on the same screen is (Marathi's default is
+ * Devanagari digits). If the runtime does not resolve the locale it asked for, this answers null
+ * and the caller prints the English form — a correct date in English rather than a guess.
+ */
+const INTL_LOCALE = { hi: 'hi-IN-u-nu-latn', mr: 'mr-IN-u-nu-latn' } as const;
+
+export const localisedDayMonth = (instant: Date, timeZone: string): string | null => {
+  const language = languageStore.current();
+  if (language === 'en') return null;
+  const formatter = new Intl.DateTimeFormat(INTL_LOCALE[language], {
+    timeZone,
+    day: 'numeric',
+    month: 'short',
+  });
+  return formatter.resolvedOptions().locale.startsWith(language) ? formatter.format(instant) : null;
+};
+
+/**
+ * `FE-W149` — a weekday's name (0 = Sunday) in the app's language, or null for English. Long form,
+ * because the one place it is shown says "Mondays and Thursdays" in English; in Hindi and Marathi
+ * the weekday's own name reads the same way. Same fallback rule as `localisedDayMonth`.
+ */
+export const localisedWeekday = (day: number): string | null => {
+  const language = languageStore.current();
+  if (language === 'en') return null;
+  const formatter = new Intl.DateTimeFormat(INTL_LOCALE[language], {
+    timeZone: 'UTC',
+    weekday: 'long',
+  });
+  // 4 January 2026 was a Sunday; add `day` to reach the weekday asked for.
+  const instant = new Date(Date.UTC(2026, 0, 4 + day));
+  return formatter.resolvedOptions().locale.startsWith(language) ? formatter.format(instant) : null;
+};
+
+/**
  * `9 Sep` — the calendar date this instant falls on, in that zone, for a human.
  *
  * Replaces `dayMonthFrom` in `src/doctors/profile.ts` for any screen reading real server
@@ -147,6 +212,8 @@ const MONTHS = [
  * the format the screens already use.
  */
 export const dayMonthIn = (iso: string, zone: TerritoryZone): string => {
+  const localised = localisedDayMonth(new Date(iso), zone.timeZone);
+  if (localised !== null) return localised;
   const parts = partsIn(iso, zone.timeZone);
   const month = MONTHS[Number(parts['month'] ?? '0') - 1];
   const day = Number(parts['day'] ?? '0');
@@ -181,6 +248,12 @@ export const dayMonthIn = (iso: string, zone: TerritoryZone): string => {
 export const dayMonthOfDate = (date: string): string | null => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(date);
   if (match === null) return null;
+  // `FE-W149`. A calendar date, so it is read in UTC: nothing to convert, only to name.
+  const localised = localisedDayMonth(
+    new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))),
+    'UTC',
+  );
+  if (localised !== null) return localised;
   const month = MONTHS[Number(match[2]) - 1];
   return month === undefined ? null : `${String(Number(match[3]))} ${month}`;
 };
@@ -218,7 +291,4 @@ export const territoryToday = (serverTime: string, zone: TerritoryZone): string 
  * rather than a boolean so the caller cannot render a warning without its reason.
  */
 export const zoneCaveat = (zone: TerritoryZone): string | null =>
-  zone.source === 'territory'
-    ? null
-    : 'Dates and times are shown in UTC. This app could not get your territory’s timezone, ' +
-      'so a day here may not be the day you worked — in India it runs 5 hours 30 minutes behind.';
+  zone.source === 'territory' ? null : t('day.zoneCaveat');

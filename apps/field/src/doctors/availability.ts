@@ -1,5 +1,6 @@
-import { clockIn, dayIn } from '../today/territory-day';
+import { clockIn, dayIn, localisedWeekday } from '../today/territory-day';
 import type { TerritoryZone } from '../today/territory-day';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * B9's "Best time to catch him" and B3's "Best window".
@@ -70,7 +71,10 @@ const hourOf = (iso: string, zone: TerritoryZone): number => Number(clockIn(iso,
 const listDays = (days: readonly string[]): string =>
   days.length <= 1
     ? (days[0] ?? '')
-    : `${days.slice(0, -1).join(', ')} and ${days[days.length - 1] ?? ''}`;
+    : t('doctors.daysAnd', {
+        list: days.slice(0, -1).join(', '),
+        last: days[days.length - 1] ?? '',
+      });
 
 const pad = (hour: number): string => `${String(hour).padStart(2, '0')}:00`;
 
@@ -97,7 +101,8 @@ export const availabilityFrom = (
   const repeated = [...counts.entries()]
     .filter(([, seen]) => seen > 1)
     .sort((a, b) => b[1] - a[1] || a[0] - b[0])
-    .map(([day]) => DAY_NAMES[day] ?? '')
+    // `FE-W149`. The weekday in the app's language; English keeps its own plural table.
+    .map(([day]) => localisedWeekday(day) ?? DAY_NAMES[day] ?? '')
     .filter((name) => name !== '');
 
   if (repeated.length === 0) return null;
@@ -119,4 +124,8 @@ export const availabilityFrom = (
 export const availabilitySentence = (availability: Availability | null): string | null =>
   availability === null
     ? null
-    : `${availability.days}, ${availability.window} — from your last ${String(availability.fromVisits)} visits.`;
+    : t('doctors.availability', {
+        days: availability.days,
+        window: availability.window,
+        visits: availability.fromVisits,
+      });

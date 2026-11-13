@@ -4049,3 +4049,70 @@ so a stuck runtime and a slow one looked identical.
 **This is the same family as the six stale-artefact instances above, one level up.** Those were checks
 reading something they did not produce; this is a check whose *condition* was wider than its claim. The
 question generalises: **when a check passes, ask what else would also have made it pass.**
+
+---
+
+## 14 October 2026 — the console's loading skeletons intermittently swallowed `router.refresh()` (`FE-W160`)
+
+`FE-W124` gave every server-rendered console route a `loading.tsx` skeleton. On GitHub CI, PR #33's
+browser suite then failed tests that had been green on `main` for weeks. Three failed on the first
+run and one on the rerun, always the same shape:
+- the admin's action succeeded and its message showed ("Granted from 2026-10-14", "Approved. This is
+  the prompt the feature now uses.");
+- the server-rendered list beside it stayed as it was before the action;
+- once, the sign-in never navigated to `/coaching`.
+
+The Playwright trace showed the refresh request made, answered `200`, and dynamic
+(`private, no-store`). So the server was asked, and something between that response and the screen
+dropped the update.
+
+**It was proved by measurement, not by reading Next's source.** On the local stack, same source, the
+three flaky specs ran 10 times each, twice per arm:
+
+| | failed |
+| --- | --- |
+| with the 15 `loading.tsx` files | **6 of 240** |
+| without them | **0 of 240** |
+
+They were removed. The exact mechanism inside Next 15.5 / React 19 (a refresh landing while a
+loading boundary's streamed segment is still pending is the likeliest shape) is **not established**.
+
+**How to apply.** Before adding a `loading.tsx` or a `<Suspense>` around a page that refreshes after a
+write, repeat the console specs that write (`--repeat-each=10`) against a production build. A
+once-only green run proves nothing about a race that shows up once in forty runs.
+
+---
+
+## 14 October 2026 — a lazy `import()` cannot be mocked in a field render test (`FE-W135`)
+
+`apps/field` loads native-backed modules lazily with `await import('./x-device')` so the node-side
+logic runner never loads them (`voice-note-device.ts`). **Under jest that `import()` is not
+transformed**: it throws `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG` (no `--experimental-vm-modules`),
+and `jest.mock('./x-device')` never applies. Code that catches the throw and falls back then runs the
+FALLBACK in every render test, silently.
+
+For WiFi-only the fallback is "unknown network, hold audio", so the voice-note route test still saw
+"Saved on this phone…" and only the wording gave it away. **A fallback that is the safe answer in
+production is the untested answer in a test.**
+
+What `FE-W135` does instead: the device half is BOUND once at the app root (`bindUploadDevice` in
+`app/_layout.tsx`, the `setQueueOwner` pattern), and a render test binds a fake. Lazy `import()` stays
+fine where every test injects the dependency anyway (`createPushClient({ voiceNotes })`).
+
+## 14 October 2026 — a string exported as a constant is frozen in the language it loaded in (`FE-W144`)
+
+The field app's language can change while it runs (`FE-W141`). `export const SESSION_EXPIRED = {
+title: t('…') }` would call `t()` ONCE, when the module first loads — in English, before the stored
+language is even read — and every screen that shows it would stay English after a switch, with no
+error anywhere. The same holds for a sentence stored in React state (`setUnsent({ title, … })`) and for
+a value inside a `useMemo` whose dependencies do not include the language.
+
+What `FE-W144` does instead: such constants became functions (`queueUnreadable()`,
+`notPermittedDetail()`, `noServerClock()`, `captureNote()`) or objects with getters (`SESSION_EXPIRED`,
+`TRACKING_WORDS`, the pull's "list rebuilt" notice); state keeps the DATA and the sentence is built at
+render; the live tracker's memo lists `language` as a dependency. `language-switch.test.tsx` and
+`routes/language-switch-route.test.tsx` switch language with a screen mounted and look for the new
+words — the only kind of test that catches this, because in English every version reads the same.
+
+**DM Sans has no Devanagari** (`FE-W147`): 0 of U+0900–U+097F in all four shipped faces, read from the
+TTF `cmap`. Hindi and Marathi are drawn by the platform's fallback font; nothing was bundled.

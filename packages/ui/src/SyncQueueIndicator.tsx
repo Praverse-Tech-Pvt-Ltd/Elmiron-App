@@ -6,6 +6,7 @@ import { BodyText, Label } from './Text';
 import { StatusGlyph } from './StatusGlyph';
 import type { StatusKind } from './StatusGlyph';
 import { elevationStyle } from './depth';
+import { t, useLanguage } from './i18n';
 
 /**
  * Phase 1 §05: on every screen, countable, tappable.
@@ -66,32 +67,36 @@ export interface SyncQueueIndicatorProps {
 const describe = (state: SyncQueueState): { status: StatusKind; message: string; meta: string } => {
   switch (state.kind) {
     case 'idle':
-      return { status: 'success', message: 'Everything sent', meta: state.at ?? '' };
+      return { status: 'success', message: t('sync.everythingSent'), meta: state.at ?? '' };
     case 'sending':
       return {
         status: 'info',
-        message: `Sending ${String(state.done)} of ${String(state.total)}`,
+        message: t('sync.sending', { done: state.done, total: state.total }),
         meta: state.size,
       };
     case 'waiting':
       return {
         status: 'offline',
-        message: `${String(state.count)} waiting · no signal`,
+        message: t('sync.waitingNoSignal', { count: state.count }),
         meta: '',
       };
     case 'wifi':
-      return { status: 'offline', message: `${String(state.count)} waiting for WiFi`, meta: '' };
+      return {
+        status: 'offline',
+        message: t('sync.waitingForWifi', { count: state.count }),
+        meta: '',
+      };
     case 'failed':
       return {
         status: 'critical',
-        message: `${String(state.count)} couldn't send · tried ${String(state.attempts)} times`,
+        message: t('sync.failed', { count: state.count, attempts: state.attempts }),
         meta: '',
       };
     case 'unreadable':
       return {
         status: 'critical',
-        message: "Can't read your queue",
-        meta: 'nothing here is confirmed',
+        message: t('sync.unreadable'),
+        meta: t('sync.unreadableMeta'),
       };
   }
 };
@@ -102,6 +107,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: tokens.space.sm,
     paddingHorizontal: tokens.space.md,
+    // `FE-W179`. Room above and below a message that wraps to two lines; at one line the 52pt
+    // minimum height still decides, so the chip is unchanged.
+    paddingVertical: tokens.space.sm,
     borderRadius: tokens.radius.control,
     backgroundColor: tokens.color.surface,
     minHeight: tokens.target.secondary,
@@ -120,6 +128,9 @@ const styles = StyleSheet.create({
   pressed: { backgroundColor: tokens.color.wash },
   // FE-D7 2. Offline is the wash already, so it presses one step darker, as the design does.
   offlinePressed: { backgroundColor: tokens.color.washPressed },
+  // `FE-W179`. Glyph and message top-aligned in their own row, the glyph on the first line; the
+  // chip still centres that row against the trailing words.
+  says: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: tokens.space.sm },
   message: { flex: 1 },
 });
 
@@ -136,6 +147,7 @@ export const SyncQueueIndicator = ({
   onPress,
   actionLabel,
 }: SyncQueueIndicatorProps): ReactNode => {
+  useLanguage();
   const { status, message, meta } = describe(state);
   const trailing = actionLabel ?? meta;
 
@@ -146,9 +158,11 @@ export const SyncQueueIndicator = ({
       onPress={onPress}
       style={({ pressed }) => syncQueueStyle(status, pressed)}
     >
-      <StatusGlyph kind={status} />
-      <View style={styles.message}>
-        <BodyText>{message}</BodyText>
+      <View style={styles.says}>
+        <StatusGlyph kind={status} lineHeight={tokens.typography.body.lineHeight} />
+        <View style={styles.message}>
+          <BodyText>{message}</BodyText>
+        </View>
       </View>
       {trailing === '' ? null : <Label muted>{trailing}</Label>}
     </Pressable>

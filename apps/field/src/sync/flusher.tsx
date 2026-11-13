@@ -4,6 +4,8 @@ import { AppState } from 'react-native';
 import { useSession } from '../session';
 import { flushOutbox } from './outbox';
 import { createPushClient } from './push-client';
+import { uploadDevice } from './upload-conditions';
+import { onDataPrefsChanged } from '../settings/data-prefs';
 
 /**
  * Tries the outbox whenever the app comes to the foreground.
@@ -54,8 +56,27 @@ export const OutboxFlusher = ({ children }: { readonly children: ReactNode }): R
       if (next === 'active') attempt();
     });
 
+    // `FE-W135`. **And when the phone joins WiFi**, while the app is open. "Recordings wait for
+    // WiFi" is a promise that they then GO; without this, audio held on mobile data waited for
+    // the next time the app came to the foreground even with the rep standing on office WiFi.
+    // A network change is an event, not a timer, and only while the app is running -- the same
+    // line as above: no background work.
+    const stopNetwork =
+      uploadDevice()?.onConnectionChange((connection) => {
+        if (connection === 'wifi') attempt();
+      }) ?? ((): void => undefined);
+
+    // `FE-W210`. **And when the rep changes the data switches.** Turning "Send audio on WiFi only"
+    // off is the rep saying "send it now, on this network". The queue screen dropped its "waiting
+    // for WiFi" label at once (`use-upload-snapshot.ts` listens to the same change) while the audio
+    // stayed where it was until the next foreground -- a screen saying one thing and the phone
+    // doing another. An event, not a timer, like the two above.
+    const stopPrefs = onDataPrefsChanged(attempt);
+
     return () => {
       subscription.remove();
+      stopNetwork();
+      stopPrefs();
     };
   }, [userId]);
 

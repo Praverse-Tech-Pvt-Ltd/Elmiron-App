@@ -35,7 +35,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     borderRadius: tokens.radius.pill,
     paddingHorizontal: tokens.space.sm,
-    paddingVertical: tokens.space.xs / 2,
+    paddingVertical: tokens.space.xxs,
   },
   neutral: { borderWidth: 1, borderColor: tokens.color.hairline },
   offline: { borderWidth: 1, borderStyle: 'dashed', borderColor: tokens.color.offlineEdge },

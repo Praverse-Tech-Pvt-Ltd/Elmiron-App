@@ -38,6 +38,10 @@ import { btn } from './theme-css';
  *
  * **The temporary password is shown once, here, and nowhere else.** It is not stored by the console
  * or the database; reloading the page loses it, and the screen says so.
+ *
+ * `FE-W171`: an address stays on one line rather than breaking at its hyphens, and the row's actions are
+ * the same kind of button so their left edges line up when they wrap. `FE-W165`: the People card
+ * says what to check in the reader's words, not "against the sheet you were given".
  */
 
 type Outcome =
@@ -333,14 +337,14 @@ const PendingLine = ({ row }: { readonly row: PendingUser }): ReactNode => {
       <td>
         {row.fullName}
         <br />
-        <span className="ff-muted">{row.email}</span>
+        <span className="ff-muted ff-email">{row.email}</span>
       </td>
       <td>{roleLabel(row.role)}</td>
       <td>
         {row.accountExists
           ? row.accountConfirmed
             ? 'Account exists, confirmed — no profile yet'
-            : 'Account exists, NOT confirmed'
+            : 'Account exists, not confirmed'
           : 'No sign-in account'}
       </td>
       <td>{row.requestedBy}</td>
@@ -479,11 +483,19 @@ const UserLine = ({
         <strong>{user.fullName}</strong>
         {isSelf ? ' (you)' : ''}
         <br />
-        <span className="ff-muted">{user.email ?? 'no email'}</span>
+        <span className="ff-muted ff-email">{user.email ?? 'no email'}</span>
       </td>
       <td>{roleLabel(user.role)}</td>
       <td>
-        {user.territoryCode === null ? '—' : `${user.territoryCode} — ${user.territoryName ?? ''}`}
+        {user.territoryCode === null ? (
+          '—'
+        ) : (
+          <>
+            <span className="ff-one-line">{user.territoryCode}</span>
+            <br />
+            <span className="ff-muted">{user.territoryName ?? ''}</span>
+          </>
+        )}
       </td>
       <td>{user.managerName ?? '—'}</td>
       <td>
@@ -593,7 +605,7 @@ const UserLine = ({
                 )}
                 <button
                   type="button"
-                  className={btn(suggestReset ? 'primary' : 'quiet')}
+                  className={btn(suggestReset ? 'primary' : 'secondary')}
                   disabled={!reasoned}
                   onClick={resetPassword}
                 >
@@ -662,8 +674,8 @@ export const UsersAdmin = ({
       <Card>
         <Heading>People</Heading>
         <Body muted>
-          Read this list against the sheet you were given: role, territory and manager for every
-          person, and no warning on anyone who should be working.
+          Check each person’s role, territory and manager. A warning beside someone means they
+          cannot work as they should until it is fixed.
         </Body>
         <table>
           <thead>

@@ -139,7 +139,7 @@ jest.mock('../supabase', () => ({
   },
 }));
 
-// The phone's position, at the planned visit's clinic (the fixture's coordinates), stamped now.
+// The phone’s position, at the planned visit’s clinic (the fixture's coordinates), stamped now.
 jest.mock('../capture/location', () => ({
   takeFix: () =>
     Promise.resolve({
@@ -181,6 +181,11 @@ jest.mock('expo-router', () => ({
     back: () => {
       mockGo.to('back');
     },
+    // `FE-W188`. The consent answer returns to the visit underneath it, never a second copy.
+    dismissTo: (href: string) => {
+      mockGo.to(`dismissTo:${href}`);
+    },
+    canGoBack: () => true,
   }),
   useLocalSearchParams: () => mockParams.current,
   Redirect: () => null,
@@ -197,7 +202,7 @@ import Doctors from '../../app/(tabs)/doctors';
 
 const changes = DAY.pages.flatMap((p) => p.response.changes);
 // `BE-C78`: tomorrow has a plan of its own now (the seed's day-early visit is a real planned visit),
-// so the pull carries TWO plans and "the first plan" is not today's. Today is the earlier date.
+// so the pull carries TWO plans and "the first plan" is not today’s. Today is the earlier date.
 const today = changes
   .filter((c) => c.entity === 'beat_plan')
   .map((c) => c.payload['plan_date'] as string)
@@ -286,8 +291,14 @@ afterAll(() => {
 /** The app's own navigation calls, followed: the rep presses, the router moves. */
 const history: string[] = [];
 const follow = (href: string): void => {
-  const to = href === 'back' ? (history.pop(), history.at(-1) ?? '/home') : href;
-  if (href !== 'back') history.push(to);
+  // `FE-W188`. `dismissTo` pops to the screen named, or replaces with it when it is not underneath.
+  const dismissed = href.startsWith('dismissTo:') ? href.slice('dismissTo:'.length) : null;
+  if (dismissed !== null) {
+    while (history.length > 0 && history.at(-1) !== dismissed) history.pop();
+    if (history.length === 0) history.push(dismissed);
+  }
+  const to = dismissed ?? (href === 'back' ? (history.pop(), history.at(-1) ?? '/home') : href);
+  if (href !== 'back' && dismissed === null) history.push(to);
   const [, name = '', id = ''] = to.split('/');
   const screenFor: Record<string, [string, Record<string, string>]> = {
     visit: ['visit', { id }],
@@ -315,19 +326,26 @@ const lines = async (label: string, until: string | RegExp): Promise<string[]> =
 };
 
 const ASHA = 'Dr Asha Deshpande (DEMO)';
+// `FE-W186`. The first sync's notice, in a rep's words rather than the sync engine's.
 const REBUILT = [
-  'Your list has been rebuilt',
-  'This was a full refresh, so anything that was removed since you last synced has simply gone rather than being marked as removed. Everything below is what the server has for you right now.',
+  'Your list is fresh from your company',
+  'This was a full refresh, so anything taken off your list since your last sync has simply gone.',
 ];
-// UX polish: the visit's progress row, one badge per step, a tick on each one done.
-const STEPS_BEFORE = ['Check in', 'With the doctor', 'Check out', 'Report'];
-const STEPS_DURING = ['✓ Check in', 'With the doctor', 'Check out', 'Report'];
-const STEPS_AFTER = ['✓ Check in', '✓ With the doctor', '✓ Check out', 'Report'];
+// `FE-W191`. "What this app records about me" is a row with its line under it, not a second link.
+const TRANSPARENCY = ['What this app records about me', 'What is recorded, and what never is.'];
+// UX polish: the visit’s progress row, one cell per step. `FE-W190`: a finished step's tick is
+// drawn, not written, so the words are the same at every stage (the cells no longer widen).
+const STEPS_BEFORE = ['Check in', 'With doctor', 'Check out', 'Report'];
+const STEPS_DURING = STEPS_BEFORE;
+const STEPS_AFTER = STEPS_BEFORE;
+// `FE-W188`. Every pushed screen draws its Back control first.
+const BACK = 'Back';
 const RECORDING_ON_RECORD = [
   'The doctor agreed to a recording.',
   // 17:26 IST: +5 minutes on a capture at 11:51Z. In UTC this line would read 11:56.
   'On this phone at 17:26 · waiting to send',
-  'Recording is not in this build, so nothing is being captured. The doctor’s answer is on the record either way.',
+  // `FE-W186`. Recording is off in the shipped configuration, said in the rep's words.
+  'Visit recording is switched off, so nothing is being recorded. The doctor’s answer is saved either way.',
 ];
 
 describe('BE-W158 — a rep’s day, shipped configuration', () => {
@@ -353,15 +371,17 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       'visits attended',
       '✓',
       'Everything sent',
-      'What this app records about me',
+      ...TRANSPARENCY,
       // Pinned footer. `BE-W176`: always offered, never the primary action.
       'Add an unplanned visit',
-      `Start the visit to ${ASHA}`,
+      // `FE-W191`. The doctor’s name behind the shortest verb, so it fits the pinned button.
+      `Visit ${ASHA}`,
     ]);
 
     await fireEvent.press(screen.getByText('See today’s route ›'));
     expect(await lines('ROUTE', /planned/u)).toEqual([
-      "Today's route",
+      BACK,
+      'Today’s route',
       '3 planned · 2 done',
       // `BE-C78`: the day is the MANAGER's plan, which `plan_mr_day` writes approved.
       'Approved by your manager',
@@ -380,9 +400,10 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
     mockNet.up = false;
     await goTo('visit', { id: PLANNED });
     expect(await lines('VISIT', 'I am here — check in')).toEqual([
+      BACK,
       ASHA,
       'Main clinic, Pune',
-      // The clinic has coordinates: keyless directions in the phone's own maps app.
+      // The clinic has coordinates: keyless directions in the phone’s own maps app.
       'Directions',
       ...STEPS_BEFORE,
       'Not started',
@@ -392,6 +413,7 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
     at(2);
     await fireEvent.press(screen.getByText('I am here — check in'));
     expect(await lines('CHECKED IN', /Saved on this phone/u)).toEqual([
+      BACK,
       ASHA,
       'Main clinic, Pune',
       'Directions',
@@ -412,7 +434,7 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
     at(5);
     await fireEvent.press(screen.getByText('Ask about recording'));
     const consent = await lines('CONSENT', "Yes, that's fine");
-    // The notice is the captured one — its label and hashes come from the server's own row.
+    // The notice is the captured one — its label and hashes come from the server’s own row.
     expect(consent).toEqual([
       'Your rep',
       'May we record this conversation?',
@@ -423,16 +445,20 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       consent[6],
       consent[7],
       'Exactly what is collected, in full',
+      // `FE-W148`. The shipped day has one notice, in English, so the screen says so plainly.
+      'This notice is in English only. No Hindi or Marathi version has been approved yet.',
       "No, don't record",
       "Yes, that's fine",
       'Give the phone back',
     ]);
     const notice = changes.find((c) => c.entity === 'consent_text_version')?.payload;
     expect(consent[6]).toBe(notice?.['full_text']);
-    expect(consent[7]).toMatch(/^Notice DEMO v1 .+ · English · [0-9a-f]{8}$/u);
+    // `FE-W186`. Which notice, in words: the version number from the operator's label, and no hash.
+    expect(consent[7]).toBe('Notice version 1 · English');
 
     await fireEvent.press(screen.getByText("Yes, that's fine"));
     expect(await lines('BACK', 'Leaving — check out')).toEqual([
+      BACK,
       ASHA,
       'Main clinic, Pune',
       'Directions',
@@ -449,6 +475,7 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
     at(20);
     await fireEvent.press(screen.getByText('Leaving — check out'));
     expect(await lines('CHECKED OUT', 'Visit finished — waiting to send')).toEqual([
+      BACK,
       ASHA,
       'Main clinic, Pune',
       'Directions',
@@ -469,7 +496,7 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       'Today',
       'Started 14:51',
       ...REBUILT,
-      "That's everyone on the plan",
+      'That’s everyone on the plan',
       'You went to every visit on the plan.',
       'Today',
       '3 of 3',
@@ -478,21 +505,22 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
     expect(await lines('HOME OFFLINE', /waiting · no signal/u)).toEqual([
       ...finishedToday,
       '3 waiting · no signal',
-      'What this app records about me',
+      ...TRANSPARENCY,
       'How today ended',
       'Add an unplanned visit',
     ]);
 
     await goTo('route');
     const routeFinished = [
-      "Today's route",
+      BACK,
+      'Today’s route',
       '3 planned · 3 done',
       'Approved by your manager',
       ASHA,
       '✓',
       // `BE-W165`, FIXED W2-E D. This line read "Not started" (marked UNTRUE) for a visit checked in
-      // at 17:23 and out at 17:41 on this phone. Now the phone's own times, SAID to be the phone's —
-      // the server's row still has no start until a pull returns one.
+      // at 17:23 and out at 17:41 on this phone. Now the phone’s own times, SAID to be the phone’s —
+      // the server’s row still has no start until a pull returns one.
       '17:23 on this phone · 18 min',
       'Dr Vikram Rao (DEMO)',
       '✓',
@@ -525,7 +553,7 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       '✓',
       'Everything sent',
       '17:51',
-      'What this app records about me',
+      ...TRANSPARENCY,
       'How today ended',
       'Add an unplanned visit',
     ]);
@@ -544,10 +572,12 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
       'Not seen 30d',
       'On plan',
       // Final UX pass: a doctor who is not overdue carries a neutral ring, not a green tick.
-      'Dr Meera Iyer (DEMO)',
-      'Urology · Pune · today',
+      // `FE-W199`: all three are seen today, so they tie on the day and the one seen longest ago
+      // leads -- Vikram Rao before Meera Iyer, where the name used to decide.
       'Dr Vikram Rao (DEMO)',
       'Nephrology · Pune · today',
+      'Dr Meera Iyer (DEMO)',
+      'Urology · Pune · today',
       // `BE-W165`, FIXED W2-E D. Read "yesterday" (marked UNTRUE), and so was FIRST — the list puts
       // the longest-unseen doctor first. Seen today at 17:41 on this phone, the most recent of the
       // three, so now last, and said so.
@@ -564,13 +594,13 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
 /**
  * C5 — WHAT THIS TEST DOES NOT ESTABLISH.
  *
- * 1. **The server's verdicts.** `sync_push` is faked at the RPC boundary and accepts everything: the
+ * 1. **The server’s verdicts.** `sync_push` is faked at the RPC boundary and accepts everything: the
  *    geofence, the shift window, the consent rules and duplicate handling are the database's, and
  *    are proved in `services/api/tests`, not here. A refusal path is not driven.
  * 2. **A server that changes.** Later pulls replay the capture; pushes are not applied to them. So
- *    "after the flush, the next pull heals the route" is NOT shown — so the phone's own times
+ *    "after the flush, the next pull heals the route" is NOT shown — so the phone’s own times
  *    (`BE-W165`, fixed W2-E D, "on this phone") are what the route shows for the rest of the day here,
- *    where on a device a pull after the flush replaces them with the server's.
+ *    where on a device a pull after the flush replaces them with the server’s.
  * 3. **One read is not captured**: the visit screen's legacy REST read of consent records is answered
  *    "none" by a stub `fetch`.
  * 4. **Device edges**: the GPS fix is a fixed coordinate at the clinic; audio is off; navigation is a
@@ -578,9 +608,9 @@ describe('BE-W158 — a rep’s day, shipped configuration', () => {
  *    no back gesture, no tab bar. AsyncStorage is the library's jest mock (in memory, same API).
  * 5. **Process death** is not driven here (`offline-day.test.tsx` does that); "signal again" is a
  *    relaunch, not a foreground event (`OutboxFlusher` also flushes on `AppState` → active).
- * 6. **The fixture is one day's shape**: one tenant, three doctors, a plan already in progress, a
+ * 6. **The fixture is one day’s shape**: one tenant, three doctors, a plan already in progress, a
  *    single page, `Asia/Kolkata`. A zone with a different offset, a multi-page pull or a deletion
- *    are not in it. Yesterday's visit started at the same 14:51 as today's first one (the seed
+ *    are not in it. Yesterday’s visit started at the same 14:51 as today’s first one (the seed
  *    uses the same hours), so "Started 14:51" alone cannot tell them apart; the route's two
  *    ticked times can.
  * 7. **It is not a device.** Rendering is react-test-renderer: layout, clipping, fonts and the

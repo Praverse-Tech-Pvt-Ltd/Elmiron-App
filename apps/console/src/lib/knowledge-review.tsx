@@ -59,7 +59,7 @@ export const AI_DRAFT_CAUTION =
 
 export const PRODUCT_CLAIM_CAUTION =
   'This draft is about a product. Product claims, indications and prescribing information are ' +
-  'regulated promotional content and must come from the client, not from a model. Approve the ' +
+  'regulated promotional content and must come from your company, not from a model. Approve the ' +
   'wording only if the underlying claim came from an approved label or prescribing information.';
 
 export const SUBMIT_AUTHOR_ONLY_NOTE =

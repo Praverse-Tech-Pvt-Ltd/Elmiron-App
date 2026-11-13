@@ -6,7 +6,7 @@ import uuid from 'expo-modules-core/src/uuid';
 import { ConsentDetailsScreen, ConsentScreen, Screen } from '@fieldforce/ui';
 import type { ConsentAnswer } from '@fieldforce/ui';
 import { createPushClient } from '../../src/sync/push-client';
-import { QUEUE_UNREADABLE } from '../../src/sync/async-storage-store';
+import { queueUnreadable } from '../../src/sync/async-storage-store';
 import { unavailableReason } from '../../src/capture/preconditions';
 import { noticesFromStore } from '../../src/consent/notices';
 import { usePulledStore } from '../../src/sync/pulled-store';
@@ -18,6 +18,7 @@ import {
   consentDetails,
   fiduciaryNote,
   NEVER_COLLECTED,
+  singleLanguageNote,
 } from '../../src/consent/content';
 import {
   activeNoticeFor,
@@ -30,7 +31,7 @@ import {
 import { consentQueueItem, sendOrQueue } from '../../src/sync/outbox';
 import { recordWitnessedConsent } from '../../src/consent/witnessed';
 import { SESSION_EXPIRED, refusalTextFor, sessionExpired } from '../../src/sync/explanation';
-import { NOT_PERMITTED_DETAIL } from '../../src/errors/plain';
+import { notPermittedDetail } from '../../src/errors/plain';
 
 /**
  * Phase 3 — the handoff, as a route.
@@ -280,7 +281,7 @@ export default function ConsentRoute(): ReactNode {
           // answer that reached neither the server nor the phone, with the screen saying it
           // landed. A consent record is the one thing in this product where being wrong is
           // worst, and `consent_records` is append-only, so there is nothing to amend later.
-          setRefusal({ title: 'This was NOT saved', detail: QUEUE_UNREADABLE });
+          setRefusal({ title: 'This was NOT saved', detail: queueUnreadable() });
           return;
         }
 
@@ -300,15 +301,34 @@ export default function ConsentRoute(): ReactNode {
         // between: the doctor has answered and the phone is about to change hands.
         // A "thank you" here would be the app addressing the doctor after the
         // decision, which is the moment pressure is cheapest to apply.
-        router.replace(`/visit/${visit.id}`);
+        //
+        // `FE-W188`. BACK to the visit, not a new one: `replace` swapped this screen for a second
+        // copy of the visit on top of the one that opened it, and Back then went from the visit to
+        // the visit -- two presses, the first of which seemed to do nothing (QA 48). `dismissTo`
+        // pops to the visit already underneath, and replaces this screen with it only when none is.
+        router.dismissTo(`/visit/${visit.id}`);
       })();
     },
     [busy, doctor, notice, refresh, router, visit],
   );
 
+  // `FE-W190`. Each state has its own `key`, so each is its own ScrollView. Both used to render a
+  // `Screen` at the same place in the tree, so React kept ONE scroll view and its offset: the
+  // details opened scrolled to where the doctor had been on the question -- the bottom, by the
+  // answers -- and "Back to the question" came back part-way down (QA 25, 26).
   if (showDetails && notice !== null) {
     return (
-      <Screen scrollable>
+      <Screen
+        key="details"
+        scrollable
+        // `FE-W188`. The same as its own "Back to the question": back to the question, not out.
+        // Its word is fixed English like every word the doctor reads here (`FE-W148`), not the
+        // catalogue's.
+        backLabel="Back"
+        onBack={() => {
+          setShowDetails(false);
+        }}
+      >
         <ConsentDetailsScreen
           collected={consentDetails(firstName)}
           fiduciaryNote={fiduciaryNote(organisation, firstName)}
@@ -324,7 +344,7 @@ export default function ConsentRoute(): ReactNode {
   }
 
   return (
-    <Screen scrollable>
+    <Screen key="question" scrollable>
       <ConsentScreen
         askedBy="Your rep"
         /*
@@ -353,7 +373,7 @@ export default function ConsentRoute(): ReactNode {
                 pullFailure.refusal.code === 'not_permitted'
               ? {
                   title: 'You do not have access to this visit',
-                  detail: NOT_PERMITTED_DETAIL,
+                  detail: notPermittedDetail(),
                 }
               : // Only when the VISIT itself is missing. Keyed on the notices instead, this
                 // said "Could not load this visit" while holding the visit -- the caught-by-test
@@ -388,6 +408,10 @@ export default function ConsentRoute(): ReactNode {
         summary={copy.summary}
         variant={CONSENT_VARIANT}
         languages={languageOptionsFrom(versions)}
+        // `FE-W148`. With one notice language there is no picker; say it is English only, plainly.
+        languageNote={singleLanguageNote(
+          languageOptionsFrom(versions).map((option) => option.code),
+        )}
         {...(language === null ? {} : { language })}
       />
     </Screen>

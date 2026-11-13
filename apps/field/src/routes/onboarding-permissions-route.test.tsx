@@ -42,6 +42,8 @@ jest.mock('../features', () => ({
 const mockBack = jest.fn();
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush, back: mockBack }) }));
+// `FE-W161`. A4 asks iOS through expo-audio, whose native module does not load under jest.
+jest.mock('expo-audio', () => ({ AudioModule: { requestRecordingPermissionsAsync: jest.fn() } }));
 
 import LocationDenied from '../../app/onboarding/location-denied';
 import MicrophoneRationale from '../../app/onboarding/microphone';
@@ -147,7 +149,7 @@ describe('A4 — the microphone, and the separation that must not collapse', () 
     // sibling screens, because the claim is the same on all three.
     await render(<MicrophoneRationale />);
     expect(fillAndHeightOf('Turn on the microphone')).toEqual(
-      fillAndHeightOf("I'll type my reports"),
+      fillAndHeightOf('I’ll type my reports'),
     );
     expect(fillAndHeightOf('Turn on the microphone').backgroundColor).not.toBe(tokens.color.accent);
   });

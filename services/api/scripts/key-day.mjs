@@ -27,6 +27,10 @@
  *      approves, through the same RPCs the console calls. Scenario S6 is NOT loaded (`D-15`, below).
  *   6. **A TEST catalogue, one TEST approved document, one TEST course** (`key-day-content/`), through
  *      the real loaders and `content-step.mjs`, then approved (B), published and assigned to both reps.
+ *      **`BE-W212`: when `ffmpeg` is on PATH, the course's first lesson carries a tiny generated TEST clip**
+ *      (a test pattern and a tone, `testClipArgs`) and its poster, uploaded by the real loader into the
+ *      private `lesson-videos` bucket — so a video lesson can be seen end to end on this laptop. Without
+ *      ffmpeg it says so and the course is text only.
  *   7. **The five AI features ON** and a daily limit (`ai-switches.mjs`), **live tracking ON** for this
  *      company, and **the live-tracking notice** proposed by A and approved by B.
  *   8. Prints the accounts, the console, and the exact next commands.
@@ -68,6 +72,7 @@ import {
 import { restClient, signIn } from './content-loader.mjs';
 import { checkCatalogue, loadCatalogue } from './load-catalogue.mjs';
 import { checkCourse, loadCourse } from './load-course.mjs';
+import { findTool, posterArgs } from './trim-video.mjs';
 import { checkKnowledge, loadKnowledge } from './load-knowledge.mjs';
 import { contentStep } from './content-step.mjs';
 import { describeStatus, runSwitches, SWITCHABLE } from './ai-switches.mjs';
@@ -79,6 +84,10 @@ export const MIGRATIONS_DIR = at('../supabase/migrations/');
 export const FUNCTIONS_ENV = at('../supabase/functions/.env');
 export const STATE_FILE = at('../.key-day/world.json');
 export const CONTENT_DIR = at('./key-day-content/');
+export const TEST_CLIP = at('../.key-day/test-clip.mp4');
+export const TEST_POSTER = at('../.key-day/test-clip.jpg');
+/** How long the generated TEST clip is. Short: it exists to prove the path, not to be watched. */
+export const TEST_CLIP_SECONDS = 8;
 export const DRAFTS_DIR = at('../../../docs/ai-platform/drafts/');
 export const NOTICE_DRAFT = at('../../../docs/operator/live-tracking-notice-DRAFT.md');
 
@@ -311,6 +320,45 @@ export const refuseRemote = (targets) => {
     });
   }
 };
+
+/**
+ * `BE-W212` — ffmpeg's arguments for the TEST clip: a test pattern with a tone, encoded exactly the way
+ * `pnpm video:trim` encodes a real one (H.264 High yuv420p, AAC stereo, faststart), so the phone plays
+ * what a real lesson would carry. Nothing in it is anyone's content.
+ * @param {string} out
+ */
+export const testClipArgs = (out) => [
+  '-hide_banner',
+  '-loglevel',
+  'error',
+  '-y',
+  '-f',
+  'lavfi',
+  '-i',
+  `testsrc=size=640x360:rate=25:duration=${String(TEST_CLIP_SECONDS)}`,
+  '-f',
+  'lavfi',
+  '-i',
+  `sine=frequency=440:sample_rate=48000:duration=${String(TEST_CLIP_SECONDS)}`,
+  '-c:v',
+  'libx264',
+  '-profile:v',
+  'high',
+  '-pix_fmt',
+  'yuv420p',
+  '-b:v',
+  '400k',
+  '-c:a',
+  'aac',
+  '-b:a',
+  '96k',
+  '-ac',
+  '2',
+  '-movflags',
+  '+faststart',
+  '-shortest',
+  out,
+];
 
 /** The laptop's likely Wi-Fi address, for the APK command. A suggestion: `ipconfig` decides. */
 export const likelyLanAddress = (interfaces = networkInterfaces()) => {
@@ -781,19 +829,58 @@ const main = async (argv) => {
         : await a.rest.get(
             `course_versions?select=id,status,course_modules(id)&course_id=eq.${held.id}`,
           );
+    // `BE-W212` — the TEST clip, made fresh by ffmpeg if it is on PATH; null otherwise.
+    const makeTestClip = () => {
+      const ffmpeg = findTool('ffmpeg');
+      if (ffmpeg === null) return null;
+      mkdirSync(at('../.key-day/'), { recursive: true });
+      execFileSync(ffmpeg, testClipArgs(TEST_CLIP), { stdio: ['ignore', 'ignore', 'inherit'] });
+      execFileSync(
+        ffmpeg,
+        posterArgs({ clip: TEST_CLIP, duration: TEST_CLIP_SECONDS, poster: TEST_POSTER }),
+        { stdio: ['ignore', 'ignore', 'inherit'] },
+      );
+      return { clip: TEST_CLIP, poster: TEST_POSTER };
+    };
+    let videoNote = '';
     if (courseVersions.some((v) => v.status === 'published')) {
       ok(`course "${course.course.title}": already published`);
+      const published = courseVersions.find((v) => v.status === 'published');
+      const withVideo = await a.rest.get(
+        `lessons?select=id&course_version_id=eq.${String(published?.id)}&video_object_path=not.is.null`,
+      );
+      videoNote =
+        withVideo.length > 0
+          ? `its first lesson carries the TEST clip (${String(TEST_CLIP_SECONDS)} s)`
+          : 'it was published without a video (before BE-W212, or without ffmpeg) — pnpm key-day --fresh makes a company whose TEST course has one';
     } else {
       // A draft WITH lessons is a previous run's load: publish it. An EMPTY draft is a load that failed
       // part-way, which `loadCourse` itself re-uses (`BE-W167`), so it is loaded again.
       const loaded = courseVersions.some(
         (v) => v.status === 'draft' && v.course_modules.length > 0,
       );
-      if (!loaded) await loadCourse(course.course, target);
+      if (!loaded) {
+        const clip = makeTestClip();
+        const first = course.course.modules[0]?.lessons[0];
+        if (clip !== null && first !== undefined) {
+          first.video = { path: clip.clip, line: first.line };
+          first.poster = { path: clip.poster, line: first.line };
+          videoNote = `its first lesson, "${first.title}", carries a TEST clip of ${String(TEST_CLIP_SECONDS)} s (test pattern and tone) with a poster`;
+        } else {
+          videoNote =
+            'ffmpeg is not on PATH, so it has no video — install it (winget install Gyan.FFmpeg), open a new terminal, and run pnpm key-day --fresh';
+        }
+        const out = await loadCourse(course.course, target);
+        if (clip !== null && out.videos !== 1)
+          throw new Error(`the TEST clip was not attached (videos: ${String(out.videos)})`);
+      } else {
+        videoNote = 'loaded by an earlier run; see that run for whether it carries the TEST clip';
+      }
       await contentStep('publish-course', course.course.title, target);
       held = await findCourse();
       ok(`course "${course.course.title}": loaded and published (no second admin: Q-21)`);
     }
+    note(`video: ${videoNote}`);
     for (const rep of ['rep1', 'rep2']) {
       await a.rest.rpc('assign_course', {
         p_course_id: held.id,
@@ -872,6 +959,10 @@ const main = async (argv) => {
         (ai.live
           ? 'the key line is in place.'
           : 'NO KEY — the gateway answers from the labelled stub until the .env is fixed.'),
+    );
+    say(`  Video: the TEST course — ${videoNote}.`);
+    say(
+      '         On the phone: Learning → the TEST course → its first lesson (docs/operator/lesson-videos.md).',
     );
     say('');
     say('  Next, in order:');

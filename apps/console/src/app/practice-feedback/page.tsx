@@ -2,7 +2,10 @@ import type { ReactNode } from 'react';
 import { SimCoachFindingSchema } from '@fieldforce/core';
 import type { SimCoachFinding } from '@fieldforce/core';
 import { signedIn } from '../../lib/session';
-import { Body, Card, Heading, Label, MissingNote, Title } from '../../lib/ui';
+import { Body, Card, Heading, Label, MissingNote, Page, PageHeader, RoleNote } from '../../lib/ui';
+import { callerRole } from '../../lib/role';
+import { indiaDateTime } from '../../lib/india-date';
+import { words } from '../../lib/labels';
 
 /**
  * AI practice feedback, for an ADMIN — the analysis of each practice (AI Doctor) session.
@@ -11,10 +14,16 @@ import { Body, Card, Heading, Label, MissingNote, Title } from '../../lib/ui';
  * admin of their company. A field manager reads nothing here: individual practice scores and
  * rankings are not a manager's to see. This is PRACTICE only -- real visits are analysed elsewhere.
  *
- * Read-only. The analysis is written by the gateway's coach (a stub/mock provider until a model is
- * connected); nothing here edits or re-scores it.
+ * Read-only. The analysis is written by the gateway's coach; nothing here edits or re-scores it.
+ *
+ * `FE-W165`/`FE-W166`: each card says when, in India time, and whether the feedback is sample data —
+ * in those words, not as "the practice stub" or a provider's name. A finding reads as its title and
+ * what it means; the dimension's stored key and the turn number are gone. `FE-W164`: a manager gets
+ * the one info-tone note, with no reads asked of the server.
  */
 export const dynamic = 'force-dynamic';
+
+export const metadata = { title: 'Practice feedback' };
 
 /** Each finding checked against the shared contract; one that does not parse is left out, not shown raw. */
 const findings = (raw: unknown): SimCoachFinding[] =>
@@ -33,8 +42,6 @@ const scores = (raw: unknown): [string, number][] =>
       )
     : [];
 
-const words = (key: string): string => key.replaceAll('_', ' ');
-
 const FindingList = ({
   heading,
   rows,
@@ -46,7 +53,8 @@ const FindingList = ({
     <Label>{heading}</Label>
     {rows.map((row) => (
       <Body key={`${row.title}-${String(row.turnIndex)}`}>
-        {`${row.title} — ${row.detail} (${words(row.dimension)}, turn ${String(row.turnIndex)})`}
+        <strong>{row.title}</strong> — {row.detail}{' '}
+        <span className="ff-muted">· {words(row.dimension)}</span>
       </Body>
     ))}
   </div>
@@ -62,8 +70,28 @@ export default async function PracticeFeedback(): Promise<ReactNode> {
     );
   }
 
-  const [me, analyses, sessions, scenarios, people] = await Promise.all([
-    session.db.from('user_profiles').select('role').eq('id', session.userId).maybeSingle(),
+  const header = (
+    <PageHeader title="Practice feedback">
+      <Body muted>
+        The AI coach’s feedback on reps’ practice sessions with an AI doctor. Practice only — not
+        real visits. Reps see their own; admins see their company’s; managers do not see these.
+      </Body>
+    </PageHeader>
+  );
+
+  const role = await callerRole();
+  if (role !== 'admin') {
+    return (
+      <Page>
+        {header}
+        <RoleNote>
+          Practice feedback is visible to the rep who practised and to admins only.
+        </RoleNote>
+      </Page>
+    );
+  }
+
+  const [analyses, sessions, scenarios, people] = await Promise.all([
     session.db
       .from('sim_coach_analyses')
       .select(
@@ -76,27 +104,6 @@ export default async function PracticeFeedback(): Promise<ReactNode> {
     session.db.from('user_profiles').select('id, full_name'),
   ]);
 
-  const header = (
-    <div className="ff-page-header-text">
-      <Title>Practice feedback</Title>
-      <Body muted>
-        The AI coach’s feedback on reps’ practice sessions with an AI doctor. Practice only — not
-        real visits. Reps see their own; admins see their company’s; managers do not see these.
-      </Body>
-    </div>
-  );
-
-  if (me.data?.role !== 'admin') {
-    return (
-      <div className="ff-page ff-page-medium">
-        {header}
-        <MissingNote>
-          Practice feedback is visible to the rep who practised and to admins only.
-        </MissingNote>
-      </div>
-    );
-  }
-
   const scenarioOf = new Map(
     (sessions.data ?? []).map((s) => [String(s.id), String(s.scenario_id)]),
   );
@@ -105,9 +112,11 @@ export default async function PracticeFeedback(): Promise<ReactNode> {
   const rows = analyses.data ?? [];
 
   return (
-    <div className="ff-page ff-page-medium">
+    <Page>
       {header}
-      {rows.length === 0 ? <Body muted>No practice session has been analysed yet.</Body> : null}
+      {rows.length === 0 ? (
+        <MissingNote tone="info">No practice session has been analysed yet.</MissingNote>
+      ) : null}
       {rows.map((row) => {
         const scenario = titleOf.get(scenarioOf.get(String(row.session_id)) ?? '') ?? 'A scenario';
         const rowScores = scores(row.dimension_scores);
@@ -115,10 +124,10 @@ export default async function PracticeFeedback(): Promise<ReactNode> {
           <Card key={String(row.id)}>
             <Heading>{`${nameOf.get(String(row.mr_id)) ?? 'A rep'} — ${scenario}`}</Heading>
             <Body muted>
-              {`${String(row.created_at).slice(0, 10)} · overall ${String(row.overall_score)} / 100 · ${
+              {`${indiaDateTime(String(row.created_at))} · overall ${String(row.overall_score)} / 100${
                 row.model_provider === 'stub' || row.model_provider === 'sample'
-                  ? 'from the practice stub, not a model'
-                  : String(row.model_provider)
+                  ? ' · sample feedback, not written by an AI model'
+                  : ''
               }`}
             </Body>
             <details>
@@ -136,6 +145,6 @@ export default async function PracticeFeedback(): Promise<ReactNode> {
           </Card>
         );
       })}
-    </div>
+    </Page>
   );
 }

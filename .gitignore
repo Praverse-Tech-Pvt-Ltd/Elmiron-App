@@ -118,3 +118,6 @@ playwright-results.json
 review-handoff/
 # W2-D: and its zip, beside it — rebuilt from the folder every session, never committed.
 review-handoff.zip
+# FE-W143: the translators' working file, `pnpm i18n:export`'s default. What is committed is the
+# result of importing it (`packages/ui/src/i18n/hi.json`, `mr.json`), never the spreadsheet.
+field-app-translations.csv

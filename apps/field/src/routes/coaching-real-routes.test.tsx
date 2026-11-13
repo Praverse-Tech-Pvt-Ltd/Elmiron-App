@@ -29,9 +29,15 @@ jest.mock('../coaching/recording-flag', () => ({
   loadRecordingEnabled: () => Promise.resolve(mockRecordingEnabled),
 }));
 const mockReplace = jest.fn();
+const mockDismissTo = jest.fn();
 jest.mock('expo-router', () => ({
   Redirect: () => null,
-  useRouter: () => ({ push: jest.fn(), replace: mockReplace, back: jest.fn() }),
+  useRouter: () => ({
+    push: jest.fn(),
+    replace: mockReplace,
+    dismissTo: mockDismissTo,
+    back: jest.fn(),
+  }),
   useLocalSearchParams: () => ({
     id: '55555555-5555-4555-8555-555555555511',
     analysisId: '55555555-5555-4555-8555-555555555511',
@@ -97,6 +103,7 @@ beforeEach(() => {
   mockRespond.mockReset();
   mockMockClient.mockClear();
   mockReplace.mockReset();
+  mockDismissTo.mockReset();
   mockRecordingEnabled = false;
   mockListConsentForVisit.mockResolvedValue({ kind: 'loaded', value: [] });
 });
@@ -218,7 +225,8 @@ describe('Reply (D3) on respond_to_analysis', () => {
       '55555555-5555-4555-8555-555555555511',
       'I did answer it.',
     );
-    expect(mockReplace).toHaveBeenCalledWith('/analysis/55555555-5555-4555-8555-555555555511');
+    // `FE-W188`. Back to the one analysis underneath, never a second copy of it.
+    expect(mockDismissTo).toHaveBeenCalledWith('/analysis/55555555-5555-4555-8555-555555555511');
     expect(mockMockClient).not.toHaveBeenCalled();
   });
 
@@ -235,5 +243,6 @@ describe('Reply (D3) on respond_to_analysis', () => {
     expect(screen.getByText(/cannot be queued/u)).toBeTruthy();
     expect(screen.getByDisplayValue('I did answer it.')).toBeTruthy();
     expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockDismissTo).not.toHaveBeenCalled();
   });
 });

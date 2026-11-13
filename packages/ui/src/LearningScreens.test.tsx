@@ -91,13 +91,79 @@ describe('UX polish — a lesson reads as the author wrote it', () => {
     );
     expect(screen.getByText('Opening paragraph.')).toBeTruthy();
     expect(screen.getByText('Dosing')).toBeTruthy();
-    expect(screen.getByText('•  Take with food')).toBeTruthy();
-    expect(screen.getByText('•  Once daily')).toBeTruthy();
+    // `FE-W184`. The mark and the point are separate texts in a row, so a wrapped point hangs
+    // under its own first word instead of running back under the "•".
+    expect(screen.getByText('Take with food')).toBeTruthy();
+    expect(screen.getByText('Once daily')).toBeTruthy();
+    expect(screen.getAllByText('•')).toHaveLength(2);
     expect(screen.getByText('Closing.')).toBeTruthy();
   });
 
   it('a body with no blank lines is one paragraph, exactly as before', async () => {
     await render(<LessonBody body={'One line.\nAnother line.'} />);
     expect(screen.getByText('One line.\nAnother line.')).toBeTruthy();
+  });
+
+  /**
+   * `FE-W193`. "Check yourself" heading questions is the author's section and stays; the same
+   * heading with nothing under it — at the end, or straight before the next heading — asks the rep
+   * to do something and gives them nothing to do, so it is not drawn.
+   */
+  it('keeps a heading with its questions, and drops a heading with nothing under it', async () => {
+    await render(
+      <LessonBody
+        body={
+          '# Check yourself\n\nWhy is a normal culture often missed?\n\n# Notes\n\n# Summary\n\nDone.\n\n# Further reading'
+        }
+      />,
+    );
+    expect(screen.getByText('Check yourself')).toBeTruthy();
+    expect(screen.getByText('Why is a normal culture often missed?')).toBeTruthy();
+    expect(screen.getByText('Summary')).toBeTruthy();
+    expect(screen.queryByText('Notes')).toBeNull();
+    expect(screen.queryByText('Further reading')).toBeNull();
+  });
+});
+
+/**
+ * `FE-W193`. Before a course is started, its page says what it is: the version's summary, how many
+ * lessons, and how long — not a title above a button.
+ */
+describe('a course before it is started (FE-W193)', () => {
+  it('shows the summary and what the course holds above "Start this course"', async () => {
+    await render(
+      <CourseScreen
+        view={{
+          kind: 'can_start',
+          title: 'Storage basics',
+          summary: 'How to keep stock cold from the depot to the clinic.',
+          facts: '6 lessons · about 30 min',
+          starting: false,
+          notice: null,
+          choices: [{ label: 'Storage basics', onStart: noop }],
+        }}
+      />,
+    );
+    expect(screen.getByText('How to keep stock cold from the depot to the clinic.')).toBeTruthy();
+    expect(screen.getByText('6 lessons · about 30 min')).toBeTruthy();
+    expect(screen.getByText('Start this course')).toBeTruthy();
+  });
+
+  it('with neither, it is the title and the button, as before', async () => {
+    await render(
+      <CourseScreen
+        view={{
+          kind: 'can_start',
+          title: 'Storage basics',
+          summary: null,
+          facts: null,
+          starting: false,
+          notice: null,
+          choices: [{ label: 'Storage basics', onStart: noop }],
+        }}
+      />,
+    );
+    expect(screen.getByText('Storage basics')).toBeTruthy();
+    expect(screen.getByText('Start this course')).toBeTruthy();
   });
 });

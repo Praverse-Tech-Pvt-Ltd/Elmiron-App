@@ -1,3 +1,5 @@
+import { t } from '@fieldforce/ui/i18n';
+
 /**
  * A3 — what the app will send, named rather than described.
  *
@@ -68,25 +70,42 @@ export const NOTIFICATION_TYPES: readonly [
   NotificationType,
   NotificationType,
 ] = [
+  // `FE-W156`. `name` and `detail` are getters, so this constant reads the language in use.
   {
     id: 'day-plan',
-    name: "Your day's plan",
-    detail: "When tomorrow's visits are ready, and when a manager changes them.",
+    get name() {
+      return t('onboarding.notifDayPlan');
+    },
+    get detail() {
+      return t('onboarding.notifDayPlanDetail');
+    },
   },
   {
     id: 'sync-outcome',
-    name: 'Whether your work saved',
-    detail: 'Only when something you sent was refused and needs you to look at it.',
+    get name() {
+      return t('onboarding.notifSync');
+    },
+    get detail() {
+      return t('onboarding.notifSyncDetail');
+    },
   },
   {
     id: 'consent-outcome',
-    name: 'Consent outcomes',
-    detail: 'When a recording you made is confirmed, or when consent was withdrawn.',
+    get name() {
+      return t('onboarding.notifConsent');
+    },
+    get detail() {
+      return t('onboarding.notifConsentDetail');
+    },
   },
   {
     id: 'coaching',
-    name: 'Coaching notes',
-    detail: 'When your manager leaves a note on one of your visits.',
+    get name() {
+      return t('onboarding.notifCoaching');
+    },
+    get detail() {
+      return t('onboarding.notifCoachingDetail');
+    },
   },
 ];
 
@@ -110,18 +129,26 @@ export const notificationTypes = (build: {
       (type.id !== 'consent-outcome' || build.recordingEnabled),
   );
 
-const COUNT_WORDS: Readonly<Record<number, string>> = {
-  1: 'this one',
-  2: 'these two',
-  3: 'these three',
-  4: 'these four',
-};
-
 /**
  * The sentence that states the cap. One place, so the number cannot drift.
  *
  * FE-D12 item 2: the cap is one per type (see `DAILY_CAP`), so it counts the types shown. The
  * default is the design's four.
+ *
+ * `FE-W156`. One whole sentence per count, so a translator never has to fit "these two" into
+ * somebody else's grammar.
  */
-export const capSentence = (cap: number = DAILY_CAP): string =>
-  `At most ${String(cap)} a day, and nothing outside ${COUNT_WORDS[cap] ?? `these ${String(cap)}`}.`;
+export const capSentence = (cap: number = DAILY_CAP): string => {
+  switch (cap) {
+    case 1:
+      return t('onboarding.capOne', { cap });
+    case 2:
+      return t('onboarding.capTwo', { cap });
+    case 3:
+      return t('onboarding.capThree', { cap });
+    case 4:
+      return t('onboarding.capFour', { cap });
+    default:
+      return t('onboarding.capMany', { cap });
+  }
+};

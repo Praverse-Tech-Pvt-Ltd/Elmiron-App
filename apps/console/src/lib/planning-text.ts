@@ -115,6 +115,14 @@ export const statusLabel = (status: VisitStatus): string =>
     not_met: 'Doctor not met',
   })[status];
 
+/**
+ * `FE-W171` — a visit's status drawn as the same pill `/days` draws a day's: done is green, under
+ * way is blue, anything else is neutral. Nothing here is a warning: "Doctor not met" is a fact the
+ * rep recorded, not a fault.
+ */
+export const statusTone = (status: VisitStatus): 'success' | 'info' | 'neutral' =>
+  status === 'completed' ? 'success' : status === 'in_progress' ? 'info' : 'neutral';
+
 /** A planned visit may be moved only before it starts, and only on a day that has not ended. */
 export const canReassign = (
   visit: {

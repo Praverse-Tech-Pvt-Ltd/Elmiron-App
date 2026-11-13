@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import {
   Animated,
+  KeyboardAvoidingView,
   Modal,
   Pressable,
   ScrollView,
@@ -8,10 +9,13 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Heading } from './Text';
 import { elevationStyle } from './depth';
+import { SurfaceContext } from './surface';
 import { useEntrance, useReduceMotion } from './motion';
+import { useT } from './i18n';
 
 /**
  * Phase 1 §05: every option list. A handle, 70pt rows, a sticky footer, and a
@@ -36,6 +40,7 @@ export interface BottomSheetProps {
 }
 
 const styles = StyleSheet.create({
+  avoider: { flex: 1 },
   scrim: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -45,10 +50,14 @@ const styles = StyleSheet.create({
     backgroundColor: tokens.color.surface,
     borderTopLeftRadius: tokens.radius.card,
     borderTopRightRadius: tokens.radius.card,
-    paddingBottom: tokens.space.lg,
+    // The bottom padding is set in `SheetBody`, with the gesture inset added (`FE-W180`).
     // FE-W101. The design's sheet shadow, cast upward over the page it covers.
     ...elevationStyle('sheet'),
+    // `FE-W191`. Gives way to the keyboard: with a filter field focused the sheet is squeezed into
+    // the room above the keyboard instead of running off the top of the screen.
+    flexShrink: 1,
   },
+  rising: { flexShrink: 1 },
   handleArea: { alignItems: 'center', paddingVertical: tokens.space.sm },
   handle: {
     width: 36,
@@ -73,6 +82,7 @@ export const BottomSheet = ({
   children,
   footer,
 }: BottomSheetProps): ReactNode => {
+  const { t } = useT();
   const { height } = useWindowDimensions();
   const reduceMotion = useReduceMotion();
 
@@ -90,16 +100,24 @@ export const BottomSheet = ({
         The sheet sits inside it and stops the press going through — without that,
         a tap anywhere on the sheet closes it, including a tap on a row.
       */}
-      <Pressable
-        accessibilityLabel="Close"
-        accessibilityRole="button"
-        onPress={onDismiss}
-        style={styles.scrim}
-      >
-        <SheetBody height={height} title={title} footer={footer}>
-          {children}
-        </SheetBody>
-      </Pressable>
+      {/*
+        `FE-W191`. A sheet can hold a text field (the unplanned visit's doctor filter). A Modal is its
+        own window, and under Android's edge-to-edge layout nothing resizes it for the keyboard, so
+        the sheet — anchored to the bottom — would sit under the keyboard. The same padding
+        `Screen` uses (`FE-W187`) lifts it.
+      */}
+      <KeyboardAvoidingView behavior="padding" style={styles.avoider}>
+        <Pressable
+          accessibilityLabel={t('common.close')}
+          accessibilityRole="button"
+          onPress={onDismiss}
+          style={styles.scrim}
+        >
+          <SheetBody height={height} title={title} footer={footer}>
+            {children}
+          </SheetBody>
+        </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -121,24 +139,40 @@ const SheetBody = ({
 }): ReactNode => {
   // Rises a sheet-height's fraction, not the full screen: arrival, not travel.
   const entrance = useEntrance({ duration: tokens.motion.gentle, rise: tokens.space.xl * 2 });
+  // `FE-W180`. The sheet runs to the bottom edge, so its last row and its footer sat under the
+  // gesture bar. The inset is added to the token padding, as `Screen` does: one is the design's
+  // margin, the other the device's hardware.
+  const insets = useSafeAreaInsets();
   return (
-    <Animated.View collapsable={false} style={entrance}>
+    <Animated.View collapsable={false} style={[entrance, styles.rising]}>
       <Pressable
         accessibilityRole="none"
         accessibilityViewIsModal
         onPress={() => {
           // Swallows the press. The scrim above must not see it.
         }}
-        style={[styles.sheet, { maxHeight: height * 0.7 }]}
+        style={[
+          styles.sheet,
+          { maxHeight: height * 0.7, paddingBottom: tokens.space.lg + insets.bottom },
+        ]}
       >
-        <View style={styles.handleArea}>
-          <View style={styles.handle} />
-        </View>
-        <View style={styles.header}>
-          <Heading>{title}</Heading>
-        </View>
-        <ScrollView contentContainerStyle={styles.content}>{children}</ScrollView>
-        {footer === undefined ? null : <View style={styles.footer}>{footer}</View>}
+        {/*
+          `FE-W176`. The sheet is white wherever it was opened from. A `Select` inside a hero card
+          would otherwise hand its white ink to the sheet's title and rows: white on white.
+        */}
+        <SurfaceContext.Provider value="paper">
+          <View style={styles.handleArea}>
+            <View style={styles.handle} />
+          </View>
+          <View style={styles.header}>
+            <Heading>{title}</Heading>
+          </View>
+          {/* A tap on a row while the filter's keyboard is up chooses the row in one tap. */}
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+            {children}
+          </ScrollView>
+          {footer === undefined ? null : <View style={styles.footer}>{footer}</View>}
+        </SurfaceContext.Provider>
       </Pressable>
     </Animated.View>
   );

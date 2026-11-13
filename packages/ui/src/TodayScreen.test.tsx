@@ -35,7 +35,8 @@ describe('the day', () => {
   it('offers the single primary action, named for where it sends the MR', async () => {
     const onStart = jest.fn();
     await render(<TodayScreen {...props({ onStartNextVisit: onStart })} />);
-    await fireEvent.press(screen.getByText('Start the visit to Dr S. Iyer'));
+    // `FE-W191`. "Visit Dr S. Iyer": the doctor’s name, behind the shortest verb that says it.
+    await fireEvent.press(screen.getByText('Visit Dr S. Iyer'));
     expect(onStart).toHaveBeenCalledTimes(1);
   });
 });
@@ -45,7 +46,7 @@ describe('a finished day is not an empty one', () => {
     // The difference matters: "nothing here" reads as a broken app to someone who
     // has just walked nine clinics.
     await render(<TodayScreen {...props({ next: null, done: 9 })} />);
-    expect(screen.getByText("That's everyone on the plan")).toBeTruthy();
+    expect(screen.getByText('That’s everyone on the plan')).toBeTruthy();
     expect(screen.queryByText(/^Start the visit/u)).toBeNull();
   });
 
@@ -81,7 +82,7 @@ describe('the states that are not the day', () => {
     // is a lost visit". Whatever is already known stays on screen and stays
     // interactive underneath the progress line.
     await render(<TodayScreen {...props({ loading: true })} />);
-    expect(screen.getByLabelText("Getting today's plan")).toBeTruthy();
+    expect(screen.getByLabelText('Getting today’s plan')).toBeTruthy();
     expect(screen.getByText('Dr S. Iyer')).toBeTruthy();
     expect(screen.getByText('6 of 9')).toBeTruthy();
   });
@@ -90,7 +91,7 @@ describe('the states that are not the day', () => {
     // The other half: with nothing known, the count is absent rather than zero.
     // "0 of 0" is a statement about the MR's work, and it would be false.
     await render(<TodayScreen {...props({ loading: true, next: null, planned: 0, done: 0 })} />);
-    expect(screen.getByLabelText("Getting today's plan")).toBeTruthy();
+    expect(screen.getByLabelText('Getting today’s plan')).toBeTruthy();
     expect(screen.queryByText('0 of 0')).toBeNull();
     expect(screen.queryByText('Nothing planned for today')).toBeNull();
   });
@@ -132,7 +133,7 @@ describe('the transparency link', () => {
  * MR-12 D3 — the copy claims ATTENDANCE, not success.
  *
  * The reviewer's sentence: "An MR who found three doctors unavailable must not read a
- * congratulation." The old screen said "That's the day done", "Everything on the plan is
+ * congratulation." The old screen said "That’s the day done", "Everything on the plan is
  * complete." and counted only `completed` — so that MR read "0 of 3" under a
  * congratulation, which is both a lie and an insult.
  *
@@ -267,13 +268,13 @@ describe('TodayScreen — says what the plan and the visit actually are', () => 
   it('does NOT claim the plan is done while stops on it have no visit', async () => {
     await render(<TodayScreen {...props({ next: null, planned: 3, done: 1, stillOnPlan: 2 })} />);
     expect(screen.getByText('2 more stops on today’s plan')).toBeTruthy();
-    expect(screen.queryByText("That's everyone on the plan")).toBeNull();
+    expect(screen.queryByText('That’s everyone on the plan')).toBeNull();
     expect(screen.queryByText(/every visit on the plan/u)).toBeNull();
   });
 
   it('POSITIVE CONTROL: with nothing left on the plan, it does say so', async () => {
     await render(<TodayScreen {...props({ next: null, planned: 3, done: 3, stillOnPlan: 0 })} />);
-    expect(screen.getByText("That's everyone on the plan")).toBeTruthy();
+    expect(screen.getByText('That’s everyone on the plan')).toBeTruthy();
   });
 
   it('an in-progress next visit says Continue, not Start', async () => {
@@ -291,8 +292,9 @@ describe('TodayScreen — says what the plan and the visit actually are', () => 
         })}
       />,
     );
-    expect(screen.getByText('Continue the visit to Dr Vikram Rao')).toBeTruthy();
-    expect(screen.queryByText(/Start the visit/u)).toBeNull();
+    // `FE-W191`. Shorter, so a long name fits the pinned button; the name is kept.
+    expect(screen.getByText('Back to Dr Vikram Rao')).toBeTruthy();
+    expect(screen.queryByText('Visit Dr Vikram Rao')).toBeNull();
     expect(screen.getByText('Checked in 11:38')).toBeTruthy();
   });
 });

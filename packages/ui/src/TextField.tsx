@@ -2,7 +2,8 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
-import { Label } from './Text';
+import { Label, Secondary } from './Text';
+import { useT } from './i18n';
 
 /**
  * Phase 1 §05: 60pt, a 19pt value, and a label that is always visible.
@@ -24,6 +25,12 @@ export interface TextFieldProps {
   readonly value: string;
   readonly onChangeText: (value: string) => void;
   readonly secure?: boolean;
+  /**
+   * `FE-W213`. A password, whether its letters are hidden or shown. `secure` alone is not enough:
+   * with "Show password" on, `secure` is false and the keyboard treated the field as ordinary
+   * prose -- autocorrecting it, suggesting it, and adding it to the words the keyboard has learned.
+   */
+  readonly password?: boolean;
   readonly autoCapitalize?: 'none' | 'sentences';
   readonly keyboardType?: 'default' | 'email-address' | 'number-pad';
   readonly editable?: boolean;
@@ -78,13 +85,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: -tokens.space.sm,
+    borderRadius: tokens.radius.pill,
   },
-  clearPressed: { opacity: 0.5 },
+  // `FE-W184`. §05: a press darkens the fill — it never fades. This faded the ✕ to half.
+  clearPressed: { backgroundColor: tokens.color.wash },
   clearGlyph: { fontSize: 18, color: tokens.color.textSecondary },
+  // `FE-W178`. The correction is a sentence, in the same slot as the help line, so it is set at
+  // the same prose step; the label weight keeps it a step firmer than the help it replaces.
   error: {
     color: tokens.color.critical,
-    fontSize: tokens.typography.label.size,
-    lineHeight: tokens.typography.label.lineHeight,
+    fontSize: tokens.typography.secondary.size,
+    lineHeight: tokens.typography.secondary.lineHeight,
     fontWeight: tokens.typography.label.weight,
     fontFamily: fontFamilyFor(tokens.typography.label.weight),
   },
@@ -95,6 +106,7 @@ export const TextField = ({
   value,
   onChangeText,
   secure = false,
+  password = false,
   autoCapitalize = 'sentences',
   keyboardType = 'default',
   editable = true,
@@ -103,6 +115,7 @@ export const TextField = ({
   onClear,
   multiline = false,
 }: TextFieldProps): ReactNode => {
+  const { t } = useT();
   const [focused, setFocused] = useState(false);
 
   return (
@@ -131,7 +144,11 @@ export const TextField = ({
           accessibilityLabel={label}
           autoCapitalize={autoCapitalize}
           editable={editable}
-          keyboardType={keyboardType}
+          // A shown password asks Android for the keyboard that does not predict or learn.
+          keyboardType={password && !secure ? 'visible-password' : keyboardType}
+          {...(password
+            ? { autoCorrect: false, spellCheck: false, autoComplete: 'current-password' as const }
+            : {})}
           onBlur={() => {
             setFocused(false);
           }}
@@ -146,7 +163,7 @@ export const TextField = ({
         />
         {onClear === undefined || value === '' ? null : (
           <Pressable
-            accessibilityLabel={`Clear ${label}`}
+            accessibilityLabel={t('common.clearField', { field: label })}
             accessibilityRole="button"
             onPress={onClear}
             style={({ pressed }) => [styles.clear, pressed ? styles.clearPressed : null]}
@@ -157,7 +174,8 @@ export const TextField = ({
       </View>
       {error === undefined ? (
         help === undefined ? null : (
-          <Label muted>{help}</Label>
+          // `FE-W178`. Help is a sentence ("About this lesson — not about a patient."): prose step.
+          <Secondary>{help}</Secondary>
         )
       ) : (
         <Text style={styles.error}>{error}</Text>

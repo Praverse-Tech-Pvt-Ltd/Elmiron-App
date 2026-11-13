@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Button, DoctorListScreen, Screen } from '@fieldforce/ui';
+import { Button, DoctorListScreen, Screen, t, useLanguage } from '@fieldforce/ui';
 import { useRouter } from 'expo-router';
 import type { SyncQueueItem } from '@fieldforce/core';
 import { visitsAsWitnessed, withPhoneTimes } from '../../src/capture/visit';
@@ -13,7 +13,7 @@ import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 import { FILTER_LABELS, buildDoctorRows, lastSeenLabel, rankDoctors } from '../../src/doctors/list';
 import type { DoctorFilter } from '../../src/doctors/list';
 import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
-import { NOT_PERMITTED_DETAIL, refusedDetail } from '../../src/errors/plain';
+import { notPermittedDetail, refusedDetail } from '../../src/errors/plain';
 
 /**
  * B8 — the doctor list, searchable.
@@ -29,6 +29,7 @@ import { NOT_PERMITTED_DETAIL, refusedDetail } from '../../src/errors/plain';
  * they can be tested without a renderer.
  */
 export default function Doctors(): ReactNode {
+  useLanguage();
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<DoctorFilter>('all');
@@ -101,8 +102,8 @@ export default function Doctors(): ReactNode {
         ? SESSION_EXPIRED
         : pullFailure.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
           ? {
-              title: 'You do not have access to this list',
-              detail: NOT_PERMITTED_DETAIL,
+              title: t('doctors.noAccessList'),
+              detail: notPermittedDetail(),
             }
           : // W2-C A2 / `BE-W155`. **A failed refresh is not "no doctors".** This branch was
             // unconditional and the list renders ONLY the banner when given a failure, so offline
@@ -112,11 +113,11 @@ export default function Doctors(): ReactNode {
             doctors.length > 0
             ? null
             : {
-                title: 'Could not load doctors',
+                title: t('doctors.couldNotLoadList'),
                 detail:
                   pullFailure.kind === 'refused'
                     ? refusedDetail(pullFailure.refusal.sqlState)
-                    : 'The app could not reach the server. It will try again when you come back to it.',
+                    : t('doctors.unreachableList'),
               };
   const loading = status === 'loading';
 
@@ -138,8 +139,8 @@ export default function Doctors(): ReactNode {
    */
   const serverNow = serverTime === null ? null : Date.parse(serverTime);
   const all = useMemo(
-    () => buildDoctorRows(doctors, visits, serverNow),
-    [doctors, visits, serverNow],
+    () => buildDoctorRows(doctors, visits, serverNow, zone),
+    [doctors, visits, serverNow, zone],
   );
   const ranked = useMemo(
     () => rankDoctors(all, query, activeFilter, onPlan ?? new Set()),
@@ -186,7 +187,7 @@ export default function Doctors(): ReactNode {
             row.lastSeenAt === null
               ? lastSeenLabel(null)
               : row.daysSince === null
-                ? `last seen ${dayMonthIn(row.lastSeenAt, zone)}`
+                ? t('doctors.lastSeenOn', { date: dayMonthIn(row.lastSeenAt, zone) })
                 : lastSeenLabel(row.daysSince),
           overdue: row.overdue,
         }))}
@@ -195,7 +196,7 @@ export default function Doctors(): ReactNode {
       {/* `FE-W85`. Only in a maps build: the clinics on a map, the ones with no location listed. */}
       {mapsEnabled && doctors.length > 0 ? (
         <Button
-          label="See your doctors on a map"
+          label={t('doctors.seeOnMap')}
           variant="secondary"
           onPress={() => {
             router.push('/map');

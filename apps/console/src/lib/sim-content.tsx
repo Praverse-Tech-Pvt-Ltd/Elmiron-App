@@ -6,6 +6,7 @@ import type { SimPersonaStance } from '@fieldforce/core';
 import { SIM_PERSONA_STANCES } from '@fieldforce/core';
 import { Body, Card, Heading, Label, MissingNote, Pill, StatusPill } from './ui';
 import { approvalAffordance, submitAffordance } from './knowledge-review';
+import { contentKindLabel, stanceLabel } from './labels';
 import type { SimContentRow } from './sim-content-row';
 import { btn } from './theme-css';
 
@@ -46,8 +47,9 @@ export const SCENARIO_MARKET_CAUTION =
   'A scenario about a product must name the market it applies to. One country’s promotional or ' +
   'regulatory content never applies everywhere, and the server refuses a product with no market.';
 
+// `FE-W165`: sentence case. The capitals shouted the one rule the next sentence already states.
 export const SIM_DRAFT_NOTE =
-  'Saved as a DRAFT. Nothing a rep can practise against until a SECOND admin approves it.';
+  'Saved as a draft. Reps cannot practise against it until a second admin approves it.';
 
 type State =
   | { readonly kind: 'idle' }
@@ -134,7 +136,7 @@ export const PersonaDraftForm = ({ onCreate }: PersonaDraftProps): ReactNode => 
       >
         {SIM_PERSONA_STANCES.map((s) => (
           <option key={s} value={s}>
-            {s}
+            {stanceLabel(s)}
           </option>
         ))}
       </select>
@@ -223,7 +225,7 @@ export const ScenarioDraftForm = ({
       <Card>
         <Heading>New practice scenario</Heading>
         <MissingNote>
-          A scenario needs an APPROVED practice doctor first. Create one above and have a second
+          A scenario needs an approved practice doctor first. Create one above and have a second
           admin approve it.
         </MissingNote>
       </Card>
@@ -293,7 +295,7 @@ export const ScenarioDraftForm = ({
         ))}
       </select>
 
-      <Label>Market{productId === '' ? ' — optional' : ' — REQUIRED for a product'}</Label>
+      <Label>Market{productId === '' ? ' — optional' : ' — required for a product'}</Label>
       <select
         aria-label="Market"
         value={marketId}
@@ -376,7 +378,7 @@ export const SimContentReview = ({
     <Card>
       <Heading>{row.title}</Heading>
       <div className="ff-row ff-row-tight">
-        <Pill tone="neutral">{row.kind}</Pill>
+        <Pill tone="neutral">{contentKindLabel(row.kind)}</Pill>
         <StatusPill status={row.status} />
       </div>
 

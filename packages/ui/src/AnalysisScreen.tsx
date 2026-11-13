@@ -2,12 +2,14 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Label, Title } from './Text';
+import { BodyText, Label, Secondary, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { CitationSpan } from './CitationSpan';
 import type { CitationSpanProps } from './CitationSpan';
+import { Screen } from './Screen';
 import { Spinner } from './Spinner';
+import { useT } from './i18n';
 
 /**
  * Phase 4 D2 — one analysis, with the evidence for every claim in it.
@@ -60,6 +62,8 @@ export interface AnalysisScreenProps {
   /** The MR's reply, once written. */
   readonly reply?: string | null;
   readonly onReply: () => void;
+  /** `FE-W188`. The screen's Back control (`Screen`'s `onBack`). */
+  readonly onBack?: () => void;
   /** "Written by the system from the recording. Your manager has not opened this yet." */
   readonly provenanceNote: string;
   /**
@@ -73,10 +77,9 @@ export interface AnalysisScreenProps {
 }
 
 const styles = StyleSheet.create({
-  head: { gap: 2 },
+  head: { gap: tokens.space.xxs },
   section: { gap: tokens.space.sm },
   citations: { gap: tokens.space.xs },
-  spacer: { flex: 1, minHeight: tokens.space.md },
 });
 
 const Findings = ({
@@ -93,7 +96,8 @@ const Findings = ({
       {findings.map((finding) => (
         <Card key={finding.id}>
           <BodyText>{finding.summary}</BodyText>
-          {finding.detail === undefined ? null : <Label muted>{finding.detail}</Label>}
+          {/* `FE-W178`. The finding's explanation is prose: the prose step, not `Label`. */}
+          {finding.detail === undefined ? null : <Secondary>{finding.detail}</Secondary>}
           <View style={styles.citations}>
             {finding.citations.map((citation) => (
               <CitationSpan key={`${finding.id}-${citation.timestamp}`} {...citation} />
@@ -114,71 +118,77 @@ export const AnalysisScreen = ({
   statusNote = null,
   reply = null,
   onReply,
+  onBack,
   provenanceNote,
   loading = false,
   failure = null,
   noFindingsNote = null,
 }: AnalysisScreenProps): ReactNode => {
+  const { t } = useT();
+  const back = onBack === undefined ? {} : { onBack };
   if (failure !== null) {
     return (
-      <>
+      <Screen scrollable {...back}>
         <Title>{doctorName}</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
-      </>
+      </Screen>
     );
   }
 
   const worked = findings.filter((finding) => finding.workedWell);
   const tryThis = findings.filter((finding) => !finding.workedWell);
 
+  // `FE-W180`. The screen's one action, pinned in the reach zone as Today's and the visit's are.
+  // It sat after a `flex: 1` spacer, which does nothing inside a scroll view, so on an analysis with
+  // several findings "Add your reply" was at the bottom of the scroll.
+  const footer =
+    findings.length === 0 ? undefined : (
+      <Button
+        label={reply === null ? t('reply.add') : t('reply.change')}
+        onPress={onReply}
+        variant="primary"
+      />
+    );
+
   return (
-    <>
+    <Screen scrollable {...back} {...(footer === undefined ? {} : { footer })}>
       <View style={styles.head}>
         <Title>{doctorName}</Title>
-        <Label muted>{consentLabel === null ? whenLabel : `${whenLabel} · ${consentLabel}`}</Label>
+        {/* `FE-W178`. The line under a screen title is `Secondary`, as on the call report. */}
+        <Secondary>
+          {consentLabel === null ? whenLabel : `${whenLabel} · ${consentLabel}`}
+        </Secondary>
       </View>
 
-      {loading ? <Spinner label="Getting this analysis" /> : null}
+      {loading ? <Spinner label={t('analysis.loading')} /> : null}
 
       {statusNote === null ? null : (
         // A refusal is not an error. The contract calls refusing correct behaviour
         // when the model cannot cite without speculating, so it reads as the system
         // declining to guess about the MR rather than as a fault.
-        <Banner detail={statusNote} title="Nothing was written about this visit" tone="info" />
+        <Banner detail={statusNote} title={t('analysis.nothingWritten')} tone="info" />
       )}
 
       {noFindingsNote === null ? null : (
-        <Banner detail={noFindingsNote} title="No findings were returned" tone="info" />
+        <Banner detail={noFindingsNote} title={t('analysis.noFindingsTitle')} tone="info" />
       )}
 
-      <Findings findings={worked} heading="What worked" />
-      <Findings
-        findings={tryThis}
-        heading={tryThis.length === 1 ? 'One thing to try next time' : 'Things to try next time'}
-      />
+      {/* The findings' own words are the model's, not the app's, and are shown as they came. */}
+      <Findings findings={worked} heading={t('analysis.whatWorked')} />
+      <Findings findings={tryThis} heading={t('analysis.tryNext', { count: tryThis.length })} />
 
-      {findings.length === 0 ? null : <Label muted>{audioNote}</Label>}
+      {findings.length === 0 ? null : <Secondary>{audioNote}</Secondary>}
 
       {reply === null ? null : (
         <Card>
-          <Label muted>Your reply</Label>
+          <Label muted>{t('reply.title')}</Label>
           <BodyText>{reply}</BodyText>
         </Card>
       )}
 
-      <View style={styles.spacer} />
-
       <Card tone="quiet">
-        <Label muted>{provenanceNote}</Label>
+        <Secondary>{provenanceNote}</Secondary>
       </Card>
-
-      {findings.length === 0 ? null : (
-        <Button
-          label={reply === null ? 'Add your reply' : 'Change your reply'}
-          onPress={onReply}
-          variant="primary"
-        />
-      )}
-    </>
+    </Screen>
   );
 };

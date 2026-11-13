@@ -1,4 +1,5 @@
 import type { Analysis, Finding, FindingCategory, Visit } from '@fieldforce/core';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * Phase 4 D1's arithmetic, and the one file in this app most able to do harm.
@@ -124,13 +125,11 @@ export const statusNote = (analysis: Analysis): string | null => {
     case 'completed':
       return null;
     case 'pending':
-      return 'This visit is still being looked at. Nothing has been written yet.';
+      return t('coaching.statusPending');
     case 'refused':
-      return (
-        analysis.refusalReason ??
-        'Nothing could be said about this visit without guessing, so nothing was. That is the system working, not failing.'
-      );
+      // The server's own reason is its words, not the app's, and is shown as it came.
+      return analysis.refusalReason ?? t('coaching.statusRefused');
     case 'failed':
-      return 'This one could not be processed. Nobody has seen anything about this visit.';
+      return t('coaching.statusFailed');
   }
 };

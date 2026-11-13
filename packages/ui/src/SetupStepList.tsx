@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Label } from './Text';
+import { BodyText, Secondary, TapLabel } from './Text';
+import { t, useT } from './i18n';
 
 /**
  * The numbered steps on an OEM battery-setup screen.
@@ -44,7 +45,8 @@ const styles = StyleSheet.create({
   list: { gap: tokens.space.md },
   step: {
     backgroundColor: tokens.color.surface,
-    borderRadius: tokens.radius.sm,
+    // `FE-W184`. A card's radius, like every other card and row; it was the 4pt `sm`.
+    borderRadius: tokens.radius.card,
     padding: tokens.space.md,
     gap: tokens.space.xs,
   },
@@ -57,7 +59,8 @@ const styles = StyleSheet.create({
   // thing to be squeezed would be the touch target.
   actions: { flexDirection: 'row', gap: tokens.space.sm, flexWrap: 'wrap' },
   action: {
-    borderRadius: tokens.radius.sm,
+    // `FE-W184`. §05's control radius — these are buttons — rather than the 4pt `sm`.
+    borderRadius: tokens.radius.control,
     borderWidth: 1,
     borderColor: tokens.color.border,
     paddingVertical: tokens.space.sm,
@@ -78,58 +81,68 @@ const styles = StyleSheet.create({
  * this outdoors at partial brightness, and TalkBack, both get the meaning from the
  * text or neither gets it at all.
  */
-const doneLabel = (done: boolean): string => (done ? 'Done' : 'Mark done');
+const doneLabel = (done: boolean): string =>
+  done ? t('onboarding.stepDone') : t('onboarding.markDone');
 
-export const SetupStepList = ({ steps, onToggleDone }: SetupStepListProps): ReactNode => (
-  <View style={styles.list}>
-    {steps.map((step, index) => (
-      <View key={step.id} style={styles.step}>
-        <View style={styles.header}>
-          <View style={styles.ordinal}>
-            <BodyText>{`${String(index + 1)}.`}</BodyText>
+export const SetupStepList = ({ steps, onToggleDone }: SetupStepListProps): ReactNode => {
+  useT();
+  return (
+    <View style={styles.list}>
+      {steps.map((step, index) => (
+        <View key={step.id} style={styles.step}>
+          <View style={styles.header}>
+            <View style={styles.ordinal}>
+              <BodyText>{`${String(index + 1)}.`}</BodyText>
+            </View>
+            <View style={styles.headerText}>
+              <BodyText>{step.title}</BodyText>
+              {step.whatYouWillSee === undefined ? null : (
+                <Secondary>
+                  {t('onboarding.whatYouWillSee', { text: step.whatYouWillSee })}
+                </Secondary>
+              )}
+            </View>
           </View>
-          <View style={styles.headerText}>
-            <BodyText>{step.title}</BodyText>
-            {step.whatYouWillSee === undefined ? null : (
-              <Label muted>{`What you'll see: ${step.whatYouWillSee}`}</Label>
-            )}
-          </View>
-        </View>
 
-        <View style={styles.actions}>
-          <Pressable
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: step.done }}
-            accessibilityLabel={`${step.title} — ${doneLabel(step.done)}`}
-            onPress={() => {
-              onToggleDone(step.id);
-            }}
-            style={({ pressed }) => [
-              styles.action,
-              step.done ? styles.actionDone : null,
-              pressed ? styles.pressed : null,
-            ]}
-          >
-            <Label>{doneLabel(step.done)}</Label>
-          </Pressable>
+          <View style={styles.actions}>
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: step.done }}
+              accessibilityLabel={t('onboarding.stepState', {
+                step: step.title,
+                state: doneLabel(step.done),
+              })}
+              onPress={() => {
+                onToggleDone(step.id);
+              }}
+              style={({ pressed }) => [
+                styles.action,
+                step.done ? styles.actionDone : null,
+                pressed ? styles.pressed : null,
+              ]}
+            >
+              {/* `FE-W177`. Pressed, so at the tappable floor (14), not `Label`'s 13.5. */}
+              <TapLabel>{doneLabel(step.done)}</TapLabel>
+            </Pressable>
 
-          {/*
+            {/*
             Rendered only when the intent resolved. There is deliberately no disabled
             variant: a greyed-out shortcut on a device that cannot open the screen
             tells the MR nothing they can act on, and invites a tap that can only
             fail. The steps above already say what to do.
           */}
-          {step.shortcut === undefined ? null : (
-            <Pressable
-              accessibilityRole="button"
-              onPress={step.shortcut.onPress}
-              style={({ pressed }) => [styles.action, pressed ? styles.pressed : null]}
-            >
-              <Label>{step.shortcut.label}</Label>
-            </Pressable>
-          )}
+            {step.shortcut === undefined ? null : (
+              <Pressable
+                accessibilityRole="button"
+                onPress={step.shortcut.onPress}
+                style={({ pressed }) => [styles.action, pressed ? styles.pressed : null]}
+              >
+                <TapLabel>{step.shortcut.label}</TapLabel>
+              </Pressable>
+            )}
+          </View>
         </View>
-      </View>
-    ))}
-  </View>
-);
+      ))}
+    </View>
+  );
+};

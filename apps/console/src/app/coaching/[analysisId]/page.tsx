@@ -3,6 +3,7 @@ import { signedIn } from '../../../lib/session';
 import { Body, Card, Heading, Label, MissingNote, Page, PageHeader } from '../../../lib/ui';
 import { OverrideForm } from '../../../lib/override-form';
 import { OverridesPanel, loadOverrides } from '../../../lib/overrides-panel';
+import { indiaDate } from '../../../lib/india-date';
 
 /**
  * Phase 4 E2 — the analysis review, and the override.
@@ -34,6 +35,8 @@ import { OverridesPanel, loadOverrides } from '../../../lib/overrides-panel';
 const READ_REASON = 'console review screen — analysis opened for review';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata = { title: 'Review an analysis' };
 
 const stamp = (startMs: number): string => {
   const total = Math.floor(startMs / 1000);
@@ -69,16 +72,33 @@ export default async function Review({
 
   const findings = analysis.findings.filter((finding) => finding.severity !== 'info');
   // FE-W12: what has already been decided, read before the form that decides again.
-  const overrides = session === null ? null : await loadOverrides(session.client, analysis.id);
+  // `FE-W165`: the line above the title names the rep and the visit, as the queue row did. It
+  // printed the analysis id, the rubric version and the model vendor — true, and of no use to the
+  // manager deciding. Both reads are as the signed-in manager, under RLS; either may come back
+  // empty, and the line then says less rather than guessing.
+  const [overrides, profile, visit] = await Promise.all([
+    session === null ? null : loadOverrides(session.client, analysis.id),
+    session?.db.from('user_profiles').select('full_name').eq('id', analysis.mrId).maybeSingle() ??
+      null,
+    session?.db
+      .from('visits')
+      .select('started_at, created_at')
+      .eq('id', analysis.visitId)
+      .maybeSingle() ?? null,
+  ]);
+  const repName = (profile?.data as { full_name?: string } | null)?.full_name ?? 'Unknown rep';
+  const visitRow = visit?.data as { started_at?: string | null; created_at?: string } | null;
+  const visitAt = visitRow?.started_at ?? visitRow?.created_at ?? null;
+  const eyebrow =
+    visitAt === null
+      ? `${repName} · analysed ${indiaDate(analysis.createdAt)}`
+      : `${repName} · visit on ${indiaDate(visitAt)}`;
 
   return (
     <Page>
       <div className="ff-split">
         <div className="ff-split-main">
-          <PageHeader
-            eyebrow={`Analysis ${analysis.id.slice(0, 8)} · rubric ${analysis.rubricVersion} · ${analysis.modelProvider} ${analysis.modelVersion}`}
-            title={findings[0]?.title ?? 'Nothing was flagged'}
-          />
+          <PageHeader eyebrow={eyebrow} title={findings[0]?.title ?? 'Nothing was flagged'} />
 
           {findings.map((finding) => (
             <Card key={finding.id}>
@@ -105,8 +125,8 @@ export default async function Review({
           <Card>
             <Heading>
               {analysis.mrRespondedAt === null
-                ? 'The MR has not replied'
-                : 'The MR replied before you opened this'}
+                ? 'The rep has not replied'
+                : 'The rep replied before you opened this'}
             </Heading>
             {analysis.mrResponse === null ? (
               <Body muted>

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { ApiClient, ListAnalysisOverridesResponse } from '@fieldforce/core';
 import { Body, Card, Heading, Label, MissingNote } from './ui';
+import { indiaDateTime } from './india-date';
 
 /**
  * `FE-W12` — the overrides already logged against an analysis (Phase 4 E1), MR-50 F2.
@@ -31,11 +32,12 @@ export const loadOverrides = (
 ): Promise<OverridesResult> =>
   client.listAnalysisOverrides({ analysisId, reason: OVERRIDES_READ_REASON }).catch(() => null);
 
-/** `2026-09-22T06:15:00+00:00` → `2026-09-22 06:15 UTC`. The server's instant, not the viewer's clock. */
-const when = (iso: string): string => {
-  const at = new Date(iso);
-  return `${at.toISOString().slice(0, 10)} ${at.toISOString().slice(11, 16)} UTC`;
-};
+/**
+ * `2026-09-22T06:15:00+00:00` → `22 Sep 2026, 11:45`. `FE-W166`: India time, like every other time
+ * in the console. It was the only one printed in UTC, so an override logged at 11:45 in Pune read
+ * as 06:15 beside a trail that said 11:45.
+ */
+const when = (iso: string): string => indiaDateTime(iso);
 
 export const OverridesPanel = ({ result }: { readonly result: OverridesResult }): ReactNode => {
   if (result === null) {

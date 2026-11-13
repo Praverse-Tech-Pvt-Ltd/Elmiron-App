@@ -1,5 +1,6 @@
 import * as Location from 'expo-location';
 import type { Coordinates } from '@fieldforce/core';
+import { t } from '@fieldforce/ui/i18n';
 
 /**
  * A position fix, taken only when the MR presses a button.
@@ -72,7 +73,14 @@ export const takeFix = async (timeoutMs: number = FIX_TIMEOUT_MS): Promise<FixOu
     ]);
 
     if (result === 'timeout') {
-      return { kind: 'unavailable', reason: 'The phone could not find your position in time.' };
+      // `FE-W150`. A getter, so the sentence is read in the app's language when it is shown --
+      // the visit screen holds this outcome in state until the next press.
+      return {
+        kind: 'unavailable',
+        get reason() {
+          return t('visit.fixTimedOut');
+        },
+      };
     }
 
     return {
@@ -88,9 +96,13 @@ export const takeFix = async (timeoutMs: number = FIX_TIMEOUT_MS): Promise<FixOu
       },
     };
   } catch (error: unknown) {
+    // The phone's own message is data and is shown as it came; only the fallback is ours.
+    if (error instanceof Error) return { kind: 'unavailable', reason: error.message };
     return {
       kind: 'unavailable',
-      reason: error instanceof Error ? error.message : 'The phone could not find your position.',
+      get reason() {
+        return t('visit.fixFailed');
+      },
     };
   }
 };

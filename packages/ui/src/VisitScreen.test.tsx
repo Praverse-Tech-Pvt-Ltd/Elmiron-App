@@ -42,8 +42,9 @@ describe('the action moves with the visit', () => {
     };
     await render(<VisitScreen {...props({ ...during, checkInCaveat: line })} />);
     expect(screen.getByText(line)).toBeTruthy();
-    // Still checked in: the line qualifies the check-in, it does not replace it.
-    expect(screen.getByText('You are checked in')).toBeTruthy();
+    // Still checked in: the line qualifies the check-in, it does not replace it. `FE-W190`: the
+    // check-in time is the one line that says so ("You are checked in" above it said it twice).
+    expect(screen.getByText('Checked in 11:56')).toBeTruthy();
 
     await render(<VisitScreen {...props(during)} />);
     expect(screen.queryByText(line)).toBeNull();
@@ -154,8 +155,9 @@ describe('after the recording question is answered', () => {
   });
 
   it('tells the MR plainly that a consented visit is still not being recorded', async () => {
-    // Recording is FE-W4. An MR who believes audio is being captured will speak as
-    // though it were, which is the one thing this screen must not let them do.
+    // An MR who believes audio is being captured will speak as though it were, which is the one
+    // thing this screen must not let them do. `FE-W186`: in the rep's words -- recording is
+    // switched off -- not the developers' "not in this build".
     await render(
       <VisitScreen
         actionLabel="Leaving — check out"
@@ -163,12 +165,33 @@ describe('after the recording question is answered', () => {
         doctorName="Dr. S. Iyer"
         clinic={null}
         onAction={() => undefined}
+        recordingOff
         stage="during"
       />,
     );
 
     expect(screen.getByText('The doctor agreed to a recording.')).toBeTruthy();
-    expect(screen.getByText(/nothing is being captured/iu)).toBeTruthy();
+    expect(screen.getByText(/Visit recording is switched off/u)).toBeTruthy();
+    expect(screen.getByText(/nothing is being recorded/u)).toBeTruthy();
+    expect(screen.queryByText(/build/u)).toBeNull();
+  });
+
+  it('THE POSITIVE CONTROL: claims nothing is switched off when recording may be on (FE-W186)', async () => {
+    // Without `recordingOff` the app either may record (the control is offered) or could not ask
+    // the server. "Switched off" would be false in the first and unsupported in the second.
+    await render(
+      <VisitScreen
+        actionLabel="Leaving — check out"
+        consent={{ outcome: 'consented', answeredLabel: 'Answered 11:58' }}
+        doctorName="Dr. S. Iyer"
+        clinic={null}
+        onAction={() => undefined}
+        onStartRecording={() => undefined}
+        stage="during"
+      />,
+    );
+    expect(screen.getByText('The doctor agreed to a recording.')).toBeTruthy();
+    expect(screen.queryByText(/switched off/u)).toBeNull();
   });
 
   it('offers the question once, and not after it has been answered', async () => {

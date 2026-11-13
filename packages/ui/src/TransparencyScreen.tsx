@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Display, Heading, Label } from './Text';
+import { BodyText, Display, Heading, Label, Secondary } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { StatusGlyph } from './StatusGlyph';
+import { t, useT } from './i18n';
+import type { TextKey } from './i18n';
 
 /**
  * Phase 2 A9 / C3 — "Everything, before you ask."
@@ -54,12 +56,14 @@ export interface TransparencyScreenProps {
   readonly neverRecorded: string;
   readonly onContinue?: () => void;
   readonly continueLabel?: string;
+  /** `FE-W192`. "Step 4 of 4", when this screen ends first run. */
+  readonly stepLine?: string;
 }
 
 const styles = StyleSheet.create({
   intro: { gap: tokens.space.xs },
   row: { flexDirection: 'row', gap: tokens.space.sm, alignItems: 'flex-start' },
-  rowText: { flex: 1, gap: 2 },
+  rowText: { flex: 1, gap: tokens.space.xxs },
   // The never block is a card of its own, at the end, in the ink surface — it is
   // the answer to the question the MR actually came with.
   neverHead: { flexDirection: 'row', alignItems: 'center', gap: tokens.space.sm },
@@ -67,53 +71,64 @@ const styles = StyleSheet.create({
 
 const MARK = { active: 'success', 'not-yet': 'offline', never: 'critical' } as const;
 
-const NOTE = {
+const NOTE: Readonly<Record<TransparencyState, TextKey | null>> = {
   active: null,
-  'not-yet': 'Not yet — this app cannot do this today.',
+  'not-yet': 'transparency.notYet',
   never: null,
-} as const;
+};
 
 export const TransparencyScreen = ({
   preamble,
   entries,
   neverRecorded,
   onContinue,
-  continueLabel = 'Start my first day',
-}: TransparencyScreenProps): ReactNode => (
-  <>
-    <View style={styles.intro}>
-      <Display>Everything, before you ask.</Display>
-      {/* FE-D12 item 1. The promise that followed ("It never changes without telling you") had
+  continueLabel,
+  stepLine,
+}: TransparencyScreenProps): ReactNode => {
+  useT();
+  return (
+    <>
+      <View style={styles.intro}>
+        {stepLine === undefined ? null : <Label muted>{stepLine}</Label>}
+        <Display>{t('settings.transparencyDetail')}</Display>
+        {/* FE-D12 item 1. The promise that followed ("It never changes without telling you") had
           nothing behind it, and this screen had gone stale unannounced. The fact stays. */}
-      <Label muted>Open this any time from home.</Label>
-    </View>
-
-    {preamble === undefined ? null : (
-      <Card>
-        <BodyText>{preamble}</BodyText>
-      </Card>
-    )}
-
-    {entries.map((entry) => (
-      <Card key={entry.title}>
-        <View style={styles.row}>
-          <StatusGlyph kind={MARK[entry.state]} large />
-          <View style={styles.rowText}>
-            <BodyText>{entry.title}</BodyText>
-            <Label muted>{entry.detail}</Label>
-            {NOTE[entry.state] === null ? null : <Label muted>{NOTE[entry.state]}</Label>}
-          </View>
-        </View>
-      </Card>
-    ))}
-
-    <Card tone="hero">
-      <View style={styles.neverHead}>
-        <Heading>What we never record</Heading>
+        <Secondary>{t('transparency.openAnyTime')}</Secondary>
       </View>
-      <BodyText>{neverRecorded}</BodyText>
-    </Card>
 
-    {onContinue === undefined ? null : <Button label={continueLabel} onPress={onContinue} />}
-  </>
-);
+      {preamble === undefined ? null : (
+        <Card>
+          <BodyText>{preamble}</BodyText>
+        </Card>
+      )}
+
+      {entries.map((entry) => {
+        const note = NOTE[entry.state];
+        return (
+          <Card key={entry.title}>
+            <View style={styles.row}>
+              <StatusGlyph kind={MARK[entry.state]} large />
+              <View style={styles.rowText}>
+                <BodyText>{entry.title}</BodyText>
+                {/* `FE-W189`. The detail and the note are sentences: the prose step, not `Label`. */}
+                <Secondary>{entry.detail}</Secondary>
+                {note === null ? null : <Secondary>{t(note)}</Secondary>}
+              </View>
+            </View>
+          </Card>
+        );
+      })}
+
+      <Card tone="hero">
+        <View style={styles.neverHead}>
+          <Heading>{t('transparency.neverHeading')}</Heading>
+        </View>
+        <BodyText>{neverRecorded}</BodyText>
+      </Card>
+
+      {onContinue === undefined ? null : (
+        <Button label={continueLabel ?? t('transparency.startFirstDay')} onPress={onContinue} />
+      )}
+    </>
+  );
+};

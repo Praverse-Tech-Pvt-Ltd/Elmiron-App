@@ -2,27 +2,29 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import uuid from 'expo-modules-core/src/uuid';
-import { DayEndScreen, Screen } from '@fieldforce/ui';
+import { DayEndScreen, t, useLanguage } from '@fieldforce/ui';
 import type { DayEndWorkDay } from '@fieldforce/ui';
 import { totalDistanceMetres } from '../src/capture/mileage';
 import { visitsAsWitnessed } from '../src/capture/visit';
 import { listMileage } from '../src/capture/visits';
 import {
-  QUEUE_UNREADABLE,
+  queueUnreadable,
   loadQueueState,
   onQueueChanged,
   queueOwner,
 } from '../src/sync/async-storage-store';
-import { presentRejection } from '../src/sync/explanation';
 import { enqueueFirst, flushOutbox, workDayQueueItem } from '../src/sync/outbox';
 import { createPushClient } from '../src/sync/push-client';
 import { usePulledStore } from '../src/sync/pulled-store';
 import { visitsFromStore } from '../src/sync/selectors';
-import { NO_SERVER_CLOCK } from '../src/today/server-window';
+import { noServerClock } from '../src/today/server-window';
 import { indicatorStateFor } from '../src/sync/indicator';
+import { heldAudioIds } from '../src/sync/upload-conditions';
+import { useUploadSnapshot } from '../src/sync/use-upload-snapshot';
 import { emptyQueue } from '../src/sync/reducer';
 import type { QueueLoad } from '../src/sync/async-storage-store';
-import { CAPTURE_NOTE, summariseDayEnd, workDayCopy } from '../src/today/day-end';
+import { captureCopy, liveCaptureOf, summariseDayEnd, workDayCopy } from '../src/today/day-end';
+import { useBack } from '../src/navigation/back';
 import { onDay } from '../src/today/plan';
 import { clockIn } from '../src/today/territory-day';
 import { endDayBlocker, workDayRequest, workDayStatus } from '../src/today/work-day';
@@ -59,13 +61,14 @@ import { useLiveTracker } from '../src/tracking/tracker';
  * the pull brings the server's stamp and the card says that instead. A refusal (a visit still
  * checked in, 45016) is shown on the card with its remedy, and the button is offered again.
  */
-const KM = (metres: number): string => `${(metres / 1000).toFixed(1)} km`;
+const km = (metres: number): string => t('common.km', { km: (metres / 1000).toFixed(1) });
 
 /** The same refusal `MileageScreen` makes, on the screen that shows the day's total. */
-const RATE_NOTE =
-  'Distance only. Your rate per kilometre is set by your company and this app has not been given it, so the amount comes from payroll rather than from here.';
+const rateNote = (): string => t('dayEnd.rateNote');
 
 export default function DayEnd(): ReactNode {
+  // `FE-W145`. Subscribed, so a language change repaints this screen and every line built below.
+  useLanguage();
   const router = useRouter();
   const [distanceMetres, setDistanceMetres] = useState<number | null>(null);
   const [distanceLoading, setDistanceLoading] = useState(true);
@@ -112,7 +115,7 @@ export default function DayEnd(): ReactNode {
      * it is the right day, and when it is absent there is no honest day to substitute.
      */
     if (today === null) {
-      setNoDay({ title: 'Could not confirm which day this is', detail: NO_SERVER_CLOCK });
+      setNoDay({ title: t('dayEnd.noDay'), detail: noServerClock() });
       setDistanceLoading(false);
       return;
     }
@@ -151,6 +154,8 @@ export default function DayEnd(): ReactNode {
   // rep owns the queue, and the session module cannot load under the test runner.
   const mrId = queueOwner();
   const items = queue.kind === 'loaded' ? queue.state.items : [];
+  // `FE-W136`. Audio WiFi-only is holding says "waiting for WiFi", not "no signal".
+  const uploadSnapshot = useUploadSnapshot();
   const dayStatus = workDayStatus(store, mrId, today, items);
   // The server's last "no" to ending this day, if the newest act on it was refused.
   const lastAct = [...items]
@@ -163,25 +168,30 @@ export default function DayEnd(): ReactNode {
     lastAct?.status === 'failed' && queue.kind === 'loaded'
       ? queue.state.rejections[lastAct.id]
       : undefined;
-  const shown = lastRejection === undefined ? null : presentRejection(lastRejection);
+  // `FE-W197`. The remedy for the verdict's SQLSTATE, or a plain sentence with its reference. This
+  // led with the server's own sentence ("work_day_has_open_visit: 1 visit(s) on …"), written for
+  // support; the queue screen still keeps it, for the help desk.
   const refusal =
     notSaved ??
-    (shown === null
+    (lastRejection === undefined
       ? null
-      : {
-          title: 'Your day was not ended',
-          detail: [shown.explanation ?? shown.fallback, shown.remedy]
-            .filter((line): line is string => line !== null && line !== '')
-            .join(' '),
-        });
+      : { title: t('dayEnd.notEnded'), detail: refusedDetail(lastRejection.sqlState) });
   const copy = workDayCopy(dayStatus, zone, refusal);
   // As this phone witnessed them: a check-out made offline counts, and goes before the close.
-  const blockedBy =
+  const witnessedToday =
     today === null
-      ? null
-      : endDayBlocker(
-          visitsAsWitnessed(visitsFromStore(store), items).filter((visit) => onDay(visit, today)),
-        );
+      ? []
+      : visitsAsWitnessed(visitsFromStore(store), items).filter((visit) => onDay(visit, today));
+  const blockedBy = today === null ? null : endDayBlocker(witnessedToday);
+  /**
+   * `FE-W191`. A visit still checked in. "Last check-out 23:33" under it read as the day's last word
+   * on position while the rep was still inside a visit whose check-out would read one again
+   * (QA screenshot 61); the line says the visit is open instead.
+   */
+  const stillOpen = witnessedToday.filter((visit) => visit.status === 'in_progress').length;
+  // `FE-W185`. What live location is doing decides what the confirmation may claim.
+  const capture = captureCopy(liveCaptureOf(tracker));
+  const back = useBack();
 
   const endDay = (): void => {
     if (ending || today === null || mrId === null) return;
@@ -203,7 +213,7 @@ export default function DayEnd(): ReactNode {
     void (async () => {
       const queued = await enqueueFirst(workDayQueueItem(body));
       if (queued.kind === 'queue_unreadable') {
-        setNotSaved({ title: 'Your day was NOT ended', detail: QUEUE_UNREADABLE });
+        setNotSaved({ title: t('dayEnd.notEndedUnsaved'), detail: queueUnreadable() });
         setEnding(false);
         return;
       }
@@ -227,7 +237,7 @@ export default function DayEnd(): ReactNode {
           tone: copy.tone,
           note: copy.offerEnd ? { value: note, onChange: setNote } : null,
           action: copy.offerEnd
-            ? { label: 'End my day', onPress: endDay, busy: ending, blockedBy }
+            ? { label: t('dayEnd.endMyDay'), onPress: endDay, busy: ending, blockedBy }
             : null,
         };
   // Only a refusal says something different from "not loaded", so only a refusal is a failure
@@ -236,44 +246,47 @@ export default function DayEnd(): ReactNode {
     noDay ??
     (pullFailure?.kind === 'refused' && pullFailure.refusal.code === 'not_permitted'
       ? {
-          title: 'You do not have access to this day',
+          title: t('dayEnd.noAccess'),
           detail: refusedDetail(pullFailure.refusal.sqlState),
         }
       : null);
 
+  // `FE-W180`. The screen renders its own `Screen`, so its actions can be pinned in the footer.
   return (
-    <Screen scrollable>
-      <DayEndScreen
-        captureNote={CAPTURE_NOTE}
-        dayLabel="Today"
-        distanceLabel={distanceMetres === null ? null : KM(distanceMetres)}
-        // FE-D2 7. Null, not 0, when there is no summary: still loading, or the fetch failed. The
-        // comment above always said a failure leaves "the totals absent"; `?? 0` made them present.
-        done={summary?.done ?? null}
-        notMet={summary?.notMet ?? null}
-        failure={denial}
-        firstCaptureLabel={
-          summary?.firstCaptureAt == null
+    <DayEndScreen
+      captureNote={capture.note}
+      captureTitle={capture.title}
+      onBack={back}
+      dayLabel={t('dayEnd.today')}
+      distanceLabel={distanceMetres === null ? null : km(distanceMetres)}
+      // FE-D2 7. Null, not 0, when there is no summary: still loading, or the fetch failed. The
+      // comment above always said a failure leaves "the totals absent"; `?? 0` made them present.
+      done={summary?.done ?? null}
+      notMet={summary?.notMet ?? null}
+      failure={denial}
+      firstCaptureLabel={
+        summary?.firstCaptureAt == null
+          ? null
+          : t('dayEnd.firstCheckIn', { time: clockIn(summary.firstCaptureAt, zone) })
+      }
+      lastCaptureLabel={
+        stillOpen > 0
+          ? t('dayEnd.stillCheckedIn', { count: stillOpen })
+          : summary?.lastCaptureAt == null
             ? null
-            : `First check-in ${clockIn(summary.firstCaptureAt, zone)}`
-        }
-        lastCaptureLabel={
-          summary?.lastCaptureAt == null
-            ? null
-            : `Last check-out ${clockIn(summary.lastCaptureAt, zone)}`
-        }
-        loading={status === 'loading' || distanceLoading}
-        onOpenQueue={() => {
-          router.push('/queue');
-        }}
-        onOpenTransparency={() => {
-          router.push('/transparency');
-        }}
-        planned={summary?.planned ?? null}
-        rateNote={RATE_NOTE}
-        sync={indicatorStateFor(queue, zone)}
-        workDay={workDay}
-      />
-    </Screen>
+            : t('dayEnd.lastCheckOut', { time: clockIn(summary.lastCaptureAt, zone) })
+      }
+      loading={status === 'loading' || distanceLoading}
+      onOpenQueue={() => {
+        router.push('/queue');
+      }}
+      onOpenTransparency={() => {
+        router.push('/transparency');
+      }}
+      planned={summary?.planned ?? null}
+      rateNote={rateNote()}
+      sync={indicatorStateFor(queue, zone, heldAudioIds(items, uploadSnapshot).length)}
+      workDay={workDay}
+    />
   );
 }

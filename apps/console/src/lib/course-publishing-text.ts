@@ -29,6 +29,40 @@ export const publishRefusal = ({ message }: Refusal): string => {
 
 export type CourseVersionStatus = 'draft' | 'published' | 'retired';
 
+/** `FE-W128` — one lesson of a version that carries a video (`BE-W208`), with its measured length. */
+export interface VideoLesson {
+  readonly lesson: string;
+  /** Seconds, as the loader's ffprobe measured them; null when it could not. */
+  readonly seconds: number | null;
+}
+
+const clock = (seconds: number): string => {
+  const total = Math.max(0, Math.round(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const two = (n: number): string => String(n).padStart(2, '0');
+  return h > 0 ? `${String(h)}:${two(m)}:${two(s)}` : `${String(m)}:${two(s)}`;
+};
+
+/**
+ * `FE-W128` — which lessons of a version carry a video, and how long each is: "None", or each lesson
+ * with its length ("length not measured" when the loader had no ffprobe). Nothing is invented.
+ */
+export const videoLessonsLine = (videos: readonly VideoLesson[]): string =>
+  videos.length === 0 ? 'None' : videos.map(videoLessonLabel).join(' · ');
+
+/** `FE-W171` — one lesson's video, for the list behind the Videos summary: "Welcome (3:05)". */
+export function videoLessonLabel(v: VideoLesson): string {
+  return `${v.lesson} (${v.seconds === null ? 'length not measured' : clock(v.seconds)})`;
+}
+
+/** The total running time of a version's videos, for the column's figure; null when none is measured. */
+export const videoTotal = (videos: readonly VideoLesson[]): string | null => {
+  const measured = videos.filter((v) => v.seconds !== null);
+  return measured.length === 0 ? null : clock(measured.reduce((n, v) => n + (v.seconds ?? 0), 0));
+};
+
 /** What may be done to a version, from its status alone; the server checks again. */
 export const versionAction = (status: CourseVersionStatus): 'publish' | 'retire' | null =>
   status === 'draft' ? 'publish' : status === 'published' ? 'retire' : null;

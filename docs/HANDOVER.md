@@ -103,11 +103,18 @@ the five. What remains is `switched off` (your choice: `… on all`) and model a
 | --- | --- | --- | --- |
 | 1 | The catalogue: markets and products, **first** — the other files name them, and are refused until they exist | Copy `docs/operator/catalogue-template.md`; `node services/api/scripts/load-catalogue.mjs <file>` (checks, writes nothing), then add `--write --url <address> --key <publishable key> --email <admin>` | seconds; re-running is safe |
 | 2 | Courses | Copy `docs/operator/course-template.md`; `load-course.mjs <file>`, then `--write …` → a DRAFT | seconds per file |
-| 3 | Publish each course | `node services/api/scripts/content-step.mjs publish-course "<course title>" --url … --key … --email …` (no console screen does this) | seconds |
+| 3 | Publish each course | the console's **Courses** page (an admin presses Publish), or `node services/api/scripts/content-step.mjs publish-course "<course title>" --url … --key … --email …` | seconds |
 | 4 | Assign it | the console's Learning page | a minute |
 | 5 | Approved material | Copy `docs/operator/knowledge-template.md`; `load-knowledge.mjs <file>`, then `--write …` → a DRAFT | seconds per file |
 | 6 | Submit it for review | `content-step.mjs submit-knowledge "<document title>" …` (a draft does not appear in the console until submitted) | seconds |
 | 7 | Approve it | **a different admin**, in the console's `/knowledge` | minutes per document, to read it |
+
+**Lesson videos (`BE-W213`).** A lesson can carry a trimmed section of the client's conference videos:
+`pnpm video:trim` cuts a phone-sized clip (under 48 MB), a `Video:` line in the course file names it, and
+step 2's `--write` uploads it into the private `lesson-videos` bucket. Clinical clips need the client's
+medical/regulatory approval before step 3 (Q-21 is whether the system should also ask a second admin). The
+whole path, with the storage and bandwidth maths (Free plan: about 20 clips; plan on Pro for a real pilot):
+**`docs/operator/lesson-videos.md`**.
 
 Every loader lists every problem in the file, by line, and writes nothing if there is one. The samples are
 refused by name (their titles start `EXAMPLE`), so copy and rename them.
@@ -150,14 +157,13 @@ never give it to a rep.** `apps/field/scripts/verify-release-apk.mjs <apk>` refu
 
 ---
 
-## Q-19 — where a backup may be kept
+## Q-19 — where a backup may be kept (ANSWERED 10 October: Supabase, `BE-C80`)
 
-**Who:** the operator. One word: **Supabase**, **GitHub** or **Bucket** (`docs/operator-inputs.md`,
-section 8).
+**Answered:** production is backed up by Supabase's own scheduled backups, which need the **paid plan**
+(`docs/operator-inputs.md`, section 8). No engineering step remains for it.
 
-**First hour:** add the step that stores the backup (about 1 hour for Supabase, half a day otherwise; the
-backup job today makes a copy and then discards it, `BE-W143`). Then `docs/DEPLOY-RUNBOOK.md` from
-"Deploy attempt — 5 October", which resumes at step 0.1, then operator steps 1–5.
+**On deploy day:** `docs/DEPLOY-RUNBOOK.md` step 0.1 passes on two readings the operator records — the paid
+plan is **active**, and a **completed backup dated today (UTC)** exists — then operator steps 1–5.
 
 **What proves it worked:** the runbook's step 5 smoke test, with the expected answers it lists.
 
@@ -198,11 +204,10 @@ Each is one answer from the operator; the detail is in `docs/operator-inputs.md`
 | Decision | Unblocks | After the answer |
 | --- | --- | --- |
 | **Q-15** — should Product Q&A flag side effects, off-label requests and complaints? | three Product Q&A benchmark cases (`BE-W134`) | engineering, size depends on the answer |
-| **Q-16, Q-17, Q-18** — manager planning: whose plans, web or phone, approval of unplanned visits | manager planning | 10–15 working days |
+| ~~**Q-16, Q-17, Q-18**~~ — manager planning | **answered 9 October (`BE-C78`) and built**: a manager plans a rep's day on the console's "Plan a rep's day"; unplanned visits need no approval and are reviewed afterwards | — |
 | **Q-20** — should the repository stay public? | nothing technical | minutes |
-| **Q-21** — does a course need a second admin's approval? | course four-eyes | ½ day if yes; nothing if no. Today ONE admin publishes, by command (`content-step.mjs`) — there is no screen |
-| **`BE-W150`** — the app refuses to start without `EXPO_PUBLIC_API_BASE_URL`, an address nothing uses (re-rule FE-D2 2) | the production APK's settings | minutes |
-| **Q-13 / `D-15`** — the PV / data-protection signatory | recording, transcripts, coaching of real visits, practice scenario S6 | not estimated |
+| **Q-21** — does a course need a second admin's approval? | course four-eyes | ½ day if yes; nothing if no. Today ONE admin publishes, on the console's Courses page (or `content-step.mjs`) |
+| **Q-13 / `D-15`** — the PV / data-protection signatory | recording, transcripts, coaching of real visits, practice scenario S6, and where side-effect flags go (until then, the company's admins read them) | not estimated |
 | **What the coach's `scientific_accuracy` means** | the coach's scoring | minutes |
-| **Q-2** Maps key, **Q-3** Firebase, **Q-12** the live-tracking notice | maps, notifications, live tracking — not started | not estimated |
+| **Q-2** Maps key, **Q-3** Firebase, **Q-12** the live-tracking notice | maps, notifications and live tracking are **built (13 October)**; each waits only on its key or, for tracking, the approved notice | minutes each, once supplied |
 | **Branch protection on `main`** (a repository admin) and the **`practice_writer` key** on the hosted project (dashboard, `docs/ai-platform/DAY-ONE.md` H7) | CI as a required gate; all five AI features in production | minutes each |

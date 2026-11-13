@@ -1,0 +1,1223 @@
+{
+  "screens": {
+    "common": "Used on many screens",
+    "tabs": "The tab bar at the bottom of every main screen",
+    "signIn": "Sign-in screen",
+    "today": "Today (the home tab)",
+    "home": "Home, for a manager or administrator",
+    "pending": "Today — unplanned visits waiting to sync",
+    "sync": "The sync line on Today and Day end, and the sign-out warning",
+    "data": "Today — the mobile data note",
+    "tracking": "The live location line on Today and Me",
+    "day": "Banners about the day and the time zone, on several screens",
+    "dayEnd": "Day end (how today ended)",
+    "settings": "Me — the settings list",
+    "me": "Me — sign out and warnings",
+    "errors": "Error messages, on many screens",
+    "remedy": "What to do when the server refuses something, on many screens",
+    "doctors": "The Doctors tab (the searchable list of the rep's doctors) and one doctor's profile (the rep's own visit history with them)",
+    "route": "Today's route (the beat plan): the day's planned stops in order, the next stop, and what happened at each",
+    "unplanned": "Add an unplanned visit: choose a doctor and clinic, give a reason, and start the visit",
+    "map": "The map of the rep's clinics, or of today's stops (only in builds with maps)",
+    "coaching": "Coaching (the tab): the rep's own reviewed visits, AI-written findings and a monthly count. Never a score",
+    "analysis": "One analysis of a visit: what worked, what to try, each with a quote from the transcript",
+    "reply": "The rep's reply to an analysis, which the manager sees beside the finding",
+    "ai": "Shared by the AI screens (assistant, AI Doctor practice): the daily allowance notice, how a reset time is written, and the button that plays a quoted recording in feedback",
+    "assistant": "The assistant: the rep asks how to do something in this app. The answers themselves come from the server and are not in this file",
+    "productQa": "Product questions: answered only from the company's approved material, with the source shown. Answers and source titles come from the server and are not in this file",
+    "practice": "AI Doctor practice: choose a practice scenario, talk to an AI doctor, and read feedback. The doctor's lines and the feedback text come from the server and are not in this file",
+    "visit": "The visit screen: one visit from arriving to leaving — check in, check out, the recording bar, and the actions during and after the visit",
+    "adverse": "Flag a possible side effect (adverse event), opened from a visit. The guidance about what the report is and what must not be written stays in English and is not in this file",
+    "report": "The call report: what the rep writes after a visit (what happened, what the doctor raised, the next step, the products discussed), and what happened when they sent it",
+    "samples": "Leave samples: the samples and materials the rep left at a visit, how many, and their declared value, with a note about the UCPMP sample limit",
+    "voiceNote": "The rep's own voice note after a visit: hold a button to record, then save it. Nobody else is in the recording",
+    "queue": "Saved on this phone: the list of the rep's work waiting to send, what is stuck, and why the server refused something",
+    "stepper": "The minus / plus count control (for example, how many packs on Leave samples). Read aloud by a screen reader",
+    "mileage": "Mileage — distance on this month's claim, day by day",
+    "dataSettings": "Mobile data — the WiFi-only and 100 MB settings",
+    "transparency": "What this app records — the list of what is and is never recorded",
+    "liveTracking": "Live location — the screen around the company's notice (the notice itself is not translated here)",
+    "onboarding": "First run (location, notifications, battery & autostart, microphone) and the start-up error screen",
+    "learning": "Learning: the courses assigned to the rep, one course's lessons, and a lesson to read and mark finished, with its video. Course, module and lesson titles, market names and a lesson's text come from the server and are not in this file",
+    "tutor": "The lesson tutor, under a lesson: the rep asks about that lesson and an AI answers only from its text. The answers come from the server and are not in this file"
+  },
+  "keys": {
+    "tabs.today": {
+      "note": "Tab label, under an icon",
+      "max": 12
+    },
+    "tabs.doctors": {
+      "note": "Tab label, under an icon",
+      "max": 12
+    },
+    "tabs.coaching": {
+      "note": "Tab label, under an icon",
+      "max": 12
+    },
+    "tabs.me": {
+      "note": "Tab label, under an icon. The rep's own page",
+      "max": 12
+    },
+    "common.on": {
+      "note": "Beside a switch",
+      "max": 6
+    },
+    "common.off": {
+      "note": "Beside a switch",
+      "max": 6
+    },
+    "common.back": {
+      "note": "A small control at the top left of a screen that returns to the screen before. Also read aloud by a screen reader",
+      "max": 14
+    },
+    "common.noMatch": {
+      "note": "Under a search field at the top of a list, when nothing in the list matches what was typed"
+    },
+    "unplanned.findDoctor": {
+      "note": "Label of a search field at the top of the list of doctors; typing part of a name narrows the list",
+      "max": 30
+    },
+    "common.clearField": {
+      "note": "Spoken by a screen reader; {field} is the field's label"
+    },
+    "common.nOfM": {
+      "note": "A large figure, e.g. 3 of 8 (visits)",
+      "max": 16
+    },
+    "common.km": {
+      "note": "A distance, e.g. 12.4 km"
+    },
+    "common.megabytes": {
+      "note": "A size, e.g. 140 MB"
+    },
+    "settings.comingLater": {
+      "note": "A small badge",
+      "max": 20
+    },
+    "settings.inUse": {
+      "note": "A small badge on the language in use",
+      "max": 16
+    },
+    "settings.languageWaiting": {
+      "note": "{language} is Hindi or Marathi, in English; {done} and {total} are numbers"
+    },
+    "sync.waitingNoSignal": {
+      "note": "One line on a narrow strip; {count} is a number"
+    },
+    "sync.unreadableMeta": {
+      "note": "Small text at the end of the sync line",
+      "max": 30
+    },
+    "today.startVisit": {
+      "note": "Main button; {doctor} is the doctor's name"
+    },
+    "today.continueVisit": {
+      "note": "Main button, at the bottom of Today, for the visit the rep is already in; {doctor} is the doctor's name. Keep it short: it must fit beside a long name"
+    },
+    "today.transparencyDetail": {
+      "note": "The line under 'What this app records about me' on Today, which opens the page listing what is and is never recorded"
+    },
+    "today.seeRoute": {
+      "note": "A small link at the corner of a card; keep the › at the end",
+      "max": 28
+    },
+    "today.lastSyncOtherDay": {
+      "note": "{date} is like 14 Oct; {time} is like 18:05"
+    },
+    "pending.unplanned": {
+      "note": "{reason} is what the rep typed"
+    },
+    "dayEnd.title": {
+      "note": "Screen title, e.g. 'Today at a glance'; {day} is the word for Today"
+    },
+    "dayEnd.captureNotePaused": {
+      "note": "Under 'Nothing is being recorded.' when the rep has agreed to share live location but it is paused right now (outside working hours, or not started today). Must stay exactly true: nothing is read now"
+    },
+    "dayEnd.liveSharingTitle": {
+      "note": "Heading on Day end while the rep's live location IS being shared. Replaces 'Nothing is being recorded.', which would be false"
+    },
+    "dayEnd.captureNoteSharing": {
+      "note": "Under the heading above: exactly when this app reads the rep's position while live location is shared. Must stay exactly true"
+    },
+    "dayEnd.stillCheckedIn_one": {
+      "note": "In place of 'Last check-out 18:22' while the rep is still inside a visit"
+    },
+    "dayEnd.stillCheckedIn_other": {
+      "note": "In place of 'Last check-out 18:22' while the rep is still inside visits; {count} is a number"
+    },
+    "dayEnd.endMyDay": {
+      "note": "Button",
+      "max": 24
+    },
+    "tracking.lastRefused": {
+      "note": "{reason} is one of the tracking.refused… sentences"
+    },
+    "tracking.lastNone": {
+      "note": "Under 'Your live location is being shared…' before the phone has sent any position"
+    },
+    "tracking.lastKept": {
+      "note": "Under 'Your live location is being shared…' once the last position reached the company"
+    },
+    "remedy.figures": {
+      "note": "{figures} is technical text from the server, left as it is"
+    },
+    "errors.reference": {
+      "note": "{code} is a five-character error code"
+    },
+    "home.teamDetail": {
+      "note": "Under 'Team' on a field manager's home in this app. The web console is the company's website for managers and administrators"
+    },
+    "home.adminDetail": {
+      "note": "Under 'Administration' on an administrator's home in this app. The web console is the company's website for managers and administrators"
+    },
+    "doctors.searchLabel": {
+      "note": "Label of the search box on the doctor list"
+    },
+    "doctors.emptyFilterAndSearch": {
+      "note": "{filter} is the name of the chosen filter chip; {query} is what the rep typed"
+    },
+    "doctors.emptyFilter": {
+      "note": "{filter} is the name of the chosen filter chip"
+    },
+    "doctors.overdue": {
+      "note": "Badge on a doctor not seen for 30 days or more",
+      "max": 14
+    },
+    "doctors.countShown": {
+      "note": "{shown} rows on screen after searching, {total} doctors in all"
+    },
+    "doctors.filterAll": {
+      "note": "Filter chip: every doctor",
+      "max": 14
+    },
+    "doctors.filterOverdue": {
+      "note": "Filter chip: doctors not seen in 30 days. 'd' is days",
+      "max": 14
+    },
+    "doctors.filterOnPlan": {
+      "note": "Filter chip: doctors on today's beat plan",
+      "max": 14
+    },
+    "doctors.neverVisited": {
+      "note": "Under a doctor's name, lower case: the rep has never visited them"
+    },
+    "doctors.seenToday": {
+      "note": "Under a doctor's name, lower case: last visited today. Also the large figure on a doctor's profile, under 'Your last visit', where the app capitalises its first letter"
+    },
+    "doctors.seenYesterday": {
+      "note": "Under a doctor's name, lower case: last visited yesterday. Also the large figure on a doctor's profile, where the app capitalises its first letter"
+    },
+    "doctors.inVisitNow": {
+      "note": "On a doctor's profile while the rep is checked in with them, above when they last visited"
+    },
+    "doctors.inVisitFirst": {
+      "note": "On a doctor's profile while the rep is checked in with them for the first time"
+    },
+    "doctors.daysAgo": {
+      "note": "Last visit, lower case. {days} is always 2 to 13"
+    },
+    "doctors.weeksAgo": {
+      "note": "Last visit, lower case. {weeks} is always 2 to 8"
+    },
+    "doctors.monthsAgo": {
+      "note": "Last visit, lower case. {months} is always 2 or more"
+    },
+    "doctors.lastSeenOn": {
+      "note": "Lower case. {date} is a date such as '9 Sep'"
+    },
+    "doctors.boundary": {
+      "note": "A promise printed on every doctor profile (decision C14): the app records nothing about prescribing or patients. Keep the meaning exact — it must not soften or add anything"
+    },
+    "doctors.nameFallback": {
+      "note": "Shown as the heading while the doctor's name has not loaded"
+    },
+    "doctors.notInYourList": {
+      "note": "Shown in place of a doctor's name when the plan names a doctor this phone does not hold"
+    },
+    "doctors.bestTime": {
+      "note": "Card heading over a sentence such as 'Tuesdays and Thursdays, 09:00–13:00 — from your last 5 visits.'"
+    },
+    "doctors.consentAgreed": {
+      "note": "Lower case, after a visit's duration: the doctor agreed to the visit being recorded"
+    },
+    "doctors.consentDeclined": {
+      "note": "Lower case: the doctor declined recording. Not a failure"
+    },
+    "doctors.consentNotAsked": {
+      "note": "Lower case: the rep did not ask about recording. Never a fault"
+    },
+    "doctors.availability": {
+      "note": "{days} is a list of weekdays such as 'Tuesdays and Thursdays'; {window} a clock range such as '09:00–13:00'; {visits} is 3 to 5"
+    },
+    "doctors.daysAnd": {
+      "note": "Joins the last weekday onto a list: {list} is 'Mondays, Tuesdays', {last} is 'Fridays'"
+    },
+    "route.title": {
+      "note": "Screen title",
+      "max": 24
+    },
+    "route.plannedDone": {
+      "note": "Header under the title: how many stops are planned and how many are done"
+    },
+    "route.nextStop": {
+      "note": "Small heading on the card of the stop to walk to next",
+      "max": 20
+    },
+    "route.notStarted": {
+      "note": "On a stop the rep has not begun yet"
+    },
+    "route.timeOnPhone": {
+      "note": "{time} is a clock time such as '10:04' this phone recorded and the server has not confirmed yet"
+    },
+    "route.durationMinutes_one": {
+      "note": "How long a visit lasted, in minutes, short form. {count} is a whole number",
+      "max": 16
+    },
+    "route.durationMinutes_other": {
+      "note": "How long a visit lasted, in minutes, short form. {count} is a whole number",
+      "max": 16
+    },
+    "route.durationHours_one": {
+      "note": "How long a visit lasted, in hours, short form. {count} is a whole number",
+      "max": 14
+    },
+    "route.durationHours_other": {
+      "note": "How long a visit lasted, in hours, short form. {count} is a whole number",
+      "max": 14
+    },
+    "route.durationHoursMinutes": {
+      "note": "Hours then minutes, e.g. '8 h 4 min'. {hours} and {minutes} are the two short forms above, already filled in"
+    },
+    "route.inProgress": {
+      "note": "Small heading on the card of the stop the rep is checked into right now",
+      "max": 20
+    },
+    "route.stopCancelled": {
+      "note": "Lower case: this stop was called off. A normal event, not an error"
+    },
+    "route.stopNotMet": {
+      "note": "Lower case: the rep went and the doctor was not available. Must not blame anyone"
+    },
+    "route.statusSubmitted": {
+      "note": "The plan's state: the rep sent it, no manager has decided. Must never suggest it was approved"
+    },
+    "route.statusApproved": {
+      "note": "The plan's state: a manager approved it"
+    },
+    "route.statusDraft": {
+      "note": "The plan's state: written, not yet sent to the manager"
+    },
+    "route.statusRejected": {
+      "note": "The plan's state: the manager sent it back"
+    },
+    "unplanned.doctorLabel": {
+      "note": "Field label",
+      "max": 20
+    },
+    "unplanned.allPlanned": {
+      "note": "When every doctor on the phone is already on today's plan, so none can be added as unplanned. 'Today's route' is the beat plan screen"
+    },
+    "unplanned.clinicLabel": {
+      "note": "Field label",
+      "max": 20
+    },
+    "unplanned.reasonLabel": {
+      "note": "Field label",
+      "max": 20
+    },
+    "unplanned.start": {
+      "note": "Main button",
+      "max": 28
+    },
+    "unplanned.starting": {
+      "note": "Main button while the visit is being made",
+      "max": 28
+    },
+    "unplanned.notSavedTitle": {
+      "note": "NOT is in capitals for emphasis: nothing was kept on the phone"
+    },
+    "unplanned.problemReasonLong": {
+      "note": "{max} is the most characters a reason may have (500)"
+    },
+    "map.noLocation": {
+      "note": "Heading over the clinics that have no position recorded, so are not on the map"
+    },
+    "map.noClinic": {
+      "note": "In place of a clinic address: this doctor has no clinic recorded"
+    },
+    "coaching.title": {
+      "note": "Screen heading",
+      "max": 24
+    },
+    "coaching.period": {
+      "note": "Heading at the top of the feed"
+    },
+    "coaching.youReplied": {
+      "note": "{time} is a clock time, e.g. 20:10"
+    },
+    "coaching.trendNote": {
+      "note": "Under a small bar chart of the rep's own monthly counts. Must say it is not a score"
+    },
+    "coaching.seenFirstTitle": {
+      "note": "Banner title. The rep sees an analysis before their manager acts on it"
+    },
+    "coaching.reviewed_one": {
+      "note": "{count} visits of {total} were looked at; most never are. Always shows the total"
+    },
+    "coaching.reviewed_other": {
+      "note": "{count} visits of {total} were looked at; most never are. Always shows the total"
+    },
+    "coaching.statusRefused": {
+      "note": "The AI declined to write anything rather than guess. Not an error"
+    },
+    "coaching.serverMismatch": {
+      "note": "{fn} is a server function name, e.g. list_analyses. Do not translate it"
+    },
+    "coaching.loading": {
+      "note": "Spinner label"
+    },
+    "coaching.aiWritten": {
+      "note": "Above AI-written findings, so none reads as a person's note"
+    },
+    "coaching.openIt": {
+      "note": "Button, half the screen width. Opens the analysis",
+      "max": 16
+    },
+    "analysis.consentAgreed": {
+      "note": "After the date, e.g. 'Thu 14 Aug · they agreed to recording'. Lower case"
+    },
+    "analysis.consentNoRecording": {
+      "note": "After the date, e.g. 'Thu 14 Aug · no recording was made'. Lower case"
+    },
+    "analysis.thisVisit": {
+      "note": "Stands in for the doctor's name or the date when they are not known"
+    },
+    "analysis.audioDeleted": {
+      "note": "Small line under a quote from the transcript. Lower case"
+    },
+    "analysis.audioKept": {
+      "note": "Small line under a quote from the transcript. {days} is always 1 or more. Lower case"
+    },
+    "analysis.loading": {
+      "note": "Spinner label"
+    },
+    "analysis.tryNext_one": {
+      "note": "Section heading above the findings to work on"
+    },
+    "analysis.tryNext_other": {
+      "note": "Section heading above the findings to work on"
+    },
+    "analysis.workedWell": {
+      "note": "Card heading",
+      "max": 24
+    },
+    "analysis.oneThingToTry": {
+      "note": "Card heading",
+      "max": 24
+    },
+    "analysis.advisory": {
+      "note": "Small tag on a finding the manager judges. The AI only advises"
+    },
+    "analysis.agree": {
+      "note": "Button, half the screen width, beside Disagree. Same weight as Disagree",
+      "max": 14
+    },
+    "analysis.disagree": {
+      "note": "Button, half the screen width, beside Agree. Same weight as Agree",
+      "max": 14
+    },
+    "analysis.overrideReason": {
+      "note": "Field label: the manager's one-line reason, which is logged"
+    },
+    "analysis.logOverride": {
+      "note": "Button",
+      "max": 28
+    },
+    "common.cancel": {
+      "note": "Button",
+      "max": 12
+    },
+    "reply.title": {
+      "note": "Screen heading, and a label above the rep's reply"
+    },
+    "reply.add": {
+      "note": "Button, sometimes half the screen width",
+      "max": 20
+    },
+    "reply.change": {
+      "note": "Button",
+      "max": 24
+    },
+    "reply.edit": {
+      "note": "Button",
+      "max": 24
+    },
+    "reply.composeLabel": {
+      "note": "Field label"
+    },
+    "reply.thisAnalysis": {
+      "note": "After 'Replying to', when the finding's own words are not known. Lower case"
+    },
+    "reply.stillOnScreen": {
+      "note": "Added after the reason a reply was refused"
+    },
+    "reply.saved": {
+      "note": "Banner title, a completion not a warning",
+      "max": 20
+    },
+    "reply.replyingTo": {
+      "note": "Label above the finding the reply answers"
+    },
+    "reply.fieldLabel": {
+      "note": "Field label"
+    },
+    "reply.saveDraft": {
+      "note": "Button",
+      "max": 24
+    },
+    "reply.saveDraftBlocked": {
+      "note": "Under a disabled button: why it cannot be pressed"
+    },
+    "reply.send": {
+      "note": "Button",
+      "max": 20
+    },
+    "reply.sendBlocked": {
+      "note": "Under a disabled button: why it cannot be pressed"
+    },
+    "reply.sending": {
+      "note": "Button label while the reply is sending",
+      "max": 20
+    },
+    "reply.sendNote": {
+      "note": "Small line under the Send button"
+    },
+    "ai.warningTitle": {
+      "note": "{used} and {limit} are numbers of requests"
+    },
+    "ai.warningResetsAt": {
+      "note": "{time} is ai.resetLabel, e.g. \"18:05 on 14 Oct\""
+    },
+    "ai.limitResetsAt": {
+      "note": "{time} is ai.resetLabel, e.g. \"18:05 on 14 Oct\""
+    },
+    "ai.resetLabel": {
+      "note": "When the daily allowance resets. {time} is a clock time (18:05), {date} a day and month (14 Oct)"
+    },
+    "ai.playRecordingAt": {
+      "note": "Read aloud by a screen reader. {timestamp} is a position in the recording, e.g. 02:14"
+    },
+    "assistant.youAsked": {
+      "note": "Read aloud by a screen reader before the rep's own question. {question} is what the rep typed"
+    },
+    "assistant.answerLabel": {
+      "note": "Small label above an answer from the assistant",
+      "max": 24
+    },
+    "assistant.send": {
+      "note": "Button",
+      "max": 16
+    },
+    "assistant.sending": {
+      "note": "Button, while sending",
+      "max": 16
+    },
+    "assistant.sendAgain": {
+      "note": "Button",
+      "max": 20
+    },
+    "productQa.ask": {
+      "note": "Button",
+      "max": 16
+    },
+    "productQa.asking": {
+      "note": "Button, while asking",
+      "max": 16
+    },
+    "productQa.approvedSources": {
+      "note": "Badge above the list of sources an answer came from",
+      "max": 24
+    },
+    "productQa.showDetails": {
+      "note": "Button. {n} is how many sources"
+    },
+    "productQa.sourceLabel": {
+      "note": "One source of an answer. {title} is a document title, {version} a number, {reference} a reference code — all from the server"
+    },
+    "productQa.sourceLabelSection": {
+      "note": "One source of an answer. {title} is a document title, {version} a number, {section} a section heading, {reference} a reference code — all from the server"
+    },
+    "productQa.anyProduct": {
+      "note": "First choice in the product picker: ask across all products"
+    },
+    "practice.aiBadge": {
+      "note": "Badge at the top of a practice conversation",
+      "max": 20
+    },
+    "practice.send": {
+      "note": "Button",
+      "max": 16
+    },
+    "practice.sending": {
+      "note": "Button, while sending",
+      "max": 16
+    },
+    "practice.sendAgain": {
+      "note": "Button",
+      "max": 20
+    },
+    "practice.ending": {
+      "note": "Button, while ending",
+      "max": 20
+    },
+    "practice.starting": {
+      "note": "Button, while starting",
+      "max": 20
+    },
+    "practice.stanceReceptive": {
+      "note": "How the practice doctor behaves; a short label after the doctor's name and specialty, separated by a dot, with a capital in English",
+      "max": 20
+    },
+    "practice.stanceSceptical": {
+      "note": "How the practice doctor behaves; a short label after the doctor's name and specialty, separated by a dot, with a capital in English",
+      "max": 20
+    },
+    "practice.stanceRushed": {
+      "note": "How the practice doctor behaves; a short label after the doctor's name and specialty, separated by a dot, with a capital in English",
+      "max": 20
+    },
+    "practice.stanceHostile": {
+      "note": "How the practice doctor behaves; a short label after the doctor's name and specialty, separated by a dot, with a capital in English",
+      "max": 20
+    },
+    "practice.startedAt": {
+      "note": "Under a past practice session: when it started. {date} is like 15 Oct; {time} is like 14:40"
+    },
+    "practice.theyWillSay": {
+      "note": "{objection} is the objection the practice doctor will raise, from the server"
+    },
+    "practice.youTurn": {
+      "note": "Label above the rep's line. {n} is the turn number"
+    },
+    "practice.doctorTurn": {
+      "note": "Label above the AI doctor's line. {name} is the practice doctor's name, {n} the turn number"
+    },
+    "practice.theAiDoctor": {
+      "note": "Used inside practice.practiceWith when the doctor's name is not known, so lower case in English"
+    },
+    "practice.practiceWith": {
+      "note": "{name} is the practice doctor's name, or practice.theAiDoctor"
+    },
+    "practice.score": {
+      "note": "{score} is a number from 0 to 100"
+    },
+    "practice.turn": {
+      "note": "Which turn of the conversation a finding is about. {n} is the turn number"
+    },
+    "practice.dimOpening": {
+      "note": "One of seven scored areas of a practice conversation"
+    },
+    "practice.dimProductKnowledge": {
+      "note": "One of seven scored areas of a practice conversation"
+    },
+    "practice.dimScientificAccuracy": {
+      "note": "One of seven scored areas of a practice conversation"
+    },
+    "practice.dimObjectionHandling": {
+      "note": "One of seven scored areas of a practice conversation"
+    },
+    "practice.dimResponseRelevance": {
+      "note": "One of seven scored areas of a practice conversation"
+    },
+    "practice.dimCommunication": {
+      "note": "One of seven scored areas of a practice conversation"
+    },
+    "practice.dimClosing": {
+      "note": "One of seven scored areas of a practice conversation"
+    },
+    "visit.thisVisit": {
+      "note": "Stands in for the doctor's name as the heading when it is not known"
+    },
+    "visit.checkInAction": {
+      "note": "Main button. Keep the dash: what the rep says, then what pressing does",
+      "max": 32
+    },
+    "visit.checkOutAction": {
+      "note": "Main button. Keep the dash: what the rep says, then what pressing does",
+      "max": 32
+    },
+    "visit.findingPosition": {
+      "note": "Main button while the phone reads its position",
+      "max": 32
+    },
+    "visit.fixUnavailable": {
+      "note": "{reason} is a sentence from the phone, sometimes in English from the phone's own system"
+    },
+    "visit.checkInApproximate": {
+      "note": "One plain line under the check-in time (decision BE-C5). Must say nothing about consequences — no manager, no review, no pay"
+    },
+    "visit.checkInOutside": {
+      "note": "One plain line under the check-in time (decision BE-C5). Must say nothing about consequences — no manager, no review, no pay"
+    },
+    "visit.checkedIn": {
+      "note": "{time} is a clock time such as 11:56"
+    },
+    "visit.checkedInAndOut": {
+      "note": "{checkedIn} and {checkedOut} are clock times such as 11:56"
+    },
+    "visit.stageDuring": {
+      "note": "The server has confirmed the check-in"
+    },
+    "visit.stageDuringPending": {
+      "note": "This phone recorded the check-in and the server has not confirmed it. Must not read as confirmed"
+    },
+    "visit.stageAfterPending": {
+      "note": "This phone recorded the check-out and the server has not confirmed it. Must not read as confirmed"
+    },
+    "visit.stepCheckIn": {
+      "note": "A small step badge, one of four in a row",
+      "max": 16
+    },
+    "visit.stepWithDoctor": {
+      "note": "A small step badge, one of four in a row on a narrow phone: keep it as short as \"Check out\" (FE-W198)",
+      "max": 12
+    },
+    "visit.stepCheckOut": {
+      "note": "A small step badge, one of four in a row",
+      "max": 16
+    },
+    "visit.stepReport": {
+      "note": "A small step badge, one of four in a row",
+      "max": 16
+    },
+    "visit.stepDone": {
+      "note": "Spoken by a screen reader for a finished step (the tick is drawn, not written). {step} is one of the visit.step… words"
+    },
+    "visit.stepNow": {
+      "note": "Spoken by a screen reader for the step the rep is on now. {step} is one of the visit.step… words"
+    },
+    "visit.recordingSwitchedOff": {
+      "note": "Under 'The doctor agreed to a recording.' when consultation recording is turned off for the company or this app, so nothing is recorded"
+    },
+    "visit.progress": {
+      "note": "Spoken by a screen reader for the row of step badges"
+    },
+    "visit.loading": {
+      "note": "Spinner label"
+    },
+    "visit.unplanned": {
+      "note": "A small badge: the rep made this visit without a plan",
+      "max": 14
+    },
+    "visit.directions": {
+      "note": "Small button: opens the phone's maps app at the clinic",
+      "max": 20
+    },
+    "visit.withTheDoctor": {
+      "note": "Lower case, after a duration such as 17 min"
+    },
+    "visit.consentDeclined": {
+      "note": "The doctor said no to recording. An ordinary outcome, not a failure — no warning tone"
+    },
+    "visit.consentAgreed": {
+      "note": "Does not say he or she: the app does not know the doctor's gender"
+    },
+    "visit.recordingAgreedAt": {
+      "note": "On the recording bar. {time} is the clock time the doctor agreed, such as 11:58"
+    },
+    "visit.recordingWithElapsed": {
+      "note": "Spoken by a screen reader. {state} is one of the visit.recording… words; {elapsed} is like 02:41"
+    },
+    "visit.recordingPausedBecause": {
+      "note": "{reason} is why it paused, such as 'a call came in'"
+    },
+    "visit.recordingRefused": {
+      "note": "{message} is the app's own sentence for the refusal, already in the reader's language (FE-W197)"
+    },
+    "visit.notSaved": {
+      "note": "NOT is in capitals for emphasis: nothing was kept on the phone"
+    },
+    "visit.doctorSaidNo": {
+      "note": "Must not blame or pressure anyone; the visit carries on"
+    },
+    "visit.doctorWithdrew": {
+      "note": "Not the same as 'said no': the doctor agreed first"
+    },
+    "adverse.title": {
+      "note": "Screen title. A rep flags what they heard; they do not assess it"
+    },
+    "adverse.send": {
+      "note": "Main button",
+      "max": 24
+    },
+    "adverse.sending": {
+      "note": "Main button while sending",
+      "max": 24
+    },
+    "adverse.writeFirst": {
+      "note": "Under the disabled Send button: why it cannot be pressed"
+    },
+    "adverse.sent": {
+      "note": "Banner title: the server has the flag",
+      "max": 24
+    },
+    "adverse.saved": {
+      "note": "Banner title: kept on the phone, NOT yet sent. Must not read as sent",
+      "max": 24
+    },
+    "adverse.notSaved": {
+      "note": "NOT is in capitals for emphasis: nothing was kept on the phone"
+    },
+    "adverse.notSavedYet": {
+      "note": "Banner title",
+      "max": 24
+    },
+    "adverse.whatHappened": {
+      "note": "Field label",
+      "max": 24
+    },
+    "common.backToVisit": {
+      "note": "Button after something was sent or saved",
+      "max": 32
+    },
+    "report.thisVisit": {
+      "note": "Stands in for the doctor's name when the phone does not have it"
+    },
+    "report.keepOpen": {
+      "note": "Follows a sentence saying what went wrong"
+    },
+    "report.send": {
+      "note": "Main button",
+      "max": 32
+    },
+    "report.sending": {
+      "note": "Main button while sending",
+      "max": 32
+    },
+    "report.summaryLabel": {
+      "note": "Text box label"
+    },
+    "report.objectionsLabel": {
+      "note": "Text box label: what the doctor objected to or pushed back on"
+    },
+    "report.nextStepLabel": {
+      "note": "Text box label"
+    },
+    "samples.thisVisit": {
+      "note": "Stands in for the doctor's name when the phone does not have it"
+    },
+    "samples.recordedDetail": {
+      "note": "{n} is how many lines were sent, a number"
+    },
+    "samples.queuedDetail": {
+      "note": "{n} is how many lines were saved, a number"
+    },
+    "samples.errorName": {
+      "note": "Keep the example pack name \"Elmiron 100 mg, 30s\" exactly as written: it is a product name"
+    },
+    "samples.errorQuantity": {
+      "note": "The plus key is the + button beside the count"
+    },
+    "samples.capNote": {
+      "note": "UCPMP is the Indian code on pharmaceutical marketing practices; keep the name UCPMP"
+    },
+    "samples.dateToday": {
+      "note": "After the doctor's name and a dot, in place of a date: \"Dr Rao · today\""
+    },
+    "samples.dateThisVisit": {
+      "note": "After the doctor's name and a dot, in place of a date: \"Dr Rao · this visit\""
+    },
+    "samples.kindSample": {
+      "note": "Choice: a sample of a medicine"
+    },
+    "samples.kindInput": {
+      "note": "Choice: printed literature or other material, not a medicine"
+    },
+    "samples.record": {
+      "note": "Main button",
+      "max": 32
+    },
+    "samples.recording": {
+      "note": "Main button while sending",
+      "max": 32
+    },
+    "samples.packs": {
+      "note": "Label above the count; also read in \"One more Packs\"",
+      "max": 20
+    },
+    "samples.valueLabel": {
+      "note": "Text box label; ₹ is rupees, the value of one pack"
+    },
+    "samples.capHeading": {
+      "note": "UCPMP is the Indian code on pharmaceutical marketing practices; keep the name UCPMP"
+    },
+    "samples.capOf": {
+      "note": "After a big number: \"6 of 12 packs\". {unit} is already in the reader's language"
+    },
+    "voiceNote.refused": {
+      "note": "{message} is the app's own sentence for the refusal, already in the reader's language (FE-W197)"
+    },
+    "voiceNote.microphoneOff": {
+      "note": "In a banner when the microphone is off. The voice note is the rep's own note: no doctor is in it, so never mention the doctor's agreement (FE-W198)"
+    },
+    "voiceNote.openSettings": {
+      "note": "Button in that banner: opens the phone's settings for this app. Settings is the phone's own word"
+    },
+    "voiceNote.subject": {
+      "note": "{doctor} is the doctor's name, or \"this visit\""
+    },
+    "voiceNote.thisVisit": {
+      "note": "Stands in for the doctor's name, inside \"Your note · this visit\""
+    },
+    "voiceNote.statusBlocked": {
+      "note": "Small line under the timer, in sentence case like every other line"
+    },
+    "voiceNote.statusRecording": {
+      "note": "Small line under the timer while the rep holds the record button"
+    },
+    "voiceNote.statusRecorded": {
+      "note": "Small line under the timer once a note is recorded and not yet saved"
+    },
+    "voiceNote.statusIdle": {
+      "note": "Small line under the timer before anything is recorded; the record button is at the bottom of the screen"
+    },
+    "voiceNote.holdLabel": {
+      "note": "Read aloud by a screen reader for the hold button"
+    },
+    "voiceNote.holding": {
+      "note": "On the hold button while the finger is on it",
+      "max": 28
+    },
+    "voiceNote.hold": {
+      "note": "On the hold button",
+      "max": 28
+    },
+    "voiceNote.save": {
+      "note": "Button",
+      "max": 32
+    },
+    "voiceNote.startAgain": {
+      "note": "Button: throw this recording away and record again",
+      "max": 32
+    },
+    "queue.stateSent": {
+      "note": "Status of one item",
+      "max": 24
+    },
+    "queue.lastSent": {
+      "note": "Under 'Everything is sent'; {time} is a clock time such as 16:52"
+    },
+    "queue.supportSubject": {
+      "note": "Subject of the email the rep's mail app opens when they press 'Tell the help desk'. The help desk reads it"
+    },
+    "queue.supportBody": {
+      "note": "First line of that email, in the rep's voice. The lines below it are the references"
+    },
+    "queue.supportLine": {
+      "note": "One line of that email: {what} is what the work is (e.g. Call report), {code} the reference the screen shows, {id} a long technical id. Keep all three"
+    },
+    "queue.supportNoCode": {
+      "note": "Put in place of {code} in that line when the server gave no reference"
+    },
+    "queue.stateWaiting": {
+      "note": "Status of one item",
+      "max": 24
+    },
+    "queue.stateWaitingWifi": {
+      "note": "Status of one item",
+      "max": 24
+    },
+    "queue.stateWaitingLong": {
+      "note": "Status of one item: tried several times, still trying",
+      "max": 24
+    },
+    "queue.stateRefused": {
+      "note": "Status of one item: the server said no",
+      "max": 24
+    },
+    "queue.stateNeedsAttention": {
+      "note": "Status of one item: a person has to look at it before it can go",
+      "max": 24
+    },
+    "queue.entityVisit": {
+      "note": "A kind of saved work. Also used inside a sentence, in lower case for English"
+    },
+    "queue.entityConsentRecord": {
+      "note": "A kind of saved work: the doctor's answer to being recorded"
+    },
+    "queue.entitySampleAndInput": {
+      "note": "A kind of saved work: the samples left at a visit"
+    },
+    "queue.entityAdverseEvent": {
+      "note": "A kind of saved work: the rep flagged a possible side effect"
+    },
+    "queue.entityWorkDay": {
+      "note": "A kind of saved work: starting or ending the working day"
+    },
+    "queue.listAnd": {
+      "note": "Joins the last item of a list: \"call report, check-in and voice note\". {rest} already holds the earlier items, separated by commas"
+    },
+    "queue.stuck": {
+      "note": "{things} is a list of kinds of work, for example \"call report and voice note\""
+    },
+    "queue.wentThrough": {
+      "note": "{things} is a list of kinds of work, for example \"check-in and check-out\""
+    },
+    "queue.tryAgainNow": {
+      "note": "Button",
+      "max": 24
+    },
+    "queue.tellHelpDesk": {
+      "note": "Button",
+      "max": 24
+    },
+    "queue.sendNowSize": {
+      "note": "Button. {size} is a size like \"2.1 MB\""
+    },
+    "queue.serverRecorded": {
+      "note": "{time} is the server's own timestamp, shown as the server sent it"
+    },
+    "queue.reference": {
+      "note": "{code} is a code for support, not translated"
+    },
+    "queue.serverRefused": {
+      "note": "Used only when the server gave no reason of its own"
+    },
+    "stepper.fewer": {
+      "note": "Read aloud for the minus button. {label} is the control's own label, like \"Packs\""
+    },
+    "stepper.more": {
+      "note": "Read aloud for the plus button. {label} is the control's own label, like \"Packs\""
+    },
+    "mileage.dayRow_one": {
+      "note": "{distance} is like 41.3 km; {count} is the number of check-ins that day"
+    },
+    "mileage.dayRow_other": {
+      "note": "{distance} is like 41.3 km; {count} is the number of check-ins that day"
+    },
+    "transparency.neverRecorded": {
+      "note": "A promise about privacy. Keep it exact; do not soften it"
+    },
+    "transparency.neverRecordedLive": {
+      "note": "A promise about privacy. Keep it exact; do not soften it"
+    },
+    "liveTracking.draftTitle": {
+      "note": "A warning above an unapproved notice; keep DRAFT prominent"
+    },
+    "liveTracking.agree": {
+      "note": "Button. The rep agrees to the company's live location notice, which is shown in English"
+    },
+    "onboarding.notNow": {
+      "note": "Button",
+      "max": 24
+    },
+    "onboarding.continue": {
+      "note": "Button",
+      "max": 24
+    },
+    "onboarding.done": {
+      "note": "Button that closes a setup screen opened from Me and goes back to Me",
+      "max": 24
+    },
+    "onboarding.stepOf": {
+      "note": "Small line above a first-run screen's headline, e.g. Step 2 of 4; {n} and {total} are numbers",
+      "max": 20
+    },
+    "onboarding.locationWithLive": {
+      "note": "Title of a dark card on the first-run location screen, in a build where live location exists but is not running now. Must stay true: position is read at check-in/out, and only if the rep shares live location"
+    },
+    "onboarding.locationWithLiveDetail": {
+      "note": "Under onboarding.locationWithLive. Says exactly when a position is read; keep every condition"
+    },
+    "onboarding.locationSharingNow": {
+      "note": "Title of the same card while the rep is sharing live location right now"
+    },
+    "onboarding.locationSharingNowDetail": {
+      "note": "Under onboarding.locationSharingNow. 'Live location' is the name of the screen where sharing is stopped"
+    },
+    "signIn.showPassword": {
+      "note": "A small control under the password field that shows the letters typed. A screen reader reads it as a switch",
+      "max": 20
+    },
+    "signIn.hidePassword": {
+      "note": "The same control while the password is shown",
+      "max": 20
+    },
+    "signIn.wrongDetails": {
+      "note": "Under 'Could not sign in', when the email and password do not match an account"
+    },
+    "signIn.notConfirmed": {
+      "note": "Under 'Could not sign in', when the account exists but was never confirmed"
+    },
+    "signIn.tooMany": {
+      "note": "Under 'Could not sign in', after too many attempts in a short time"
+    },
+    "signIn.switchedOff": {
+      "note": "Under 'Could not sign in', when the company has disabled the account"
+    },
+    "signIn.otherProblem": {
+      "note": "Under 'Could not sign in', for any other refusal; a 'Reference: 500.' may follow it"
+    },
+    "me.signedInAs": {
+      "note": "Under the title on Me; {who} is the account's name and email, e.g. Asha Patil · asha@company.in"
+    },
+    "me.version": {
+      "note": "Small line at the bottom of Me; {version} is like 1.2.0",
+      "max": 40
+    },
+    "me.versionBuild": {
+      "note": "Small line at the bottom of Me; {version} is like 1.2.0 and {build} a number",
+      "max": 40
+    },
+    "transparency.checkInLocationDetailLive": {
+      "note": "In a build with live location: the check-in row's detail, without 'never between visits' (live location reads between visits when shared)"
+    },
+    "onboarding.stepDone": {
+      "note": "A small toggle on a setup step, when it is marked done",
+      "max": 16
+    },
+    "onboarding.markDone": {
+      "note": "A small toggle on a setup step",
+      "max": 16
+    },
+    "onboarding.whatYouWillSee": {
+      "note": "{text} is what the phone's own settings screen says"
+    },
+    "onboarding.stepState": {
+      "note": "Spoken by a screen reader; {step} is the step, {state} is Done or Mark done"
+    },
+    "onboarding.couldNotOpen": {
+      "note": "{destination} is the name of a phone settings screen, e.g. App info"
+    },
+    "onboarding.screenAutostart": {
+      "note": "The name Xiaomi phones give this settings screen; use the name the phone shows in this language"
+    },
+    "onboarding.screenAutoLaunch": {
+      "note": "The name Oppo and Realme phones give this settings screen; use the name the phone shows in this language"
+    },
+    "onboarding.screenAutoStartVivo": {
+      "note": "The name Vivo phones give this settings screen; use the name the phone shows in this language"
+    },
+    "onboarding.screenAppInfo": {
+      "note": "The Android settings screen for one app; use the name the phone shows in this language"
+    },
+    "onboarding.screenBatteryOptimisation": {
+      "note": "The Android settings screen; use the name the phone shows in this language"
+    },
+    "onboarding.deniedBody": {
+      "note": "14 minutes and ₹600 are the design's estimates; keep the numbers"
+    },
+    "onboarding.capOne": {
+      "note": "{cap} is the number of notifications a day"
+    },
+    "onboarding.capTwo": {
+      "note": "{cap} is the number of notifications a day"
+    },
+    "onboarding.capThree": {
+      "note": "{cap} is the number of notifications a day"
+    },
+    "onboarding.capFour": {
+      "note": "{cap} is the number of notifications a day"
+    },
+    "onboarding.capMany": {
+      "note": "{cap} is the number of notifications a day, more than four"
+    },
+    "onboarding.pushChannel": {
+      "note": "The name of this app's notifications, shown in the phone's own settings"
+    },
+    "onboarding.configError": {
+      "note": "Title of a red banner; the detail under it is technical text left in English"
+    },
+    "home.signedInAsManager": {
+      "note": "Under the title on a field manager's home in this app"
+    },
+    "home.signedInAsAdmin": {
+      "note": "Under the title on an administrator's home in this app"
+    },
+    "learning.due": {
+      "note": "{date} is a day and month, e.g. 15 Oct. After a course's line, e.g. \"Not started · Due 15 Oct\""
+    },
+    "learning.startedOn": {
+      "note": "{date} is a day and month, e.g. 3 Oct. A line under a course's title"
+    },
+    "learning.finishedOn": {
+      "note": "{date} is a day and month, e.g. 3 Oct. A line under a course's title"
+    },
+    "learning.versionForMarket": {
+      "note": "One version of a course, on a Start button when there is a version per market. {title} is the version's title and {market} the market's name, both from the server"
+    },
+    "learning.versionNoMarket": {
+      "note": "One version of a course, on a Start button. {title} is the version's title, from the server"
+    },
+    "learning.startVersion": {
+      "note": "Button. {version} is learning.versionForMarket or learning.versionNoMarket"
+    },
+    "learning.lessonsFinished_one": {
+      "note": "{done} and {count} are numbers of lessons"
+    },
+    "learning.lessonsFinished_other": {
+      "note": "{done} and {count} are numbers of lessons"
+    },
+    "learning.courseFinished": {
+      "note": "{date} is a day and month, e.g. 7 Oct"
+    },
+    "learning.aboutDuration": {
+      "note": "{duration} is a length already worded, e.g. \"30 min\" or \"1 h 30 min\" (route.durationMinutes / route.durationHours). Beside a lesson's title, and under a course's title before it is started"
+    },
+    "learning.lessonNotDone": {
+      "note": "Under a lesson the rep has not finished (whether or not they have opened it), before its length",
+      "max": 16
+    },
+    "learning.courseLessons_one": {
+      "note": "Under a course's title before it is started: how many lessons it has. {count} is a number"
+    },
+    "learning.courseLessons_other": {
+      "note": "Under a course's title before it is started: how many lessons it has. {count} is a number"
+    },
+    "learning.minutes_one": {
+      "note": "{count} is the estimated reading time in minutes"
+    },
+    "learning.minutes_other": {
+      "note": "{count} is the estimated reading time in minutes"
+    },
+    "learning.saving": {
+      "note": "Button label while a finished lesson is being saved. Not 'recording': in this app recording means audio of a doctor"
+    },
+    "learning.stamp": {
+      "note": "When the server recorded a lesson as finished. {time} is a clock time (14:40), {date} a day and month (7 Oct)"
+    },
+    "learning.finishedRecorded": {
+      "note": "{when} is learning.stamp, e.g. \"14:40 on 7 Oct\""
+    },
+    "learning.finishProgress_one": {
+      "note": "{done} and {count} are numbers of lessons"
+    },
+    "learning.finishProgress_other": {
+      "note": "{done} and {count} are numbers of lessons"
+    },
+    "learning.videoLength": {
+      "note": "{length} is the video's length, e.g. 12:34"
+    },
+    "learning.playVideoLength": {
+      "note": "Read aloud by a screen reader. {length} is the video's length, e.g. 12:34"
+    },
+    "learning.playVideo": {
+      "note": "Read aloud by a screen reader on the play button"
+    },
+    "learning.videoPlayHint": {
+      "note": "Read aloud by a screen reader on the play button"
+    },
+    "learning.videoStarting": {
+      "note": "Read aloud by a screen reader while the video starts"
+    },
+    "tutor.badge": {
+      "note": "A small badge above the tutor's answer"
+    },
+    "tutor.moreFrom": {
+      "note": "{when} is ai.resetLabel, e.g. \"00:00 on 10 Oct\""
+    },
+    "home.signedInAs": {
+      "note": "{role} is a role this app does not recognise, written exactly as the server issued it, for support to read. Managers and administrators see home.signedInAsManager / home.signedInAsAdmin instead"
+    }
+  }
+}

@@ -17,6 +17,7 @@
  * to read JSX to find it.
  */
 
+import { t } from '@fieldforce/ui/i18n';
 import type { OemFamily } from './oem';
 
 export interface SetupStep {
@@ -37,6 +38,11 @@ export interface OemContent {
   readonly family: OemFamily;
   /** "A5", for cross-referencing the design. Shown to nobody. */
   readonly screen: string;
+  /**
+   * The phone's own name for its skin, shown over the headline because the MR's phone uses it.
+   * `FE-W192`: empty for the generic screen, which shows none — "Android" there read as a debug
+   * label, and naming the platform tells an MR nothing they did not know.
+   */
   readonly skin: string;
   readonly headline: string;
   /**
@@ -54,76 +60,72 @@ export interface OemContent {
  */
 export const A8_STEP_DETAIL_IS_UNSOURCED = true;
 
-const XIAOMI: OemContent = {
+const XIAOMI = (): OemContent => ({
   family: 'xiaomi',
   screen: 'A5',
   skin: 'MIUI / HyperOS',
-  headline: 'Xiaomi will shut this app off. Two taps stops it.',
-  consequence:
-    "If MIUI closes the app, your check-ins and mileage stop and you'll be entering them by hand.",
+  headline: t('onboarding.xiaomiHeadline'),
+  consequence: t('onboarding.xiaomiConsequence'),
   steps: [
-    { intentId: 'xiaomi-autostart', title: 'Autostart' },
+    { intentId: 'xiaomi-autostart', title: t('onboarding.screenAutostart') },
     {
       intentId: 'xiaomi-battery',
-      title: 'Battery saver → No restrictions',
-      whatYouWillSee: 'Battery saver / No restrictions. Tap the last one, then press back.',
+      title: t('onboarding.stepXiaomiBattery'),
+      whatYouWillSee: t('onboarding.seeXiaomiBattery'),
     },
-    { title: 'Lock the app in Recents' },
+    { title: t('onboarding.stepLockRecents') },
   ],
-};
+});
 
-const OPPO: OemContent = {
+const OPPO = (): OemContent => ({
   family: 'oppo',
   screen: 'A6',
   skin: 'ColorOS',
-  headline: 'ColorOS is the strictest of the four.',
-  consequence:
-    'Three settings in three different places. Worth doing once — otherwise the app dies in your pocket within the hour.',
+  headline: t('onboarding.oppoHeadline'),
+  consequence: t('onboarding.oppoConsequence'),
   steps: [
-    { intentId: 'oppo-autostart', title: 'Auto-launch' },
+    { intentId: 'oppo-autostart', title: t('onboarding.screenAutoLaunch') },
     {
       intentId: 'oppo-battery',
-      title: 'Power saving → Allow background',
-      whatYouWillSee: 'Smart power saving / Allow background activity',
+      title: t('onboarding.stepOppoBattery'),
+      whatYouWillSee: t('onboarding.seeOppoBattery'),
     },
-    { title: 'Sleep standby optimisation → off' },
+    { title: t('onboarding.stepOppoSleep') },
   ],
-};
+});
 
-const VIVO: OemContent = {
+const VIVO = (): OemContent => ({
   family: 'vivo',
   screen: 'A7',
   skin: 'Funtouch OS',
-  headline: "Vivo hides this under 'High background power'.",
-  consequence:
-    "The setting sounds like a warning. It isn't — it's permission to keep running while you walk between clinics.",
+  headline: t('onboarding.vivoHeadline'),
+  consequence: t('onboarding.vivoConsequence'),
   steps: [
-    { intentId: 'vivo-autostart', title: 'Auto-start' },
+    { intentId: 'vivo-autostart', title: t('onboarding.screenAutoStartVivo') },
     {
       intentId: 'vivo-battery',
-      title: 'Allow high background power',
-      whatYouWillSee: 'High background power use. Switch it on, then press back twice.',
+      title: t('onboarding.stepVivoBattery'),
+      whatYouWillSee: t('onboarding.seeVivoBattery'),
     },
-    { title: 'Lock the app in Recents' },
+    { title: t('onboarding.stepLockRecents') },
   ],
-};
+});
 
-const REALME: OemContent = {
+const REALME = (): OemContent => ({
   family: 'realme',
   screen: 'A8',
   skin: 'Realme UI',
-  headline: 'Two settings, same screen. Quickest of the four.',
-  consequence:
-    "Realme puts both in one place. Tap through and you're done in about fifteen seconds.",
+  headline: t('onboarding.realmeHeadline'),
+  consequence: t('onboarding.realmeConsequence'),
   // Two steps, because the extract says "two settings". Their titles are the two
   // settings A6 names, which Realme UI inherits from ColorOS. No `whatYouWillSee` on
   // either: the extract does not give Realme's wording and guessing it would defeat
   // the point of the line, which is to confirm the MR is on the right screen.
   steps: [
-    { intentId: 'realme-autostart', title: 'Auto-launch' },
-    { intentId: 'realme-battery', title: 'Allow background activity' },
+    { intentId: 'realme-autostart', title: t('onboarding.screenAutoLaunch') },
+    { intentId: 'realme-battery', title: t('onboarding.stepRealmeBattery') },
   ],
-};
+});
 
 /**
  * The generic screen, for the majority of devices.
@@ -132,28 +134,31 @@ const REALME: OemContent = {
  * calls these settings, because it does not know. Naming a screen that is not there
  * is the same failure as sending a Realme user to ColorOS instructions.
  */
-const UNKNOWN: OemContent = {
+const UNKNOWN = (): OemContent => ({
   family: 'unknown',
   screen: '—',
-  skin: 'Android',
-  headline: 'Stop Android putting this app to sleep.',
-  consequence:
-    "If the phone sleeps the app, your check-ins and mileage stop and you'll be entering them by hand.",
+  skin: '',
+  headline: t('onboarding.genericHeadline'),
+  consequence: t('onboarding.genericConsequence'),
   steps: [
     {
       intentId: 'unknown-battery',
-      title: 'Allow the app to run in the background',
-      whatYouWillSee: 'Battery optimisation. Find this app in the list and allow it.',
+      title: t('onboarding.stepGenericBattery'),
+      whatYouWillSee: t('onboarding.seeGenericBattery'),
     },
     {
       intentId: 'unknown-app-details',
-      title: 'Check the app is allowed to start on its own',
-      whatYouWillSee: 'App info. The wording differs by phone.',
+      title: t('onboarding.stepGenericStart'),
+      whatYouWillSee: t('onboarding.seeGenericStart'),
     },
   ],
-};
+});
 
-const CONTENT: Readonly<Record<OemFamily, OemContent>> = {
+/**
+ * `FE-W156`. Builders, not objects, so the words are read in the language in use each time a
+ * screen asks for them — never frozen at the moment this module loaded.
+ */
+const CONTENT: Readonly<Record<OemFamily, () => OemContent>> = {
   xiaomi: XIAOMI,
   oppo: OPPO,
   vivo: VIVO,
@@ -165,4 +170,4 @@ const CONTENT: Readonly<Record<OemFamily, OemContent>> = {
  * The screen content for a family. Total — every family has content, so a detection
  * result can always be rendered and there is no "no screen for this device" branch.
  */
-export const contentFor = (family: OemFamily): OemContent => CONTENT[family];
+export const contentFor = (family: OemFamily): OemContent => CONTENT[family]();

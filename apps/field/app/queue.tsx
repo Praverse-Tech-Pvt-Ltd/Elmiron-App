@@ -1,12 +1,26 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { QueueScreen } from '@fieldforce/ui';
-import { QUEUE_UNREADABLE, loadQueueState } from '../src/sync/async-storage-store';
+import { Linking } from 'react-native';
+import { QueueScreen, entityWords, rowStateFor, t, useLanguage } from '@fieldforce/ui';
+import { supportEmail, supportPhone } from '../src/features';
+import { useBack } from '../src/navigation/back';
+import { supportLink } from '../src/support/contact';
+import { indicatorStateFor } from '../src/sync/indicator';
+import { usePulledStore } from '../src/sync/pulled-store';
+import { queueUnreadable, loadQueueState } from '../src/sync/async-storage-store';
 import type { QueueLoad } from '../src/sync/async-storage-store';
 import { flushOutbox } from '../src/sync/outbox';
 import { createPushClient } from '../src/sync/push-client';
 import { presentRejection } from '../src/sync/explanation';
 import { emptyQueue } from '../src/sync/reducer';
+import { megabytes } from '../src/sync/data-use';
+import {
+  deviceUploadConditions,
+  heldAudioIds,
+  sendingAudioAnyway,
+  uploadDevice,
+} from '../src/sync/upload-conditions';
+import { useUploadSnapshot } from '../src/sync/use-upload-snapshot';
 
 /**
  * Route binding. It reads state, passes it down, and renders. Nothing else.
@@ -30,7 +44,19 @@ import { emptyQueue } from '../src/sync/reducer';
  * network operation and `packages/ui` has no client, which is the same boundary
  * that keeps the queue's verdicts server-owned.
  */
+/**
+ * `FE-W153`. Why the last press failed, kept as the error's own message (or none) rather than as the
+ * sentence, so "Nothing has been lost" is read at render, in the app's current language.
+ */
+type RetryFailure = { readonly message: string | null };
+
+const retryFailureText = (failure: RetryFailure): string =>
+  failure.message === null
+    ? t('queue.nothingLost')
+    : `${failure.message} ${t('queue.nothingLost')}`;
+
 export default function Queue(): ReactNode {
+  useLanguage();
   // `FE-W44`. The LOAD, not the state. This is the screen an MR opens when they already
   // suspect something is wrong, and an empty list here used to be what an unreadable store
   // looked like -- the most reassuring possible rendering of the least reassuring fact.
@@ -39,8 +65,42 @@ export default function Queue(): ReactNode {
   // the screen said "Everything is sent" about a queue nobody had looked at. It starts as
   // `reading` now, and the screen claims nothing until the read settles.
   const [load, setLoad] = useState<QueueLoad | { readonly kind: 'reading' }>({ kind: 'reading' });
-  const [retryFailed, setRetryFailed] = useState<string | null>(null);
+  const [retryFailed, setRetryFailed] = useState<RetryFailure | null>(null);
   const state = load.kind === 'loaded' ? load.state : emptyQueue;
+  const back = useBack();
+  // `FE-W191`. The territory's clock, for "Last sent at …" — the same line Today's sync row draws.
+  const { zone } = usePulledStore();
+  const sent = load.kind === 'loaded' ? indicatorStateFor(load, zone) : null;
+  const lastSentLabel =
+    sent?.kind === 'idle' && sent.at !== null ? t('queue.lastSent', { time: sent.at }) : null;
+
+  /*
+    MR-17 B1. Through `presentRejection`, which until now was written, tested and CALLED BY
+    NOTHING -- the reducer's records went straight to the screen, so the remedy it derives and the
+    retry/escalate judgement it makes were both unreachable. This is the line that makes the
+    SQLSTATE mean something to an MR.
+  */
+  const rejections = Object.fromEntries(
+    Object.entries(state.rejections).map(([id, record]) => [id, presentRejection(record)]),
+  );
+
+  /**
+   * `FE-W195`. "Tell the help desk", when the build names one: a message that already carries every
+   * reference the rep would otherwise have to copy off this screen — what each stuck or refused
+   * thing is, the reference its row shows, and its id. No help desk configured: no handler, and the
+   * screen draws no button (its rule since S3).
+   */
+  const references = state.items
+    .filter((item) => {
+      const row = rowStateFor(item, rejections[item.id]);
+      return row === 'refused' || row === 'needs-attention' || row === 'waiting-long';
+    })
+    .map((item) => ({
+      what: entityWords(item.entity),
+      code: rejections[item.id]?.code ?? null,
+      id: item.id,
+    }));
+  const helpDesk = supportLink({ email: supportEmail, phone: supportPhone }, references);
 
   const refresh = (): void => {
     void loadQueueState().then(setLoad);
@@ -48,9 +108,47 @@ export default function Queue(): ReactNode {
 
   useEffect(refresh, []);
 
+  // `FE-W136`. Audio WiFi-only is holding right now, and what sending it anyway would cost.
+  const uploadSnapshot = useUploadSnapshot();
+  const heldIds = heldAudioIds(state.items, uploadSnapshot);
+  const heldBytes =
+    heldIds.length === 0
+      ? null
+      : (uploadDevice()?.heldAudioBytes(state.items.filter((item) => heldIds.includes(item.id))) ??
+        null);
+
   return (
     <QueueScreen
       items={state.items}
+      onBack={back}
+      lastSentLabel={lastSentLabel}
+      {...(helpDesk === null
+        ? {}
+        : {
+            onContactSupport: () => {
+              // The phone's own mail app or dialler. Nothing is sent by this app.
+              void Linking.openURL(helpDesk).catch(() => undefined);
+            },
+          })}
+      waitingForWifi={{
+        ids: heldIds,
+        sizeLabel: heldBytes === null ? null : megabytes(heldBytes),
+        // The MR's deliberate choice, this once: the held audio goes over this network, and what
+        // it uses is counted like any other mobile-data upload. The switch itself is untouched.
+        onSendNow: () => {
+          setRetryFailed(null);
+          void flushOutbox(
+            createPushClient(),
+            undefined,
+            undefined,
+            sendingAudioAnyway(deviceUploadConditions),
+          )
+            .then(refresh)
+            .catch((error: unknown) => {
+              setRetryFailed({ message: error instanceof Error ? error.message : null });
+            });
+        },
+      }}
       readState={
         load.kind === 'reading' ? 'reading' : load.kind === 'unreadable' ? 'unreadable' : 'read'
       }
@@ -59,10 +157,10 @@ export default function Queue(): ReactNode {
       // therefore belongs to the screen, as a prop, which is also where it belongs
       // semantically: it is part of the queue's story, not a thing floating above it.
       {...(load.kind === 'unreadable'
-        ? { retryFailure: QUEUE_UNREADABLE }
+        ? { retryFailure: queueUnreadable() }
         : retryFailed === null
           ? {}
-          : { retryFailure: retryFailed })}
+          : { retryFailure: retryFailureText(retryFailed) })}
       onRetry={() => {
         setRetryFailed(null);
         // **MR-28 C2.** This was `void flushOutbox(...).then(refresh)` with no `.catch`.
@@ -81,22 +179,10 @@ export default function Queue(): ReactNode {
         void flushOutbox(createPushClient())
           .then(refresh)
           .catch((error: unknown) => {
-            setRetryFailed(
-              error instanceof Error
-                ? `${error.message} Nothing has been lost — everything below is still on this phone.`
-                : 'Nothing has been lost — everything below is still on this phone.',
-            );
+            setRetryFailed({ message: error instanceof Error ? error.message : null });
           });
       }}
-      /*
-        MR-17 B1. Through `presentRejection`, which until now was written, tested and
-        CALLED BY NOTHING -- the reducer's records went straight to the screen, so the
-        remedy it derives and the retry/escalate judgement it makes were both unreachable.
-        This is the line that makes the SQLSTATE mean something to an MR.
-      */
-      rejections={Object.fromEntries(
-        Object.entries(state.rejections).map(([id, record]) => [id, presentRejection(record)]),
-      )}
+      rejections={rejections}
     />
   );
 }

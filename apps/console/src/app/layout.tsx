@@ -4,10 +4,18 @@ import { Nav } from '../lib/nav';
 import { TopBar } from '../lib/top-bar';
 import { themeCss } from '../lib/theme-css';
 import { signedIn } from '../lib/session';
+import { callerRole } from '../lib/role';
+import { RoleNote } from '../lib/ui';
 
+/**
+ * `FE-W169` — every tab says which page it is ("Coaching queue · Field Force"): each page exports
+ * its own `metadata.title` and this template adds the product. The description was the first
+ * screen's, "Consent versions, audit and retention", long after the console became more than that.
+ */
 export const metadata = {
-  title: 'Field Force — admin',
-  description: 'Consent versions, audit and retention.',
+  title: { default: 'Field Force', template: '%s · Field Force' },
+  description:
+    'The Field Force console: coaching, planning, live location and the team’s day for managers; content approvals and administration for admins.',
 };
 
 /**
@@ -41,6 +49,8 @@ export default async function RootLayout({
 }): Promise<ReactNode> {
   // MR-52 A1. Read per request, so the sidebar names whoever this browser is signed in as.
   const session = await signedIn();
+  // `FE-W164`: the role decides what the sidebar OFFERS, nothing more (`role.ts`).
+  const role = session === null ? null : await callerRole();
   return (
     <html className={sans.variable} lang="en">
       <head>
@@ -58,10 +68,24 @@ export default async function RootLayout({
             <main className="ff-main-bare">{children}</main>
           ) : (
             <>
-              <Nav signedInEmail={session.email} />
+              <Nav role={role} signedInEmail={session.email} />
               <div className="ff-column">
                 <TopBar />
-                <main className="ff-main">{children}</main>
+                <main className="ff-main">
+                  {/*
+                    `FE-W164`. A rep who signs in here is offered no destination, and is told why
+                    rather than left with an empty sidebar. Every page still answers for itself.
+                  */}
+                  {role === 'mr' ? (
+                    <div className="ff-page ff-page-gap">
+                      <RoleNote>
+                        This console is for managers and admins. Your own work — visits, learning
+                        and practice — is in the Field Force app.
+                      </RoleNote>
+                    </div>
+                  ) : null}
+                  {children}
+                </main>
               </div>
             </>
           )}

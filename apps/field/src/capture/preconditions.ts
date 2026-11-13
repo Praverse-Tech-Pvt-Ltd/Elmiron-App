@@ -33,6 +33,7 @@
  * cold start. The test is what holds the behaviour once the defect is no longer reachable
  * by accident.
  */
+import { t } from '@fieldforce/ui/i18n';
 
 export interface PreconditionMessage {
   readonly title: string;
@@ -52,9 +53,14 @@ export interface PreconditionMessage {
  * consent record saying so would be dangerously false.
  */
 export const VISIT_NOT_AVAILABLE: PreconditionMessage = {
-  title: 'This visit is not on your phone',
-  detail:
-    'It may still be syncing, or it may no longer be yours. Pull down on Today to sync, and if it does not appear, ask your manager.',
+  // `FE-W150`. Getters, so a screen holding this object in state reads it in the app's current
+  // language at render, not in whatever language it was when the press happened.
+  get title() {
+    return t('visit.notOnYourPhone');
+  },
+  get detail() {
+    return t('visit.notOnYourPhoneDetail');
+  },
 };
 
 /**
@@ -66,9 +72,12 @@ export const VISIT_NOT_AVAILABLE: PreconditionMessage = {
  * is far more likely to resolve on its own than a missing visit.
  */
 export const DOCTOR_NOT_AVAILABLE: PreconditionMessage = {
-  title: 'This doctor has not synced yet',
-  detail:
-    'The visit is here but the doctor’s details are not. Give it a moment and try again — nothing is lost.',
+  get title() {
+    return t('visit.doctorNotSynced');
+  },
+  get detail() {
+    return t('visit.doctorNotSyncedDetail');
+  },
 };
 
 /**

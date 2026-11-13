@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
+import { MAX_FONT_SCALE } from './Text';
 
 /**
  * The six states of §02, as a mark rather than as a colour.
@@ -39,6 +40,13 @@ export interface StatusGlyphProps {
   readonly kind: StatusKind;
   /** Larger mark for a card header or an indicator. Default is the list-row size. */
   readonly large?: boolean;
+  /**
+   * `FE-W179`. The line height of the words beside the glyph, in a row that aligns to the top. The
+   * glyph is centred on their FIRST line, so a sentence that wraps — a long doctor's name, a
+   * translated banner, a large font size — leaves the mark beside its first line instead of
+   * floating at the middle of the paragraph. Scaled with the font, as the words' own line is.
+   */
+  readonly lineHeight?: number;
 }
 
 export const STATUS_COLOR: Record<StatusKind, string> = {
@@ -59,7 +67,8 @@ export const STATUS_FILL: Record<StatusKind, string> = {
   critical: tokens.color.criticalFill,
   info: tokens.color.infoFill,
   offline: tokens.color.offlineFill,
-  recording: '#F6EDE9',
+  // `FE-W181`. A palette colour now, not a literal.
+  recording: tokens.color.recordingFill,
   neutral: tokens.color.surface,
 };
 
@@ -93,9 +102,23 @@ const styles = StyleSheet.create({
   dot: { borderRadius: tokens.radius.pill },
   ring: { borderRadius: tokens.radius.pill, borderStyle: 'dashed' },
   hollow: { borderRadius: tokens.radius.pill, borderStyle: 'solid' },
+  line: { justifyContent: 'center', alignItems: 'center' },
 });
 
-export const StatusGlyph = ({ kind, large = false }: StatusGlyphProps): ReactNode => {
+export const StatusGlyph = ({ kind, large = false, lineHeight }: StatusGlyphProps): ReactNode => {
+  const { fontScale } = useWindowDimensions();
+  const mark = <Mark kind={kind} large={large} />;
+  if (lineHeight === undefined) return mark;
+  return <View style={[styles.line, { height: lineHeight * fontScale }]}>{mark}</View>;
+};
+
+const Mark = ({
+  kind,
+  large,
+}: {
+  readonly kind: StatusKind;
+  readonly large: boolean;
+}): ReactNode => {
   const size = large ? 16 : 11;
   const color = STATUS_COLOR[kind];
 
@@ -133,6 +156,8 @@ export const StatusGlyph = ({ kind, large = false }: StatusGlyphProps): ReactNod
     <Text
       accessibilityElementsHidden
       importantForAccessibility="no"
+      // `FE-W179`. The mark sits in a box of fixed width; uncapped, a large font pushed it out.
+      maxFontSizeMultiplier={MAX_FONT_SCALE}
       style={[styles.mark, { color, fontSize: size, lineHeight: size + 4, width: size + 4 }]}
     >
       {MARK[kind]}

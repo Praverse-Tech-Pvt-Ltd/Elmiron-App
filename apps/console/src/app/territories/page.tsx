@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { ADMIN_RPC, TerritoryTreeSchema } from '@fieldforce/core';
 import { signedIn } from '../../lib/session';
-import { Body, MissingNote, Title } from '../../lib/ui';
+import { Body, MissingNote, Page, PageHeader, RoleNote } from '../../lib/ui';
 import { TerritoriesAdmin } from '../../lib/territories-admin';
 import { adminRefusal } from '../../lib/admin-text';
 
@@ -14,6 +14,8 @@ import { adminRefusal } from '../../lib/admin-text';
  * Nothing is deleted: a territory no longer used is renamed (the migration says why).
  */
 export const dynamic = 'force-dynamic';
+
+export const metadata = { title: 'Territories' };
 
 export default async function TerritoriesPage(): Promise<ReactNode> {
   const session = await signedIn();
@@ -29,21 +31,22 @@ export default async function TerritoriesPage(): Promise<ReactNode> {
   const parsed = tree.error === null ? TerritoryTreeSchema.safeParse(tree.data) : null;
 
   return (
-    <div className="ff-page">
-      <div className="ff-page-header-text">
-        <Title>Territories</Title>
+    <Page>
+      <PageHeader title="Territories">
         <Body muted>
           National, then Region, then Area/Territory. Reps sit on the lowest level; a manager sees
           their territory and everything beneath it. Working hours set on a territory apply to
           everything beneath it that has none of its own.
         </Body>
-      </div>
+      </PageHeader>
       {tree.error !== null ? (
-        <MissingNote tone={tree.error.code === '42501' ? 'info' : 'critical'}>
-          {tree.error.code === '42501'
-            ? 'Only an admin, or a field manager for their own territory, reads the territory tree.'
-            : adminRefusal(tree.error)}
-        </MissingNote>
+        tree.error.code === '42501' ? (
+          <RoleNote>
+            Only an admin, or a field manager for their own territory, reads the territory tree.
+          </RoleNote>
+        ) : (
+          <MissingNote tone="critical">{adminRefusal(tree.error)}</MissingNote>
+        )
       ) : parsed === null || !parsed.success ? (
         <MissingNote tone="critical">
           The territory tree came back in a shape this console does not recognise, so it is not
@@ -52,13 +55,13 @@ export default async function TerritoriesPage(): Promise<ReactNode> {
       ) : (
         <>
           {parsed.data.canEdit ? null : (
-            <MissingNote tone="info">
+            <RoleNote>
               You can see your own territory and everything beneath it. Only an admin changes them.
-            </MissingNote>
+            </RoleNote>
           )}
           <TerritoriesAdmin canEdit={parsed.data.canEdit} nodes={parsed.data.territories} />
         </>
       )}
-    </div>
+    </Page>
   );
 }

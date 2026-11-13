@@ -9,7 +9,7 @@ import { DoctorSchema, VisitSchema } from '@fieldforce/core';
  *
  * Operator ruling (28 September): the first time the rep OPENS a visit, if the microphone is not
  * already granted and A4 has not been answered, A4 is shown, then the rep is back on the visit.
- * "Turn on the microphone" requests RECORD_AUDIO; "I'll type my reports" requests nothing. Either
+ * "Turn on the microphone" requests RECORD_AUDIO; "I’ll type my reports" requests nothing. Either
  * answer is remembered, and A4 never shows again. (FE-D7 4: the design's labels; until then they
  * were "Allow the microphone" and "Not now".)
  *
@@ -140,7 +140,7 @@ describe('A4 — shown before the first visit', () => {
 
   it('once A4 has been answered, a visit does not show it again', async () => {
     await render(<MicrophoneRationale />);
-    await fireEvent.press(screen.getByText("I'll type my reports"));
+    await fireEvent.press(screen.getByText('I’ll type my reports'));
     await waitFor(() => {
       expect(mockBack).toHaveBeenCalledTimes(1);
     });
@@ -183,7 +183,7 @@ describe('A4 — its two answers', () => {
   it('"I\'ll type my reports" requests nothing, then goes back', async () => {
     await render(<MicrophoneRationale />);
 
-    await fireEvent.press(screen.getByText("I'll type my reports"));
+    await fireEvent.press(screen.getByText('I’ll type my reports'));
 
     await waitFor(() => {
       expect(mockBack).toHaveBeenCalledTimes(1);

@@ -47,13 +47,15 @@ test('an admin publishes a loaded draft, and it reads as published', async ({ pa
   await expect(row.getByRole('button', { name: 'Retire' })).toBeVisible();
 });
 
-test('a manager is refused, in words, and nothing changes', async ({ page }) => {
+// `FE-W164`: a manager is no longer offered a Retire button to press into the refusal. The page says
+// once that publishing is an admin's; `retire_course_version` still refuses a manager whatever is
+// drawn (the API suite holds that).
+test('a manager is told publishing is an admin’s, and is offered no button', async ({ page }) => {
   await signIn(page, world.manager);
   await page.goto('/courses');
+  await expect(page.getByText(/^Only an admin publishes or retires a course\./u)).toBeVisible();
   const row = page.getByRole('row', { name: new RegExp(world.publishedCourse.title, 'u') });
-  await row.getByRole('button', { name: 'Retire' }).click();
-  await expect(
-    row.getByText('Only an admin publishes or retires a course. Nothing changed.'),
-  ).toBeVisible();
   await expect(row.getByText('Published', { exact: true })).toBeVisible();
+  await expect(row.getByRole('button', { name: 'Retire' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Publish' })).toHaveCount(0);
 });

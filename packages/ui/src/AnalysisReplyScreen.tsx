@@ -2,10 +2,12 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Banner } from './Banner';
-import { BodyText, Label, Title } from './Text';
+import { BodyText, Label, Secondary, Title } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
+import { Screen } from './Screen';
 import { TextField } from './TextField';
+import { useT } from './i18n';
 
 /**
  * Phase 4 D3 — the MR's reply, as its own screen.
@@ -26,6 +28,11 @@ import { TextField } from './TextField';
  * FE-W4. `voiceNote` states that plainly rather than rendering a hold-to-talk
  * control that captures nothing — the same rule that keeps the citation's play
  * button off `AnalysisScreen`.
+ *
+ * `FE-W180`. The screen owns its `Screen`, so Send and Save as draft are PINNED in its footer, in
+ * the reach zone and riding up with the keyboard, as Today, the visit and the call report pin
+ * theirs. They sat after a `flex: 1` spacer, which does nothing inside a scroll view: on a long
+ * finding the rep scrolled, with the keyboard up, to find Send.
  */
 export interface AnalysisReplyScreenProps {
   /** The finding this argues with, in its own words. Not editable. */
@@ -50,12 +57,12 @@ export interface AnalysisReplyScreenProps {
    * must be on a screen where it is.
    */
   readonly sendFailure?: { readonly title: string; readonly detail: string } | null;
+  /** `FE-W188`. The screen's Back control (`Screen`'s `onBack`). */
+  readonly onBack?: () => void;
 }
 
 const styles = StyleSheet.create({
-  head: { gap: 2 },
-  spacer: { flex: 1, minHeight: tokens.space.md },
-  foot: { gap: tokens.space.sm },
+  head: { gap: tokens.space.xxs },
 });
 
 export const AnalysisReplyScreen = ({
@@ -70,39 +77,77 @@ export const AnalysisReplyScreen = ({
   saved = null,
   failure = null,
   sendFailure = null,
+  onBack,
 }: AnalysisReplyScreenProps): ReactNode => {
+  const { t } = useT();
+  const back = onBack === undefined ? {} : { onBack };
   if (failure !== null) {
     return (
-      <>
-        <Title>Your reply</Title>
+      <Screen scrollable {...back}>
+        <Title>{t('reply.title')}</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
-      </>
+      </Screen>
     );
   }
 
   const empty = value.trim() === '';
 
-  return (
+  /*
+    Branched rather than spread: `ButtonProps` makes `disabled` and `note` a
+    union so a disabled button cannot exist without a reason line, and that
+    guarantee is exactly what a spread of `{...(empty ? {disabled: true} : {})}`
+    would erase.
+  */
+  const footer = (
     <>
+      {empty ? (
+        <Button
+          disabled
+          label={t('reply.saveDraft')}
+          note={t('reply.saveDraftBlocked')}
+          onPress={onSaveDraft}
+          variant="secondary"
+        />
+      ) : (
+        <Button label={t('reply.saveDraft')} onPress={onSaveDraft} variant="secondary" />
+      )}
+      {empty ? (
+        <Button disabled label={t('reply.send')} note={t('reply.sendBlocked')} onPress={onSend} />
+      ) : (
+        <Button
+          label={t('reply.send')}
+          loading={busy}
+          loadingLabel={t('reply.sending')}
+          note={t('reply.sendNote')}
+          onPress={onSend}
+        />
+      )}
+    </>
+  );
+
+  return (
+    <Screen scrollable footer={footer} {...back}>
       <View style={styles.head}>
-        <Title>Your reply</Title>
-        <Label muted>Goes with the finding, wherever it appears</Label>
+        <Title>{t('reply.title')}</Title>
+        {/* `FE-W178`. The line under a screen title is `Secondary`, as on the call report. */}
+        <Secondary>{t('reply.subtitle')}</Secondary>
       </View>
 
       {sendFailure === null ? null : (
         <Banner detail={sendFailure.detail} title={sendFailure.title} tone="critical" />
       )}
 
-      {saved === null ? null : <Banner detail={saved} title="Saved" tone="info" />}
+      {saved === null ? null : <Banner detail={saved} title={t('reply.saved')} tone="info" />}
 
       <Card>
-        <Label muted>Replying to</Label>
+        <Label muted>{t('reply.replyingTo')}</Label>
+        {/* The finding in the model's own words — data, shown as it came. */}
         <BodyText>{finding}</BodyText>
       </Card>
 
       <TextField
         help={voiceNote}
-        label="What you want to say"
+        label={t('reply.fieldLabel')}
         onChangeText={onChangeText}
         value={value}
       />
@@ -114,39 +159,6 @@ export const AnalysisReplyScreen = ({
       <Card tone="quiet">
         <BodyText>{replyNote}</BodyText>
       </Card>
-
-      <View style={styles.spacer} />
-
-      {/*
-        Branched rather than spread: `ButtonProps` makes `disabled` and `note` a
-        union so a disabled button cannot exist without a reason line, and that
-        guarantee is exactly what a spread of `{...(empty ? {disabled: true} : {})}`
-        would erase.
-      */}
-      <View style={styles.foot}>
-        {empty ? (
-          <Button
-            disabled
-            label="Save as a draft"
-            note="Write something first — a draft needs words to keep."
-            onPress={onSaveDraft}
-            variant="secondary"
-          />
-        ) : (
-          <Button label="Save as a draft" onPress={onSaveDraft} variant="secondary" />
-        )}
-        {empty ? (
-          <Button disabled label="Send reply" note="Write something first." onPress={onSend} />
-        ) : (
-          <Button
-            label="Send reply"
-            loading={busy}
-            loadingLabel="Sending…"
-            note="Your manager sees this next to the finding."
-            onPress={onSend}
-          />
-        )}
-      </View>
-    </>
+    </Screen>
   );
 };

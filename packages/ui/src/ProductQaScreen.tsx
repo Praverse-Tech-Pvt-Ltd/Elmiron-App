@@ -9,6 +9,7 @@ import { Button } from './Button';
 import { Card } from './Card';
 import { Select } from './Select';
 import { TextField } from './TextField';
+import { t, useLanguage } from './i18n';
 
 /**
  * W2-C C / `BE-W160` — Product Q&A: a question, and an answer only from approved material.
@@ -46,7 +47,7 @@ export interface ProductQaScreenProps {
 }
 
 const styles = StyleSheet.create({
-  head: { gap: 2 },
+  head: { gap: tokens.space.xxs },
   sources: {
     gap: tokens.space.xs,
     marginTop: tokens.space.sm,
@@ -70,6 +71,7 @@ const Answer = ({
   readonly text: string;
   readonly sources: readonly { readonly label: string; readonly detail?: readonly string[] }[];
 }): ReactNode => {
+  useLanguage();
   const [open, setOpen] = useState(false);
   return (
     <Card>
@@ -80,13 +82,15 @@ const Answer = ({
       */}
       <BodyText>{text}</BodyText>
       <View style={styles.sources}>
-        <Badge label="Approved sources" tone="success" />
+        <Badge label={t('productQa.approvedSources')} tone="success" />
         {sources.map((source) => (
           <Secondary key={source.label}>{source.label}</Secondary>
         ))}
         <View style={styles.sourceToggle}>
           <Button
-            label={open ? 'Hide source details' : `Show source details (${String(sources.length)})`}
+            label={
+              open ? t('productQa.hideDetails') : t('productQa.showDetails', { n: sources.length })
+            }
             onPress={() => {
               setOpen((value) => !value);
             }}
@@ -111,6 +115,7 @@ const Answer = ({
 };
 
 const Result = ({ view }: { readonly view: ProductQaView }): ReactNode => {
+  useLanguage();
   switch (view.kind) {
     case 'idle':
       return null;
@@ -119,24 +124,21 @@ const Result = ({ view }: { readonly view: ProductQaView }): ReactNode => {
     case 'no_approved_information':
       return (
         <Card>
-          <BodyText>No approved answer for this yet.</BodyText>
+          <BodyText>{t('productQa.noApprovedTitle')}</BodyText>
           <Secondary>{view.text}</Secondary>
-          <Secondary>
-            This app answers only from material your company has approved. Until that material is
-            loaded, take the question to your manager or the Medical team.
-          </Secondary>
+          <Secondary>{t('productQa.noApprovedDetail')}</Secondary>
         </Card>
       );
     case 'refusal':
       // UX polish (compliance). A refusal was drawn in the answer's own card, with the answer's
       // own type -- a deliberate "not answered" that could be read AS an answer. It is a notice
       // now, titled so that it cannot be.
-      return <Banner detail={view.text} title="Not answered" tone="info" />;
+      return <Banner detail={view.text} title={t('productQa.notAnswered')} tone="info" />;
     case 'switched_off':
       return (
         <Banner
-          detail="Product questions are not switched on for your company yet. Nothing was asked."
-          title="Not available yet"
+          detail={t('productQa.switchedOffDetail')}
+          title={t('productQa.switchedOffTitle')}
           tone="info"
         />
       );
@@ -145,25 +147,25 @@ const Result = ({ view }: { readonly view: ProductQaView }): ReactNode => {
         <Banner
           detail={
             view.resetLabel === null
-              ? 'You have used today’s questions.'
-              : `You have used today’s questions. They reset at ${view.resetLabel}.`
+              ? t('productQa.usedToday')
+              : t('productQa.usedTodayResets', { time: view.resetLabel })
           }
-          title="That is all for today"
+          title={t('productQa.limitTitle')}
           tone="info"
         />
       );
     case 'offline':
       return (
         <Card>
-          <BodyText>No signal, so the question was not asked.</BodyText>
-          <Button label="Ask again" onPress={view.onRetry} variant="secondary" />
+          <BodyText>{t('productQa.offline')}</BodyText>
+          <Button label={t('productQa.askAgain')} onPress={view.onRetry} variant="secondary" />
         </Card>
       );
     case 'error':
       return (
         <Card>
-          <BodyText>The answer did not come back. Nothing is wrong with your question.</BodyText>
-          <Button label="Ask again" onPress={view.onRetry} variant="secondary" />
+          <BodyText>{t('productQa.error')}</BodyText>
+          <Button label={t('productQa.askAgain')} onPress={view.onRetry} variant="secondary" />
         </Card>
       );
   }
@@ -181,43 +183,54 @@ export const ProductQaScreen = ({
   onAsk,
   asking = false,
   view,
-}: ProductQaScreenProps): ReactNode => (
-  <>
-    <View style={styles.head}>
-      <Title>Product questions</Title>
-      <Label muted>
-        Answered only from your company’s approved material, with the source shown.
-      </Label>
-    </View>
+}: ProductQaScreenProps): ReactNode => {
+  useLanguage();
+  return (
+    <>
+      <View style={styles.head}>
+        <Title>{t('productQa.title')}</Title>
+        {/* `FE-W178`. The line under a screen title is `Secondary`, as on the call report. */}
+        <Secondary>{t('productQa.intro')}</Secondary>
+      </View>
 
-    {products === undefined || onChangeProduct === undefined ? null : (
-      <Select
-        label="Product (optional)"
-        onChange={(value) => {
-          onChangeProduct(value === ANY_PRODUCT ? null : value);
-        }}
-        options={[
-          { value: ANY_PRODUCT, label: 'Any product' },
-          ...products.map((product) => ({ value: product.id, label: product.label })),
-        ]}
-        value={productId ?? ANY_PRODUCT}
-      />
-    )}
-    <TextField
-      help="About a product — not about a patient."
-      label="Your question"
-      onChangeText={onChangeQuestion}
-      value={question}
-    />
-
-    <View style={styles.foot}>
-      {question.trim() === '' ? (
-        <Button disabled label="Ask" note="Write your question first." onPress={onAsk} />
-      ) : (
-        <Button label={asking ? 'Asking…' : 'Ask'} loading={asking} onPress={onAsk} />
+      {products === undefined || onChangeProduct === undefined ? null : (
+        <Select
+          label={t('productQa.product')}
+          onChange={(value) => {
+            onChangeProduct(value === ANY_PRODUCT ? null : value);
+          }}
+          options={[
+            { value: ANY_PRODUCT, label: t('productQa.anyProduct') },
+            ...products.map((product) => ({ value: product.id, label: product.label })),
+          ]}
+          value={productId ?? ANY_PRODUCT}
+        />
       )}
-    </View>
+      <TextField
+        help={t('productQa.help')}
+        label={t('productQa.yourQuestion')}
+        onChangeText={onChangeQuestion}
+        value={question}
+      />
 
-    <Result view={view} />
-  </>
-);
+      <View style={styles.foot}>
+        {question.trim() === '' ? (
+          <Button
+            disabled
+            label={t('productQa.ask')}
+            note={t('productQa.writeFirst')}
+            onPress={onAsk}
+          />
+        ) : (
+          <Button
+            label={asking ? t('productQa.asking') : t('productQa.ask')}
+            loading={asking}
+            onPress={onAsk}
+          />
+        )}
+      </View>
+
+      <Result view={view} />
+    </>
+  );
+};

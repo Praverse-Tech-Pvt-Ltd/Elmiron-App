@@ -58,6 +58,13 @@ import { INDIA_PROFILES, createBedrockProvider } from '../_shared/bedrock-provid
 import type { IndiaProfileId } from '../_shared/bedrock-provider.ts';
 import { bedrockConverse } from '../_shared/bedrock-client.ts';
 import { createOpenAiProvider } from '../_shared/openai-provider.ts';
+import {
+  SPEECH_UNAVAILABLE_CODES,
+  SpeechError,
+  createOpenAiSpeech,
+  readRepAudio,
+  takeSpokenTurn,
+} from '../_shared/openai-speech.ts';
 import { practiceWriterFromEnv } from '../_shared/practice-writer.ts';
 import type { StubShape } from '../_shared/stub-provider.ts';
 
@@ -86,6 +93,9 @@ interface RequestBody {
   // server's (`sim_session_context`); fields a client still sends for them are not read.
   readonly sessionId?: unknown;
   readonly repText?: unknown;
+  // `BE-W214` ai_doctor by voice: `{ base64, mimeType }` in place of `repText`. The reply then also
+  // carries what the rep was heard to say and the doctor's reply as speech.
+  readonly repAudio?: unknown;
   // Read only to REFUSE it: `mr_chat` is single-turn since W1-S (`BE-W135`), and a non-empty
   // history is a 400 rather than something silently dropped.
   readonly history?: unknown;
@@ -208,9 +218,22 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return json(400, { code: '22023', message: 'question is required' });
   }
   if (feature === 'ai_doctor') {
-    if (typeof body.sessionId !== 'string' || String(body.repText ?? '').trim().length === 0) {
-      return json(400, { code: '22023', message: 'sessionId and repText are required' });
+    const spoken = body.repAudio !== undefined;
+    if (
+      typeof body.sessionId !== 'string' ||
+      (!spoken && String(body.repText ?? '').trim().length === 0)
+    ) {
+      return json(400, {
+        code: '22023',
+        message: 'sessionId and repText (or repAudio) are required',
+      });
     }
+  }
+  // `BE-W214`. A spoken turn is read and size-checked before anything else is done with it.
+  const repAudio =
+    feature === 'ai_doctor' && body.repAudio !== undefined ? readRepAudio(body.repAudio) : null;
+  if (repAudio !== null && 'refused' in repAudio) {
+    return json(400, { code: '22023', message: repAudio.refused });
   }
   if (feature === 'mr_chat' && typeof body.message !== 'string') {
     return json(400, { code: '22023', message: 'mr_chat needs a message' });
@@ -328,11 +351,56 @@ Deno.serve(async (req: Request): Promise<Response> => {
         });
         return withAllowance(result);
       }
+      const sessionId = String(body.sessionId);
+      if (repAudio !== null) {
+        // `BE-W214`. Voice needs OpenAI's speech models: the stub and Bedrock have none, so a local
+        // run without the key says so plainly instead of pretending to have heard the rep.
+        if (aiProvider !== 'openai') {
+          return json(503, {
+            code: 'voice_unavailable',
+            message:
+              'Speaking to the practice doctor needs the AI service; type your turn instead.',
+          });
+        }
+        try {
+          const result = await takeSpokenTurn({
+            audio: repAudio.audio,
+            speech: createOpenAiSpeech({ apiKey: Deno.env.get('OPENAI_API_KEY') }),
+            // As the rep: a session that is not theirs is refused before any audio leaves here.
+            authorise: async () => {
+              await rpc.call('sim_session_context', { p_session_id: sessionId });
+            },
+            // `BE-W220`: the turn opens the request (switch, allowance, log) and only then asks to
+            // hear the rep, so no audio reaches the vendor for a request that was never admitted.
+            takeTurn: (hear) =>
+              takeDoctorTurn({ rpc, writer, provider, sessionId, repText: '', hearRepText: hear }),
+            replyText: (turn) => (turn.kind === 'replied' ? turn.reply : null),
+          });
+          return withAllowance(result);
+        } catch (error) {
+          if (error instanceof SpeechError) {
+            // A key OpenAI refuses, or an account with no credit, is not the rep's voice: say voice is
+            // unavailable rather than asking them to repeat themselves into a service that cannot hear.
+            if (SPEECH_UNAVAILABLE_CODES.has(error.code)) {
+              return json(503, {
+                code: 'voice_unavailable',
+                message:
+                  'Speaking to the practice doctor is not available just now; type your turn instead.',
+              });
+            }
+            return json(502, {
+              code: 'voice_failed',
+              message: 'Your turn could not be heard. Try again.',
+            });
+          }
+          throw error;
+        }
+      }
       const result = await takeDoctorTurn({
         rpc,
         writer,
         provider,
-        sessionId: String(body.sessionId),
+        sessionId,
         repText: String(body.repText),
         // W1-R C (`BE-W136`): persona, objection and history come from `sim_session_context`. A
         // client that still sends them is not refused — it is ignored.

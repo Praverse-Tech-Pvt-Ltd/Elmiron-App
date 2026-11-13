@@ -18,8 +18,11 @@ import {
   planRefusal,
   reassignRefusal,
   statusLabel,
+  statusTone,
 } from './planning-text';
 import { btn } from './theme-css';
+import { dayLabel } from './india-date';
+import { plural } from './plural';
 
 /**
  * `BE-W171` — the client half of `/planning`. Every write is an RPC; this file holds only the
@@ -28,6 +31,10 @@ import { btn } from './theme-css';
  * **The request id.** A new one is minted whenever the route changes, and reused while it does not:
  * a manager who presses Save twice, or whose first press timed out, sends the SAME id, and
  * `plan_mr_day` answers with the first save instead of writing a second version.
+ *
+ * `FE-W166`: days read "16 Jan 2030", and a save says "1 visit added". The rep's own today stays on
+ * the page as `data-rep-today` (the machine value), for anything that needs it. `FE-W171`: each stop
+ * is one grid row so the clinic pickers line up, and a visit's status is the pill `/days` uses.
  */
 
 interface Stop {
@@ -117,7 +124,7 @@ export const PlanDay = ({
             ? 'No change — this is already the plan. Nothing new was written.'
             : summary.replayed
               ? `Already saved as version ${String(summary.version)}.`
-              : `Saved as version ${String(summary.version)}: ${String(summary.visitsCreated ?? 0)} visit(s) added, ` +
+              : `Saved as version ${String(summary.version)}: ${plural(summary.visitsCreated ?? 0, 'visit', 'visits')} added, ` +
                 `${String(summary.visitsMoved ?? 0)} kept on the new version, ${String(summary.visitsCancelled ?? 0)} cancelled.`,
         });
         router.refresh();
@@ -148,14 +155,17 @@ export const PlanDay = ({
           </button>
         </form>
         <Body muted>
-          {review.fullName}’s today is {review.today}.
+          <span data-rep-today={review.today}>
+            It is {dayLabel(review.today)} where {review.fullName} works
+          </span>
+          ; earlier days cannot be planned.
           {rep.via_grant ? ' You plan for this rep under an admin’s grant for this day.' : ''}
         </Body>
       </Card>
 
       <Card>
         <Heading>
-          Route for {day}
+          Route for {dayLabel(day)}
           {current === null ? ' — no plan yet' : ` — version ${String(current.version)}`}
         </Heading>
         {ended ? (
@@ -196,36 +206,38 @@ export const PlanDay = ({
                       </option>
                     ))}
                   </select>
-                  <button
-                    type="button"
-                    className={btn('secondary')}
-                    disabled={ended || index === 0}
-                    onClick={() => {
-                      move(index, -1);
-                    }}
-                  >
-                    Up
-                  </button>
-                  <button
-                    type="button"
-                    className={btn('secondary')}
-                    disabled={ended || index === stops.length - 1}
-                    onClick={() => {
-                      move(index, 1);
-                    }}
-                  >
-                    Down
-                  </button>
-                  <button
-                    type="button"
-                    className={btn('danger')}
-                    disabled={ended}
-                    onClick={() => {
-                      edit(stops.filter((_, i) => i !== index));
-                    }}
-                  >
-                    Remove
-                  </button>
+                  <div className="ff-route-actions">
+                    <button
+                      type="button"
+                      className={btn('secondary')}
+                      disabled={ended || index === 0}
+                      onClick={() => {
+                        move(index, -1);
+                      }}
+                    >
+                      Up
+                    </button>
+                    <button
+                      type="button"
+                      className={btn('secondary')}
+                      disabled={ended || index === stops.length - 1}
+                      onClick={() => {
+                        move(index, 1);
+                      }}
+                    >
+                      Down
+                    </button>
+                    <button
+                      type="button"
+                      className={btn('danger')}
+                      disabled={ended}
+                      onClick={() => {
+                        edit(stops.filter((_, i) => i !== index));
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
               </li>
             );
@@ -280,7 +292,7 @@ export const PlanDay = ({
       </Card>
 
       <Card>
-        <Heading>Visits on {day}</Heading>
+        <Heading>Visits on {dayLabel(day)}</Heading>
         {review.visits.length === 0 ? (
           <Body muted>No visits on this day.</Body>
         ) : (
@@ -383,7 +395,9 @@ const VisitRow = ({
           {originLabel(visit.origin)}
         </Pill>
       </td>
-      <td>{statusLabel(visit.status)}</td>
+      <td>
+        <Pill tone={statusTone(visit.status)}>{statusLabel(visit.status)}</Pill>
+      </td>
       <td>{note}</td>
       <td>
         {visit.origin === 'unplanned' ? (

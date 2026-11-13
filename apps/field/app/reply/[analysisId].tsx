@@ -1,13 +1,61 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
-import type { Analysis } from '@fieldforce/core';
-import { AnalysisReplyScreen, Screen } from '@fieldforce/ui';
+import type { Analysis, Refusal } from '@fieldforce/core';
+import { AnalysisReplyScreen, t, useLanguage } from '@fieldforce/ui';
 import { coachingEnabled } from '../../src/features';
 import { readMyAnalysis, respondToMyAnalysis } from '../../src/coaching/server';
-import { NO_AUDIO_NOTE, REPLY_NOTE } from '../../src/coaching/content';
+import type { ServerRead } from '../../src/coaching/server';
+import { noAudioNote, replyNote } from '../../src/coaching/content';
 import { orderedFindings } from '../../src/coaching/feed';
 import { failureDetail, refusedDetail } from '../../src/errors/plain';
+import { useBack } from '../../src/navigation/back';
+
+/**
+ * `FE-W158`. Why the finding could not be loaded, and why a reply was not sent, each kept as its
+ * cause. The words are built from it at render, so a language chosen afterwards repaints them.
+ */
+type LoadFailure =
+  | {
+      readonly kind: 'read';
+      readonly outcome: Exclude<ServerRead<Analysis | null>, { readonly kind: 'loaded' }>;
+    }
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'thrown'; readonly error: unknown };
+
+type SendFailure =
+  { readonly kind: 'refused'; readonly refusal: Refusal } | { readonly kind: 'unreachable' };
+
+const loadFailureWords = (failure: LoadFailure): { title: string; detail: string } => {
+  switch (failure.kind) {
+    case 'thrown':
+      return { title: t('reply.couldNotLoad'), detail: failureDetail(failure.error) };
+    case 'absent':
+      return { title: t('analysis.notAvailable'), detail: t('analysis.notAvailableDetail') };
+    case 'read': {
+      const { outcome } = failure;
+      return outcome.kind === 'refused' && outcome.refusal.code === 'not_permitted'
+        ? { title: t('analysis.noAccess'), detail: refusedDetail(outcome.refusal.sqlState) }
+        : {
+            title: t('reply.couldNotLoad'),
+            detail:
+              outcome.kind === 'mismatch'
+                ? outcome.detail
+                : refusedDetail(outcome.refusal.sqlState),
+          };
+    }
+  }
+};
+
+const sendFailureWords = (failure: SendFailure): { title: string; detail: string } => ({
+  title: t('reply.notSent'),
+  detail:
+    failure.kind === 'refused'
+      ? `${refusedDetail(failure.refusal.sqlState)} ${t('reply.stillOnScreen')}`
+      : // FE-D16. No answer at all: usually no signal. Said plainly, because a rep could
+        // otherwise assume it waits in the queue like a check-in does (FE-CR-10).
+        t('reply.unreachable'),
+});
 
 /**
  * Phase 4 D3 — the reply binding.
@@ -41,19 +89,22 @@ export default function ReplyRoute(): ReactNode {
 }
 
 function Reply(): ReactNode {
+  useLanguage();
   const { analysisId } = useLocalSearchParams<{ analysisId: string }>();
   const router = useRouter();
+  const back = useBack();
 
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState<string | null>(null);
-  const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
+  /** True once "Save as a draft" is pressed; its sentence is built at render (`FE-W158`). */
+  const [saved, setSaved] = useState(false);
+  const [failure, setFailure] = useState<LoadFailure | null>(null);
   // FE-D2 5. A SEND failure is not a LOAD failure. It went into `failure`, which replaces the form,
   // so the banner "What you wrote is still on the screen" appeared on a screen where it was not,
   // and nothing ever cleared it. It is its own state now: shown above the form, cleared by the
   // next edit or send.
-  const [sendFailure, setSendFailure] = useState<{ title: string; detail: string } | null>(null);
+  const [sendFailure, setSendFailure] = useState<SendFailure | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,32 +121,11 @@ function Reply(): ReactNode {
           setValue((current) => (current === '' ? (found.mrResponse ?? '') : current));
           return;
         }
-        setFailure(
-          outcome.kind === 'loaded'
-            ? {
-                title: 'This analysis is not available to you',
-                detail: 'It does not exist, or it is not one of yours.',
-              }
-            : outcome.kind === 'refused' && outcome.refusal.code === 'not_permitted'
-              ? {
-                  title: 'You do not have access to this analysis',
-                  detail: refusedDetail(outcome.refusal.sqlState),
-                }
-              : {
-                  title: 'Could not load the finding',
-                  detail:
-                    outcome.kind === 'mismatch'
-                      ? outcome.detail
-                      : refusedDetail(outcome.refusal.sqlState),
-                },
-        );
+        setFailure(outcome.kind === 'loaded' ? { kind: 'absent' } : { kind: 'read', outcome });
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        setFailure({
-          title: 'Could not load the finding',
-          detail: failureDetail(error),
-        });
+        setFailure({ kind: 'thrown', error });
       });
 
     return () => {
@@ -113,15 +143,15 @@ function Reply(): ReactNode {
    */
   const finding =
     analysis === null
-      ? 'this analysis'
+      ? t('reply.thisAnalysis')
       : (orderedFindings(analysis).find((candidate) => candidate.severity !== 'info')?.title ??
         orderedFindings(analysis)[0]?.title ??
-        'this analysis');
+        t('reply.thisAnalysis'));
 
   const send = (): void => {
     if (busy || analysis === null || value.trim() === '') return;
     setBusy(true);
-    setSaved(null);
+    setSaved(false);
     setSendFailure(null);
 
     void respondToMyAnalysis(analysis.id, value.trim())
@@ -129,49 +159,45 @@ function Reply(): ReactNode {
         if (outcome.kind === 'sent') {
           // Back to the analysis, where the reply now appears beside the findings —
           // the MR sees where it landed rather than being told it was sent.
-          router.replace(`/analysis/${analysis.id}`);
+          // `FE-W188`. `dismissTo`, not `replace`: the reply is usually opened FROM the analysis, and
+          // replacing the reply with a second copy of it left two analyses on the stack, so Back
+          // went from the analysis to the same analysis. `dismissTo` returns to the one underneath,
+          // or replaces the reply with it when it was opened from the Coaching tab.
+          router.dismissTo(`/analysis/${analysis.id}`);
           return;
         }
-        setSendFailure({
-          title: 'Your reply was not sent',
-          detail: `${refusedDetail(outcome.refusal.sqlState)} What you wrote is still on the screen.`,
-        });
+        setSendFailure({ kind: 'refused', refusal: outcome.refusal });
       })
       .catch(() => {
-        // FE-D16. No answer at all: usually no signal. Said plainly, because a rep could
-        // otherwise assume it waits in the queue like a check-in does (FE-CR-10).
-        setSendFailure({
-          title: 'Your reply was not sent',
-          detail:
-            'The server could not be reached. Replies cannot be queued on this phone yet, so it is not saved. What you wrote is still on the screen: send it again when you have signal.',
-        });
+        // No answer at all: usually no signal (`sendFailureWords`).
+        setSendFailure({ kind: 'unreachable' });
       })
       .finally(() => {
         setBusy(false);
       });
   };
 
+  // `FE-W180`. The screen renders its own `Screen`, so its Send can be pinned in the footer.
   return (
-    <Screen scrollable>
-      <AnalysisReplyScreen
-        busy={busy}
-        failure={failure}
-        finding={finding}
-        onChangeText={(next) => {
-          setValue(next);
-          setSaved(null);
-          setSendFailure(null);
-        }}
-        onSaveDraft={() => {
-          setSaved('Kept on this screen. It is not sent, and it is not saved if you leave.');
-        }}
-        onSend={send}
-        replyNote={REPLY_NOTE}
-        saved={saved}
-        sendFailure={sendFailure}
-        voiceNote={NO_AUDIO_NOTE}
-        value={value}
-      />
-    </Screen>
+    <AnalysisReplyScreen
+      busy={busy}
+      failure={failure === null ? null : loadFailureWords(failure)}
+      finding={finding}
+      onBack={back}
+      onChangeText={(next) => {
+        setValue(next);
+        setSaved(false);
+        setSendFailure(null);
+      }}
+      onSaveDraft={() => {
+        setSaved(true);
+      }}
+      onSend={send}
+      replyNote={replyNote()}
+      saved={saved ? t('reply.draftKept') : null}
+      sendFailure={sendFailure === null ? null : sendFailureWords(sendFailure)}
+      voiceNote={noAudioNote()}
+      value={value}
+    />
   );
 }

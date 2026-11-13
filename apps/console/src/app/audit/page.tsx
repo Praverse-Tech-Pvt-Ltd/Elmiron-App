@@ -1,9 +1,13 @@
 import type { ReactNode } from 'react';
 import { ADMIN_RPC, AUDIT_ACTIONS, AuditSearchSchema } from '@fieldforce/core';
 import { signedIn } from '../../lib/session';
-import { Body, Card, Label, MissingNote, Pill, Title } from '../../lib/ui';
+import { callerRole } from '../../lib/role';
+import { Body, Card, Label, MissingNote, Page, PageHeader, Pill, RoleNote } from '../../lib/ui';
 import { adminRefusal, dayAfterStart, dayStart } from '../../lib/admin-text';
 import { auditQuery, readAuditFilters } from '../../lib/audit-filters';
+import { systemRowsNote } from '../../lib/audit';
+import { indiaDateTime } from '../../lib/india-date';
+import { actionLabel, auditWhat, reasonLabel, tableLabel, whoLabel } from '../../lib/labels';
 import { btn } from '../../lib/theme-css';
 
 /**
@@ -13,18 +17,31 @@ import { btn } from '../../lib/theme-css';
  * `search_audit_log` is admin-only, company-scoped and audited: every page view writes a row with the
  * reason below, so who read the trail is in the trail. A refusal is shown as a refusal, never as an
  * empty table (the same rule as the compliance panel's `audit.ts`).
+ *
+ * `FE-W165`: the rows are in words — "Created · AI request" by "Asha Patil · Admin", the console's
+ * own reasons as the screen that was opened — and the filters say the same words while still
+ * sending the stored values (`user_profiles`, `insert`), so a kept link is unchanged.
+ * `FE-W164`: a manager is told the log is an admin's, once, without the filter form they could not
+ * use.
  */
 export const dynamic = 'force-dynamic';
+
+export const metadata = { title: 'Audit log' };
 
 const READ_REASON = 'console audit log screen';
 const PAGE = 50;
 
-const dateTime = (iso: string): string =>
-  new Date(iso).toLocaleString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    dateStyle: 'medium',
-    timeStyle: 'medium',
-  });
+const ONLY_ADMINS =
+  'Only an admin reads the audit log. It records every change in your company, and every read of someone else’s record.';
+
+const header = (
+  <PageHeader title="Audit log">
+    <Body muted>
+      Every change to a record, and every read of someone else’s, by a person in your company —
+      newest first. Reading this page is itself recorded here. Times are India time.
+    </Body>
+  </PageHeader>
+);
 
 export default async function AuditPage({
   searchParams,
@@ -37,6 +54,16 @@ export default async function AuditPage({
       <MissingNote>
         No session reached the server. Signing in again is the first thing to try.
       </MissingNote>
+    );
+  }
+
+  const role = await callerRole();
+  if (role !== null && role !== 'admin') {
+    return (
+      <Page>
+        {header}
+        <RoleNote>{ONLY_ADMINS}</RoleNote>
+      </Page>
     );
   }
 
@@ -56,17 +83,24 @@ export default async function AuditPage({
     session.db.from('user_profiles').select('id, full_name').order('full_name'),
   ]);
 
+  if (result.error !== null && result.error.code === '42501') {
+    return (
+      <Page>
+        {header}
+        <RoleNote>{ONLY_ADMINS}</RoleNote>
+      </Page>
+    );
+  }
+
   const page = result.error === null ? AuditSearchSchema.safeParse(result.data) : null;
+  const tables = [...(page?.success === true ? page.data.tables : [])].sort((a, b) =>
+    tableLabel(a).localeCompare(tableLabel(b)),
+  );
+  const hidden = page?.success === true ? systemRowsNote(page.data.systemRowsHidden) : null;
 
   return (
-    <div className="ff-page">
-      <div className="ff-page-header-text">
-        <Title>Audit log</Title>
-        <Body muted>
-          Every change to a record, and every read of someone else’s, by a person in your company —
-          newest first. Reading this page is itself recorded here. Times are India time.
-        </Body>
-      </div>
+    <Page>
+      {header}
 
       <Card>
         <form className="ff-filters" method="get">
@@ -82,12 +116,12 @@ export default async function AuditPage({
             </select>
           </div>
           <div className="ff-field">
-            <Label>Table</Label>
-            <select name="table" aria-label="Table" defaultValue={filters.table ?? ''}>
+            <Label>Record type</Label>
+            <select name="table" aria-label="Record type" defaultValue={filters.table ?? ''}>
               <option value="">Any</option>
-              {(page?.success === true ? page.data.tables : []).map((t) => (
+              {tables.map((t) => (
                 <option key={t} value={t}>
-                  {t}
+                  {tableLabel(t)}
                 </option>
               ))}
             </select>
@@ -98,7 +132,7 @@ export default async function AuditPage({
               <option value="">Any</option>
               {AUDIT_ACTIONS.map((a) => (
                 <option key={a} value={a}>
-                  {a === 'select' ? 'read' : a}
+                  {actionLabel(a)}
                 </option>
               ))}
             </select>
@@ -125,11 +159,7 @@ export default async function AuditPage({
       </Card>
 
       {result.error !== null ? (
-        <MissingNote tone="critical">
-          {result.error.code === '42501'
-            ? 'Only an admin reads the audit log. This refusal is itself recorded in it.'
-            : adminRefusal(result.error)}
-        </MissingNote>
+        <MissingNote tone="critical">{adminRefusal(result.error)}</MissingNote>
       ) : page === null || !page.success ? (
         <MissingNote tone="critical">
           The audit log came back in a shape this console does not recognise, so it is not shown.
@@ -155,17 +185,20 @@ export default async function AuditPage({
                 <tbody>
                   {page.data.data.map((row) => (
                     <tr key={row.id}>
-                      <td className="ff-nowrap">{dateTime(row.occurredAt)}</td>
+                      <td className="ff-nowrap">{indiaDateTime(row.occurredAt)}</td>
+                      <td>{whoLabel(row.actorName, row.actorRole)}</td>
                       <td>
-                        {row.actorName}
-                        {row.actorRole === null ? '' : ` (${row.actorRole})`}
+                        {auditWhat(row.action, row.tableName)}{' '}
+                        {row.refused ? <Pill tone="critical">Refused</Pill> : null}
                       </td>
-                      <td>
-                        {row.action === 'select' ? 'read' : row.action} {row.tableName}{' '}
-                        {row.refused ? <Pill tone="critical">refused</Pill> : null}
+                      {/*
+                        The record's id, shortened: enough to tell two records apart in a list,
+                        and the whole id is there on hover for anyone who must match it.
+                      */}
+                      <td className="ff-mono" title={row.rowId ?? undefined}>
+                        {row.rowId === null ? '—' : row.rowId.slice(0, 8)}
                       </td>
-                      <td className="ff-mono">{row.rowId ?? '—'}</td>
-                      <td>{row.reason ?? '—'}</td>
+                      <td>{reasonLabel(row.reason) ?? '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -189,14 +222,9 @@ export default async function AuditPage({
               </a>
             )}
           </div>
-          {page.data.systemRowsHidden > 0 ? (
-            <Body muted>
-              {String(page.data.systemRowsHidden)} entries written by the system itself (no person)
-              belong to no company and are not shown to any.
-            </Body>
-          ) : null}
+          {hidden === null ? null : <Body muted>{hidden}</Body>}
         </>
       )}
-    </div>
+    </Page>
   );
 }

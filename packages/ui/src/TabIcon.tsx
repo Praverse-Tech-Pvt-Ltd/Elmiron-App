@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { tokens } from '@fieldforce/ui-tokens';
+import { StyleSheet, Text, View } from 'react-native';
+import type { ColorValue } from 'react-native';
+import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
+import { MAX_FONT_SCALE } from './Text';
 
 /**
  * The four tab-bar icons, drawn in `View`s.
@@ -105,6 +107,49 @@ const styles = StyleSheet.create({
  * is wider than the navigator's icon slot (31) on purpose and overflows it sideways, centred, as
  * the design draws it; the slot is not a touch target, the whole tab is.
  */
+const labelStyles = StyleSheet.create({
+  label: {
+    fontSize: tokens.typography.tappable.size,
+    lineHeight: tokens.typography.tappable.lineHeight,
+    fontWeight: tokens.typography.tappable.weight,
+    fontFamily: fontFamilyFor(tokens.typography.tappable.weight),
+    textAlign: 'center',
+  },
+  beside: { marginStart: tokens.space.xs },
+});
+
+export interface TabBarLabelProps {
+  /** The navigator's tint for this tab: accent when open, muted otherwise. */
+  readonly color: ColorValue;
+  /** The tab's title, in the app's language. */
+  readonly children: string;
+  /** The navigator's placement. Beside the icon only on a wide screen. */
+  readonly position?: 'below-icon' | 'beside-icon';
+}
+
+/**
+ * `FE-W177`, `FE-W179`. The words under each tab icon, for `tabBarLabel`.
+ *
+ * Its own component rather than `tabBarLabelStyle`, for two things the style cannot say: the label
+ * is a TAPPABLE label, so it takes `tappable` (14) — it was `label`'s 13.5, under Phase 1's floor —
+ * and it sits in a bar of fixed height (`tokens.target.tabBar`), so its growth with the system font
+ * size is capped at `MAX_FONT_SCALE` instead of being pushed under the bar's bottom edge. One line,
+ * centred, as the navigator's own label is.
+ */
+export const TabBarLabel = ({
+  color,
+  children,
+  position = 'below-icon',
+}: TabBarLabelProps): ReactNode => (
+  <Text
+    maxFontSizeMultiplier={MAX_FONT_SCALE}
+    numberOfLines={1}
+    style={[labelStyles.label, position === 'beside-icon' ? labelStyles.beside : null, { color }]}
+  >
+    {children}
+  </Text>
+);
+
 export const TabBarIcon = ({ name, focused }: TabIconProps): ReactNode => (
   <View style={[styles.indicator, focused ? styles.indicatorOn : null]}>
     <TabIcon focused={focused} name={name} />

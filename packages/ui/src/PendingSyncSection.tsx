@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
-import { Heading, Secondary } from './Text';
+import { Label, Secondary } from './Text';
 import { ListItem } from './ListItem';
 import type { StatusKind } from './StatusGlyph';
+import { useT } from './i18n';
+import type { TextKey } from './i18n';
 
 /**
  * `BE-W176` — "Pending sync": unplanned visits this phone made that the server has not yet put on a
@@ -29,10 +31,10 @@ export interface PendingSyncSectionProps {
   readonly onOpen: (item: PendingSyncItem) => void;
 }
 
-const STATE_WORDS: Readonly<Record<PendingSyncItem['state'], string>> = {
-  waiting: 'Waiting to send',
-  sent: 'Sent — waiting for the server to confirm the day',
-  refused: 'Refused by the server',
+const STATE_WORDS: Readonly<Record<PendingSyncItem['state'], TextKey>> = {
+  waiting: 'pending.waiting',
+  sent: 'pending.sent',
+  refused: 'pending.refused',
 };
 
 const STATE_GLYPH: Readonly<Record<PendingSyncItem['state'], StatusKind>> = {
@@ -43,20 +45,27 @@ const STATE_GLYPH: Readonly<Record<PendingSyncItem['state'], StatusKind>> = {
 
 const styles = StyleSheet.create({
   section: { gap: tokens.space.sm, paddingTop: tokens.space.sm },
-  head: { gap: tokens.space.xs / 2 },
+  head: { gap: tokens.space.xxs },
 });
 
-export const PendingSyncSection = ({ items, onOpen }: PendingSyncSectionProps): ReactNode =>
-  items.length === 0 ? null : (
+export const PendingSyncSection = ({ items, onOpen }: PendingSyncSectionProps): ReactNode => {
+  const { t } = useT();
+  return items.length === 0 ? null : (
     <View style={styles.section}>
       <View style={styles.head}>
-        <Heading>Pending sync</Heading>
-        <Secondary>Day will be confirmed after sync.</Secondary>
+        {/* `FE-W178`. A section header, muted 13.5, as B6 draws "Added today". */}
+        <Label muted>{t('pending.heading')}</Label>
+        <Secondary>{t('pending.lead')}</Secondary>
       </View>
       {items.map((item) => (
         <ListItem
           // The state first, beside its glyph; then where and why.
-          detail={[STATE_WORDS[item.state], item.problem, item.clinic, `Unplanned · ${item.reason}`]
+          detail={[
+            t(STATE_WORDS[item.state]),
+            item.problem,
+            item.clinic,
+            t('pending.unplanned', { reason: item.reason }),
+          ]
             .filter((line): line is string => line !== null && line !== '')
             .join('\n')}
           key={item.id}
@@ -69,3 +78,4 @@ export const PendingSyncSection = ({ items, onOpen }: PendingSyncSectionProps): 
       ))}
     </View>
   );
+};

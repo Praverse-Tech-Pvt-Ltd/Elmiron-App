@@ -1,8 +1,23 @@
 import type { ReactNode } from 'react';
 import { ADMIN_RPC, RetentionOverviewSchema } from '@fieldforce/core';
 import { signedIn } from '../../lib/session';
-import { Body, Card, Heading, MissingNote, Pill, Stat, Stats, Title } from '../../lib/ui';
+import { callerRole } from '../../lib/role';
+import {
+  Body,
+  Card,
+  Heading,
+  MissingNote,
+  Page,
+  PageHeader,
+  Pill,
+  RoleNote,
+  Stat,
+  Stats,
+} from '../../lib/ui';
 import { adminRefusal, retentionAlerts } from '../../lib/admin-text';
+import { indiaDateTime } from '../../lib/india-date';
+import { tableLabel } from '../../lib/labels';
+import { plural } from '../../lib/plural';
 
 /**
  * `FE-W78` — Retention & purge, read-only.
@@ -15,20 +30,29 @@ import { adminRefusal, retentionAlerts } from '../../lib/admin-text';
  *
  * **No purge button.** The worker claims an object, deletes it from storage, then confirms
  * (`retention.yml`); it runs hourly and a second, manual worker would be a second implementation of a
- * compliance control. If it has stopped, the fix is the workflow, and this page says so.
+ * compliance control.
+ *
+ * `FE-W168`: a worker that has never run is shown as "Not run yet", not as a green "Keeping up"
+ * beside "Last run: never"; the overdue figure is in the attention tone when it is not zero; the 35
+ * kept-for-good tables are named in words behind "Show them" rather than as a wall of `snake_case`.
  */
 export const dynamic = 'force-dynamic';
 
+export const metadata = { title: 'Retention & purge' };
+
 const READ_REASON = 'console retention & purge screen';
 
-const dateTime = (iso: string | null): string =>
-  iso === null
-    ? 'never'
-    : new Date(iso).toLocaleString('en-IN', {
-        timeZone: 'Asia/Kolkata',
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      });
+const ONLY_ADMINS =
+  'Only an admin reads retention figures: they count recordings made by everyone in your company.';
+
+const header = (
+  <PageHeader title="Retention & purge">
+    <Body muted>
+      What is kept, for how long, and whether the worker that destroys expired audio is running.
+      Read-only. Times are India time.
+    </Body>
+  </PageHeader>
+);
 
 export default async function RetentionPage(): Promise<ReactNode> {
   const session = await signedIn();
@@ -40,47 +64,57 @@ export default async function RetentionPage(): Promise<ReactNode> {
     );
   }
 
+  // `FE-W164`: a manager is told once, in the info tone, and nothing is asked of the server.
+  const role = await callerRole();
+  if (role !== null && role !== 'admin') {
+    return (
+      <Page>
+        {header}
+        <RoleNote>{ONLY_ADMINS}</RoleNote>
+      </Page>
+    );
+  }
+
   const result = await session.db.rpc(ADMIN_RPC.retentionOverview, {
     p_reason: READ_REASON,
     p_runs: 20,
   });
   const parsed = result.error === null ? RetentionOverviewSchema.safeParse(result.data) : null;
 
-  const header = (
-    <div className="ff-page-header-text">
-      <Title>Retention &amp; purge</Title>
-      <Body muted>
-        What is kept, for how long, and whether the worker that destroys expired audio is running.
-        Read-only. Times are India time.
-      </Body>
-    </div>
-  );
-
   if (result.error !== null || parsed === null || !parsed.success) {
     return (
-      <div className="ff-page">
+      <Page>
         {header}
-        <MissingNote tone="critical">
-          {result.error === null
-            ? 'The retention figures came back in a shape this console does not recognise, so none are shown.'
-            : result.error.code === '42501'
-              ? 'Only an admin reads retention status: these figures count other people’s recordings.'
+        {result.error?.code === '42501' ? (
+          <RoleNote>{ONLY_ADMINS}</RoleNote>
+        ) : (
+          <MissingNote tone="critical">
+            {result.error === null
+              ? 'The retention figures came back in a shape this console does not recognise, so none are shown.'
               : adminRefusal(result.error)}
-        </MissingNote>
-      </div>
+          </MissingNote>
+        )}
+      </Page>
     );
   }
 
   const o = parsed.data;
+  const overdue = o.yours.overdueRecordings + o.yours.overdueVoiceNotes;
   const figures = [
-    { label: 'Live recordings', value: o.yours.liveRecordings },
-    { label: 'Live voice notes', value: o.yours.liveVoiceNotes },
-    { label: 'Overdue', value: o.yours.overdueRecordings + o.yours.overdueVoiceNotes },
-    { label: 'Destroyed so far', value: o.yours.destroyedRecordings + o.yours.destroyedVoiceNotes },
+    { label: 'Live recordings', value: o.yours.liveRecordings, attention: false },
+    { label: 'Live voice notes', value: o.yours.liveVoiceNotes, attention: false },
+    { label: 'Overdue', value: overdue, attention: overdue > 0 },
+    {
+      label: 'Destroyed so far',
+      value: o.yours.destroyedRecordings + o.yours.destroyedVoiceNotes,
+      attention: false,
+    },
   ];
+  const neverRun = o.worker.lastRunAt === null;
+  const kept = [...o.appendOnlyTables].map(tableLabel).sort((a, b) => a.localeCompare(b));
 
   return (
-    <div className="ff-page">
+    <Page>
       {header}
 
       {retentionAlerts(o).map((alert) => (
@@ -94,8 +128,8 @@ export default async function RetentionPage(): Promise<ReactNode> {
         <table>
           <thead>
             <tr>
-              <th>What</th>
-              <th>Kept</th>
+              <th className="ff-w-md">What</th>
+              <th className="ff-w-md">Kept</th>
               <th>How</th>
             </tr>
           </thead>
@@ -110,19 +144,23 @@ export default async function RetentionPage(): Promise<ReactNode> {
             </tr>
             <tr>
               <td>Abandoned partial uploads</td>
-              <td>Until the next run after they are abandoned</td>
+              <td>Until the worker’s next run after they are abandoned</td>
               <td>Destroyed by the same worker.</td>
             </tr>
             <tr>
               <td>
-                Append-only records ({o.appendOnlyTables.length} tables, including the audit log and
-                consent records)
+                Permanent records: {plural(kept.length, 'kind of record', 'kinds of record')},
+                including the audit log and consent records
               </td>
-              <td>Kept; never edited or deleted, by any role</td>
+              <td>Kept; never edited or deleted, by anyone</td>
               <td>
-                A database trigger refuses every update and delete.
-                <br />
-                <span className="ff-muted">{o.appendOnlyTables.join(', ')}</span>
+                <div className="ff-cell-stack">
+                  <span>A safeguard in the database refuses every change and every deletion.</span>
+                  <details>
+                    <summary>{`Show all ${String(kept.length)}`}</summary>
+                    <span className="ff-muted">{kept.join(', ')}</span>
+                  </details>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -135,36 +173,45 @@ export default async function RetentionPage(): Promise<ReactNode> {
 
       <Card>
         <Heading>Your company’s audio</Heading>
-        <Stats>
+        <Stats columns={4}>
           {figures.map((f) => (
-            <Stat key={f.label} label={f.label}>
+            <Stat key={f.label} label={f.label} tone={f.attention ? 'attention' : 'neutral'}>
               {f.value}
             </Stat>
           ))}
         </Stats>
         {o.yours.oldestOverdueAt === null ? null : (
-          <Body muted>Oldest overdue since {dateTime(o.yours.oldestOverdueAt)}.</Body>
+          <Body muted>Oldest overdue since {indiaDateTime(o.yours.oldestOverdueAt)}.</Body>
         )}
       </Card>
 
       <Card>
         <Heading>The retention worker</Heading>
-        <Body>
-          Last run: {dateTime(o.worker.lastRunAt)} · last fully successful run:{' '}
-          {dateTime(o.worker.lastSuccessfulRunAt)} ·{' '}
-          <Pill tone={o.worker.stalled ? 'critical' : 'success'}>
-            {o.worker.stalled ? 'Stalled' : 'Keeping up'}
+        <div className="ff-row">
+          <Pill tone={o.worker.stalled ? 'critical' : neverRun ? 'neutral' : 'success'}>
+            {o.worker.stalled ? 'Stalled' : neverRun ? 'Not run yet' : 'Keeping up'}
           </Pill>
-        </Body>
+          {o.worker.lastRunAt === null ? null : (
+            <Body>
+              {`Last run ${indiaDateTime(o.worker.lastRunAt)} · last fully successful run ${
+                o.worker.lastSuccessfulRunAt === null
+                  ? 'none yet'
+                  : indiaDateTime(o.worker.lastSuccessfulRunAt)
+              }.`}
+            </Body>
+          )}
+        </div>
         <Body muted>
-          It destroys up to {o.thresholds.purgeBatchLimit} objects per run. It counts as stalled
-          when more than {o.thresholds.purgeBatchLimit * o.thresholds.purgeBacklogMultiplier}{' '}
-          objects are overdue, or any has been overdue for more than{' '}
-          {o.thresholds.purgeMaxSilenceHours} hours. There is no manual purge here: if it has
-          stopped, the “Audio retention” workflow is what needs attention.
+          It destroys up to {o.thresholds.purgeBatchLimit} files per run. It counts as stalled when
+          more than {o.thresholds.purgeBatchLimit * o.thresholds.purgeBacklogMultiplier} files are
+          overdue, or any has been overdue for more than {o.thresholds.purgeMaxSilenceHours} hours.
+          There is no manual purge here: if it stops, tell whoever runs the service for your
+          company.
         </Body>
         {o.runs.length === 0 ? (
-          <Body muted>No run is recorded.</Body>
+          neverRun ? null : (
+            <Body muted>No run is recorded.</Body>
+          )
         ) : (
           <table>
             <thead>
@@ -172,14 +219,16 @@ export default async function RetentionPage(): Promise<ReactNode> {
                 <th>Started</th>
                 <th>Finished</th>
                 <th>Outcome</th>
-                <th className="ff-num">Your objects destroyed</th>
+                <th className="ff-num">Your files destroyed</th>
               </tr>
             </thead>
             <tbody>
               {o.runs.map((run) => (
                 <tr key={run.id}>
-                  <td>{dateTime(run.startedAt)}</td>
-                  <td>{run.finishedAt === null ? '—' : dateTime(run.finishedAt)}</td>
+                  <td className="ff-nowrap">{indiaDateTime(run.startedAt)}</td>
+                  <td className="ff-nowrap">
+                    {run.finishedAt === null ? '—' : indiaDateTime(run.finishedAt)}
+                  </td>
                   <td>
                     <Pill
                       tone={
@@ -193,7 +242,7 @@ export default async function RetentionPage(): Promise<ReactNode> {
                       {run.outcome === 'succeeded'
                         ? 'Succeeded'
                         : run.outcome === 'failed'
-                          ? 'Failed on some objects'
+                          ? 'Failed on some files'
                           : 'Did not finish'}
                     </Pill>
                   </td>
@@ -207,6 +256,6 @@ export default async function RetentionPage(): Promise<ReactNode> {
           A run’s totals across every company are not shown: they count other companies’ audio.
         </Body>
       </Card>
-    </div>
+    </Page>
   );
 }

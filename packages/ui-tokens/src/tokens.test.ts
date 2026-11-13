@@ -39,6 +39,24 @@ describe('tokens', () => {
   it('keeps body type at 16 or above for outdoor legibility', () => {
     expect(tokens.typography.body.size).toBeGreaterThanOrEqual(16);
   });
+
+  it('keeps every label a finger presses at or above 14 (FE-W177)', () => {
+    // Phase 1 bans "any tappable label below 14". `label` (13.5) is for words that are read, not
+    // pressed; the tab bar, the filter chips and "Mark done" were all set at it.
+    for (const role of ['tappable', 'control'] as const) {
+      expect(tokens.typography[role].size, role).toBeGreaterThanOrEqual(14);
+    }
+    expect(tokens.typography.label.size).toBeLessThan(tokens.typography.tappable.size);
+  });
+
+  it('keeps the spacing scale ascending from xxs (FE-W181)', () => {
+    // Keyed rather than `Object.values`, which widens an interface's values to `any`.
+    const { xxs, xs, sm, md, lg, xl } = tokens.space;
+    const steps = [xxs, xs, sm, md, lg, xl];
+    expect(steps).toEqual([...steps].sort((a, b) => a - b));
+    expect(new Set(steps).size).toBe(steps.length);
+    expect(tokens.space.xxs).toBe(2);
+  });
 });
 
 describe('required contrast pairs', () => {
@@ -206,6 +224,7 @@ describe('motion', () => {
 describe('the tab bar', () => {
   it('fits a 28pt icon well and a label line, and never drops below the touch floor', () => {
     expect(tokens.target.tabBar).toBeGreaterThanOrEqual(tokens.target.floor);
-    expect(tokens.target.tabBar).toBeGreaterThanOrEqual(28 + tokens.typography.label.lineHeight);
+    // `FE-W177`. The tab label is a tappable label, so it takes the `tappable` step.
+    expect(tokens.target.tabBar).toBeGreaterThanOrEqual(28 + tokens.typography.tappable.lineHeight);
   });
 });

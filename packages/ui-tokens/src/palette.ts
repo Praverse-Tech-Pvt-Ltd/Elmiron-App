@@ -68,6 +68,11 @@ export const brandPalette = {
   offlineEdge: '#B4B7AC',
   /** Recording in progress. Terracotta by decision, not signal red. */
   recording: '#8A4A32',
+  /**
+   * `FE-W181`. The tint behind a recording in progress — the recording bar and the recording
+   * glyph's fill. It was a literal in two components, the only colour in the app not drawn from here.
+   */
+  recordingFill: '#F6EDE9',
 
   // 03 — Depth
   /**

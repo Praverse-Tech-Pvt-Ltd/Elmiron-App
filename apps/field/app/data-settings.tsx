@@ -1,0 +1,71 @@
+import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+import { DataSettingsScreen, Screen, t, useLanguage } from '@fieldforce/ui';
+import type { DataSettingKey } from '@fieldforce/ui';
+import { useBack } from '../src/navigation/back';
+import { readDataPrefs, writeDataPref } from '../src/settings/data-prefs';
+import type { DataPrefs } from '../src/settings/data-prefs';
+import { megabytes, usedThisMonth } from '../src/sync/data-use';
+import type { DataUseRecord } from '../src/sync/data-use';
+import { readDataUse } from '../src/sync/data-use-store';
+import { usePulledStore } from '../src/sync/pulled-store';
+
+/**
+ * `FE-W139` — route binding for C4's "Your data" settings. Reads the two switches and this month's
+ * count off the phone, saves a change, and moves a switch only once the phone has kept it.
+ *
+ * The month is the SERVER's (`serverTime` from the pulled store): with no server instant yet, the
+ * screen shows no figure rather than one for a month the handset's clock chose.
+ */
+export default function DataSettings(): ReactNode {
+  useLanguage();
+  const back = useBack();
+  const { serverTime } = usePulledStore();
+  const [prefs, setPrefs] = useState<DataPrefs | null>(null);
+  const [record, setRecord] = useState<DataUseRecord | null>(null);
+  const [saving, setSaving] = useState(false);
+  // `FE-W155`. Whether the last change failed, not its sentence: the words are read at render.
+  const [saveFailed, setSaveFailed] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    void Promise.all([readDataPrefs(), readDataUse()]).then(([nextPrefs, nextRecord]) => {
+      if (!live) return;
+      setPrefs(nextPrefs);
+      setRecord(nextRecord);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const change = (key: DataSettingKey, next: boolean): void => {
+    if (saving || prefs === null) return;
+    setSaving(true);
+    setSaveFailed(false);
+    void writeDataPref(key, next)
+      .then(() => {
+        setPrefs({ ...prefs, [key]: next });
+      })
+      .catch(() => {
+        setSaveFailed(true);
+      })
+      .finally(() => {
+        setSaving(false);
+      });
+  };
+
+  return (
+    // `FE-W188`. Opened from Me or Today, so it has a way back.
+    <Screen onBack={back} scrollable>
+      <DataSettingsScreen
+        wifiOnlyAudio={prefs?.wifiOnlyAudio ?? null}
+        warnOverMonthly={prefs?.warnOverMonthly ?? null}
+        onChange={change}
+        saving={saving}
+        saveFailure={saveFailed ? t('dataSettings.saveFailedDetail') : null}
+        usedThisMonth={serverTime === null ? null : megabytes(usedThisMonth(record, serverTime))}
+      />
+    </Screen>
+  );
+}

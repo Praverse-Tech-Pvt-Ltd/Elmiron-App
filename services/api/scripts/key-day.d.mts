@@ -65,3 +65,9 @@ export declare const refuseRemote: (targets: { label: string; url: string }[]) =
 export declare const likelyLanAddress: (
   interfaces?: Record<string, NetworkInterfaceInfo[] | undefined>,
 ) => { name: string; address: string } | null;
+
+/** `BE-W212` — the generated TEST clip, its poster, its length, and ffmpeg's arguments for it. */
+export declare const TEST_CLIP: string;
+export declare const TEST_POSTER: string;
+export declare const TEST_CLIP_SECONDS: number;
+export declare const testClipArgs: (out: string) => string[];

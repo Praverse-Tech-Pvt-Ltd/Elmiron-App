@@ -3,13 +3,14 @@ import { StyleSheet, View } from 'react-native';
 import { tokens } from '@fieldforce/ui-tokens';
 import { Pressable } from 'react-native';
 import { Banner } from './Banner';
-import { Label, Title } from './Text';
+import { Label, TapLabel, Title } from './Text';
 import { ListItem } from './ListItem';
 import { Spinner } from './Spinner';
 import { EmptyState } from './EmptyState';
 import { SkeletonRows } from './Skeleton';
 import { SurfaceContext } from './surface';
 import { TextField } from './TextField';
+import { t, useLanguage } from './i18n';
 
 /**
  * B8 — the doctor list.
@@ -78,13 +79,13 @@ const emptyMessage = (
   total: number | undefined,
 ): string => {
   const searched = query.trim();
-  if (total === 0) return 'No doctors in your territory yet.';
+  if (total === 0) return t('doctors.emptyTerritory');
   if (searched !== '' && filterLabel !== null) {
-    return `Nothing under “${filterLabel}” matches “${searched}”.`;
+    return t('doctors.emptyFilterAndSearch', { filter: filterLabel, query: searched });
   }
-  if (searched !== '') return `Nothing matches “${searched}”.`;
-  if (filterLabel !== null) return `No doctors under “${filterLabel}”.`;
-  return 'No doctors in your territory yet.';
+  if (searched !== '') return t('doctors.emptySearch', { query: searched });
+  if (filterLabel !== null) return t('doctors.emptyFilter', { filter: filterLabel });
+  return t('doctors.emptyTerritory');
 };
 
 export const DoctorListScreen = ({
@@ -99,6 +100,7 @@ export const DoctorListScreen = ({
   failure = null,
   total,
 }: DoctorListScreenProps): ReactNode => {
+  useLanguage();
   // The chip an MR can see is on. "All" is not a narrowing, so it never explains an
   // empty list.
   const active = filters.find((candidate) => candidate.id === activeFilter);
@@ -107,7 +109,7 @@ export const DoctorListScreen = ({
   if (failure !== null) {
     return (
       <>
-        <Title>Doctors</Title>
+        <Title>{t('doctors.title')}</Title>
         <Banner detail={failure.detail} title={failure.title} tone="critical" />
       </>
     );
@@ -115,11 +117,11 @@ export const DoctorListScreen = ({
 
   return (
     <>
-      <Title>Doctors</Title>
+      <Title>{t('doctors.title')}</Title>
 
       <TextField
         autoCapitalize="none"
-        label="Name, clinic or area"
+        label={t('doctors.searchLabel')}
         onChangeText={onQueryChange}
         onClear={() => {
           onQueryChange('');
@@ -151,12 +153,13 @@ export const DoctorListScreen = ({
                   that automatic — the alternative is a hardcoded white that the
                   next palette change silently breaks.
                 */}
+                {/* `FE-W177`. A chip is pressed, so its label is at the tappable floor (14). */}
                 {on ? (
                   <SurfaceContext.Provider value="accent">
-                    <Label>{filter.label}</Label>
+                    <TapLabel>{filter.label}</TapLabel>
                   </SurfaceContext.Provider>
                 ) : (
-                  <Label muted>{filter.label}</Label>
+                  <TapLabel muted>{filter.label}</TapLabel>
                 )}
               </Pressable>
             );
@@ -164,7 +167,7 @@ export const DoctorListScreen = ({
         </View>
       )}
 
-      {loading ? <Spinner label="Getting your doctor list" /> : null}
+      {loading ? <Spinner label={t('doctors.loadingList')} /> : null}
 
       {/* FE-W101. The list's shape while it loads, under the spinner's words — never instead. */}
       {loading && rows.length === 0 ? <SkeletonRows count={5} /> : null}
@@ -187,7 +190,7 @@ export const DoctorListScreen = ({
             title={row.name}
             // Spread rather than `meta={... : undefined}`: `exactOptionalPropertyTypes`
             // treats an explicit undefined as a value, not as an absent prop.
-            {...(row.overdue ? { meta: 'Overdue' } : {})}
+            {...(row.overdue ? { meta: t('doctors.overdue') } : {})}
             {...(onOpenDoctor === undefined
               ? {}
               : {
@@ -203,8 +206,8 @@ export const DoctorListScreen = ({
         <View style={styles.count}>
           <Label muted>
             {rows.length === total
-              ? `${String(total)} doctors in your territory.`
-              : `${String(rows.length)} of ${String(total)} doctors in your territory.`}
+              ? t('doctors.countAll', { total })
+              : t('doctors.countShown', { shown: rows.length, total })}
           </Label>
         </View>
       )}

@@ -1,11 +1,14 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { fontFamilyFor, tokens } from '@fieldforce/ui-tokens';
-import { BodyText, Label, Title } from './Text';
+import { BodyText, Label, Secondary, Title } from './Text';
 import { Banner } from './Banner';
 import { Button } from './Button';
+import { Card } from './Card';
 import { Screen } from './Screen';
 import { Spinner } from './Spinner';
+import { t, useT } from './i18n';
+import type { TextKey } from './i18n';
 
 /**
  * The upload queue — the MR's only proof their day's work is safe.
@@ -79,8 +82,18 @@ export interface QueueScreenProps {
    * place for one.
    */
   readonly onRetry?: () => void;
-  /** S3's "Tell the help desk". Absent until there is a help desk to tell. */
+  /**
+   * S3's "Tell the help desk". Absent until there is a help desk to tell. `FE-W195`: the route
+   * passes it when the build names one (`EXPO_PUBLIC_SUPPORT_EMAIL` / `_PHONE`).
+   */
   readonly onContactSupport?: () => void;
+  /**
+   * `FE-W191`. "Last sent at 14:05" under "Everything is sent" — the server's time for the newest
+   * delivery, already in the territory's clock. Null when the server has stamped nothing.
+   */
+  readonly lastSentLabel?: string | null;
+  /** `FE-W188`. The screen's Back control. */
+  readonly onBack?: () => void;
   /**
    * MR-28 C2 — what happened when the MR last pressed "Try again now", if it failed.
    *
@@ -104,9 +117,25 @@ export interface QueueScreenProps {
    * queue, and an empty one really is "Everything is sent".
    */
   readonly readState?: 'reading' | 'unreadable' | 'read';
+  /**
+   * `FE-W136`. Audio that "Send audio on WiFi only" is holding RIGHT NOW -- the route knows the
+   * switch and the network; this screen does not. Those rows say "Waiting for WiFi", are never
+   * counted as stuck (nothing was tried), and a neutral block above them says how many.
+   *
+   * `onSendNow` sends them over the network the phone is on, this once. **A secondary action, not a
+   * primary**: this screen still has no primary, and the design's own rule -- "the MR never spends
+   * their data without being told first" -- is kept by stating the size in the button's label when
+   * it is known (`sizeLabel`, e.g. "2.1 MB").
+   */
+  readonly waitingForWifi?: {
+    readonly ids: readonly string[];
+    readonly sizeLabel?: string | null;
+    readonly onSendNow?: () => void;
+  };
 }
 
-export type QueueRowState = 'sent' | 'waiting' | 'waiting-long' | 'refused' | 'needs-attention';
+export type QueueRowState =
+  'sent' | 'waiting' | 'waiting-wifi' | 'waiting-long' | 'refused' | 'needs-attention';
 
 /**
  * Which of the five states a row is in.
@@ -120,9 +149,12 @@ export const rowStateFor = (
   item: QueueScreenItem,
   rejection: QueueScreenRejection | undefined,
   longRetryAfterAttempts: number = LONG_RETRY_AFTER_ATTEMPTS,
+  /** `FE-W136`. Held by "Send audio on WiFi only": not tried, so never "Still trying". */
+  heldForWifi = false,
 ): QueueRowState => {
   if (rejection !== undefined) return rejection.deadLettered ? 'needs-attention' : 'refused';
   if (item.status === 'synced') return 'sent';
+  if (heldForWifi && item.status === 'queued') return 'waiting-wifi';
   return item.attemptCount >= longRetryAfterAttempts ? 'waiting-long' : 'waiting';
 };
 
@@ -183,25 +215,46 @@ export const stuckSummaryFor = (
 const GLYPH: Readonly<Record<QueueRowState, string>> = {
   sent: '\u2713',
   waiting: '\u21BB',
+  'waiting-wifi': '\u21BB',
   'waiting-long': '\u25F7',
   refused: '\u2715',
   'needs-attention': '\u2298',
 };
 
-/** The text label. Meaning is never carried by colour or glyph alone. */
-const LABEL: Readonly<Record<QueueRowState, string>> = {
-  sent: 'Sent',
-  waiting: 'Waiting to send',
-  'waiting-long': 'Still trying',
-  refused: 'Refused',
-  'needs-attention': 'Needs someone to look',
+/**
+ * `FE-W191`. The glyph's ink. "Sent" carries the success green it has everywhere else — the tick on
+ * a done stop, a visit's done step — and was the one grey tick in the app (QA screenshot 53). Every
+ * other state keeps the muted ink: waiting is never coloured as a fault (§05).
+ */
+const GLYPH_INK: Readonly<Record<QueueRowState, string>> = {
+  sent: tokens.color.success,
+  waiting: tokens.color.textSecondary,
+  'waiting-wifi': tokens.color.textSecondary,
+  'waiting-long': tokens.color.textSecondary,
+  refused: tokens.color.textSecondary,
+  'needs-attention': tokens.color.textSecondary,
+};
+
+/**
+ * The text label. Meaning is never carried by colour or glyph alone. `FE-W153`: keys, read at
+ * render in the app's current language.
+ */
+const LABEL: Readonly<Record<QueueRowState, TextKey>> = {
+  sent: 'queue.stateSent',
+  waiting: 'queue.stateWaiting',
+  // `FE-W136`. Neutral, like waiting: the MR chose this, and nothing is wrong.
+  'waiting-wifi': 'queue.stateWaitingWifi',
+  'waiting-long': 'queue.stateWaitingLong',
+  refused: 'queue.stateRefused',
+  'needs-attention': 'queue.stateNeedsAttention',
 };
 
 const styles = StyleSheet.create({
   row: {
     paddingVertical: tokens.space.md,
     paddingHorizontal: tokens.space.md,
-    borderRadius: tokens.radius.sm,
+    // `FE-W184`. The card radius every other row has; it was the 4pt `sm`.
+    borderRadius: tokens.radius.card,
     backgroundColor: tokens.color.surface,
     gap: tokens.space.xs,
     // §04's absolute floor for anything tappable, from the token rather than as a
@@ -210,10 +263,13 @@ const styles = StyleSheet.create({
     minHeight: tokens.target.floor,
     justifyContent: 'center',
   },
-  statusLine: { flexDirection: 'row', alignItems: 'center', gap: tokens.space.sm },
+  // `FE-W179`. Top-aligned: the glyph carries the label's own line height, so it sits on the label's
+  // first line — on its baseline — and stays there when a translated state wraps.
+  statusLine: { flexDirection: 'row', alignItems: 'flex-start', gap: tokens.space.sm },
   glyph: {
     color: tokens.color.textSecondary,
     fontSize: tokens.typography.body.size,
+    lineHeight: tokens.typography.body.lineHeight,
     fontWeight: '500',
     fontFamily: fontFamilyFor('500'),
   },
@@ -235,7 +291,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: tokens.color.hairline,
     paddingTop: tokens.space.sm,
-    gap: 2,
+    gap: tokens.space.xxs,
   },
   actions: { flexDirection: 'row', gap: tokens.space.sm, paddingTop: tokens.space.xs },
   grow: { flex: 1 },
@@ -247,33 +303,48 @@ const styles = StyleSheet.create({
  * which told a rep that something technical was stuck rather than which piece of their day.
  * An entity this map does not know is still shown, de-underscored, rather than hidden.
  */
-const ENTITY_WORDS: Readonly<Record<string, string>> = {
-  visit: 'Unplanned visit',
-  check_in: 'Check-in',
-  check_out: 'Check-out',
-  consent_record: 'Doctor’s recording answer',
-  call_report: 'Call report',
-  sample_and_input: 'Samples left',
-  voice_note: 'Voice note',
-  recording: 'Visit recording',
-  adverse_event: 'Side-effect flag',
+const ENTITY_WORDS: Readonly<Record<string, TextKey>> = {
+  visit: 'queue.entityVisit',
+  check_in: 'queue.entityCheckIn',
+  check_out: 'queue.entityCheckOut',
+  consent_record: 'queue.entityConsentRecord',
+  call_report: 'queue.entityCallReport',
+  sample_and_input: 'queue.entitySampleAndInput',
+  voice_note: 'queue.entityVoiceNote',
+  recording: 'queue.entityRecording',
+  adverse_event: 'queue.entityAdverseEvent',
   // `BE-W190`. "Start my day" or "End my day", waiting to go.
-  work_day: 'Your working day',
+  work_day: 'queue.entityWorkDay',
 };
 
-export const entityWords = (entity: string): string =>
-  ENTITY_WORDS[entity] ?? `${entity.charAt(0).toUpperCase()}${entity.slice(1).replace(/_/gu, ' ')}`;
+/**
+ * `FE-W153`. In the app's current language; an entity this build does not know is the outbox's own
+ * name, de-underscored -- a code, not a word, so it is not in the catalogue.
+ */
+export const entityWords = (entity: string): string => {
+  const key = ENTITY_WORDS[entity];
+  return key === undefined
+    ? `${entity.charAt(0).toUpperCase()}${entity.slice(1).replace(/_/gu, ' ')}`
+    : t(key);
+};
 
-/** The same words inside a sentence: "Stuck: call report and samples left." */
+/**
+ * The same words inside a sentence: "Stuck: call report and samples left." Lower-cased, except the
+ * doctor's answer, which opens with a word that keeps its capital. Lower-casing is a no-op in
+ * Devanagari, so a translation is shown as written.
+ */
 const inSentence = (entity: string): string => {
   const words = entityWords(entity);
-  return words === 'Doctor’s recording answer' ? words : words.toLowerCase();
+  return entity === 'consent_record' ? words : words.toLowerCase();
 };
 
 const list = (values: readonly string[]): string =>
   values.length <= 1
     ? (values[0] ?? '')
-    : `${values.slice(0, -1).join(', ')} and ${values[values.length - 1] ?? ''}`;
+    : t('queue.listAnd', {
+        rest: values.slice(0, -1).join(', '),
+        last: values[values.length - 1] ?? '',
+      });
 
 /**
  * The block S3 puts above the rows.
@@ -291,65 +362,105 @@ const StuckBlock = ({
   readonly summary: QueueStuckSummary;
   readonly onRetry?: (() => void) | undefined;
   readonly onContactSupport?: (() => void) | undefined;
-}): ReactNode => (
-  <View accessibilityRole="alert" accessible style={styles.stuck}>
-    <BodyText>
-      {summary.count === 1 ? '1 thing won’t go' : `${String(summary.count)} things won’t go`}
-    </BodyText>
-    <Label
-      muted
-    >{`Stuck: ${list(summary.stuckEntities.map(inSentence))}. It is still safe on your phone.`}</Label>
+}): ReactNode => {
+  useT();
+  return (
+    <View accessibilityRole="alert" accessible style={styles.stuck}>
+      <BodyText>{t('queue.wontGo', { count: summary.count })}</BodyText>
+      {/* `FE-W189`. Sentences, at the prose step; round 1 left the block's lines at `Label`. */}
+      <Secondary>
+        {t('queue.stuck', { things: list(summary.stuckEntities.map(inSentence)) })}
+      </Secondary>
 
-    <View style={styles.reassurance}>
-      {summary.sentEntities.length === 0 ? null : (
-        <Label
-          muted
-        >{`Everything else went through — ${list(summary.sentEntities.map(inSentence))}.`}</Label>
-      )}
-      {/*
+      <View style={styles.reassurance}>
+        {summary.sentEntities.length === 0 ? null : (
+          <Secondary>
+            {t('queue.wentThrough', { things: list(summary.sentEntities.map(inSentence)) })}
+          </Secondary>
+        )}
+        {/*
         Said out loud, because the MR is the person most likely to assume otherwise.
         It is also literally true of this system: there is no ranking, score or
         percentile anywhere to count it against, and the backend has tests asserting
         those columns do not exist.
       */}
-      <Label muted>This is not counted against you. The upload failed, not you.</Label>
-    </View>
-
-    {onRetry === undefined && onContactSupport === undefined ? null : (
-      <View style={styles.actions}>
-        {onRetry === undefined ? null : (
-          <View style={styles.grow}>
-            <Button label="Try again now" onPress={onRetry} variant="secondary" />
-          </View>
-        )}
-        {onContactSupport === undefined ? null : (
-          <View style={styles.grow}>
-            <Button label="Tell the help desk" onPress={onContactSupport} variant="quiet" />
-          </View>
-        )}
+        <Secondary>{t('queue.notAgainstYou')}</Secondary>
       </View>
-    )}
-  </View>
-);
+
+      {onRetry === undefined && onContactSupport === undefined ? null : (
+        <View style={styles.actions}>
+          {onRetry === undefined ? null : (
+            <View style={styles.grow}>
+              <Button label={t('queue.tryAgainNow')} onPress={onRetry} variant="secondary" />
+            </View>
+          )}
+          {onContactSupport === undefined ? null : (
+            <View style={styles.grow}>
+              <Button label={t('queue.tellHelpDesk')} onPress={onContactSupport} variant="quiet" />
+            </View>
+          )}
+        </View>
+      )}
+    </View>
+  );
+};
+
+/**
+ * `FE-W136`. How many recordings are waiting for WiFi, and -- when the route can do it -- the way to
+ * send them now. Offline's dashed wash, because waiting is a normal state (§05: never red).
+ */
+const WifiBlock = ({
+  count,
+  sizeLabel,
+  onSendNow,
+}: {
+  readonly count: number;
+  readonly sizeLabel: string | null;
+  readonly onSendNow: (() => void) | undefined;
+}): ReactNode => {
+  useT();
+  return (
+    <Card tone="offline">
+      <BodyText>{t('queue.wifiWaiting', { count })}</BodyText>
+      <Secondary>{t('queue.wifiDetail')}</Secondary>
+      {onSendNow === undefined ? null : (
+        <Button
+          label={
+            sizeLabel === null ? t('queue.sendNow') : t('queue.sendNowSize', { size: sizeLabel })
+          }
+          onPress={onSendNow}
+          variant="secondary"
+        />
+      )}
+    </Card>
+  );
+};
 
 const QueueRow = ({
   item,
   rejection,
   longRetryAfterAttempts,
+  heldForWifi,
 }: {
   readonly item: QueueScreenItem;
   readonly rejection: QueueScreenRejection | undefined;
   readonly longRetryAfterAttempts: number;
+  readonly heldForWifi: boolean;
 }): ReactNode => {
-  const state = rowStateFor(item, rejection, longRetryAfterAttempts);
+  useT();
+  const state = rowStateFor(item, rejection, longRetryAfterAttempts, heldForWifi);
   return (
     <View style={styles.row}>
       <View style={styles.statusLine}>
         {/* Decorative. The label beside it is what a screen reader announces. */}
-        <Text importantForAccessibility="no" accessibilityElementsHidden style={styles.glyph}>
+        <Text
+          importantForAccessibility="no"
+          accessibilityElementsHidden
+          style={[styles.glyph, { color: GLYPH_INK[state] }]}
+        >
           {GLYPH[state]}
         </Text>
-        <BodyText>{LABEL[state]}</BodyText>
+        <BodyText>{t(LABEL[state])}</BodyText>
       </View>
       <Label muted>{entityWords(item.entity)}</Label>
       {rejection === undefined ? null : (
@@ -368,16 +479,16 @@ const QueueRow = ({
             this at", which is the app telling an MR something the server never said.
           */}
           {rejection.receivedAt === null ? null : (
-            <Label muted>{`Server recorded this at ${rejection.receivedAt}`}</Label>
+            <Label muted>{t('queue.serverRecorded', { time: rejection.receivedAt })}</Label>
           )}
-          {rejection.deadLettered ? (
-            <Label muted>This can be sent again once someone reviews it.</Label>
-          ) : null}
+          {rejection.deadLettered ? <Secondary>{t('queue.canResend')}</Secondary> : null}
           {/*
             The reference support asks for. The fallback sentence has always said "Report the
             code below to support" -- and nothing below it showed one.
           */}
-          {rejection.code === null ? null : <Label muted>{`Reference: ${rejection.code}`}</Label>}
+          {rejection.code === null ? null : (
+            <Label muted>{t('queue.reference', { code: rejection.code })}</Label>
+          )}
         </>
       )}
     </View>
@@ -392,34 +503,62 @@ export const QueueScreen = ({
   onContactSupport,
   retryFailure,
   readState = 'read',
+  waitingForWifi,
+  lastSentLabel = null,
+  onBack,
 }: QueueScreenProps): ReactNode => {
+  useT();
   const outstanding = items.filter((item) => item.status !== 'synced');
-  const summary = stuckSummaryFor(items, rejections, longRetryAfterAttempts);
+  const held = new Set(waitingForWifi?.ids ?? []);
+  const heldHere = outstanding.filter(
+    (item) => held.has(item.id) && item.status === 'queued' && rejections[item.id] === undefined,
+  );
+  // `FE-W136`. Held audio was never tried, so it is never "won't go" -- whatever an older attempt
+  // count says. Only the stuck block is told to look past it.
+  const refusedHere = outstanding.some((item) => rejections[item.id] !== undefined);
+  const summary = stuckSummaryFor(
+    items.filter((item) => !heldHere.includes(item)),
+    rejections,
+    longRetryAfterAttempts,
+  );
 
   return (
-    <Screen scrollable>
-      <Title>Saved on this phone</Title>
+    <Screen scrollable {...(onBack === undefined ? {} : { onBack })}>
+      <Title>{t('queue.title')}</Title>
 
       {retryFailure === undefined ? null : (
-        <Banner detail={retryFailure} title="Nothing could be sent" tone="critical" />
+        <Banner detail={retryFailure} title={t('queue.nothingSentTitle')} tone="critical" />
       )}
 
       {summary === null ? null : (
         <StuckBlock onContactSupport={onContactSupport} onRetry={onRetry} summary={summary} />
       )}
 
-      {readState === 'reading' ? <Spinner label="Reading your queue" /> : null}
+      {readState !== 'read' || heldHere.length === 0 ? null : (
+        <WifiBlock
+          count={heldHere.length}
+          sizeLabel={waitingForWifi?.sizeLabel ?? null}
+          onSendNow={waitingForWifi?.onSendNow}
+        />
+      )}
+
+      {readState === 'reading' ? <Spinner label={t('queue.reading')} /> : null}
 
       {readState !== 'read' ? null : outstanding.length === 0 ? (
         <View style={styles.empty}>
           <View style={styles.statusLine}>
-            <Text importantForAccessibility="no" accessibilityElementsHidden style={styles.glyph}>
+            <Text
+              importantForAccessibility="no"
+              accessibilityElementsHidden
+              style={[styles.glyph, { color: GLYPH_INK.sent }]}
+            >
               {GLYPH.sent}
             </Text>
             {/* Reassuring, not an error. Nothing waiting is the good outcome. */}
-            <BodyText>Everything is sent</BodyText>
+            <BodyText>{t('queue.everythingSent')}</BodyText>
           </View>
-          <BodyText muted>Nothing is waiting to leave this phone.</BodyText>
+          <BodyText muted>{t('queue.nothingWaiting')}</BodyText>
+          {lastSentLabel === null ? null : <Secondary>{lastSentLabel}</Secondary>}
         </View>
       ) : (
         // Rendered in the order given. The long-retry threshold changes what a row
@@ -431,8 +570,17 @@ export const QueueScreen = ({
             item={item}
             rejection={rejections[item.id]}
             longRetryAfterAttempts={longRetryAfterAttempts}
+            heldForWifi={heldHere.includes(item)}
           />
         ))
+      )}
+
+      {/*
+        `FE-W195`. A refusal the rep cannot fix says "give the reference to your help desk" on its row;
+        with no stuck block above, the way to do that is here. With a stuck block it is in the block.
+      */}
+      {summary !== null || onContactSupport === undefined || !refusedHere ? null : (
+        <Button label={t('queue.tellHelpDesk')} onPress={onContactSupport} variant="quiet" />
       )}
     </Screen>
   );

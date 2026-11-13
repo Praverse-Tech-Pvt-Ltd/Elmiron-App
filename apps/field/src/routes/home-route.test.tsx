@@ -31,8 +31,11 @@ jest.mock('expo-router', () => ({
 
 import Home from '../../app/(tabs)/home';
 import { asyncStorageQueueStore, setQueueOwner } from '../sync/async-storage-store';
-import { checkInQueueItem } from '../sync/outbox';
+import { checkInQueueItem, voiceNoteQueueItem } from '../sync/outbox';
 import { emptyQueue } from '../sync/reducer';
+import { WARN_OVER_KEY } from '../settings/data-prefs';
+import { DATA_USE_KEY } from '../sync/data-use-store';
+import { bindUploadDevice } from '../sync/upload-conditions';
 
 const signedInAs = (role: string) => ({ status: 'signed-in', role, signOut: jest.fn() });
 
@@ -95,10 +98,37 @@ describe('app/home.tsx — the role-aware shell', () => {
   it('names the role it read from the token rather than inferring one', async () => {
     // The role comes from the JWT claim Backend's auth hook installs. Displaying it
     // is how an MR and a support engineer can both see which role the server issued.
+    // `FE-W182`: in words — it printed the token's own "field_manager" on a client's phone.
     mockSession.mockReturnValue(signedInAs('field_manager'));
     mockStore.mockReturnValue(emptyPulled());
     await render(<Home />);
-    expect(screen.getByText(/Signed in as field_manager/u)).toBeTruthy();
+    expect(screen.getByText('Signed in as a field manager')).toBeTruthy();
+    expect(screen.queryByText(/field_manager/u)).toBeNull();
+  });
+
+  it('names an administrator in words too', async () => {
+    mockSession.mockReturnValue(signedInAs('admin'));
+    mockStore.mockReturnValue(emptyPulled());
+    await render(<Home />);
+    expect(screen.getByText('Signed in as an administrator')).toBeTruthy();
+  });
+
+  it('names a role it does not know exactly as the server issued it (FE-W182)', async () => {
+    // Not a guess at what it means: the raw value is what support needs to read.
+    mockSession.mockReturnValue(signedInAs('auditor'));
+    mockStore.mockReturnValue(emptyPulled());
+    await render(<Home />);
+    expect(screen.getByText('Signed in as auditor')).toBeTruthy();
+  });
+
+  it('says where a manager’s work is, with no internal reference (FE-W182)', async () => {
+    mockSession.mockReturnValue(signedInAs('field_manager'));
+    mockStore.mockReturnValue(emptyPulled());
+    await render(<Home />);
+    expect(
+      screen.getByText('Your team’s exceptions and approvals are in the web console.'),
+    ).toBeTruthy();
+    expect(screen.queryByText(/FE-W/u)).toBeNull();
   });
 
   // One render per case. Rendering repeatedly inside a single test leaves the earlier
@@ -274,7 +304,7 @@ describe('app/home.tsx — the visit the MR is standing inside is never hidden',
     await render(<Home />);
 
     // MR-49 D2 / FE-W59: an in-progress visit is CONTINUED, not started.
-    await fireEvent.press(await screen.findByText('Continue the visit to Dr Asha Deshpande'));
+    await fireEvent.press(await screen.findByText('Back to Dr Asha Deshpande'));
     expect(mockPush).toHaveBeenCalledWith('/visit/66666666-6666-4666-8666-666666666606');
     expect(screen.queryByText('Nothing planned for today')).toBeNull();
   });
@@ -287,8 +317,8 @@ describe('app/home.tsx — the visit the MR is standing inside is never hidden',
     await render(<Home />);
 
     expect(await screen.findByText('Nothing planned for today')).toBeTruthy();
-    expect(screen.queryByText('Start the visit to Dr Asha Deshpande')).toBeNull();
-    expect(screen.queryByText('Continue the visit to Dr Asha Deshpande')).toBeNull();
+    expect(screen.queryByText('Visit Dr Asha Deshpande')).toBeNull();
+    expect(screen.queryByText('Back to Dr Asha Deshpande')).toBeNull();
   });
 
   it('W2-C A2 / BE-W154: a check-in queued on THIS phone makes it a visit in progress, offline', async () => {
@@ -317,7 +347,7 @@ describe('app/home.tsx — the visit the MR is standing inside is never hidden',
     mockStore.mockReturnValue(withVisit(visitOf('planned', id)));
     await render(<Home />);
 
-    expect(await screen.findByText('Continue the visit to Dr Asha Deshpande')).toBeTruthy();
+    expect(await screen.findByText('Back to Dr Asha Deshpande')).toBeTruthy();
     await asyncStorageQueueStore.save(emptyQueue);
   });
 });
@@ -406,5 +436,79 @@ describe('app/home.tsx — W2-B C, the sync line follows the queue while Today s
     await asyncStorageQueueStore.save(emptyQueue);
 
     expect(await screen.findByText('Everything sent')).toBeTruthy();
+  });
+});
+
+/**
+ * `FE-W136` / `FE-W138`. Today says "waiting for WiFi" for held audio rather than "no signal", and
+ * shows the 100 MB note -- in attention, with the way to the setting -- only when asked for and over.
+ */
+describe('Today — mobile data (FE-W136, FE-W138)', () => {
+  const REP = '22222222-2222-4222-8222-222222222298';
+  const mobile = {
+    read: () => Promise.resolve({ connection: 'mobile' as const, wifiOnlyAudio: true }),
+    recordUse: () => Promise.resolve(),
+    onConnectionChange: () => () => undefined,
+    heldAudioBytes: () => null,
+  };
+
+  it('held audio alone reads "waiting for WiFi", not "no signal"', async () => {
+    bindUploadDevice(mobile);
+    try {
+      setQueueOwner(REP);
+      await asyncStorageQueueStore.save({
+        ...emptyQueue,
+        items: [
+          voiceNoteQueueItem({
+            id: '0d0d0d0d-0d0d-4d0d-8d0d-0d0d0d0d0d01',
+            noteId: '0e0e0e0e-0e0e-4e0e-8e0e-0e0e0e0e0e01',
+            visitId: '0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f01',
+            userId: REP,
+            durationSeconds: 7,
+            recordedAt: '2026-09-14T10:00:00.000Z',
+          }),
+        ],
+      });
+      mockSession.mockReturnValue(signedInAs('mr'));
+      mockStore.mockReturnValue(emptyPulled());
+      await render(<Home />);
+      expect(await screen.findByText('1 waiting for WiFi')).toBeTruthy();
+      expect(screen.queryByText(/no signal/u)).toBeNull();
+    } finally {
+      bindUploadDevice(null);
+    }
+  });
+
+  it('over 100 MB this month, with the warning on, a calm note that leads to the setting', async () => {
+    await AsyncStorage.setItem(WARN_OVER_KEY, 'on');
+    await AsyncStorage.setItem(
+      DATA_USE_KEY,
+      JSON.stringify({ month: '2026-09', bytes: 140_000_000 }),
+    );
+    setQueueOwner(REP);
+    await asyncStorageQueueStore.save(emptyQueue);
+    mockSession.mockReturnValue(signedInAs('mr'));
+    mockStore.mockReturnValue(emptyPulled());
+    await render(<Home />);
+    expect(
+      await screen.findByText('This app has sent 140 MB over mobile data this month'),
+    ).toBeTruthy();
+    await fireEvent.press(screen.getByText('Mobile data settings'));
+    expect(mockPush).toHaveBeenCalledWith('/data-settings');
+  });
+
+  it('with the warning off, the same month says nothing', async () => {
+    await AsyncStorage.setItem(WARN_OVER_KEY, 'off');
+    await AsyncStorage.setItem(
+      DATA_USE_KEY,
+      JSON.stringify({ month: '2026-09', bytes: 140_000_000 }),
+    );
+    setQueueOwner(REP);
+    await asyncStorageQueueStore.save(emptyQueue);
+    mockSession.mockReturnValue(signedInAs('mr'));
+    mockStore.mockReturnValue(emptyPulled());
+    await render(<Home />);
+    expect(await screen.findByText('Everything sent')).toBeTruthy();
+    expect(screen.queryByText(/over mobile data this month/u)).toBeNull();
   });
 });

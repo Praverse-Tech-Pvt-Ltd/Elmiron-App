@@ -6,6 +6,7 @@ import { BodyText, Label } from './Text';
 import { Button } from './Button';
 import { Card } from './Card';
 import { TextField } from './TextField';
+import { useT } from './i18n';
 
 /**
  * Phase 1 §05, the manager's half: "AI finding · advisory · you decide."
@@ -43,7 +44,7 @@ const styles = StyleSheet.create({
     backgroundColor: tokens.color.infoFill,
     borderRadius: tokens.radius.well,
     paddingHorizontal: tokens.space.sm,
-    paddingVertical: 2,
+    paddingVertical: tokens.space.xxs,
   },
   logged: {
     backgroundColor: tokens.color.successFill,
@@ -57,13 +58,14 @@ export const OverrideControl = ({
   onLog,
   outcomeNote,
 }: OverrideControlProps): ReactNode => {
+  const { t } = useT();
   const [decision, setDecision] = useState<OverrideDecision | undefined>(undefined);
   const [reason, setReason] = useState('');
 
   return (
     <Card>
       <View style={styles.advisory}>
-        <Label muted>AI finding · advisory · you decide</Label>
+        <Label muted>{t('analysis.advisory')}</Label>
       </View>
 
       <BodyText>{finding}</BodyText>
@@ -73,7 +75,7 @@ export const OverrideControl = ({
           <View style={styles.row}>
             <View style={styles.half}>
               <Button
-                label="Agree"
+                label={t('analysis.agree')}
                 onPress={() => {
                   setDecision('agree');
                 }}
@@ -82,7 +84,7 @@ export const OverrideControl = ({
             </View>
             <View style={styles.half}>
               <Button
-                label="Disagree"
+                label={t('analysis.disagree')}
                 onPress={() => {
                   setDecision('disagree');
                 }}
@@ -93,9 +95,13 @@ export const OverrideControl = ({
 
           {decision === undefined ? null : (
             <>
-              <TextField label="Why — one line, logged" onChangeText={setReason} value={reason} />
+              <TextField
+                label={t('analysis.overrideReason')}
+                onChangeText={setReason}
+                value={reason}
+              />
               <Button
-                label="Log the override"
+                label={t('analysis.logOverride')}
                 onPress={() => {
                   onLog(decision, reason);
                 }}

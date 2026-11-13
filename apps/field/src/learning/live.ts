@@ -1,10 +1,12 @@
 import {
   CompleteLessonResponseSchema,
   LMS_RPC,
+  LessonVideoUrlError,
   StartCourseVersionResponseSchema,
+  createLessonVideoSignedUrl,
 } from '@fieldforce/core';
 import type { CompleteLessonResponse, StartCourseVersionResponse } from '@fieldforce/core';
-import { callRpc, selectRows } from '../live-rest';
+import { LiveRequestError, callRpc, selectRows } from '../live-rest';
 import type { LiveConnection } from '../live-rest';
 
 /**
@@ -63,6 +65,28 @@ export interface OutlineRows {
   readonly completedLessonIds: ReadonlySet<string>;
 }
 
+/**
+ * `FE-W127` / `BE-W208` — a lesson's clip, as the lesson row names it: object paths in the PRIVATE
+ * `lesson-videos` bucket, never URLs. A URL is asked for (`videoUrl`) only when the rep presses play.
+ */
+/**
+ * `FE-W193` — what a course version holds, shown BEFORE the rep starts it: how many lessons, and how
+ * long they take in all. The read rules let a rep read a published version's lessons without an
+ * enrolment (`lessons_select_readable`), so the course page no longer offers "Start this course"
+ * under nothing but a title.
+ */
+export interface CoursePreview {
+  readonly lessons: number;
+  /** The sum of the lessons' estimates, or null when any lesson has none — never an under-count. */
+  readonly minutes: number | null;
+}
+
+export interface LessonVideoRef {
+  readonly objectPath: string;
+  readonly posterPath: string | null;
+  readonly durationSeconds: number | null;
+}
+
 export interface LessonRow {
   readonly id: string;
   readonly versionId: string;
@@ -71,6 +95,8 @@ export interface LessonRow {
   readonly estimatedMinutes: number | null;
   /** When the server recorded this enrolment finishing it, or null. */
   readonly completedAt: string | null;
+  /** The lesson's video, or null for a text-only lesson. */
+  readonly video: LessonVideoRef | null;
 }
 
 export interface LearningBackend {
@@ -86,12 +112,20 @@ export interface LearningBackend {
     readonly versions: readonly VersionRow[];
     readonly enrolments: readonly EnrolmentRow[];
   }>;
+  /** `FE-W193`. A version's lesson count and total estimate, read before it is started. */
+  preview(versionId: string): Promise<CoursePreview>;
   /** One version's modules and lessons (titles only), and what this enrolment has completed. */
   outline(versionId: string, enrolmentId: string): Promise<OutlineRows>;
   /** One lesson in full, with whether this enrolment has completed it; null if not readable. */
   lesson(lessonId: string, enrolmentId: string): Promise<LessonRow | null>;
   start(versionId: string): Promise<StartCourseVersionResponse>;
   complete(enrolmentId: string, lessonId: string): Promise<CompleteLessonResponse>;
+  /**
+   * `FE-W127` — a short-lived signed URL for a lesson clip or poster, created as the signed-in rep:
+   * Storage signs it only when RLS lets the rep read the lesson. A refusal is a `LiveRequestError`
+   * (the screen's "did not load"); no answer at all is what `fetch` threw (the screen's "no signal").
+   */
+  videoUrl(objectPath: string): Promise<string>;
 }
 
 const text = (value: unknown): string => (typeof value === 'string' ? value : '');
@@ -179,6 +213,20 @@ export const createLiveLearningBackend = (c: LiveConnection): LearningBackend =>
     return { title: course === undefined ? null : text(course['title']), versions, enrolments };
   },
 
+  preview: async (versionId) => {
+    const lessons = await selectRows(
+      c,
+      `lessons?select=id,estimated_minutes&course_version_id=eq.${versionId}`,
+    );
+    const estimates = lessons.map((r) => intOrNull(r['estimated_minutes']));
+    return {
+      lessons: lessons.length,
+      minutes: estimates.every((m): m is number => m !== null)
+        ? estimates.reduce((sum, m) => sum + m, 0)
+        : null,
+    };
+  },
+
   outline: async (versionId, enrolmentId) => {
     const [modules, lessons, completions] = await Promise.all([
       selectRows(
@@ -212,7 +260,7 @@ export const createLiveLearningBackend = (c: LiveConnection): LearningBackend =>
   lesson: async (lessonId, enrolmentId) => {
     const [row] = await selectRows(
       c,
-      `lessons?select=id,course_version_id,title,body,estimated_minutes&id=eq.${lessonId}`,
+      `lessons?select=id,course_version_id,title,body,estimated_minutes,video_object_path,video_poster_path,video_duration_seconds&id=eq.${lessonId}`,
     );
     if (row === undefined) return null;
     const [done] = await selectRows(
@@ -226,6 +274,14 @@ export const createLiveLearningBackend = (c: LiveConnection): LearningBackend =>
       body: text(row['body']),
       estimatedMinutes: intOrNull(row['estimated_minutes']),
       completedAt: done === undefined ? null : textOrNull(done['completed_at']),
+      video:
+        textOrNull(row['video_object_path']) === null
+          ? null
+          : {
+              objectPath: text(row['video_object_path']),
+              posterPath: textOrNull(row['video_poster_path']),
+              durationSeconds: intOrNull(row['video_duration_seconds']),
+            },
     };
   },
 
@@ -241,4 +297,16 @@ export const createLiveLearningBackend = (c: LiveConnection): LearningBackend =>
         p_lesson_id: lessonId,
       }),
     ),
+
+  videoUrl: async (objectPath) => {
+    try {
+      return await createLessonVideoSignedUrl(c, objectPath);
+    } catch (error) {
+      // The server ANSWERED and refused: the same kind of failure as a refused table read.
+      if (error instanceof LessonVideoUrlError) {
+        throw new LiveRequestError(error.status, null, error.message);
+      }
+      throw error;
+    }
+  },
 });

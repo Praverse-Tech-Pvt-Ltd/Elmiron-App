@@ -11,6 +11,7 @@ export * from './consent.js';
 export * from './capture.js';
 export * from './upload.js';
 export * from './adverse-event.js';
+export * from './adverse-event-admin.js';
 export * from './transcript-v0.js';
 export * from './transcript-v1.js';
 export * from './analysis.js';
