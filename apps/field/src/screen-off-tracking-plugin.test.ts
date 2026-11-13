@@ -46,3 +46,23 @@ describe('FE-W207 the foreground-service permissions', () => {
     );
   });
 });
+
+describe('FE-W219 a screen-off build can schedule the job its positions arrive through', () => {
+  const BOOT = 'android.permission.RECEIVE_BOOT_COMPLETED';
+
+  it('does not block RECEIVE_BOOT_COMPLETED, which a persisted job needs', () => {
+    const out = withAndroidRelease(withScreenOffTracking({ name: 'x', slug: 'x' }, ON), ON) as Out;
+    expect(out.android?.blockedPermissions).not.toContain(BOOT);
+    // Everything else stays blocked, background location first among it.
+    expect(out.android?.blockedPermissions).toEqual(
+      expect.arrayContaining(BLOCKED_PERMISSIONS.filter((permission) => permission !== BOOT)),
+    );
+  });
+
+  it('POSITIVE CONTROL: every other build still blocks it', () => {
+    for (const env of [{}, { EXPO_PUBLIC_LIVE_TRACKING: 'true' }]) {
+      const out = withAndroidRelease({ name: 'x', slug: 'x' }, env) as Out;
+      expect(out.android?.blockedPermissions).toContain(BOOT);
+    }
+  });
+});

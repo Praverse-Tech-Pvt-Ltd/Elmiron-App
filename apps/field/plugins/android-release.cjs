@@ -17,6 +17,8 @@
  * in the manifest means no library can add it.
  */
 
+const { screenOffInBuild } = require('./screen-off-tracking.cjs');
+
 const MAX_VERSION_CODE = 2100000000;
 
 const BLOCKED_PERMISSIONS = [
@@ -28,6 +30,25 @@ const BLOCKED_PERMISSIONS = [
   // This app schedules none -- every notification is pushed by the server -- so it is blocked.
   'android.permission.RECEIVE_BOOT_COMPLETED',
 ];
+
+/**
+ * `FE-W219`. The one permission a screen-off build may NOT block.
+ *
+ * `expo-task-manager` hands each position from the location foreground service to the app through a
+ * PERSISTED JobScheduler job, and Android refuses to schedule a persisted job for an app that does
+ * not hold `RECEIVE_BOOT_COMPLETED` -- with an exception thrown inside a broadcast receiver, which
+ * ends the process. With the permission blocked, the app crashed at the first position after a rep
+ * started sharing: found on the emulator on the first run of a screen-off build, 13 November 2026.
+ *
+ * So it is let through in a screen-off build and blocked in every other, as before. It starts
+ * nothing by itself after a reboot: a task delivered with no tracker running stops the service
+ * (`src/tracking/screen-off.ts`, `deliver`).
+ */
+const BOOT_COMPLETED = 'android.permission.RECEIVE_BOOT_COMPLETED';
+const blockedFor = (env) =>
+  screenOffInBuild(env)
+    ? BLOCKED_PERMISSIONS.filter((permission) => permission !== BOOT_COMPLETED)
+    : BLOCKED_PERMISSIONS;
 
 /** The version code for this build, from `FIELD_ANDROID_VERSION_CODE`; throws on a bad value. */
 const androidVersionCode = (raw) => {
@@ -48,7 +69,7 @@ const androidVersionCode = (raw) => {
 /** The config with the version code set and the blocked permissions added (never removed). */
 const withAndroidRelease = (config, env) => {
   const android = config.android ?? {};
-  const blocked = new Set([...(android.blockedPermissions ?? []), ...BLOCKED_PERMISSIONS]);
+  const blocked = new Set([...(android.blockedPermissions ?? []), ...blockedFor(env)]);
   return {
     ...config,
     android: {
