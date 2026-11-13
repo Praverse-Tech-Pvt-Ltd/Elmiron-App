@@ -8,11 +8,15 @@ import {
   useState,
 } from 'react';
 import type { ReactNode } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import * as Location from 'expo-location';
 import uuid from 'expo-modules-core/src/uuid';
 import type { LiveTrackingStatus } from '@fieldforce/core';
-import { liveTrackingEnabled } from '../features';
+import { liveTrackingEnabled, liveTrackingScreenOffEnabled } from '../features';
+import { SCREEN_OFF_TASK, setScreenOffSink, usesScreenOffService } from './screen-off';
+import type { ScreenOffFix } from './screen-off';
+import { t } from '@fieldforce/ui/i18n';
+import { tokens } from '@fieldforce/ui-tokens';
 import { LiveRequestError } from '../live-rest';
 import { useSession } from '../session';
 import type { TrackingState } from '../integrations/tracking';
@@ -155,7 +159,78 @@ const Tracker = ({
     };
   }, [foreground, intervalSeconds, refresh]);
 
-  const state = stateOf(status, { foreground, openedDay });
+  // `FE-W207`. While the screen-off service runs, the app leaving the screen does not pause sharing:
+  // the rep sees the service's notification instead, and every other rule still stops it.
+  const screenOff = usesScreenOffService(Platform.OS, liveTrackingScreenOffEnabled);
+  const [serviceRunning, setServiceRunning] = useState(false);
+  const state = stateOf(status, { foreground: foreground || serviceRunning, openedDay });
+
+  // `FE-W217`. **`serviceRunning` is what this component last did, not what Android is doing.** The
+  // system can end the service without telling anybody (memory pressure, a battery saver, the rep
+  // taking the location permission away), and then this stayed true: the screens went on saying the
+  // phone was sharing while nothing was read, and nothing started it again. So Android is ASKED,
+  // each time the app comes back on screen and every interval while it is; a service found dead is
+  // started again by the watcher below, which runs only if every other rule still says `active`.
+  const serviceRunningRef = useRef(serviceRunning);
+  serviceRunningRef.current = serviceRunning;
+  const [serviceRestarts, setServiceRestarts] = useState(0);
+  useEffect(() => {
+    if (!screenOff || !foreground) return undefined;
+    let cancelled = false;
+    const check = (): void => {
+      if (!serviceRunningRef.current) return;
+      void Location.hasStartedLocationUpdatesAsync(SCREEN_OFF_TASK).then(
+        (running) => {
+          if (cancelled || running || !serviceRunningRef.current) return;
+          setServiceRunning(false);
+          setServiceRestarts((count) => count + 1);
+        },
+        () => undefined,
+      );
+    };
+    check();
+    const timer = setInterval(check, intervalSeconds * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [screenOff, foreground, intervalSeconds]);
+
+  /** One position to the server, spaced by the company's interval; both watchers send through it. */
+  const sendFix = useCallback(
+    (fix: ScreenOffFix): void => {
+      // Spacing measured between two of the phone's OWN fix times -- an elapsed duration, never
+      // a decision about the time of day, which is the server's (`withinWorkingHours`).
+      if (!dueToSend(lastSentAt.current, fix.timestampMs, intervalSeconds)) return;
+      lastSentAt.current = fix.timestampMs;
+      void backend
+        .ping({
+          id: uuid.v4(),
+          latitude: fix.latitude,
+          longitude: fix.longitude,
+          accuracyM: fix.accuracyM,
+          // The device's clock, labelled as such: the server bounds it and stamps its own.
+          recordedAt: new Date(fix.timestampMs).toISOString(),
+        })
+        .then(
+          (verdict) => {
+            setLastSend(
+              verdict.reason === null
+                ? { kind: 'kept' }
+                : { kind: 'refused', reason: verdict.reason },
+            );
+            // A stale picture (hours over, company off, day ended) refreshes the status, which
+            // takes the state out of `active` and so stops whichever watcher is running.
+            if (refreshAfter(verdict)) refresh();
+          },
+          () => {
+            // Dropped, not queued: see `live.ts` for why a live position is now or never.
+            setLastSend({ kind: 'failed' });
+          },
+        );
+    },
+    [backend, intervalSeconds, refresh],
+  );
 
   // The watcher, started by `active` and by nothing else.
   useEffect(() => {
@@ -172,6 +247,47 @@ const Tracker = ({
         return;
       }
       setPermissionDenied(false);
+
+      if (screenOff) {
+        // `FE-W207`: a location FOREGROUND SERVICE, started while the app is on screen, so Android's
+        // while-in-use permission carries over with the screen off. No background permission.
+        setScreenOffSink({ onFix: sendFix });
+        const started = await Location.startLocationUpdatesAsync(SCREEN_OFF_TASK, {
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: intervalSeconds * 1000,
+          distanceInterval: 0,
+          pausesUpdatesAutomatically: false,
+          foregroundService: {
+            notificationTitle: t('tracking.serviceTitle'),
+            notificationBody: t('tracking.serviceBody'),
+            notificationColor: tokens.color.accent,
+            killServiceOnDestroy: true,
+          },
+        }).then(
+          () => true,
+          () => false,
+        );
+        if (!started) {
+          setScreenOffSink(null);
+          setLastSend({ kind: 'failed' });
+          return;
+        }
+        if (life.removed) {
+          setScreenOffSink(null);
+          void Location.stopLocationUpdatesAsync(SCREEN_OFF_TASK).catch(() => undefined);
+          return;
+        }
+        setServiceRunning(true);
+        life.subscription = {
+          remove: () => {
+            setScreenOffSink(null);
+            setServiceRunning(false);
+            void Location.stopLocationUpdatesAsync(SCREEN_OFF_TASK).catch(() => undefined);
+          },
+        };
+        return;
+      }
+
       const sub = await Location.watchPositionAsync(
         // Balanced, as check-in uses: precision nobody reads costs battery on a phone that must last.
         {
@@ -180,33 +296,12 @@ const Tracker = ({
           distanceInterval: 0,
         },
         (fix) => {
-          // Spacing measured between two of the phone's OWN fix times -- an elapsed duration, never
-          // a decision about the time of day, which is the server's (`withinWorkingHours`).
-          if (!dueToSend(lastSentAt.current, fix.timestamp, intervalSeconds)) return;
-          lastSentAt.current = fix.timestamp;
-          void backend
-            .ping({
-              id: uuid.v4(),
-              latitude: fix.coords.latitude,
-              longitude: fix.coords.longitude,
-              accuracyM: fix.coords.accuracy,
-              // The device's clock, labelled as such: the server bounds it and stamps its own.
-              recordedAt: new Date(fix.timestamp).toISOString(),
-            })
-            .then(
-              (verdict) => {
-                setLastSend(
-                  verdict.reason === null
-                    ? { kind: 'kept' }
-                    : { kind: 'refused', reason: verdict.reason },
-                );
-                if (refreshAfter(verdict)) refresh();
-              },
-              () => {
-                // Dropped, not queued: see `live.ts` for why a live position is now or never.
-                setLastSend({ kind: 'failed' });
-              },
-            );
+          sendFix({
+            latitude: fix.coords.latitude,
+            longitude: fix.coords.longitude,
+            accuracyM: fix.coords.accuracy,
+            timestampMs: fix.timestamp,
+          });
         },
       ).catch(() => null);
       if (sub === null) {
@@ -220,7 +315,9 @@ const Tracker = ({
       life.removed = true;
       life.subscription?.remove();
     };
-  }, [state, intervalSeconds, backend, refresh]);
+    // Off screen the status timer above does not tick; a refusal that means the picture is stale
+    // (`refreshAfter`) asks again, and that is what stops the service at the end of the hours.
+  }, [state, intervalSeconds, screenOff, sendFix, serviceRestarts]);
 
   const accept = useCallback(
     async (noticeVersionId: string): Promise<AcceptOutcome> => {

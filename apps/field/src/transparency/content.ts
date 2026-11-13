@@ -1,6 +1,7 @@
 import type { TransparencyEntry, TransparencyState } from '@fieldforce/ui';
 import { t } from '@fieldforce/ui/i18n';
 import type { TextKey } from '@fieldforce/ui/i18n';
+import { liveTrackingScreenOffEnabled } from '../features';
 
 /**
  * A9 — "Everything, before you ask." The design's structure and voice
@@ -53,7 +54,11 @@ export const neverRecorded = (): string => t('transparency.neverRecorded');
  * the rep shares live location, a position is read every few minutes with the app on screen. So the
  * sentence the build shows follows the build, as the recordings row does.
  */
-export const neverRecordedWithLiveTracking = (): string => t('transparency.neverRecordedLive');
+// `FE-W207`: with the screen-off service in the build, "nothing in the background" is not the claim.
+export const neverRecordedWithLiveTracking = (): string =>
+  liveTrackingScreenOffEnabled
+    ? t('transparency.neverRecordedLiveScreenOff')
+    : t('transparency.neverRecordedLive');
 
 export const neverRecordedFor = (build: { readonly liveTrackingEnabled: boolean }): string =>
   build.liveTrackingEnabled ? neverRecordedWithLiveTracking() : neverRecorded();
@@ -73,7 +78,15 @@ export const transparencyEntries = (build: {
     'active',
   ),
   ...(build.liveTrackingEnabled === true
-    ? [entry('transparency.liveLocation', 'transparency.liveLocationDetail', 'active')]
+    ? [
+        entry(
+          'transparency.liveLocation',
+          liveTrackingScreenOffEnabled
+            ? 'transparency.liveLocationDetailScreenOff'
+            : 'transparency.liveLocationDetail',
+          'active',
+        ),
+      ]
     : []),
   entry('transparency.visits', 'transparency.visitsDetail', 'active'),
   entry('transparency.voiceNotes', 'transparency.voiceNotesDetail', 'active'),

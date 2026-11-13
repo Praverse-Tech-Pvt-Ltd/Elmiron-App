@@ -3,6 +3,7 @@ import { clockIn } from './territory-day';
 import type { TerritoryZone } from './territory-day';
 import type { WorkDayStatus } from './work-day';
 import { t } from '@fieldforce/ui/i18n';
+import { liveTrackingScreenOffEnabled } from '../features';
 
 /**
  * B7's day, reduced to what the screen puts on it.
@@ -121,7 +122,13 @@ export const captureCopy = (
     case 'paused':
       return { title: t('dayEnd.nothingRecorded'), note: t('dayEnd.captureNotePaused') };
     case 'sharing':
-      return { title: t('dayEnd.liveSharingTitle'), note: t('dayEnd.captureNoteSharing') };
+      return {
+        title: t('dayEnd.liveSharingTitle'),
+        // `FE-W207`: the sentence follows the build -- with the screen off too, under a notification.
+        note: liveTrackingScreenOffEnabled
+          ? t('dayEnd.captureNoteSharingScreenOff')
+          : t('dayEnd.captureNoteSharing'),
+      };
   }
 };
 

@@ -25,7 +25,8 @@ const FORBIDDEN = [
   'requestBackgroundPermissionsAsync',
   'getBackgroundPermissionsAsync',
   'isAndroidBackgroundLocationEnabled',
-  'startLocationUpdatesAsync',
+  // `FE-W207`: `startLocationUpdatesAsync` is no longer here. It is allowed in ONE file and only as a
+  // foreground service, which needs no background permission -- the test below pins exactly that.
   'startGeofencingAsync',
   // `FE-W161` — the iOS ways: the "Always" usage strings, expo-location's iOS background option,
   // and any background mode at all (none is needed; `plugins/ios-release.cjs` refuses `location`).
@@ -70,6 +71,29 @@ const offenders = (): string[] => {
 describe('FE-D2 first run — no background location, anywhere', () => {
   it('no app source file or app config asks for, declares or uses background location', () => {
     expect(offenders()).toEqual([]);
+  });
+
+  it('FE-W207: location updates start in the tracker alone, and only as a foreground service', () => {
+    const files = [...sourceFiles(join(APP_ROOT, 'app')), ...sourceFiles(join(APP_ROOT, 'src'))];
+    const callers = files.filter((file) =>
+      readFileSync(file, 'utf8')
+        .split('\n')
+        .some((line) => {
+          const trimmed = line.trim();
+          return (
+            !trimmed.startsWith('*') &&
+            !trimmed.startsWith('//') &&
+            line.includes('startLocationUpdatesAsync(')
+          );
+        }),
+    );
+    expect(callers.map((file) => relative(APP_ROOT, file).replace(/\\/gu, '/'))).toEqual([
+      'src/tracking/tracker.tsx',
+    ]);
+    const tracker = readFileSync(join(APP_ROOT, 'src', 'tracking', 'tracker.tsx'), 'utf8');
+    const call = tracker.slice(tracker.indexOf('startLocationUpdatesAsync('));
+    // Within the call's options: without `foregroundService` Android demands background permission.
+    expect(call.slice(0, call.indexOf('})'))).toContain('foregroundService: {');
   });
 
   it('the recorded decision still says so', () => {

@@ -1,3 +1,5 @@
+// `FE-W207`: TaskManager needs the screen-off location task defined before anything can start it.
+import '../src/tracking/screen-off-task';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Stack } from 'expo-router';

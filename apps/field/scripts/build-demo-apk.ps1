@@ -53,6 +53,7 @@
     EXPO_PUBLIC_PRACTICE      AI Doctor practice and its feedback (ai_doctor, ai_coach)
     EXPO_PUBLIC_PRACTICE_VOICE  AI Doctor practice by voice, hands-free (FE-W163; needs the OpenAI key)
     EXPO_PUBLIC_LIVE_TRACKING live location during working hours (the company switch still decides)
+    EXPO_PUBLIC_LIVE_TRACKING_SCREEN_OFF  ...also with the screen off, under a notification (FE-W207)
   and EXPO_PUBLIC_MAPS / EXPO_PUBLIC_PUSH ONLY when their inputs are in the shell
   (GOOGLE_MAPS_ANDROID_API_KEY; GOOGLE_SERVICES_JSON naming a file) -- the same rule
   release-build-checks.mjs --integrations-only enforces; a flag already set by hand is left as it is.
@@ -130,7 +131,7 @@ $MustBeUnset = @('EXPO_PUBLIC_COACHING_ENABLED', 'EXPO_PUBLIC_RECORDING_ENABLED'
 $AllFeatureFlags = @(
   'EXPO_PUBLIC_LEARNING', 'EXPO_PUBLIC_LESSON_TUTOR', 'EXPO_PUBLIC_ASSISTANT',
   'EXPO_PUBLIC_PRODUCT_QA', 'EXPO_PUBLIC_PRACTICE', 'EXPO_PUBLIC_PRACTICE_VOICE',
-  'EXPO_PUBLIC_LIVE_TRACKING'
+  'EXPO_PUBLIC_LIVE_TRACKING', 'EXPO_PUBLIC_LIVE_TRACKING_SCREEN_OFF'
 )
 $KeyGatedFlags = @(
   @{ Flag = 'EXPO_PUBLIC_MAPS'; Input = 'GOOGLE_MAPS_ANDROID_API_KEY'; IsFile = $false },

@@ -1,5 +1,6 @@
 import type { TextKey } from '@fieldforce/ui/i18n';
 import type { TrackingState } from '../integrations/tracking';
+import { liveTrackingScreenOffEnabled } from '../features';
 
 /**
  * `FE-W185` — what the first-run location screen promises about WHEN a position is read, chosen so
@@ -33,8 +34,16 @@ export const locationClaim = (input: {
   if (input.trackerState === 'active') {
     return {
       title: 'onboarding.locationSharingNow',
-      detail: 'onboarding.locationSharingNowDetail',
+      // `FE-W207`: with the screen-off service, "on screen" is not the condition.
+      detail: liveTrackingScreenOffEnabled
+        ? 'onboarding.locationSharingNowDetailScreenOff'
+        : 'onboarding.locationSharingNowDetail',
     };
   }
-  return { title: 'onboarding.locationWithLive', detail: 'onboarding.locationWithLiveDetail' };
+  return {
+    title: 'onboarding.locationWithLive',
+    detail: liveTrackingScreenOffEnabled
+      ? 'onboarding.locationWithLiveDetailScreenOff'
+      : 'onboarding.locationWithLiveDetail',
+  };
 };

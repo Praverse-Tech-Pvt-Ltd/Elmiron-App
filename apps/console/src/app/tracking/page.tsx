@@ -19,6 +19,8 @@ import {
   embedMapUrl,
   trackingRefusal,
 } from '../../lib/tracking-text';
+import { LiveMap, LiveRefresh } from '../../lib/live-map';
+import { kilometresLabel, mapPins, mapRoute, trailKilometres } from '../../lib/live-map-data';
 
 /**
  * `FE-W72` / `BE-W180` — live location, for a field manager or an admin.
@@ -28,7 +30,8 @@ import {
  * second RPC that checks again. A rep who opens this page is refused by the first call, and the page
  * says so in words.
  *
- * **A list, not a map.** Each position links to Google Maps (`https://www.google.com/maps?q=lat,lng`,
+ * **`FE-W208`: a map as well as the list.** `LiveMap` draws the same two answers on OpenStreetMap
+ * with Leaflet, no key needed, and `LiveRefresh` re-reads the page every minute. Each position also links to Google Maps (`https://www.google.com/maps?q=lat,lng`,
  * no key and nothing but the coordinates in the URL); drawing a map in the console needs the Maps SDK,
  * which is a separate, later item.
  *
@@ -82,6 +85,7 @@ const EmbeddedMap = ({
 
 const Trail = ({ trail }: { trail: TrackingTrail }): ReactNode => {
   const newest = trail.points.at(-1);
+  const km = trailKilometres(trail);
   return (
     <Card>
       <Heading>
@@ -89,6 +93,13 @@ const Trail = ({ trail }: { trail: TrackingTrail }): ReactNode => {
       </Heading>
       {newest === undefined ? null : (
         <EmbeddedMap latitude={newest.latitude} longitude={newest.longitude} />
+      )}
+      {/* `FE-W208`: straight lines between kept positions, never road distance or mileage. */}
+      {km === null ? null : (
+        <Body>
+          {plural(trail.points.length, 'position', 'positions')} today, about {kilometresLabel(km)}{' '}
+          apart in straight lines between them (not road distance, and not the rep’s mileage).
+        </Body>
       )}
       <Body muted>
         Every position kept for this rep on {dayLabel(trail.day)}, oldest first, on the rep’s clock
@@ -200,6 +211,20 @@ export default async function Tracking({
             The notice reps accept — load and approve your company’s own
           </a>
         </Body>
+      ) : null}
+
+      {/* `FE-W208`: the same two answers as the table, on a map, kept fresh. */}
+      <LiveRefresh />
+      {overview.reps.some((rep) => rep.latest !== null) ? (
+        <Card>
+          <Heading>On the map</Heading>
+          <Body muted>
+            Each rep’s newest position
+            {selected === null ? '' : `, and ${selected.fullName}’s day as a line`}. Grey means
+            older than 30 minutes. Choose a pin to see that rep’s day.
+          </Body>
+          <LiveMap pins={mapPins(overview.reps, selected?.mrId ?? null)} route={mapRoute(trail)} />
+        </Card>
       ) : null}
 
       <Card>
