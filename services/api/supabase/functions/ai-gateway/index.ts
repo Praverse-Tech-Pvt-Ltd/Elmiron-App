@@ -370,7 +370,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
             authorise: async () => {
               await rpc.call('sim_session_context', { p_session_id: sessionId });
             },
-            takeTurn: (repText) => takeDoctorTurn({ rpc, writer, provider, sessionId, repText }),
+            // `BE-W220`: the turn opens the request (switch, allowance, log) and only then asks to
+            // hear the rep, so no audio reaches the vendor for a request that was never admitted.
+            takeTurn: (hear) =>
+              takeDoctorTurn({ rpc, writer, provider, sessionId, repText: '', hearRepText: hear }),
             replyText: (turn) => (turn.kind === 'replied' ? turn.reply : null),
           });
           return withAllowance(result);

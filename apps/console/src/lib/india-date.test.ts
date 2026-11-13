@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dayLabel, indiaDate, indiaDateTime, indiaToday } from './india-date';
+import { dayLabel, indiaDate, indiaDateTime, indiaToday, isRealDay } from './india-date';
 
 describe('indiaToday (FE-W125)', () => {
   it('is already the next day in India between midnight and 05:30 IST, when UTC is not', () => {
@@ -45,5 +45,17 @@ describe('FE-W166 — dates a person reads', () => {
   it('returns an unreadable instant unchanged', () => {
     expect(indiaDate('not a date')).toBe('not a date');
     expect(indiaDateTime('')).toBe('');
+  });
+});
+
+describe('FE-W215 — a day in the address bar is a day that exists', () => {
+  it('accepts a real day, and refuses a shape that names no day', () => {
+    expect(isRealDay('2026-10-14')).toBe(true);
+    expect(isRealDay('2028-02-29')).toBe(true);
+    expect(isRealDay('2026-02-31')).toBe(false);
+    expect(isRealDay('2026-02-29')).toBe(false);
+    expect(isRealDay('2026-13-01')).toBe(false);
+    expect(isRealDay('14-10-2026')).toBe(false);
+    expect(isRealDay(undefined)).toBe(false);
   });
 });

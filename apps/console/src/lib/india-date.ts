@@ -103,3 +103,14 @@ export const indiaDateTime = (iso: string): string => {
   const date = named(p.year, p.month, p.day);
   return date === null ? iso : `${date}, ${p.hour}:${p.minute}`;
 };
+
+/**
+ * `FE-W215`. Is this a day that exists? `2026-02-31` has the right SHAPE, and a page that checked
+ * only the shape passed it to the database, which refused it -- so a mistyped address showed a
+ * manager "could not be read" in place of a day. A caller falls back to today instead.
+ */
+export const isRealDay = (value: string | undefined): value is string => {
+  if (value === undefined || !DAY.test(value)) return false;
+  const at = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(at.getTime()) && at.toISOString().slice(0, 10) === value;
+};

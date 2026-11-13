@@ -74,6 +74,22 @@ describe('sign-in password (FE-W192)', () => {
     expect(screen.getByText('Hide password')).toBeTruthy();
   });
 
+  it('FE-W213: shown or hidden, the keyboard never corrects, suggests or learns it', async () => {
+    await render(
+      <PasswordField label="Password" value="hunter22" onChangeText={() => undefined} />,
+    );
+    const hidden = screen.getByLabelText('Password').props;
+    expect(hidden['autoCorrect']).toBe(false);
+    expect(hidden['spellCheck']).toBe(false);
+
+    await fireEvent.press(screen.getByRole('switch', { name: 'Show password' }));
+    const shown = screen.getByLabelText('Password').props;
+    expect(shown['secureTextEntry']).toBe(false);
+    expect(shown['autoCorrect']).toBe(false);
+    expect(shown['spellCheck']).toBe(false);
+    expect(shown['keyboardType']).toBe('visible-password');
+  });
+
   it('is at least the tap floor', async () => {
     await render(<PasswordField label="Password" value="" onChangeText={() => undefined} />);
     const toggle = screen.getByRole('switch', { name: 'Show password' });

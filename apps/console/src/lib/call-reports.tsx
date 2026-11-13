@@ -89,17 +89,23 @@ export const CallReportQueue = ({
   const approveOne = (view: CallReportView): void => {
     setOutcome({ kind: 'busy', ids: [view.id] });
     void browserClient()
-      .rpc(MANAGER_RPC.approveCallReport, {
-        p_call_report_id: view.id,
+      // `FE-W216`. The bulk function with one id, not `approve_call_report`: only the bulk one
+      // refuses a report that has been decided since this list was loaded (`BE-W221`). The single
+      // function is the "change of mind" path and would silently replace a colleague's rejection.
+      .rpc(MANAGER_RPC.approveCallReportsBulk, {
+        p_call_report_ids: [view.id],
         p_approved: true,
         p_reason: null,
       })
-      .then(({ error }) => {
-        if (error !== null) {
+      .then(({ data, error }) => {
+        const answer = error === null ? parseBulkDecision(data)?.results[0] : undefined;
+        if (error !== null || answer?.decided !== true) {
+          const why = error ?? { message: answer?.error ?? 'no reason given' };
           setOutcome({
             kind: 'refused',
-            message: `${reportName(view)}: ${decisionRefusal(error)}`,
+            message: `${reportName(view)}: ${decisionRefusal(why)}`,
           });
+          router.refresh();
           return;
         }
         tick(view.id, false);

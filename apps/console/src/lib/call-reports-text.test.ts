@@ -148,6 +148,14 @@ describe('FE-W200 — the server’s refusals, in plain words', () => {
     expect(decisionRefusal({ message: 'not authenticated', code: '28000' })).toMatch(
       /Sign in again/u,
     );
+    expect(
+      decisionRefusal({
+        message: 'call report abc already has a decision; open the report to change it',
+      }),
+    ).toMatch(/already decided this report/u);
+    expect(
+      decisionRefusal({ message: 'a call report that is not approved needs a reason' }),
+    ).toMatch(/Say why/u);
     // Anything unnamed is still shown, never swallowed.
     expect(decisionRefusal({ message: 'something new' })).toBe(
       'The server refused this: something new',

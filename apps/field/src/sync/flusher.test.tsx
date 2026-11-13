@@ -23,6 +23,7 @@ jest.mock('../session', () => ({
 import { OutboxFlusher } from './flusher';
 import { bindUploadDevice } from './upload-conditions';
 import type { Connection } from './upload-conditions';
+import { writeDataPref } from '../settings/data-prefs';
 
 const tree = (): React.JSX.Element => (
   <OutboxFlusher>
@@ -89,5 +90,23 @@ describe('OutboxFlusher — FE-W135, audio held for WiFi goes when the phone joi
     } finally {
       bindUploadDevice(null);
     }
+  });
+});
+
+describe('OutboxFlusher — FE-W210, changing the data switches sends what was waiting', () => {
+  it('flushes when "Send audio on WiFi only" is saved, and stops listening when signed out', async () => {
+    const storage = { getItem: () => Promise.resolve(null), setItem: () => Promise.resolve() };
+    mockUser.mockReturnValue('rep-a');
+    const view = await render(tree());
+    expect(mockFlush).toHaveBeenCalledTimes(1);
+
+    await writeDataPref('wifiOnlyAudio', false, storage);
+    expect(mockFlush).toHaveBeenCalledTimes(2);
+
+    // NEGATIVE CONTROL: with no one signed in there is no queue, so nothing is listening.
+    mockUser.mockReturnValue(null);
+    await view.rerender(tree());
+    await writeDataPref('wifiOnlyAudio', true, storage);
+    expect(mockFlush).toHaveBeenCalledTimes(2);
   });
 });

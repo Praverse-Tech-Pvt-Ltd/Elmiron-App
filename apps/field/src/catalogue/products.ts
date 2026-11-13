@@ -146,3 +146,16 @@ export const loadProductChoices = async (
 /** Toggle one product in the chosen list, keeping the order in which they were chosen. */
 export const toggleProduct = (chosen: readonly string[], id: string): readonly string[] =>
   chosen.includes(id) ? chosen.filter((x) => x !== id) : [...chosen, id];
+
+/**
+ * `FE-W212`. The marked products a call report carries: those the rep marked that are on the list
+ * the rep can SEE (`FE-W190` -- a draft kept from an earlier opening may name a product the company
+ * has since withdrawn, and a mark the rep cannot see must not be sent in their name).
+ *
+ * It takes a LIST, not "a list or nothing yet": the caller waits for the read to answer. Treating
+ * "not loaded yet" as "no products" is how a restored draft's marks were silently dropped.
+ */
+export const productsToSend = (chosen: readonly string[], list: ProductList): string[] =>
+  list.kind === 'none'
+    ? []
+    : chosen.filter((id) => list.products.some((product) => product.id === id));

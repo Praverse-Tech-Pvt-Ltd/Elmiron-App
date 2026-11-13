@@ -25,6 +25,12 @@ export interface TextFieldProps {
   readonly value: string;
   readonly onChangeText: (value: string) => void;
   readonly secure?: boolean;
+  /**
+   * `FE-W213`. A password, whether its letters are hidden or shown. `secure` alone is not enough:
+   * with "Show password" on, `secure` is false and the keyboard treated the field as ordinary
+   * prose -- autocorrecting it, suggesting it, and adding it to the words the keyboard has learned.
+   */
+  readonly password?: boolean;
   readonly autoCapitalize?: 'none' | 'sentences';
   readonly keyboardType?: 'default' | 'email-address' | 'number-pad';
   readonly editable?: boolean;
@@ -100,6 +106,7 @@ export const TextField = ({
   value,
   onChangeText,
   secure = false,
+  password = false,
   autoCapitalize = 'sentences',
   keyboardType = 'default',
   editable = true,
@@ -137,7 +144,11 @@ export const TextField = ({
           accessibilityLabel={label}
           autoCapitalize={autoCapitalize}
           editable={editable}
-          keyboardType={keyboardType}
+          // A shown password asks Android for the keyboard that does not predict or learn.
+          keyboardType={password && !secure ? 'visible-password' : keyboardType}
+          {...(password
+            ? { autoCorrect: false, spellCheck: false, autoComplete: 'current-password' as const }
+            : {})}
           onBlur={() => {
             setFocused(false);
           }}
