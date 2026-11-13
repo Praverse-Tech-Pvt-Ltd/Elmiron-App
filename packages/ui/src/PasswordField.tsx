@@ -60,6 +60,7 @@ export const PasswordField = ({
         value={value}
         onChangeText={onChangeText}
         secure={!shown}
+        password
         autoCapitalize="none"
         editable={editable}
       />

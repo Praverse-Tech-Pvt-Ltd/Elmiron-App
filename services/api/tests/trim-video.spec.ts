@@ -195,7 +195,12 @@ describe('video:trim — what is asked of ffmpeg', () => {
   });
 
   it('finds ffmpeg on PATH, honours an override, and says null when it is absent', () => {
-    const dir = join('C:', 'tools', 'ffmpeg', 'bin');
+    // A directory in this platform's own spelling: PATH is split on `:` off Windows, so the
+    // Windows drive letter cut the entry in two on CI's Linux runner and nothing was found.
+    const dir =
+      process.platform === 'win32'
+        ? join('C:', 'tools', 'ffmpeg', 'bin')
+        : join('/opt', 'tools', 'ffmpeg', 'bin');
     const exe = process.platform === 'win32' ? '.exe' : '';
     const has = (want: string) => (p: string) => p === want;
     expect(findTool('ffmpeg', { PATH: dir, PATHEXT: '.EXE' }, has(join(dir, `ffmpeg${exe}`)))).toBe(

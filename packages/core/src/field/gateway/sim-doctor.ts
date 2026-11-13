@@ -64,8 +64,25 @@ export interface SimTurnInput {
   readonly provider: LlmProvider;
   readonly sessionId: string;
   readonly repText: string;
+  /**
+   * `BE-W220` — a SPOKEN turn: the rep's words are not known yet, and finding them out sends their
+   * audio to a vendor. When this is given, `repText` is not read and this is called instead —
+   * **only after `ai_begin_request` has admitted the request**, so the feature switch, the daily
+   * allowance and the request log all stand between the audio and the vendor, exactly as they stand
+   * between a typed turn and the model. A throw closes the request `failed` and is rethrown; an
+   * empty answer (silence) closes it `failed` with `no_speech`. Either way the attempt is counted:
+   * a transcription costs money whether or not anything was said.
+   */
+  readonly hearRepText?: () => Promise<string>;
   readonly timeoutMs?: number;
 }
+
+/** `ai_requests.error_code` for a spoken turn that could not be heard: the vendor's short code. */
+const speechFailure = (error: unknown): string => {
+  const code = (error as { code?: unknown }).code;
+  const shaped = typeof code === 'string' ? code.toLowerCase().replace(/[^a-z0-9_]/gu, '_') : '';
+  return /^[a-z][a-z0-9_]{0,55}$/u.test(shaped) ? `speech_${shaped}` : 'speech_failed';
+};
 
 /**
  * The session as the server holds it, read BEFORE `ai_begin_request` so that "not your session"
@@ -130,8 +147,9 @@ const renderHistory = (
 
 export const takeDoctorTurn = async (input: SimTurnInput): Promise<SimTurnResult> => {
   const { rpc, provider, sessionId } = input;
-  const repText = input.repText.trim();
-  if (repText.length === 0) throw new Error('takeDoctorTurn: empty rep turn');
+  const spoken = input.hearRepText !== undefined;
+  let repText = spoken ? '' : input.repText.trim();
+  if (!spoken && repText.length === 0) throw new Error('takeDoctorTurn: empty rep turn');
 
   // 0. The session, from the server. Its turns were each screened before they were stored.
   const context = await sessionContext(rpc, sessionId);
@@ -165,6 +183,21 @@ export const takeDoctorTurn = async (input: SimTurnInput): Promise<SimTurnResult
   if (begun.outputSchemaName !== SIM_DOCTOR_TURN_OUTPUT_SCHEMA_NAME) {
     await complete({ status: 'failed', errorCode: 'prompt_schema_mismatch' });
     return { kind: 'failed', sessionId, message: SIM_TURN_FAILED_MESSAGE };
+  }
+
+  // 1b. `BE-W220`. A spoken turn is heard HERE and not before: the request is open, so the switch
+  // and the allowance have already had their say, and the attempt is in the log whatever follows.
+  if (input.hearRepText !== undefined) {
+    try {
+      repText = (await input.hearRepText()).trim();
+    } catch (error) {
+      await complete({ status: 'failed', errorCode: speechFailure(error) });
+      throw error;
+    }
+    if (repText.length === 0) {
+      await complete({ status: 'failed', errorCode: 'no_speech' });
+      return { kind: 'failed', sessionId, message: SIM_TURN_FAILED_MESSAGE };
+    }
   }
 
   // 2. Guardrails, BEFORE the model and BEFORE the turn is stored.

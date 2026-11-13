@@ -130,6 +130,15 @@ describe('takeSpokenTurn — the order is the guarantee', () => {
     };
   };
 
+  /** A turn that, like `takeDoctorTurn`, asks to hear the rep once its request is open. */
+  const hearing =
+    (turn: Turn, heardInto?: string[]) =>
+    async (hear: () => Promise<string>): Promise<Turn> => {
+      const words = await hear();
+      heardInto?.push(words);
+      return turn;
+    };
+
   it('authorises the session BEFORE any audio is transcribed', async () => {
     const speech = fakeSpeech('hello', new Uint8Array([1]));
     const order: string[] = [];
@@ -141,7 +150,7 @@ describe('takeSpokenTurn — the order is the guarantee', () => {
           order.push('authorise');
           return Promise.reject(Object.assign(new Error('not your session'), { code: '42501' }));
         },
-        takeTurn: () => Promise.resolve({ kind: 'replied', reply: 'x' }),
+        takeTurn: hearing({ kind: 'replied', reply: 'x' }),
         replyText: () => null,
       }),
     ).rejects.toMatchObject({ code: '42501' });
@@ -151,17 +160,15 @@ describe('takeSpokenTurn — the order is the guarantee', () => {
 
   it('the heard words are the turn; the reply comes back with its speech', async () => {
     const speech = fakeSpeech('Doctor, may I show you the data?', new Uint8Array([7, 7]));
-    const takeTurn = vi.fn((): Promise<Turn> =>
-      Promise.resolve({ kind: 'replied', reply: 'Go on.' }),
-    );
+    const heard: string[] = [];
     const result = await takeSpokenTurn<Turn>({
       audio: AUDIO,
       speech,
       authorise: () => Promise.resolve(),
-      takeTurn,
+      takeTurn: hearing({ kind: 'replied', reply: 'Go on.' }, heard),
       replyText: (turn) => (turn.kind === 'replied' ? turn.reply : null),
     });
-    expect(takeTurn).toHaveBeenCalledWith('Doctor, may I show you the data?');
+    expect(heard).toEqual(['Doctor, may I show you the data?']);
     expect(result).toEqual({
       kind: 'replied',
       reply: 'Go on.',
@@ -170,17 +177,53 @@ describe('takeSpokenTurn — the order is the guarantee', () => {
     });
   });
 
-  it('silence is no_speech: no turn is taken, nothing is counted', async () => {
-    const takeTurn = vi.fn((): Promise<Turn> => Promise.resolve({ kind: 'replied', reply: 'x' }));
+  it('BE-W220: no audio is transcribed for a turn that is refused before it asks to hear', async () => {
+    // `ai_begin_request` refusing (practice switched off, allowance spent) is a throw out of the
+    // turn BEFORE it calls `hear`. The audio must not have left by then.
+    const speech = fakeSpeech('hello', new Uint8Array([1]));
+    await expect(
+      takeSpokenTurn<Turn>({
+        audio: AUDIO,
+        speech,
+        authorise: () => Promise.resolve(),
+        takeTurn: () =>
+          Promise.reject(Object.assign(new Error('feature is switched off'), { code: '45010' })),
+        replyText: () => null,
+      }),
+    ).rejects.toMatchObject({ code: '45010' });
+    expect(speech.calls).toEqual([]);
+  });
+
+  it('BE-W220: the audio is transcribed when the turn asks, and not before', async () => {
+    const speech = fakeSpeech('hello', new Uint8Array([1]));
+    const order: string[] = [];
+    await takeSpokenTurn<Turn>({
+      audio: AUDIO,
+      speech,
+      authorise: () => Promise.resolve(),
+      takeTurn: async (hear) => {
+        order.push(`request open; transcribed so far: ${String(speech.calls.length)}`);
+        await hear();
+        order.push(`heard; transcribed so far: ${String(speech.calls.length)}`);
+        return { kind: 'replied', reply: 'x' };
+      },
+      replyText: () => null,
+    });
+    expect(order).toEqual(['request open; transcribed so far: 0', 'heard; transcribed so far: 1']);
+  });
+
+  it('silence is no_speech: the turn heard nothing, and nothing is spoken', async () => {
+    const speech = fakeSpeech('', new Uint8Array([1]));
     const result = await takeSpokenTurn<Turn>({
       audio: AUDIO,
-      speech: fakeSpeech('', new Uint8Array([1])),
+      speech,
       authorise: () => Promise.resolve(),
-      takeTurn,
+      // What `takeDoctorTurn` returns for silence, after closing the request as `no_speech`.
+      takeTurn: hearing({ kind: 'patient_specific', message: 'unused' }),
       replyText: () => 'x',
     });
     expect(result).toEqual({ kind: 'no_speech' });
-    expect(takeTurn).not.toHaveBeenCalled();
+    expect(speech.calls).toEqual(['transcribe']);
   });
 
   it('a guardrail refusal is passed through and nothing is spoken', async () => {
@@ -189,7 +232,7 @@ describe('takeSpokenTurn — the order is the guarantee', () => {
       audio: AUDIO,
       speech,
       authorise: () => Promise.resolve(),
-      takeTurn: () => Promise.resolve({ kind: 'patient_specific', message: 'No patient details.' }),
+      takeTurn: hearing({ kind: 'patient_specific', message: 'No patient details.' }),
       replyText: (turn) => (turn.kind === 'replied' ? turn.reply : null),
     });
     expect(result).toMatchObject({ kind: 'patient_specific', doctorAudio: null });
@@ -201,7 +244,7 @@ describe('takeSpokenTurn — the order is the guarantee', () => {
       audio: AUDIO,
       speech: fakeSpeech('hello', new SpeechError('http_500')),
       authorise: () => Promise.resolve(),
-      takeTurn: () => Promise.resolve({ kind: 'replied', reply: 'Hello.' }),
+      takeTurn: hearing({ kind: 'replied', reply: 'Hello.' }),
       replyText: (turn) => (turn.kind === 'replied' ? turn.reply : null),
     });
     expect(result).toMatchObject({ kind: 'replied', reply: 'Hello.', doctorAudio: null });

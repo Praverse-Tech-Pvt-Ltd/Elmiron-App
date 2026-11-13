@@ -37,6 +37,13 @@ export const decisionRefusal = ({ code, message }: Refusal): string => {
   if (/superseded by a newer version/u.test(message)) {
     return 'The rep has sent a newer version of this report. Reload the page to read it.';
   }
+  // `BE-W221`: the list on screen was stale -- somebody decided this report after it was loaded.
+  if (/already has a decision/u.test(message)) {
+    return 'Somebody has already decided this report. Open it to see the decision, or to change it.';
+  }
+  if (/needs a reason/u.test(message)) {
+    return 'Say why the report is not approved. The rep reads the reason.';
+  }
   if (/no call reports supplied/u.test(message)) {
     return 'Tick at least one report first.';
   }

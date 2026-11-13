@@ -67,6 +67,28 @@ export const devicePersistence: QueuePersistence = {
 };
 
 /**
+ * `FE-W209`. **One read-then-write on a queue at a time.**
+ *
+ * Every writer here reads the whole queue, changes it and writes the whole queue back. Two of them
+ * interleaved lose a row: a flush read the queue, spent seconds sending, and wrote its copy back --
+ * over a voice note the rep had saved in between. The audio file stayed on the phone with no queue
+ * row, so nothing would ever send it. `FE-W135` made that easy to hit: every recording saved off
+ * WiFi is now queued at once, and a flush also starts whenever the phone joins WiFi.
+ *
+ * Keyed by the store, so a test's in-memory queue and the device's never wait on each other. A
+ * failure inside one section does not poison the next.
+ */
+const queueLocks = new WeakMap<QueuePersistence, Promise<unknown>>();
+const withQueueLock = <T>(store: QueuePersistence, run: () => Promise<T>): Promise<T> => {
+  const next = (queueLocks.get(store) ?? Promise.resolve()).then(run, run);
+  queueLocks.set(
+    store,
+    next.catch(() => undefined),
+  );
+  return next;
+};
+
+/**
  * The outbox: work the MR has done that the server has not yet acknowledged.
  *
  * **The rule that shapes everything here: a refusal is not a failure.** If the
@@ -452,16 +474,11 @@ export const sendOrQueue = async (
       };
     }
 
-    const load = await store.read();
-    if (load.kind === 'unreadable') {
-      // `FE-W44`. Writing here would replace whatever is on disk with a queue holding only
-      // this item. The work is not queued, and saying so is the only honest answer — a
-      // `queued` verdict would tell the MR their write is safe on a device that just lost
-      // the rest of them.
-      return { kind: 'queue_unreadable' };
-    }
-    await store.write(syncQueueReducer(load.state, { type: 'enqueued', item }));
-    return { kind: 'queued' };
+    // `FE-W44`. An unreadable queue is never written over: that would replace whatever is on
+    // disk with a queue holding only this item. The work is not queued, and saying so is the only
+    // honest answer — a `queued` verdict would tell the MR their write is safe on a device that
+    // just lost the rest of them.
+    return enqueueFirst(item, store);
   }
 };
 
@@ -477,10 +494,12 @@ export const enqueueFirst = async (
   item: SyncQueueItem,
   store: QueuePersistence = devicePersistence,
 ): Promise<{ readonly kind: 'queued' } | { readonly kind: 'queue_unreadable' }> => {
-  const load = await store.read();
-  if (load.kind === 'unreadable') return { kind: 'queue_unreadable' };
-  await store.write(syncQueueReducer(load.state, { type: 'enqueued', item }));
-  return { kind: 'queued' };
+  return withQueueLock(store, async () => {
+    const load = await store.read();
+    if (load.kind === 'unreadable') return { kind: 'queue_unreadable' } as const;
+    await store.write(syncQueueReducer(load.state, { type: 'enqueued', item }));
+    return { kind: 'queued' } as const;
+  });
 };
 
 /**
@@ -607,11 +626,37 @@ export interface FlushResult {
  * rest, because the reducer already treats each item's verdict as isolated, and an
  * MR whose second check-in is refused should still have their third one sent.
  */
-export const flushOutbox = async (
+export const flushOutbox = (
   client: OutboxWriteClient,
   store: QueuePersistence = devicePersistence,
   owner: () => string | null = queueOwner,
   conditions: UploadConditions = deviceUploadConditions,
+): Promise<FlushResult> => {
+  // `FE-W209`. **One flush of a queue at a time; a second waits its turn.** A flush starts on
+  // mount, on foreground, on joining WiFi, on "Send now" and after an unplanned visit, and nothing
+  // stopped two running together: both read the same `queued` rows and both sent them. For audio
+  // that was two upload sessions for one recording, and whichever verdict was written last won --
+  // so a row the server had accepted could end up shown as failed. Waiting, not skipping: the
+  // caller that enqueued a row and then flushed must have ITS row looked at, and the run that was
+  // already going read the queue before that row existed.
+  const next = (flushTurns.get(store) ?? Promise.resolve()).then(
+    () => flushOnce(client, store, owner, conditions),
+    () => flushOnce(client, store, owner, conditions),
+  );
+  flushTurns.set(
+    store,
+    next.catch(() => undefined),
+  );
+  return next;
+};
+
+const flushTurns = new WeakMap<QueuePersistence, Promise<unknown>>();
+
+const flushOnce = async (
+  client: OutboxWriteClient,
+  store: QueuePersistence,
+  owner: () => string | null,
+  conditions: UploadConditions,
 ): Promise<FlushResult> => {
   const startedFor = owner();
   const load = await store.read();
@@ -800,13 +845,34 @@ export const flushOutbox = async (
     }
   }
 
-  await store.write(state);
-  return {
-    attempted: queued.length,
-    sent,
-    stillQueued: state.items.filter((item) => item.status === 'queued').length,
-    ...withHeld,
-  };
+  // `FE-W209`. **Written back over what is on disk NOW, not over what this run read at its top.**
+  // The sends above took time, and anything enqueued meanwhile is on disk and not in `state`:
+  // writing `state` as it stands would delete it. So, inside the same lock every enqueue takes,
+  // the queue is read again and every row this run never saw is kept.
+  const verdicts = state;
+  return withQueueLock(store, async () => {
+    // MR-49 / `FE-W61`, once more at the last moment: `store` reads and writes the queue of whoever
+    // is signed in NOW. If that changed during the final send, this run's verdicts belong to the
+    // previous user's queue and are not written into the new one. Writes are idempotent by id.
+    if (owner() !== startedFor) {
+      return { attempted: sent, sent, stillQueued: queued.length - sent, ownerChanged: true };
+    }
+    const latest = await store.read();
+    if (latest.kind === 'unreadable') {
+      return { attempted: queued.length, sent, stillQueued: 0, unreadable: true };
+    }
+    const seen = new Set(load.state.items.map((item) => item.id));
+    const merged = latest.state.items
+      .filter((item) => !seen.has(item.id))
+      .reduce((next, item) => syncQueueReducer(next, { type: 'enqueued', item }), verdicts);
+    await store.write(merged);
+    return {
+      attempted: queued.length,
+      sent,
+      stillQueued: merged.items.filter((item) => item.status === 'queued').length,
+      ...withHeld,
+    };
+  });
 };
 
 /**

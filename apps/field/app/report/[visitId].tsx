@@ -14,7 +14,7 @@ import { doctorsFromStore, visitsFromStore } from '../../src/sync/selectors';
 // MR-25 C1 asked for this on conversion: the day in the TERRITORY's zone, not a character slice of
 // the ISO string (which was right only for the mock's own offset). The lint exception is gone.
 import { dayMonthIn, dayMonthOfDate } from '../../src/today/territory-day';
-import { loadProductChoices, toggleProduct } from '../../src/catalogue/products';
+import { loadProductChoices, productsToSend, toggleProduct } from '../../src/catalogue/products';
 import type { ProductList } from '../../src/catalogue/products';
 import { failureDetail, refusedDetail } from '../../src/errors/plain';
 import { queueOwner } from '../../src/sync/async-storage-store';
@@ -157,7 +157,7 @@ export default function CallReport(): ReactNode {
     setSending(true);
     setFailure(null);
 
-    const body = {
+    const bodyFor = (list: ProductList) => ({
       id: uuid.v4(),
       visitId,
       summary,
@@ -165,17 +165,13 @@ export default function CallReport(): ReactNode {
       // `FE-W190`: and only those on the list the rep can SEE -- a draft kept from an earlier
       // opening may name a product the company has since withdrawn, and a mark the rep cannot see
       // must not be sent in their name.
-      productIdsDiscussed: chosenProducts.filter((id) =>
-        productList === null || productList.kind === 'none'
-          ? false
-          : productList.products.some((product) => product.id === id),
-      ),
+      productIdsDiscussed: productsToSend(chosenProducts, list),
       objectionsRaised: objections.trim() === '' ? null : objections,
       nextStep: nextStep.trim() === '' ? null : nextStep,
       // `FE-W196`. Sent for approval. Without it the server stored the report as a draft, and the
       // managers' approval queue — which lists only submitted reports — never showed it.
       status: 'submitted' as const,
-    };
+    });
 
     /**
      * MR-18 B2/B3. Through the outbox to Supabase, like the other four.
@@ -199,7 +195,20 @@ export default function CallReport(): ReactNode {
      * reached a manager's approval queue. The copy below still makes no claim about approval:
      * only about whether the SERVER has the report.
      */
-    void sendOrQueue(() => createPushClient().createCallReport(body), callReportQueueItem(body))
+    // `FE-W212`. **The list is waited for, never assumed empty.** `productList` is null until the
+    // first read answers, and this used to send `[]` then: a rep who reopened a draft with products
+    // marked and pressed Send before the list arrived had the report go without them -- and the
+    // draft, the only other copy of those marks, was cleared a moment later. The read falls back to
+    // the phone's saved copy, so this resolves offline too.
+    void (productList === null ? loadProductChoices() : Promise.resolve(productList))
+      .then((list) => {
+        setProductList(list);
+        const body = bodyFor(list);
+        return sendOrQueue(
+          () => createPushClient().createCallReport(body),
+          callReportQueueItem(body),
+        );
+      })
       .then((outcome) => {
         if (outcome.kind === 'sent') {
           setSentNote('sent');

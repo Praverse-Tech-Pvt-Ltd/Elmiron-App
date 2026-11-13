@@ -554,6 +554,44 @@ describe.skipIf(!reachable)('team exceptions', () => {
     });
   });
 
+  /**
+   * `BE-W219`. Three branches of `team_exceptions` (rejection rate, consent rate,
+   * organisation-default captures) read every organisation's reps: the function is SECURITY
+   * DEFINER and only two of its five branches were scoped. The rival rep's six refused items are
+   * the same fixture the test above uses for puneMr.
+   *
+   * The POSITIVE CONTROL is the rival's own admin: the row exists and is flagged for the people
+   * who may see it. Without that, "nobody else sees it" would also pass on a day with no row.
+   */
+  it("BE-W219: another organisation's rep is in nobody else's exceptions", async () => {
+    await inRolledBackTransaction(async (client) => {
+      await asUser(client, world.users.rivalMr);
+      await push(
+        client,
+        Array.from({ length: 6 }, () => poisonCheckIn(world.visits.rival)),
+      );
+      const flaggedFor = async (caller: FixtureUser): Promise<string[]> => {
+        await client.query('reset role');
+        await asUser(client, caller);
+        const rows = await client.query<{ mr_id: string }>(
+          `select mr_id from public.team_exceptions('2026-08-12')`,
+        );
+        return rows.rows.map((r) => r.mr_id);
+      };
+
+      expect(await flaggedFor(world.users.rivalAdmin)).toContain(world.users.rivalMr.id);
+
+      for (const caller of [
+        world.users.westManager,
+        world.users.southManager,
+        world.users.admin,
+        world.users.puneMr,
+      ]) {
+        expect(await flaggedFor(caller)).not.toContain(world.users.rivalMr.id);
+      }
+    });
+  });
+
   it('reads its thresholds from config rather than from the migration', async () => {
     // Uses the rejection rate rather than the sync clock: received_at is stamped
     // with clock_timestamp(), which is later than the transaction's now(), so a
@@ -717,6 +755,111 @@ describe.skipIf(!reachable)('approval workflow', () => {
         [world.callReports.pune],
       );
       expect(decided.rows[0]?.effective_status).toBe('approved');
+    });
+  });
+
+  /**
+   * `BE-W221`. The bulk call clears what is WAITING. A report somebody has already decided is not
+   * waiting, and approving it from a list drawn earlier replaced a colleague's rejection silently.
+   */
+  describe('BE-W221 — a decision is not replaced from a stale list, and a rejection says why', () => {
+    type Bulk = {
+      results: { id: string; decided: boolean; error: string | null }[];
+      decidedCount: number;
+    };
+    const bulkApprove = async (client: Client): Promise<Bulk | undefined> =>
+      (
+        await client.query<{ payload: Bulk }>(
+          'select public.approve_call_reports_bulk($1, true, null) as payload',
+          [[world.callReports.pune]],
+        )
+      ).rows[0]?.payload;
+    const statusNow = async (client: Client): Promise<string | undefined> =>
+      (
+        await client.query<{ effective_status: string }>(
+          'select effective_status from public.call_report_current where id = $1',
+          [world.callReports.pune],
+        )
+      ).rows[0]?.effective_status;
+
+    it('the bulk call refuses a report that was not approved meanwhile, and the rejection stands', async () => {
+      await inRolledBackTransaction(async (client) => {
+        // The admin records "not approved" after the manager's list was drawn.
+        await asUser(client, world.users.admin);
+        await client.query('select public.approve_call_report($1, false, $2)', [
+          world.callReports.pune,
+          'the products discussed are missing',
+        ]);
+        await client.query('reset role');
+
+        await asUser(client, world.users.westManager);
+        const payload = await bulkApprove(client);
+        expect(payload?.decidedCount).toBe(0);
+        expect(payload?.results[0]?.decided).toBe(false);
+        expect(payload?.results[0]?.error).toMatch(/already has a decision/);
+        expect(await statusNow(client)).toBe('rejected');
+      });
+    });
+
+    it('POSITIVE CONTROL: the same bulk call approves the report while it is still waiting', async () => {
+      await inRolledBackTransaction(async (client) => {
+        await asUser(client, world.users.westManager);
+        const payload = await bulkApprove(client);
+        expect(payload?.decidedCount).toBe(1);
+        expect(await statusNow(client)).toBe('approved');
+      });
+    });
+
+    it('a deliberate change of mind still works, one report at a time', async () => {
+      await inRolledBackTransaction(async (client) => {
+        await asUser(client, world.users.westManager);
+        await client.query('select public.approve_call_report($1, false, $2)', [
+          world.callReports.pune,
+          'no next step',
+        ]);
+        await client.query('select public.approve_call_report($1, true, null)', [
+          world.callReports.pune,
+        ]);
+        expect(await statusNow(client)).toBe('approved');
+      });
+    });
+
+    it('"not approved" with no reason, or a blank one, is refused; an approval needs none', async () => {
+      await inRolledBackTransaction(async (client) => {
+        await asUser(client, world.users.westManager);
+        for (const reason of [null, '', '   ']) {
+          await client.query('savepoint before_refusal');
+          await expect(
+            client.query('select public.approve_call_report($1, false, $2)', [
+              world.callReports.pune,
+              reason,
+            ]),
+          ).rejects.toMatchObject({
+            code: '22023',
+            message: expect.stringMatching(/needs a reason/u) as unknown,
+          });
+          await client.query('rollback to savepoint before_refusal');
+        }
+        expect(await statusNow(client)).toBe('submitted');
+        await client.query('select public.approve_call_report($1, true, null)', [
+          world.callReports.pune,
+        ]);
+        expect(await statusNow(client)).toBe('approved');
+      });
+    });
+
+    it('says nothing about a decided report outside the caller’s company', async () => {
+      await inRolledBackTransaction(async (client) => {
+        await asUser(client, world.users.westManager);
+        await client.query('select public.approve_call_report($1, true, null)', [
+          world.callReports.pune,
+        ]);
+        await client.query('reset role');
+        await asUser(client, world.users.rivalAdmin);
+        const payload = await bulkApprove(client);
+        expect(payload?.results[0]?.decided).toBe(false);
+        expect(payload?.results[0]?.error).toMatch(/not in your scope/);
+      });
     });
   });
 

@@ -3,7 +3,7 @@ import { signedIn } from '../../lib/session';
 import { callerRole } from '../../lib/role';
 import { Body, Card, Heading, MissingNote, Page, PageHeader, Pill, RoleNote } from '../../lib/ui';
 import { btn } from '../../lib/theme-css';
-import { dayLabel, indiaToday } from '../../lib/india-date';
+import { dayLabel, indiaToday, isRealDay } from '../../lib/india-date';
 import { MANAGER_RPC, parseAll, parseTeamException } from '../../lib/manager-rows';
 import {
   EXCEPTION_KINDS,
@@ -28,9 +28,6 @@ export const dynamic = 'force-dynamic';
 
 export const metadata = { title: 'Team exceptions' };
 
-const isDate = (value: string | undefined): value is string =>
-  value !== undefined && /^\d{4}-\d{2}-\d{2}$/u.test(value);
-
 export default async function TeamExceptions({
   searchParams,
 }: {
@@ -47,7 +44,7 @@ export default async function TeamExceptions({
 
   const params = await searchParams;
   // India's date by default (`FE-W125`): the function's own default is the database's UTC date.
-  const day = isDate(params.date) ? params.date : indiaToday();
+  const day = isRealDay(params.date) ? params.date : indiaToday();
   const role = await callerRole();
 
   const header = (

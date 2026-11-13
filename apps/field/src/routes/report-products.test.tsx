@@ -51,6 +51,9 @@ jest.mock('../catalogue/products', () => ({
   loadProductChoices: () => mockLoad(),
 }));
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setQueueOwner } from '../sync/async-storage-store';
+import { REPORT_DRAFT_KEY } from '../capture/report-draft';
 import CallReport from '../../app/report/[visitId]';
 
 const ACTIVEX = '11111111-1111-4111-8111-111111111111';
@@ -153,5 +156,54 @@ describe('BE-W175 — products on the call report', () => {
       expect(mockSendOrQueue).toHaveBeenCalledTimes(1);
     });
     expect(queuedPayload().productIdsDiscussed).toEqual([]);
+  });
+
+  /**
+   * `FE-W212`. The list is read from the network first, so for a moment the screen has a restored
+   * draft and no list. Send pressed in that moment used to send `[]` -- and then clear the draft,
+   * the only other copy of the marks.
+   */
+  it('FE-W212: Send pressed before the list has loaded still sends the draft’s marked products', async () => {
+    const REP = '22222222-2222-4222-8222-2222222222aa';
+    const VISIT = '44444444-4444-4444-8444-444444444401';
+    setQueueOwner(REP);
+    await AsyncStorage.setItem(
+      REPORT_DRAFT_KEY(REP, VISIT),
+      JSON.stringify({
+        summary: 'Discussed the dosing guide.',
+        objections: '',
+        nextStep: '',
+        productIds: [ACTIVEX],
+      }),
+    );
+    let arrive: (list: ListKind) => void = () => undefined;
+    mockLoad.mockReturnValue(
+      new Promise<ListKind>((resolve) => {
+        arrive = resolve;
+      }),
+    );
+    mockSendOrQueue.mockResolvedValue({ kind: 'sent' });
+    try {
+      await render(<CallReport />);
+      await waitFor(() => {
+        expect(screen.getByLabelText('What happened').props['value']).toBe(
+          'Discussed the dosing guide.',
+        );
+      });
+      // The list has NOT arrived: no product is on screen to mark or un-mark.
+      expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+      await fireEvent.press(screen.getByText('Send the report'));
+      // Nothing is sent until the list is known.
+      expect(mockSendOrQueue).not.toHaveBeenCalled();
+
+      arrive({ kind: 'fresh', products: CATALOGUE });
+      await waitFor(() => {
+        expect(mockSendOrQueue).toHaveBeenCalledTimes(1);
+      });
+      expect(queuedPayload().productIdsDiscussed).toEqual([ACTIVEX]);
+    } finally {
+      setQueueOwner(null);
+      await AsyncStorage.clear();
+    }
   });
 });

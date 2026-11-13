@@ -36,7 +36,10 @@ describe('FE-W13 — the audit panel does not claim to show attempts', () => {
     // rows that were mostly creations) into the caveat, where it is asserted here.
     expect(AUDIT_HEADING).toBe('Recent activity');
     expect(AUDIT_CAVEAT).toMatch(/succeeded/iu);
-    expect(AUDIT_CAVEAT).toMatch(/refused read is not recorded/iu);
+    // `FE-W214`: a refusal IS recorded (`20260924000300`); this panel does not ask for it.
+    expect(AUDIT_CAVEAT).toMatch(/refused read is recorded too, but it is not shown here/iu);
+    expect(AUDIT_CAVEAT).not.toMatch(/not recorded/iu);
+    expect(emptyTrailNote()).not.toMatch(/not recorded/iu);
   });
 
   it('never describes an empty trail as an absence of attempts', () => {

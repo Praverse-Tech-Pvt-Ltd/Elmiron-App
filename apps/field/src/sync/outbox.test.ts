@@ -992,3 +992,110 @@ describe('FE-W61 — a flush stops when the signed-in user changes', () => {
     expect(result.ownerChanged).toBeUndefined();
   });
 });
+
+/**
+ * `FE-W209`. Every writer reads the whole queue and writes the whole queue back, and a flush spends
+ * seconds between its read and its write. Two things followed, and both lose a rep's work:
+ * a row enqueued during a flush was overwritten, and two flushes at once sent everything twice.
+ */
+describe('FE-W209 — a flush and another writer at the same time', () => {
+  const clientThat = (send: () => Promise<unknown>): OutboxWriteClient =>
+    ({ createCheckIn: send }) as unknown as OutboxWriteClient;
+  const second: CreateCheckInRequest = { ...body, id: '77777777-7777-4777-8777-777777777702' };
+
+  /** A send that waits until the test lets it finish — the seconds a real upload takes. */
+  const gate = (): { send: () => Promise<unknown>; open: () => void; calls: () => number } => {
+    let open: () => void = () => undefined;
+    let calls = 0;
+    const held = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    return {
+      send: () => {
+        calls += 1;
+        return held.then(() => ({}));
+      },
+      open: () => {
+        open();
+      },
+      calls: () => calls,
+    };
+  };
+
+  it('a row enqueued WHILE a flush is sending is still on the queue when the flush ends', async () => {
+    const store = inMemory();
+    await enqueueFirst(checkInQueueItem(body), store);
+    const sending = gate();
+    const flush = flushOutbox(clientThat(sending.send), store, () => 'rep-a', onWifi);
+    await vi.waitFor(() => {
+      expect(sending.calls()).toBe(1);
+    });
+
+    // The rep saves something else while the first item is still on its way.
+    await enqueueFirst(checkInQueueItem(second), store);
+    sending.open();
+    await flush;
+
+    const ids = store.current().items.map((item) => [item.id, item.status]);
+    expect(ids).toContainEqual([second.id, 'queued']);
+    expect(ids).toContainEqual([body.id, 'synced']);
+  });
+
+  it('two flushes started together send each row ONCE', async () => {
+    const store = inMemory();
+    await enqueueFirst(checkInQueueItem(body), store);
+    const sending = gate();
+    const client = clientThat(sending.send);
+    const first = flushOutbox(client, store, () => 'rep-a', onWifi);
+    const again = flushOutbox(client, store, () => 'rep-a', onWifi);
+    await vi.waitFor(() => {
+      expect(sending.calls()).toBe(1);
+    });
+    sending.open();
+    const results = await Promise.all([first, again]);
+
+    expect(sending.calls()).toBe(1);
+    expect(results.map((r) => r.sent)).toEqual([1, 0]);
+  });
+
+  it('POSITIVE CONTROL: the second flush still runs, and sends what the first never saw', async () => {
+    const store = inMemory();
+    await enqueueFirst(checkInQueueItem(body), store);
+    const sending = gate();
+    const client = clientThat(sending.send);
+    const first = flushOutbox(client, store, () => 'rep-a', onWifi);
+    await vi.waitFor(() => {
+      expect(sending.calls()).toBe(1);
+    });
+    await enqueueFirst(checkInQueueItem(second), store);
+    const again = flushOutbox(client, store, () => 'rep-a', onWifi);
+    sending.open();
+    await Promise.all([first, again]);
+
+    expect(sending.calls()).toBe(2);
+    expect(store.current().items.map((item) => item.status)).toEqual(['synced', 'synced']);
+  });
+
+  it('a queue that became unreadable during the flush is not written over', async () => {
+    let readable = true;
+    const base = inMemory();
+    const write = vi.fn(base.write);
+    const store: QueuePersistence = {
+      read: () => (readable ? base.read() : Promise.resolve({ kind: 'unreadable' as const })),
+      write,
+    };
+    await enqueueFirst(checkInQueueItem(body), store);
+    write.mockClear();
+    const result = await flushOutbox(
+      clientThat(() => {
+        readable = false;
+        return Promise.resolve({});
+      }),
+      store,
+      () => 'rep-a',
+      onWifi,
+    );
+    expect(result.unreadable).toBe(true);
+    expect(write).not.toHaveBeenCalled();
+  });
+});

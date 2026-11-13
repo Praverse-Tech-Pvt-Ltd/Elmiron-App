@@ -198,28 +198,41 @@ export interface VoiceExtras {
 }
 
 /**
- * One spoken turn: authorise the session, transcribe, take the turn as text, speak the reply.
+ * One spoken turn: authorise the session, open the request, transcribe, take the turn, speak the reply.
  *
  * * The session is read FIRST, as the rep, so audio for a session that is not theirs is refused
  *   before any of it is sent to OpenAI.
- * * Nothing said (silence, a cough) is `no_speech` — no turn is taken, no request is counted.
+ * * `BE-W220`: **the audio is transcribed only when `takeTurn` asks for the words** — and the turn
+ *   asks only after `ai_begin_request` has admitted the request. It used to be transcribed here,
+ *   before the turn began: a rep whose practice was switched off, or whose daily allowance was
+ *   spent, still had their voice sent to the vendor, and no row in the request log said so.
+ * * Nothing said (silence, a cough) is `no_speech` — the turn closed the request as failed, so the
+ *   attempt is counted: a transcription is paid for whether or not anything was said.
  * * A reply that cannot be spoken is still a reply: it arrives as text with `doctorAudio: null`.
  */
 export const takeSpokenTurn = async <TurnResult extends { readonly kind: string }>(input: {
   readonly audio: RepAudio;
   readonly speech: SpeechClient;
   readonly authorise: () => Promise<void>;
-  readonly takeTurn: (repText: string) => Promise<TurnResult>;
+  /** Takes the turn; calls `hear` for the rep's words once the request is open, or never. */
+  readonly takeTurn: (hear: () => Promise<string>) => Promise<TurnResult>;
   readonly replyText: (result: TurnResult) => string | null;
   readonly timeoutMs?: number;
 }): Promise<{ readonly kind: 'no_speech' } | (TurnResult & VoiceExtras)> => {
   await input.authorise();
-  const repText = await withSignal(input.timeoutMs ?? 20_000, (signal) =>
-    input.speech.transcribe(input.audio, signal),
-  );
-  if (repText.length === 0) return { kind: 'no_speech' };
+  let asked = false;
+  let repText = '';
+  const hear = async (): Promise<string> => {
+    asked = true;
+    repText = await withSignal(input.timeoutMs ?? 20_000, (signal) =>
+      input.speech.transcribe(input.audio, signal),
+    );
+    return repText;
+  };
 
-  const result = await input.takeTurn(repText);
+  const result = await input.takeTurn(hear);
+  if (asked && repText.length === 0) return { kind: 'no_speech' };
+
   const reply = input.replyText(result);
   let doctorAudio: VoiceExtras['doctorAudio'] = null;
   if (reply !== null && reply.trim().length > 0) {

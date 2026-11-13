@@ -32,10 +32,16 @@ export const AUDIT_HEADING = 'Recent activity';
 
 /**
  * Why a refusal is absent, shown to the reader rather than only to whoever reads this file.
+ *
+ * `FE-W214`: it said a refused read "is not recorded". That stopped being true with
+ * `20260924000300_refused_reads_are_audited.sql`: a refusal IS kept, and this panel simply does not
+ * ask for it (`p_include_refused` defaults to false). Telling an admin the record does not exist,
+ * when `/audit` shows it behind one tick box, is the overclaim in the other direction.
  */
 export const AUDIT_CAVEAT =
   'Every row here is something that succeeded: a read, a change or a creation. A refused read is ' +
-  'not recorded in the trail, so this is not a list of every attempt.';
+  'recorded too, but it is not shown here, so this is not a list of every attempt. To see refused ' +
+  'reads, open Audit and tick "Include refused reads".';
 
 export interface AuditRow {
   readonly id: number;
@@ -95,8 +101,8 @@ export const hiddenRowsNote = (response: ListAuditLogResponse): string | null =>
  * refusals are not recorded (`BE-W102`).
  */
 export const emptyTrailNote = (): string =>
-  'Nothing has been recorded yet. This does not mean there were no attempts — refusals are not ' +
-  'recorded.';
+  'Nothing that succeeded has been recorded yet. This does not mean there were no attempts — ' +
+  'refused reads are kept, but they are not shown here.';
 
 /**
  * What to say when the read itself was refused or failed.
