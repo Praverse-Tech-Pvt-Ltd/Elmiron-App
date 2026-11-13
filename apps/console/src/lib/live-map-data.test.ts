@@ -9,6 +9,7 @@ import {
   mapPins,
   mapRoute,
   tileUrl,
+  tooltipHtml,
   trailKilometres,
 } from './live-map-data';
 
@@ -108,5 +109,18 @@ describe('FE-W208 the live location map', () => {
     expect(tileUrl(' https://tiles.example/{z}/{x}/{y}.png ')).toBe(
       'https://tiles.example/{z}/{x}/{y}.png',
     );
+  });
+});
+
+describe('FE-W218 — a rep’s name on the map is text, never markup', () => {
+  it('escapes everything Leaflet would otherwise read as HTML', () => {
+    expect(tooltipHtml('<img src=x onerror="alert(1)"> · 2 min ago')).toBe(
+      '&lt;img src=x onerror=&quot;alert(1)&quot;&gt; · 2 min ago',
+    );
+    expect(tooltipHtml("O'Brien & Sons")).toBe('O&#39;Brien &amp; Sons');
+  });
+
+  it('POSITIVE CONTROL: an ordinary name is unchanged', () => {
+    expect(tooltipHtml('Asha Kulkarni · 2 min ago')).toBe('Asha Kulkarni · 2 min ago');
   });
 });

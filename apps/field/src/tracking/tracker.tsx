@@ -165,6 +165,37 @@ const Tracker = ({
   const [serviceRunning, setServiceRunning] = useState(false);
   const state = stateOf(status, { foreground: foreground || serviceRunning, openedDay });
 
+  // `FE-W217`. **`serviceRunning` is what this component last did, not what Android is doing.** The
+  // system can end the service without telling anybody (memory pressure, a battery saver, the rep
+  // taking the location permission away), and then this stayed true: the screens went on saying the
+  // phone was sharing while nothing was read, and nothing started it again. So Android is ASKED,
+  // each time the app comes back on screen and every interval while it is; a service found dead is
+  // started again by the watcher below, which runs only if every other rule still says `active`.
+  const serviceRunningRef = useRef(serviceRunning);
+  serviceRunningRef.current = serviceRunning;
+  const [serviceRestarts, setServiceRestarts] = useState(0);
+  useEffect(() => {
+    if (!screenOff || !foreground) return undefined;
+    let cancelled = false;
+    const check = (): void => {
+      if (!serviceRunningRef.current) return;
+      void Location.hasStartedLocationUpdatesAsync(SCREEN_OFF_TASK).then(
+        (running) => {
+          if (cancelled || running || !serviceRunningRef.current) return;
+          setServiceRunning(false);
+          setServiceRestarts((count) => count + 1);
+        },
+        () => undefined,
+      );
+    };
+    check();
+    const timer = setInterval(check, intervalSeconds * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [screenOff, foreground, intervalSeconds]);
+
   /** One position to the server, spaced by the company's interval; both watchers send through it. */
   const sendFix = useCallback(
     (fix: ScreenOffFix): void => {
@@ -286,7 +317,7 @@ const Tracker = ({
     };
     // Off screen the status timer above does not tick; a refusal that means the picture is stale
     // (`refreshAfter`) asks again, and that is what stops the service at the end of the hours.
-  }, [state, intervalSeconds, screenOff, sendFix]);
+  }, [state, intervalSeconds, screenOff, sendFix, serviceRestarts]);
 
   const accept = useCallback(
     async (noticeVersionId: string): Promise<AcceptOutcome> => {

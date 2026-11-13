@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Map as LeafletMap } from 'leaflet';
 import type { MapPin, MapRoute } from './live-map-data';
-import { tileUrl } from './live-map-data';
+import { tileUrl, tooltipHtml } from './live-map-data';
 
 /**
  * `FE-W208` — every rep's newest position, and the chosen rep's day as a line, on a real map with no
@@ -71,7 +71,7 @@ export const LiveMap = ({
           fillColor: color,
           fillOpacity: pin.stale ? 0.6 : 0.95,
         })
-          .bindTooltip(pin.label, {
+          .bindTooltip(tooltipHtml(pin.label), {
             permanent: pins.length <= 12,
             direction: 'top',
             offset: [0, -8],

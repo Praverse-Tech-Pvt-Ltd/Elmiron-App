@@ -100,3 +100,17 @@ export const tileUrl = (configured: string | undefined): string =>
   configured !== undefined && /^https:\/\/.+\{z\}.+\{x\}.+\{y\}/u.test(configured.trim())
     ? configured.trim()
     : DEFAULT_TILE_URL;
+
+/**
+ * `FE-W218`. A pin's label as the HTML Leaflet will insert. **`bindTooltip` given a string sets it as
+ * `innerHTML`**, and the label begins with a rep's name -- text a person typed. A name carrying
+ * markup would have run as script in the browser of every manager who opened the map. Escaped here,
+ * a name is shown as the characters it is.
+ */
+export const tooltipHtml = (label: string): string =>
+  label
+    .replace(/&/gu, '&amp;')
+    .replace(/</gu, '&lt;')
+    .replace(/>/gu, '&gt;')
+    .replace(/"/gu, '&quot;')
+    .replace(/'/gu, '&#39;');
