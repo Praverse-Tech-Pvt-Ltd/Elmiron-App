@@ -28,6 +28,7 @@ import type { TerritoryZone } from '../../src/today/territory-day';
 import type { DayOrigin, PullFailure } from '../../src/sync/pulled-store';
 import { SESSION_EXPIRED, sessionExpired } from '../../src/sync/explanation';
 import { notPermittedDetail, refusedDetail } from '../../src/errors/plain';
+import { LiveTrackingHomeControls } from '../../src/tracking/home-controls';
 import { LiveTrackingStatusLine } from '../../src/tracking/status-line';
 import { removalWording } from '../../src/sync/pull';
 
@@ -357,6 +358,12 @@ const MrToday = (): ReactNode => {
           <LiveTrackingStatusLine
             onOpen={() => {
               router.push('/live-tracking');
+            }}
+          />
+          {/* `FE-W220`. Start and stop from here, once the notice is accepted. */}
+          <LiveTrackingHomeControls
+            onOpenLocation={() => {
+              router.push('/onboarding/location');
             }}
           />
           <PendingSyncSection
